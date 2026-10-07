@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.2.0",
+  "contractVersion": "1.3.0",
   "plugin": {
     "name": "evimed-knowledge-plugin",
     "version": "0.1.0",
@@ -32,11 +32,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "542",
+        "content-length": "430",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 14:57:28 GMT"
+        "date": "Mon, 05 Oct 2026 16:31:01 GMT"
       },
-      "recordedAt": "2026-09-22T14:57:29.200Z"
+      "recordedAt": "2026-10-05T16:31:02.171Z"
     },
     "manifest.json": {
       "request": {
@@ -49,11 +49,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "1570",
+        "content-length": "1197",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 14:57:28 GMT"
+        "date": "Mon, 05 Oct 2026 16:31:01 GMT"
       },
-      "recordedAt": "2026-09-22T14:57:29.294Z"
+      "recordedAt": "2026-10-05T16:31:02.183Z"
     },
     "sources-page-1.json": {
       "request": {
@@ -363,6 +363,43 @@
         "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
       "recordedAt": "2026-09-22T14:57:30.154Z"
+    },
+    "source-platform-produced.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/sources/evimed-evidence",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "593",
+        "content-type": "application/json",
+        "date": "Mon, 05 Oct 2026 16:31:01 GMT"
+      },
+      "recordedAt": "2026-10-05T16:31:02.200Z"
     }
-  }
+  },
+  "partialRecordings": [
+    {
+      "recordedAt": "2026-10-05T16:31:02.203Z",
+      "server": "http://127.0.0.1:18081",
+      "plugin": {
+        "name": "evimed-knowledge-plugin",
+        "version": "0.1.0",
+        "build": "fw-frontier-20261005",
+        "started_at": "2026-10-05T16:30:53.572317Z"
+      },
+      "contractVersion": "1.3.0",
+      "fixtures": [
+        "health.json",
+        "manifest.json",
+        "source-platform-produced.json"
+      ],
+      "reason": "Contract 1.3.0 adds Source.platform_produced: the manifest and health name the new contract and one source row carries the field. The stream's recordings are the 1.2.0 plugin's, still valid, since a minor only adds.",
+      "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off, the whole registry synced, EVIMED_EVIDENCE_FEED_URL set), not a production plugin"
+    }
+  ]
 }

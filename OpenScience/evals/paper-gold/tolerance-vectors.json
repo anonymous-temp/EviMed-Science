@@ -1,0 +1,18 @@
+{
+  "note": "Shared by tolerance.test.mjs and score_existing_methods.py so the JavaScript rule and its Python port cannot drift. Synthetic numbers only; no hidden reference value appears here.",
+  "vectors": [
+    { "name": "printed ratio at its printed precision", "reference": { "value": 1.3, "printed": "1.30", "absoluteTolerance": 0.005 }, "halfWidth": 0.005000000005, "clamped": false },
+    { "name": "curator-chosen half unit of 0.5 on a two-decimal ratio is clamped", "reference": { "value": 1.3, "printed": "1.30", "absoluteTolerance": 0.5 }, "halfWidth": 0.005000000005, "clamped": true },
+    { "name": "legacy record without a printed token is bounded by its shortest printing", "reference": { "value": 1.3, "absoluteTolerance": 0.5 }, "halfWidth": 0.05000000005, "clamped": true },
+    { "name": "p-value near 1e-25 with an absolute tolerance of 1e-10", "reference": { "value": 3.4567e-25, "absoluteTolerance": 1e-10 }, "halfWidth": 3.4567e-28, "clamped": true },
+    { "name": "computed reference inside the relative ceiling keeps its stated tolerance", "reference": { "value": -0.7145323, "absoluteTolerance": 1e-5 }, "halfWidth": 1e-5, "clamped": false },
+    { "name": "relative tolerance stated on a computed reference", "reference": { "value": 2.5e-9, "absoluteTolerance": 0, "relativeTolerance": 1e-6 }, "halfWidth": 2.5e-15, "clamped": false },
+    { "name": "a reference that is exactly zero has an absolute ceiling", "reference": { "value": 0, "absoluteTolerance": 1e-5 }, "halfWidth": 1e-6, "clamped": true },
+    { "name": "exact comparison stays exact", "reference": { "value": 2, "absoluteTolerance": 0 }, "halfWidth": 0, "clamped": false },
+    { "name": "printed percentage on the proportion scale", "reference": { "value": 0.375, "printed": "37.5%" }, "halfWidth": 0.0005000000005, "clamped": false },
+    { "name": "scientific notation is relative to its last mantissa digit", "reference": { "value": 1.2e-5, "printed": "1.2 x 10^-5" }, "halfWidth": 5.000000005e-7, "clamped": false },
+    { "name": "a named reason widens a printed number to two units of its last digit", "reference": { "value": 0.164, "printed": "0.164", "absoluteTolerance": 0.002, "toleranceReason": "inputs-rounded-in-source" }, "halfWidth": 0.002, "clamped": false },
+    { "name": "no reason buys more than the ceiling", "reference": { "value": 0.164, "printed": "0.164", "absoluteTolerance": 0.05, "toleranceReason": "stochastic-method" }, "halfWidth": 0.00492, "clamped": true },
+    { "name": "integer-valued float reads as an integer in both languages", "reference": { "value": 13.0, "absoluteTolerance": 1e-5 }, "halfWidth": 1e-5, "clamped": false }
+  ]
+}

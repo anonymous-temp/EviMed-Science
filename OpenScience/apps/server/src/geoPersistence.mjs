@@ -1,5 +1,5 @@
 /**
- * 「循证 GEO」's own schema, `evimed_geo` (build spec 2026-09-25 §2).
+ * 「循证传播」's own schema, `evimed_geo` (build spec 2026-09-25 §2).
  *
  * Hidden knowledge:
  *
@@ -58,10 +58,11 @@
  */
 
 import {
-  GEO_ARMS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_AUDIENCES, GEO_CELL_STATUSES,
+  GEO_ARMS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_REFERENCE_STATUSES, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_MEMBER_ROLES, GEO_PLACEMENT_LABELS, GEO_AUDIENCES, GEO_CELL_STATUSES,
   GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_DATA_TYPES, GEO_ERROR_ACTIONS, GEO_ERROR_STATUSES, GEO_ERROR_TYPES,
   GEO_FAILURE_MODES, GEO_GROUP_SIGNALS, GEO_LEDGER_KINDS, GEO_MEDIA_TYPES, GEO_METRIC_ROW_SCOPES, GEO_ORDER_STATES,
   GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS,
+  GEO_COMPARISON_EVIDENCE_TYPES,
   GEO_PROBE_JOB_STATUSES, GEO_PROJECT_STATUSES, GEO_QUESTION_KINDS, GEO_RECONCILIATION_STATUSES, GEO_ROUND_KINDS,
   GEO_ROUND_STATUSES, GEO_SEVERITIES, GEO_SNAPSHOT_STATUSES, GEO_SOURCE_LAYERS, GEO_TIERS, GEO_TOPUP_STATUSES,
 } from "@evimed/domain";
@@ -78,7 +79,7 @@ export const GEO_SCHEMA = "evimed_geo";
 export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
   "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles",
-  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links",
+  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members",
 ]);
 
 /**
@@ -552,6 +553,9 @@ CREATE TABLE IF NOT EXISTS evimed_geo.reconciliations (
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS red_flag_expected jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS red_flag_hits jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS safety_terms_hit jsonb NOT NULL DEFAULT '[]'::jsonb;
+-- The three checks beside the statements (flywheel F21): a claim beyond the label, safety information left out of the answer, and
+-- what the links it cites say — as the judge found them and code re-verified them.
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS checks jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS variant text;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS rival text;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS reason text;
@@ -591,9 +595,67 @@ CREATE TABLE IF NOT EXISTS evimed_geo.schedule_marks (
 );
 CREATE INDEX IF NOT EXISTS geo_schedule_marks_open_idx ON evimed_geo.schedule_marks (geo_project_id, kind, state)
   WHERE state IN ('pending', 'claimed', 'running');
+-- What a project's product is about, by the shared entity vocabulary
+-- (entityVocabulary.mjs). NULL means not tagged yet — the vocabulary could not
+-- tag when the product was written — and a pass over those rows tags them.
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS entity_keys text[];
+
 -- A claim's source as a reader names it (「玛仕度肽注射液说明书（国家药监局 2025）」);
 -- source_ref stays the machine reference the quote is checked against.
 ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS source_label text;
+
+-- One evidence chain (flywheel F21, 2026-10-06): the claim table stays the project's working index, and the claims a card
+-- ruler verifies are also written into the product zone's cards. journey_stage and clinical_question say which card a claim
+-- belongs to, comparison_type how a difference is known (closed words in the domain), artifact_path the preserved source
+-- file its quotation is in, and card_id, card_claim_id and card_revision the card claim it became. A release-5 row has none
+-- of them and reads as a claim not yet written into a card.
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS journey_stage jsonb;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS clinical_question text;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS comparison_type text CHECK (comparison_type IN ${inList(GEO_COMPARISON_EVIDENCE_TYPES)});
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS artifact_path text;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS card_id text;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS card_claim_id text;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS card_revision integer;
+CREATE INDEX IF NOT EXISTS geo_claims_card_idx ON evimed_geo.claims (card_id) WHERE card_id IS NOT NULL;
+
+-- Who speaks (producer: enterprise or doctor, the relation to the product, a doctor's hospital, department and specialty) and
+-- the project's one product zone in the evidence zones. The zone id is unique: a zone belongs to one project.
+-- The lower layers cite the cards (F21). claim_refs holds the references the platform read in the article's text (card id, card claim
+-- id, card revision) and ref_status what it found; ref_checked_sha the hash of the text it read, so an unchanged text is not read
+-- again. A card-layer article made from a card has card_id and card_revision and no path: its text is the card's public view,
+-- rendered when it is read. placement_label is 广告 or 商业合作 on an article that was paid for. A release-5 article has none of
+-- them and reads as unchecked.
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS claim_refs jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS ref_status text NOT NULL DEFAULT 'unchecked' CHECK (ref_status IN ${inList(GEO_ARTICLE_REFERENCE_STATUSES)});
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS ref_checked_sha text;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS card_id text;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS card_revision integer;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS placement_label text CHECK (placement_label IN ${inList(GEO_PLACEMENT_LABELS)});
+CREATE UNIQUE INDEX IF NOT EXISTS geo_articles_card_key ON evimed_geo.articles (geo_project_id, card_id) WHERE card_id IS NOT NULL AND path IS NULL;
+
+-- Project members (flywheel F29): colleagues and outside agencies, by role, beside the owner (who is the project's account and has no
+-- row). One row per account and role — a person may be both editor and medical reviewer. detail holds how the person is named when a
+-- card discloses them (hospital, department, specialty, title) and, for an agency, who it is. user_id is the member's account, so
+-- the account's deletion removes its memberships; the project's deletion takes the rows with it.
+CREATE TABLE IF NOT EXISTS evimed_geo.members (
+  geo_project_id text NOT NULL REFERENCES evimed_geo.projects(id) ON DELETE CASCADE,
+  user_id        text NOT NULL,
+  role           text NOT NULL CHECK (role IN ${inList(GEO_MEMBER_ROLES)}),
+  invited_by     text,
+  detail         jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (geo_project_id, user_id, role)
+);
+CREATE INDEX IF NOT EXISTS geo_members_user_idx ON evimed_geo.members (user_id);
+
+-- A project the platform keeps for itself (the medication-question bank of flywheel F22, held by the platform publisher): measured
+-- by the probe and judged like any other, and never advanced by the orchestrator — no step is dispatched for it, no weekly report
+-- exported, no schedule run.
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS internal boolean NOT NULL DEFAULT false;
+
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS producer jsonb;
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS product_zone_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS geo_projects_product_zone_key ON evimed_geo.projects (product_zone_id) WHERE product_zone_id IS NOT NULL;
 
 -- Links the brand published itself (gap E6). \`url_key\` is \`canonicalGeoUrl(url)\`,
 -- what an engine's citation is matched by; \`article_id\` names the project's

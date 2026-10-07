@@ -100,7 +100,26 @@ function refusedFrame(error: unknown): FrameFailure {
  *  which is done in the conversation itself, from its own composer or from the
  *  menu on its row in the sidebar. The frame's own notice page says the same
  *  words (`runtimeUiServer.mjs`). */
-const RUNTIME_SLOT_CAP_TEXT = "同时进行的研究已达上限，先结束一个再试。";
+const RUNTIME_SLOT_CAP_TEXT = "你同时进行的研究已达上限，先结束一个再试。";
+
+/**
+ * Every research environment of the deployment is taken (2026-10-05).
+ *
+ * Not the researcher's own ceiling above — that one is theirs to lift and stays
+ * a refusal — but the host's: its slots are shared with other products and are
+ * not raised, so a start that finds them all taken is a place in line. The
+ * cover says so in one plain line and the opening asks again by itself, at the
+ * pace the control plane named (`Retry-After`) and widening to the last rung
+ * here, for as long as the reader stays on this conversation; it starts when a
+ * slot frees. Said on the cover, never as an alert: nothing has failed.
+ */
+const ROOM_FULL_CODE = "runtime_capacity_full";
+const ROOM_FULL_LINE = "所有研究环境都在使用中，空出后会自动开始。";
+const ROOM_RETRY_MS = [5_000, 8_000, 12_000, 15_000] as const;
+
+function isRoomFull(error: unknown): error is WebApiError {
+  return error instanceof WebApiError && error.code === ROOM_FULL_CODE;
+}
 
 /**
  * A start refused because the project's runtime settings are being applied.
@@ -290,7 +309,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // is a choice this shell refuses rather than binds.
   const capabilityAgents = useRef(new Map<string, { agentId: string; agentVersion: string }>());
   // The capability the task on screen is bound to, as the control plane said
-  // it: what decides whether the 「循证 GEO」 chip carries its options.
+  // it: what decides whether the 「循证传播」 chip carries its options.
   const [frameCapability, setFrameCapability] = useState<string | null>(null);
   // The latest `geo-options` handler, read by the message listener.
   const geoOptionsHandler = useRef<((change: { sessionId?: unknown; coverageDays?: unknown; engines?: unknown }) => void) | null>(null);
@@ -315,6 +334,13 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   const [preparing, setPreparing] = useState(false);
   const preparingRetries = useRef(0);
   const preparingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Every research environment is taken (`ROOM_FULL_CODE`): the cover says so
+  // and the opening asks again by itself until a slot frees.
+  const [waitingForRoom, setWaitingForRoom] = useState(false);
+  const roomAsks = useRef(0);
+  const roomTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const roomHold = useRef({ active, suspended });
+  roomHold.current = { active, suspended };
   // The control plane's account of the runtime start this opening waits on.
   const [startStatus, setStartStatus] = useState<WebRuntimeStartStatus | null>(null);
   const incoming = useRef(0);
@@ -347,7 +373,9 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   useEffect(() => {
     preparingRetries.current = 0;
     setPreparing(false);
-    return () => clearTimeout(preparingTimer.current);
+    roomAsks.current = 0;
+    setWaitingForRoom(false);
+    return () => { clearTimeout(preparingTimer.current); clearTimeout(roomTimer.current); roomTimer.current = undefined; };
   }, [projectId]);
 
   const navigationKey = `${location.pathname}:${runtimeUiIntentFromState(location.state, projectId)?.requestId ?? ""}`;
@@ -486,7 +514,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // Which moment the opening is in, for its deadline; opening the task (a
   // request in flight) is timed by its own deadline further down.
   const runtimeMoment = startStatus?.startStage ?? "environment";
-  const deadlineMoment: OpenMoment | null = navigated || pending || ready ? null
+  const deadlineMoment: OpenMoment | null = navigated || pending || ready || waitingForRoom ? null
     : runtimeUp && binding ? "interface" : runtimeMoment;
   useEffect(() => {
     if (error || deadlineMoment === null) return;
@@ -500,6 +528,35 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     return () => clearTimeout(timeout);
   }, [error, attempt, deadlineMoment, booted, projectId]);
 
+  // The place in line (`ROOM_FULL_CODE`): one timer, whoever noticed first — this
+  // opening's own start or the frame document's notice — and one more ask each
+  // time it fires. A frame the reader is not looking at asks nothing; the timer
+  // keeps its pace and asks again once it is on screen.
+  const waitForRoom = useCallback((retryAfterSeconds: number | null) => {
+    setWaitingForRoom(true);
+    if (roomTimer.current !== undefined) return;
+    const rung = ROOM_RETRY_MS[Math.min(roomAsks.current, ROOM_RETRY_MS.length - 1)];
+    roomAsks.current += 1;
+    const delay = Math.max(rung, retryAfterSeconds ? retryAfterSeconds * 1_000 : 0);
+    const ask = () => {
+      roomTimer.current = undefined;
+      if (!roomHold.current.active || roomHold.current.suspended) { waitForRoom(null); return; }
+      void startWebRuntime({ projectId, opening: true }).then(() => {
+        // A slot was free: the opening begins again, and finds its runtime up.
+        roomAsks.current = 0;
+        setWaitingForRoom(false);
+        setAttempt(value => value + 1);
+      }).catch((cause: unknown) => {
+        if (isRoomFull(cause)) { waitForRoom(cause.retryAfterSeconds); return; }
+        roomAsks.current = 0;
+        setWaitingForRoom(false);
+        const refusal = refusedStart(cause);
+        setError(refusal ?? refusedFrame(cause));
+      });
+    };
+    roomTimer.current = setTimeout(ask, delay);
+  }, [projectId]);
+
   // This opening's own start. The frame document starts the runtime too, and
   // the two join one start on the server; this call is made because its answer
   // can be read — a start refused into a frame is a page this shell cannot see
@@ -510,11 +567,13 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   useEffect(() => {
     let live = true;
     void startWebRuntime({ projectId, opening: true }).catch((cause: unknown) => {
-      const refusal = live ? refusedStart(cause) : null;
+      if (!live) return;
+      if (isRoomFull(cause)) { waitForRoom(cause.retryAfterSeconds); return; }
+      const refusal = refusedStart(cause);
       if (refusal) setError(refusal);
     });
     return () => { live = false; };
-  }, [projectId, attempt]);
+  }, [projectId, attempt, waitForRoom]);
 
   // The moment the start is in, asked while the runtime is not up yet. A
   // status read that fails changes nothing: the deadline stays in charge.
@@ -538,11 +597,12 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // an opening as well as a renewal; a start still refused says why.
   const reconnect = useCallback(() => {
     void startWebRuntime({ projectId, opening: true }).catch((cause: unknown) => {
+      if (isRoomFull(cause)) { waitForRoom(cause.retryAfterSeconds); return; }
       const refusal = refusedStart(cause);
       if (refusal) setError(refusal);
     });
     renewBinding.current?.();
-  }, [projectId]);
+  }, [projectId, waitForRoom]);
 
   /** One message to the frame's bridge, in the envelope and sequence it checks. */
   const postToFrame = useCallback((type: string, fields: object) => {
@@ -573,6 +633,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           preparingTimer.current = setTimeout(() => setAttempt(value => value + 1), PREPARING_RETRY_MS);
           return;
         }
+        if (message.code === ROOM_FULL_CODE) { waitForRoom(null); return; }
         setError(noticedFrame(message.code, typeof message.detail === "string" ? message.detail.slice(0, 200) : "",
           typeof message.title === "string" ? message.title.slice(0, 200) : ""));
         return;
@@ -587,6 +648,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         recoveryAttempted.current = false;
         preparingRetries.current = 0;
         setPreparing(false);
+        roomAsks.current = 0;
+        setWaitingForRoom(false);
         setNativeError(null);
         incoming.current = message.seq; lastSent.current = ""; setReady(true);
         setReadyGeneration(value => value + 1);
@@ -615,7 +678,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const to = routes[String(message.destination)];
         if (!to) return;
         if (message.destination === "geo") {
-          // 「循证 GEO」, at one of this project's tabs when the frame names
+          // 「循证传播」, at one of this project's tabs when the frame names
           // one (a run's report linking to 诊断): the tab is a closed
           // vocabulary, and the project is the tab's own, never the frame's word.
           incoming.current = message.seq;
@@ -698,7 +761,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           })
           .catch(() => { postToFrame("capability", { capabilityId: null, sessionId: from }); });
       } else if (message.type === "evimed.runtime-ui.geo-options") {
-        // 覆盖周期 or AI 引擎 changed beside the 「循证 GEO」 chip; the handler
+        // 覆盖周期 or AI 引擎 changed beside the 「循证传播」 chip; the handler
         // validates it again and writes it to this project's GEO row.
         incoming.current = message.seq;
         geoOptionsHandler.current?.({ sessionId: message.sessionId, coverageDays: message.coverageDays, engines: message.engines });
@@ -754,7 +817,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [binding, origin, projectId, intent, location, navigate, navigated, attempt, postToFrame]);
+  }, [binding, origin, projectId, intent, location, navigate, navigated, attempt, postToFrame, waitForRoom]);
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;
@@ -843,7 +906,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     return () => { active = false; };
   }, [booted, error, frameId, frameTask, postToFrame]);
 
-  // 循证 GEO's options beside its chip, for a conversation bound to one of the
+  // 循证传播's options beside its chip, for a conversation bound to one of the
   // module's capabilities (`useFrameGeoOptions`).
   const postGeo = useCallback((payload: object) => postToFrame("geo", payload), [postToFrame]);
   geoOptionsHandler.current = useFrameGeoOptions({
@@ -897,7 +960,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // it has, switching to another shows nothing — the kernel is on screen and
   // keeps its own composer (a switch inside a live runtime used to read as a
   // cold start: walk of 2026-09-20, 「每次点会话都要冷启动」).
-  const cover = navigated ? null : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} line={preparing ? PREPARING_LINE : undefined} />;
+  const cover = navigated ? null : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} line={waitingForRoom ? ROOM_FULL_LINE : preparing ? PREPARING_LINE : undefined} />;
   // A renewal that failed is only worth saying once the lease it renews has
   // actually run out — or when it is an expired login, which no retry fixes.
   const leaseAlert = leaseFailure && (leaseFailure.final || leaseExpired) ? leaseFailure.text : null;

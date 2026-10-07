@@ -45,7 +45,7 @@ jobs:
           sudo apt-get install -y python3 python3-pip python3-venv postgresql-client python3-yaml python3-cryptography r-base-core libgmp10 zlib1g fonts-noto-cjk fonts-texgyre ripgrep
           # Match the scientific imports exercised by deployment-smoke with
           # the reviewed versions shipped in deploy/runtime-dsh/Dockerfile.
-          python3 -m pip install numpy==2.2.6 pandas==2.2.3 scipy==1.15.3
+          python3 -m pip install numpy==2.2.6 pandas==2.2.3 scipy==1.15.3 statsmodels==0.14.6
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -152,6 +152,7 @@ jobs:
           pnpm check:skill-vocabulary
           pnpm check:skill-digests
           pnpm check:skill-packages
+          pnpm check:vcr-scenario-help
           pnpm check:composition-references
           pnpm check:kernel-defaults
           pnpm check:pin-inventory
@@ -941,13 +942,22 @@ jobs:
           df -h /
 
       - name: Build hosted Web, agent runtime and deterministic replay images
+        env:
+          # The workflow's own token, for the one build that reaches the GitHub
+          # API (the Mendelian randomization engine's R packages): api.github.com
+          # allows 60 unauthenticated requests an hour per runner address and this
+          # build spent them on about every other run. It reaches the engine's
+          # Dockerfile as a BuildKit secret through the overlay below and is
+          # exported as GITHUB_PAT for the R install command alone: no build
+          # argument, no layer, no log.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           # This is an ephemeral CI builder, never the serving host. Stop before
           # builds or exports exhaust the filesystem; no production volume exists here.
           test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
           docker buildx create --name evimed-ci --driver docker-container --driver-opt default-load=true --use
           export BUILDX_BUILDER=evimed-ci
-          extra_compose=(-f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml)
+          extra_compose=(-f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml -f ../.github/ci/docker-compose.build-secrets.yml)
           build_flags=()
           if [ "$EVIMED_FULL_RELEASE" = "true" ]; then
             build_flags=(--no-cache)

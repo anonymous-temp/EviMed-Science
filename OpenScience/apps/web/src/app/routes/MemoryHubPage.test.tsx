@@ -322,7 +322,7 @@ describe("记忆胶囊", () => {
           key: "project.fact.aspirin", value: "研究阿司匹林一级预防的净获益", summary: "研究阿司匹林一级预防的净获益" }),
         // A task brief is how a memory is found, never a row (audit 2026-09-26, M-4).
         record({ id: "rec_brief", kind: "run_summary", scope: "project", scopeId: "prj_1",
-          key: "run.session.ses_far", value: "{}", summary: "「循证 GEO」自动运行 · 第 6 步（内容）" }),
+          key: "run.session.ses_far", value: "{}", summary: "「循证传播」自动运行 · 第 6 步（内容）" }),
       ],
       query: "阿司匹林", semantic: 1, conversations: {}, usage: {},
     });
@@ -331,7 +331,7 @@ describe("记忆胶囊", () => {
     await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "阿司匹林");
     await waitFor(() => expect(searchMemories).toHaveBeenCalledWith("阿司匹林"));
     expect(await screen.findByText("研究阿司匹林一级预防的净获益")).toBeInTheDocument();
-    expect(screen.queryByText(/循证 GEO」自动运行/)).toBeNull();
+    expect(screen.queryByText(/循证传播」自动运行/)).toBeNull();
     expect(screen.queryByText(/药学背景/)).toBeNull();
     expect(screen.queryByText(/搜索结果按相关度排序/)).toBeNull();
   });

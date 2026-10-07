@@ -285,6 +285,7 @@ services:
       OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY: ${OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY:-10}
       OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY: ${OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY:-1}
       OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS: ${OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS:-3}
+      OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY: ${OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY:-8}
       OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS: ${OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS:-86400000}
       OPEN_SCIENCE_EVOLUTION_POLL_MS: ${OPEN_SCIENCE_EVOLUTION_POLL_MS:-15000}
       OPEN_SCIENCE_EVOLUTION_LEASE_MS: ${OPEN_SCIENCE_EVOLUTION_LEASE_MS:-120000}
@@ -296,6 +297,10 @@ services:
       OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES:-4194304}
       OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS:-10000}
       OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS:-256}
+      OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY:-1}
+      OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS:-30000}
+      OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT: ${OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT:-2}
+      OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE: ${OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE:-60}
       OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST: ${OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST:-[]}
       OPEN_SCIENCE_EVALUATION_DATA_DIR: ${OPEN_SCIENCE_EVALUATION_DATA_DIR:-}
       NODE_ENV: ${NODE_ENV:-production}
@@ -526,7 +531,80 @@ services:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT:
-      # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
+      # The platform's evidence programme and its public pages (evidence-flywheel
+      # plan 2026-10-05, B7): the programme's switch, its day's model money and
+      # its concurrency, and the two public-page switches. Value-less: unset keeps
+      # config.mjs's defaults — everything off, 30 yuan a day, one slot — so a
+      # deployment turns each on in .env and nowhere else.
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_RECALCULATION_CARDS_ENABLED:
+      OPEN_SCIENCE_PREDICTION_REGISTRY_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY:
+      # The programme's own limits (F01/F02): an episode's budget, the least number of distinct readers
+      # before a topic's demand is counted, the original analyses published in a week, and the age
+      # at which an official card's last source check makes it stale.
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS:
+      OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE:
+      # Where the public pages, their API, the sitemap and the feed are served: /evidence (default) or /evimed-evidence, for a
+      # numeric address whose own /evidence/ belongs to another product. Value-less: unset keeps config.mjs's default.
+      OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH:
+      # What one address may fetch of the public pages in a minute, and the topic requests one account
+      # may make in a day (flywheel F08). Value-less: unset keeps config.mjs's defaults.
+      OPEN_SCIENCE_EVIDENCE_PUBLIC_RATE_PER_MINUTE:
+      OPEN_SCIENCE_EVIDENCE_TOPIC_REQUESTS_PER_DAY:
+      # The card-citation gift (evidence-flywheel plan 2026-10-05, F07): interface only,
+      # off and worth 0 until the owner chooses an amount.
+      OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT:
+      # Keeping the cards current and answering readers' challenges (flywheel F13/F14,
+      # 2026-10-05): the switch (off), the watch's batch and interval, a reader's daily
+      # challenges, and the exit rule for an AI-kept card. Value-less: unset keeps
+      # config.mjs's defaults.
+      OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH:
+      OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS:
+      OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY:
+      OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS:
+      OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS:
+      # The flywheel's own figures (2026-10-06): the operator route and the scrape's families. Off by default.
+      OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED:
+      # The community column of an official zone (2026-10-06): the switch (off) and the most cards one column lists.
+      OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS:
+      # What becomes of a published card goes back into learning (2026-10-06): the switch (off) and the change-log entries one pass reads.
+      OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED:
+      OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH:
+      # The platform's own modules hand 循证进化 what they could not do as research leads (2026-10-06): the switch (off) and the new leads taken in a day.
+      OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED:
+      OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY:
+      # A general lesson of an account's handbook may become a platform skill after an independent re-check (2026-10-06): the switch (off) and the candidates re-checked in a day.
+      OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:
+      OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY:
+      # What the platform reads for one account that asks it to verify a card's sources, per rolling day.
+      OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY:
+      # The most the judging of readers' challenges may spend in a day.
+      OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY:
+      # Sharing memory inside the platform (evidence-flywheel plan 2026-10-05, F17-F19):
+      # how long a share link lives and how often it may be used, how many other
+      # accounts must keep a new author's pack before it counts for platform
+      # learning and for how long, the daily ceiling on deliveries to other
+      # accounts, and the evidence-zone subscription (each switch off until turned on).
+      # Value-less: unset keeps config.mjs's defaults.
+      OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:
+      OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS:
+      OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES:
+      OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS:
+      OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS:
+      OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY:
+      OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT:
+      OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS:
+      # 「循证传播」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
       # open to operators once on, no social channel, no marketplace. The
       # marketplace key is the host file bound below.
@@ -543,6 +621,8 @@ services:
       OPEN_SCIENCE_GEO_SOCIAL_URL:
       OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS:
       OPEN_SCIENCE_GEO_INCLUSION_ENGINES:
+      OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED:
+      OPEN_SCIENCE_GEO_QUESTION_BANK_ENABLED:
       # 「虚拟临研」 (vcrService.mjs, build plan 2026-09-28). Value-less, same
       # rule: unset keeps config.mjs's defaults — the module off, open to
       # operators once on, no engine composed and no data plane, which is
@@ -550,6 +630,11 @@ services:
       OPEN_SCIENCE_VCR_ENABLED:
       OPEN_SCIENCE_VCR_AUDIENCE:
       OPEN_SCIENCE_VCR_PREVIEW_USERS:
+      OPEN_SCIENCE_VCR_PUBLIC_SIMULATIONS_ENABLED:
+      OPEN_SCIENCE_VCR_PLATFORM_PACKS_ENABLED:
+      OPEN_SCIENCE_VCR_FRONTIER_EVENTS_ENABLED:
+      OPEN_SCIENCE_VCR_FRONTIER_EVENTS_STUDIES_PER_TICK:
+      OPEN_SCIENCE_VCR_FRONTIER_EVENTS_WINDOW_DAYS:
       OPEN_SCIENCE_VCR_POLL_MS:
       OPEN_SCIENCE_VCR_LEASE_MS:
       OPEN_SCIENCE_VCR_ENGINE_URL: ${OPEN_SCIENCE_VCR_ENGINE_URL-}
@@ -594,6 +679,10 @@ services:
       # a starting allowance on its first read (2026-10-04).
       OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED:
       OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS:
+      # The platform wallet's gifts (2026-10-05): how many days the sign-up gift lasts, and the monthly gift
+      # (0 is off). The defaults are the code's own and are written here so an operator reads them where they set them.
+      OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS: ${OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS:-30}
+      OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT: ${OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT:-0}
       # Versioned task charges opt in independently of the allowance page.
       OPEN_SCIENCE_RESEARCH_BILLING_ENABLED:
       OPEN_SCIENCE_RESEARCH_COMMERCE_ENABLED:
@@ -747,6 +836,10 @@ services:
       # not on the list does nothing and says nothing.
       OPEN_SCIENCE_LEARNING_EVALUATION_USERS:
       OPEN_SCIENCE_OPERATOR_USERS:
+      # The account the smoke and the capability battery sign in as. With the operators it is the only one whose
+      # acceptance-*/audit-*/eval-method-* projects are the platform's own (not charged, outside the project
+      # ceiling and the runtime slots); unset, there is none. Both containers decide it from the same value.
+      OPEN_SCIENCE_ACCEPTANCE_USERNAME:
       OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY:
@@ -839,7 +932,7 @@ services:
       OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE: ${OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE:-}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS:-60000}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES:-16777216}
-      # The NCBI Gene Expression Omnibus workflow's six resource limits (config.mjs `geneExpression*`; not 循证 GEO). The two
+      # The NCBI Gene Expression Omnibus workflow's six resource limits (config.mjs `geneExpression*`; not 循证传播). The two
       # byte limits are enforced by the public-source gateway as a download streams; every limit also reaches the runtime
       # as EVIMED_GENE_EXPRESSION_*, where the tools refuse an input over one for that computation. Counters:
       # open_science_gene_expression_limits_total{limit,action}.
@@ -912,6 +1005,7 @@ services:
       OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS: ${OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS:-120000}
       OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS: ${OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS:-43200000}
       OPEN_SCIENCE_RUNTIME_IDLE_YIELD_AFTER_MS: ${OPEN_SCIENCE_RUNTIME_IDLE_YIELD_AFTER_MS:-1800000}
+      OPEN_SCIENCE_RUNTIME_START_WAIT_MS: ${OPEN_SCIENCE_RUNTIME_START_WAIT_MS:-180000}
       OPEN_SCIENCE_RUNTIME_PRE_STOP_TRANSCRIPT_TIMEOUT_MS: ${OPEN_SCIENCE_RUNTIME_PRE_STOP_TRANSCRIPT_TIMEOUT_MS:-15000}
       OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS: ${OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS:-30000}
       OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS: ${OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS:-64}
@@ -1856,6 +1950,7 @@ services:
       OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY: ${OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY:-10}
       OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY: ${OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY:-1}
       OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS: ${OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS:-3}
+      OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY: ${OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY:-8}
       OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS: ${OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS:-86400000}
       OPEN_SCIENCE_EVOLUTION_POLL_MS: ${OPEN_SCIENCE_EVOLUTION_POLL_MS:-15000}
       OPEN_SCIENCE_EVOLUTION_LEASE_MS: ${OPEN_SCIENCE_EVOLUTION_LEASE_MS:-120000}
@@ -1867,6 +1962,10 @@ services:
       OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES:-4194304}
       OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS:-10000}
       OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS:-256}
+      OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY:-1}
+      OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS:-30000}
+      OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT: ${OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT:-2}
+      OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE: ${OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE:-60}
       OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST: ${OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST:-[]}
       OPEN_SCIENCE_EVALUATION_DATA_DIR: ${OPEN_SCIENCE_EVALUATION_DATA_DIR:-}
       NODE_ENV: ${NODE_ENV:-production}
@@ -1934,6 +2033,10 @@ services:
       # launch plan's own reads.
       OPEN_SCIENCE_REVIEW_ENABLED:
       OPEN_SCIENCE_OPERATOR_USERS:
+      # The account the smoke and the capability battery sign in as. With the operators it is the only one whose
+      # acceptance-*/audit-*/eval-method-* projects are the platform's own (not charged, outside the project
+      # ceiling and the runtime slots); unset, there is none. Both containers decide it from the same value.
+      OPEN_SCIENCE_ACCEPTANCE_USERNAME:
       # A run's budgets, the delivery retry ceiling and the runtime's own
       # switches, passed to neither container until 2026-09-28.
       OPEN_SCIENCE_RUN_MAX_STEPS:

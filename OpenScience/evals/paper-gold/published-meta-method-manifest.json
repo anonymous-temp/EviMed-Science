@@ -1,69 +1,133 @@
 {
-  "schemaVersion": 1,
-  "methodId": "meta-reml-published-data-v2",
+  "schemaVersion": 2,
+  "methodId": "meta-reml-published-data-v3",
   "track": "E",
+  "engineId": "meta",
+  "executionKind": "actual-existing-engine",
   "benchmarkType": "method",
   "controlPlaneOnlyGold": true,
-  "referenceHash": "016e24eddf50c13d35a57a04bb7a2e27737531ce4b777d9ac616d1d4cc0123b8",
-  "sourceCommit": "0cb96ce4ff16586a9dbc8a9b0f9bc617538d2738",
-  "status": "actual-existing-engine-method-ruler-scored-not-full-research",
+  "referenceHash": "1bf963851dfcdc365600bb83b6cb9a7dc4c38bec10790feb760b0c2b0ecea896",
+  "status": "method-ruler-scored-every-admitted-case-reported-not-full-research",
+  "measures": "The engine's own statistics function on the frozen inputs of every admitted case.",
+  "referenceKinds": [
+    "other-implementation"
+  ],
+  "admission": {
+    "rule": "A pinned metadat dataset with verified file hashes and a citable source publication.",
+    "engineOutputRead": false,
+    "fixedBeforeScoring": true
+  },
+  "rowsEntered": 5,
+  "cases": 5,
+  "excludedBeforeScoring": {
+    "count": 0,
+    "reasons": {}
+  },
+  "distinctPublishedSources": 5,
   "references": [
     {
       "id": "dat.bcg",
+      "kind": "other-implementation",
       "publicationId": "10.1001/jama.1994.03510330076038",
       "sourceHash": "8508024604252ddecbbba88a5ebbbf76ddec7d32f9e5df56521f602ce5398fdb",
-      "authorCodeSourceHash": "bed1c56bcdf067bc6733193e23057b42bd1177c013271b036ad6f016e8c8fd68",
-      "independentImplementation": "metafor-5.2.1"
+      "independentImplementation": "metafor-5.2.1",
+      "outcome": "agree"
     },
     {
       "id": "dat.bangertdrowns2004",
+      "kind": "other-implementation",
       "publicationId": "10.3102/00346543074001029",
       "sourceHash": "3067af08a40ed500ee48373fc720743eb32bec5ebd6d8f32787be02603a3a8c0",
-      "authorCodeSourceHash": "3c0a995e96921c64d9680eda8e068bc05d69190c27c639ec55ce23e365c7677e",
-      "independentImplementation": "metafor-5.2.1"
+      "independentImplementation": "metafor-5.2.1",
+      "outcome": "agree"
     },
     {
       "id": "dat.hackshaw1998",
+      "kind": "other-implementation",
       "publicationId": "10.1136/bmj.315.7114.980",
       "sourceHash": "a0a8476ab3ce31723e8ebd1a6ca365d77dd9a384bef32c21834f7dfc69d51275",
-      "authorCodeSourceHash": "78c11d889f7be144bd58216276c6a5bfe50547e35dd76277283b7d2f31bdcaa6",
-      "independentImplementation": "metafor-5.2.1"
+      "independentImplementation": "metafor-5.2.1",
+      "outcome": "agree"
     },
     {
       "id": "dat.linde2005",
+      "kind": "other-implementation",
       "publicationId": "10.1192/bjp.186.2.99",
       "sourceHash": "589afc35595a819a895edeea88ce3956fb72d4c9a1d2437ae6a5db00461303c9",
-      "authorCodeSourceHash": "a94bcd7acb46d066efc536b4210935367c38606689d34743588b0684a6080cef",
-      "independentImplementation": "metafor-5.2.1"
+      "independentImplementation": "metafor-5.2.1",
+      "outcome": "agree"
     },
     {
       "id": "dat.normand1999",
+      "kind": "other-implementation",
       "publicationId": "10.1002/(sici)1097-0258(19990215)18:3<321::aid-sim28>3.0.co;2-p",
       "sourceHash": "d705acb0f1a83fbd5656706782825347dc285adc6526558346e6d9769c64f70c",
-      "authorCodeSourceHash": "120392187d5984b7b041d6e95f4876d02572420bc4e4e98c341ebb3434a7481f",
-      "independentImplementation": "metafor-5.2.1"
+      "independentImplementation": "metafor-5.2.1",
+      "outcome": "agree"
     }
   ],
   "fullResearchReproductions": 0,
-  "engineId": "meta",
   "actualCalibrationReceipt": {
     "ok": true,
-    "methodId": "meta-reml-published-data-v2",
+    "methodId": "meta-reml-published-data-v3",
     "engineId": "meta",
+    "executionKind": "actual-existing-engine",
     "scored": true,
     "scope": "deterministic-method-only",
-    "methodCases": 10,
-    "passed": 10,
+    "cases": 5,
+    "agree": 5,
+    "disagree": 0,
+    "couldNotRun": 0,
+    "rows": 10,
+    "excludedBeforeScoring": 0,
+    "entered": 5,
+    "publishedSources": 5,
+    "sourcesFullyAgreeing": 5,
+    "bySource": {
+      "10.1001/jama.1994.03510330076038": {
+        "cases": 1,
+        "agree": 1,
+        "disagree": 0,
+        "couldNotRun": 0
+      },
+      "10.3102/00346543074001029": {
+        "cases": 1,
+        "agree": 1,
+        "disagree": 0,
+        "couldNotRun": 0
+      },
+      "10.1136/bmj.315.7114.980": {
+        "cases": 1,
+        "agree": 1,
+        "disagree": 0,
+        "couldNotRun": 0
+      },
+      "10.1192/bjp.186.2.99": {
+        "cases": 1,
+        "agree": 1,
+        "disagree": 0,
+        "couldNotRun": 0
+      },
+      "10.1002/(sici)1097-0258(19990215)18:3<321::aid-sim28>3.0.co;2-p": {
+        "cases": 1,
+        "agree": 1,
+        "disagree": 0,
+        "couldNotRun": 0
+      }
+    },
+    "disagreementDiagnoses": {},
+    "methodCases": 5,
+    "passed": 5,
     "unsupported": 0,
     "passedPublishedSources": 5,
-    "sourceDefinitionHash": "016e24eddf50c13d35a57a04bb7a2e27737531ce4b777d9ac616d1d4cc0123b8",
-    "evaluationScorerHash": "f0e73bb4804a45ca8a61963103b7ffde04875b880e5ad3a34f3e007eade04721",
+    "scoredPublishedSources": 5,
+    "sourceDefinitionHash": "1bf963851dfcdc365600bb83b6cb9a7dc4c38bec10790feb760b0c2b0ecea896",
+    "evaluationScorerHash": "86eb3d1cf3f73bddf7c815b4655ea794feeab727477ab4540b78aff19dacc37b",
     "engineDigest": "d3e00a6ecd6a3bed4d8492bfa843eb685600ead6c7f565283f3681b75e6bf2dc",
     "runtimeDigest": "d63a9b31a9f96a3cca721cab263d4311e96a7442a71c00f4502825accfb70e76",
-    "scorerDigest": "42f18fee01d89d8a3d3c9e1f24df2377aad121ce490bbc84d84faa90e6cee697",
-    "reportHash": "850fe79bf17b3cb38957471f276c571826df9d27b28739b4cf81108b23add40b",
-    "scoredReportHash": "9aba47ec56ec506b5fc09692313b2c789b98bee547b4039cbe49e1a65bb6424e",
-    "fullResearchReproductions": 0,
-    "executedAt": "2026-10-04T18:24:52.040798+00:00"
+    "scorerDigest": "6dbc7aa912f8324b00c54c9e1e0b3bca3166c8c8f4c5fb7741ab4a21f467e6b7",
+    "reportHash": "08e5384deee3b33ea10b5c48ceb242930199c0e316b511fb077d1c86788c4f89",
+    "scoredReportHash": "d1010c2bc37849e39d6c6c04ae955c32278c4658d2b856ee5609b5bf7337857b",
+    "fullResearchReproductions": 0
   }
 }

@@ -238,6 +238,24 @@ function gatewayError(status, code, message) {
   return new GatewayError(status, code, message);
 }
 
+/**
+ * The sentence for the one refusal the gateway answers that it did not raise:
+ * the usage ledger's 402. Answered with the generic sentence below, a call its
+ * budget refused was recorded by the kernel — and shown in the kernel's own
+ * conversation window — as "The model gateway is temporarily unavailable.",
+ * which tells the reader to wait for something that is not coming back
+ * (2026-10-05: an autopilot episode with a CNY 1.11 budget, refused on its
+ * second call). The ledger knows which limit it was; the body says so.
+ * @param {any} error
+ * @returns {string | null}
+ */
+function spendLimitRefusalMessage(error) {
+  if (error?.status !== 402 || error?.code !== "usage_budget_exceeded") return null;
+  return error?.details?.window === "run"
+    ? "The spending limit of this run refused the model call; nothing was sent to the provider."
+    : "The spending limit of this account refused the model call; nothing was sent to the provider.";
+}
+
 function sendError(res, error, onFailure) {
   const status = Number.isSafeInteger(error?.status) ? error.status : 502;
   const code = typeof error?.code === "string" ? error.code : "model_gateway_unavailable";
@@ -256,7 +274,7 @@ function sendError(res, error, onFailure) {
   }
   const message = error instanceof GatewayError
     ? error.message
-    : "The model gateway is temporarily unavailable.";
+    : spendLimitRefusalMessage(error) ?? "The model gateway is temporarily unavailable.";
   const body = Buffer.from(JSON.stringify({ error: { code, message } }));
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
@@ -443,10 +461,35 @@ function normalizedRequest(body, config) {
     model: config.deepseekModel,
     ...reasoningFields(body, "chat", config),
     stream,
-    ...(body.max_tokens == null && body.max_completion_tokens == null
-      ? { max_completion_tokens: configuredOutputLimit } : {}),
+    ...outputCeiling(body, configuredOutputLimit, "max_completion_tokens"),
     ...(stream ? { stream_options: { ...(body.stream_options ?? {}), include_usage: true } } : {}),
   };
+}
+
+/**
+ * The output limit one call is forwarded with: what the caller asked for, and
+ * never more than the deployment's ceiling
+ * (`OPEN_SCIENCE_MODEL_GATEWAY_RESERVATION_MAX_OUTPUT_TOKENS`, 65,536).
+ *
+ * The ceiling used to be only the default for a caller that named no limit. The
+ * kernel names one — 256,000 tokens on every request — and the reservation
+ * prices whatever is named, so each call held ¥2.05 by day (¥1.03 at the night
+ * rate) against a real cost of a few fen. Every budget is compared with
+ * reservations: an episode limited to ¥2.25 was refused on its second call
+ * (production, 2026-10-05), and a quarter of an agenda's cap split among three
+ * re-checks paid for none below a cap of about ¥26. Of 22,689 kernel calls
+ * settled on production none wrote more than 32,763 tokens, so the ceiling is
+ * twice the largest answer ever given and eight times nearer to it than what
+ * was being held. Lowering the limit that is sent, rather than only the amount
+ * reserved, is what keeps the reservation a true ceiling of the call's cost.
+ * @param {Record<string, any>} body a validated request
+ * @param {number} ceiling
+ * @param {"max_tokens" | "max_completion_tokens"} unnamed the field a request that names no limit is given: each wire has its own
+ */
+function outputCeiling(body, ceiling, unnamed) {
+  if (body.max_tokens != null) return { max_tokens: Math.min(body.max_tokens, ceiling) };
+  if (body.max_completion_tokens != null) return { max_completion_tokens: Math.min(body.max_completion_tokens, ceiling) };
+  return { [unnamed]: ceiling };
 }
 
 /** The kernel's credential on the Messages route: the workload token, in
@@ -586,7 +629,7 @@ function normalizedMessagesRequest(body, config) {
     model: config.deepseekModel,
     ...reasoningFields(body, "messages", config),
     stream: body.stream === true,
-    max_tokens: body.max_tokens ?? configuredOutputLimit,
+    ...outputCeiling(body, configuredOutputLimit, "max_tokens"),
   };
 }
 
@@ -1252,6 +1295,13 @@ const CONTROL_PLANE_NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREA
  * personal cap must not stop the feed for everyone, and the feed's spend must
  * not be refused by a limit that was set for a person.
  *
+ * `call.limits.run` (0 or absent = none) is a cap on what `call.runId` has
+ * committed, this call included: the envelope of the unit of work the call is
+ * made for, counted over that unit's own rows. A scheduled agenda's next-action
+ * decision carries its episode's envelope there; the agenda's own daily and
+ * weekly caps are never passed as `daily` and `weekly`, which sum everything
+ * the account spent (`autopilotNextAction.mjs`).
+ *
  * @param {{ config: any, usageLedger: any, fetchImpl?: typeof fetch }} deps
  * @param {{ userId: string, projectId: string, runId?: string | null, purpose?: string, body: any,
  *           signal?: AbortSignal, at?: Date, limits?: { daily?: number, weekly?: number, moduleDaily?: number, run?: number }, operation?:string, taskId?:string, module?:string }} call
@@ -1287,7 +1337,7 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
       estimatedCost: estimate.cost,
       dailyLimit: call.limits?.daily !== undefined ? Number(call.limits.daily) : Number(config.userDailySpendLimit) || 0,
       weeklyLimit: call.limits?.weekly !== undefined ? Number(call.limits.weekly) : Number(config.userWeeklySpendLimit) || 0,
-      runLimit: Number(call.limits?.run)||0,
+      runLimit: Number(call.limits?.run) || 0,
       now: at,
     });
   }

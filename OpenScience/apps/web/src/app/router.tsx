@@ -26,6 +26,7 @@ const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
+const SharedCapsulePage = lazy(() => import("./routes/SharedCapsulePage").then((m) => ({ default: m.SharedCapsulePage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
 const SimulatedWalletPage = lazy(() => import("./routes/SimulatedWalletPage").then((m) => ({ default: m.SimulatedWalletPage })));
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
@@ -36,6 +37,7 @@ const VcrStudyPage = lazy(() => import("./virtual-research/VcrStudyPage").then((
 const EvidenceZonesPage = lazy(() => import("./routes/EvidenceZonesPage").then((m) => ({ default: m.EvidenceZonesPage })));
 const EvidenceZonePage = lazy(() => import("./routes/EvidenceZonePage").then((m) => ({ default: m.EvidenceZonePage })));
 const EvidenceReadingPage = lazy(() => import("./routes/EvidenceReadingPage").then((m) => ({ default: m.EvidenceReadingPage })));
+const EvidenceAuthorPage = lazy(() => import("./routes/EvidenceAuthorPage").then((m) => ({ default: m.EvidenceAuthorPage })));
 const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ default: m.GeoHomePage })));
 const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
@@ -94,7 +96,8 @@ export const routes: RouteObject[] = [
         { path: "frontier/zones", element: <EvidenceZonesPage /> },
         { path: "frontier/zones/:zoneId", element: <EvidenceZonePage /> },
         { path: "frontier/zones/:zoneId/evidence/:cardId", element: <EvidenceReadingPage /> },
-        // 「循证 GEO」: the projects, one project's tabs (概览 when none is
+        { path: "frontier/authors/:authorId", element: <EvidenceAuthorPage /> },
+        // 「循证传播」: the projects, one project's tabs (概览 when none is
         // named), and one AI answer. Like the frontier feed, each answers for
         // itself when the module is off here.
         { path: "geo", element: <GeoHomePage /> },
@@ -111,6 +114,9 @@ export const routes: RouteObject[] = [
         { path: "files", element: <KnowledgePage /> },
         { path: "autopilot", element: <AutopilotPage /> },
         { path: "memory", element: <MemoryHubPage /> },
+        // A share link and a delivery from the inbox (flywheel F17): the same preview, trial and import a file has, with no file.
+        { path: "memory/shared/:token", element: <SharedCapsulePage /> },
+        { path: "memory/delivered/:deliveryId", element: <SharedCapsulePage /> },
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
         { path: "account", element: <AccountPage /> },

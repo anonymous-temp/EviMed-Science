@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { HttpError } from "./security.mjs";
-import { capsuleFactUri, capsuleMemoryRoot, capsuleSegment, capsuleTreeUri, parseCapsuleFactUri } from "./openVikingClient.mjs";
+import { capsuleFactUri, capsuleMemoryRoot, capsuleSegment, capsuleTreeUri, parseCapsuleFactUri, userMemoryRoot } from "./openVikingClient.mjs";
 
 function digest(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -42,11 +42,15 @@ function factDocument(entry) {
  * dropped. That is what makes a stale index harmless and a rebuild always safe.
  */
 export class MemoryIndexing {
-  /** @param {{database:any,openViking:any,jobs:any,rerank?:any,scoreThreshold?:number}} dependencies */
-  constructor({ database, openViking, jobs, rerank = null, scoreThreshold = 0 }) {
+  /** @param {{database:any,openViking:any,jobs:any,withdrawals?:any,rerank?:any,scoreThreshold?:number}} dependencies */
+  constructor({ database, openViking, jobs, withdrawals = null, rerank = null, scoreThreshold = 0 }) {
     this.database = database;
     this.openViking = openViking;
     this.jobs = jobs;
+    // What the account's deletion owes the index (`MemoryIndexWithdrawals`).
+    // Without one, the purge asks the index itself and fails the deletion when
+    // it cannot answer, which is what every deployment did until 2026-10-05.
+    this.withdrawals = withdrawals;
     this.rerank = rerank;
     // The relevance floor a recall asks the index for. Zero rather than the
     // server's own 0.1, which is applied even with no reranker configured and
@@ -94,13 +98,24 @@ export class MemoryIndexing {
     for (const capsuleId of capsuleIds) {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`memory-index:${userId}:${capsuleId}`]);
     }
-    for (const capsuleId of capsuleIds) {
-      await this.openViking.remove(userId, capsuleMemoryRoot(userId, { accountCreatedAt, capsuleId }), { recursive: true });
+    // Every address the account's copies can be at: each registered capsule's
+    // subtree, then the whole capsule tree, which is the only thing that also
+    // removes a subtree this ledger never recorded — an earlier account
+    // generation's, or one whose publication row was lost — and the account's
+    // research memory with it.
+    const uris = [
+      ...capsuleIds.map((capsuleId) => capsuleMemoryRoot(userId, { accountCreatedAt, capsuleId })),
+      capsuleTreeUri(userId), userMemoryRoot(userId),
+    ];
+    if (this.withdrawals) {
+      // Owed in this transaction and asked for after it commits: the account
+      // goes whether or not the index answers today, and its copies go when it
+      // does. The row is the account's alone to outlive it, which is why it is
+      // not a job of the account's own queue.
+      await this.withdrawals.enqueue(client, userId, uris);
+      return { scopes: capsuleIds.length, verified: false, queued: uris.length };
     }
-    // Then the whole capsule tree, which is the only thing that also removes a
-    // subtree this ledger never recorded — an earlier account generation's, or
-    // one whose publication row was lost.
-    await this.openViking.remove(userId, capsuleTreeUri(userId), { recursive: true });
+    for (const uri of uris.slice(0, -1)) await this.openViking.remove(userId, uri, { recursive: true });
     return { scopes: capsuleIds.length, verified: true };
   }
 

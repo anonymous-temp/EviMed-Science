@@ -160,10 +160,22 @@ ACTIVITY=$(docker exec "$WEB_CONTAINER" node -e '
       if (process.argv[1] && (body.data.state !== "idle" || body.data.lease?.requestId !== process.argv[1]
         || !Number.isFinite(expiresAt) || expiresAt <= Date.now()
         || !drained(a) || !drained(body.data.blockers))) throw new Error("maintenance is not owned and drained");
-      console.log([a.runningAgentRuns, a.runningProductJobs, a.busyRuntimes].join(" "));
+      // `interactive`: the runs and runtimes of projects a researcher owns (maintenanceService.interactiveActivity). When
+      // the live release says so, the platform own background work and its leased jobs are reported and do not refuse
+      // a switch; a release that does not say (older, or its inspection failed) is asked about everything, as before.
+      const i = body.data.interactive;
+      const scoped = i && Number.isSafeInteger(i.runningAgentRuns) && Number.isSafeInteger(i.busyRuntimes);
+      console.log([scoped ? i.runningAgentRuns : a.runningAgentRuns, a.runningProductJobs, scoped ? i.busyRuntimes : a.busyRuntimes,
+        scoped ? "interactive" : "all"].join(" "));
     })
     .catch((error) => { console.log("unknown " + error.message); });' "$MAINTENANCE_REQUEST_ID" 2>/dev/null || echo "unknown no-web-container")
-if ! [[ "$ACTIVITY" =~ ^[0-9]+\ [0-9]+\ [0-9]+$ || "$ACTIVITY" == unknown\ * ]]; then ACTIVITY="unknown ${ACTIVITY:-no answer}"; fi
+if ! [[ "$ACTIVITY" =~ ^[0-9]+\ [0-9]+\ [0-9]+(\ interactive|\ all)?$ || "$ACTIVITY" == unknown\ * ]]; then ACTIVITY="unknown ${ACTIVITY:-no answer}"; fi
+# The scope token is optional (a release that predates it prints three numbers, and means `all`).
+ACTIVITY_SCOPE=all
+case "$ACTIVITY" in
+  [0-9]*" interactive") ACTIVITY_SCOPE=interactive; ACTIVITY="${ACTIVITY% interactive}" ;;
+  [0-9]*" all") ACTIVITY="${ACTIVITY% all}" ;;
+esac
 case "$ACTIVITY" in
   unknown*)
     if [ -n "$MAINTENANCE_REQUEST_ID" ]; then
@@ -174,7 +186,12 @@ case "$ACTIVITY" in
   "0 0 0") echo "  nothing in flight" ;;
   *)
     read -r active_runs active_jobs busy_runtimes <<<"$ACTIVITY"
-    if [ "$ALLOW_ACTIVE" = 1 ]; then
+    # Interactive scope: only runs and runtimes of a researcher's projects would be reaped. A leased product job is
+    # re-claimed when its lease runs out, so on its own it is named and does not refuse (2026-10-05: four refusals at
+    # 05:00 while learning jobs ran).
+    if [ "$ACTIVITY_SCOPE" = interactive ] && [ "$active_runs" = 0 ] && [ "$busy_runtimes" = 0 ]; then
+      echo "  ${active_jobs} product job(s) in flight: they are leased, and resume after the switch; the platform's own background work does not hold a release"
+    elif [ "$ALLOW_ACTIVE" = 1 ]; then
       echo "  ${active_runs} agent run(s), ${active_jobs} product job(s), ${busy_runtimes} busy runtime(s) in flight; --allow-active: switching anyway"
     else
       echo "  REFUSED: ${active_runs} agent run(s), ${active_jobs} product job(s), ${busy_runtimes} busy runtime(s) in flight would be reaped."

@@ -19,6 +19,7 @@ import {
   migrateResearchMemory,
 } from "./researchMemoryPersistence.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
+import { projectMemoryUri, researchMemoryRoots } from "./openVikingClient.mjs";
 
 /**
  * Research memory — the structured records — on the control-plane database.
@@ -342,11 +343,15 @@ export function validateRecordInput(input) {
 
 /** The one form of an identifier a source link is recorded and compared in. A
  *  knowledge-base document is its `src_` id; a published work is its DOI,
- *  lower-cased with no resolver prefix. Anything else names nothing we can find
- *  again, so it is no link at all. */
+ *  lower-cased with no resolver prefix; an evidence card is its `ec_` id and a
+ *  frontier item its public id. Anything else names nothing we can find again, so
+ *  it is no link at all. */
 const SOURCE_ID_FORMAT = Object.freeze({
   knowledge_source: /^src_[a-f0-9]{32}$/,
   doi: /^10\.\d{4,9}\/\S{1,250}$/,
+  // An evidence card (`ec_` and the hex of its identity) and a frontier item (its public id), flywheel F19.
+  evidence_card: /^ec_[a-f0-9]{32}$/,
+  frontier_item: /^[a-z0-9]{12,32}$/,
 });
 
 /**
@@ -699,11 +704,17 @@ export class ResearchMemoryStore {
    * recall provider is `builtin` would enqueue one job per memory for a worker
    * that is never composed.
    *
-   * @param {any} config @param {{ database?: any, jobs?: any }} options
+   * `withdrawals` is the other half of that outbox: what a deletion of a whole
+   * project's or account's memory owes the index as subtrees, kept in the same
+   * transaction as the rows (`MemoryIndexWithdrawals`). Handed over under the
+   * same rule as `jobs`.
+   *
+   * @param {any} config @param {{ database?: any, jobs?: any, withdrawals?: any }} options
    */
-  constructor(config, { database = null, jobs = null } = {}) {
+  constructor(config, { database = null, jobs = null, withdrawals = null } = {}) {
     this.database = database ?? null;
     this.jobs = jobs ?? null;
+    this.withdrawals = withdrawals ?? null;
     this.contextLimit = Math.max(0, Math.min(20, Number(config?.memoryContextLimit ?? 8)));
     this.contextMaxChars = Math.max(0, Math.min(100_000, Number(config?.memoryContextMaxChars ?? 20_000)));
     this.inferredTtlMs = Math.max(0, Number(config?.memoryInferredTtlDays ?? 90)) * 24 * 60 * 60 * 1_000;
@@ -743,6 +754,7 @@ export class ResearchMemoryStore {
       // before the transaction opens; inside one there is no second connection
       // to run DDL on. Memoised per database, so this costs one lookup.
       if (this.jobs) await migrateProductStore(this.database);
+      if (this.withdrawals) await this.withdrawals.migrate();
       return await this.database.transaction(operation);
     } catch (error) {
       throw memoryDatabaseError(error);
@@ -1370,6 +1382,7 @@ export class ResearchMemoryStore {
       await this.#lockOwnerForOutbox(client, owner);
       const result = await client.query("DELETE FROM evimed_memory.records WHERE user_id=$1 RETURNING id,scope,scope_id,kind", [owner]);
       await this.#forgetRows(client, owner, result.rows);
+      await this.withdrawals?.enqueue(client, owner, researchMemoryRoots(owner));
       return Number(result.rowCount ?? 0);
     });
   }
@@ -1613,6 +1626,21 @@ export class ResearchMemoryStore {
         stateAt: recorded.stateAt, linkedAt: recorded.linkedAt,
       };
     });
+  }
+
+  /**
+   * The evidence cards and frontier items memories name, one row per link, with the state each holds — what
+   * `KnowledgeChangeService.sweepEvidenceLinks` looks the current state up for (flywheel F19). Links not yet moved first, so a
+   * bounded pass reaches the ones nobody has looked at before it revisits the ones it has.
+   * @param {{ userId?: string | null, limit?: number }} [options]
+   * @returns {Promise<{ userId: string, type: string, id: string, state: string }[]>}
+   */
+  async linkedEvidenceSources({ userId = null, limit = 500 } = {}) {
+    const result = await this.#query(`SELECT user_id, source_type, source_id, state FROM evimed_memory.record_sources
+      WHERE source_type IN ('evidence_card','frontier_item') AND ($1::text IS NULL OR user_id=$1)
+      ORDER BY state_at NULLS FIRST, user_id, record_id LIMIT $2`,
+    [userId == null ? null : assertUserId(userId), Math.max(1, Math.min(5000, Number(limit) || 500))]);
+    return result.rows.map((/** @type {any} */ row) => ({ userId: String(row.user_id), type: String(row.source_type), id: String(row.source_id), state: String(row.state) }));
   }
 
   /**
@@ -1886,6 +1914,10 @@ export class ResearchMemoryStore {
       const records = await client.query(`DELETE FROM evimed_memory.records WHERE user_id=$1 AND scope='project' AND scope_id=$2
         RETURNING id,scope,scope_id,kind`, [owner, scopeId]);
       await this.#forgetRows(client, owner, records.rows);
+      // The subtree itself, which the per-record jobs above are bounded and
+      // cannot promise to empty: owed to the index in this transaction, so the
+      // deletion never waits for the index and the index is still told.
+      await this.withdrawals?.enqueue(client, owner, [projectMemoryUri(owner, scopeId)]);
       // The project's conversations' own state goes with it.
       await client.query("DELETE FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2", [owner, scopeId]);
       return { structured: Number(records.rowCount ?? 0) };

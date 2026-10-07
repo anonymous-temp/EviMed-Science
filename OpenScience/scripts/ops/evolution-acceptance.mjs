@@ -55,7 +55,8 @@ try {
     if (completed("existing-engine-methods", reference.methodId)) continue;
     const evaluation = await app.evolution.worker.perform({ id: `acceptance-existing-${reference.methodId}`, kind: "evolution-evaluate",
       payload: { action: "import-existing-methods", methodId: reference.methodId, reportHash: reference.reportHash } });
-    if (!evaluation?.payload?.summary?.scored || evaluation.payload.summary.passedPublishedSources < 5) throw new Error("Existing-engine method calibration lacks five actually passed published sources.");
+    // The ruler has to have scored five published sources. Whether the engine agreed with them is its finding, recorded below, not a condition for the ruler to count.
+    if (!evaluation?.payload?.summary?.scored || evaluation.payload.summary.scoredPublishedSources < 5) throw new Error("Existing-engine method calibration lacks five scored published sources.");
     report.stages.push({ stage: "existing-engine-methods", methodId: reference.methodId, result: evaluation.payload.summary }); await save();
   }
   const awaitCapacity = async () => {

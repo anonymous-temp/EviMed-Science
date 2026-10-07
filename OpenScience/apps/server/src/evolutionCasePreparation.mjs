@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
-import { numericScore } from "../../../evals/paper-gold/evaluator.mjs";
+import { numericScore, simulationRequiredReplicates, simulationSpecificationIssues } from "../../../evals/paper-gold/evaluator.mjs";
 import { createEvolutionAggregateCasePreparation, AGGREGATE_REFERENCE_METHODS } from "./evolutionAggregateCasePreparation.mjs";
 const hash = text => createHash("sha256").update(text).digest("hex");
 /** Deterministic independent curation for published DARTH cases. Expected values are
@@ -23,9 +23,13 @@ export function createEvolutionCasePreparation({ config, controller, fetchImpl =
     const published = (definition.cases ?? []).filter(row => row.kind === "published" && row.hidden === true && row.independentQa?.passed === true && row.sourceHash && row.publicationId && Object.keys(row.numeric ?? {}).length);
     const publishedReferenceCount = new Set(published.map(row => row.publicationId)).size;
     const admitted = (definition.cases ?? []).filter(row => row.hidden === true && row.independentQa?.passed === true && row.sourceHash);
-    const simulationReady = definition.noPublishedExamples === true && admitted.some(row => row.kind === "simulation"
-      && Array.isArray(row.inputs) && row.inputs.length > 1 && Number.isFinite(Date.parse(row.preregistered?.at))
-      && row.preregistered?.hash === hash(JSON.stringify({ inputs: row.inputs, specification: row.specification })));
+    // A simulation is ready when its specification stays inside the bounds a specification may not choose
+    // for itself, it preregistered as many datasets as its own tolerance needs, and at least one scenario's
+    // truth is far enough from the null to tell the method from an estimator that always answers the null.
+    const simulations = admitted.filter(row => row.kind === "simulation" && Array.isArray(row.inputs) && Number.isFinite(Date.parse(row.preregistered?.at))
+      && row.preregistered?.hash === hash(JSON.stringify({ inputs: row.inputs, specification: row.specification }))
+      && simulationSpecificationIssues(row.specification).length === 0 && row.inputs.length >= simulationRequiredReplicates(row.specification));
+    const simulationReady = definition.noPublishedExamples === true && simulations.some(row => Math.abs(row.specification.truth - (row.specification.nullValue ?? 0)) > row.specification.maxBias);
     const workflowSmokeReady = admitted.some(row => row.kind === "workflow-smoke" && row.input && Object.keys(row.numeric ?? {}).length > 0);
     const ok = publishedReferenceCount >= 2 || simulationReady || workflowSmokeReady;
     return { ok, ...(ok ? {} : { status: "waiting_resource", resourceCode: "independent_published_references_incomplete" }),

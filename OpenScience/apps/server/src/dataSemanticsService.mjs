@@ -131,7 +131,9 @@ export class DataSemanticsService {
       if (!fitted) throw new HttpError(413, "semantics_asset_too_large", "The recorded meaning of this dataset no longer fits one record; split it into several datasets.");
       try {
         const saved = await this.documents.put(userId, DATA_SEMANTICS_KIND, id, fitted.asset, { expectedRevision: row ? row.revision : 0, projectId, telemetry: telemetry && Boolean(row) });
-        await this.onChanged?.({ userId, projectId, datasetId, revision: saved.revision, asset: fitted.asset });
+        // The record is saved. What a consumer of the change does with it is the consumer's business: its failure is
+        // not the write's, and an error of its own that looks like a lost race must not make this one write again.
+        try { await this.onChanged?.({ userId, projectId, datasetId, revision: saved.revision, asset: fitted.asset }); } catch { /* the consumer's failure is its own */ }
         return { ...outcome, asset: fitted.asset, revision: saved.revision, trimmed: fitted.trimmed };
       } catch (error) {
         if (error instanceof HttpError && error.code === "product_revision_conflict" && attempt < WRITE_ATTEMPTS) continue;

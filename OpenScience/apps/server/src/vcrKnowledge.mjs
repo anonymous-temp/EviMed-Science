@@ -30,6 +30,16 @@
  *   (`vcrSuggestColumnRemap`) or when the caller names the rename; every rename
  *   is reported and every column left unmatched is listed, because a guessed
  *   rename would silently change who is in the cohort.
+ * - **A curated pack can become the platform's (flywheel F26, 2026-10-06).** After the study's lead has marked a draft curated, the
+ *   lead may ask for the pack to be a platform pack: the code re-checks it (the same structure and licence validation the draft
+ *   passed, and the source-change ledger for every source a work identifier names — a retraction, withdrawal, correction or
+ *   expression of concern fails the entries that cite it, by name) and a pack that passes is copied as an immutable version owned by
+ *   the platform publisher, attributed to its author by the name they allow, with the date and the version it came from. One that
+ *   fails stays the account's, the failing entries named. Pack entries carry no quotation and no locator (a pack is definitions in the
+ *   pack's own words, sources by link), so there is nothing of that kind to find again; the check is what the contract has. Every
+ *   account reads a live platform pack beside the shipped ones, but an account's own pack of the same disease wins for that account;
+ *   the author may take their name off, which retires the version for new studies and leaves it to the studies that pinned it. A source
+ *   that changes after promotion labels the pack 「来源有变更」 and rewrites nothing. Off unless `OPEN_SCIENCE_VCR_PLATFORM_PACKS_ENABLED`.
  * - **Comparing two versions is the engine's.** Both versions are applied to the
  *   same registered dataset by `cohort.build` with a `compare` block; counts and
  *   the standardized difference of each baseline covariate are what the engine
@@ -41,12 +51,14 @@
  */
 
 import {
-  VCR_PACK_SCHEMA, VCR_PACK_SECTIONS, validateKnowledgePack, validateNamedRules, vcrPackConceptColumns, vcrPackEntrySources,
+  DISPLAY_TIME_ZONE, agendaLocalDate, VCR_PACK_SCHEMA, VCR_PACK_SECTIONS, validateKnowledgePack, validateNamedRules, vcrPackConceptColumns, vcrPackEntrySources,
   vcrPackMatchesName, vcrPackSummary, vcrRemapRowRuleColumns, vcrRequirementVariables, vcrRowRuleColumns, vcrSuggestColumnRemap, VCR_SHIPPED_PACKS,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
+import { sourceIdentifiersOf } from "./sourceChanges.mjs";
 import { VCR_COMPARISON_RESULT_KIND } from "./vcrPersistence.mjs";
+import { vcrKnowledgeId } from "./vcrKnowledgeStore.mjs";
 
 /** @param {unknown} value */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -84,8 +96,58 @@ export function presentPackSummary(origin, pack, row = null) {
     name: summary.disease.name, nameZh: summary.disease.nameZh, aliases: summary.disease.aliases, aliasesZh: summary.disease.aliasesZh,
     version: summary.version, status: summary.status, updated: summary.updated, counts: summary.counts,
     sources: summary.sources.map((source) => ({ ...source, ...sourceUse(pack, source.id) })),
-    ...(row?.reviewedBy ? { reviewedBy: row.reviewedBy, reviewedAt: row.reviewedAt } : {}),
+    // A platform pack names its author through `platform.author`, by the name they allow; the account that reviewed it is not shown.
+    ...(row?.reviewedBy && !row?.platform ? { reviewedBy: row.reviewedBy, reviewedAt: row.reviewedAt } : {}),
+    ...(row?.platform ? { platform: publicPlatform(row.platform) } : {}),
   };
+}
+
+/**
+ * A platform pack's record as a reader gets it: the author's name as they allow it, never their account.
+ * @param {Record<string, any>} platform
+ */
+function publicPlatform(platform) {
+  return { version: platform.version, author: platform.author, zoneId: platform.zoneId, state: platform.state, sourceChanged: platform.sourceChanged };
+}
+
+/** What a source change of this kind does to a pack's promotion: the kinds that say a source no longer stands as it was read. */
+const PROMOTION_BLOCKING_KINDS = Object.freeze(["retraction", "withdrawal", "correction", "concern"]);
+/** What labels a platform pack 「来源有变更」: those, and a new version of the source. */
+const WATCH_KINDS = Object.freeze([...PROMOTION_BLOCKING_KINDS, "new_version"]);
+
+/**
+ * The sources of a pack that a work identifier names, with what the source-change ledger holds of each: a retraction, correction or
+ * the like. A page with no work identifier (a guideline site) cannot be looked up and is counted as such, not as clean.
+ * @param {Record<string, any>} pack @param {{ getMany: (identifiers: unknown[]) => Promise<Map<string, any>> }} sourceChanges @param {readonly string[]} kinds
+ * @returns {Promise<{ lookedUp: number, unreadable: number, changed: Array<{ sourceId: string, identifier: string, kind: string }> }>}
+ */
+async function sourceChangesOf(pack, sourceChanges, kinds) {
+  let lookedUp = 0;
+  let unreadable = 0;
+  /** @type {Array<{ sourceId: string, identifier: string, kind: string }>} */
+  const changed = [];
+  for (const source of list(pack.sources)) {
+    const identifiers = sourceIdentifiersOf({ url: source?.url });
+    if (!identifiers.length) { unreadable += 1; continue; }
+    lookedUp += 1;
+    const facts = await sourceChanges.getMany(identifiers);
+    for (const identifier of identifiers) {
+      for (const change of list(facts.get(identifier)?.changes)) {
+        if (kinds.includes(String(change?.kind))) changed.push({ sourceId: String(source.id), identifier, kind: String(change.kind) });
+      }
+    }
+  }
+  return { lookedUp, unreadable, changed };
+}
+
+/**
+ * The entry a validation issue's path names, as `{ section, id }`; the path itself when it names none.
+ * @param {Record<string, any>} pack @param {string} field
+ */
+function entryOfField(pack, field) {
+  const found = /^(terms|phenotypes|endpoints|criteria|mappings|background)\[(\d+)\]/.exec(String(field));
+  if (!found) return { section: null, id: String(field) };
+  return { section: found[1], id: String(list(pack[found[1]])[Number(found[2])]?.id ?? field) };
 }
 
 /** @param {Record<string, any>} pack @param {string} id */
@@ -154,17 +216,27 @@ function presentVersion(version) {
 export class VcrKnowledge {
   /**
    * @param {{ store: import("./vcrKnowledgeStore.mjs").VcrKnowledgeStore, studyStore: any, dataStore?: any, jobs?: any,
-   *   shipped?: ReadonlyMap<string, Record<string, any>> | Record<string, Record<string, any>>, now?: () => Date }} options
+   *   shipped?: ReadonlyMap<string, Record<string, any>> | Record<string, Record<string, any>>, now?: () => Date,
+   *   platform?: Record<string, any> }} options
    */
-  constructor({ store, studyStore, dataStore = null, jobs = null, shipped = VCR_SHIPPED_PACKS, now = () => new Date() }) {
+  constructor({ store, studyStore, dataStore = null, jobs = null, shipped = VCR_SHIPPED_PACKS, now = () => new Date(), platform = {} }) {
     if (!store || !studyStore) throw new TypeError("The knowledge package needs its store and the study store.");
+    /**
+     * Platform packs (flywheel F26): `enabled` is the switch; `publisherId` owns the copies; `sourceChanges` is the ledger the
+     * re-check reads; `entityVocabulary` names a pack's disease in entity keys; `officialZoneForKeys` finds the official zone of
+     * the same disease; `people` resolves an account's display name.
+     * @type {{ enabled: boolean, publisherId: string, sourceChanges: any, entityVocabulary: any, officialZoneForKeys: ((keys: string[]) => Promise<string | null>) | null,
+     *   people: ((ids: string[]) => Promise<Map<string, string>>) | null }}
+     */
+    this.platform = { enabled: false, publisherId: "", sourceChanges: null, entityVocabulary: null, officialZoneForKeys: null, people: null, ...platform };
     this.store = store;
     this.studyStore = studyStore;
     this.dataStore = dataStore;
     this.jobs = jobs;
     this.now = now;
     this.shipped = shipped instanceof Map ? shipped : new Map(Object.entries(shipped));
-    this.counters = { packsDrafted: 0, packsBound: 0, packsPromoted: 0, definitionsSaved: 0, definitionsReused: 0, comparisons: 0 };
+    this.counters = { packsDrafted: 0, packsBound: 0, packsPromoted: 0, definitionsSaved: 0, definitionsReused: 0, comparisons: 0,
+      platformPassed: 0, platformFailed: 0, platformWithdrawn: 0, platformSourcesChanged: 0 };
   }
 
   /** The jobs queue is composed after this package; read at request time. @param {{ jobs?: any, dataStore?: any }} packages */
@@ -183,17 +255,19 @@ export class VcrKnowledge {
    */
   async listPacks(userId, query = "") {
     const shipped = [...this.shipped.values()].filter((pack) => vcrPackMatchesName(pack, query)).map((pack) => presentPackSummary("shipped", pack));
-    const stored = (await this.store.listPacks(userId)).filter((row) => vcrPackMatchesName(row.body, query)).map((row) => presentPackSummary("stored", row.body, row));
+    const stored = (await this.store.listPacks(userId, { platformPacks: this.platform.enabled })).filter((row) => vcrPackMatchesName(row.body, query)).map((row) => presentPackSummary("stored", row.body, row));
     return { packs: [...shipped, ...stored] };
   }
 
   /**
-   * One pack by id: a shipped pack's id (`nsclc`) or the account's own row (`pkg_…`).
-   * @param {string} userId @param {string} id @returns {Promise<{ origin: "shipped" | "stored", pack: Record<string, any>, row: Record<string, any> | null }>}
+   * One pack by id: a shipped pack's id (`nsclc`), the account's own row (`pkg_…`) or, with platform packs on, a platform version.
+   * @param {string} userId @param {string} id @param {{ forBinding?: boolean }} [options] @returns {Promise<{ origin: "shipped" | "stored", pack: Record<string, any>, row: Record<string, any> | null }>}
    */
-  async resolvePack(userId, id) {
+  async resolvePack(userId, id, { forBinding = false } = {}) {
     if (SHIPPED_ID.test(id) && this.shipped.has(id)) return { origin: "shipped", pack: /** @type {Record<string, any>} */ (this.shipped.get(id)), row: null };
-    const row = STORED_ID.test(id) ? await this.store.getPack(userId, id) : null;
+    // Off, no platform row is read: the account's own pack is the only stored one there is.
+    const row = !STORED_ID.test(id) ? null : this.platform.enabled
+      ? await this.store.getReadablePack(userId, id, { platformPacks: true, forBinding }) : await this.store.getPack(userId, id);
     if (!row) throw new HttpError(404, "vcr_pack_not_found", "Knowledge pack not found.");
     return { origin: "stored", pack: row.body, row };
   }
@@ -224,7 +298,8 @@ export class VcrKnowledge {
    * @param {any} study @param {string} packId @param {string} actor
    */
   async bindPack(study, packId, actor) {
-    const { origin, pack, row } = await this.resolvePack(study.userId, packId);
+    // A retired platform version is not offered to a new binding, even to an account that pinned it for another study.
+    const { origin, pack, row } = await this.resolvePack(study.userId, packId, { forBinding: true });
     const binding = await this.store.bindStudy({
       studyId: study.id, userId: study.userId, origin, packId: origin === "stored" ? String(row?.id) : String(pack.id),
       packVersion: Number(pack.version ?? 1), actor,
@@ -248,7 +323,7 @@ export class VcrKnowledge {
       return { ok: false, issues: [{ code: "pack_curated_in_use", field: "", detail: `这个研究已经按整理过的知识包「${bound.pack.disease?.nameZh ?? bound.pack.disease?.name ?? bound.pack.id}」工作，不再起草新的；要补充内容请改用定义与条件的写入。` }] };
     }
     const draftId = String(object(document.disease).key ?? "");
-    const pack = { ...document, schema: VCR_PACK_SCHEMA, id: draftId, version: 1, status: "ai-draft", updated: this.now().toISOString().slice(0, 10) };
+    const pack = { ...document, schema: VCR_PACK_SCHEMA, id: draftId, version: 1, status: "ai-draft", updated: agendaLocalDate(DISPLAY_TIME_ZONE, this.now()) };
     const issues = validateKnowledgePack(pack, { level: "draft" });
     if (issues.length) return { ok: false, issues };
     const row = await this.store.savePack({ userId: study.userId, studyId: study.id, diseaseKey: draftId, status: "ai-draft", body: pack, actor });
@@ -276,6 +351,120 @@ export class VcrKnowledge {
     return presentPackSummary("stored", promoted.body, promoted);
   }
 
+  // --- platform packs (flywheel F26) ---------------------------------------------------
+
+  /**
+   * The re-check of a pack: the validation it passed as a draft, held again, and the source-change ledger read for every source a
+   * work identifier names. Pure over its inputs: the verdict is code, and the failing entries and sources are named.
+   * @param {Record<string, any>} pack
+   * @returns {Promise<{ passed: boolean, failing: Array<{ section: string | null, id: string, code: string, detail: string }>,
+   *   checked: { entries: number, sources: number, lookedUp: number, unreadable: number, quotes: number } }>}
+   */
+  async recheckPack(pack) {
+    const ledger = this.platform.sourceChanges;
+    if (!ledger?.getMany) throw new HttpError(503, "vcr_unavailable", "The source-change ledger is not available, so a pack cannot be re-checked.");
+    /** @type {Array<{ section: string | null, id: string, code: string, detail: string }>} */
+    const failing = [];
+    for (const issue of validateKnowledgePack({ ...pack, status: "curated" }, { level: "draft" })) {
+      failing.push({ ...entryOfField(pack, issue.field), code: issue.code, detail: issue.detail });
+    }
+    const looked = await sourceChangesOf(pack, ledger, PROMOTION_BLOCKING_KINDS);
+    for (const change of looked.changed) {
+      const source = list(pack.sources).find((entry) => String(entry?.id) === change.sourceId);
+      const label = `${source?.title ?? change.sourceId}（${change.identifier}）已有「${change.kind}」记录`;
+      const citing = VCR_PACK_SECTIONS.flatMap((section) => list(pack[section]).filter((entry) => list(entry.sources).map(String).includes(change.sourceId))
+        .map((entry) => ({ section, id: String(entry.id) })));
+      if (!citing.length) failing.push({ section: "sources", id: change.sourceId, code: "source_changed", detail: label });
+      for (const entry of citing) failing.push({ ...entry, code: "source_changed", detail: label });
+    }
+    return {
+      passed: failing.length === 0, failing,
+      checked: { entries: VCR_PACK_SECTIONS.reduce((total, section) => total + list(pack[section]).length, 0), sources: list(pack.sources).length,
+        lookedUp: looked.lookedUp, unreadable: looked.unreadable, quotes: 0 },
+    };
+  }
+
+  /**
+   * `POST /api/vcr/studies/:id/pack/platform`: the study's lead asks for the pack the study works from to become a platform pack. The
+   * pack has to be one of the account's own, already marked curated; it is re-checked and, when it passes, copied. A failing pack is
+   * the account's still, and the answer names what failed. The same pack version asked for twice is the platform copy that exists.
+   * @param {any} study @param {string} requestedBy
+   */
+  async requestPlatformPromotion(study, requestedBy) {
+    if (!this.platform.enabled) throw new HttpError(404, "vcr_platform_packs_not_enabled", "Platform knowledge packs are not enabled.");
+    const bound = await this.studyPack(study);
+    if (!bound || bound.binding.origin !== "stored" || !bound.row || bound.row.userId !== study.userId) {
+      throw new HttpError(404, "vcr_pack_not_found", "This study works from no pack of this account to promote.");
+    }
+    if (bound.row.status !== "curated") throw new HttpError(409, "vcr_pack_not_curated", "Only a pack the study's lead has marked curated can become a platform pack.");
+    const existing = await this.store.livePlatformCopyOf(study.userId, bound.row.id, bound.row.version);
+    if (existing) {
+      const copy = await this.store.getReadablePack(study.userId, String(existing.pack_id), { platformPacks: true });
+      return { state: "passed", existing: true, failing: [], checked: null, platformPack: copy ? presentPackSummary("stored", copy.body, copy) : null };
+    }
+    const result = await this.recheckPack(bound.pack);
+    const promotionId = vcrKnowledgeId("promotion");
+    if (!result.passed) {
+      this.counters.platformFailed += 1;
+      await this.store.recordPromotion({ id: promotionId, userId: study.userId, packId: bound.row.id, packVersion: bound.row.version, requestedBy,
+        state: "failed", failing: result.failing, checked: result.checked });
+      return { state: "failed", existing: false, failing: result.failing, checked: result.checked, platformPack: null };
+    }
+    const disease = object(bound.pack.disease);
+    const names = [disease.name, disease.nameZh, ...list(disease.aliases), ...list(disease.aliasesZh)].filter((name) => typeof name === "string" && name.trim());
+    const tagged = await this.platform.entityVocabulary?.tag?.({ texts: names }).catch(() => null);
+    const entityKeys = list(tagged).map(String).filter((key) => key.startsWith("disease:"));
+    const zoneId = entityKeys.length && this.platform.officialZoneForKeys ? await this.platform.officialZoneForKeys(entityKeys).catch(() => null) : null;
+    const author = (await this.platform.people?.([study.userId]))?.get(study.userId) ?? "";
+    const copy = await this.store.promoteToPlatform({ publisherId: this.platform.publisherId, source: /** @type {any} */ (bound.row), authorName: author, entityKeys, zoneId,
+      recheck: { passedAt: this.now().toISOString(), checked: result.checked }, actor: requestedBy });
+    await this.store.recordPromotion({ id: promotionId, userId: study.userId, packId: bound.row.id, packVersion: bound.row.version, requestedBy,
+      state: "passed", failing: [], checked: result.checked, platformPackId: String(copy.id) });
+    this.counters.platformPassed += 1;
+    return { state: "passed", existing: false, failing: [], checked: result.checked, platformPack: presentPackSummary("stored", copy.body, copy) };
+  }
+
+  /**
+   * `DELETE /api/vcr/packs/:id/platform`: the author takes their name off a platform pack. It is retired for new studies; the
+   * studies that pinned the version keep it. Only the account the pack was copied from may do it.
+   * @param {string} userId @param {string} platformPackId
+   */
+  async withdrawPlatformPack(userId, platformPackId) {
+    if (!this.platform.enabled) throw new HttpError(404, "vcr_platform_packs_not_enabled", "Platform knowledge packs are not enabled.");
+    const retired = await this.store.retirePlatformPack({ userId, platformPackId, reason: "author_withdrew" });
+    if (!retired) throw new HttpError(404, "vcr_pack_not_found", "Knowledge pack not found.");
+    this.counters.platformWithdrawn += 1;
+    return { id: platformPackId, state: "retired", retiredAt: retired.retiredAt };
+  }
+
+  /**
+   * The live platform packs whose disease shares an entity key with `keys`, as the summary a zone page links: a zone asks with
+   * the keys of what it is about.
+   * @param {readonly string[]} keys
+   */
+  async packsForEntityKeys(keys) {
+    if (!this.platform.enabled) return [];
+    return (await this.store.platformPacksForKeys(keys)).map((row) => ({ ...presentPackSummary("stored", row.body, row), id: row.id }));
+  }
+
+  /**
+   * The source watch: a bounded batch of live platform packs, oldest looked at first, each labelled 「来源有变更」 when the
+   * source-change ledger now holds a change to one of its sources, and unlabelled when it no longer says so. Never rewrites a pack.
+   * @param {{ limit?: number }} [options]
+   */
+  async watchPlatformPackSources({ limit = 20 } = {}) {
+    const ledger = this.platform.sourceChanges;
+    if (!this.platform.enabled || !ledger?.getMany) return { checked: 0, changed: 0 };
+    let changed = 0;
+    const packs = await this.store.platformPacksToCheck(limit);
+    for (const pack of packs) {
+      const looked = await sourceChangesOf(pack.body, ledger, WATCH_KINDS);
+      await this.store.markSourceChanges({ platformPackId: pack.id, changes: looked.changed, watchedAt: this.now().toISOString() });
+      if (looked.changed.length) { changed += 1; this.counters.platformSourcesChanged += 1; }
+    }
+    return { checked: packs.length, changed };
+  }
+
   /**
    * What the study page shows: the pack it works from (summary, not sections),
    * the definitions it used and the comparisons it ran.
@@ -286,8 +475,17 @@ export class VcrKnowledge {
       this.studyPack(study), this.store.definitionsUsedBy(study.id, study.userId), this.store.comparisonResults(study.id),
     ]);
     const pack = bound ? presentPackSummary(bound.binding.origin, bound.pack, bound.row) : null;
+    // The platform pack side (flywheel F26): a curated pack of the account may be offered to the platform, and what the last re-check said.
+    const own = Boolean(bound?.row && !bound.row.platform && bound.row.userId === study.userId);
+    const latest = this.platform.enabled && own && bound?.row ? await this.store.latestPromotion(study.userId, bound.row.id) : null;
+    const live = this.platform.enabled && own && bound?.row ? await this.store.livePlatformCopyOf(study.userId, bound.row.id, bound.row.version) : null;
+    const platform = this.platform.enabled && own
+      ? { canRequest: Boolean(canPromote && bound?.row?.status === "curated" && !live), requested: Boolean(live),
+        recheck: latest && latest.packVersion === bound?.row?.version ? { state: latest.state, failing: latest.failing, checked: latest.checked, at: latest.createdAt } : null }
+      : null;
     return {
-      pack: pack ? { ...pack, boundAt: bound?.binding.boundAt ?? null, canPromote: Boolean(canPromote && bound?.row && bound.row.status === "ai-draft") } : null,
+      pack: pack ? { ...pack, boundAt: bound?.binding.boundAt ?? null, canPromote: Boolean(canPromote && bound?.row && bound.row.status === "ai-draft"),
+        ...(platform ? { platformRequest: platform } : {}) } : null,
       definitions: definitions.map((entry) => ({ ...entry, packRefs: entry.packRefs })),
       comparisons: comparisons.map(presentComparison).filter(Boolean),
     };

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
+import { taskBudgetRefusal } from "../src/agendaBudget.mjs";
 import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 
@@ -52,9 +53,26 @@ async function fixture(t, digestProjectId = "owned-project") {
   }).catch((error) => sendError(res, error)));
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
-  return { base: `http://127.0.0.1:${server.address().port}`,
+  return { base: `http://127.0.0.1:${server.address().port}`, service,
     headers: { cookie: "fixture=active", "content-type": "application/json", "x-open-science-csrf": "csrf" }, calls };
 }
+
+test("a task's spent budget reaches the browser as the task's own refusal, with when it frees in Retry-After and no account figures", async (t) => {
+  const { base, headers, service } = await fixture(t);
+  const now = Date.now();
+  service.runNow = async () => { throw taskBudgetRefusal("day", 3, 3, now + 3 * 3_600_000, now); };
+  service.followUp = async () => { throw taskBudgetRefusal("week", 6, 6, null, now); };
+  const run = await fetch(`${base}/api/autopilot/agendas/agenda-one/run-now`, { method: "POST", headers, body: JSON.stringify({ requestId: "r1" }) });
+  assert.equal(run.status, 402);
+  const body = await run.json();
+  assert.equal(body.code, "autopilot_daily_budget_spent");
+  assert.equal(body.details, undefined, "a task's refusal declares no account amounts: the sentence is the registry's");
+  assert.equal(Number(run.headers.get("retry-after")), 3 * 3600);
+  const follow = await fetch(`${base}/api/autopilot/agendas/agenda-one/follow-ups`, { method: "POST", headers, body: JSON.stringify({ requestId: "r2", note: "再查一下" }) });
+  assert.equal(follow.status, 402);
+  assert.equal((await follow.json()).code, "autopilot_weekly_budget_spent");
+  assert.equal(follow.headers.get("retry-after"), null, "no time is claimed when none is known");
+});
 
 test("agenda endpoints bind ownership and reject browser identity fields", async (t) => {
   const { base, headers, calls } = await fixture(t);

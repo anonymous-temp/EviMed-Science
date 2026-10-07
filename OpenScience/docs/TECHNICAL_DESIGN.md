@@ -229,7 +229,7 @@ its switch is on; the rest are changes inside existing layers.
   `deepseek-flash` under purpose `frontier` and the module's own daily budget, builds events,
   the hot list, the 07:30 daily and 与你相关, and serves the runtime a read-only
   `frontier_search` (`frontierGateway.mjs`).
-- **「循证 GEO」** (`geo*.mjs`, schema `evimed_geo`, `OPEN_SCIENCE_GEO_ENABLED`, opened per
+- **「循证传播」** (`geo*.mjs`, schema `evimed_geo`, `OPEN_SCIENCE_GEO_ENABLED`, opened per
   account): one row per GEO project on top of an ordinary project, `/api/geo/*`; the consumer
   AI engines are measured server side through the probe host and the metrics computed from
   `@evimed/domain`'s `geo/metrics.json`; the eight-step program runs the four GEO capabilities

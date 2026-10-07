@@ -102,6 +102,14 @@ test('executable is the exact version that really ran, and the newest fact wins'
   assert.equal(healed.lastSuccess.at, '2026-10-05T08:00:00.000Z', 'a late job for an older run cannot hide a newer one')
 })
 
+test('the day a reader is told something last worked is the day where they are, not the UTC day', () => {
+  // 23:30 UTC on the 3rd is 07:30 on the 4th in China.
+  const ran = recordOf(success('2026-10-03T23:30:00.000Z'))
+  assert.match(projectAvailability({ subject, operations: ran }).text, /最近一次是 2026-10-04/)
+  assert.match(projectAvailability({ subject, operations: recordOf(success('2026-10-03T23:30:00.000Z'), failure('2026-10-05T08:00:00.000Z')) }).text, /此前成功过，最近一次是 2026-10-04/)
+  assert.match(projectAvailability({ subject, operations: recordOf(success('2026-10-03T15:59:00.000Z')) }).text, /最近一次是 2026-10-03/, 'the day turns at local midnight')
+})
+
 test('a missing engine or data source is a fact about today and outranks a success from the past', () => {
   const ran = recordOf(success('2026-10-03T08:00:00.000Z'))
   const down = projectAvailability({ subject, operations: ran, reasons: [{ code: 'engine-not-ready', detail: 'drug_safety_analysis', source: 'engine-health', facts: { engineState: 'unreachable' } }] })

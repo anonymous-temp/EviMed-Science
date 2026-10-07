@@ -196,6 +196,84 @@ test("the cancel route stops the kernel first, then the ledger, and the dispatch
   }
 });
 
+/** A run that is certainly still going, written the way the ledger holds one. */
+async function appendRunning(/** @type {string} */ ledger, /** @type {string} */ id, /** @type {string} */ sessionId) {
+  await appendFile(ledger, `${JSON.stringify({
+    event: "started", id, dispatchId: null, dispatchStatus: "accepted", kernelRequestIds: [], sessionId,
+    mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null, effectiveAgentId: null, effectiveAgentVersion: null,
+    effectiveRuntimeAgent: null, effectiveRouteReason: null, model: "deepseek/deepseek-flash", question: "还在跑的研究",
+    createdAt: new Date().toISOString(), startedAt: new Date().toISOString(), baselineCursor: null,
+  })}\n`, "utf8");
+}
+
+test("the runs page's stop records the user's intent before the kernel is asked, so the monitor cannot win the race unattributed (review F4)", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-cancel-intent-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false });
+  const address = await app.listen(0, "127.0.0.1");
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = { "X-Open-Science-Project": "default", "Content-Type": "application/json" };
+  /** @type {Array<{ sessionId: string, intentNoted: boolean }>} */
+  const kernelCalls = [];
+  app.runtimeManager.cancelRuntimeSession = async (/** @type {any} */ _project, /** @type {string} */ sessionId) => {
+    kernelCalls.push({ sessionId, intentNoted: app.agentRuns.stopRequests.has("run_intent") });
+    // The monitor reads the aborted turn and writes its own cancel while the route is still on the kernel call.
+    const project = await app.store.requireProject(await app.store.userById("dev"), "default");
+    await app.agentRuns.finishInternal(project, "run_intent", { status: "canceled", errorCode: "runtime_canceled", artifacts: [] });
+    return true;
+  };
+  try {
+    const ledger = path.join(dataDir, "users", "dev", "projects", "default", ".openscience", "runs.jsonl");
+    await fetch(`${base}/api/research-sessions/ses_boot`, { method: "PUT", headers, body: JSON.stringify({ mode: "open-domain" }) });
+    await appendRunning(ledger, "run_intent", "ses_intent");
+    const stopped = await fetch(`${base}/api/agent-runs/run_intent/cancel`, { method: "POST", headers, body: "{}" });
+    assert.equal(stopped.status, 200);
+    assert.deepEqual(kernelCalls, [{ sessionId: "ses_intent", intentNoted: true }], "noted before the kernel call");
+    const run = (await (await fetch(`${base}/api/agent-runs`, { headers })).json()).data.find((/** @type {any} */ item) => item.id === "run_intent");
+    assert.deepEqual([run.status, run.canceledBy], ["canceled", "user"], "the monitor's own terminal write, first, is still the user's stop");
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("deleting a conversation that is still working stops its kernel session first, as the stop button does, and settles it as the user's stop (review F6)", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-delete-stop-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false });
+  const address = await app.listen(0, "127.0.0.1");
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = { "X-Open-Science-Project": "default", "Content-Type": "application/json" };
+  /** @type {string[]} */
+  const kernelCancels = [];
+  let reachable = true;
+  app.runtimeManager.cancelRuntimeSession = async (/** @type {any} */ _project, /** @type {string} */ sessionId) => {
+    if (!reachable) throw new HttpError(504, "runtime_cancel_unavailable", "Runtime session cancellation did not answer in time.");
+    kernelCancels.push(sessionId);
+    return true;
+  };
+  try {
+    const ledger = path.join(dataDir, "users", "dev", "projects", "default", ".openscience", "runs.jsonl");
+    await fetch(`${base}/api/research-sessions/ses_boot`, { method: "PUT", headers, body: JSON.stringify({ mode: "open-domain" }) });
+    await appendRunning(ledger, "run_delete", "ses_delete");
+    const remove = (/** @type {string} */ id) => fetch(`${base}/api/agent-runs/${id}`, { method: "PATCH", headers, body: JSON.stringify({ deleted: true }) });
+    const deleted = await remove("run_delete");
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(kernelCancels, ["ses_delete"], "the kernel session was stopped, not only the ledger");
+    const run = (await app.agentRuns.list(await app.store.requireProject(await app.store.userById("dev"), "default"))).find((/** @type {any} */ item) => item.id === "run_delete");
+    assert.deepEqual([run.status, run.canceledBy, run.deleted === true], ["canceled", "user", true]);
+    // A kernel that is there and cannot be reached: the deletion says so and leaves the run, rather than hide a run that keeps spending.
+    await appendRunning(ledger, "run_delete_stuck", "ses_delete_stuck");
+    reachable = false;
+    const refused = await remove("run_delete_stuck");
+    assert.equal(refused.status, 504);
+    const stuck = (await (await fetch(`${base}/api/agent-runs`, { headers })).json()).data.find((/** @type {any} */ item) => item.id === "run_delete_stuck");
+    assert.equal(stuck.status, "running");
+    assert.notEqual(stuck.deleted, true, "and it is not hidden");
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("a line the researcher chose replaces the router and is said as theirs", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-line-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false });

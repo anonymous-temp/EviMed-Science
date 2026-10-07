@@ -1,18 +1,28 @@
 import { randomUUID } from "node:crypto";
-import { BALANCE_REFUSAL_CODES } from "@evimed/domain";
+import { AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES, RUNTIME_ROOM_REFUSAL_CODES } from "@evimed/domain";
 import { autopilotAttemptDispatchId } from "./autopilotService.mjs";
 import { HttpError } from "./security.mjs";
 
 export const AUTOPILOT_RESOURCE_BACKOFF_MS = Object.freeze([300_000, 900_000, 3_600_000, 21_600_000, 86_400_000]);
 
+/**
+ * What the platform's evidence programme refuses a dispatch with when its day's budget is spent or its one slot is taken: a wait,
+ * like a wait for a runtime, never a failed episode — the episode keeps its place and the attempt is not counted
+ * (`evidenceProgramme.mjs`, plan §5.1).
+ */
+export const AUTOPILOT_PROGRAMME_WAIT_CODES = Object.freeze(["evidence_programme_budget_spent", "evidence_programme_slot_busy"]);
+
+// The task's own caps are a rolling window: a dispatch refused by them is not
+// one that a retry a minute later finds open, and the next occurrence asks again.
+const TASK_BUDGET_CODES = AUTOPILOT_BUDGET_ERROR_CODES;
 const TERMINAL = new Set(["autopilot_job_invalid", "autopilot_stopped", "autopilot_episode_state_conflict",
   "result_impact_source_unavailable",
-  "runtime_prompt_acceptance_unknown", "runtime_prompt_rejected"]);
+  "runtime_prompt_acceptance_unknown", "runtime_prompt_rejected", ...TASK_BUDGET_CODES]);
 // A verification that cannot be afforded, cannot be routed, or names a claim
 // that is no longer there will not become affordable, routable or present by
 // being tried again. Retrying it spends the little budget the claim had left on
 // the same refusal.
-const VERIFICATION_TERMINAL = new Set(["usage_budget_exceeded", "autopilot_job_invalid", "autopilot_stopped",
+const VERIFICATION_TERMINAL = new Set(["usage_budget_exceeded", ...TASK_BUDGET_CODES, "autopilot_job_invalid", "autopilot_stopped",
   "result_impact_source_unavailable",
   "autopilot_paused", "autopilot_claim_not_found", "autopilot_episode_not_found", "autopilot_payload_invalid",
   "autopilot_capability_unavailable", "runtime_prompt_rejected"]);
@@ -105,9 +115,17 @@ export class AutopilotWorker {
         // must not keep spending on re-checking last week's claims.
         const agenda = await this.service.checkInactivity(job.userId, job.payload?.agendaId);
         if (!agenda.payload.enabled || agenda.payload.status !== "active") {
+          // Skipping the job is not enough: the claim it was queued for would read "queued" for ever.
+          await this.service.endVerificationsOfAgenda?.(job.userId, job.payload.episodeId,
+            agenda.payload.status === "stopped" ? "agenda_stopped" : "agenda_paused", job.payload.verificationId);
           return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
         }
         await holdsLease();
+        // The claim, not the job, says whether this re-check is still wanted: one that ended while the
+        // agenda was stopped is not run for the old episode because the agenda was started again.
+        if (await this.service.verificationPending?.(job.userId, job.payload.episodeId, job.payload.verificationId) === false) {
+          return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "verification_settled" });
+        }
         await this.service.assertEpisodeContinuation?.(job.userId, job.payload.episodeId);
         const verification = await this.dispatchVerification({ ...job.payload, userId: job.userId, projectId: job.projectId, dispatchId: autopilotAttemptDispatchId(job.payload.verificationId, job.attempts), assertDispatchAllowed });
         verificationDispatched = true;
@@ -165,16 +183,17 @@ export class AutopilotWorker {
     } catch (error) {
       const code = typeof error?.code === "string" ? error.code : "autopilot_dispatch_failed";
       this.lastError = code;
-      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && (BALANCE_REFUSAL_CODES.includes(code) || ["autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", "runtime_limit_exceeded"].includes(code))) {
+      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && (BALANCE_REFUSAL_CODES.includes(code) || ["autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", ...RUNTIME_ROOM_REFUSAL_CODES, ...AUTOPILOT_PROGRAMME_WAIT_CODES].includes(code))) {
         await holdsLease();
-        const unstartedResource = code === "runtime_busy" || code === "runtime_limit_exceeded";
+        const unstartedResource = code === "runtime_busy" || RUNTIME_ROOM_REFUSAL_CODES.includes(code) || AUTOPILOT_PROGRAMME_WAIT_CODES.includes(code);
         const retry = unstartedResource || job.attempts < Number(job.maxAttempts ?? 3);
         const delayMs = code === "autopilot_dispatch_pending" ? Math.min(300_000, 30_000 * Math.max(1, job.attempts))
           : code === "runtime_busy" ? this.busyDelayMs : AUTOPILOT_RESOURCE_BACKOFF_MS[Math.min(Math.max(0, job.attempts - 1), AUTOPILOT_RESOURCE_BACKOFF_MS.length - 1)];
         const at = new Date();
         // The leased queue write is the durable refusal even if recording its
         // reader-facing episode detail meets a later storage outage.
-        await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: BALANCE_REFUSAL_CODES.includes(code) ? "Proactive research is waiting for account credits." : "The previous dispatch is still settling." },
+        await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: BALANCE_REFUSAL_CODES.includes(code) ? "Proactive research is waiting for account credits."
+          : AUTOPILOT_PROGRAMME_WAIT_CODES.includes(code) ? "The platform's evidence programme is waiting for budget or its slot." : "The previous dispatch is still settling." },
           { retry, delayMs: retry ? delayMs : 0, ...(unstartedResource ? { refundAttempt: true } : {}) });
         await this.service.recordResourceDeferral(job.userId, job.payload.episodeId, {
           jobId: job.id, code, attempts: job.attempts, retrying: retry, at: at.toISOString(), retryAt: retry ? new Date(at.getTime() + delayMs).toISOString() : null,
@@ -184,6 +203,10 @@ export class AutopilotWorker {
       }
       if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && ["autopilot_paused", "autopilot_stopped"].includes(code)) {
         await holdsLease();
+        if (job.kind === "verify") {
+          await this.service.endVerificationsOfAgenda?.(job.userId, job.payload.episodeId,
+            code === "autopilot_stopped" ? "agenda_stopped" : "agenda_paused", job.payload.verificationId).catch(() => {});
+        }
         await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
         return null;
       }

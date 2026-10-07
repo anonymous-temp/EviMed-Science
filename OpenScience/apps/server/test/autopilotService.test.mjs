@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
-import { STOPPING_RULES } from "@evimed/domain";
+import { AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY, STOPPING_RULES, knownErrorCodeMessage } from "@evimed/domain";
 import { AutopilotService, parseVerificationResult, recomputationVerdict, splitEpisodeBudget, verificationBudgetCny,
-  verificationEpisodeId, verificationIdFor, verificationBrief, verificationPrompt,
+  verificationEpisodeId, verificationIdFor, verificationBrief, verificationPrompt, verificationSlots,
   verificationWorkspacePath } from "../src/autopilotService.mjs";
 import { AutopilotPlanner, RESEARCHER_PAUSE_KIND, rotationTaskType } from "../src/autopilotNextAction.mjs";
 import { sourceIdFor } from "../src/sourceService.mjs";
@@ -46,10 +46,15 @@ class MemoryJobs {
   }
 }
 
-function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T01:00:00.000Z"), planner = null } = {}) {
+function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T01:00:00.000Z"), planner = null, accountCaps = undefined } = {}) {
   const documents = new MemoryDocuments();
   const jobs = new MemoryJobs();
-  const usage = { assertWithinLimits: async () => ({ allowed: true }) };
+  // The ledger's two questions, as a double: the account's limits (`assertWithinLimits`) and
+  // what the agenda's own runs spent (`spendOfRuns`, with when it was made). Both open by default.
+  const usage = { asked: [], spend: { day: 0, week: 0 }, timeline: [],
+    assertWithinLimits: async () => ({ allowed: true }),
+    spendOfRuns: async (userId, options) => { usage.asked.push({ userId, ...options }); return usage.spend; },
+    spendTimelineOfRuns: async () => usage.timeline };
   const notifications = { created: [], create: async (userId, input) => {
     if (notificationCreate) return notificationCreate(userId, input, notifications);
     notifications.created.push({ userId, input });
@@ -58,15 +63,17 @@ function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T0
   // decision promotes has to survive the actual candidate/approved rules, not a
   // stub that agrees with the caller.
   const capsules = new CapsuleService(documents);
-  const service = new AutopilotService({ documents, jobs, usage, notifications, capsules, planner,
+  const service = new AutopilotService({ documents, jobs, usage, notifications, capsules, planner, ...(accountCaps ? { accountCaps } : {}),
     now, id: (() => { let i = 0; return (prefix) => `${prefix}${++i}`; })() });
   return { documents, jobs, usage, notifications, capsules, service };
 }
 
+// ¥16 a night: the quarter held back (¥4) pays for the three re-checks an episode may earn at ¥1.33 each, each
+// above the ¥1.2 a run needs. A smaller cap funds fewer of them, which the budget tests below are about.
 const agendaInput = {
   projectId: "project-one", title: "心衰证据追踪", topics: ["heart failure", "SGLT2"],
   taskTypes: ["literature-sentinel", "evidence-update"], dailyBudgetCny: 20, weeklyBudgetCny: 80,
-  maxEpisodeCny: 8, scheduleHour: 1, timeZone: "Asia/Shanghai",
+  maxEpisodeCny: 16, scheduleHour: 1, timeZone: "Asia/Shanghai",
 };
 
 test("opening an owned digest records reading without treating list or get as activity", async () => {
@@ -226,7 +233,7 @@ test("an agenda is persistent, bounded and disabled until the user starts it", a
   assert.equal(agenda.payload.enabled, false);
   assert.equal(agenda.payload.status, "paused");
   assert.deepEqual(agenda.payload.taskTypes, agendaInput.taskTypes);
-  assert.equal(agenda.payload.maxEpisodeCny, 8);
+  assert.equal(agenda.payload.maxEpisodeCny, 16);
   await assert.rejects(() => service.create("user-one", { ...agendaInput, maxEpisodeCny: 21 }),
     (error) => error.code === "autopilot_budget_invalid");
 });
@@ -449,6 +456,42 @@ test("a completed episode admits only contract-valid claims tied to accepted run
   const episode = await service.getEpisode("user-one", scheduled.episode.id);
   assert.equal(episode.payload.rejectedClaims.length, 2);
   assert.equal(episode.payload.costCny, 1.25);
+});
+
+test("a briefing carries its episode's day in the agenda's time zone, not the UTC day it finished on", async () => {
+  // 07:00 in Asia/Shanghai is 23:00 UTC of the day before: the episode is the 7th's, and so is its briefing.
+  const { service } = fixture({ now: () => new Date("2026-09-06T23:30:00.000Z") });
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const manual = await service.runNow("user-one", active.id, { requestId: "request-one" });
+  assert.equal(manual.episode.payload.date, "2026-09-07");
+  await service.markEpisodeDispatched("user-one", manual.episode.id, { runId: "run-one", sessionId: "session-one" });
+  const digest = await service.completeRun("user-one", {
+    projectId: "project-one", runId: "run-one", status: "succeeded", deltaSchemaVersion: 1, artifacts: [], costCny: 0.5, claims: [] });
+  assert.equal(digest.payload.date, "2026-09-07");
+});
+
+test("an episode with no day of its own is dated by the agenda's day when its briefing is made, not the UTC day it finished on", async () => {
+  // The fallback of the fix above: an episode written before it carried a date. 23:30 UTC is 07:30 tomorrow in Asia/Shanghai.
+  const { service, documents } = fixture({ now: () => new Date("2026-09-06T23:30:00.000Z") });
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const manual = await service.runNow("user-one", active.id, { requestId: "request-old" });
+  const { date, ...rest } = manual.episode.payload;
+  await documents.put("user-one", "episode", manual.episode.id, rest, { expectedRevision: manual.episode.revision, projectId: "project-one" });
+  await service.markEpisodeDispatched("user-one", manual.episode.id, { runId: "run-old", sessionId: "session-old" });
+  const digest = await service.completeRun("user-one", {
+    projectId: "project-one", runId: "run-old", status: "succeeded", deltaSchemaVersion: 1, artifacts: [], costCny: 0.5, claims: [] });
+  assert.equal(date, "2026-09-07", "the episode's own day, had it carried one");
+  assert.equal(digest.payload.date, "2026-09-07");
+  const utc = await service.create("user-one", { ...agendaInput, timeZone: "UTC" });
+  await service.start("user-one", utc.id, { expectedRevision: utc.revision });
+  const other = await service.runNow("user-one", utc.id, { requestId: "request-utc" });
+  const { date: _gone, ...bare } = other.episode.payload;
+  await documents.put("user-one", "episode", other.episode.id, bare, { expectedRevision: other.episode.revision, projectId: "project-one" });
+  await service.markEpisodeDispatched("user-one", other.episode.id, { runId: "run-utc", sessionId: "session-utc" });
+  assert.equal((await service.completeRun("user-one", { projectId: "project-one", runId: "run-utc", status: "succeeded", deltaSchemaVersion: 1, artifacts: [], costCny: 0, claims: [] })).payload.date,
+    "2026-09-06", "an agenda in UTC is dated by UTC");
 });
 
 test("stopping an agenda durably cancels its running sessions without replacing work", async () => {
@@ -956,36 +999,150 @@ test("a verification id survives the whole cap, and only this shape is one", () 
 test("the night's budget is split before the episode is dispatched, not spent twice", async () => {
   const f = fixture();
   const cap = STOPPING_RULES.verificationsPerEpisode;
-  const created = await f.service.create("user-one", { ...agendaInput, dailyBudgetCny: 8, maxEpisodeCny: 8 });
+  const created = await f.service.create("user-one", { ...agendaInput, dailyBudgetCny: 16, maxEpisodeCny: 16 });
   const active = await f.service.start("user-one", created.id, { expectedRevision: created.revision });
   const { episode, job } = await f.service.schedule("user-one", active.id, { date: "2026-09-06" });
-  const night = 8;
+  const night = 16;
 
   assert.ok(episode.payload.budgetCny < night, "an episode dispatched at the whole night's budget starves its own re-checks");
-  assert.equal(episode.payload.budgetCny + episode.payload.verificationBudgetCny * cap <= night, true,
+  assert.equal(episode.payload.budgetCny + episode.payload.verificationBudgetCny * episode.payload.verificationSlots <= night, true,
     "a night must cost what it said it would cost, second opinions included");
+  assert.equal(episode.payload.verificationSlots, cap, "¥4 held back pays for three runs of ¥1.33");
   assert.equal(job.payload.budgetCny, episode.payload.budgetCny, "the dispatched budget is the split one");
   assert.match(episode.payload.prompt, new RegExp(`CNY ${episode.payload.budgetCny.toFixed(2)}`),
     "the run is told the budget it actually has");
   assert.deepEqual(splitEpisodeBudget(night),
-    { episodeCny: episode.payload.budgetCny, verificationCny: episode.payload.verificationBudgetCny });
+    { episodeCny: episode.payload.budgetCny, verificationCny: episode.payload.verificationBudgetCny, verifications: episode.payload.verificationSlots });
+});
 
-  // A night too small to fund both keeps the episode and says so on the claim,
-  // instead of queueing a job nobody can afford to run.
-  const poor = fixture();
-  const tiny = await poor.service.create("user-one", { ...agendaInput, dailyBudgetCny: 0.02, weeklyBudgetCny: 0.02, maxEpisodeCny: 0.02 });
-  const running = await poor.service.start("user-one", tiny.id, { expectedRevision: tiny.revision });
-  const scheduled = await poor.service.schedule("user-one", running.id, { date: "2026-09-06" });
-  assert.equal(scheduled.episode.payload.budgetCny, 0.02);
-  assert.equal(scheduled.episode.payload.verificationBudgetCny, 0);
-  await poor.service.markEpisodeDispatched("user-one", scheduled.episode.id, { runId: "run-poor", sessionId: "session-poor" });
-  await poor.service.completeRun("user-one", { projectId: "project-one", runId: "run-poor", status: "succeeded",
-    deltaSchemaVersion: 1, artifacts: ["reports/evidence.md"], costCny: 0.02, claims: [{
-      id: "claim-0", statement: "一条结论", type: "direct", tier: "unverified", sources: ["doi:10.1000/example-0"],
-      provenance: { episodeId: scheduled.episode.id, artifact: "reports/evidence.md" } }] });
-  const claim = (await poor.service.getEpisode("user-one", scheduled.episode.id)).payload.claims[0];
-  assert.deepEqual(claim.verification, { status: "unscheduled", reason: "verification_budget_unavailable" });
-  assert.equal(poor.jobs.items.filter((item) => item.kind === "verify").length, 0);
+/** An agenda with its own cap, one episode scheduled, dispatched and completed with `claims` accepted claims. */
+async function completedAtCap(maxEpisodeCny, claims = 3) {
+  const f = fixture();
+  const created = await f.service.create("user-one", { ...agendaInput, dailyBudgetCny: maxEpisodeCny, weeklyBudgetCny: maxEpisodeCny * 5, maxEpisodeCny });
+  const active = await f.service.start("user-one", created.id, { expectedRevision: created.revision });
+  const scheduled = await f.service.schedule("user-one", active.id, { date: "2026-09-06" });
+  await f.service.markEpisodeDispatched("user-one", scheduled.episode.id, { runId: "run-cap", sessionId: "session-cap" });
+  const digest = await f.service.completeRun("user-one", { projectId: "project-one", runId: "run-cap", status: "succeeded",
+    deltaSchemaVersion: 1, artifacts: ["reports/evidence.md"], costCny: 1, claims: Array.from({ length: claims }, (_, index) => ({
+      id: `claim-${index}`, statement: `一条结论 ${index}`, type: "direct", tier: "unverified", sources: [`doi:10.1000/example-${index}`],
+      provenance: { episodeId: scheduled.episode.id, artifact: "reports/evidence.md" } })) });
+  const episode = await f.service.getEpisode("user-one", scheduled.episode.id);
+  return { ...f, scheduled: scheduled.episode, episode, digest };
+}
+
+test("the number of re-checks an episode books is what the held-back share can pay for at the minimum a run needs", async () => {
+  // Each re-check is a run of its own and needs MIN_RUN_BUDGET_CNY (¥1.2): a share that cannot pay for a
+  // run is not held back, and the claims it cannot pay for say so instead of queueing runs that die on their first call.
+  const expectations = [
+    // cap, booked, each re-check's share, the episode's own
+    [16, 3, 1.33, 12.01], [14.4, 3, 1.2, 10.8], [14.39, 2, 1.79, 10.81], [8, 1, 2, 6], [4.8, 1, 1.2, 3.6], [4.79, 0, 0, 4.79], [1.2, 0, 0, 1.2],
+  ];
+  for (const [cap, booked, share, own] of expectations) {
+    const { episode, jobs, digest } = await completedAtCap(cap, 4);
+    const label = `cap ¥${cap}`;
+    assert.equal(episode.payload.verificationSlots, booked, label);
+    assert.equal(episode.payload.verificationBudgetCny, share, label);
+    assert.equal(episode.payload.budgetCny, own, label);
+    assert.equal(episode.payload.budgetCny + share * booked <= cap + 1e-9, true, `${label}: the night costs what it said`);
+    const verifications = episode.payload.claims.map((claim) => claim.verification);
+    assert.deepEqual(verifications.filter((item) => item.status === "queued").map((item) => item.id),
+      Array.from({ length: booked }, (_, index) => verificationIdFor(episode.id, index)), label);
+    // Past what the share pays for: unscheduled, with the budget as the reason. Past the rule's three: the cap's.
+    assert.deepEqual(verifications.slice(booked).map((item) => [item.status, item.reason]),
+      verifications.slice(booked).map((_, index) => ["unscheduled", booked + index >= STOPPING_RULES.verificationsPerEpisode ? "verification_cap" : "verification_budget_unavailable"]), label);
+    const jobsBooked = jobs.items.filter((job) => job.kind === "verify");
+    assert.equal(jobsBooked.length, booked, label);
+    for (const job of jobsBooked) assert.equal(job.payload.budgetCny >= MIN_RUN_BUDGET_CNY, true, `${label}: no job is given less than a run needs`);
+    // The briefing says the same: nothing in it reads "queued" for a run that was not booked.
+    const inDigest = [...digest.payload.headlines, ...digest.payload.leads].map((claim) => claim.verification.status);
+    assert.equal(inDigest.filter((status) => status === "queued").length, booked, label);
+  }
+});
+
+test("an episode from before the number of re-checks was recorded reads it from the share it carries", () => {
+  const episode = (payload) => ({ payload });
+  assert.equal(verificationSlots(episode({ budgetCny: 12, verificationBudgetCny: 1.33 })), 3, "a share a run can use pays for the cap");
+  assert.equal(verificationSlots(episode({ budgetCny: 5.9, verificationBudgetCny: 0.5 })), 0, "an old share below one run's minimum buys none: each would die on its first call");
+  assert.equal(verificationSlots(episode({ budgetCny: 12, verificationBudgetCny: 1.33, verificationSlots: 2 })), 2, "what was recorded is what counts");
+  assert.equal(verificationSlots(episode({ budgetCny: 12, verificationBudgetCny: 1.33, verificationSlots: 9 })), 3, "never more than the rule's three");
+  assert.equal(verificationSlots(episode({ budgetCny: 12 })), 3, "no share recorded: taken out of the budget it has");
+  assert.equal(verificationSlots(episode({ budgetCny: 1.5 })), 0);
+});
+
+test("a per-episode cap below what one run needs is refused when it is set, with the minimum named, and the minimum itself is accepted", async () => {
+  const { service } = fixture();
+  const sentence = knownErrorCodeMessage("autopilot_episode_budget_too_small");
+  assert.match(sentence, new RegExp(`¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)}`), "the researcher's sentence states the minimum");
+  for (const maxEpisodeCny of [0.01, 0.02, 1, 1.19]) {
+    await assert.rejects(() => service.create("user-one", { ...agendaInput, maxEpisodeCny }),
+      (error) => error.status === 400 && error.code === "autopilot_episode_budget_too_small" && /1\.20/.test(error.message), `create at ¥${maxEpisodeCny}`);
+  }
+  const created = await service.create("user-one", { ...agendaInput, maxEpisodeCny: AGENDA_MIN_EPISODE_BUDGET_CNY });
+  assert.equal(created.payload.maxEpisodeCny, AGENDA_MIN_EPISODE_BUDGET_CNY);
+  // Editing is held to the same floor, and a refused edit changes nothing.
+  await assert.rejects(() => service.update("user-one", created.id, { expectedRevision: created.revision, maxEpisodeCny: 1 }),
+    { code: "autopilot_episode_budget_too_small" });
+  assert.equal((await service.get("user-one", created.id)).revision, created.revision);
+  const raised = await service.update("user-one", created.id, { expectedRevision: created.revision, maxEpisodeCny: 5 });
+  assert.equal(raised.payload.maxEpisodeCny, 5);
+  // The order still holds: the floor is a minimum of the cap, not a way around "episode <= daily".
+  await assert.rejects(() => service.update("user-one", created.id, { expectedRevision: raised.revision, dailyBudgetCny: 2 }), { code: "autopilot_budget_invalid" });
+});
+
+test("an agenda stored with a cap below the floor makes no episode: the timer pauses it once with the sentence, a request for work is refused, and raising the cap lifts it", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service, documents, jobs, notifications } = fixture({ planner });
+  const sentence = knownErrorCodeMessage("autopilot_episode_budget_too_small");
+  const created = await service.create("user-one", agendaInput);
+  // Written before the floor existed: production holds one (¥1.50 less what is held back left ¥1.11, and it failed in four seconds).
+  const legacy = await documents.put("user-one", "agenda", created.id, { ...created.payload, maxEpisodeCny: 0.5, dailyBudgetCny: 2, enabled: true, status: "active" },
+    { expectedRevision: created.revision, projectId: created.projectId });
+
+  // A researcher asking for work now is told at once; nothing is written.
+  await assert.rejects(() => service.runNow("user-one", legacy.id, { requestId: "ask" }), { status: 400, code: "autopilot_episode_budget_too_small" });
+  await assert.rejects(() => service.followUp("user-one", legacy.id, { requestId: "ask-2", note: "再查一下" }), { code: "autopilot_episode_budget_too_small" });
+  assert.equal((await service.get("user-one", legacy.id)).payload.status, "active", "a refused request does not pause the agenda");
+
+  // The timer's occurrence: no episode, no job, no model call -- the agenda says why and tells the researcher.
+  const result = await service.schedule("user-one", legacy.id, { date: "2026-09-06" });
+  assert.equal(result.episode, null);
+  assert.equal(result.job, null);
+  assert.equal(result.stopped.kind, "episode_budget_too_small");
+  assert.equal(planner.calls.length, 0, "no decision was paid for");
+  assert.equal(jobs.items.length, 0);
+  assert.equal((await service.listEpisodes("user-one", { projectId: "project-one" })).items.length, 0);
+  const paused = await service.get("user-one", legacy.id);
+  assert.deepEqual([paused.payload.enabled, paused.payload.status, paused.payload.pauseCode], [false, "paused", "autopilot_episode_budget_too_small"]);
+  assert.equal(paused.payload.pauseReason, sentence, "the same sentence the edit form's refusal reads");
+  assert.equal(notifications.created.length, 1);
+  assert.equal(notifications.created[0].input.body, sentence);
+
+  // Starting it again would only pause it again at the next occurrence: refused, with the same sentence.
+  await assert.rejects(() => service.start("user-one", paused.id, { expectedRevision: paused.revision }), { code: "autopilot_episode_budget_too_small" });
+  // Its other fields stay editable; only the cap is held to the floor.
+  const renamed = await service.update("user-one", paused.id, { expectedRevision: paused.revision, title: "心衰证据追踪（新）" });
+  assert.equal(renamed.payload.pauseCode, "autopilot_episode_budget_too_small", "the reason stands until the cap is raised");
+  const raised = await service.update("user-one", paused.id, { expectedRevision: renamed.revision, maxEpisodeCny: 2 });
+  assert.equal(raised.payload.pauseCode, null, "raising the cap lifts the reason the page was giving");
+  const started = await service.start("user-one", raised.id, { expectedRevision: raised.revision });
+  const { episode } = await service.schedule("user-one", started.id, { date: "2026-09-07" });
+  assert.equal(episode.payload.budgetCny, 2, "¥2 is under the point where a share is held back for a re-check, so the episode has all of it");
+});
+
+test("a direction at reduced priority is halved but never to less than a run can be given", async () => {
+  // Three nights without a gated claim halve the budget: half of ¥2 would be ¥1, which dies on its first call.
+  const { service } = fixture();
+  const created = await service.create("user-one", { ...agendaInput, dailyBudgetCny: 2, weeklyBudgetCny: 10, maxEpisodeCny: 2 });
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  for (const date of ["2026-09-01", "2026-09-02", "2026-09-03"]) {
+    const { episode } = await service.schedule("user-one", agenda.id, { date });
+    agenda = await service.get("user-one", agenda.id);
+    await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: episode.id, status: "succeeded", gatedClaims: 0 });
+    agenda = await service.get("user-one", agenda.id);
+  }
+  const reduced = await service.schedule("user-one", agenda.id, { date: "2026-09-04" });
+  assert.equal(reduced.episode.payload.selection.priority, "reduced");
+  assert.equal(reduced.episode.payload.budgetCny, MIN_RUN_BUDGET_CNY, "half of ¥2 is ¥1: the episode keeps what a run needs");
 });
 
 test("an interrupted merge replays the whole fold and books no second verification", async () => {
@@ -1042,6 +1199,121 @@ test("a verdict that arrives after the worker gave up is recorded, not dropped",
   assert.equal((await f.service.getEpisode("user-one", episode.id)).payload.claims[0].verification.status, "recorded");
 });
 
+/** The fields of a claim's verification that name its state. */
+const stateOf = (claim) => ({ status: claim.verification.status, ...(claim.verification.reason ? { reason: claim.verification.reason } : {}),
+  ...(claim.verification.code ? { code: claim.verification.code } : {}) });
+
+test("stopping an agenda ends every re-check that had not finished in a named state, and nothing reads queued for work that will never run", async () => {
+  const f = fixture();
+  const { agenda, episode, digest } = await completedEpisode(f, { count: 3 });
+  const [first, second, third] = [0, 1, 2].map((index) => verificationIdFor(episode.id, index));
+  // Observed on production: one re-check dispatched and cancelled by the stop, two never started -- and afterwards
+  // `queued`, `verification_result_missing` and `queued` for ever.
+  await f.service.recordVerificationDispatched("user-one", episode.id, { verificationId: first, dispatchId: first, runId: "verify-run-0", sessionId: "verify-session-0" });
+  const active = await f.service.get("user-one", agenda.id);
+  await f.service.stop("user-one", active.id, { expectedRevision: active.revision });
+
+  const claims = (await f.service.getEpisode("user-one", episode.id)).payload.claims;
+  assert.deepEqual(stateOf(claims[0]), { status: "unavailable", reason: "agenda_stopped", code: "verification_canceled_by_stop" },
+    "cancelled by the stop: recorded as that, not as a result that is missing");
+  assert.equal(claims[0].verification.runId, "verify-run-0");
+  assert.deepEqual([stateOf(claims[1]), stateOf(claims[2])], [{ status: "unscheduled", reason: "agenda_stopped" }, { status: "unscheduled", reason: "agenda_stopped" }],
+    "not started: not scheduled, and the reason says the agenda was stopped");
+  assert.deepEqual(claims.map((claim) => claim.verification.id), [first, second, third], "each keeps its identity");
+  assert.equal(claims.some((claim) => claim.verification.status === "queued"), false);
+  // The briefing agrees with the episode: its copies of the claims carry the same states.
+  const briefed = [...(await f.service.getDigest("user-one", digest.id)).payload.leads];
+  assert.deepEqual(briefed.map((claim) => stateOf(claim)), claims.map(stateOf));
+  // The cancellation of the one that ran is on its way, as before.
+  assert.equal(f.jobs.items.filter((job) => job.payload.action === "cancel" && job.payload.verificationId === first).length, 1);
+
+  // The sweep is replayable (the reconcile timer runs it again): a second pass writes nothing.
+  const settled = await f.service.getEpisode("user-one", episode.id);
+  await f.service.sweepStop("user-one", agenda.id);
+  assert.equal((await f.service.getEpisode("user-one", episode.id)).revision, settled.revision, "no churn on replay");
+
+  // The cancelled run's own ending is not the story: its callback says "no result file", and the claim keeps the stop's.
+  const callback = await f.service.recordVerification("user-one", { episodeId: episode.id, verificationId: first, runId: "verify-run-0", errorCode: "verification_result_missing" });
+  assert.equal(callback.repeated, true);
+  assert.equal((await f.service.getEpisode("user-one", episode.id)).payload.claims[0].verification.code, "verification_canceled_by_stop");
+
+  // A restart revives none of them: the claim, not the job, says whether a re-check is still wanted.
+  const stopped = await f.service.get("user-one", agenda.id);
+  await f.service.start("user-one", stopped.id, { expectedRevision: stopped.revision });
+  for (const id of [first, second, third]) assert.equal(await f.service.verificationPending("user-one", episode.id, id), false, id);
+});
+
+test("a re-check cancelled with its agenda still takes a verdict that lands before the cancel did", async () => {
+  const f = fixture();
+  const { agenda, episode } = await completedEpisode(f, { count: 2 });
+  const [first, second] = [0, 1].map((index) => verificationIdFor(episode.id, index));
+  await f.service.recordVerificationDispatched("user-one", episode.id, { verificationId: first, dispatchId: first, runId: "verify-run-0", sessionId: "verify-session-0" });
+  const active = await f.service.get("user-one", agenda.id);
+  await f.service.stop("user-one", active.id, { expectedRevision: active.revision });
+  // A real verdict is the one thing nobody else can produce: it is recorded over the record that said there was none.
+  const folded = await f.service.recordVerification("user-one", { episodeId: episode.id, verificationId: first, runId: "verify-run-0", verdict: "refuted", checkedSources: [] });
+  assert.equal(folded.repeated, false);
+  const claims = (await f.service.getEpisode("user-one", episode.id)).payload.claims;
+  assert.equal(claims[0].verification.status, "recorded");
+  assert.equal(claims[0].refutation, "refuted");
+  // ...including one for a re-check the stop had marked as never started, which a dispatch in flight can still be.
+  const late = await f.service.recordVerification("user-one", { episodeId: episode.id, verificationId: second, runId: "verify-run-1", verdict: "stands", checkedSources: [] });
+  assert.equal(late.repeated, false);
+  // A second failure still does not overwrite a verdict.
+  const again = await f.service.recordVerification("user-one", { episodeId: episode.id, verificationId: first, errorCode: "verification_run_failed" });
+  assert.equal(again.repeated, true);
+});
+
+test("a run that ends without a result after its agenda was stopped is recorded as cancelled by the stop, even if the sweep has not reached it", async () => {
+  const f = fixture();
+  const { agenda, episode } = await completedEpisode(f, { count: 3 });
+  const ids = [0, 1, 2].map((index) => verificationIdFor(episode.id, index));
+  await f.service.recordVerificationDispatched("user-one", episode.id, { verificationId: ids[0], dispatchId: ids[0], runId: "verify-run-0", sessionId: "verify-session-0" });
+  // The stop is written but its sweep has not run (it is best effort and the timer replays it).
+  const current = await f.service.get("user-one", agenda.id);
+  await f.documents.put("user-one", "agenda", agenda.id, { ...current.payload, enabled: false, status: "stopped" }, { expectedRevision: current.revision, projectId: current.projectId });
+  for (const [index, errorCode] of ["verification_run_failed", "verification_result_missing", "verification_result_unreadable"].entries()) {
+    await f.service.recordVerification("user-one", { episodeId: episode.id, verificationId: ids[index], runId: `run-${index}`, errorCode });
+  }
+  const claims = (await f.service.getEpisode("user-one", episode.id)).payload.claims;
+  for (const claim of claims) assert.deepEqual(stateOf(claim), { status: "unavailable", reason: "agenda_stopped", code: "verification_canceled_by_stop" });
+});
+
+test("a re-check that failed for its own reason while the agenda ran keeps that reason", async () => {
+  const f = fixture();
+  const { episode } = await completedEpisode(f, { count: 2 });
+  await f.service.recordVerification("user-one", { episodeId: episode.id, verificationId: verificationIdFor(episode.id, 0), errorCode: "verification_result_missing" });
+  await f.service.recordVerification("user-one", { episodeId: episode.id, verificationId: verificationIdFor(episode.id, 1), errorCode: "usage_budget_exceeded" });
+  const claims = (await f.service.getEpisode("user-one", episode.id)).payload.claims;
+  assert.deepEqual(claims.map(stateOf), [{ status: "unavailable", code: "verification_result_missing" }, { status: "unavailable", code: "usage_budget_exceeded" }]);
+});
+
+test("a paused agenda ends the re-checks the worker skips for it, naming the pause and not the stop", async () => {
+  let at = new Date("2026-09-06T01:00:00.000Z");
+  const f = fixture({ now: () => at });
+  const { episode, digest } = await completedEpisode(f, { count: 3 });
+  at = new Date("2026-09-06T02:00:00.000Z");
+  const [first, second] = [0, 1].map((index) => verificationIdFor(episode.id, index));
+  const ended = await f.service.endVerificationsOfAgenda("user-one", episode.id, "agenda_paused", first);
+  assert.deepEqual(ended.map((claim) => claim.id), ["claim-0"], "only the claim the skipped job was for");
+  const claims = (await f.service.getEpisode("user-one", episode.id)).payload.claims;
+  assert.deepEqual(claims.map(stateOf), [{ status: "unscheduled", reason: "agenda_paused" }, { status: "queued" }, { status: "queued" }]);
+  assert.equal(await f.service.verificationPending("user-one", episode.id, first), false);
+  assert.equal(await f.service.verificationPending("user-one", episode.id, second), true);
+  // A job booked before its episode was merged finds no claim yet: that is not "settled".
+  assert.equal(await f.service.verificationPending("user-one", episode.id, verificationIdFor(episode.id, 7)), true);
+  assert.deepEqual((await f.service.getDigest("user-one", digest.id)).payload.leads.map((claim) => claim.verification.status), ["unscheduled", "queued", "queued"]);
+  assert.deepEqual(await f.service.endVerificationsOfAgenda("user-one", episode.id, "agenda_paused", first), [], "replayable");
+  // The researcher's reading: not re-checked, and why -- never "unchecked", which promises one.
+  const state = (await f.service.researchState("user-one", (await completedEpisodeAgendaId(f)))).unresolved;
+  assert.deepEqual(state.map((item) => [item.kind, item.reason ?? null]), [["not_rechecked", "agenda_paused"], ["unchecked", null], ["unchecked", null]]);
+});
+
+/** The one agenda a fixture holds. */
+async function completedEpisodeAgendaId(f) {
+  return (await f.documents.list("user-one", "agenda", { projectId: "project-one" })).items[0].id;
+}
+
 test("a refutation that lands after the researcher adopted the claim takes the capsule entry back", async () => {
   const f = fixture();
   const { episode, digest } = await completedEpisode(f, { count: 1 });
@@ -1075,9 +1347,12 @@ test("a refutation that lands after the researcher adopted the claim takes the c
   const second = await completedEpisode(f, { count: 1, date: "2026-09-07", runId: "run-two" });
   const kept = await f.service.decide("user-one", second.digest.id, { action: "adopt", claimId: "claim-0" });
   const keptId = kept.payload.decisions.at(-1).memory.entryId;
+  // Approved the way a researcher approves — through the capsule, which is what
+  // marks the entry as curated. A status written straight into the store is not
+  // that, and passed here only while both briefings carried one date and so one
+  // retraction sentence, which the replay guard took for a replay.
   const stored = await f.documents.get("user-one", "fact", keptId);
-  await f.documents.put("user-one", "fact", keptId, { ...stored.payload, status: "approved" },
-    { expectedRevision: stored.revision, projectId: "project-one" });
+  await f.capsules.updateEntry("user-one", stored.payload.capsuleId, keptId, { status: "approved", expectedRevision: stored.revision });
   await f.service.recordVerification("user-one", { episodeId: second.episode.id,
     verificationId: verificationIdFor(second.episode.id, 0), verdict: "refuted", checkedSources: [], runId: "verify-run-b" });
   const approved = await f.documents.get("user-one", "fact", keptId);
@@ -1422,12 +1697,14 @@ test("the model's choice, focus and reason are kept on the episode and in its br
   assert.match(prompt, /Planned focus for this episode.*核对尚未复核的结论/);
   assert.match(prompt, /original instruction/, "the researcher's own scope is still the first thing the run reads");
 
-  // What the decision was handed: this episode's id (its cost is the episode's), the agenda's own envelope, no stop yet.
+  // What the decision was handed: this episode's id (its cost is the episode's), the episode's own envelope
+  // (its cap, ¥16; never the agenda's daily and weekly caps, which are not the account's sum), no stop yet.
   const [call] = planner.calls;
   assert.equal(call.userId, "user-one");
   assert.equal(call.projectId, "project-one");
   assert.equal(call.episodeId, first.episode.id);
-  assert.deepEqual(call.limits, { daily: 20, weekly: 80 });
+  assert.equal(call.envelopeCny, agendaInput.maxEpisodeCny);
+  assert.equal(call.limits, undefined);
   assert.equal(call.stopAllowed, false, "an agenda that has finished nothing has given the decision nothing to stop on");
   assert.equal(call.context.question.title, "心衰证据追踪");
   assert.equal(call.context.priority, "normal");
@@ -1822,4 +2099,151 @@ test("material added after a needs_input stop is what the next decision reads be
   // Once an episode has run, the stop is behind the question.
   const later = await service.get("user-one", agenda.id);
   assert.equal((await service.researchState("user-one", later.id)).materials[0].name, "年龄分布.xlsx");
+});
+
+// ---------------------------------------------------------------------------
+// An agenda's own caps count the agenda's own spend (2026-10-04).
+//
+// A task written with ¥3 a day and ¥6 a week was refused with the account's
+// wording by an account that had spent ¥16 that day on other research, while the
+// task itself had spent nothing: its caps were handed to the ledger's admission
+// check, which sums everything the account spent. These are the unit halves;
+// the same cases run against the real ledger in `agendaBudget.integration`.
+// ---------------------------------------------------------------------------
+
+const smallAgenda = { ...agendaInput, dailyBudgetCny: 3, weeklyBudgetCny: 6, maxEpisodeCny: 1.5 };
+
+async function started(service, input = smallAgenda) {
+  const created = await service.create("user-one", input);
+  return service.start("user-one", created.id, { expectedRevision: created.revision });
+}
+
+test("an agenda's caps are never compared with the account's spend: the ledger is asked what the agenda's own runs spent, and the account's limits as the account's", async () => {
+  const asked = [];
+  const { service, usage, jobs } = fixture({ accountCaps: () => ({ userDailySpendLimit: 40, userWeeklySpendLimit: 0 }), planner: plannerDouble((input) => choose(input.eligible[0])) });
+  usage.assertWithinLimits = async (userId, limits) => { asked.push({ userId, ...limits }); };
+  const agenda = await started(service);
+  const first = await service.runNow("user-one", agenda.id, { requestId: "one" });
+  // The first episode of a new agenda has no run to ask about: nothing of its own was spent, and the question was still the account's.
+  assert.deepEqual(usage.asked.map((call) => call.runIds), [[]]);
+  assert.equal(first.episode.payload.status, "queued");
+
+  const second = await service.runNow("user-one", agenda.id, { requestId: "two" });
+  const own = usage.asked.at(-1).runIds;
+  assert.deepEqual(own, [first.episode.id, ...[0, 1, 2].map((index) => verificationIdFor(first.episode.id, index))],
+    "the agenda's own episodes and the verifications they may earn, nothing else");
+  assert.equal(usage.asked.at(-1).now.toISOString(), "2026-09-06T01:00:00.000Z", "read at the service's clock");
+  // The account's question: its own caps, 0 for none — never the agenda's ¥3 and ¥6.
+  assert.deepEqual(asked.map(({ userId, dailyLimit, weeklyLimit }) => ({ userId, dailyLimit, weeklyLimit })),
+    [{ userId: "user-one", dailyLimit: 40, weeklyLimit: 0 }, { userId: "user-one", dailyLimit: 40, weeklyLimit: 0 }]);
+  assert.equal(second.episode.payload.status, "queued");
+  assert.equal(jobs.items.filter((job) => job.kind === "episode").length, 2);
+});
+
+test("the task's own daily cap spent refuses as the task's budget, with when it frees; the account is not blamed", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service, usage, jobs } = fixture({ planner });
+  const agenda = await started(service);
+  usage.spend = { day: 3, week: 3 };
+  // Spend made 5 and 2 hours ago: the earlier one leaving the window is what frees a cent of room.
+  usage.timeline = [{ at: "2026-09-05T20:00:00.000Z", cost: 2 }, { at: "2026-09-05T23:00:00.000Z", cost: 1 }];
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "now" }), (error) => {
+    assert.equal(error.status, 402);
+    assert.equal(error.code, "autopilot_daily_budget_spent");
+    assert.match(error.message, /This task's own daily budget is spent: CNY 3\.00 of CNY 3\.00/);
+    assert.equal(error.details, undefined, "no account amounts ride on a task's refusal");
+    // 20:00 + 24 h + the minute the bucket may be early by = 20:01 tomorrow = 19 h after now (01:00).
+    assert.equal(error.retryAfterSeconds, 19 * 3600 + 60);
+    return true;
+  });
+  assert.equal(planner.calls.length, 0, "no decision was paid for");
+  assert.equal(jobs.items.length, 0);
+  assert.equal((await service.listEpisodes("user-one", { projectId: agenda.projectId })).items.length, 0, "and no episode exists");
+  // A follow-up is the researcher asking for work now: bound by the same budget.
+  await assert.rejects(() => service.followUp("user-one", agenda.id, { requestId: "ask", note: "再查一下肾病亚组" }), { code: "autopilot_daily_budget_spent" });
+  // And the scheduled occurrence.
+  await assert.rejects(() => service.schedule("user-one", agenda.id, { date: "2026-09-06" }), { code: "autopilot_daily_budget_spent" });
+});
+
+test("the weekly cap refuses as the week's budget, and is the one named when both are spent because it frees later", async () => {
+  const { service, usage } = fixture();
+  const agenda = await started(service);
+  usage.spend = { day: 1, week: 6 };
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "a" }), { status: 402, code: "autopilot_weekly_budget_spent" });
+  usage.spend = { day: 3, week: 6 };
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "b" }), { code: "autopilot_weekly_budget_spent" });
+  // A timeline that cannot be read leaves the refusal without a time, never without its reason.
+  usage.spendTimelineOfRuns = async () => { throw new Error("database away"); };
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "c" }), (error) => error.code === "autopilot_weekly_budget_spent" && error.retryAfterSeconds === undefined);
+});
+
+test("what the agenda has left is the envelope of its next episode and of that episode's decision, and the episode is funded from it", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service, usage } = fixture({ planner });
+  const agenda = await started(service);
+  // ¥1.70 of the day's ¥3 is gone: ¥1.30 is left, less than the ¥1.50 an episode may spend, and still more than a run needs.
+  usage.spend = { day: 1.7, week: 1.7 };
+  const { episode } = await service.runNow("user-one", agenda.id, { requestId: "tight" });
+  assert.equal(planner.calls[0].envelopeCny, 1.3);
+  const split = splitEpisodeBudget(1.3);
+  assert.deepEqual([episode.payload.budgetCny, episode.payload.verificationBudgetCny], [split.episodeCny, split.verificationCny]);
+  assert.ok(episode.payload.budgetCny + episode.payload.verificationBudgetCny * STOPPING_RULES.verificationsPerEpisode <= 1.3 + 1e-9, "the episode and its second opinions never exceed what was left");
+  // Plenty left: the episode's own cap is the envelope, as it always was.
+  usage.spend = { day: 0, week: 0 };
+  const roomy = await service.runNow("user-one", agenda.id, { requestId: "roomy" });
+  assert.equal(planner.calls[1].envelopeCny, 1.5);
+  assert.equal(roomy.episode.payload.budgetCny + roomy.episode.payload.verificationBudgetCny * STOPPING_RULES.verificationsPerEpisode, 1.5);
+  // The week binds when it is the tighter: ¥6 a week with ¥4.60 spent leaves ¥1.40.
+  usage.spend = { day: 0.5, week: 4.6 };
+  await service.runNow("user-one", agenda.id, { requestId: "week" });
+  assert.equal(planner.calls[2].envelopeCny, 1.4);
+});
+
+test("less than one run needs left in a window is that window spent: the budget is refused before a run is given what cannot make a call", async () => {
+  // ¥1.10 of ¥3 left is "available", and a run limited to it is refused on its first model call (MIN_RUN_BUDGET_CNY).
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service, usage, jobs } = fixture({ planner });
+  const agenda = await started(service);
+  usage.spend = { day: 1.9, week: 1.9 };
+  usage.timeline = [{ at: "2026-09-05T20:00:00.000Z", cost: 1.9 }];
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "short" }), (error) => {
+    assert.equal(error.code, "autopilot_daily_budget_spent");
+    // The spend leaving the window frees the whole ¥3: at 20:01 tomorrow, 19 h after now (01:00).
+    assert.equal(error.retryAfterSeconds, 19 * 3600 + 60);
+    return true;
+  });
+  assert.equal(planner.calls.length, 0, "no decision was paid for");
+  assert.equal(jobs.items.length, 0);
+  // ¥1.20 left is exactly one run's minimum: funded.
+  usage.spend = { day: 1.8, week: 1.8 };
+  const { episode } = await service.runNow("user-one", agenda.id, { requestId: "enough" });
+  assert.equal(episode.payload.budgetCny, MIN_RUN_BUDGET_CNY);
+});
+
+test("an account at its own cap is refused as the account, whatever the agenda has left", async () => {
+  const { service, usage, jobs } = fixture({ accountCaps: () => ({ userDailySpendLimit: 20, userWeeklySpendLimit: 0 }) });
+  const agenda = await started(service);
+  usage.assertWithinLimits = async (_userId, limits) => {
+    if (limits.dailyLimit > 0) throw new HttpError(402, "usage_budget_exceeded", "This account reached its spending limit.");
+  };
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "capped" }), { status: 402, code: "usage_budget_exceeded" });
+  assert.equal(jobs.items.length, 0);
+});
+
+test("an agenda with no ledger composed is bounded by its episode cap and nothing else", async () => {
+  const documents = new MemoryDocuments();
+  const jobs = new MemoryJobs();
+  const service = new AutopilotService({ documents, jobs, now: () => new Date("2026-09-06T01:00:00Z"), id: (prefix) => `${prefix}1` });
+  const created = await service.create("user-one", smallAgenda);
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const { episode } = await service.runNow("user-one", agenda.id, { requestId: "free" });
+  assert.equal(episode.payload.budgetCny + episode.payload.verificationBudgetCny * STOPPING_RULES.verificationsPerEpisode, 1.5);
+});
+
+test("a run scope carries the account's day and week and the run's own limit, never the agenda's caps", () => {
+  const { service } = fixture({ accountCaps: () => ({ userDailySpendLimit: 0, userWeeklySpendLimit: 100 }) });
+  const agenda = { payload: { dailyBudgetCny: 3, weeklyBudgetCny: 6 } };
+  assert.deepEqual(service.runScope(agenda, 1.12), { dailyLimit: 1_000_000, weeklyLimit: 100, runLimit: 1.12 },
+    "no account cap is a figure no run reaches, so the agenda's ¥3 cannot become the gateway's daily limit");
+  assert.throws(() => service.runScope(agenda, 0), { code: "autopilot_payload_invalid" }, "a run with nothing to spend is not a run with no limit");
 });

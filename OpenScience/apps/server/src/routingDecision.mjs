@@ -1,4 +1,4 @@
-import { capabilityTitle } from "@evimed/domain";
+import { capabilityTitle, formatCredits } from "@evimed/domain";
 import { runEstimate } from "./runRoute.mjs";
 import { HttpError, assertObject, assertString, readJson, sendJson } from "./security.mjs";
 import {
@@ -81,7 +81,10 @@ function durationText(minutes) {
  */
 function creditsText(credits, simulated = false) {
   if (!credits) return null;
-  const text = credits.min === credits.max ? `约 ${credits.min} 灵豆` : `约 ${credits.min}–${credits.max} 灵豆`;
+  // Drawn with the one display rule (two decimals, a small amount with its first two significant digits): an exact
+  // estimate of 0.43 is 0.43, never rounded to a whole number or to nothing.
+  const [low, high] = [formatCredits(credits.min), formatCredits(credits.max, { rounding: "up" })];
+  const text = low === high ? `约 ${low} 灵豆` : `约 ${low}–${high} 灵豆`;
   return simulated ? `${text}（模拟）` : text;
 }
 
@@ -99,7 +102,8 @@ function range(value) {
   const min = Number(pair.min ?? pair.low);
   const max = Number(pair.max ?? pair.high);
   if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < min) return null;
-  return { min: Math.round(min), max: Math.round(max) };
+  // Not rounded: an exact estimate is a fraction of a credit, and the wallet that is not exact sends whole numbers.
+  return { min, max };
 }
 
 /**

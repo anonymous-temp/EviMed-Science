@@ -6,6 +6,7 @@
 import clinicalSafetyRulesData from "./clinical-safety-rules.json" with { type: "json" };
 import { claimAppraisalFindings } from "./appraisalStructure.mjs";
 import { normalizeWorkspacePath } from "./workspaceLayout.mjs";
+import { isPlatformCardAddress, platformCardCitationMessage, platformCardCitationsByLine } from "./citedSources.mjs";
 import { deriveMarkdownStructure } from "./sourceMaterials.mjs";
 import { locateQuoteInText } from "./sourceMaterialsLocate.mjs";
 
@@ -336,6 +337,8 @@ export const clinicalEvidenceCheckIds = Object.freeze([
   "runtime-leakage",
   "claim-marker-format",
   "internal-api-citation",
+  // EviMed's own card page cited as a source (flywheel plan §4.3 rule 2): a notice, in no tier.
+  "platform-card-citation",
   "exclusive-safety",
   "matrix-present",
   "matrix-schema",
@@ -2016,10 +2019,13 @@ function normalizedExtractionPassage(value) {
     .replace(/\s+([.,;:!?。！？])/gu, "$1");
 }
 
-/** @param {string} haystack @param {readonly string[]} segments @param {(segment: string) => string} project @returns {boolean} */
-function segmentsPresentInOrder(haystack, segments, project) {
+/**
+ * @param {string} haystack @param {readonly string[]} segments @param {(segment: string) => string} project
+ * @param {{ spans?: number[][] }} [memo] where the haystack's numeric spans are kept for the next quote checked against it
+ * @returns {boolean} */
+function segmentsPresentInOrder(haystack, segments, project, memo = {}) {
   if (!haystack) return false;
-  const numericSpans = [...haystack.matchAll(passageNumberToken)].map((match) => [match.index, match.index + match[0].length]);
+  const numericSpans = memo.spans ??= [...haystack.matchAll(passageNumberToken)].map((match) => [match.index, match.index + match[0].length]);
   let from = 0;
   for (const segment of segments) {
     const needle = project(segment);
@@ -2166,12 +2172,43 @@ export function quoteIsPresent(artifact, quote) {
   const source = String(artifact ?? "");
   const segments = String(quote ?? "").split(quoteElision).map((part) => part.trim()).filter(Boolean);
   if (!source || !segments.length) return false;
+  const memo = documentMemo(source);
   // The artifact as preserved, then with inline citation markers taken out.
-  for (const text of [source, source.replace(inlineReferenceMarker, "")]) {
-    if (segmentsPresentInOrder(normalizedPassage(text), segments, normalizedPassage)) return true;
-    if (segmentsPresentInOrder(normalizedExtractionPassage(text), segments, normalizedExtractionPassage)) return true;
+  for (const [form, text] of [["preserved", source], ["unmarked", memo.unmarked ??= source.replace(inlineReferenceMarker, "")]]) {
+    const plain = memo[`${form}:plain`] ??= {};
+    plain.text ??= normalizedPassage(text);
+    if (segmentsPresentInOrder(plain.text, segments, normalizedPassage, plain)) return true;
+    const extraction = memo[`${form}:extraction`] ??= {};
+    extraction.text ??= normalizedExtractionPassage(text);
+    if (segmentsPresentInOrder(extraction.text, segments, normalizedExtractionPassage, extraction)) return true;
   }
   return false;
+}
+
+// Reading a document is the costly part of checking a quote against it —
+// megabytes of text normalised and scanned for numbers, twice over — and a claim
+// set checks many quotes against the same few documents: sixty claims on one
+// 2 MB full text were fourteen seconds of one thread. The last few large
+// documents keep what was read from them; a small one is cheaper to read again
+// than to keep. Nothing here changes an answer: the same text is the same text.
+const DOCUMENT_MEMO_MIN_CHARS = 50_000;
+const DOCUMENT_MEMO_SIZE = 3;
+/** @type {Map<string, Record<string, any>>} */
+const documentMemos = new Map();
+/** @param {string} source @returns {Record<string, any>} */
+function documentMemo(source) {
+  if (source.length < DOCUMENT_MEMO_MIN_CHARS) return {};
+  let memo = documentMemos.get(source);
+  if (!memo) {
+    memo = {};
+    documentMemos.set(source, memo);
+    if (documentMemos.size > DOCUMENT_MEMO_SIZE) documentMemos.delete(/** @type {string} */ (documentMemos.keys().next().value));
+  } else {
+    // Recently used last, so the oldest is the one that goes.
+    documentMemos.delete(source);
+    documentMemos.set(source, memo);
+  }
+  return memo;
 }
 
 // A verdict about a quote needs the text the quote is supposed to be in.
@@ -3142,12 +3179,13 @@ function validSourceArtifactPath(value) {
  *   artifactText: Map<string, string>,
  *   sourceDomains: Set<string>,
  *   issues: IssueLog,
+ *   publicUrl?: string | null,
  * }} context
  * @returns {void}
  */
 function validateSynthesizedClaim(
   value,
-  { label, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, issues },
+  { label, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, issues, publicUrl = null },
 ) {
   if (!synthesizedConfidenceLevels.has(value.confidence)) {
     issues.push(`${label}.confidence must be one of high, moderate, low for a synthesized claim.`);
@@ -3219,6 +3257,7 @@ function validateSynthesizedClaim(
       if (domain === "www.evimed.com" && String(source.sourceUrl ?? "").includes("/api-evimed/")) {
         issues.push(`${sourceLabel}.sourceUrl is an internal API route, not a public evidence citation.`);
       }
+      platformCardSourceNotice(issues, `${sourceLabel}.sourceUrl`, source.sourceUrl, publicUrl);
     }
     for (const token of supportNumericTokens([source.supportQuote, source.sourceTitle, source.identifier].join(" "))) {
       supportNumbers.add(token);
@@ -3272,6 +3311,19 @@ function auditClaim(value, label, context) {
 }
 
 /**
+ * A notice, never a finding the tiers act on: the claim's source address is one of EviMed's own card pages (plan
+ * §4.3 rule 2). The region of the check that was running is restored, because the pushes after this one belong to it.
+ * @param {IssueLog} issues @param {string} where @param {unknown} sourceUrl @param {string | null | undefined} publicUrl
+ */
+function platformCardSourceNotice(issues, where, sourceUrl, publicUrl) {
+  if (typeof sourceUrl !== "string" || !isPlatformCardAddress(sourceUrl, { publicUrl })) return;
+  const running = issues.current;
+  issues.region("platform-card-citation");
+  issues.push(platformCardCitationMessage({ path: where, url: sourceUrl }));
+  issues.current = running;
+}
+
+/**
  * @typedef {{
  *   issues: IssueLog,
  *   reportReferenceNumbers: Set<number> | null,
@@ -3282,6 +3334,7 @@ function auditClaim(value, label, context) {
  *   seen: Set<string>,
  *   claimIds: string[],
  *   derivedClaims: { label: string, claim: Record<string, any> }[],
+ *   publicUrl?: string | null,
  * }} ClaimAuditContext
  */
 
@@ -3349,7 +3402,7 @@ function auditClaimAppraisal(value, label, { issues, artifactText, successfulArt
  * @returns {void}
  */
 function auditClaimEvidence(value, label, context) {
-  const { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, seen, claimIds, derivedClaims } = context;
+  const { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, seen, claimIds, derivedClaims, publicUrl = null } = context;
   issues.region("claim-schema");
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     issues.push(`${label} must be an object.`);
@@ -3380,6 +3433,7 @@ function auditClaimEvidence(value, label, context) {
       artifactText,
       sourceDomains,
       issues,
+      publicUrl,
     });
     // The optional legacy bond adds information, never another independent
     // supporting source or a numeric anchor. Its finding is advisory: a false
@@ -3467,6 +3521,7 @@ function auditClaimEvidence(value, label, context) {
     if (domain === "www.evimed.com" && value.sourceUrl.includes("/api-evimed/")) {
       issues.push(`${label}.sourceUrl is an internal API route, not a public evidence citation.`);
     }
+    platformCardSourceNotice(issues, `${label}.sourceUrl`, value.sourceUrl, publicUrl);
   }
 }
 
@@ -3588,6 +3643,9 @@ export function validateClinicalEvidencePackage({
   // randomized body from an observational one; absent, it falls back to the
   // instrument and the stated start, and nothing else in the gate changes.
   sourceTypes = {},
+  // The deployment's configured public URL, when the caller has it. A card page is recognised by its path on any
+  // host; this adds the pages under a public URL that carries a path prefix of its own.
+  publicUrl = null,
 } = {}) {
   const issues = new IssueLog();
   /** @type {string[]} */
@@ -3755,6 +3813,12 @@ export function validateClinicalEvidencePackage({
   if (/https:\/\/www\.evimed\.com\/api-evimed\//i.test(reportText ?? "")) {
     issues.push("EviMed API endpoints cannot be used as public evidence citations.");
   }
+  // The report's links and its reference list: one finding per address and line. Advice in every tier — it
+  // never withholds, never fails a run, and the reader is told in the sentence above all.
+  issues.region("platform-card-citation");
+  for (const found of platformCardCitationsByLine("clinical-evidence-report.md", reportText, { publicUrl })) {
+    issues.pushAttributed({ text: found.message, line: found.line });
+  }
   issues.region("exclusive-safety");
   if (exclusiveSafetyPattern.test(reportText ?? "")) {
     issues.push("The report must not turn a bounded recommendation into an unsupported exclusive safety claim.");
@@ -3800,7 +3864,7 @@ export function validateClinicalEvidencePackage({
   const seen = new Set();
   /** @type {{ label: string, claim: Record<string, any> }[]} */
   const derivedClaims = [];
-  const claimContext = { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceTypes: typeMap(sourceTypes), sourceDomains, seen, claimIds, derivedClaims };
+  const claimContext = { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceTypes: typeMap(sourceTypes), sourceDomains, seen, claimIds, derivedClaims, publicUrl };
   for (const [index, value] of claims.entries()) auditClaim(value, `claims[${index}]`, claimContext);
   const reportClaims = reportClaimIds(reportText);
   const reportSet = new Set(reportClaims);

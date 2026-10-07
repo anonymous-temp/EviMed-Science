@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   useEvidenceScope,
   useEvidenceRequestId,
@@ -10,6 +10,10 @@ import { PageShell } from "@/components/layout/PageShell";
 import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EvidenceReading } from "@/components/frontier/EvidenceReading";
+import { EvidenceCardLinks, EvidenceContinueAction } from "@/components/frontier/EvidenceCardLinks";
+import { EvidenceChangeLog } from "@/components/frontier/EvidenceChangeLog";
+import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
+import { listMyEvidenceChallenges, type EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
 import {
@@ -47,7 +51,9 @@ function EvidenceReadingContent({
   const commentRequestId = useEvidenceRequestId();
   const [score, setScore] = useState<number | "">("");
   const [reviewText, setReviewText] = useState("");
-  const [editing, setEditing] = useState(false);
+  // A draft made from a research result opens straight in the editor (`?edit=1`).
+  const [params] = useSearchParams();
+  const [editing, setEditing] = useState(params.get("edit") === "1");
   const [comment, setComment] = useState("");
   const [zone, setZone] = useState<EvidenceZone | null>(null);
   const [evidence, setEvidence] = useState<EvidenceCard | null>(null);
@@ -56,6 +62,24 @@ function EvidenceReadingContent({
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const capture = useEvidenceScope(`${zoneId}:${cardId}:${refresh}`);
+  // Keeping cards current (flywheel F14): where the deployment has it, each claim offers 「质疑」 and the card shows its history.
+  const features = useEvidenceFeatures();
+  const [challenges, setChallenges] = useState<EvidenceChallengeView[] | undefined>(undefined);
+  const challengeable = features.upkeep && evidence?.state === "published";
+  useEffect(() => {
+    if (!challengeable) {
+      setChallenges(undefined);
+      return;
+    }
+    let active = true;
+    // A failure to read the reader's earlier challenges leaves the claims challengeable and merely forgets them.
+    listMyEvidenceChallenges(cardId)
+      .then((items) => active && setChallenges(items))
+      .catch(() => active && setChallenges([]));
+    return () => {
+      active = false;
+    };
+  }, [challengeable, cardId]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -159,7 +183,7 @@ function EvidenceReadingContent({
             )}
         </div>
       )}
-      {editing && evidence && (
+      {editing && evidence?.canEdit && (
         <div className="mb-4">
           <CardEditor
             key={`${zoneId}:${cardId}`}
@@ -193,6 +217,7 @@ function EvidenceReadingContent({
           <>
             <EvidenceReading
               evidence={evidence}
+              challenges={challengeable ? (challenges ?? []) : undefined}
               onDeleteComment={(id) => {
                 const current = capture();
                 setBusy(true);
@@ -217,6 +242,16 @@ function EvidenceReadingContent({
                 回到相关动态
               </Link>
             )}
+            {features.upkeep && evidence.state === "published" && (
+              <section className="mt-6" aria-label="这张卡的变更记录">
+                <h3 className="mb-2 text-ui font-medium text-text">变更记录</h3>
+                <EvidenceChangeLog zoneId={zoneId} cardId={evidence.id} pageSize={10} />
+              </section>
+            )}
+            <div className="mt-6 space-y-4">
+              <EvidenceContinueAction evidence={evidence} />
+              <EvidenceCardLinks cardId={evidence.id} />
+            </div>
             {evidence.canReview && (
               <form
                 className="mt-6 max-w-measure space-y-3"

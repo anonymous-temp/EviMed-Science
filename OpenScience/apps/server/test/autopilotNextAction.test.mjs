@@ -139,7 +139,7 @@ const input = (extra = {}) => ({ userId: "user-1", projectId: "project-1", episo
 
 test("one metered, bounded call under its own purpose, charged to the episode it chooses for", async () => {
   const { instance, calls } = planner(async () => answer(run), { userDailySpendLimit: 30 });
-  const decision = await instance.decide(input({ limits: { daily: 20, weekly: 80 } }));
+  const decision = await instance.decide(input({ envelopeCny: 8 }));
   assert.deepEqual(decision, { ...run, model: "deepseek-flash" });
   assert.equal(calls.length, 1);
   const { call } = calls[0];
@@ -147,8 +147,10 @@ test("one metered, bounded call under its own purpose, charged to the episode it
   assert.equal(call.userId, "user-1");
   assert.equal(call.projectId, "project-1");
   assert.equal(call.runId, "episode-abc");
-  // The agenda's own envelope and the account's: whichever is tighter, per window.
-  assert.deepEqual(call.limits, { daily: 20, weekly: 80 });
+  // Two different questions, two different sums (2026-10-04: the agenda's ¥3 a day was passed as `daily` and
+  // compared with everything the account had spent): the account's caps over what the account spent, and the
+  // episode's own envelope over what this one episode has spent, which is the decision itself.
+  assert.deepEqual(call.limits, { daily: 30, weekly: 0, run: 8 });
   assert.equal(call.body.model, "deepseek-flash");
   assert.equal(call.body.max_tokens, 800, "an explicit ceiling, or the gateway reserves for 65,536 tokens");
   assert.deepEqual(call.body.thinking, { type: "disabled" });
@@ -158,9 +160,11 @@ test("one metered, bounded call under its own purpose, charged to the episode it
   assert.deepEqual(JSON.parse(call.body.messages[1].content), { today: "2026-10-04" });
   assert.ok(call.signal instanceof AbortSignal);
   assert.deepEqual(instance.counters, { decisions: 1, runs: 1, stops: 0, invalid: 0, failures: 0, circuitOpen: 0, budgetSpent: 0 });
-  const tighter = planner(async () => answer(run), { userDailySpendLimit: 5, userWeeklySpendLimit: 0 });
-  await tighter.instance.decide(input({ limits: { daily: 20, weekly: 80 } }));
-  assert.deepEqual(tighter.calls[0].call.limits, { daily: 5, weekly: 80 });
+  // An agenda's own daily and weekly caps are not a parameter of the decision at all: passed as `limits` they are ignored
+  // rather than compared with the account's whole spend, and the account's caps stand as the deployment set them.
+  const tighter = planner(async () => answer(run), { userDailySpendLimit: 5, userWeeklySpendLimit: 40 });
+  await tighter.instance.decide(input({ limits: { daily: 3, weekly: 6 } }));
+  assert.deepEqual(tighter.calls[0].call.limits, { daily: 5, weekly: 40, run: 0 }, "no envelope is no per-run cap, and the agenda's caps never become the account's");
 });
 
 test("a stop is returned as a stop with its kind, only where one is allowed", async () => {
@@ -266,4 +270,23 @@ test("the operator sees how each decision ended, per process", async () => {
   assert.equal(family.type, "counter");
   assert.deepEqual(Object.fromEntries(family.series.map((item) => [item.labels.result, item.value])),
     { run: 1, stop: 0, invalid: 1, failed: 0, circuit_open: 0, budget_spent: 0 });
+});
+
+test("a resource need rides on a stop only when 循证进化 is on, and a need that cannot be used is dropped, never the decision", () => {
+  const stop = (extra) => JSON.stringify({ action: "stop", stopKind: "needs_input", reason: "缺少计算工具", ...extra });
+  const options = { eligible: ["literature-sentinel"], stopAllowed: true };
+  const need = { kind: "tool", capabilityId: "statistical-analysis", methodId: "decision-net-benefit" };
+  // Off: the key is none of the planner's business, as it was before the module existed.
+  assert.deepEqual(parsePlannerAnswer(stop({ resourceNeed: need }), options), { action: "stop", stopKind: "needs_input", reason: "缺少计算工具" });
+  // On: a well-formed need is kept; a malformed one, or one on another kind of stop, is left out and the stop stands.
+  assert.deepEqual(parsePlannerAnswer(stop({ resourceNeed: need }), { ...options, evolutionEnabled: true }).resourceNeed,
+    { kind: "tool", capabilityId: "statistical-analysis", methodId: "decision-net-benefit", toolId: undefined, requirementId: undefined });
+  for (const resourceNeed of [{ kind: "money" }, "tool", 7]) {
+    const parsed = parsePlannerAnswer(stop({ resourceNeed }), { ...options, evolutionEnabled: true });
+    assert.equal(parsed.action, "stop");
+    assert.equal("resourceNeed" in parsed, false);
+  }
+  const exhausted = parsePlannerAnswer(JSON.stringify({ action: "stop", stopKind: "exhausted", reason: "证据已用尽", resourceNeed: need }), { ...options, evolutionEnabled: true });
+  assert.equal(exhausted.stopKind, "exhausted");
+  assert.equal("resourceNeed" in exhausted, false);
 });

@@ -170,6 +170,13 @@ export function EvidenceMaintenance({
                     onChange={(enabled) => patch({ enabled })}
                     disabled={busy}
                   />
+                  {data.billing && (
+                    <p className="text-caption text-text-3">
+                      {data.billing.payer === "owner"
+                        ? "自动更新的模型费用由你的额度支付"
+                        : "自动更新的模型费用由平台支付"}
+                    </p>
+                  )}
                   <Input
                     label="关注的问题或检索词"
                     required

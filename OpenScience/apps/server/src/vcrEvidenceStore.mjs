@@ -346,8 +346,8 @@ export class VcrEvidenceStore extends VcrStoreBase {
       const result = await handle.query(
         `INSERT INTO ${VCR_SCHEMA}.assumptions
            (id, study_id, user_id, key, version, name, endpoint, unit, point_value, distribution, sensitivity,
-            source_kind, value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16, $17::jsonb, $18, $19)
+            source_kind, value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16, $17::jsonb, $18, $19, $20)
          RETURNING *`,
         [
           vcrId("assumption"), studyId, userId, key, version,
@@ -356,7 +356,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
           String(card?.sourceKind ?? "expert_set"), String(card?.valueSource ?? "assumed"),
           card?.poolingMethod ?? null, jsonb(card?.pooling),
           [...(card?.evidenceIds ?? [])].map(String), jsonb(card?.applicability),
-          String(card?.reviewState ?? "ai_set"), String(card?.note ?? ""),
+          String(card?.reviewState ?? "ai_set"), String(card?.note ?? ""), card?.afterFreeze === true,
         ],
       );
       await this.audit({
@@ -364,7 +364,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
         object: `${card?.key ?? ""}@${version}`,
         detail: {
           sourceKind: card?.sourceKind ?? null, poolingMethod: card?.poolingMethod ?? null,
-          evidenceCount: (card?.evidenceIds ?? []).length,
+          evidenceCount: (card?.evidenceIds ?? []).length, ...(card?.afterFreeze === true ? { afterFreeze: true } : {}),
         },
       });
       return result.rows[0] ?? null;
@@ -380,11 +380,11 @@ export class VcrEvidenceStore extends VcrStoreBase {
     );
   }
 
-  /** The current card for every key of a study. @param {{ studyId: string }} query */
+  /** The current card for every key of a study: a version written after the plan froze is beside it, never it. @param {{ studyId: string }} query */
   async latestAssumptions({ studyId }) {
     return this.rows(
       `SELECT DISTINCT ON (key) * FROM ${VCR_SCHEMA}.assumptions
-       WHERE study_id = $1 ORDER BY key, version DESC`,
+       WHERE study_id = $1 AND NOT after_freeze ORDER BY key, version DESC`,
       [studyId],
     );
   }
@@ -392,7 +392,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
   /** @param {{ studyId: string, key: string }} query */
   async latestAssumption({ studyId, key }) {
     return this.one(
-      `SELECT * FROM ${VCR_SCHEMA}.assumptions WHERE study_id = $1 AND key = $2 ORDER BY version DESC LIMIT 1`,
+      `SELECT * FROM ${VCR_SCHEMA}.assumptions WHERE study_id = $1 AND key = $2 AND NOT after_freeze ORDER BY version DESC LIMIT 1`,
       [studyId, key],
     );
   }

@@ -44,6 +44,7 @@ import {
  *   config: any,
  *   researchMemory: any,
  *   memorySubstrate?: any,
+ *   memoryIndexWorker?: { drainWithdrawals?: () => Promise<any> } | null,
  *   feedbackEvents: any,
  *   store: any,
  *   context: (req: any, res: any) => Promise<any>,
@@ -54,7 +55,7 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, researchMemory, memorySubstrate = null, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+  config, researchMemory, memorySubstrate = null, memoryIndexWorker = null, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
 
@@ -126,14 +127,14 @@ export function createMemoryRoutes({
       if (body.confirm !== "reset") {
         throw new HttpError(400, "memory_reset_confirmation_required", "Resetting memory requires confirm: \"reset\".");
       }
-      // The derived index first, and awaited, for the reason project deletion
-      // gives: a recall index that still answers with deleted memories is a
-      // copy of deleted data, so its failure fails the reset while the records
-      // are still there to retry with. Once more after the rows are gone, for
-      // an index job that re-published one in between.
-      if (memorySubstrate) await memorySubstrate.forgetUser(ctx.user.id);
+      // The index is never waited on: it holds derived copies, every hit is re-read
+      // from the store, and a slow index failed this reset outright (2026-10-05, the
+      // same class as project deletion). The rows go and the subtrees' withdrawal is
+      // owed to the index in the same transaction (`MemoryIndexWithdrawals`); it is
+      // asked for now, unawaited, and again by the index worker until it answers.
       const removed = await researchMemory.purgeUserMemory(ctx.user.id);
-      if (memorySubstrate) await memorySubstrate.forgetUser(ctx.user.id).catch(() => false);
+      if (memorySubstrate?.active && !researchMemory.withdrawals) void memorySubstrate.forgetUser(ctx.user.id).catch(() => false);
+      void memoryIndexWorker?.drainWithdrawals?.();
       await audit(ctx, "memory.reset", "completed", removed);
       sendJson(res, 200, { data: removed });
       return true;

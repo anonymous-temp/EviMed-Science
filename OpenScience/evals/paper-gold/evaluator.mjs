@@ -1,33 +1,24 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { boundedHalfWidth } from "./tolerance.mjs";
 export const STAGES = Object.freeze(["question", "method", "recall", "extraction", "calculation", "certainty", "writing"]);
 export const GAPS = Object.freeze(["connector", "extraction", "method_missing", "implementation", "routing", "skill_instruction", "writing", "model_capability", "outside_product"]);
 export const BENCHMARKS = Object.freeze(["method", "research", "question"]);
 export const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+/** A reference's stated tolerance is honoured only up to the bound `tolerance.mjs` derives from how the
+ *  number was printed; `toleranceClamped` says a frozen definition asked for more than that. */
 export function numericScore(actual, reference) {
   if (!Number.isFinite(actual)) return { valid: false, reason: "missing_numeric_result" };
   const interval = reference.interval ?? [reference.value, reference.value];
-  const tolerance = Math.max(reference.absoluteTolerance ?? 0, Math.abs(reference.value ?? 0) * (reference.relativeTolerance ?? 0));
-  return { valid: actual >= interval[0] - tolerance && actual <= interval[1] + tolerance, distance: actual < interval[0] ? interval[0] - actual : actual > interval[1] ? actual - interval[1] : 0 };
+  const { halfWidth: tolerance, clamped } = boundedHalfWidth(reference);
+  return { valid: actual >= interval[0] - tolerance && actual <= interval[1] + tolerance, distance: actual < interval[0] ? interval[0] - actual : actual > interval[1] ? actual - interval[1] : 0, ...(clamped ? { toleranceClamped: true } : {}) };
 }
 export function crossImplementationScore(actual, independent, tolerances = {}) {
   if (!independent.implementationId || independent.implementationId === actual.implementationId) throw new Error("Cross-implementation scoring requires independent implementations.");
   return Object.fromEntries(Object.entries(independent.numeric).map(([key, value]) => [key, numericScore(actual.numeric[key], { ...tolerances[key], value, interval: undefined })]));
 }
-export function simulationScore(samples, specification) {
-  if (!Array.isArray(samples) || samples.length < 2) throw new Error("Simulation requires at least two replicates.");
-  const n = samples.length;
-  const bias = samples.reduce((sum, row) => sum + row.estimate - specification.truth, 0) / n;
-  const variance = samples.reduce((sum, row) => sum + (row.estimate - specification.truth - bias) ** 2, 0) / (n - 1);
-  const coverage = samples.filter(row => row.lower <= specification.truth && row.upper >= specification.truth).length / n;
-  const falsePositive = samples.filter(row => row.p < specification.alpha).length / n;
-  const mcseCoverage = Math.sqrt(coverage * (1 - coverage) / n);
-  const mcseBias = Math.sqrt(variance / n);
-  const mcseFalsePositive = Math.sqrt(falsePositive * (1 - falsePositive) / n);
-  return { n, bias, coverage, falsePositive, mcseBias, mcseCoverage, mcseFalsePositive,
-    valid: Math.abs(bias) <= specification.maxBias + 1.96 * mcseBias && Math.abs(coverage - specification.coverage) <= specification.coverageTolerance + 1.96 * mcseCoverage && (specification.truth !== 0 || falsePositive <= specification.alpha + specification.falsePositiveTolerance + 1.96 * mcseFalsePositive) };
-}
+export { simulationScore, simulationRequiredReplicates, simulationSpecificationIssues, SIMULATION_LIMITS } from "./simulation.mjs";
 export function timeHoldout(caseRecord, modelReleasedAt, toolDevelopedAt) {
   const earliest = Math.min(...(caseRecord.firstPublicDates ?? []).map(Date.parse));
   return Number.isFinite(earliest) && earliest > Date.parse(modelReleasedAt) && earliest > Date.parse(toolDevelopedAt);
@@ -57,7 +48,7 @@ export async function freezeCycle(dataDir, cycleId, definition) {
   if (!/^[a-zA-Z0-9_-]+$/.test(cycleId)) throw new Error("Invalid cycle id.");
   const directory = path.join(dataDir, "paper-gold", "cycles", cycleId);
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const evaluatorSources = await Promise.all(["./evaluator.mjs", "./run.mjs", "./benchmarks.mjs", "../../apps/server/src/paperGoldEvaluator.mjs", "../../apps/server/src/paperGoldCalibration.mjs", "../../apps/server/src/reviewModel.mjs", "../../apps/server/src/paperGoldVerification.mjs"].map(file => readFile(new URL(file, import.meta.url), "utf8")));
+  const evaluatorSources = await Promise.all(["./evaluator.mjs", "./tolerance.mjs", "./simulation.mjs", "./run.mjs", "./benchmarks.mjs", "../../apps/server/src/paperGoldEvaluator.mjs", "../../apps/server/src/paperGoldCalibration.mjs", "../../apps/server/src/reviewModel.mjs", "../../apps/server/src/paperGoldVerification.mjs"].map(file => readFile(new URL(file, import.meta.url), "utf8")));
   const evaluatorCodeHash = digest(evaluatorSources);
   const hash = digest({ definition, evaluatorCodeHash });
   const file = path.join(directory, "definition.json");
@@ -97,9 +88,13 @@ export async function scoreUnit(unit, gold, { review, verifyCode } = {}) {
     if (["paper_error", "reasonable_difference"].includes(disagreement.verdict) && disagreement.codeVerified === true) stages.calculation.valid = !gold.deterministicVerification || verification?.verified === true;
   }
   const gaps = (unit.gaps ?? []).map(code => { if (!GAPS.includes(code)) throw new Error("Unknown gap code."); return code; });
+  // A unit that was not given its inputs cannot have computed the paper's numbers. Whether it reported one anyway is
+  // something code can see: a delivered receipt holding a number under a gold output path. That used to be left to the
+  // assessing model's prompt; a model's four "true"s no longer make such a unit valid.
+  const numbersWithoutInputs = gold.inputAvailable === false ? Object.keys(gold.baselineNumeric ?? gold.withheldNumeric ?? {}).filter(key => Number.isFinite(unit.numeric?.[key])) : [];
   const reachable = new Set(gold.reachableEvidenceIds ?? []);
   const recalled = new Set(unit.recalledEvidenceIds ?? []);
-  return { id: unit.id, type: gold.type, nativeEgressProofHash:unit.nativeEgressProofHash??null,assessmentReceiptHash:unit.assessmentReceiptHash??null,assessmentEvidenceIds:unit.assessmentEvidenceIds??[],assessmentReasoningStatus:unit.assessmentReasoningStatus??"unknown", stages, numeric, disagreement, gaps, deterministicVerificationRequired:Boolean(gold.deterministicVerification), ...(verification ? {codeVerified:verification.verified === true,...(verification.verified ? {verificationProof:verification.proof}:{verificationFailure:verification.reason})}:{}), applicableStagesValid: applicableStages.every(stage => stages[stage].observed && stages[stage].valid), allStagesValid: gold.inputAvailable !== false && applicableStages.every(stage => stages[stage].observed && stages[stage].valid), fullResearchReproductionValid: gold.type === "research" && gold.inputAvailable !== false && ["unexposed", "exposed_uncited", "exposed-unreferenced", "cited"].includes(unit.exposureTier) && STAGES.every(stage => stages[stage].observed && stages[stage].valid), benchmarkScope: gold.benchmarkScope ?? (gold.inputAvailable === false ? "missing-input-response" : gold.type), recall: { denominator: reachable.size, found: [...reachable].filter(id => recalled.has(id)).length, connectorGaps: gold.unreachableEvidenceIds ?? [] }, exposureTier: unit.exposureTier ?? "unknown" };
+  return { id: unit.id, type: gold.type, nativeEgressProofHash:unit.nativeEgressProofHash??null,assessmentReceiptHash:unit.assessmentReceiptHash??null,assessmentEvidenceIds:unit.assessmentEvidenceIds??[],assessmentCitedDeliveredFiles:unit.assessmentCitedDeliveredFiles??[],assessmentRefusal:unit.assessmentRefusal??null,assessmentReasoningStatus:unit.assessmentReasoningStatus??"unknown", stages, numeric, disagreement, gaps, deterministicVerificationRequired:Boolean(gold.deterministicVerification), ...(verification ? {codeVerified:verification.verified === true,...(verification.verified ? {verificationProof:verification.proof}:{verificationFailure:verification.reason})}:{}), numbersReportedWithoutInputs: numbersWithoutInputs, applicableStagesValid: numbersWithoutInputs.length === 0 && applicableStages.every(stage => stages[stage].observed && stages[stage].valid), allStagesValid: gold.inputAvailable !== false && applicableStages.every(stage => stages[stage].observed && stages[stage].valid), fullResearchReproductionValid: gold.type === "research" && gold.inputAvailable !== false && ["unexposed", "exposed_uncited", "exposed-unreferenced", "cited"].includes(unit.exposureTier) && STAGES.every(stage => stages[stage].observed && stages[stage].valid), benchmarkScope: gold.benchmarkScope ?? (gold.inputAvailable === false ? "missing-input-response" : gold.type), recall: { denominator: reachable.size, found: [...reachable].filter(id => recalled.has(id)).length, connectorGaps: gold.unreachableEvidenceIds ?? [] }, exposureTier: unit.exposureTier ?? "unknown" };
 }
 function groupBy(rows, select) {
   const groups = {}; for (const row of rows) { const key = select(row); (groups[key] ??= []).push(row); } return groups;

@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:5c9342d3fc4d7b383bd170b620a1a16539324f482c121bb9d42347689f1c529b",
+  "version": "sha256:dce1c1f8aee156026f7cd83f0eb20fb21c70850e59e29ab4584532dda48ae4d4",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 32,
+    "nodes": 33,
     "edges": 10,
     "byVia": {
       "schema": 10,
@@ -659,9 +659,102 @@
       "stateEffect": "none"
     },
     {
+      "name": "mcp__evimed__frontier_search",
+      "source": "mcp",
+      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days, and for a keyword query EviMed's own evidence cards. Use it when a question asks what is new or recent; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed or a card.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Keywords: drug, disease, trial, agency (Chinese or English). Omit to list the newest items."
+          },
+          "lane": {
+            "type": "string",
+            "enum": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ]
+          },
+          "specialty": {
+            "type": "string",
+            "enum": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          "window": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "3d",
+              "7d",
+              "30d"
+            ],
+            "default": "30d"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "all"
+            ],
+            "default": "selected",
+            "description": "selected: the editors' picks; all: everything collected."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 8
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "doi"
+      ],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links or monitoring. Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
+      "description": "Read this 循证传播 project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards (evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -682,7 +775,8 @@
               "articles",
               "orders",
               "owned_links",
-              "monitoring"
+              "monitoring",
+              "cards"
             ]
           },
           "filter": {
@@ -831,7 +925,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} or retires one {id, status: retired}. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 循证传播 project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} or retires one {id, status: retired}. Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {

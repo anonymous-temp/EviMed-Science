@@ -19,7 +19,7 @@
  *   - at 390 px nothing overflows horizontally;
  *   - at the desktop width, the style budget of §7: at most 8 kinds of
  *     control (9 on the frontier feed, whose headlines are links; 10 on a
- *     data page — the knowledge base and 循证 GEO), 5 text colours (8 on the
+ *     data page — the knowledge base and 循证传播), 5 text colours (8 on the
  *     frontier feed, which adds the safety red and the rank colours; 7 on a
  *     data page) and 3 kinds of border (6 on a GEO project's tabs, the
  *     measured number — see GEO_BUDGET), with each kind of control named in
@@ -96,7 +96,7 @@ export const ROUTES = [
   // content addresses with ids; the home is the one every account can open.
   ["frontier-zones", "/app/frontier/zones"],
   ["capabilities", "/app/capabilities"],
-  // 循证 GEO's home — its one sentence where the account is not offered the
+  // 循证传播's home — its one sentence where the account is not offered the
   // module; one project's seven tabs are added when the account has one
   // (`geoProjectRoutes`).
   ["geo", "/app/geo"],
@@ -147,10 +147,10 @@ const FRONTIER_BUDGET = { controls: 9, colors: 8 };
  * borders, against the reading page's 8 / 5 / 3. A dashboard legitimately
  * carries more — a metric band, a chart's legend and axis labels, a severity
  * scale, a table's own header — and it is a wider budget, not the absence of
- * one: 循证 GEO shipped inside the old budget and still looked cheap, which is
+ * one: 循证传播 shipped inside the old budget and still looked cheap, which is
  * why the fix was its information architecture and not its allowance.
  *
- * 循证 GEO is the page it was written for (fusion plan §5.5, §5.9): it spends
+ * 循证传播 is the page it was written for (fusion plan §5.5, §5.9): it spends
  * the severity reds of 讲错我方 and the single-hue heat ramp on top of the
  * chrome, and its header carries a rail of eight steps beside the tabs. The
  * per-number 「问 AI」 buttons are gone — one 「对话」 in the header replaced
@@ -383,6 +383,15 @@ export function measure([leakSources, backOfficeSources]) {
     const lines = (r.height - around) / lineHeight;
     if (contentSized && textOnly && lineHeight > 0 && Math.round(lines) >= 1 && Math.abs(lines - Math.round(lines)) < 0.05) {
       return around ? `text+${Math.round(around)}` : "text";
+    }
+    // A card whose CSS sets a minimum height and lets its text grow it past
+    // that is one kind at every height its text gives it: the tools of 科研工具
+    // (`min-h-32`) drew 136, 162 and 182 px for descriptions of three lengths
+    // and failed the walk as three kinds (2026-10-06). At its minimum it is
+    // measured like any other control.
+    const minHeight = declared !== null ? String(declared.get("min-height")) : "auto";
+    if (declared !== null && String(declared.get("height")) === "auto" && /^[\d.]+px$/.test(minHeight) && r.height > parseFloat(minHeight) + 0.5) {
+      return `min${Math.round(parseFloat(minHeight))}+`;
     }
     return `${Math.round(r.height)}h`;
   };

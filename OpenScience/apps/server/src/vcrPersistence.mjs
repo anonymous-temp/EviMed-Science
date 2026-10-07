@@ -11,7 +11,7 @@
  *   execution (jobs, executions, results, forecasts), the business side
  *   (matching, referrals, sites, follow-up) and governance (lineage, stale
  *   marks, reviews, decisions, regulatory contacts, audit, schedule marks) are
- *   all created here — the shape 「循证 GEO」 settled on, for the same reason:
+ *   all created here — the shape 「循证传播」 settled on, for the same reason:
  *   so no package migrates a table another one reads. Additive and idempotent.
  * - **Tenancy is a column, checked in code**, and here it is not enough on its
  *   own: a study has members, so a row's reader is decided by
@@ -43,7 +43,7 @@ import {
   VCR_EXPORT_KINDS, VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_STATES, VCR_MEMBER_ROLES,
   VCR_MISSING_REASONS, VCR_MODEL_RISKS, VCR_MODEL_TIERS, VCR_POOLING_METHODS, VCR_POPULATION_KINDS,
   VCR_RATINGS, VCR_REFERRAL_STATES, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
-  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES,
+  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES, PLATFORM_PUBLISHER_USER_ID,
 } from "@evimed/domain";
 import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
@@ -87,7 +87,8 @@ export const VCR_TABLES = Object.freeze([
   "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments",
   "referrals", "referral_events", "sites", "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
-  "model_assessments", "model_plan_versions",
+  "model_assessments", "model_plan_versions", "published_simulations",
+  "precedent_candidates", "evidence_signals", "frontier_scans", "platform_packs", "pack_promotions",
 ]);
 
 const migrations = new WeakMap();
@@ -133,6 +134,10 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.studies (
   UNIQUE (user_id, project_id)
 );
 CREATE INDEX IF NOT EXISTS vcr_studies_user_idx ON evimed_vcr.studies (user_id, updated_at DESC) WHERE deleted_at IS NULL;
+-- What the study is about, by the shared entity vocabulary (entityVocabulary.mjs).
+-- NULL means not tagged yet — the vocabulary could not tag when the study was
+-- written — and a pass over those rows tags them.
+ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS entity_keys text[];
 
 -- Study members and their roles (plan §11.1 conclusion 4): project-level only,
 -- deliberately not an organization model.
@@ -372,6 +377,10 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.assumptions (
   UNIQUE (study_id, key, version)
 );
 CREATE INDEX IF NOT EXISTS vcr_assumptions_study_idx ON evimed_vcr.assumptions (study_id, key, version DESC);
+-- A version written after the study's analysis plan froze (flywheel F24, 2026-10-06): the new evidence is kept as a version of the
+-- card and shown beside the version the plan froze with, and is never the study's current one — every reader of "the card" skips it,
+-- so a frozen plan is not touched and no recomputation starts from it.
+ALTER TABLE evimed_vcr.assumptions ADD COLUMN IF NOT EXISTS after_freeze boolean NOT NULL DEFAULT false;
 
 -- ---------------------------------------------------------------------------
 -- Data plane (plan §8.1). Patient-level rows live outside this schema.
@@ -1216,6 +1225,139 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.schedule_marks (
 );
 CREATE INDEX IF NOT EXISTS vcr_schedule_marks_open_idx ON evimed_vcr.schedule_marks (study_id, kind, state)
   WHERE state IN ('pending', 'claimed', 'running');
+
+-- Trial events the frontier feed reported for what a study is about (flywheel F24, 2026-10-06). A candidate is a pointer — the feed
+-- item, the registry or DOI identifier it names — and never a precedent: a precedent is a registry record the study fetched and
+-- extracted through the evidence write, checked in code. One row per account and feed item; \`study_ids\` are the studies whose entity
+-- keys led to it. \`dismissed\` hides it from the list and keeps it, so a tick that sees the item again does not raise it again.
+CREATE TABLE IF NOT EXISTS evimed_vcr.precedent_candidates (
+  id               text PRIMARY KEY,
+  user_id          text NOT NULL,
+  frontier_item_id text NOT NULL,
+  event            text NOT NULL CHECK (event IN ('registration', 'results', 'label_change')),
+  registry         text,
+  registry_id      text,
+  doi              text,
+  pmid             text,
+  title            text NOT NULL,
+  study_ids        text[] NOT NULL DEFAULT '{}',
+  state            text NOT NULL DEFAULT 'candidate' CHECK (state IN ('candidate', 'dismissed')),
+  noticed_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, frontier_item_id)
+);
+CREATE INDEX IF NOT EXISTS vcr_precedent_candidates_user_idx ON evimed_vcr.precedent_candidates (user_id, noticed_at DESC);
+
+-- News about the sources of an assumption card: a new results item of the feed that names a work the card stands on, or a recorded
+-- retraction, correction or new version of one (the source-change ledger). The card reads 「有新证据」 while a signal of its version is
+-- open; \`versioned\` says a later version took the news in, and \`after_freeze\` that the study's plan had frozen when it did.
+CREATE TABLE IF NOT EXISTS evimed_vcr.evidence_signals (
+  id                 text PRIMARY KEY,
+  study_id           text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id            text NOT NULL,
+  assumption_key     text NOT NULL,
+  assumption_version integer NOT NULL,
+  cause              text NOT NULL CHECK (cause IN ('new_results', 'source_retracted', 'source_corrected', 'source_new_version')),
+  frontier_item_id   text,
+  identifier         text NOT NULL,
+  title              text NOT NULL DEFAULT '',
+  state              text NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'versioned')),
+  version_after      integer,
+  after_freeze       boolean NOT NULL DEFAULT false,
+  noticed_at         timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (study_id, assumption_key, assumption_version, identifier, cause)
+);
+CREATE INDEX IF NOT EXISTS vcr_evidence_signals_study_idx ON evimed_vcr.evidence_signals (study_id, state, noticed_at DESC);
+
+-- A knowledge pack an account's study lead curated and the platform re-checked, copied as the platform's own immutable version
+-- (flywheel F26, 2026-10-06). The copy is a row of \`knowledge_packs\` owned by the platform publisher account, so every reader of a pack
+-- reads it as it reads any stored one; this table is what the row stands on: whose pack it was copied from (the author, by name, for
+-- as long as they allow it), which version, the official zone of the same disease and whether a source of it has since changed. A
+-- retired version is no longer offered to new studies and stays readable to the studies that pinned it.
+CREATE TABLE IF NOT EXISTS evimed_vcr.platform_packs (
+  pack_id        text PRIMARY KEY REFERENCES evimed_vcr.knowledge_packs(id),
+  disease_key    text NOT NULL,
+  version        integer NOT NULL,
+  source_pack_id text NOT NULL,
+  source_version integer NOT NULL,
+  author_user_id text NOT NULL,
+  author_name    text NOT NULL DEFAULT '',
+  authored_at    timestamptz NOT NULL,
+  entity_keys    text[] NOT NULL DEFAULT '{}',
+  zone_id        text,
+  state          text NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'retired')),
+  retired_at     timestamptz,
+  retired_reason text,
+  source_changed_at timestamptz,
+  source_changes jsonb NOT NULL DEFAULT '[]'::jsonb,
+  recheck        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  promoted_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vcr_platform_packs_disease_idx ON evimed_vcr.platform_packs (disease_key, version DESC);
+CREATE INDEX IF NOT EXISTS vcr_platform_packs_keys_idx ON evimed_vcr.platform_packs USING gin (entity_keys);
+
+-- Every request to make an account's pack a platform pack, and what the re-check said: the pack stays the account's when it did not
+-- pass, with the failing entries and sources named, and the account reads the result on the pack's page.
+CREATE TABLE IF NOT EXISTS evimed_vcr.pack_promotions (
+  id             text PRIMARY KEY,
+  user_id        text NOT NULL,
+  pack_id        text NOT NULL,
+  pack_version   integer NOT NULL,
+  requested_by   text NOT NULL,
+  state          text NOT NULL CHECK (state IN ('passed', 'failed')),
+  failing        jsonb NOT NULL DEFAULT '[]'::jsonb,
+  checked        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  platform_pack_id text,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vcr_pack_promotions_pack_idx ON evimed_vcr.pack_promotions (user_id, pack_id, created_at DESC);
+
+-- The platform's version is immutable: a row of the publisher account's packs is written once.
+CREATE OR REPLACE FUNCTION evimed_vcr.refuse_platform_pack_change() RETURNS trigger AS $$
+BEGIN
+  IF OLD.user_id = '${PLATFORM_PUBLISHER_USER_ID}' THEN
+    RAISE EXCEPTION 'a platform knowledge pack version is immutable' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS vcr_platform_pack_immutable ON evimed_vcr.knowledge_packs;
+CREATE TRIGGER vcr_platform_pack_immutable BEFORE UPDATE OR DELETE ON evimed_vcr.knowledge_packs
+  FOR EACH ROW EXECUTE FUNCTION evimed_vcr.refuse_platform_pack_change();
+
+-- When the frontier consumer last looked at a study, so a tick takes the study looked at longest ago first.
+CREATE TABLE IF NOT EXISTS evimed_vcr.frontier_scans (
+  study_id   text PRIMARY KEY REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  scanned_at timestamptz NOT NULL
+);
+
+-- A report its study lead chose to put in the public 「模拟研究」 column (flywheel plan §5.6, 2026-10-06). The row is the frozen
+-- public form of one export, not a pointer to it: the numbers were rendered from the report model after the runtime's small-cell
+-- suppression, each carries its value-source label, and nothing in it is a row of a person. A withdrawn publication keeps its row
+-- (the record of what was public) and is read by nobody. One live publication per export.
+CREATE TABLE IF NOT EXISTS evimed_vcr.published_simulations (
+  id              text PRIMARY KEY,
+  study_id        text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id         text NOT NULL,
+  published_by    text NOT NULL,
+  export_id       text NOT NULL,
+  export_kind     text NOT NULL CHECK (export_kind IN ('simulation_report', 'model_analysis_report')),
+  title           text NOT NULL,
+  summary         text NOT NULL DEFAULT '',
+  producer        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  sections        jsonb NOT NULL DEFAULT '[]'::jsonb,
+  limitations     jsonb NOT NULL DEFAULT '[]'::jsonb,
+  intended_use    text NOT NULL DEFAULT '',
+  intended_use_key text NOT NULL DEFAULT '',
+  receipts        jsonb NOT NULL DEFAULT '[]'::jsonb,
+  published_at    timestamptz NOT NULL DEFAULT now(),
+  withdrawn_at    timestamptz,
+  withdrawn_by    text
+);
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_published_simulations_live_idx ON evimed_vcr.published_simulations (study_id, export_id)
+  WHERE withdrawn_at IS NULL;
+CREATE INDEX IF NOT EXISTS vcr_published_simulations_public_idx ON evimed_vcr.published_simulations (published_at DESC, id DESC)
+  WHERE withdrawn_at IS NULL;
 `;
 }
 

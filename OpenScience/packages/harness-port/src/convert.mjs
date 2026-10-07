@@ -142,7 +142,11 @@ export function toTurnEnd(event) {
   if (!KNOWN_TURN_END.has(kind)) return { kind: 'unknown', rawKind: kind }
   const error = record(reason.error)
   const code = str(error.code)
-  return code ? { kind: /** @type {any} */ (kind), code } : { kind: /** @type {any} */ (kind) }
+  return {
+    kind: /** @type {any} */ (kind),
+    ...(code ? { code } : {}),
+    ...(Number.isSafeInteger(error.status) ? { status: /** @type {number} */ (error.status) } : {}),
+  }
 }
 
 /**

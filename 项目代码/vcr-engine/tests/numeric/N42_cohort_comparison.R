@@ -80,7 +80,7 @@ vcr_case("N42", c("AC-02", "AC-09"), function() {
     abs(by_name(rt$diagnostics$comparison)$age$standardizedDifference - (65 - 55) / sqrt((stats::var(c(30, 40, 50, 60, 70, 80)) + stats::var(c(50, 60, 70, 80))) / 2)) < 1e-12
   unlink(dir, recursive = TRUE)
   list(pass = ok_sizes && ok_wf && ok_smd && ok_direction && ok_skipped && ok_floor && ok_hash && ok_swap && ok_plain && ok_refused && ok_tiny,
-       detail = sprintf("A keeps %d, B keeps %d (both %d, only A %d, only B %d) equal to the independent count; SMD age %.4f (independent %.4f), male %.4f (%.4f), eGFR %.4f (%.4f); text column skipped %s; swap flips signs %s; no `compare` -> no comparison %s; bad column / bad rule refused %s; one-observation covariate named %s",
+       detail = sprintf("A keeps %d, B keeps %d (both %d, only A %d, only B %d) equal to the independent count; SMD age %.4f (independent %.4f), male %.4f (%.4f), eGFR %.4f (%.4f); text column named as not numeric %s; swap flips signs %s; no `compare` -> no comparison %s; bad column / bad rule refused %s; one-observation covariate named %s",
                         cc$cohortSizeA, cc$cohortSizeB, cc$overlap$both, cc$overlap$onlyA, cc$overlap$onlyB,
                         rows$age$standardizedDifference, want_age, rows$male$standardizedDifference, want_male,
                         rows$egfr$standardizedDifference, want_egfr, ok_skipped, ok_swap, ok_plain, ok_refused, ok_tiny))

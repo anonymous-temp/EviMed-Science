@@ -1,23 +1,24 @@
-import { evolutionToolVisible } from '@evimed/domain';
-/** Reuse existing owner handbooks. No personal method or source prose is copied to the platform. */
-export function createEvolutionLearningCoupling({service,documents,database}) {
-  const handbooks=async()=> (await database.query("SELECT user_id,id,payload,revision FROM evimed_product.documents WHERE kind='method' AND deleted_at IS NULL AND payload->>'recordType'='capability-handbook' AND payload->>'status'='active'")).rows;
+import { guestMarkedRuns } from './capsuleShareTrust.mjs';
+/**
+ * What the learning loop hands to 循证进化: a closed gap code and an event identity, read from a researcher's
+ * capability handbook and never written back to it. A handbook is the researcher's own document; the platform
+ * does not add revisions to it or its own fields (the tools a capability has are the platform's catalogue,
+ * which a run reads through the native skill mount for that capability).
+ * No personal method or source prose is copied to the platform.
+ * A run that drew on a received pack no other account had yet vouched for (`capsuleShareTrust.mjs`, plan §7, 2026-10-05) is left out
+ * of the count: shared text from a new author must not be able to make the platform believe it lacks a method.
+ * @param {{service:any,database:any}} dependencies
+ */
+export function createEvolutionLearningCoupling({service,database}) {
+  const handbooks=async()=> (await database.query("SELECT user_id,id,payload FROM evimed_product.documents WHERE kind='method' AND deleted_at IS NULL AND payload->>'recordType'='capability-handbook' AND payload->>'status'='active'")).rows;
   return {
     async scan() {
       for(const book of await handbooks()) {
-        const runs=new Set((book.payload.observations??[]).filter(row=>row.used===true && row.gapCodes?.includes('method-missing')).map(row=>row.runId).filter(Boolean));
+        const seen=(book.payload.observations??[]).filter(row=>row.used===true && row.gapCodes?.includes('method-missing')).map(row=>row.runId).filter(Boolean);
+        const guest=await guestMarkedRuns(database,book.user_id,[...new Set(seen)]);
+        const runs=new Set(seen.filter(runId=>!guest.has(runId)));
         if(runs.size>=2) await service.ingestEvent({id:`handbook-gap:${book.user_id}:${book.id}:${book.payload.contentDigest}`,type:'handbook-gap',userId:book.user_id,track:'M',gapCode:'method-missing',code:'method-missing'});
       }
-      return this.refresh();
-    },
-    async refresh() {
-      const tools=(await service.tools()).filter(row=>evolutionToolVisible(row.payload));
-      for(const book of await handbooks()) {
-        const references=tools.filter(row=>row.payload.capabilityIds?.includes(book.payload.capabilityId)).map(row=>({toolId:row.id,revision:row.payload.revision,digest:row.payload.artifactDigest,validationLevel:row.payload.validationLevel,origin:'tool-result'}));
-        if(JSON.stringify(book.payload.platformToolReferences??[])===JSON.stringify(references))continue;
-        await documents.put(book.user_id,'method',book.id,{...book.payload,platformToolReferences:references},{expectedRevision:book.revision,telemetry:true});
-      }
-      return {observed:tools.length};
     },
   };
 }

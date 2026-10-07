@@ -19,7 +19,8 @@ import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
 import { Tag } from "@/components/ui/Tag";
-import { GEO_ARTICLE_SAFETY_OPEN, GEO_ARTICLE_STATUS_WORDS, GEO_LAYER_NAMES, layerName } from "../geoText";
+import { ArticleTextDialog } from "../ArticleTextDialog";
+import { GEO_ARTICLE_SAFETY_OPEN, GEO_ARTICLE_STALE_NOTE, GEO_ARTICLE_STATUS_WORDS, GEO_ARTICLE_UNRESOLVED_NOTE, GEO_LAYER_NAMES, GEO_PLACEMENT_LABEL_WORDS, layerName } from "../geoText";
 import { FilterRow, StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 
 type LayerFilter = "all" | GeoArticleLayer;
@@ -47,6 +48,8 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
   const [layer, setLayer] = useState<LayerFilter>("all");
   const [pending, setPending] = useState<Pending>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /** The article whose text is open: one made from a card, which has no file for the report reader. */
+  const [reading, setReading] = useState<GeoArticle | null>(null);
   const present = LAYERS.filter((key) => articles.some((article) => article.layer === key));
   const options: FilterOption<LayerFilter>[] = [
     { value: "all", label: "全部" },
@@ -91,6 +94,7 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
           const held = article.safety === "open";
           const withdrawn = article.status === "withdrawn";
           const canOpen = Boolean(article.runId && article.path);
+          const canRead = !canOpen && Boolean(article.cardId);
           const withdraw = !withdrawn ? () => setPending({ kind: "withdraw", article }) : null;
           return (
             <ListRow
@@ -105,6 +109,7 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
               actions={(
                 <>
                   {canOpen && <Button variant="text" size="sm" onClick={() => open(article)}>打开</Button>}
+                  {canRead && <Button variant="text" size="sm" onClick={() => setReading(article)}>查看</Button>}
                   {held && <Button variant="text" size="sm" loading={busy === article.id} onClick={() => setPending({ kind: "release", article })}>放行</Button>}
                   {!held && withdraw && <Button variant="text" size="sm" loading={busy === article.id} onClick={withdraw}>撤回</Button>}
                 </>
@@ -115,6 +120,7 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
         })}
       </List>
       </div>
+      {reading && <ArticleTextDialog geoId={geoId} articleId={reading.id} title={reading.title || "证据卡片"} onClose={() => setReading(null)} />}
       {pending?.kind === "withdraw" && (
         <ConfirmDialog
           title={`撤回“${pending.article.title || "这篇稿件"}”？`}
@@ -144,6 +150,9 @@ function articleMeta(article: GeoArticle): string {
     layerName(article.layer) === "—" ? null : layerName(article.layer),
     article.title && article.question && article.question !== article.title ? article.question : null,
     article.placements > 0 ? `投放 ${article.placements} 家` : null,
+    article.placementLabel ? GEO_PLACEMENT_LABEL_WORDS[article.placementLabel] ?? null : null,
+    (article.staleReferences?.length ?? 0) > 0 ? GEO_ARTICLE_STALE_NOTE : null,
+    article.referenceStatus === "unresolved" ? GEO_ARTICLE_UNRESOLVED_NOTE : null,
   ].filter(Boolean).join(" · ");
 }
 

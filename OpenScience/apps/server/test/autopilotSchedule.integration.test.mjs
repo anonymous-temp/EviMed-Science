@@ -97,7 +97,7 @@ test('resource capacity waits do not consume the attempt budget of an unstarted 
   let checks = 0;
   const worker = new AutopilotWorker({ jobs, service, busyDelayMs: 1000,
     dispatchEpisode: async () => {
-      if (!capacity) throw Object.assign(new Error('No work started'), { code: checks++ % 2 ? 'runtime_busy' : 'runtime_limit_exceeded' });
+      if (!capacity) throw Object.assign(new Error('No work started'), { code: ['runtime_busy', 'runtime_limit_exceeded', 'runtime_capacity_full'][checks++ % 3] });
       return { runId: 'run-resource-ready', sessionId: 'session-resource-ready' };
     } });
   for (let retry = 0; retry < 12; retry++) {

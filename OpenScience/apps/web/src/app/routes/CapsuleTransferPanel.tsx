@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { CapsuleSharePanel } from "@/components/capsule/CapsuleSharePanel";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { CAPSULE_SCAN_REASONS, capsuleEntryLabel, fromSender } from "@/lib/capsuleText";
 import { Input, inputClasses } from "@/components/ui/Input";
+import { takeDownSnapshot } from "@/lib/capsuleShareClient";
+import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
 import { formatDateTime } from "@/lib/format";
 import { labelFor } from "@/lib/statusLabel";
 import {
@@ -42,6 +45,10 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
    *  Revoking is permanent — every copy already handed out stops importing —
    *  and it was one click with no confirmation (2026-09-16 review, U11). */
   const [revoking, setRevoking] = useState<CapsuleExportSnapshot | null>(null);
+  /** The snapshot an author asked to take down: it also switches off every recipient's copy, so it asks first (flywheel F17). */
+  const [takingDown, setTakingDown] = useState<CapsuleExportSnapshot | null>(null);
+  // Sharing between accounts has its own switch: its panel and the take-down of a share are drawn only where the server says so.
+  const sharing = useCapsuleShareFeature() === "on";
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +124,19 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
         void perform(async () => { await revokeCapsuleExport(owner, snapshot); setRefresh(value => value + 1); });
       }}
     />}
+    {takingDown && <ConfirmDialog
+      title="下架这份分享？"
+      body="下架后收到的人那份副本会被停用，并收到一条说明；它不能再被收下。对方自己的记忆和对话不受影响。已下载的离线文件无法收回。"
+      confirmLabel="下架并停用副本"
+      onCancel={() => setTakingDown(null)}
+      onConfirm={() => {
+        const snapshot = takingDown;
+        const owner = capsuleId;
+        setTakingDown(null);
+        if (!owner) return;
+        void perform(async () => { const done = await takeDownSnapshot(owner, snapshot.id, ""); setRefresh(value => value + 1); setNotice(`已下架，停用了 ${done.copies} 份副本`); });
+      }}
+    />}
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 text-ui text-error">
       <span>{error}</span>
       <Button size="sm" variant="secondary" disabled={busy} onClick={() => { setError(null); setRefresh(value => value + 1); }}>刷新记录</Button>
@@ -148,6 +168,8 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
       ) : null}
       <Button disabled={busy || !capsuleId || !exportPassword || outgoing?.empty === true} loading={busy} onClick={() => void createExport()}>加密导出</Button>
     </section>
+
+    {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} />}
 
     <section className="space-y-3" aria-label="胶囊导入">
       <h3 className="text-ui font-semibold text-text">导入</h3>
@@ -212,6 +234,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
               <Button size="sm" variant="text" disabled={busy || !exportPassword} onClick={() => void createExport(snapshot.id, snapshot.scopes)}>更新快照</Button>
               <Button size="sm" variant="text" destructive disabled={busy || snapshot.status === "revoked"} onClick={() => setRevoking(snapshot)}>撤销此快照</Button>
+              {sharing && <Button size="sm" variant="text" destructive disabled={busy} onClick={() => setTakingDown(snapshot)}>下架并停用副本</Button>}
             </div>
           </li>)}
         </ul>

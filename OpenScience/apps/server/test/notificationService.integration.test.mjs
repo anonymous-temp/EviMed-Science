@@ -37,7 +37,7 @@ test("a real proactive digest persists one actionable inbox item under its owner
     jobs: new ProductJobs(database), notifications: service });
   const agenda = await autopilot.create(digestOwner, { projectId: "default", title: "Digest integration",
     topics: ["research updates"], taskTypes: ["literature-sentinel"], dailyBudgetCny: 2,
-    weeklyBudgetCny: 10, maxEpisodeCny: 1, scheduleHour: 1, timeZone: "UTC" });
+    weeklyBudgetCny: 10, maxEpisodeCny: 1.5, scheduleHour: 1, timeZone: "UTC" });
   const input = { digestId: "digest-inbox-contract", date: "2026-09-06", episodeIds: ["episode-contract"], costCny: 0, claims: [] };
   const digest = await autopilot.createDigest(digestOwner, agenda.id, input);
   await autopilot.createDigest(digestOwner, agenda.id, input);

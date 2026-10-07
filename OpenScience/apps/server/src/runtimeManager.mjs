@@ -1,6 +1,6 @@
 import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
-import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProject, isEvolutionProject } from "./internalProjects.mjs";
+import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject } from "./internalProjects.mjs";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
@@ -281,6 +281,17 @@ export function requestRuntime(runtime, target, { method = "GET", headers = {}, 
     }
   });
 }
+
+/** A start refused because every slot of the deployment is taken: a wait, not a failure (`RUNTIME_ROOM_WAIT_CODES`). */
+const ROOM_FULL_CODE = "runtime_capacity_full";
+/** What a refusal for want of room tells its caller to wait before asking again. */
+const ROOM_RETRY_AFTER_SECONDS = 5;
+/** A wait that grows is never asked about less often than this. */
+const ROOM_RETRY_CEILING_MS = 15_000;
+/** A wait nobody has asked about for this long was given up on: the shell asks at least every fifteen seconds, and the slowest worker every five minutes. */
+const ROOM_WAIT_GIVE_UP_MS = 10 * 60_000;
+/** A wait asked about this recently is one somebody is still in (`open_science_runtime_start_waiting`). */
+const ROOM_WAIT_ACTIVE_MS = 2 * 60_000;
 
 function positiveLimit(value) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
@@ -1519,7 +1530,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   const gateways = plan.gateways ?? null;
   // Neither a container nor a remote session can see a path on this host.
   const containerized = plan.sandboxMode === "docker" || plan.sandboxMode === "agentbay";
-  // The six resource limits of the NCBI Gene Expression Omnibus workflow (not 循证 GEO): the tools enforce in the runtime what
+  // The six resource limits of the NCBI Gene Expression Omnibus workflow (not 循证传播): the tools enforce in the runtime what
   // only the runtime can see (samples and probes a matrix holds, memory, time), from the same config keys the gateway
   // enforces the two byte limits with.
   for (const spec of Object.values(GENE_EXPRESSION_LIMITS)) environment[`EVIMED_${spec.env}`] = String(config[spec.configKey] ?? spec.default);
@@ -1595,7 +1606,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     if (frontierGatewayUrl && frontierAudienceAllows(config, { id: String(project.userId ?? "") })) {
       environment.EVIMED_FRONTIER_GATEWAY_URL = frontierGatewayUrl;
     }
-    // 「循证 GEO」's three tools ride the same token, and are given an address
+    // 「循证传播」's three tools ride the same token, and are given an address
     // on the same terms as the frontier's: the module on and open to this
     // account. Whether the project is a GEO project is the gateway's answer
     // (`geo_no_project`), not a reason to leave the address out.
@@ -1745,7 +1756,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   if (!environment.EVIMED_FRONTIER_GATEWAY_URL) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "frontier_search"])].join(",");
   }
-  // 「循证 GEO」's tools likewise: offered only where their gateway address
+  // 「循证传播」's tools likewise: offered only where their gateway address
   // was given above, and the social search only where the deployment has a
   // social channel — a tool that can only answer 「无信号」 is not offered.
   // `OPTIONAL_TOOLS` in the MCP server lets the release audit count them.
@@ -3114,7 +3125,11 @@ export class DockerRuntimeProvider {
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
     if (personal) await this.assertPersonalImage(personal.identity.baseRuntimeImageDigest);
-    if (platformSkillGeneration) await verifyPlatformSkillGeneration(this.config, platformSkillGeneration.reference);
+    // Verified once more at the last moment before it is mounted; an extension that fails here starts the runtime without it.
+    if (platformSkillGeneration) {
+      try { await verifyPlatformSkillGeneration(this.config, platformSkillGeneration.reference); }
+      catch { manager.platformSkillSupply?.noteFailure?.("platform_skill_generation_unverified"); platformSkillGeneration = null; }
+    }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
       extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null });
@@ -3395,9 +3410,9 @@ export class RuntimeManager {
     this.workloadTokenWriter = workloadTokenWriter;
     this.setWorkloadTimer = setWorkloadTimer;
     this.clearWorkloadTimer = clearWorkloadTimer;
-    /** @type {(project: any, status: any, errorCode?: string) => any} */
+    /** @type {(project: any, status: any, errorCode?: string, options?: { by?: 'user' | 'platform' | null }) => any} */
     this.onRuntimeStop = onRuntimeStop;
-    /** @type {(project: Record<string, any>) => Promise<void>} */
+    /** @type {(project: Record<string, any>, options?: { by?: 'user' | 'platform' | null }) => Promise<void>} */
     this.onRuntimeStopping = onRuntimeStopping;
     /** @type {(project: any, sessionId: any) => any} */
     this.onSessionAbort = onSessionAbort;
@@ -3419,6 +3434,9 @@ export class RuntimeManager {
      *  read when that start makes room (`makeRoomFor`), so an opening that
      *  finds a warm-up's start under way still counts as one. */
     this.openingStarts = new Set();
+    /** Pending starts a run's dispatch is waiting on (`startWhenRoom`), by project key: the only starts another
+     *  researcher's long-idle runtime gives way to while a parked tab still holds it (`makeRoomFor`). */
+    this.dispatchStarts = new Set();
     /** Pending starts only a speculative warm-up has asked for, by project
      *  key: `makeRoomFor` retires nothing for them. Any other caller that
      *  joins takes its key out. */
@@ -3430,6 +3448,17 @@ export class RuntimeManager {
      *  deployment at its ceiling (`makeRoomFor`): how many, and the last time
      *  (`open_science_runtime_background_yielded_total`). */
     this.backgroundYields = { total: 0, failed: 0, lastAt: /** @type {string | null} */ (null) };
+    /** Projects whose start found every slot taken and has not started since,
+     *  by project key (`noteRoomRefusal`): when it began, when it last asked
+     *  and whose it is. */
+    this.roomWaits = /** @type {Map<string, { since: number, lastAt: number, audience: "researcher" | "background" }>} */ (new Map());
+    /** The waits that ended, by whose they were: how many started and how many
+     *  were given up on, the seconds they spent and the longest one
+     *  (`open_science_runtime_start_*`). */
+    this.roomWaitStats = {
+      researcher: { started: 0, gaveUp: 0, seconds: 0, maxSeconds: 0 },
+      background: { started: 0, gaveUp: 0, seconds: 0, maxSeconds: 0 },
+    };
     /** Workload tokens this process refused, by what the check was doing when it did
      *  (`noteWorkloadTokenRefusal`). */
     this.workloadTokenRefusals = { token: 0, runtime: 0, superseded: 0, unreadable: 0 };
@@ -3854,7 +3883,7 @@ export class RuntimeManager {
 
   /**
    * @param {Record<string, any>} project
-   * @param {{ opening?: boolean, speculative?: boolean, boundedScope?: any }} [options] `opening`: the researcher is
+   * @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any }} [options] `opening`: the researcher is
    *   opening a conversation in this project (the shell's own start of its
    *   frame) rather than a request of a surface that is already open — see
    *   `makeRoomFor`. It shapes only a start this call begins; one already
@@ -3867,6 +3896,7 @@ export class RuntimeManager {
    *   one project's group in the sidebar stopped the warm runtime of another,
    *   and the click into that other one was refused (429) and not usable in
    *   60 s. A caller that is not speculative joining the start lifts it.
+   *   `dispatch`: a run is about to be sent here (`startWhenRoom` says so); see `makeRoomFor`.
    */
   async start(project, options = {}) {
     const key = this.key(project);
@@ -3884,8 +3914,8 @@ export class RuntimeManager {
     return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project, options)) : this.startAdmitted(project, options);
   }
 
-  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, boundedScope?: any }} [options] */
-  async startAdmitted(project, { opening = false, speculative = false, boundedScope = null } = {}) {
+  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any }} [options] */
+  async startAdmitted(project, { opening = false, speculative = false, dispatch = false, boundedScope = null } = {}) {
     const key = this.key(project);
     if (this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
     if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
@@ -3912,6 +3942,7 @@ export class RuntimeManager {
       return existing;
     }
     if (opening) this.openingStarts.add(key);
+    if (dispatch) this.dispatchStarts.add(key);
     const pending = this.starts.get(key);
     if (pending) {
       if (!speculative) this.speculativeStarts.delete(key);
@@ -3926,7 +3957,7 @@ export class RuntimeManager {
       // instead of beginning a second container. Its own entry in `starts` is
       // not counted against the ceilings it checks.
       await this.enforceProjectQuota(project);
-      await this.makeRoomFor(project, { opening: this.openingStarts.has(key), speculative: this.speculativeStarts.has(key) });
+      await this.makeRoomFor(project, { opening: this.openingStarts.has(key), speculative: this.speculativeStarts.has(key), dispatch: this.dispatchStarts.has(key) });
       this.enforceRuntimeCapacity(project, { starting: true });
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
@@ -3996,6 +4027,7 @@ export class RuntimeManager {
     try {
       const runtime = await started;
       this.startFailures.delete(key);
+      this.noteRoomFound(project);
       try {
         this.onRuntimeStart(project, runtime);
       } catch {
@@ -4013,7 +4045,7 @@ export class RuntimeManager {
       // what happened instead.
       // A guess refused for want of room is no answer to anyone waiting: the
       // frame that opens this project next makes its own room.
-      if (!(this.speculativeStarts.has(key) && error?.code === "runtime_limit_exceeded")) {
+      if (!(this.speculativeStarts.has(key) && (error?.code === ROOM_FULL_CODE || error?.code === "runtime_limit_exceeded"))) {
         this.startFailures.set(key, {
           code: typeof error?.code === "string" ? error.code : "runtime_start_failed",
           status: Number.isSafeInteger(error?.status) ? error.status : 502,
@@ -4025,6 +4057,7 @@ export class RuntimeManager {
       this.starts.delete(key);
       this.startProgress.delete(key);
       this.openingStarts.delete(key);
+      this.dispatchStarts.delete(key);
       this.speculativeStarts.delete(key);
     }
   }
@@ -4092,7 +4125,7 @@ export class RuntimeManager {
     this.lastMountedCapsuleMethods.set(this.key(project), mountedMethods.capsule ?? []);
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
-    const platformSkillGeneration = this.platformSkillOverrides.has(key)?this.platformSkillOverrides.get(key):(this.platformSkillSupply ? await this.platformSkillSupply.prepareForRuntime({...project,capabilityId:project.capabilityId??this.platformSkillScopes.get(key)}) : null);
+    const platformSkillGeneration = this.platformSkillOverrides.has(key)?this.platformSkillOverrides.get(key):(await this.selectPlatformSkills(project,this.platformSkillScopes.get(key))).generation;
     const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration });
 
     // Nothing is copied into a project any more: the image carries the skill
@@ -5224,11 +5257,12 @@ export class RuntimeManager {
    * wait on it indefinitely. Failure is isolated: a stop that cannot pre-read
    * still has to stop.
    * @param {Record<string, any>} project
+   * @param {'user' | 'platform' | null} [by] who asked for the stop (`stop`'s `by`)
    * @returns {Promise<void>}
    */
-  async notifyRuntimeStopping(project) {
+  async notifyRuntimeStopping(project, by = null) {
     try {
-      await this.onRuntimeStopping(project);
+      await this.onRuntimeStopping(project, { by });
     } catch {
       /* isolated: evimed_runtime_stopping_notify_failures_total */
     }
@@ -5239,14 +5273,28 @@ export class RuntimeManager {
    * @param {string} status
    * @param {string} [errorCode] why the runs it held end, when it is not the
    *   plain cancel (`RUNTIME_YIELDED_CODE`)
+   * @param {'user' | 'platform' | null} [by] who asked for the stop (`stop`'s `by`): the runs it held end
+   *   `canceledBy` that, and when nobody says, the platform
    */
-  notifyRuntimeStop(project, runtime, status, errorCode) {
+  notifyRuntimeStop(project, runtime, status, errorCode, by = null) {
     if (!runtime.stopNotification) {
       runtime.stopNotification = Promise.resolve()
-        .then(() => this.onRuntimeStop(project, status, errorCode))
+        .then(() => this.onRuntimeStop(project, status, errorCode, { by }))
         .catch(() => {});
     }
     return runtime.stopNotification;
+  }
+
+  /** Who is waiting for room now, and every wait that ended, for `/api/ops/metrics`. */
+  roomWaitsSnapshot() {
+    const now = Date.now();
+    this.settleRoomWaits(now);
+    const waiting = { researcher: 0, background: 0 };
+    for (const wait of this.roomWaits.values()) if (now - wait.lastAt < ROOM_WAIT_ACTIVE_MS) waiting[wait.audience] += 1;
+    return {
+      researcher: { ...this.roomWaitStats.researcher, waiting: waiting.researcher },
+      background: { ...this.roomWaitStats.background, waiting: waiting.background },
+    };
   }
 
   statsAll() {
@@ -5280,6 +5328,7 @@ export class RuntimeManager {
         yieldFailures: this.backgroundYields.failed,
         lastYieldedAt: this.backgroundYields.lastAt,
       },
+      roomWaits: this.roomWaitsSnapshot(),
       methodMounts: { ...this.methodMounts, maxPromptBytes: positiveLimit(this.config.mountedMethodPromptBytes) },
       unverifiedReleaseLaunches: [...this.unverifiedReleaseLaunches].map(([code, launches]) => ({ code, launches })),
     };
@@ -5303,6 +5352,18 @@ export class RuntimeManager {
   }
 
   /**
+   * Whether this start may take a slot, else why not.
+   *
+   * Two refusals, because they ask different things of the person (2026-10-05):
+   * `runtime_limit_exceeded` is the researcher's own ceiling — their other
+   * conversations hold the room, so waiting would not help and the sentence
+   * says what does — and `runtime_capacity_full` is the deployment's: every
+   * slot of a host shared with other products is taken, which is a place in
+   * line (the shell retries by itself, a run's dispatch waits, a worker
+   * defers). The researcher's own ceiling is asked first for exactly that
+   * reason: a start held by it would otherwise be told to wait for a slot it
+   * could not take once one was free.
+   *
    * @param {Record<string, any>} project
    * @param {{ starting?: boolean }} [options] `starting`: this project's own
    *   start is already registered in `starts` and is not one of the others
@@ -5310,29 +5371,113 @@ export class RuntimeManager {
   enforceRuntimeCapacity(project, { starting = false } = {}) {
     const own = starting && this.starts.has(this.key(project)) ? 1 : 0;
     const maxGlobal = positiveLimit(this.config.maxRunningRuntimes);
-    if(this.config.evolutionEnabled===true&&isEvolutionProject(project.id)&&maxGlobal!=null&&this.runtimeCount()-own>=maxGlobal-1){
-      throw new HttpError(429,'runtime_limit_exceeded','Evolution waits to preserve the final research runtime slot.',{retryAfterSeconds:60});
-    }
-    if (maxGlobal != null && this.runtimeCount() - own >= maxGlobal) {
-      throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for the server; limit is ${maxGlobal}.`, {
-        retryAfterSeconds: 5,
-      });
-    }
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
-    // Background work holds at most its share of the deployment, so a
-    // researcher opening a project always finds room (`backgroundRuntimeLimit`).
-    const maxBackground = isInternalProject(project.id) ? backgroundRuntimeLimit(maxGlobal, maxPerUser) : null;
-    if (maxBackground != null && this.backgroundRuntimeCount() - own >= maxBackground) {
-      throw new HttpError(429, "runtime_limit_exceeded", `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`, {
-        retryAfterSeconds: 60,
-      });
-    }
+    const background = this.isBackgroundProject(project.userId, project.id);
     // A background project is never one of the researcher's slots
     // (`runtimeCountForUser`), so it is not held to their ceiling either.
-    if (maxPerUser != null && !isInternalProject(project.id) && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
+    if (maxPerUser != null && !background && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
       throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for this user; limit is ${maxPerUser}.`, {
         retryAfterSeconds: 5,
       });
+    }
+    if(this.config.evolutionEnabled===true&&isEvolutionProject(project.id)&&maxGlobal!=null&&this.runtimeCount()-own>=maxGlobal-1){
+      throw this.roomFull(project,'Evolution waits to preserve the final research runtime slot.',60);
+    }
+    if (maxGlobal != null && this.runtimeCount() - own >= maxGlobal) {
+      throw this.roomFull(project, `Every runtime slot of the server is taken; limit is ${maxGlobal}.`, ROOM_RETRY_AFTER_SECONDS);
+    }
+    // Background work holds at most its share of the deployment, so a
+    // researcher opening a project always finds room (`backgroundRuntimeLimit`).
+    const maxBackground = background ? backgroundRuntimeLimit(maxGlobal, maxPerUser) : null;
+    if (maxBackground != null && this.backgroundRuntimeCount() - own >= maxBackground) {
+      throw this.roomFull(project, `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`, 60);
+    }
+  }
+
+  /**
+   * The refusal of a start that found no room, and the first line of its wait
+   * on the operator's books (`noteRoomRefusal`).
+   * @param {Record<string, any>} project @param {string} message @param {number} retryAfterSeconds
+   */
+  roomFull(project, message, retryAfterSeconds) {
+    this.noteRoomRefusal(project);
+    return new HttpError(429, ROOM_FULL_CODE, message, { retryAfterSeconds });
+  }
+
+  /**
+   * A start that found no room, noted as the beginning of a wait. The shell
+   * asks again on its own, a dispatch waits in `startWhenRoom`, a worker defers
+   * — all of them arrive here again for the same project, which is what makes
+   * the wait observable without anyone telling this class they are waiting: it
+   * began at the first refusal and ends at the project's next start
+   * (`noteRoomFound`), or is given up on when nobody asked again
+   * (`settleRoomWaits`). A warm-up that guessed at a project is no wait.
+   * @param {Record<string, any>} project
+   */
+  noteRoomRefusal(project) {
+    const key = this.key(project);
+    if (this.speculativeStarts.has(key)) return;
+    const now = Date.now();
+    this.settleRoomWaits(now);
+    const wait = this.roomWaits.get(key);
+    if (wait) wait.lastAt = now;
+    else this.roomWaits.set(key, { since: now, lastAt: now, audience: this.isBackgroundProject(project.userId, project.id) ? "background" : "researcher" });
+  }
+
+  /** A project's runtime came up: whatever wait it had is over. @param {Record<string, any>} project */
+  noteRoomFound(project) {
+    const key = this.key(project);
+    const wait = this.roomWaits.get(key);
+    if (!wait) return;
+    this.roomWaits.delete(key);
+    this.recordRoomWait(wait, "started", Date.now() - wait.since);
+  }
+
+  /** Waits nobody has asked about for `ROOM_WAIT_GIVE_UP_MS` ended without a start: the person left. @param {number} now */
+  settleRoomWaits(now) {
+    for (const [key, wait] of this.roomWaits) {
+      if (now - wait.lastAt < ROOM_WAIT_GIVE_UP_MS) continue;
+      this.roomWaits.delete(key);
+      this.recordRoomWait(wait, "gave_up", wait.lastAt - wait.since);
+    }
+  }
+
+  /** @param {{ audience: "researcher" | "background" }} wait @param {"started" | "gave_up"} outcome @param {number} ms */
+  recordRoomWait(wait, outcome, ms) {
+    const seconds = Math.max(0, ms) / 1000;
+    const stats = this.roomWaitStats[wait.audience];
+    if (outcome === "started") stats.started += 1;
+    else stats.gaveUp += 1;
+    stats.seconds += seconds;
+    stats.maxSeconds = Math.max(stats.maxSeconds, seconds);
+  }
+
+  /**
+   * `start`, waiting for room when the deployment is full.
+   *
+   * For a caller that has someone waiting on the answer and cannot ask again
+   * itself — a run's dispatch, which has already reserved the run. Retries only
+   * `runtime_capacity_full`, at the refusal's own `retryAfterSeconds` widening
+   * to fifteen seconds, for at most `runtimeStartWaitMs`; every other refusal,
+   * and the researcher's own ceiling, is the caller's at once. Outside
+   * `start`, so no database admission connection is held while it sleeps.
+   *
+   * @param {Record<string, any>} project @param {Record<string, any>} [options] as for `start`
+   * @param {{ sleep?: (ms: number) => Promise<void>, now?: () => number }} [hooks] a test's clock
+   */
+  async startWhenRoom(project, options = {}, { sleep: pause = sleep, now = Date.now } = {}) {
+    const maxWaitMs = Number(this.config.runtimeStartWaitMs);
+    const budget = Number.isFinite(maxWaitMs) && maxWaitMs > 0 ? maxWaitMs : 0;
+    const began = now();
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.start(project, { ...options, dispatch: true });
+      } catch (error) {
+        const left = began + budget - now();
+        if (error?.code !== ROOM_FULL_CODE || left <= 0) throw error;
+        const hint = Number.isFinite(error.retryAfterSeconds) ? error.retryAfterSeconds * 1000 : ROOM_RETRY_AFTER_SECONDS * 1000;
+        await pause(Math.min(left, Math.min(ROOM_RETRY_CEILING_MS, hint * (1 + attempt * 0.5))));
+      }
     }
   }
 
@@ -5352,9 +5497,10 @@ export class RuntimeManager {
    * a deployment at its global ceiling is also asked of other researchers'
    * runtimes, but only those idle past `runtimeIdleYieldAfterMs` — the
    * thirty minutes the idle reaper used to wait anyway — least recently used
-   * first. A warm runtime is a convenience to its owner, never a reason
-   * another researcher cannot start. When nothing qualifies the ceiling
-   * refuses exactly as before.
+   * first; for a run's `dispatch`, those a parked tab still holds after
+   * those no tab does. A warm runtime is a convenience to its owner, never a
+   * reason another researcher's run cannot start. When nothing qualifies the
+   * ceiling refuses exactly as before.
    *
    * An `opening` — the researcher opening a conversation in this project —
    * may also take their own idle runtime that a tab still holds open; see
@@ -5367,12 +5513,12 @@ export class RuntimeManager {
    * held it for ten minutes while a researcher's start was refused
    * (2026-10-04). Never the other way round.
    * @param {Record<string, any>} project
-   * @param {{ opening?: boolean, speculative?: boolean }} [options]
+   * @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean }} [options]
    */
-  async makeRoomFor(project, { opening = false, speculative = false } = {}) {
+  async makeRoomFor(project, { opening = false, speculative = false, dispatch = false } = {}) {
     // Background work waits for room; it never takes a researcher's idle
     // runtime to make some. The capacity check refuses it and its job defers.
-    if (isInternalProject(project.id)) return;
+    if (this.isBackgroundProject(project.userId, project.id)) return;
     const maxGlobal = positiveLimit(this.config.maxRunningRuntimes);
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
     const own = this.key(project);
@@ -5393,7 +5539,7 @@ export class RuntimeManager {
       ? Math.max(0, configuredYield) : 30 * 60_000;
     /** @param {[string, any]} entry */
     const eligible = ([key, runtime]) => key !== own && Boolean(runtime.project) && !runtime.modelGatewayScope
-      && !isInternalProject(key.slice(key.indexOf(":") + 1));
+      && !this.isBackgroundKey(key);
     /** @param {[string, any]} left @param {[string, any]} right */
     const byAge = ([a], [b]) => lastUse(a) - lastUse(b);
     const mine = [...this.runtimes.entries()].filter((entry) => eligible(entry) && entry[0].startsWith(prefix)).sort(byAge);
@@ -5444,6 +5590,20 @@ export class RuntimeManager {
         await yieldIfIdle(entry, false);
         if (!full()) return;
       }
+      // Then, for a run's dispatch only, those a parked tab still holds. An open connection is not use
+      // (`noteRuntimeUse`): the tab's one socket was counted when it opened, and past the yield age nobody has asked
+      // that runtime for anything since. Release 5, live (2026-10-05): two researchers' tabs left open held two of the
+      // deployment's four slots for two hours while a dispatch waited out its whole allowance and was refused. Not for
+      // any other start: an opening has sent nothing yet, and the parked frame's own reconnect must not take a slot
+      // back from the next parked tab, or the tabs would retire each other in turn.
+      if (dispatch) {
+        for (const entry of others) {
+          if (!globalFull()) break;
+          if (!connected(entry[0])) continue;
+          await yieldIfIdle(entry, true);
+          if (!full()) return;
+        }
+      }
     }
     if (!opening) return;
     // Last, for an opening only: the researcher's own idle runtime that a tab
@@ -5479,7 +5639,7 @@ export class RuntimeManager {
    * @returns {Promise<void>}
    */
   async yieldBackgroundRuntimes(own, stillFull) {
-    const background = (/** @type {string} */ key) => key !== own && isInternalProject(key.slice(key.indexOf(":") + 1));
+    const background = (/** @type {string} */ key) => key !== own && this.isBackgroundKey(key);
     const settling = [...this.starts, ...this.runtimeStops].filter(([key]) => background(key)).map(([, work]) => work);
     if (settling.length) {
       const configured = Number(this.config.runtimeBackgroundYieldWaitMs);
@@ -5567,9 +5727,23 @@ export class RuntimeManager {
     return this.runtimeKeys().size;
   }
 
+  /**
+   * Whether a project's runtime is the platform's own background work, which takes no slot of its owner's and
+   * is held to the background share instead — a question of limits, so the name alone does not answer it: an
+   * ordinary account's `acceptance-x` takes its slot like any other project (`isInternalProjectOf`).
+   * @param {unknown} userId @param {unknown} projectId @returns {boolean}
+   */
+  isBackgroundProject(userId, projectId) { return isInternalProjectOf(this.config, userId, projectId); }
+
+  /** @param {string} key `<user>:<project>`, the runtime table's key @returns {boolean} */
+  isBackgroundKey(key) {
+    const split = key.indexOf(":");
+    return split > 0 && this.isBackgroundProject(key.slice(0, split), key.slice(split + 1));
+  }
+
   /** Running and starting runtimes of the platform's own background projects. */
   backgroundRuntimeCount() {
-    const background = (/** @type {string} */ key) => isInternalProject(key.slice(key.indexOf(":") + 1));
+    const background = (/** @type {string} */ key) => this.isBackgroundKey(key);
     return [...this.runtimeKeys()].filter(background).length;
   }
 
@@ -5579,7 +5753,7 @@ export class RuntimeManager {
     // take one of the researcher's slots: a lesson being distilled must never
     // be why they cannot open a second project. The global ceiling still
     // counts them.
-    const counted = (/** @type {string} */ key) => key.startsWith(prefix) && !isInternalProject(key.slice(prefix.length));
+    const counted = (/** @type {string} */ key) => key.startsWith(prefix) && !this.isBackgroundKey(key);
     return [...this.runtimeKeys()].filter(counted).length;
   }
 
@@ -5697,13 +5871,17 @@ export class RuntimeManager {
   /** Adopt only between completed runs, before the next run's immutable snapshot is reserved.
    * The existing plugin exclusive fence excludes all prompt admissions during replacement. */
   async setPlatformSkillScope(project,capabilityId) {
+    // No supply (the module is off): nothing to scope, and no entry is kept for every project that ever dispatched.
+    if(!this.platformSkillSupply)return{adopted:false};
     const key=this.key(project),previous=this.platformSkillRefreshes.get(key)??Promise.resolve();
     const task=previous.catch(()=>{}).then(async()=>{
       this.platformSkillScopes.set(key,capabilityId);
       if(!this.platformSkillSupply||!this.runtimes.has(key))return{adopted:false};
       const refresh=async()=>{
         const runtime=this.runtimes.get(key);if(!runtime)return{adopted:false};
-        const wanted=await this.platformSkillSupply.prepareForRuntime({...project,capabilityId:project.capabilityId??capabilityId});
+        const {generation:wanted,degraded}=await this.selectPlatformSkills(project,capabilityId);
+        // A selection that failed is not a request to mount nothing: what the runtime has stays, and the next boundary asks again.
+        if(degraded)return{adopted:false};
         if((wanted?.reference?.generationHash??null)===(runtime.platformSkillGeneration?.reference?.generationHash??null))return{adopted:false};
         if(this.starts.has(key)||this.runtimeStops.has(key)||this.boundedRuntimeScope(project)||await this.idleVerdict(project)!=='idle')return{adopted:false,pending:true};
         if(this.pluginService&&await this.pluginService.hasPendingPrompts(project))return{adopted:false,pending:true};
@@ -5727,6 +5905,27 @@ export class RuntimeManager {
   }
 
   runtimePlatformSkills(project) { return this.runtimes.get(this.key(project))?.platformSkillGeneration?.pins ?? []; }
+
+  /**
+   * The platform skills a runtime for this project would mount. An optional extension failing never withholds
+   * unrelated research: the supply falls back to the last generation that verified, or to none, and says so
+   * (`degraded`); a supply that throws anyway is counted and treated the same. Every runtime start and every
+   * dispatch on a live runtime asks this, so a corrupt file under `<data>/.openscience/platform-skills/` used to
+   * fail them all.
+   * @param {Record<string, any>} project @param {string | null | undefined} capabilityId
+   * @returns {Promise<{ generation: any, degraded: boolean }>}
+   */
+  async selectPlatformSkills(project, capabilityId) {
+    const supply = this.platformSkillSupply;
+    if (!supply) return { generation: null, degraded: false };
+    const scoped = { ...project, capabilityId: project.capabilityId ?? capabilityId };
+    try {
+      return supply.selectForRuntime ? await supply.selectForRuntime(scoped) : { generation: await supply.prepareForRuntime(scoped), degraded: false };
+    } catch {
+      supply.noteFailure?.("platform_skill_selection_failed");
+      return { generation: null, degraded: true };
+    }
+  }
 
   runtimePersonalSkillGeneration(project) { return this.runtimes.get(this.key(project))?.personalSkillGeneration ?? null; }
   runtimePersonalSkillPins(project) {
@@ -5831,8 +6030,9 @@ export class RuntimeManager {
     return { generation, upstream: pluginUpstreamHealth(proof.upstream) };
   }
 
-  async restart(project) {
-    await this.stop(project);
+  /** @param {any} project @param {{ by?: 'user' | 'platform' | null }} [options] who asked for the restart */
+  async restart(project, { by = null } = {}) {
+    await this.stop(project, { by });
     return this.start(project);
   }
 
@@ -5852,14 +6052,14 @@ export class RuntimeManager {
    * Failure records become visible only after the terminal callback, so that
    * callback cannot recursively wait for this very shutdown.
    * @param {any} project @param {any} runtime @param {string} status @param {string|null} generation
-   * @param {string} [errorCode] */
-  async closeCapturedRuntime(project, runtime, status, generation, errorCode) {
+   * @param {string} [errorCode] @param {'user' | 'platform' | null} [by] who asked for the stop */
+  async closeCapturedRuntime(project, runtime, status, generation, errorCode, by = null) {
     const key = this.key(project);
     if (this.failedRuntimeStops.get(key)?.runtime === runtime) this.failedRuntimeStops.delete(key);
     let failure = null;
     try { await runtime.close(); await this.pluginService?.clearPromptAdmissions(project); }
     catch (error) { failure = error; }
-    await this.notifyRuntimeStop(project, runtime, status, errorCode);
+    await this.notifyRuntimeStop(project, runtime, status, errorCode, by);
     if (failure) {
       if (!this.runtimes.has(key)) this.failedRuntimeStops.set(key, { runtime, generation });
       await appendRuntimeEvent(project, "cleanup_failed", { kind: runtime.kind, error: "runtime_cleanup_required" }, this.config);
@@ -5867,8 +6067,12 @@ export class RuntimeManager {
     }
   }
 
-  /** @param {any} project @param {{expectedGeneration?:string|null,terminalStatus?:string,failureCode?:string|null,guard?:(()=>boolean)|null}} [options] */
-  async stop(project, { expectedGeneration = null, terminalStatus = "canceled", failureCode = null, guard = null } = {}) {
+  /**
+   * Stop a project's runtime. `by` says who asked: `"user"` for the researcher's own stop, restart or project
+   * deletion — the runs it held are then a user's stop, charged for what ran — and anything else, including
+   * nothing, is the platform's (a release, the idle reaper, a capacity yield, the autopilot): free.
+   * @param {any} project @param {{expectedGeneration?:string|null,terminalStatus?:string,failureCode?:string|null,guard?:(()=>boolean)|null,by?:'user'|'platform'|null}} [options] */
+  async stop(project, { expectedGeneration = null, terminalStatus = "canceled", failureCode = null, guard = null, by = null } = {}) {
     const key = this.key(project);
     const requested = this.runtimes.get(key) ?? this.failedRuntimeStops.get(key)?.runtime ?? null;
     const generation = this.runtimes.has(key) ? this.runtimeGeneration(project) : this.failedRuntimeStops.get(key)?.generation ?? null;
@@ -5878,7 +6082,7 @@ export class RuntimeManager {
       void pendingStart.then(async runtime => {
         // Queue behind this stop, even when start settles while admission
         // cleanup is awaiting its connection. Preserve that exact identity.
-        if (this.runtimes.get(key) === runtime) await this.stop(project, { guard: () => this.runtimes.get(key) === runtime });
+        if (this.runtimes.get(key) === runtime) await this.stop(project, { guard: () => this.runtimes.get(key) === runtime, by });
       }).catch(() => {});
     }
     return this.withRuntimeStop(project, async () => {
@@ -5888,7 +6092,7 @@ export class RuntimeManager {
         return false;
       }
       if (current() !== requested || (guard && !guard())) return false;
-      await this.notifyRuntimeStopping(project);
+      await this.notifyRuntimeStopping(project, by);
       // A token write must settle before its files can belong to a replacement.
       await requested.workloadWritePending?.catch(() => {});
       if (current() !== requested || (guard && !guard())
@@ -5900,7 +6104,7 @@ export class RuntimeManager {
       this.clearEviMedWorkloadRefresh(key);
       this.runtimeActivity.delete(key);
       requested.closedByManager = true;
-      await this.closeCapturedRuntime(project, requested, terminalStatus, generation);
+      await this.closeCapturedRuntime(project, requested, terminalStatus, generation, undefined, by);
       await appendRuntimeEvent(project, failureCode ? "workload_token_refresh_failed" : "stopped", {
         kind: requested.kind, sandboxMode: requested.sandboxMode ?? "mock", pid: requested.pid,
         containerName: requested.containerName ?? null, ...(failureCode ? { error: failureCode } : {}),
@@ -6106,7 +6310,7 @@ export class RuntimeManager {
       .filter(([key]) => key.startsWith(prefix))
       .map(([key, runtime]) => ({
         runtime,
-        background: isInternalProject(key.slice(prefix.length)),
+        background: this.isBackgroundKey(key),
         lastUseAt: Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0),
       }))
       .sort((left, right) => Number(left.background) - Number(right.background) || right.lastUseAt - left.lastUseAt);

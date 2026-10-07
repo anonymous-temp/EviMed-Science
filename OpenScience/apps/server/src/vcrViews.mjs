@@ -43,6 +43,7 @@ import {
   allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
 
+import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
 import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
 import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocuments.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -66,7 +67,9 @@ export function abilitiesOf(roles) {
 /**
  * The compute budget in the unit the platform actually meters: CPU seconds.
  * There is no money here — `budgetOf` measures what the engine spent — and a
- * page that said 「元」 would be quoting a price nobody set.
+ * page that said 「元」 would be quoting a price nobody set. `committedSeconds` is
+ * what running work may still spend at most, not what queued jobs might: a
+ * number the page can show beside 「已用」 without it reading as spent.
  * @param {Record<string, any> | null | undefined} budget
  */
 export function budgetView(budget) {
@@ -96,8 +99,31 @@ export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} 
 }));
 
 /**
+ * Whether a live job's last contact with the engine failed because the engine did
+ * not answer — the one wait a researcher can be told about and asked nothing for.
+ * Read from the job's own row, which is what any replica sees: a running job
+ * records the failed poll (`transportError`) or the submit whose reply never came
+ * (`submissionError`) and clears it the next time the engine answers; a job the
+ * queue put back for another try records the code as its error. Every other reason
+ * a job is slow (the budget, the work in front of it, a long simulation) is not
+ * this, and says nothing.
+ * @param {Record<string, any>} job
+ * @returns {boolean}
+ */
+export function jobWaitsOnEngine(job) {
+  const state = String(job.state);
+  if (state === "running") {
+    const checkpoint = object(job.checkpoint);
+    return [checkpoint.transportError, checkpoint.submissionError].some((code) => VCR_ENGINE_RETRYABLE_CODES.includes(String(code)));
+  }
+  return state === "queued" && VCR_ENGINE_RETRYABLE_CODES.includes(String(object(job.error).code));
+}
+
+/**
  * One job as a page shows it. A failed job carries its plain reason; the code
- * and the row id stay on the server.
+ * and the row id stay on the server. A job waiting on an engine that does not
+ * answer says so in one line (`waitingOn`) and asks for nothing: it continues by
+ * itself when the engine is back.
  * @param {Record<string, any>} job @param {Date} now
  */
 export function jobView(job, now) {
@@ -118,6 +144,8 @@ export function jobView(job, now) {
     error: error && (error.code || error.message) ? { code: text(error.code), message: text(error.message), partial: error.partial === true } : null,
     updatedAt: zhTime(job.updatedAt ?? job.createdAt, now),
     cancelable: ["queued", "running", "awaiting_budget"].includes(String(job.state)),
+    // Present only when there is something to say: a page that is told nothing shows nothing.
+    ...(jobWaitsOnEngine(job) ? { waitingOn: "engine" } : {}),
   };
 }
 
@@ -1077,13 +1105,16 @@ export function presentPrecedent(row) {
 /**
  * `GET /api/vcr/precedents`: the library, or the sentence saying it is not
  * there — never an empty table that reads as 「没有先例」.
- * @param {{ available: boolean, message?: string | null, rows?: readonly Record<string, any>[], sources?: string | null, registryCoverage?:any[] }} input
+ * @param {{ available: boolean, message?: string | null, rows?: readonly Record<string, any>[], sources?: string | null, registryCoverage?:any[], candidates?: readonly Record<string, any>[] | null }} input
  */
-export function presentPrecedents({ available, message = null, rows = [], sources = null, registryCoverage = [] }) {
+export function presentPrecedents({ available, message = null, rows = [], sources = null, registryCoverage = [], candidates = null }) {
   return {
     available,
     message: available ? null : message,
     precedents: rows.map(presentPrecedent),
+    // Trial events the frontier feed reported for what the account's studies are about (flywheel F24): pointers, each marked
+    // `candidate: true`, never rows of the library above — a precedent is a registry record the evidence write fetched and checked.
+    ...(candidates ? { candidates } : {}),
     ...(registryCoverage.length ? { registryCoverage } : {}),
     sources,
   };

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import pg from "pg";
 import { CONTROL_PLANE_SCHEMA_VERSION } from "../src/controlPlaneDatabase.mjs";
 import { createWebApiApp } from "../src/server.mjs";
+// The control plane's migration makes one account of its own, the evidence publisher (`auth_type` platform, flywheel B2, 2026-10-05):
+// the counts below are of people.
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const { Pool } = pg;
@@ -183,6 +185,26 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     );
     assert.equal(await pathMissing(path.join(dataDir, "users", "alice", "projects", "workspace-race")), true);
 
+    // A run can leave a read-only directory in a workspace; deleting the project or the account still removes it (2026-10-06).
+    for (const [owner, projectId] of [[aliceFromFirst, "readonly-tree"], [null, "readonly-account"]]) {
+      const account = owner ?? await (async () => {
+        await first.app.store.createUser("readonly-owner", "readonly correct battery staple", "Readonly Owner");
+        return first.app.store.userById("readonly-owner");
+      })();
+      await first.app.store.createProject(account, projectId, "Read-only tree");
+      const leaf = path.join(dataDir, "users", account.id, "projects", projectId, "workspace", ".copied", "__pycache__");
+      await mkdir(leaf, { recursive: true });
+      await chmod(leaf, 0o555);
+      await chmod(path.dirname(leaf), 0o555);
+      if (owner) {
+        await first.app.store.deleteProject(owner, projectId);
+        assert.equal(await pathMissing(path.join(dataDir, "users", account.id, "projects", projectId)), true);
+      } else {
+        await first.app.store.deleteUser(account);
+        assert.equal(await pathMissing(path.join(dataDir, "users", account.id)), true);
+      }
+    }
+
     await first.app.store.createUser("identity-race", "race correct battery staple", "Identity Race");
     const identityFromFirst = await first.app.store.userById("identity-race");
     const identityRace = await Promise.allSettled([
@@ -218,7 +240,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     }
 
     const rows = await admin.query(
-      "SELECT (SELECT count(*) FROM evimed_control.users)::integer AS users, (SELECT count(*) FROM evimed_control.auth_sessions)::integer AS sessions, (SELECT count(*) FROM evimed_control.projects)::integer AS projects",
+      "SELECT (SELECT count(*) FROM evimed_control.users WHERE auth_type <> 'platform')::integer AS users, (SELECT count(*) FROM evimed_control.auth_sessions)::integer AS sessions, (SELECT count(*) FROM evimed_control.projects)::integer AS projects",
     );
     assert.deepEqual(rows.rows[0], { users: 2, sessions: 2, projects: 3 });
   } finally {
@@ -283,7 +305,7 @@ test("PostgreSQL bootstrap applies the character floor only when creating a new 
     bootstrapUser: "bootstrap-floor", bootstrapPassword: "short", stateStore: "postgres", databaseUrl });
   try {
     await assert.rejects(app.store.loadUsers(), { code: "weak_password" });
-    assert.equal((await admin.query("SELECT count(*)::integer AS count FROM evimed_control.users")).rows[0].count, 0);
+    assert.equal((await admin.query("SELECT count(*)::integer AS count FROM evimed_control.users WHERE auth_type <> 'platform'")).rows[0].count, 0);
     app.store.config.bootstrapPassword = "abc123";
     await app.store.loadUsers();
     const before = await admin.query("SELECT password_hash FROM evimed_control.users WHERE id = 'bootstrap-floor'");
@@ -332,7 +354,7 @@ test("the configured bootstrap account is created even when other accounts alrea
     const alice = await login(app.base, "alice", "correct horse battery staple");
     assert.equal(alice.response.status, 200, "the configured bootstrap account must be able to log in");
 
-    const rows = await admin.query("SELECT id FROM evimed_control.users ORDER BY id");
+    const rows = await admin.query("SELECT id FROM evimed_control.users WHERE auth_type <> 'platform' ORDER BY id");
     assert.deepEqual(rows.rows.map((row) => row.id), ["alice", "other-service"]);
   } finally {
     await app?.app.close();

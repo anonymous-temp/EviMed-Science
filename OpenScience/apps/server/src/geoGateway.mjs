@@ -1,4 +1,4 @@
-// 「循证 GEO」 for the runtime's `geo_read`, `geo_write` and
+// 「循证传播」 for the runtime's `geo_read`, `geo_write` and
 // `social_posts_search` tools (build spec 2026-09-25 §4).
 //
 // The same shape as every internal gateway (layer 3): one path prefix, one
@@ -228,11 +228,11 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
         throw gatewayError(401, "geo_gateway_token_invalid", "GEO gateway authentication failed.");
       }
       if (!config.geoEnabled || !geo?.service) {
-        throw gatewayError(503, "geo_disabled", "循证 GEO is switched off for this deployment; answer without the platform's GEO data.");
+        throw gatewayError(503, "geo_disabled", "循证传播 is switched off for this deployment; answer without the platform's GEO data.");
       }
       const user = { id: String(identity.userId) };
       if (!geo.service.allows(user)) {
-        throw gatewayError(503, "geo_disabled", "循证 GEO is not open to this account; answer without the platform's GEO data.");
+        throw gatewayError(503, "geo_disabled", "循证传播 is not open to this account; answer without the platform's GEO data.");
       }
       const now = Date.now();
       for (const [key, window] of windows) if (window.until <= now) windows.delete(key);
@@ -245,7 +245,7 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       const body = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
       const project = operation === "social" ? null : await geo.store.projectByControlProject(String(identity.userId), String(identity.projectId));
       if (operation !== "social" && !project) {
-        throw gatewayError(404, "geo_no_project", "This conversation is not in a 循证 GEO project; open the GEO project's conversation to read or write its data.");
+        throw gatewayError(404, "geo_no_project", "This conversation is not in a 循证传播 project; open the GEO project's conversation to read or write its data.");
       }
       let work;
       let budget = budgetMs;

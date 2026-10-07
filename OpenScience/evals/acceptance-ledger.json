@@ -13,12 +13,40 @@
       "native-ui": "Driven from the product UI in a browser. geo-insight is the first row to carry it: its recorded attempts were turns of a project conversation bound to the capability. Public browser acceptance of the other rows is open work.",
       "http-api": "Dispatched through the control plane's HTTP API (/api/agent-runs/dispatch and the hosted e2e).",
       "harness": "A capability run driven from an eval harness under evals/ rather than by the hosted product. No row carries this yet: an artifact a harness script assembled is the harness delivering, not the capability, and it belongs under relatedEvidence.",
-      "platform-job": "Dispatched by one of the control plane's own workers — the 循证 GEO orchestrator, the learning loop, the source pipeline — rather than by a person's message or an acceptance script. What started the job (a GEO program begun on its page, a finished run the loop learned from, an upload) is named in the row's note. The three internal capabilities are only ever run this way."
+      "platform-job": "Dispatched by one of the control plane's own workers — the 循证传播 orchestrator, the learning loop, the source pipeline — rather than by a person's message or an acceptance script. What started the job (a GEO program begun on its page, a finished run the loop learned from, an upload) is named in the row's note. The three internal capabilities are only ever run this way."
     },
     "evidence": "Either a repository-relative path that must exist, or 'PROGRESS.md@YYYY-MM-DD HH:MM' naming a log entry that must be there. Line numbers are not a form: PROGRESS.md is written newest first, so every new milestone would invalidate every anchor below it.",
     "evalHarness": "The directory under evals/ that holds this capability's eval assets, or null when it has none. Most rows name their own evals/<id>; comprehensive-drug-evaluation and drug-selection still share evals/drug-evidence-quality, and two rows point at a differently named harness (evals/clinical-review-quality, evals/research-topic-quality).",
-    "briefCount": "The number of entries in <evalHarness>/briefs.json. Zero is honest and common: a smoke or benchmark-case harness ships no briefs, and a capability package is supposed to carry at least three real ones. Exemption: an internal capability that only a platform job dispatches (method-distillation, method-relations — the learning loop; evolution-scout, tool-builder — the evolution development worker) has no researcher request to write a brief from; its inputs are the platform's own run records, and it is evaluated by the job-level harness its row names (evals/method-quality splits or evals/paper-gold reference and calibration assets) instead. An internal capability a person's material reaches (source-understanding) is not exempt.",
-    "relatedEvidence": "References that exist and are worth keeping in view but that do not establish a capability-level accepted delivery. The checker resolves each one so it cannot rot."
+    "briefCount": "The number of entries in <evalHarness>/briefs.json. Zero is honest and common: a smoke or benchmark-case harness ships no briefs, and a capability package is supposed to carry at least three real ones. Exemption: an internal capability that only a platform job dispatches (method-distillation, method-relations — the learning loop; tool-builder, evolution-scout — 循证进化) has no researcher request to write a brief from; its inputs are the platform's own run records, or public literature and closed gap codes, and it is evaluated by the job-level harness its row names (evals/method-quality splits for the learning loop; evals/paper-gold, the published-case evaluation 循证进化 builds and scores a tool with, for the evolution pair) instead. An internal capability a person's material reaches (source-understanding) is not exempt.",
+    "relatedEvidence": [
+      "R",
+      "e",
+      "f",
+      "r",
+      "n",
+      "c",
+      "s",
+      " ",
+      "t",
+      "h",
+      "a",
+      "x",
+      "i",
+      "d",
+      "w",
+      "o",
+      "k",
+      "p",
+      "g",
+      "v",
+      "b",
+      "u",
+      "l",
+      "y",
+      "-",
+      ".",
+      "T"
+    ]
   },
   "capabilities": [
     {
@@ -162,13 +190,15 @@
         "surface": null
       },
       "relatedEvidence": [
+        "capabilities/evolution-scout/capability.yaml",
+        "evals/paper-gold/run.mjs",
         "evals/acceptance/2026-10-04-evolution.json",
         "apps/server/test/evolutionScout.test.mjs",
         "packages/domain/test/evolutionContracts.test.mjs",
         "packages/domain/src/contractRegistry.mjs",
         "evals/paper-gold/calibration-manifest.json"
       ],
-      "note": "Internal platform-job capability with frozen development inputs, not researcher briefs. The paper-gold job-level harness contains reference and calibration assets; contract and worker tests establish offline behavior. The preserved evolution acceptance record is partially measured and explicitly does not accept the whole plan. No independently identified capability-level live delivery is claimed by this row; live delivery acceptance remains open."
+      "note": "Internal: dispatched only by the evolution worker (evolutionRuns.mjs), never by a user request; no researcher's material reaches it, so it is exempt from the three-brief rule as a platform-job-only internal capability (definitions.briefCount). New with 循证进化 (OPEN_SCIENCE_EVOLUTION_ENABLED, off by default): it turns preserved literature method tuples and closed failure codes into one research card for a missing tool. The module has never been switched on in production, so no scouting run is on record; the row reads not-run until one is. Its contract validator accepts any input and only labels (advisory findings); what accepts a card is the dossier's reference preparation and the evaluator (evals/paper-gold), not this package."
     },
     {
       "id": "gene-expression-analysis",
@@ -191,7 +221,7 @@
       "id": "geo-content",
       "visibility": "public",
       "evalHarness": "evals/geo-content",
-      "briefCount": 7,
+      "briefCount": 10,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/geo-content/results/2026-09-25-xinermei-batch6-corrections/run.json",
@@ -205,7 +235,7 @@
         "evals/geo-content/results/2026-08-30-geo-002",
         "evals/geo-content/results/2026-08-30-geo-003"
       ],
-      "note": "2.0.0 (2026-09-25): the capability no longer measures — the platform does — and writes layered articles instead of content blocks; briefs geo-005…007 grade that, geo-001…004 remain the measurement corpus. Accepted on production 2026-09-25 (信尔美): the 循证 GEO orchestrator dispatched six first-round batches after the strategy step (2.0.1, then 2.0.2), all six succeeded and verified, and 32 articles were registered publishable with safety clear (29 of the 32 files still equal the digest registered for them; three of the third batch's were edited after registering). Evidence is the sixth batch (run_61dd779a9ce5, 2.0.2, 14 minutes): five correction materials for measured 讲错我方 — brief geo-006's kind of work on 信尔美 — whose files equal its own receipt byte for byte. Kept beside it is the first battlefield batch (run_963e1b372752, 2.0.1, 19 minutes: card, two Q&As, popular and deep articles for the battlefield groups — brief geo-005's case); its transcript shows one read of the contract-kind table after a step it named “Find gate implementation” (the guard's slashless-directory gap, fixed in 7f6298bf5), and the sixth batch's transcript was not kept. Re-gated on 2026-09-28 both packages raise nothing. The two failed geo-content runs that day were a run cancelled with its conversation and a follow-up judged against the wrong contract (fixed in 751bc7919). Briefs geo-005…007 have not been dispatched as written. History: the 2026-09-10 run on the 1.x contract (速效救心丸) ended specialist_deliverable_not_accepted on two unactionable findings, fixed after it; earlier deliverables under relatedEvidence were assembled by the harness (measure.mjs + build_pack.py), not by the capability."
+      "note": "2.0.0 (2026-09-25): the capability no longer measures — the platform does — and writes layered articles instead of content blocks; briefs geo-005…007 grade that, geo-001…004 remain the measurement corpus. Accepted on production 2026-09-25 (信尔美): the 循证传播 orchestrator dispatched six first-round batches after the strategy step (2.0.1, then 2.0.2), all six succeeded and verified, and 32 articles were registered publishable with safety clear (29 of the 32 files still equal the digest registered for them; three of the third batch's were edited after registering). Evidence is the sixth batch (run_61dd779a9ce5, 2.0.2, 14 minutes): five correction materials for measured 讲错我方 — brief geo-006's kind of work on 信尔美 — whose files equal its own receipt byte for byte. Kept beside it is the first battlefield batch (run_963e1b372752, 2.0.1, 19 minutes: card, two Q&As, popular and deep articles for the battlefield groups — brief geo-005's case); its transcript shows one read of the contract-kind table after a step it named “Find gate implementation” (the guard's slashless-directory gap, fixed in 7f6298bf5), and the sixth batch's transcript was not kept. Re-gated on 2026-09-28 both packages raise nothing. The two failed geo-content runs that day were a run cancelled with its conversation and a follow-up judged against the wrong contract (fixed in 751bc7919). Briefs geo-005…007 have not been dispatched as written. History: the 2026-09-10 run on the 1.x contract (速效救心丸) ended specialist_deliverable_not_accepted on two unactionable findings, fixed after it; earlier deliverables under relatedEvidence were assembled by the harness (measure.mjs + build_pack.py), not by the capability."
     },
     {
       "id": "geo-insight",
@@ -223,7 +253,7 @@
         "evals/geo-insight/results/2026-09-25-production-conversation/receipt-mismatch-root-cause.json",
         "evals/capability-audit/recovered-runs/2026-09-29/run_e9a3ba42cefb2937da6e48337d714881.json"
       ],
-      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. No geo-insight run on record completed its turn. The first attempt (09:39Z) was cut by a release that restarted the runtime mid-run (runtime_stopped). The second (10:00Z, 「继续」 in the same conversation) had its package accepted at 10:20:17 — 82 claims, all 82 quote-verified, 25 question groups, 88 measured questions, 5 control groups — then appended a section to revision-notes.md thirteen seconds later, delegated strategy before any baseline existed, and was stopped by the operator at 10:30:47. A stopped turn never refreshes the receipt, so revision-notes.md no longer matched it, and the finish path recorded the cancel as failed / specialist_receipt_digest_mismatch and dropped the four files that still matched their digests. Read on 2026-09-28 from the production transcript and ledgers (receipt-mismatch-root-cause.json): not a release and not geo_write. Fixed in 4f23cef34 (a stopped run stays canceled and keeps the files that still match). A third geo-insight package (run_3fca60b67487, 10:42–10:59Z) passed its own contract three times in the conversation the orchestrator had opened for geo-content, and was failed against geo-content's required geo-content.md (fixed in 751bc7919: a turn is judged by the deliverables it planned). The claims, journey and questions in the 信尔美 project were written through geo_write by these runs. A clean run on a new, paused GEO project is planned (run plan of 2026-09-28). 2026-09-28 first run to finish its turn (release evimed-207399ec148b-1, brief geo-insight-003, 波立维/clopidogrel identity): capability-acceptance created a new GEO project for 波立维 and paused it so the platform's own program would not start, then dispatched into the conversation the module binds to geo-insight. 38 minutes, delivered verified with geo-insight.md, claims.json, question-map.json, journey.md, sources.json and revision notes; the review's three findings were all fixed; one advisory geo_claim_unverified. The two failed 09-25 attempts are explained in the evidence beside the old row (a cancel relabelled as a receipt mismatch — fixed — and a turn judged against another capability's contract — fixed) and stay in relatedEvidence. The 波立维 GEO project stays paused in the acceptance account."
+      "note": "New on 2026-09-25 with the 「循证传播」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. No geo-insight run on record completed its turn. The first attempt (09:39Z) was cut by a release that restarted the runtime mid-run (runtime_stopped). The second (10:00Z, 「继续」 in the same conversation) had its package accepted at 10:20:17 — 82 claims, all 82 quote-verified, 25 question groups, 88 measured questions, 5 control groups — then appended a section to revision-notes.md thirteen seconds later, delegated strategy before any baseline existed, and was stopped by the operator at 10:30:47. A stopped turn never refreshes the receipt, so revision-notes.md no longer matched it, and the finish path recorded the cancel as failed / specialist_receipt_digest_mismatch and dropped the four files that still matched their digests. Read on 2026-09-28 from the production transcript and ledgers (receipt-mismatch-root-cause.json): not a release and not geo_write. Fixed in 4f23cef34 (a stopped run stays canceled and keeps the files that still match). A third geo-insight package (run_3fca60b67487, 10:42–10:59Z) passed its own contract three times in the conversation the orchestrator had opened for geo-content, and was failed against geo-content's required geo-content.md (fixed in 751bc7919: a turn is judged by the deliverables it planned). The claims, journey and questions in the 信尔美 project were written through geo_write by these runs. A clean run on a new, paused GEO project is planned (run plan of 2026-09-28). 2026-09-28 first run to finish its turn (release evimed-207399ec148b-1, brief geo-insight-003, 波立维/clopidogrel identity): capability-acceptance created a new GEO project for 波立维 and paused it so the platform's own program would not start, then dispatched into the conversation the module binds to geo-insight. 38 minutes, delivered verified with geo-insight.md, claims.json, question-map.json, journey.md, sources.json and revision notes; the review's three findings were all fixed; one advisory geo_claim_unverified. The two failed 09-25 attempts are explained in the evidence beside the old row (a cancel relabelled as a receipt mismatch — fixed — and a turn judged against another capability's contract — fixed) and stay in relatedEvidence. The 波立维 GEO project stays paused in the acceptance account."
     },
     {
       "id": "geo-proposal",
@@ -237,7 +267,7 @@
         "surface": "http-api"
       },
       "relatedEvidence": [],
-      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. Never run in production: the orchestrator dispatches it only for 导出 and after a weekly round, and 信尔美 has had neither. Nothing in the code keeps it from running today: POST /api/geo/projects/<id>/export {kind: proposal} claims the run and the orchestrator dispatches it with the export brief, which since 05d41bc44 also states each engine's latest measurement date and which are stale, so the package reports from the data the project holds rather than stopping on the probe host's outage. A run on 信尔美 is planned (run plan of 2026-09-28). 2026-09-28 first production run (release evimed-1f5607732e37-1): capability-acceptance asked 信尔美's GEO module for its proposal export (POST /api/geo/projects/<id>/export, the page's 导出提案资料包) and the orchestrator dispatched geo-proposal; 14 minutes, delivered verified with geo-proposal.md, proposal-package.json and revision notes (the five office/HTML files are binaries the driver does not copy), and the review's one finding fixed. The brief stated each engine's last measurement date, so the package names the stale engines instead of hiding them."
+      "note": "New on 2026-09-25 with the 「循证传播」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. Never run in production: the orchestrator dispatches it only for 导出 and after a weekly round, and 信尔美 has had neither. Nothing in the code keeps it from running today: POST /api/geo/projects/<id>/export {kind: proposal} claims the run and the orchestrator dispatches it with the export brief, which since 05d41bc44 also states each engine's latest measurement date and which are stale, so the package reports from the data the project holds rather than stopping on the probe host's outage. A run on 信尔美 is planned (run plan of 2026-09-28). 2026-09-28 first production run (release evimed-1f5607732e37-1): capability-acceptance asked 信尔美's GEO module for its proposal export (POST /api/geo/projects/<id>/export, the page's 导出提案资料包) and the orchestrator dispatched geo-proposal; 14 minutes, delivered verified with geo-proposal.md, proposal-package.json and revision notes (the five office/HTML files are binaries the driver does not copy), and the review's one finding fixed. The brief stated each engine's last measurement date, so the package names the stale engines instead of hiding them."
     },
     {
       "id": "geo-strategy",
@@ -253,7 +283,7 @@
       "relatedEvidence": [
         "evals/geo-strategy/results/2026-09-25-xinermei-sources-step/run.json"
       ],
-      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. 2026-09-25 production (信尔美, step 5, run_3576ce426c20, geo-strategy 1.0.2), dispatched by the 循证 GEO orchestrator once the baseline round had its metrics: succeeded and verified in 22 minutes (¥2.96), all three submissions passing, the independent review's 11 findings all fixed. The delivered strategy.json holds a 28-site source table with the three conditions per site, 20 gaps in the seven classes, five engine expectations, a named battlefield (「P1-03 与其他减重药怎么选」) and three tiers. Its one notice (no battlefield group; no source table) was the contract not reading the method pack's shape; re-gated on 2026-09-28 with a6286df48 the package raises nothing. The run's transcript was not kept, so whether it read the gate cannot be checked. Not the project's current data: after the 2026-09-27 data repair the registered strategy has no battlefield, layout or gaps, none of 963 sources has its conditions checked, and the targets carry no M-19 or M-01S; a re-run on the current release is planned to refill them (run plan of 2026-09-28), and its package can replace this evidence if it is accepted. Briefs geo-strategy-001…004 have not been dispatched as written. 2026-09-28 re-run on 信尔美 through capability-acceptance (release evimed-1f5607732e37-1, brief geo-strategy-004 with the project's own strategy brief, a new session bound to geo-strategy 1.0.4), because the 09-27 data repair had emptied the registered strategy: 17 minutes, delivered verified, the review's five findings all fixed, and the strategy refilled. The 09-25 orchestrator run stays in relatedEvidence."
+      "note": "New on 2026-09-25 with the 「循证传播」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. 2026-09-25 production (信尔美, step 5, run_3576ce426c20, geo-strategy 1.0.2), dispatched by the 循证传播 orchestrator once the baseline round had its metrics: succeeded and verified in 22 minutes (¥2.96), all three submissions passing, the independent review's 11 findings all fixed. The delivered strategy.json holds a 28-site source table with the three conditions per site, 20 gaps in the seven classes, five engine expectations, a named battlefield (「P1-03 与其他减重药怎么选」) and three tiers. Its one notice (no battlefield group; no source table) was the contract not reading the method pack's shape; re-gated on 2026-09-28 with a6286df48 the package raises nothing. The run's transcript was not kept, so whether it read the gate cannot be checked. Not the project's current data: after the 2026-09-27 data repair the registered strategy has no battlefield, layout or gaps, none of 963 sources has its conditions checked, and the targets carry no M-19 or M-01S; a re-run on the current release is planned to refill them (run plan of 2026-09-28), and its package can replace this evidence if it is accepted. Briefs geo-strategy-001…004 have not been dispatched as written. 2026-09-28 re-run on 信尔美 through capability-acceptance (release evimed-1f5607732e37-1, brief geo-strategy-004 with the project's own strategy brief, a new session bound to geo-strategy 1.0.4), because the 09-27 data repair had emptied the registered strategy: 17 minutes, delivered verified, the review's five findings all fixed, and the strategy refilled. The 09-25 orchestrator run stays in relatedEvidence."
     },
     {
       "id": "manuscript-support",
@@ -469,19 +499,21 @@
         "surface": null
       },
       "relatedEvidence": [
+        "capabilities/tool-builder/capability.yaml",
+        "evals/paper-gold/run.mjs",
         "evals/acceptance/2026-10-04-evolution.json",
         "apps/server/test/evolutionBuildFailures.test.mjs",
         "packages/domain/test/evolutionContracts.test.mjs",
         "packages/domain/src/contractRegistry.mjs",
         "evals/paper-gold/calibration-manifest.json"
       ],
-      "note": "Internal platform-job capability with frozen development inputs, not researcher briefs. The paper-gold job-level harness contains reference and calibration assets; contract and worker tests establish offline behavior. The preserved evolution acceptance record is partially measured and explicitly does not accept the whole plan. No independently identified capability-level live delivery is claimed by this row; live delivery acceptance remains open."
+      "note": "Internal: dispatched only by the evolution worker (evolutionRuns.mjs), never by a user request; no researcher's material reaches it, so it is exempt from the three-brief rule as a platform-job-only internal capability (definitions.briefCount). New with 循证进化: it implements one candidate tool and its development tests from a frozen research card, with no tools of its own and no evaluator access. The module has never been switched on in production, so no build run is on record; the row reads not-run until one is. Its contract validator accepts any input and only labels (advisory findings); what accepts a candidate is the static package check, the independent execution check and the paper-gold evaluator, not this package."
     },
     {
       "id": "vcr-analysis",
       "visibility": "public",
       "evalHarness": "evals/vcr-analysis",
-      "briefCount": 3,
+      "briefCount": 4,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,
@@ -537,7 +569,7 @@
       "id": "vcr-protocol",
       "visibility": "public",
       "evalHarness": "evals/vcr-protocol",
-      "briefCount": 5,
+      "briefCount": 6,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,

@@ -81,10 +81,11 @@ test(
     const first = open();
     const capabilities = await migrateFrontier(first, { dimension: 1024 });
     const created = await inventory(first);
-    // 22 feed tables and ten native evidence/editorial tables, plus the optional vector table.
+    // 22 feed tables and sixteen native evidence/editorial tables (the last three the public pages' reads and topic requests,
+    // 2026-10-06), plus the optional vector table.
     assert.equal(
       created.tables.length,
-      capabilities.vector ? 33 : 32,
+      capabilities.vector ? 39 : 38,
       created.tables.join(),
     );
     for (const table of [
@@ -120,6 +121,9 @@ test(
       "evidence_card_revisions",
       "evidence_automation",
       "evidence_editorial_jobs",
+      "evidence_change_log",
+      "evidence_challenges",
+      "evidence_upkeep_state",
     ]) {
       assert.ok(created.tables.includes(table), `${table} was not created`);
     }

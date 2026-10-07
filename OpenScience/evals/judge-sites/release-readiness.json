@@ -196,11 +196,11 @@
       ]
     },
     "J10": {
-      "implementation": "registry-only-caller-absent-at-base",
+      "implementation": "implemented-through-J17-ranking-only-per-plan-4.6",
       "qualification": "uncalibrated",
       "threshold": 0.8,
       "missing": [
-        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+        "Shared J17 ranking calibration remains unqualified; no independent capability assignment is introduced."
       ]
     },
     "J11": {
@@ -220,7 +220,7 @@
       ]
     },
     "J13": {
-      "implementation": "registry-only-caller-absent-at-base",
+      "implementation": "wired",
       "qualification": "uncalibrated",
       "threshold": 0.8,
       "missing": [
@@ -228,7 +228,7 @@
       ]
     },
     "J14": {
-      "implementation": "registry-only-caller-absent-at-base",
+      "implementation": "wired",
       "qualification": "uncalibrated",
       "threshold": 0.8,
       "missing": [
@@ -271,7 +271,7 @@
       ]
     },
     "J17": {
-      "implementation": "registry-only-caller-absent-at-base",
+      "implementation": "wired",
       "qualification": "uncalibrated",
       "threshold": 0.8,
       "missing": [
@@ -436,9 +436,8 @@
   },
   "releaseRequirements": [
     "Refresh the deployment tool-probe evidence: current capability audit references 40 tools while this source registry has 54; 13 have never been probed and source identity is absent.",
-    "Rebuild and release the runtime for screening and duplicate-log changes, and run engine incremental release for shared-client and engine changes after team review.",
+    "Build the production runtime and engine images, generate the release manifest from their actual IDs, and run deployment acceptance after team review.",
     "Observe each released batch for seven days; inspect per-site settled/escalated/fallback ratios and first three days of per-account learning spend.",
-    "Rebase or integrate the later release-line modules before wiring J10/J17, J13 and J14; those callers do not exist at this plan base.",
     "Collect the missing human-reviewed and full-manuscript reference labels before qualifying remaining sites; weak incumbent labels and synthetic smoke controls are not independent acceptance."
   ],
   "frontierSnapshot": {
@@ -491,7 +490,22 @@
     "status": "deferred-with-own-phase",
     "reason": "Plan section4.5 schedules these with Evolution2, not as an independent feature release."
   },
-  "validation": {
+  "integratedMainCommit": "93564fd7fa864dcb5c1d6c04d7cdda1a981b50a7",
+  "mainIntegration": {
+    "status": "regression-in-progress",
+    "preserved": [
+      "Evidence flywheel publication and privacy gates",
+      "Existing routing and model output ceilings",
+      "Platform/account budget ownership",
+      "Unqualified site fallback"
+    ],
+    "addedCallers": {
+      "J13": "Reorder a complete authorized prefix; retain every candidate and meter against the runtime project or subscribed project.",
+      "J14": "Resolve exact titles first; compare public topic candidates outside vote transactions; keep account/project attribution, quota checks, related links and durable model costs.",
+      "J17": "Rank preserved publication leads before bounded scout admission, retain all papers, preserve durable queue order and atomically enforce the daily scout limit."
+    }
+  },
+  "validationBeforeMainIntegration": {
     "typechecks": "All five final project typechecks passed serially.",
     "webBuild": "build:web passed.",
     "mcp": "902 research tests (1 skipped) and 9 memory tests passed.",
@@ -499,5 +513,20 @@
     "web": "2253passed in broad run;12resource-pressure failures passed in serial191test rerun.",
     "audits": "Source secrets, dependency vulnerabilities, hosted compliance, SaaS alignment, manifests/skill digests passed. Capability live-probe evidence audit remains red as listed above.",
     "finalAdditionalChecks": "Focused domain regression, calibration-pin binding, report advisory behavior, evaluator final dispatch, shared client builds and regenerated tool graph checks passed. Final server ESLint/typecheck passed."
+  },
+  "validation": {
+    "typechecks": "Server, web, domain, harness-port and socket typechecks passed after main integration.",
+    "webBuild": "Hosted build:web passed; existing bundle-size advisory remains.",
+    "mcp": {
+      "researchTests": 925,
+      "researchSkipped": 1,
+      "memoryTests": 9,
+      "failed": 0
+    },
+    "server": "Full bounded-concurrency suite in progress; a new provenance inventory entry was corrected and all 9 inventory tests passed.",
+    "web": "Pending the main-integrated full web suite.",
+    "audits": "Source credential, dependency, hosted compliance (78 checks), SaaS alignment, capability manifests, curated digests, skill package generation, vocabulary and tool graphs passed. Capability execution audit still requires new live probes.",
+    "liveDeploymentManifest": "Not generated in this source-only worktree; real release image IDs are required.",
+    "databaseFocused": "Jev accounting, J13/J14 context and durable billing, related-topic links and race handling, J17 actual queue leases and concurrent daily-cap admission passed against isolated PostgreSQL."
   }
 }

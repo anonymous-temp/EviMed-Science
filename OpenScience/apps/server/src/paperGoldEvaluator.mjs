@@ -73,41 +73,88 @@ export function paperGoldExposureTier({audit,durableComplete,traceCoverage,sourc
  if(['cited','exposed_uncited'].includes(audit.tier))return audit.tier;
  return durableComplete&&traceCoverage.complete&&sourceTrace.complete?audit.tier:'unknown';
 }
+/**
+ * `cite_lookup` (the dsh-cite package, registered through the citation bridge) is a native tool, not an `evimed_*` socket tool: its
+ * result reaches the session history as the text its own renderer produced, one `N. <title>（<year>, <journal>）` line per work,
+ * with no `ok` head and no JSON (dsh-cite@0.3.2 `cite_lookup.output.render`). Release 6 held 19 successful results of it across six
+ * runs; none parsed, so the trace was incomplete and four units read unknown exposure. A rendered result is read back to the works
+ * it lists, and anything that is not exactly that shape (empty, cut off, another layout) stays unparsed, which keeps the trace
+ * incomplete: the failure is unknown, never unexposed.
+ * @param {any} value @returns {{ ok: true, data: { works: string[] } } | null}
+ */
+function parseCiteLookupRendering(value){
+ const parts=Array.isArray(value)?value:Array.isArray(value?.content)?value.content:null;
+ const text=typeof value==='string'?value:parts&&parts.length&&parts.every(part=>part?.type==='text'&&typeof part.text==='string')?parts.map(part=>part.text).join('\n'):null;
+ if(text===null)return null;
+ const works=[];
+ for(const line of text.replace(/\s+$/,'').split('\n')){
+  const numbered=/^(\d+)\. /.exec(line);
+  if(numbered&&Number(numbered[1])===works.length+1)works.push(line.slice(numbered[0].length));
+  else if(works.length)works[works.length-1]+=`\n${line}`;
+  else return null;
+ }
+ // The renderer closes every label with a full-width parenthesis; an entry that does not end in one was cut.
+ return works.length&&works.every(work=>work.endsWith('）'))?{ok:true,data:{works}}:null;
+}
+/**
+ * The evimed MCP server wraps every result with `provenance: { tool, arguments, scope }`, and `arguments` is the call's own request
+ * echoed back (`_data_with_provenance`). What the run typed into its own query is not what the platform served it: on release 6 a
+ * run searched Europe PMC with the protected DOI, was served four items none of which was the paper, and that echo was the only
+ * match in its source responses, so the unit read exposed_uncited from the model's own recalled identifier. The request side
+ * refuses a request that names the protected paper; the response side is audited without the echo of what was asked.
+ * @param {any} data
+ */
+function withoutRequestEcho(data){
+ if(!data||typeof data!=='object'||Array.isArray(data)||!data.provenance||typeof data.provenance!=='object'||Array.isArray(data.provenance)||!Object.hasOwn(data.provenance,'arguments'))return data;
+ const {arguments:_asked,...provenance}=data.provenance;
+ return {...data,provenance};
+}
 /** Source exposure requires a successful observed response, never prompts or requested identifiers. @param {any} transcript */
 export function paperGoldSourceResponses(transcript){
  const responses=[],unknownTools=[];
- const parse=value=>{
+ const parse=(value,tool='')=>{
+  if(typeof value==='string'&&/^Error:|^error\n/.test(value))return {ok:false};
+  if(/(?:^|__|[./])cite_lookup$/.test(tool)){const rendered=parseCiteLookupRendering(value);if(rendered)return rendered;}
   if(typeof value==='string'){
-   if(/^Error:|^error\n/.test(value))return {ok:false};
    if(value.startsWith('ok\n')){const body=value.slice(3);if(!body.trim())return null;try{return {ok:true,data:JSON.parse(body)};}catch{return {ok:true,data:body};}}
-   try{return parse(JSON.parse(value));}catch{return null;}
+   try{return parse(JSON.parse(value),tool);}catch{return null;}
   }
   if(!value||typeof value!=='object')return null;
   if(typeof value.ok==='boolean')return value.ok===false?{ok:false}:((Object.hasOwn(value,'data')&&value.data!==undefined)||(Object.hasOwn(value,'artifacts')&&value.artifacts!==undefined))?{ok:true,data:value.data,artifacts:value.artifacts}:null;
   if(value.status==='error')return {ok:false};
   if(['ok','success','warning'].includes(value.status))return ((Object.hasOwn(value,'data')&&value.data!==undefined)||(Object.hasOwn(value,'artifacts')&&value.artifacts!==undefined))?{ok:true,data:value.data,artifacts:value.artifacts}:null;
   if(value.isError===true)return {ok:false};
-  if(Array.isArray(value.content)){const parsed=value.content.filter(x=>x.type==='text').map(x=>parse(x.text)).filter(Boolean);if(parsed.length===1)return parsed[0];}
+  if(Array.isArray(value.content)){const parsed=value.content.filter(x=>x.type==='text').map(x=>parse(x.text,tool)).filter(Boolean);if(parsed.length===1)return parsed[0];}
   return null;
  };
  for(const message of transcript?.messages??[])for(const part of message.parts??[]){
   if(part.type!=='tool'||!/web_read|web_search|open_access_full_text|literature_search|public_source|pubmed|europe|crossref|frontier|knowledge|memory|capsule|tooluniverse|source_search|cite_lookup/i.test(part.tool??part.name??''))continue;
   if(part.status==='failed'||part.status==='error'||part.error)continue;
-  const result=part.status==='completed'?parse(part.output):null;
+  const result=part.status==='completed'?parse(part.output,part.tool??part.name??''):null;
   if(!result){unknownTools.push(part.tool??part.name??'unknown');continue;}
-  if(result.ok)responses.push({tool:part.tool??part.name,data:result.data,artifacts:result.artifacts});
+  if(result.ok)responses.push({tool:part.tool??part.name,data:withoutRequestEcho(result.data),artifacts:result.artifacts});
  }
  return {responses,complete:unknownTools.length===0,unknownTools};
 }
-/** Only unchanged files in this exact run's validated receipt can produce scores/code proof. @param {any} request */
+/**
+ * Only unchanged files in this exact run's validated receipt can produce scores/code proof.
+ *
+ * Two different things were one list until 2026-10-06. `issues` is a file the scoring needs and cannot trust: a file
+ * the receipt pins whose bytes differ from the pin, a receipt-pinned JSON that does not parse, a file that cannot be
+ * opened inside the workspace. `unverified` is a delivered file the receipt never pinned (a report, a scratch script):
+ * scoring never reads it, its text is not handed to any assessor or reviewer (it goes to `auditText`, the citation
+ * scan, only), and it is listed here by path so that nothing about it is hidden. On release 6 five of six runs
+ * delivered such a file and every one of them made its unit unauditable.
+ * @param {any} request */
 export async function readPaperGoldArtifacts({project,run,receipt}){
- const deliveredText=[],auditText=[],numeric={},recalledEvidenceIds=[],issues=[],pins=new Map();
+ const deliveredText=[],auditText=[],numeric={},recalledEvidenceIds=[],issues=[],unverified=[],pins=new Map();
  if(receipt?.runId===run.id)for(const entry of receipt.entries??[])for(const file of entry.files??[])if(typeof file.path==="string"&&/^[a-f0-9]{64}$/.test(file.sha256??""))pins.set(file.path,file.sha256);
  for(const artifact of (run.artifacts??[]).filter(row=>/\.(?:json|md|txt|csv|py)$/.test(row.path??row))){
   const relative=artifact.path??artifact;let opened;
   try{normalizeWorkspaceRelativePath(relative,"evaluation artifact");opened=await openScopedFileNoFollow(project.workspaceDir,path.resolve(project.workspaceDir,relative));
    if(!opened.stat.isFile()||opened.stat.size>16*1024*1024)throw new Error("Artifact bounds failed.");
    const bytes=await opened.handle.readFile(),text=bytes.toString("utf8");auditText.push(text);
+   if(!pins.has(relative)){unverified.push({path:relative,reason:"not_pinned_by_producer_receipt"});continue;}
    if(pins.get(relative)!==createHash("sha256").update(bytes).digest("hex")){issues.push({path:relative,reason:"producer_receipt_hash_unverified"});continue;}
    deliveredText.push({path:relative,text});if(!relative.endsWith(".json"))continue;
    let value;try{value=JSON.parse(text);}catch{issues.push({path:relative,reason:"numeric_receipt_unreadable"});continue;}
@@ -115,7 +162,15 @@ export async function readPaperGoldArtifacts({project,run,receipt}){
    for(const source of value.preservedSources??[])if(source.id&&source.sha256)recalledEvidenceIds.push(source.id);
   }catch{issues.push({path:String(relative),reason:"artifact_unavailable_or_outside_scope"});}finally{await opened?.handle.close().catch(()=>{});}
  }
- return {deliveredText,auditText,numeric,recalledEvidenceIds,issues};
+ return {deliveredText,auditText,numeric,recalledEvidenceIds,issues,unverified};
+}
+/** Whether a no-tool answer shows the paper may be remembered. The model is told to omit what it is unsure
+ * of, so requiring every field to match could almost never flag anything: one published number given from
+ * memory, within its printed precision, is the signal. A flagged case goes to the development set, which is
+ * the cautious side to err on. @param {any} answer @param {any} gold */
+export function paperGoldBaselineMemorized(answer, gold) {
+  const references = Object.entries(gold.baselineNumeric ?? gold.numeric ?? {});
+  return references.some(([key, reference]) => numericScore(answer?.numeric?.[key], reference).valid);
 }
 /** Metered production evaluator. Hidden definition is never passed to dispatch. @param {any} deps */
 export function createPaperGoldEvaluator({ config, usageLedger, store, agentRuns, evaluationIsolation, dispatch, controller, runtimeManager, fetchImpl = fetch }) {
@@ -193,10 +248,7 @@ export function createPaperGoldEvaluator({ config, usageLedger, store, agentRuns
           try { parsed = JSON.parse(answerText); } catch { parsed = { numeric: {}, parseStatus: "invalid_json" }; }
           return { ...parsed, baselineReceipt: { answerText, model: answer.model ?? null, providerRequestId: answer.id ?? null, usage: answer.usage ?? null, responseHash: digest(answer), numericFields } };
         },
-        baselineMemorized(answer, gold) {
-          const references = Object.entries(gold.baselineNumeric ?? gold.numeric ?? {});
-          return references.length > 0 && references.every(([key, reference]) => numericScore(answer.numeric?.[key], reference).valid);
-        },
+        baselineMemorized: paperGoldBaselineMemorized,
         async dispatch({ caseRecord, replicate, attempt = 0 }) {
           const identity = paperGoldDispatchIdentity(cycleId,caseRecord.id,replicate,attempt);
           const unitProjectId = identity.projectId;
@@ -226,7 +278,7 @@ export function createPaperGoldEvaluator({ config, usageLedger, store, agentRuns
           for(const response of sourceTrace.responses)await evaluationIsolation.auditExposure({userId,projectId:project.id,runId:run.id},"transcript-source-response",response);
           const nativeCoverage=sealed.complete?await readPaperGoldNativeCoverage({runtimeManager,project,run,signal}):null;
           const audit=await evaluationIsolation.audit(run.id),traceCoverage=paperGoldTraceCoverage(sealed.transcript,nativeCoverage);
-          return {id:run.id,projectId:project.id,numeric:artifacts.numeric,checks:{},recalledEvidenceIds:artifacts.recalledEvidenceIds,modelFamily:"deepseek",nativeEgressProofHash:traceCoverage.nativeCoverageProofHash,exposureTier:paperGoldExposureTier({audit,durableComplete:sealed.complete,traceCoverage,sourceTrace}),gaps:[...(run.status==="succeeded"?[]:["model_capability"]),...(artifacts.issues.length?["extraction"]:[])],assessmentEvidence:{deliveredText:artifacts.deliveredText,artifactIssues:artifacts.issues,transcript:sealed.transcript,runStatus:run.status,completeDurableTranscript:sealed.complete,traceCoverage,nativeCoverage,sourceTraceCoverage:{complete:sourceTrace.complete,unknownTools:sourceTrace.unknownTools}}};
+          return {id:run.id,projectId:project.id,numeric:artifacts.numeric,checks:{},recalledEvidenceIds:artifacts.recalledEvidenceIds,modelFamily:"deepseek",nativeEgressProofHash:traceCoverage.nativeCoverageProofHash,exposureTier:paperGoldExposureTier({audit,durableComplete:sealed.complete,traceCoverage,sourceTrace}),gaps:[...(run.status==="succeeded"?[]:["model_capability"]),...(artifacts.issues.length?["extraction"]:[])],assessmentEvidence:{deliveredText:artifacts.deliveredText,artifactIssues:artifacts.issues,unverifiedArtifacts:artifacts.unverified,transcript:sealed.transcript,runStatus:run.status,completeDurableTranscript:sealed.complete,traceCoverage,nativeCoverage,sourceTraceCoverage:{complete:sourceTrace.complete,unknownTools:sourceTrace.unknownTools}}};
         },
         async assess(unit, gold) {
           if (!Object.values(gold.stageChecks ?? {}).some(checks => checks.length)) return unit;

@@ -5,6 +5,7 @@
  * Where the wallet is simulated (`evimedCreditsSimulator.mjs`) every answer that
  * carries an amount says `simulated: true`, so no consumer can draw one as money.
  */
+import { accountMonthStart } from "@evimed/domain";
 import { HttpError, sendJson } from "./security.mjs";
 
 const ROOT = "/api/account/allowance";
@@ -15,15 +16,14 @@ const CAPABILITY_ID = /^[a-z][a-z0-9-]{0,63}$/;
 const MAX_ESTIMATES = 40;
 const NO_LINKS = Object.freeze({ rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null });
 
+/** A statement line's id as the wallet and the settlement ledger spell one. */
+const STATEMENT_ID = /^[A-Za-z0-9_:.-]{1,200}$/;
+
 /** @param {string} pathname */
 export function researchAllowanceRoutePattern(pathname) {
+  if (pathname.startsWith(`${ROOT}/statements/`)) return `${ROOT}/statements/:id`;
   return [ROOT, `${ROOT}/statements`, `${ROOT}/estimate`, `${ROOT}/estimates`].includes(pathname)
     ? pathname : `${ROOT}/:route`;
-}
-
-/** @param {Date} now */
-function monthStart(now) {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
 /** @param {unknown} value */
@@ -63,6 +63,11 @@ function estimateData(capabilityId, estimate) {
   };
 }
 
+/** @param {string} text */
+function decodeURIComponentSafe(text) {
+  try { return decodeURIComponent(text); } catch { return ""; }
+}
+
 /** @template T @param {() => Promise<T>} read @returns {Promise<T>} */
 async function financialRead(read) {
   try { return await read(); } catch (error) {
@@ -89,9 +94,14 @@ export function createResearchAllowanceRoutes({ store, service, commerce, config
     const enabled = config.evimedCreditsEnabled === true && Boolean(service);
     const simulated = enabled && config.evimedCreditsSimulated === true;
     if (url.pathname === ROOT) {
-      const since = monthStart(now());
+      // The month a person reads begins at 00:00 on its first day in Asia/Shanghai, the
+      // calendar every gift's expiry and every statement line already uses.
+      const since = accountMonthStart(now());
       const summary = enabled ? await financialRead(() => service.allowanceSummary(user.id, { since })) : null;
-      const available = typeof summary?.balanceCny === "number" && Number.isFinite(summary.balanceCny)
+      // The platform's wallet answers in exact decimal strings and says what it holds in each kind; EviMed's, in a
+      // number and nothing else — which is all that is claimed of it.
+      const wallet = summary?.wallet ?? null;
+      const available = wallet ? wallet.available : typeof summary?.balanceCny === "number" && Number.isFinite(summary.balanceCny)
         && summary.balanceCny >= 0 ? summary.balanceCny : null;
       const status = summary ? balanceStatus(summary.status) : "disabled";
       // A ledger that could not be read has no month to show: unknown, never zero.
@@ -99,11 +109,16 @@ export function createResearchAllowanceRoutes({ store, service, commerce, config
       const lowThreshold = simulated && Number.isFinite(summary?.lowThreshold) ? summary.lowThreshold : null;
       const data = {
         enabled, simulated, currency: "CNY", status: status === "ready" && available === null ? "unavailable" : status,
+        // 可用 = 充值 + 赠送 − 冻结, each of the three given beside it; and the next gift to end, with its date.
+        // Only the platform's wallet has lots and holds: nothing is inferred about EviMed's from an undocumented upstream field.
         available,
-        // Neither a wallet hold nor the source of its balance is inferred
-        // from model reservations or from an undocumented upstream field.
-        held: null, balances: null, membership: null,
+        held: wallet ? wallet.frozen : null,
+        balances: wallet ? { purchased: wallet.purchased, gifted: wallet.gifted } : null,
+        nextExpiry: wallet?.nextExpiry ?? null,
+        membership: null,
         lowThreshold,
+        // Decided here, in exact units: no page compares a float with a threshold.
+        low: wallet ? wallet.low : null,
         month: readable ? { since: since.toISOString(), paid: summary?.spentCny ?? 0, pending: summary?.pendingCny ?? 0 } : null,
         commerce: readable ? commerce.links() : NO_LINKS,
       };
@@ -113,6 +128,15 @@ export function createResearchAllowanceRoutes({ store, service, commerce, config
     if (url.pathname === `${ROOT}/statements`) {
       const options = statementOptions(url);
       const data = enabled ? await financialRead(() => service.statements(user.id, options)) : { items: [], nextCursor: null };
+      sendJson(res, 200, { data: { simulated, ...data } }, HEADERS);
+      return true;
+    }
+    if (url.pathname.startsWith(`${ROOT}/statements/`)) {
+      // One line in full, on request: the calls, the tokens, the price list and the amount to 8 decimals behind a charge.
+      const id = decodeURIComponentSafe(url.pathname.slice(`${ROOT}/statements/`.length));
+      if (!STATEMENT_ID.test(id)) throw new HttpError(404, "credit_statement_not_found", "No such statement line.");
+      if (!enabled) throw new HttpError(404, "credit_statement_not_found", "No such statement line.");
+      const data = await financialRead(() => service.statementDetail(user.id, id));
       sendJson(res, 200, { data: { simulated, ...data } }, HEADERS);
       return true;
     }

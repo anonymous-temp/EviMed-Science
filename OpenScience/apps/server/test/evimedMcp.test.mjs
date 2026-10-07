@@ -327,11 +327,11 @@ test("「前沿动态」 search reaches a runtime only where the module is on an
   }
 });
 
-// 「循证 GEO」 is a module a deployment may run for its operators only. A
+// 「循证传播」 is a module a deployment may run for its operators only. A
 // runtime of an account it is not open to is given no route, so its three
 // tools answer `geo_disabled` without asking, and are not even listed; the
 // social search is offered only where the deployment has a social channel.
-test("循证 GEO's tools reach a runtime only where the module is on and open to its account", async () => {
+test("循证传播's tools reach a runtime only where the module is on and open to its account", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-geo-mcp-"));
   try {
     const { project, plan } = await fixture(tmp);

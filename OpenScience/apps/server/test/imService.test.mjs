@@ -326,6 +326,25 @@ test("queued frontier delivery rechecks channel preferences and the injected mut
   }
 });
 
+test("a share notice pushed to a channel carries the page the in-app notice opens, not the bare inbox", async () => {
+  const config = { publicUrl: "https://science.example.com" };
+  assert.equal(noticeLink(config, { source: { type: "share", id: "delivery/dlv_0123abcd" } }), "https://science.example.com/app/memory/delivered/dlv_0123abcd");
+  assert.equal(noticeLink(config, { source: { type: "share", id: "withdrawn/dlv_0123abcd" } }), "https://science.example.com/app/memory", "a withdrawal and a take-down open the memory page");
+  assert.equal(noticeLink(config, { source: { type: "share", id: "delivery/not an id" } }), "https://science.example.com/app/memory", "an id that is not one opens nothing it should not");
+  assert.equal(noticeLink({ publicUrl: "" }, { source: { type: "share", id: "delivery/dlv_0123abcd" } }), null, "no public URL, no link");
+  const sent = [];
+  const item = { id: "notice", userId: "alice", count: 1, source: { type: "share", id: "delivery/dlv_0123abcd" }, noticeType: "notify", title: "李主任 向你分享了一套工作方式", body: "李主任的工作方式", severity: "info" };
+  const service = new ImService({ config: { imEnabled: true, publicUrl: config.publicUrl }, database: null, credentials: {},
+    notifications: { get: async () => item, preferences: async () => ({ channels: ["in-app", "feishu"], switches: { notify: true } }), recordChannelSent: async () => {} },
+    users: {}, agentRuns: {}, runtimeManager: {}, dispatchRun: async () => {}, steerRun: async () => {}, classifier: {}, write: () => {},
+    store: { claimDeliveries: async () => [{ id: "delivery", userId: "alice", notificationId: "notice", channel: "feishu", bindingId: "binding", eventCount: 1, attempts: 1 }], bindingById: async () => ({ status: "active" }), settleDelivery: async () => {} },
+  });
+  service.registry = { isEnabled: () => true, get: () => ({ deliver: async (_binding, message) => { sent.push(message); return { delivered: true, messageId: "sent" }; } }) };
+  await service.processDeliveries();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].link, "https://science.example.com/app/memory/delivered/dlv_0123abcd");
+});
+
 test("the IM module factory forwards the frontier late-delivery policy", async () => {
   const policy = async () => false;
   const module = createImModule({ config: { imEnabled: false }, database: {}, credentials: {}, notifications: {}, users: {}, agentRuns: {}, runtimeManager: {},

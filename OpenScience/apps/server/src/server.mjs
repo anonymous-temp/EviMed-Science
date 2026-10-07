@@ -1,8 +1,6 @@
 import { jevTransport } from "./jevTransport.mjs";
 import { createJudgeService } from './judgeService.mjs';
 import { createJudgeGatewayHandler, JUDGE_GATEWAY_PATH } from './judgeGateway.mjs';
-import { renderEvolutionToolContext } from './evolutionToolContext.mjs';
-import { routeExplicitEvolutionTool } from './evolutionToolRouting.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
@@ -74,8 +72,21 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject, isEvolutionProject } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
+import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
+import { HANDBOOK_LESSON_CLASSES, createPlatformHandbooks, handbookJudgeMessages, platformHandbookMetricFamilies, projectFactsReader } from "./learningPlatformHandbooks.mjs";
+import { evidenceEstablishedAuthors } from "./evidenceAuthorStanding.mjs";
+import { callReviewModel } from "./reviewModel.mjs";
+import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
+import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, programmeLeadReader } from "./evolutionLeadSources.mjs";
+import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
+import { createEvidenceRecalculation, createOfficialZoneMatcher, evidenceRecalculationMetricFamilies } from "./evidenceRecalculation.mjs";
+import { createPredictionRegistry, predictionRegistryMetricFamilies } from "./predictionRegistry.mjs";
+import { evidenceCardMetricFamilies } from "./evidenceCardMetrics.mjs";
+import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
+import { evolutionRunGap } from './evolutionIntegration.mjs';
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, readDeliveryReceipt, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
@@ -97,7 +108,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -113,7 +124,7 @@ import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
-import { createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, modelGatewayFilesRefusals, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { callModelForControlPlane, createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, modelGatewayFilesRefusals, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger, usageUncertainMetricFamily } from "./usageLedger.mjs";
@@ -161,10 +172,17 @@ import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
+import { MemoryIndexWithdrawals } from "./memoryIndexWithdrawals.mjs";
 import { MaintenanceService } from "./maintenanceService.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
+import { CapsuleShareLinks } from "./capsuleShareLinks.mjs";
+import { CapsuleSharing } from "./capsuleSharing.mjs";
+import { capsuleShareMetricFamilies } from "./capsuleShareMetrics.mjs";
+import { createGuestInfluence } from "./capsuleShareTrust.mjs";
+import { EvidenceZoneSubscriptions, createEvidenceLinkStates, subscriptionsForAudience } from "./evidenceZoneSubscription.mjs";
+import { reownOperatorImportedZones } from "./evidenceReown.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
@@ -185,10 +203,7 @@ import { ReviewWorker } from "./reviewWorker.mjs";
 import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
 import { createEvimedCreditsClient } from "./evimedCreditsClient.mjs";
 import { EvimedCreditsService, creditsReadiness } from "./evimedCreditsService.mjs";
-import {
-  SIMULATED_WALLET_BALANCE_URL, SIMULATED_WALLET_DEDUCT_URL, SIMULATED_WALLET_KEY,
-  SimulatedWallet, createSimulatedWalletFetch, evimedCreditsRefusal,
-} from "./evimedCreditsSimulator.mjs";
+import { SimulatedWallet, evimedCreditsRefusal } from "./evimedCreditsSimulator.mjs";
 import { createSimulatedWalletRoutes, simulatedWalletRoutePattern } from "./simulatedWalletRoutes.mjs";
 import { prepareResearchBillingAccountDeletion } from "./evimedCreditsPersistence.mjs";
 import { EvimedCreditsWorker } from "./evimedCreditsWorker.mjs";
@@ -206,8 +221,9 @@ import { removeSourceCopies, sourceAttemptId, sourceReadCopyDirectory } from "./
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { createConfiguredWebRenderer } from "./webRender.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
-import { edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
+import { edgeFetch, edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
 import { pagesReadFromSessions } from "./webReadPages.mjs";
+import { createSourceChanges, sourceChangeMetricFamilies } from "./sourceChanges.mjs";
 import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
@@ -231,10 +247,39 @@ import { createFrontierRoutes, frontierRoutePattern } from "./frontierRoutes.mjs
 import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
 import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
+import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
+import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.mjs";
+import { createEvidenceFlywheelMetrics } from "./evidenceFlywheelMetrics.mjs";
+import { createGeoCardCitationReader } from "./geoCardCitations.mjs";
+import { createEvidenceOutcomes, evidenceOutcomeMetricFamilies } from "./evidenceIncidents.mjs";
+import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "./evidenceCommunity.mjs";
+import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
+import { setEvidencePublicBase } from "./evidencePublicPaths.mjs";
+import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
+import { EVIDENCE_TOPIC_REQUEST_LIST_MAX, createEvidenceTopicRequestRoutes, createEvidenceTopicRequests, topicRequestCounts } from "./evidencePublicRequests.mjs";
+import { pageReads } from "./evidencePublicReads.mjs";
+import { createEvidenceProgrammeRoutes } from "./evidenceProgrammeRoutes.mjs";
+import { platformContentCitedMetricFamilies } from "./evidenceCitationMetrics.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
+import { EvidenceCardFromResult } from "./evidenceCardFromResult.mjs";
+import { EvidenceAuthors } from "./evidenceAuthors.mjs";
+import { createCitationGift } from "./evidenceCitationGift.mjs";
+import { EvidenceContinuation } from "./evidenceContinuation.mjs";
+import { EvidenceOrigins } from "./evidenceOrigins.mjs";
+import { createEvidencePublishRoutes } from "./evidencePublishRoutes.mjs";
+import { evidencePublishMetricFamilies } from "./evidencePublishMetrics.mjs";
+import { createEvidenceSourceVerification, evidenceSourceVerificationMetricFamilies } from "./evidenceSourceVerification.mjs";
+// Keeping the cards current and answering readers' challenges (flywheel F13, F14): composed after the result impact path they feed.
+import { createEvidenceChangeLog, evidenceChangeLogMetricFamilies } from "./evidenceChangeLog.mjs";
+import { createEvidenceUpkeep, evidenceUpkeepMetricFamilies } from "./evidenceCurrency.mjs";
+import { createChallengeJudge, createEvidenceChallenges, evidenceChallengeMetricFamilies } from "./evidenceChallenges.mjs";
+import { createEvidenceFigures } from "./evidenceFigures.mjs";
+import { createEvidenceUpkeepRoutes } from "./evidenceUpkeepRoutes.mjs";
+import { parseModelJson } from "./frontierEditor.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
 // the two reader actions, and the composer the worker ticks.
+import { createEntityVocabulary, entityVocabularyMetricFamilies } from "./entityVocabulary.mjs";
 import { FrontierEvents } from "./frontierEvents.mjs";
 import { FrontierDaily } from "./frontierDaily.mjs";
 import { FrontierWeekly } from "./frontierWeekly.mjs";
@@ -242,12 +287,15 @@ import { FrontierNotifications } from "./frontierNotifications.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
-// 「循证 GEO」 (build spec 2026-09-25): the schema's content store, the pages'
+// 「循证传播」 (build spec 2026-09-25): the schema's content store, the pages'
 // service and routes, the runtime tools' gateway and the social channel. The
 // measurement, market and orchestration packages attach to the composed
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
+import { GeoCards } from "./geoCards.mjs";
+import { GeoMembers } from "./geoMembers.mjs";
+import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
 import { geoArticleGateOf } from "./geoWrites.mjs";
 import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
@@ -265,12 +313,14 @@ import { createGeoNotifier } from "./geoNotify.mjs";
 import { composeVcr, vcrMetricFamilies, vcrMetricsSnapshot, withVcrEngineWarnings } from "./vcrComposition.mjs";
 import { createAvailability } from "./availabilityModule.mjs";
 import { availabilityMetricFamilies } from "./availabilityService.mjs";
+import { evolutionOpsMetricFamilies, evolutionOpsSnapshot } from "./evolutionOpsMetrics.mjs";
 import { loadMethodValidation } from "./vcrMethodValidation.mjs";
 import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
+import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
 import { deleteVcrProjectRows, deleteVcrUserRows, removeVcrArtifacts } from "./vcrStoreBase.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
@@ -460,11 +510,6 @@ async function readVerificationVerdict(project, run) {
   }
 }
 
-function minimumPositive(...values) {
-  const positive = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
-  return positive.length ? Math.min(...positive) : 0;
-}
-
 function isLocalDevelopmentOrigin(origin) {
   try {
     const url = new URL(origin);
@@ -616,6 +661,7 @@ function routePattern(pathname) {
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
+  if (pathname === "/api/ops/evidence-flywheel") return pathname;
   if (pathname === ALERT_RECEIVER_PATH) return pathname;
   if (pathname === "/api/ops/usage/by-purpose") return pathname;
   if (pathname === "/api/availability" || pathname === "/api/ops/availability") return pathname;
@@ -959,9 +1005,26 @@ function clientAddress(req, config) {
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} overrides
  */
+/**
+ * A file of a project's workspace by its path relative to it, read without following links; null when it cannot be read.
+ * What 「循证传播」 reads a claim's preserved source and an article's text with.
+ * @param {{ workspaceDir: string }} controlProject
+ */
+function geoSourceReaderOf(controlProject) {
+  return async (/** @type {string} */ relative) => {
+    try { return String(await readFileNoFollow(controlProject.workspaceDir, resolveScopedPath(controlProject.workspaceDir, relative), "utf8")); } catch { return null; }
+  };
+}
+
 export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = createHostedExtensionIntegration, runtimeManagerFactory = (config, hooks) => new RuntimeManager(config, hooks)} = {}) {
   if(typeof extensionIntegrationFactory !== "function" || typeof runtimeManagerFactory !== "function") throw new TypeError("Invalid server constructor factory.");
   const config = loadConfig(overrides);
+  // Where the public evidence pages, their API, the sitemap and the feed are served: one setting, read by everything that writes or answers
+  // one of their addresses (`evidencePublicPaths.mjs`), made once here.
+  setEvidencePublicBase(config.evidencePublicBasePath);
+  // Whether a project is the platform's own, for its owner (`internalProjects.mjs`): a name alone is never enough.
+  const internalFor = (/** @type {unknown} */ userId, /** @type {unknown} */ projectId) => isInternalProjectOf(config, userId, projectId);
+  if (config.evolutionRefusal) process.stderr.write(`evolution: ${config.evolutionRefusal.code} (${config.evolutionRefusal.key}); the module stays off and the platform starts\n`);
   const managedBrowser = overrides.managedBrowserService ?? createManagedBrowserService(config);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });
@@ -982,9 +1045,30 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let maintenanceService = null;
   /** @type {ReturnType<typeof createEvolution> | null} */
   let evolution = null;
+  /** @type {ReturnType<typeof createEvidenceRecalculation> | null} */
+  let evidenceRecalculation = null;
+  /** @type {ReturnType<typeof createPredictionRegistry> | null} */
+  let predictionRegistry = null;
+  /** @type {ReturnType<typeof createEvidenceFlywheelMetrics> | null} */
+  let evidenceFlywheel = null;
+  /** @type {ReturnType<typeof createEvidenceOutcomes> | null} */
+  let evidenceOutcomes = null;
+  /** @type {ReturnType<typeof createEvolutionLeadSources> | null} */
+  let evolutionLeadSources = null;
+  /** @type {ReturnType<typeof createPlatformHandbooks> | null} */
+  let platformHandbooks = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
+  // The one durable fact per source identifier (B5, plan 2026-10-05): the frontier feed, the evidence zone and the
+  // Crossref lookup write what they saw about a retraction, correction, concern or new version; the result impact path,
+  // the memory labels and the cards read it. It belongs to the platform publisher account — the platform's, never a
+  // tenant's — which the control plane's own migration creates (`PLATFORM_PUBLISHER_USER_ID`); `overrides` is how a
+  // test names another. Without the product ledger there is no record, and every module behaves as it did before.
+  const sourceChanges = productDocuments
+    ? createSourceChanges({ documents: productDocuments, ownerUserId: overrides.sourceChangesOwnerUserId ?? PLATFORM_PUBLISHER_USER_ID,
+      report: code => { void securityAudit(config, "source.change", "failed", { code }).catch(() => {}); } })
+    : null;
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
@@ -1131,9 +1215,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // that the writer and the reader cannot disagree about which provider is on.
   const memoryIndexActive = selectedMemoryIndexProvider(config) === "openviking"
     && Boolean(openVikingClient.configured) && Boolean(productDatabase && productJobs);
+  // What a deletion owes the index as whole subtrees, kept in the deleting
+  // transaction and drained by the index worker (`memoryIndexWithdrawals.mjs`):
+  // deleting a project, resetting memory or erasing an account never waits on
+  // the index answering. Exists exactly when the index does.
+  const memoryWithdrawals = memoryIndexActive ? new MemoryIndexWithdrawals({ database: productDatabase, openViking: openVikingClient }) : null;
   const researchMemory = overrides.researchMemory
     ?? new ResearchMemoryStore(config, {
-      database: productDatabase, jobs: memoryIndexActive ? productJobs : null,
+      database: productDatabase, jobs: memoryIndexActive ? productJobs : null, withdrawals: memoryWithdrawals,
     });
   // One reranker for both recall paths. It orders candidates that have already
   // been hydrated from the authoritative store, because the index's own
@@ -1155,7 +1244,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // OpenViking the research recall uses, so it exists exactly when that
   // provider is selected and reachable — never as a second thing to configure.
   const memoryIndexing = productDatabase && productJobs && memorySubstrate.active
-    ? new MemoryIndexing({ database: productDatabase, openViking: openVikingClient, jobs: productJobs, rerank: memoryRerank }) : null;
+    ? new MemoryIndexing({ database: productDatabase, openViking: openVikingClient, jobs: productJobs, withdrawals: memoryWithdrawals, rerank: memoryRerank }) : null;
   // Composed whenever there is a queue, not only when there is an index. The
   // database trigger that enqueues `memory-index` jobs fires on every capsule
   // and fact write — a Postgres trigger cannot read this config — so a
@@ -1163,7 +1252,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // indexing the worker drains them and records why (M5, 2026-09-16).
   const memoryIndexWorker = productJobs
     ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing,
-      substrate: memoryIndexing ? memorySubstrate : null,
+      substrate: memoryIndexing ? memorySubstrate : null, withdrawals: memoryIndexing ? memoryWithdrawals : null,
       pollMs: config.memoryIndexPollMs, leaseMs: config.memoryIndexLeaseMs,
       reconcileMs: config.memoryIndexReconcileMs }) : null;
   // What the researcher did, and the one producer that reads it back. Both
@@ -1408,7 +1497,23 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
     privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
   }) : null;
+  // Sharing a capsule with other accounts of this deployment, in the app (plan §7, F17): share links, deliveries to named accounts, and
+  // taking either back. Off with its own switch (`OPEN_SCIENCE_CAPSULE_SHARE_ENABLED`): not composed, so no table of it is read and its routes
+  // answer 404 by name. Needs the control-plane database and the transfer service; absent either, the routes answer 503 by name.
+  const capsuleShareLinks = config.capsuleShareEnabled && productDatabase && capsuleTransferService
+    ? new CapsuleShareLinks({ database: productDatabase, ttlDays: config.capsuleShareLinkTtlDays, maxUses: config.capsuleShareLinkMaxUses }) : null;
+  const capsuleSharing = capsuleShareLinks && notificationService
+    ? new CapsuleSharing({ database: productDatabase, transfers: capsuleTransferService, links: capsuleShareLinks, notifications: notificationService,
+      perDay: config.capsuleShareDeliveriesPerDay, report: code => { void securityAudit(config, "capsule.share", "failed", { code }).catch(() => {}); } }) : null;
+  // A project's evidence-zone subscriptions (F18): off with the switch, and read only for the project that subscribed.
+  const zoneSubscriptions = productDatabase && productDocuments
+    ? new EvidenceZoneSubscriptions({ judgeService, database: productDatabase, documents: productDocuments, enabled: config.evidenceZoneSubscriptionEnabled,
+      maxPerProject: config.evidenceZoneSubscriptionMaxPerProject, maxItems: config.evidenceZoneSubscriptionMaxItems }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes,
+    sharing: capsuleSharing, links: capsuleShareLinks, subscriptions: zoneSubscriptions, isOperator: user => config.operatorUsers.includes(user.id),
+    // Sharing has its own switch; a zone subscription is the frontier's, so it asks the frontier's audience like every zone route.
+    // (Asked per request: the frontier is composed further down.)
+    shareEnabled: config.capsuleShareEnabled === true, frontier: { allows: user => Boolean(frontier) && frontier.service.allows(user) },
     // A 「试用一次」 conversation is marked in its own memory state.
     trials: researchMemory.configured ? { mark: (userId, projectId, sessionId, capsuleId) => researchMemory.updateSessionState(userId, projectId, sessionId,
       { trialCapsuleId: capsuleId }) } : null,
@@ -1417,7 +1522,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       userId: user.id, username: user.id, detail: JSON.stringify(details),
     }) });
   const memoryRoutes = createMemoryRoutes({
-    config, researchMemory, memorySubstrate, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+    config, researchMemory, memorySubstrate, memoryIndexWorker, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
   /** The accounts an integration key of `ownerId` made for the people behind
@@ -1653,9 +1758,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const library = createLibrary({ config, store, documents: productDocuments, sources: sourceService, capsules: capsuleService,
     kbIndex, report: (code) => process.stderr.write(`personal library: ${code}\n`) });
   libraryService = library.service;
+  // The one entity vocabulary (entityVocabulary.mjs, plan §4.2): the frontier's glossary and entity keys, read by
+  // the pipeline, the evidence zones, autopilot agendas, GEO products and VCR studies. It follows the frontier
+  // module: off, every answer is empty and no table is read.
+  const entityVocabulary = createEntityVocabulary({ database: productDatabase, enabled: Boolean(config.frontierEnabled && productDatabase),
+    report: (code) => process.stderr.write(`${code}\n`) });
   const autopilotPlanner = new AutopilotPlanner(config, { usageLedger });
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
-    documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
+    documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService, entityVocabulary,
+    // The account's own spending caps, which cover everything the researcher spends;
+    // an agenda's daily and weekly caps count only the agenda's own (agendaBudget.mjs).
+    accountCaps: () => ({ userDailySpendLimit: config.userDailySpendLimit, userWeeklySpendLimit: config.userWeeklySpendLimit }),
     capsules: capsuleService,
     // The model decision before each episode: metered under purpose `autopilot`,
     // and absent it the date rotation chooses (autopilotNextAction.mjs).
@@ -1672,7 +1785,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // to the first operator's internal project, which the worker makes before
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
-   *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
+   *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
    *   weekly: FrontierWeekly, notifications: FrontierNotifications } | null} */
   let frontier = null;
   if (config.frontierEnabled && productDatabase) {
@@ -1690,8 +1803,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const ingest = new FrontierIngest({ database: productDatabase, plugin: client, vocabulary,
       dimension: config.kbEmbeddingDimension, pollMs: config.knowledgePluginPollMs });
     const editor = new FrontierEditor(config, { judgeService, usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
-    const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config,
-      workerId: randomId("frontier-") });
+    const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges,
+      glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-") });
     // One implementation of "today's spend": the pipeline's, which it gates on.
     const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
     // The second wave (build spec D): events and the hot list, the daily and
@@ -1704,7 +1817,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       workerId: randomId("frontier-weekly-") });
     const frontierNotifications = new FrontierNotifications({ database: productDatabase, jobs: productJobs,
       notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
-    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget,
+    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget, entityVocabulary,
       // 与我相关 reads a reader's own recent questions: their runs across
       // their projects, the platform's internal ones left out. Asked in the
       // background, a few readers a round, never on a request.
@@ -1713,7 +1826,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!user || !agentRuns) return [];
         const runs = [];
         for (const listed of await store.listProjects(user)) {
-          if (isInternalProject(listed.id)) continue;
+          if (internalFor(userId, listed.id)) continue;
           const project = await store.requireProject(user, listed.id);
           for (const run of await agentRuns.researcherRuns(project, { includeManaged: true })) runs.push({ projectId: project.id, run });
         }
@@ -1731,8 +1844,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const composer = new FrontierComposer({ events, daily, weekly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
-    const evidenceZones = new EvidenceZoneService({database:productDatabase});
+    // Official zones belong to the platform publisher; a zone and its cards are tagged with the shared entity keys.
+    const evidenceZones = new EvidenceZoneService({database:productDatabase,entityKeysFor:entityVocabulary.entityKeysFor,platformPublisherUserId:PLATFORM_PUBLISHER_USER_ID,
+      // A card published or revised in a followed zone is an inbox notice for each follower (flywheel F10): told after the
+      // write committed, and a notice that could not be queued is said on stderr and never reaches the writer.
+      onCardPublished: async (event) => {
+        try { await frontierNotifications.notifyZoneFollowers(event); } catch (error) { process.stderr.write(`frontier zone notice: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`); }
+      }});
+    // An official zone keeps running on the feed's budget; every other zone's upkeep is booked to its owner, in the
+    // owner's own `evimed-evidence` project, and charged through the allowance composed below (`useBilling`).
     const evidenceEditorial = new EvidenceEditorial({database:productDatabase,service:evidenceZones,editor,budget,
+      isOperator:(/** @type {string} */ userId)=>config.operatorUsers.includes(userId),
+      ensureProject:(/** @type {string} */ userId)=>ensureEvidenceProject(store,userId),
       readSource:createEvidenceSourceReader({readWeb:(url,options)=>webReader.read(url,options),transport:(request)=>webTransport(request),userAgent:webReadUserAgent(config)}),canRun:()=>!maintenanceService||maintenanceService.claimingAllowed()});
     const worker = new FrontierWorker({
       ingest, pipeline, composer, evidence:evidenceEditorial, database: productDatabase,
@@ -1748,10 +1871,55 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
   }
+  // The evidence programme's day (evidenceBudget.mjs): the publisher account's `evidence` spend against its own budget, and its
+  // concurrency. A reading is never taken while the programme's switch is off.
+  const evidenceBudget = createEvidenceBudget({ usageLedger, config });
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
+  // The community column of an official zone (evidenceCommunity.mjs, flywheel F07): other users' public cards on the zone's subjects. Composed with its
+  // switch and the frontier; off, the route answers 404 by name and no table is read.
+  const evidenceCommunity = config.evidenceCommunityCardsEnabled && frontier && productDatabase
+    ? createEvidenceCommunity({ database: productDatabase, maxCards: config.evidenceCommunityMaxCards, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }) : null;
+  const evidenceCommunityRoutes = createEvidenceCommunityRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config, community: evidenceCommunity });
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
     frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes});
+  // What the platform's own evidence offers the frontier (flywheel F09): a public feed the knowledge-source plugin reads like
+  // any other publisher's. It reads cards, so it exists only where the evidence tables do; off, its two paths answer by name.
+  const evidenceFeed = frontier && config.evidencePublicWebEnabled ? createEvidenceFeed({ database: productDatabase, config }) : null;
+  const evidenceFeedRoutes = createEvidenceFeedRoutes({ config, feed: evidenceFeed });
+  // The public evidence pages and their read-only API (flywheel F08, F27) and the topic requests behind their 「选题申请」 page. Composed
+  // only where the feed is (the frontier's zones, a database) and with the same switch; off, the router answers `false` before it does
+  // anything and the request is whatever an unknown path is. The per-address limiter is the server's own, keyed apart from the API's.
+  const evidencePublicOn = Boolean(frontier && productDatabase && config.evidencePublicWebEnabled);
+  // The 「模拟研究」 column reads what 虚拟临研's study leads published (vcrPublications.mjs). That module is composed further down, so the
+  // reader is found when a page is asked for; the module answers one page as a list and the pages read `{ items, next }`. With the
+  // module or its publication switch off there is no reader and the column says it is empty.
+  /** @type {{ current: { list: (query: { limit?: number, before?: string | null }) => Promise<any[]>, get: (id: string) => Promise<any> } | null }} */
+  const vcrSimulations = { current: null };
+  const evidenceSimulations = {
+    list: async (/** @type {{ limit?: number, before?: string | null }} */ { limit = 20, before = null } = {}) => {
+      const items = vcrSimulations.current ? await vcrSimulations.current.list({ limit, before }) : [];
+      return { items, next: items.length >= limit ? items[items.length - 1].id : null };
+    },
+    get: async (/** @type {string} */ id) => (vcrSimulations.current ? vcrSimulations.current.get(id) : null),
+  };
+  // The monthly page's two optional sections are found the same way (evidencePublicMetrics.mjs): the question bank's month where 循证传播 and its
+  // question-bank lever are composed, and the prediction registry's calibration where its switches are. Neither exists yet here; each is set where
+  // its module is made, and until then (or without it) the section answers nothing and is not rendered.
+  /** @type {{ questionBank: ((query: { month: string }) => Promise<any>) | null, predictionCalibration: (() => Promise<any>) | null }} */
+  const evidenceMetricSections = { questionBank: null, predictionCalibration: null };
+  const evidenceTopicRequests = evidencePublicOn ? createEvidenceTopicRequests({ judgeService, judgeContext: user => ensureEvidenceProject(store, user.id), database: productDatabase, config }) : null;
+  const evidencePublicRoutes = createEvidencePublicRoutes({
+    config: evidencePublicOn ? config : { ...config, evidencePublicWebEnabled: false }, database: evidencePublicOn ? productDatabase : null,
+    simulations: overrides.evidenceSimulations ?? evidenceSimulations, requests: evidenceTopicRequests,
+    questionBank: overrides.evidenceQuestionBank ?? (async (query) => evidenceMetricSections.questionBank?.(query) ?? null),
+    predictionCalibration: overrides.evidencePredictionCalibration ?? (async () => evidenceMetricSections.predictionCalibration?.() ?? null),
+    // A first-hand card's calculated claims are checked against their engine receipts here as in the app (the zone service reads them).
+    receiptsFor: frontier ? (/** @type {any} */ card) => frontier.evidenceZones.receiptsFor(card) : null,
+    limiter: (req) => rateLimiter.check(`evidence-public:${clientAddress(req, config)}`, { max: config.evidencePublicRatePerMinute, windowMs: 60_000, code: "evidence_public_rate_limited", label: "evidence page requests" }),
+    report: (code) => process.stderr.write(`${code}\n`),
+  });
+  const evidenceTopicRequestRoutes = createEvidenceTopicRequestRoutes({ store, requests: evidenceTopicRequests, frontier: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes });
   /**
    * A researcher's new project, as `POST /api/projects` makes it and as a new
    * GEO project makes its own: a name in any language and an id the
@@ -1761,16 +1929,26 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * @param {any} user @param {{ id?: unknown, name?: unknown }} body
    */
   async function createResearcherProject(user, body) {
-    const existing = (await store.listProjects(user)).filter((project) => !isInternalProject(project.id));
+    const existing = (await store.listProjects(user)).filter((project) => !internalFor(user.id, project.id));
     if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
     const id = body.id == null
       ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
       : safeId(assertString(body.id, "id", { max: 64 }), "project id");
-    // The learning loop's project is made by the loop; the paired
-    // evaluation still makes its own through this route.
-    // Not `isInternalProject`: the paired evaluation makes its `eval-method-*`
-    // projects through this very route.
-    if (id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID) {
+    // The ids the platform makes itself — the loop's, the knowledge base's, the frontier's and an
+    // evaluation cell's — are internal by name for any owner, so they cannot be typed here. Not the
+    // self-measurement shapes (`acceptance-*`, `audit-*`, `eval-method-*`): the paired evaluation makes
+    // its own through this very route, and they are internal only for an operator or the acceptance
+    // account (`isInternalProjectOf`); for everyone else they are ordinary projects.
+    if (isReservedProjectId(id)) {
+      throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
+    }
+    // 「循证进化」's own projects are named, not detected: the id is what puts
+    // a project outside the account's project ceiling and the per-user runtime
+    // limit, and what (flag on) gives its runtime the evaluation network and
+    // ends it after each run. The server makes them itself (`store.projectFor`);
+    // an operator may make an evaluation project here, as the standalone
+    // paper-gold harness does before it registers a policy (operator-only).
+    if (isEvolutionProject(id) && !config.operatorUsers.includes(user.id)) {
       throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
     }
     const name = projectDisplayName(body.name ?? id);
@@ -1799,7 +1977,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     await audit({ config, user, project }, "project.create", "completed", { target: id });
     return data;
   }
-  // 「循证 GEO」 (geoService.mjs): composed only when switched on and a
+  // 「循证传播」 (geoService.mjs): composed only when switched on and a
   // product database exists; otherwise its routes answer 404 `geo_not_enabled`,
   // its tools are not offered and nothing of it runs. The other packages attach
   // here: `geo.worker` (the leased loops, started and stopped with the rest),
@@ -1810,21 +1988,40 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
    *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
+   *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
-    const geoStore = new GeoStore({ database: productDatabase });
+    const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
       fetchImpl: overrides.geoSocialFetch ?? globalThis.fetch });
+    // The project's product zone and its cards (geoCards.mjs): the evidence zones the frontier composes, or one of its own where
+    // the frontier is off — the zone service needs nothing of the feed.
+    // The project's members, and the people a card discloses (the owner and the editors write it, the medical reviewers review it).
+    const geoMembers = new GeoMembers({ store: geoStore });
+    const geoCards = new GeoCards({
+      store: geoStore, database: productDatabase, report: (code) => process.stderr.write(`geo cards: ${code}\n`),
+      people: async (project) => geoMembers.peopleOf(project, { ownerName: (await store.userById(project.userId))?.name ?? null }),
+      zones: frontier?.evidenceZones ?? new EvidenceZoneService({ database: productDatabase, entityKeysFor: entityVocabulary.entityKeysFor, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }),
+      ownerName: async (userId) => (await store.userById(userId))?.name ?? null,
+    });
+    /** A claim's preserved source file from its project's workspace. @param {any} controlProject */
+    const geoSourceReader = (controlProject) => async (/** @type {{ artifactPath: string | null }} */ claim) =>
+      (claim.artifactPath ? geoSourceReaderOf(controlProject)(claim.artifactPath) : null);
     geo = {
       store: geoStore,
-      service: new GeoService({ store: geoStore, config, social, metricName: (id) => geoMetricDefinition(id)?.name ?? null }),
+      service: new GeoService({ store: geoStore, config, social, cards: geoCards, metricName: (id) => geoMetricDefinition(id)?.name ?? null }),
       social,
       worker: null,
       orchestrator: null,
       market: null,
       exporter: null,
+      cards: geoCards,
+      members: geoMembers,
+      refreshCards: (geoProject, controlProject) => geoCards.refresh(geoProject, { readSource: geoSourceReader(controlProject) }),
       importDelivery: createGeoDeliveryImport({ store: geoStore, report: (code) => process.stderr.write(`geo import: ${code}\n`),
+        refreshCards: (geoProject, controlProject) => geo?.refreshCards(geoProject, controlProject) ?? Promise.resolve(null),
+        checkReferences: (geoProject, article, text) => geoCards.checkArticle(geoProject, article, text),
         articleGate: (project, ref) => geo?.articleGate(project, ref) ?? Promise.resolve("unverified"),
         articleRunId: (project, deliverableId) => geo?.articleRunId(project, deliverableId) ?? Promise.resolve(null) }),
       // A project made before its brand was known is named by the brand once
@@ -1860,7 +2057,23 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A record document to text and a figure to curve points run in the runtime
     // controller's disposable container, like a document export does.
     intakeController,
+    entityVocabulary,
+    sourceChanges,
+    officialZoneForKeys: productDatabase ? createOfficialZoneLookup({ database: productDatabase }) : null,
+    // The learning package's prediction registry (flywheel F25) is given here when it exists; without one the filing route is absent.
+    // The prediction registry is composed with the evolution module, after this: the filing route asks for it when a prediction is filed.
+    // Given only where its two switches say it will exist, so that off the filing route stays absent as the module rules.
+    predictionRegistry: overrides.vcrPredictionRegistry ?? (config.predictionRegistryEnabled && config.evolutionEnabled ? { register: async (/** @type {Record<string, any>} */ prediction) => {
+      if (!predictionRegistry) throw Object.assign(new Error("The prediction registry is not enabled."), { status: 404, code: "prediction_registry_disabled" });
+      return predictionRegistry.register(prediction);
+    } } : null),
   });
+  vcrSimulations.current = vcr?.simulations ?? null;
+  // Rows made while the vocabulary could not tag (the frontier off, the glossary not yet seeded) are tagged once it
+  // can: a bounded pass per module after each glossary load, each row through its own owner (entityVocabulary.mjs).
+  if (autopilotService && productDatabase) entityVocabulary.registerBackfill("autopilot", ({ limit }) => autopilotService.backfillEntityKeys(productDatabase, { limit }));
+  if (geo) entityVocabulary.registerBackfill("geo", ({ limit }) => geo.store.backfillEntityKeys({ limit }));
+  if (vcr) entityVocabulary.registerBackfill("vcr", ({ limit }) => vcr.store.backfillEntityKeys({ limit }));
 
   /**
    * The newest run of a GEO project's control-plane project that holds the
@@ -1900,6 +2113,51 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
     get exporter() { return geo?.exporter ?? null; },
+    get members() { return geo?.members ?? null; },
+    // The cards of the project's product zone: read as the project, written as its owner (the zone is the owner's).
+    get cards() {
+      const parts = geo;
+      if (!parts) return null;
+      /** @type {any} */
+      const hooks = {
+        list: (/** @type {any} */ project) => parts.cards.list(project),
+        // An article's text: a card-layer article as the card renders now, a stored one as its file reads. Null when it cannot be read.
+        articleText: async (/** @type {any} */ project, /** @type {string} */ articleId) => {
+          const article = await parts.store.getArticle(project.id, articleId);
+          if (!article) throw new HttpError(404, "geo_article_not_found", "Article not found.");
+          let text = null;
+          if (article.cardId) text = (await parts.cards.cardLayerText(project, article))?.markdown ?? null;
+          else if (article.path) {
+            const owner = await store.userById(project.userId);
+            const control = owner ? await store.requireProject(owner, project.projectId) : null;
+            if (control) text = await geoSourceReaderOf(control)(article.path);
+          }
+          if (text == null) throw new HttpError(404, "geo_article_text_unavailable", "The article's text is not available.");
+          return { article, text };
+        },
+        // An article's references against the cards, and the references a card's change log says moved since.
+        articleReferences: async (/** @type {any} */ project, /** @type {string} */ articleId) => {
+          const { article, text } = await hooks.articleText(project, articleId);
+          const checked = await parts.cards.checkText(project, { text, layer: String(article.layer ?? "") });
+          const stale = await parts.cards.staleReferences(project, [{ id: article.id, claimRefs: checked.references }]);
+          return { articleId: article.id, status: checked.status, ...checked.graph, staleReferences: stale.get(article.id) ?? [] };
+        },
+        // The article as it leaves the platform for a channel of its author's: references off, the author named, the relation to the
+        // product said, and the label that an AI drafted it (a doctor signs their own).
+        articlePublishable: async (/** @type {any} */ project, /** @type {string} */ articleId) => {
+          const { article, text } = await hooks.articleText(project, articleId);
+          const producer = geoCardProducer(project.producer, project.product);
+          const doctor = project.producer?.kind === "doctor" && project.producer?.name ? geoDisclosurePerson({ ...project.producer, name: String(project.producer.name) }) : null;
+          return { articleId: article.id, layer: article.layer, aiGenerated: true, markdown: geoPublishableText({ text, producer, person: doctor, aiGenerated: true }) };
+        },
+        refresh: async (/** @type {any} */ _user, /** @type {any} */ project) => {
+          const owner = await store.userById(project.userId);
+          if (!owner) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
+          return parts.refreshCards(project, await store.requireProject(owner, project.projectId));
+        },
+      };
+      return hooks;
+    },
   });
   const documentController = overrides.documentExportController ?? new RuntimeControllerClient(config);
   const vcrDocumentAdapter = vcr ? createVcrDocumentAdapter({ vcr, store }) : null;
@@ -1948,7 +2206,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // What a project's datasets mean: one ledger document per dataset, read and written by the two data capabilities
   // through their tool's gateway and shown beside the dataset on the files page. No patient row is ever in it.
   const dataSemantics = productDocuments && config.dataSemanticsEnabled ? new DataSemanticsService({ documents: productDocuments,
-    onChanged: async event => { await evolution?.integration.datasetChanged(event); } }) : null;
+    // The consumer's failure is not the dataset write's: the record is already saved, and the integration reports its own.
+    onChanged: async event => { await evolution?.integration.datasetChanged(event).catch(() => {}); } }) : null;
   const dataSemanticsRoutes = createDataSemanticsRoutes({ store, service: dataSemantics, maxJsonBytes: config.maxJsonBytes });
   const resultProvenance = productDocuments && config.resultsEnabled ? new ResultProvenanceService({
     documents: productDocuments, config, maxSnapshotBytes: config.resultSnapshotMaxBytes,
@@ -1997,13 +2256,87 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // What a changed source reaches besides result versions: the memories that name it and the learned methods linked to the
   // results that rest on it, each labelled (N15). And the one standing authorization a recheck may use: the running agenda
   // whose episode produced the result. A paused or not-started agenda is none, and nothing here asks for another approval.
-  const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, methods: learningService,
+  const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, methods: learningService, sourceChanges,
+    evidence: productDatabase ? createEvidenceLinkStates(productDatabase) : null,
     report: code => { void securityAudit(config, "knowledge.change", "failed", { code }).catch(() => {}); } });
   const resultImpacts = resultProvenance ? new ResultImpactService({ documents: productDocuments, results: resultProvenance,
-    autopilot: autopilotService, notifications: notificationService, knowledge: knowledgeChange,
+    autopilot: autopilotService, notifications: notificationService, knowledge: knowledgeChange, sourceChanges,
     authorizeContinuation: autopilotService && config.sourceChangeRecheckLimit > 0 ? producingAgenda({ results: resultProvenance, autopilot: autopilotService }) : null,
     autoRecheckLimit: config.sourceChangeRecheckLimit,
     report: code => { void securityAudit(config, "result.impact", "failed", { code }).catch(() => {}); } }) : null;
+  // Keeping the evidence cards current and answering a reader's challenge (evidenceCurrency.mjs, evidenceChallenges.mjs; flywheel F13, F14). Composed with
+  // the frontier and switched by OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED; off, the editor is exactly what it was and its routes answer 404. The editor ticks
+  // the loops (its own tick: no new scheduler), and what a changed source reaches besides cards — the result impact path and the memory labels — is driven
+  // from the same feed, which nothing polled until now. `notifyZoneFollowers` is the frontier-links package's push to a zone's followers; absent, none.
+  /** @type {{ changeLog: ReturnType<typeof createEvidenceChangeLog>, upkeep: ReturnType<typeof createEvidenceUpkeep>, challenges: ReturnType<typeof createEvidenceChallenges>, figures: ReturnType<typeof createEvidenceFigures> } | null} */
+  let evidenceUpkeep = null;
+  if (frontier && config.evidenceUpkeepEnabled && productDatabase) {
+    const zones = frontier.evidenceZones;
+    const followers = /** @type {any} */ (frontier.notifications);
+    // The upkeep names what happened to the card (updated, corrected, withdrawn); the followers' notice names the change it words. One notice per
+    // card revision either way: a revision the zone service already announced as published content changing is not announced twice.
+    const notifyZoneFollowers = typeof followers?.notifyZoneFollowers === "function"
+      ? (/** @type {{ zoneId: string, cardId: string, revision: number, kind: string }} */ event) => followers.notifyZoneFollowers({ zoneId: event.zoneId, cardId: event.cardId, revision: event.revision, change: event.kind === "updated" ? "revised" : event.kind })
+      : null;
+    const changeLog = createEvidenceChangeLog({ database: productDatabase });
+    const upkeep = createEvidenceUpkeep({
+      database: productDatabase, changeLog, sourceChanges, notifications: notificationService, notifyZoneFollowers, resultImpacts, knowledgeChange,
+      levers: { batch: config.evidenceUpkeepBatch, intervalHours: config.evidenceUpkeepIntervalHours, retireAfterChecks: config.evidenceRetireAfterChecks,
+        retireAfterDays: config.evidenceRetireAfterDays, challengesPerDay: config.evidenceChallengesPerDay },
+      isOperator: (/** @type {string} */ userId) => config.operatorUsers.includes(userId),
+      report: (code) => process.stderr.write(`${code}\n`),
+    });
+    const judge = createChallengeJudge({ config, usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch, callModel: callModelForControlPlane,
+      parseJson: parseModelJson, billing: () => ensureEvidenceProject(store) });
+    const challenges = createEvidenceChallenges({ database: productDatabase, service: zones, changeLog, notifications: notificationService, judge, budget: evidenceBudget,
+      levers: { challengesPerDay: config.evidenceChallengesPerDay }, notifyZoneFollowers, report: (code) => process.stderr.write(`${code}\n`),
+      // A calculated claim is checked against its receipt: the reader the composition gives the zone service below (read when a challenge is, not now).
+      receiptsFor: (card) => zones.receiptsFor(card) });
+    zones.onCardSaved = async (event) => { await upkeep.onCardRevision(event); await challenges.onCardRevision(event); };
+    frontier.evidenceEditorial.useUpkeep({ sourceChanges, upkeep, challenges });
+    evidenceUpkeep = { changeLog, upkeep, challenges, figures: createEvidenceFigures({ database: productDatabase }) };
+    frontier.evidenceUpkeep = evidenceUpkeep;
+  }
+  const evidenceUpkeepRoutes = createEvidenceUpkeepRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config,
+    challenges: evidenceUpkeep?.challenges ?? null, upkeep: evidenceUpkeep?.upkeep ?? null, changeLog: evidenceUpkeep?.changeLog ?? null, maxJsonBytes: config.maxJsonBytes });
+  // The engine receipts a first-hand card's calculated claims are read back from (evidenceCalculationReceipts.mjs): the platform's own
+  // internal evidence project and never another account's, and the evolution module's recalculation receipts. Reading is lazy, so
+  // the evolution module composed further down is found when a card is read; with it off a recalculation receipt reads as unavailable.
+  if (frontier && resultProvenance) {
+    frontier.evidenceZones.calculationReceipts = createCalculationReceiptReader({
+      results: resultProvenance, scopes: [{ userId: PLATFORM_PUBLISHER_USER_ID, projectId: EVIDENCE_PROJECT_ID }],
+      evolution: { get: (/** @type {string} */ id) => (evolution?.service ? evolution.service.get(id) : Promise.resolve(null)) },
+    });
+  }
+  // The platform's own evidence programme (evidenceProgramme.mjs, plan §5.1 F01/F02/F04): a daily topic decision, agendas the publisher
+  // account runs in its internal evidence project, and the cards their verified conclusions earn. Composed only with its switch on and
+  // the frontier (which it reads and whose zones it writes) and the autopilot (which runs its agendas) beside it; off, it is nothing.
+  // The agendas' own planner, budget and slot are the programme's through `autopilotService.programme`.
+  const evidenceProgramme = config.evidenceProgrammeEnabled && frontier && autopilotService && productDatabase && productDocuments && productJobs ? createEvidenceProgramme({
+    config, database: productDatabase, documents: productDocuments, jobs: productJobs, autopilot: autopilotService, zones: frontier.evidenceZones,
+    budget: evidenceBudget, entityVocabulary, results: resultProvenance, usageLedger,
+    ensureProject: () => ensureEvidenceProject(store),
+    canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+    report: code => process.stderr.write(`${code}\n`),
+  }) : null;
+  if (autopilotService && evidenceProgramme) autopilotService.programme = evidenceProgramme;
+  // The selector's "a card went out of date" signal is the upkeep's own list of official cards whose currency is not current (a new study
+  // or a changed source it left for the programme to decide on); with the upkeep off the programme has no such signal and says so.
+  if (evidenceProgramme && evidenceUpkeep) {
+    const upkeep = evidenceUpkeep.upkeep;
+    evidenceProgramme.useSignals({ staleOfficialCards: async () => (await upkeep.staleOfficialCards({ limit: 50 })).map((card) => ({ zoneId: card.zoneId, cardId: card.cardId, reason: card.currency })) });
+  }
+  // Two more of the selector's signals are the public pages' own: how often a zone's pages were read and which topics readers asked for
+  // (evidencePublicReads.mjs, evidencePublicRequests.mjs). Both tables exist only where the pages are on; without them the selector is told
+  // the signal is not recorded rather than that it is zero.
+  if (evidenceProgramme && evidencePublicOn) {
+    evidenceProgramme.useSignals({
+      pageReads: (query) => pageReads(productDatabase, query),
+      topicRequests: () => topicRequestCounts(productDatabase, { limit: EVIDENCE_TOPIC_REQUEST_LIST_MAX }),
+    });
+  }
+  // The operator's page of the programme and the button that runs today's decision now (evidenceProgrammeRoutes.mjs).
+  const evidenceProgrammeRoutes = createEvidenceProgrammeRoutes({ store, programme: evidenceProgramme, config, maxJsonBytes: config.maxJsonBytes });
   // The numerical chain: which calculation a printed number came from, and the platform writing a report's numbers itself.
   const resultLineage = resultProvenance ? new ResultLineageService({ results: resultProvenance, replays: resultReplays, config,
     mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes),
@@ -2076,6 +2409,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     get orchestrator() { return vcr?.orchestrator ?? null; },
     get jobs() { return vcr?.jobs ?? null; },
     get exporter() { return vcr?.exporter ?? null; },
+    get publications() { return vcr?.publications ?? null; },
+    get predictions() { return vcr?.predictions ?? null; },
     get members() { return vcr?.members ?? null; },
     // The referral ledger's acts, the first human stop among them
     // (`vcrContact.mjs`) — not the store, which has no `contactReferral`.
@@ -2089,6 +2424,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let consolidationScheduleTimer = null;
   let consolidationScheduleRun = null;
   let capsuleCleanupTimer = null;
+  /** The hourly look at the cards and frontier items memories name (knowledgeChange.mjs `sweepEvidenceLinks`, F19). */
+  let evidenceLinkTimer = null;
   let capsuleCleanupRun = null;
   const retryCapsuleCleanup = () => {
     if (!capsuleTransferService) return Promise.resolve();
@@ -2225,6 +2562,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, authStore: store, registry: agentRegistry, database: productDatabase, jobs: productJobs, documents: productDocuments,
     agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService, skillSupply,
     methodValidation: () => loadMethodValidation({ file: config.vcrMethodValidationFile, engine: vcr?.engine }),
+    vcrEngine: () => vcr?.engineProbe?.snapshot() ?? null,
     mutation: maintenanceMutation,
     canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
     fetchImpl: overrides.availabilityFetch ?? globalThis.fetch,
@@ -2364,8 +2702,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // timeout the capture is abandoned and the run records `history_unavailable`
     // exactly as it did before — the failure mode is the old behaviour, never a
     // stuck stop.
-    onRuntimeStopping: async (project) => {
+    onRuntimeStopping: async (project, { by = null } = {}) => {
       if (!agentRuns) return;
+      // First, before any pre-read: whatever the container's exit is read as, a stop the user asked for is theirs.
+      await agentRuns.noteRuntimeStop(project, { by });
       let running = [];
       try {
         // Every run still going, and the bounded run this runtime was reserved
@@ -2410,14 +2750,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         clearTimeout(timer);
       }
     },
-    onRuntimeStop: (project, status, errorCode) => {
+    onRuntimeStop: (project, status, errorCode, options) => {
       runtimeEventPump.detach(project);
       // Returned, not fired-and-forgotten here: `notifyRuntimeStop` already
       // wraps this call in its own `.catch()`, and returning the promise is
       // what keeps a rejection — a project whose ledger cannot be read,
       // oversized or corrupted — flowing through that existing handling
       // instead of becoming a second, unguarded unhandled rejection.
-      return agentRuns?.closeProject(project, status, errorCode);
+      return agentRuns?.closeProject(project, status, errorCode, options);
     },
     // The researcher's own stop, relayed through the runtime proxy.
     onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId, { by: "user" }),
@@ -2513,25 +2853,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // beside a real wallet's address, a bad starting allowance) is named here
     // and the module comes up refusing: the platform boots either way.
     const refusal = evimedCreditsRefusal(config);
-    // The simulated wallet (evimedCreditsSimulator.mjs): in the control plane,
-    // in PostgreSQL, behind the same client — only the wallet is replaced.
+    // The platform's own wallet (evimedCreditsWallet.mjs, behind the simulated
+    // top-up): in the control plane, in PostgreSQL, called in the settlement's own
+    // transaction. EviMed's wallet is reached through the integer-only client.
     const simulator = config.evimedCreditsSimulated && !refusal
-      ? new SimulatedWallet({ database: productDatabase, startCredits: config.evimedCreditsSimulatedStartCredits }) : null;
+      ? new SimulatedWallet({
+        database: productDatabase, startCredits: config.evimedCreditsSimulatedStartCredits,
+        signupGiftDays: config.evimedCreditsSignupGiftDays, monthlyGift: config.evimedCreditsMonthlyGift,
+      }) : null;
     const service = new EvimedCreditsService({
       config, database: productDatabase, usageLedger, refusal, simulator,
       // Whom EviMed charges: the EviMed user id the account row keeps, since
       // our account id is a hash EviMed cannot resolve (§14).
       evimedUserIdOf: (/** @type {string} */ userId) => store.evimedUserIdOf(userId),
-      client: refusal ? null : createEvimedCreditsClient(simulator ? {
-        deductUrl: SIMULATED_WALLET_DEDUCT_URL,
-        balanceUrl: SIMULATED_WALLET_BALANCE_URL,
-        apiKey: SIMULATED_WALLET_KEY,
-        simulated: true,
-        timeoutMs: config.evimedCreditsTimeoutMs,
-        // `simulatedWalletFaults` is for tests that need an unknown outcome;
-        // nothing in configuration reaches it.
-        fetchImpl: createSimulatedWalletFetch(simulator, overrides.simulatedWalletFaults),
-      } : {
+      // The inbox, for the reminders before a gift ends. Absent, none is sent.
+      notify: notificationService ? (/** @type {string} */ userId, /** @type {any} */ input) => notificationService.create(userId, input) : null,
+      client: refusal || simulator ? null : createEvimedCreditsClient({
         deductUrl: config.evimedCreditsUrl,
         balanceUrl: config.evimedCreditsBalanceUrl,
         // The key EviMed already issued this deployment: the file is read per
@@ -2551,7 +2888,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     credits = { service, worker };
   }
-  const creditsRoutes = createEvimedCreditsRoutes({ store, service: credits?.service ?? null, config });
+  // The zone editor charges an account's own zone's upkeep through the allowance, composed above after it.
+  frontier?.evidenceEditorial.useBilling({ credits: credits?.service ?? null });
+  const creditsRoutes = createEvimedCreditsRoutes({
+    store, service: credits?.service ?? null, config,
+    audit: (event, detail) => securityAudit(config, event, "completed", detail),
+  });
   const allowanceRoutes = createResearchAllowanceRoutes({
     store, service: credits?.service ?? null, config, commerce: createResearchCommerce(config),
   });
@@ -2569,9 +2911,39 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     estimateCredits: overrides.estimateRunCredits
       ?? (credits ? ({ capabilityId }) => credits.service.estimate(capabilityId) : null),
   });
+  /**
+   * The researcher's own stop of one run, in the one order every surface uses (review F4, F6): the intent is
+   * recorded first, so the run's monitor — which can read the aborted turn and write the terminal before this
+   * returns — cannot leave it unattributed; then the kernel's own session is stopped, so nothing goes on
+   * spending; then the ledger is told, as the researcher's. A kernel that is there and cannot be reached leaves
+   * the run running and says so (the error propagates): a ledger that says cancelled while the kernel keeps
+   * spending is worse than an error the page can retry.
+   * @param {any} project @param {any} run
+   * @returns {Promise<{ root: "canceled" | "runtime-not-running" | "session-not-found", canceled: any }>}
+   */
+  async function stopRunForUser(project, run) {
+    await agentRuns.noteStopRequest(project, { runId: run.id });
+    /** @type {"canceled" | "runtime-not-running" | "session-not-found"} */
+    let root = "canceled";
+    try {
+      if (!(await runtimeManager.cancelRuntimeSession(project, run.sessionId))) root = "runtime-not-running";
+    } catch (error) {
+      // A session the kernel no longer holds is not running either.
+      if (/** @type {any} */ (error)?.code !== "runtime_session_not_found") throw error;
+      root = "session-not-found";
+    }
+    return { root, canceled: await agentRuns.cancelRun(project, run.id, { by: "user" }) };
+  }
+  // The co-creation loop's pieces (composed after the run store, which asks the origins for the card a run began from).
+  /** @type {{ origins: EvidenceOrigins, publisher: EvidenceCardFromResult | null, continuation: EvidenceContinuation, authors: EvidenceAuthors,
+   *   verification: ReturnType<typeof createEvidenceSourceVerification> } | null} */
+  let evidencePublish = null;
   agentRuns = new AgentRunStore(researchSessions, {
     judgeService,
     agentRegistry,
+    // The evidence card a conversation was started from (「用这张卡继续研究」), recorded on its run and counted as a citation.
+    originCardOf: (project, session) => evidencePublish?.origins.originCardOf(project, session) ?? Promise.resolve(null),
+    onOriginCardRun: (project, run) => evidencePublish?.origins.runStarted(project, run),
     captureRuntimeEgressProof: (project, run) => config.evolutionEnabled === true && isEvolutionProject(project.id)
       ? runtimeManager.captureRunEgressProof({ project, runId: run.id, phase: 'start' }) : null,
     independentWork: independentProductWork,
@@ -2586,7 +2958,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       0,
       Math.ceil(Number(config.agentRunMonitorStallMs) / AGENT_RUN_MONITOR_INTERVAL_MS) || 0,
     ),
-    readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
+    // A read that must wake the runtime for a dispatch a person is waiting on
+    // (`waitForRoom`), before the run is reserved: with every slot taken it stands
+    // in line (`startWhenRoom`) rather than refusing them. A worker's dispatch does
+    // not ask, and its refusal is its own deferral.
+    readSessionHistory: async (project, sessionId, options) => {
+      if (options?.wake === true && options?.waitForRoom === true) await runtimeManager.startWhenRoom(project);
+      return runtimeManager.sessionMessages(project, sessionId, options);
+    },
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     readChildSessionActivity: (project, parentSessionId, childSessionIds, options) =>
       runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds, options),
@@ -2601,7 +2980,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     runtimePlatformSkills: (project) => runtimeManager.runtimePlatformSkills(project),
-    setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.setPlatformSkillScope(project, capabilityId),
+    // Only where there are platform skills to scope (循证进化 on): otherwise the call would keep a capability per project for a supply that does not exist.
+    setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.platformSkillSupply ? runtimeManager.setPlatformSkillScope(project, capabilityId) : undefined,
     onPlatformSkillExecution: (event) => evolution?.onExecution(event),
     onPlatformSkillRetrieval: (event) => evolution?.onRetrieval(event),
     runtimePersonalSkills: (project, observation = {}) => {
@@ -2658,10 +3038,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       runAttribution.delete(`${project.userId}\0${project.id}`);
       // A researcher's new question, or a conversation deleted, is what
       // 与我相关 is read from: their profile is due at the next round.
-      if (frontier && !isInternalProject(project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
+      if (frontier && !internalFor(project.userId, project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
       // A finished run in a GEO project: the claim library its geo-insight
       // deliverable holds is registered from the file (geoDeliveryImport.mjs).
-      if (geo && !isInternalProject(project.id)) {
+      if (geo && !internalFor(project.userId, project.id)) {
         independentProductWork(() => geo.importDelivery(project, run)).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
       }
     },
@@ -2672,10 +3052,56 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     onRunProjection: (project, run, type, data) => {
       runEvents.publish(run.id, type, data);
     },
+    // 灵豆 (design 2026-10-05): a commissioned run freezes its P90 estimate, or what is available if
+    // less, the moment it exists — and the hold is let go when it ends, whatever way it ends
+    // (`settleRun`), and swept after the run's own timeout if the process died. A plain question,
+    // the platform's own work and an evaluation take none. Never throws: billing failing never
+    // stops research.
+    onRunReserved: async (project, run) => {
+      if (!credits || internalFor(project.userId, project.id) || runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project))
+        || !isChargeableResearchRun(run)) return;
+      await credits.service.holdForRun({
+        userId: project.userId, runId: run.id, capabilityId: run.effectiveAgentId ?? run.agentId ?? null, startedAt: run.startedAt ?? run.createdAt ?? null,
+      });
+    },
     onRunFinished: async (project, run) => {
+      // 灵豆 settlement (§9.6): one charge per finished run, in EviMed's currency, from the CNY this run already
+      // has recorded against it. It is idempotent on the run id and it never throws, so it can be asked for twice:
+      // where it falls in the completion below, and in the `finally` that ends it. The platform's own background
+      // work is left out for the same reason the usage caps leave it out: an evaluation cell and a lesson are not
+      // the researcher's spend.
+      //
+      // A step of the completion that throws before the settlement (about twenty are awaited ahead of it) must
+      // not leave the run uncharged with its hold frozen for the run's whole timeout (review F7): the `finally`
+      // settles whatever has not been, and `settleRun` lets the hold go on every path of its own.
+      let chargeAsked = false;
+      const settleCharge = async (/** @type {boolean | undefined} */ evaluation = undefined) => {
+        if (chargeAsked || !credits) return;
+        chargeAsked = true;
+        let evaluationRun = evaluation;
+        try { evaluationRun ??= runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project)); } catch { evaluationRun = false; }
+        if (evaluationRun || internalFor(project.userId, project.id)) return;
+        await credits.service.settleRun({
+          userId: project.userId, projectId: project.id, runId: run.id,
+          dispatchId: run.dispatchId ?? null,
+          status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
+          // Who stopped a cancelled run: the researcher (charged for what had run) or the platform (not charged).
+          // Absent when the stop cannot be attributed, and then it is not charged either.
+          canceledBy: run.canceledBy ?? null,
+          effectiveRouteReason: run.effectiveRouteReason,
+          effectiveAgentId: run.effectiveAgentId ?? run.agentId ?? null,
+          automated: run.automated === true,
+          accountCreatedAt: run.accountCreatedAt ?? null,
+          startedAt: run.startedAt ?? run.createdAt ?? null,
+          finishedAt: run.finishedAt ?? null,
+          capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
+          subject: run.title ?? run.question ?? null,
+        });
+      };
+      try {
       await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
-      if (evolution && !isInternalProject(project.id) && run.status === "failed") {
-        const gapCode = /tool|engine|command/.test(run.errorCode ?? "") ? "method-implementation" : "model-capability";
+      const gapCode = evolution && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
+      if (gapCode) {
         await evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode,
           code: gapCode, track: "M", origin: "platform-inference" });
       }
@@ -2688,7 +3114,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // export either way. Those the receipt does not vouch for are
           // captured as observed.
           const captured = await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt,
-            unreceipted: !isInternalProject(project.id),
+            unreceipted: !internalFor(project.userId, project.id),
             transformationsFor: dataSemantics ? digests => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null,
             runtimeImageId: async () => (await runtimeManager.inspectRuntimeImage().catch(() => null))?.imageId ?? null });
           for (const failure of captured?.failures ?? []) await securityAudit(config, "result.capture", "failed", {
@@ -2795,6 +3221,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
       }, project, run);
+      // The platform's own evidence programme: a finished episode, or a recorded independent check of one of its claims, is the
+      // moment a card may be earned (evidenceProgramme.mjs `settleEpisode`, which waits for what is not in yet). Nothing for any run
+      // that is not the programme's, and a failure here never touches the run.
+      if (evidenceProgramme?.owns(project.userId, project.id)) {
+        await evidenceProgramme.onRunFinished(project, run, { verifiedEpisodeId }).catch((/** @type {any} */ error) => securityAudit(config, "evidence.programme.settle", "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id,
+          code: typeof error?.code === "string" ? error.code : "evidence_programme_settle_failed",
+        }));
+      }
       // A 虚拟临研 run (dispatch id `vcr-…`): its bounded runtime is let go,
       // then the orchestrator folds it into the study's steps — the same order
       // a GEO run takes below. Released whether or not the orchestrator is
@@ -2827,27 +3262,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code : "geo_run_completion_failed",
         }));
       }
-      // 灵豆 settlement (§9.6): one charge per finished run, in EviMed's
-      // currency, from the CNY this run already has recorded against it. It is
-      // idempotent on the run id, it never throws, and it is not a condition of
-      // anything below — the platform's own background work is left out for the
-      // same reason the usage caps leave it out: an evaluation cell and a lesson
-      // are not the researcher's spend.
-      if (credits && !evaluationRun && !isInternalProject(project.id)) {
-        await credits.service.settleRun({
-          userId: project.userId, projectId: project.id, runId: run.id,
-          dispatchId: run.dispatchId ?? null,
-          status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
-          effectiveRouteReason: run.effectiveRouteReason,
-          effectiveAgentId: run.effectiveAgentId ?? run.agentId ?? null,
-          automated: run.automated === true,
-          accountCreatedAt: run.accountCreatedAt ?? null,
-          startedAt: run.startedAt ?? run.createdAt ?? null,
-          finishedAt: run.finishedAt ?? null,
-          capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
-          subject: run.title ?? run.question ?? null,
-        });
-      }
+      await settleCharge(evaluationRun);
       // Background work is not a person's research: a lesson, a source being
       // read and an evaluation cell run in the account's internal projects,
       // and each reports where it belongs (the knowledge base's own row). On
@@ -2859,7 +3274,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // autopilot episode or its verification is known here — the episode's
       // digest is its result, and that is an ordinary notice.
       if (notificationService && runFinishedReachesInbox(run, {
-        internalProject: isInternalProject(project.id), evaluation: evaluationRun,
+        internalProject: internalFor(project.userId, project.id), evaluation: evaluationRun,
         automated: automatedRun(run), autopilotOwned: autopilotOwned === true,
       })) {
         try {
@@ -2958,11 +3373,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // It runs inside the transcript write on purpose: it needs the same
           // sessions, and both must finish before the run's container is let go.
           await recordMethodUse({ project, run, sessions });
-          if (learningService && config.learningEnabled && !evaluationRun && !isInternalProject(project.id)) {
+          if (learningService && config.learningEnabled && !evaluationRun && !internalFor(project.userId, project.id)) {
             const state = await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId);
             if (!state.learning && !state.trial) {
               await recordHandbookRunObservations({ learning: learningService, userId: project.userId, projectId: project.id,
                 run: await recordNativeHandbookAttachments(project, run), projection: await agentRuns.runWorkflowProjection(project, run), sessions,
+                observeGaps: Boolean(evolution),
               }).catch((error) => securityAudit(config, "handbook.observe", "failed", {
                 userId: project.userId, projectId: project.id, runId: run.id,
                 code: typeof error?.code === "string" ? error.code : "handbook_observation_unavailable",
@@ -2981,7 +3397,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // The project says so as well as the runtime: `evaluationRun` is read
       // from memory the web process loses on every release, and a cell that
       // finishes after one would otherwise be read as the researcher's own run.
-      if (evaluationRun || isInternalProject(project.id)) return;
+      if (evaluationRun || internalFor(project.userId, project.id)) return;
       // Nor does the platform's own background work: a distillation, a
       // relations pass or a source being understood reads excerpts of the
       // researcher's runs, and extracting memory from it paid a model call to
@@ -3136,6 +3552,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         extractionError: memoryResult.extractionError,
       }).catch(() => {});
       await queueLessons(memoryResult);
+      } finally {
+        await settleCharge();
+      }
     },
     onRunFinishedError: async (error, project, run) => {
       await securityAudit(config, "memory.agent_run.record", "failed", {
@@ -3151,6 +3570,35 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     },
   });
+  // The co-creation loop (evidence-flywheel plan §5.2, F05–F07): a result published as a card, research continued from a
+  // card, the author page. All of it is the frontier's, so with the frontier off none of it is composed, no route
+  // answers and no run asks which card it came from. The citation gift is the credits service's own grant entry
+  // point and is off (`evidenceCitationGiftEnabled`, `evidenceCitationGiftAmount`).
+  if (frontier && productDatabase) {
+    const origins = new EvidenceOrigins({ database: productDatabase,
+      cited: createCitationGift({ config, grant: credits ? (accountId, grant) => credits.service.operatorGrant(accountId, grant) : null,
+        report: (event, detail) => { void securityAudit(config, event, "completed", detail).catch(() => {}); } }),
+      report: (code) => process.stderr.write(`evidence origins: ${code}\n`) });
+    evidencePublish = {
+      origins,
+      publisher: resultProvenance ? new EvidenceCardFromResult({ database: productDatabase, results: resultProvenance, zones: frontier.evidenceZones,
+        runs: { list: (project) => agentRuns.list(project) } }) : null,
+      // The write is the frontier's 「存入知识库」: the same library object, the same project creation as 「新建项目」.
+      continuation: new EvidenceContinuation({ database: productDatabase, origins, library: frontier.actions.library,
+        createProject: (user, name) => createResearcherProject(user, { name }),
+        bindSession: (project, sessionId) => researchSessions.put(project, sessionId, { mode: "open-domain" }) }),
+      // The author page carries the author's recent changes where the change log is composed (the upkeep's); without it the page has none.
+      authors: new EvidenceAuthors({ database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID, changeLog: evidenceUpkeep?.changeLog ?? null }),
+      // A ✓ means the platform read the source: the owner's request to have it read, through the reader the editor's upkeep uses.
+      verification: createEvidenceSourceVerification({ database: productDatabase, zones: frontier.evidenceZones,
+        readSource: frontier.evidenceEditorial.readSource, perDay: config.evidenceVerifyReadsPerDay,
+        report: (code) => process.stderr.write(`evidence source verification: ${code}\n`) }),
+    };
+  }
+  const evidencePublishRoutes = createEvidencePublishRoutes({ store, frontier: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
+    publisher: evidencePublish?.publisher ?? null, continuation: evidencePublish?.continuation ?? null, authors: evidencePublish?.authors ?? null,
+    verification: evidencePublish?.verification ?? null,
+    audit: (event, status, details) => securityAudit(config, event, status, details) });
   const personalSkillGenerations = productDatabase ? new PersonalSkillGenerationService(productDatabase, {
     config, skillService: skillLibraryService, pluginService, jobs: productJobs,
     resolveUser: async project => {
@@ -3189,7 +3637,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     budget: project => remainingHandbookPromptBytes(config, runtimeManager, project),
     attached: recordNativeSessionHandbooks,
     allowed: async (project, sessionId) => {
-      if (!config.learningEnabled || isInternalProject(project.id)) return false;
+      if (!config.learningEnabled || internalFor(project.userId, project.id)) return false;
       const state = await memoryPausedFor(researchMemory, project.userId, project.id, sessionId);
       return !state.learning && !state.trial;
     },
@@ -3239,6 +3687,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       resolveSourceRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
       enabled: async (userId, projectId) => config.learningEnabled
         && !(await memoryPausedFor(researchMemory, userId, projectId)).learning,
+      // A lesson that became an account's handbook may be general enough for the platform's (learningPlatformHandbooks.mjs, flywheel F16); told, never asked.
+      onApplied: (applied) => platformHandbooks?.consider(applied),
     }));
     const consolidation = new MethodConsolidation({
       judgeService,
@@ -3296,6 +3746,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: researchMemory,
+      // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
+      // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
+      guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,
+        minAccounts: config.capsuleShareCorroborationMinAccounts, keptDays: config.capsuleShareCorroborationKeptDays }) : null,
       // A conversation trying someone else's capsule teaches the loop nothing.
       sessionState: researchMemory.configured
         ? (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId) : null,
@@ -3313,13 +3767,25 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!user) return [];
         const own = [];
         for (const entry of await store.listProjects(user)) {
-          if (entry.archivedAt || isInternalProject(entry.id)) continue;
+          if (entry.archivedAt || internalFor(user.id, entry.id)) continue;
           own.push(await store.requireProject(user, entry.id));
         }
         return own;
       },
       routinePeriodDays: config.transcriptRetentionDays,
     });
+    // What becomes of a published card goes back into learning (evidenceIncidents.mjs, flywheel F15): composed with its switch, the frontier whose change log it reads
+    // and this loop, whose housekeeping tick drives it. The incidents belong to the platform's evidence project; the observation goes to the researcher's own methods.
+    if (config.learningEvidenceOutcomesEnabled && frontier && productDatabase && productDocuments) {
+      evidenceOutcomes = createEvidenceOutcomes({
+        database: productDatabase, documents: productDocuments, ensureOwner: () => ensureEvidenceProject(store), methodFeedback,
+        resolveProject: async (userId, projectId) => {
+          const user = await store.userById(userId);
+          return user ? store.requireProject(user, projectId) : null;
+        },
+        batch: config.learningEvidenceOutcomesBatch, report: (code) => process.stderr.write(`${code}\n`),
+      });
+    }
     learningWorker = new LearningWorker({
       jobs: productJobs, distillation, consolidation,
       enabled: config.learningEnabled,
@@ -3334,6 +3800,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const user = await store.userById(userId);
           return user ? store.requireProject(user, projectId) : null;
         } });
+        await evidenceOutcomes?.tick();
+        await platformHandbooks?.tick();
       },
       resolveProject: async (job) => {
         const user = await store.userById(job.userId);
@@ -3402,7 +3870,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }));
       let permission;
       try {
-        permission = credits ? await credits.service.assertBalanceForStart(user.id, selected.id) : { allowed: true, reason: "not_enabled" };
+        // An episode and its verification run overnight with nobody watching: they need their P90.
+        permission = credits ? await credits.service.assertBalanceForStart(user.id, selected.id, { unattended: true }) : { allowed: true, reason: "not_enabled" };
       } catch (error) {
         await record({ allowed: false, reason: typeof error?.code === "string" ? error.code : "balance_check_unavailable" });
         throw error;
@@ -3477,22 +3946,26 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const agenda = await autopilotService.get(user.id, verification.agendaId);
       const brief = verificationBrief(verification);
       const prompt = verificationPrompt(brief);
-      const dailyLimit = minimumPositive(agenda.payload.dailyBudgetCny, config.userDailySpendLimit);
-      const weeklyLimit = minimumPositive(agenda.payload.weeklyBudgetCny, config.userWeeklySpendLimit);
-      const runLimit = Number(verification.budgetCny);
-      if (!Number.isFinite(runLimit) || runLimit <= 0) {
+      if (!Number.isFinite(Number(verification.budgetCny)) || Number(verification.budgetCny) <= 0) {
         throw new HttpError(400, "autopilot_payload_invalid", "A verification needs a positive share of the episode budget.");
       }
-      // Verification spends money, so it asks the same question the episode
-      // asked before it spent any: an account already at its ceiling leaves the
-      // claim at "gated" instead of promoting it unchecked. The share it spends
-      // was held back from the episode's own budget at schedule time, so a night
-      // that used everything it was given has not eaten its own second opinion.
-      if (usageLedger) await usageLedger.assertWithinLimits(user.id, { dailyLimit, weeklyLimit });
+      // Verification spends money, so it asks the same two questions the episode
+      // asked before it spent any: the task's own caps against what the task spent,
+      // and the account's against the account's. A task or an account already at
+      // its ceiling leaves the claim at "gated" instead of promoting it unchecked.
+      // The share it spends was held back from the episode's own budget at
+      // schedule time, so a night that used everything it was given has not eaten
+      // its own second opinion; it is bounded by what the task has left, if less.
+      const allowance = await autopilotService.assertAffordable(user.id, agenda);
+      const runLimit = Math.min(Number(verification.budgetCny), allowance.remainingCny);
+      const { dailyLimit, weeklyLimit } = autopilotService.runScope(agenda, runLimit);
       const registry = await agentRegistry;
       const selected = registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
       if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
-      await checkAutopilotBalance(verification, user, selected);
+      // A verification of the platform's own claim is the platform's money too (purpose `evidence`), and the programme's budget
+      // does not gate it: its share was held back from the episode's own cap when the episode was made.
+      const programmeOwned = Boolean(evidenceProgramme?.owns(user.id, project.id));
+      if (!programmeOwned) await checkAutopilotBalance(verification, user, selected);
       await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, verification, previous.unsent);
       if (previous.unsent) await discardVerificationScratch(project, previous.unsent.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
         userId: project.userId, projectId: project.id, runId: previous.unsent.id,
@@ -3534,7 +4007,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           effectiveRuntimeAgent: selected.runtimeAgent,
           // Binding fixes capability identity while preserving this verified
           // control-plane dispatch reason.
-          effectiveRouteReason: VERIFICATION_ROUTE_REASON,
+          effectiveRouteReason: programmeOwned ? EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON : VERIFICATION_ROUTE_REASON,
         }, async (binding, dispatchedRun) => {
           await assertAutopilotDispatchAllowed(verification, user);
           await autopilotService.recordVerificationDispatched(user.id, verification.episodeId, {
@@ -3597,25 +4070,34 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (previous.replay) return { runId: previous.replay.id, sessionId: previous.replay.sessionId };
         const dispatchId = episode.dispatchId ?? episode.episodeId;
         const agenda = await autopilotService.get(user.id, episode.agendaId);
-        if (usageLedger) await usageLedger.assertWithinLimits(user.id, {
-          dailyLimit: Number(agenda.payload.dailyBudgetCny) || 0,
-          weeklyLimit: Number(agenda.payload.weeklyBudgetCny) || 0,
-        });
+        // The same two questions as at scheduling, asked again because the budget
+        // may have been spent between the two: the task's own caps against the
+        // task's own spend, then the account's. What is left of the task's caps
+        // bounds this run below.
+        const allowance = await autopilotService.assertAffordable(user.id, agenda);
+        // The platform's own agenda (the evidence programme's) is held by the programme's day and its one slot as well, and is
+        // nobody's to pay: no wallet is asked, and the run's spend is booked as `evidence` (its route reason).
+        const programmeOwned = Boolean(evidenceProgramme?.owns(user.id, project.id));
+        if (programmeOwned) await evidenceProgramme.assertAdmitted(user.id, agenda, { episodeId: episode.episodeId });
         const registry = await agentRegistry;
         // One table in the domain, held against every capability's declared
         // task types by a test: GEO monitoring used to ride `signal-monitoring`
         // here and ran adverse-event analysis instead.
         const selected = registry.get(autopilotEpisodeCapability(episode.taskType) ?? "");
         if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
-        await checkAutopilotBalance(episode, user, selected);
+        if (!programmeOwned) await checkAutopilotBalance(episode, user, selected);
         await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, episode, previous.unsent);
-        const dailyLimit = minimumPositive(agenda.payload.dailyBudgetCny, config.userDailySpendLimit);
-        const weeklyLimit = minimumPositive(agenda.payload.weeklyBudgetCny, config.userWeeklySpendLimit);
+        // Signed into the bounded runtime and every model request it makes: the
+        // account's day and week (the gateway sums everything the account spent,
+        // so these are never the task's) and this run's own limit, which is what
+        // the task's caps become — the episode's budget, or what the task has left
+        // if less.
+        const { dailyLimit, weeklyLimit, runLimit } = autopilotService.runScope(agenda, Math.min(Number(episode.budgetCny), allowance.remainingCny));
         const session = await runtimeManager.reserveBoundedRuntimeSession(project, {
           runId: episode.episodeId,
           dailyLimit,
           weeklyLimit,
-          runLimit: Number(episode.budgetCny),
+          runLimit,
         });
         const cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(project);
         const releaseOwnRuntime = async () => cleanupTarget?.runId === episode.episodeId
@@ -3632,7 +4114,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             effectiveAgentId: selected.id,
             effectiveAgentVersion: selected.version,
             effectiveRuntimeAgent: selected.runtimeAgent,
-            effectiveRouteReason: `autopilot:${episode.taskType}`,
+            effectiveRouteReason: programmeOwned ? evidenceProgrammeRouteReason(episode.taskType) : `autopilot:${episode.taskType}`,
             ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
           }, async (binding, dispatchedRun, repairText = null) => {
             // Record the attempt before checking the lease: a refusal now has
@@ -3677,11 +4159,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (prepared.memories.length > 0) {
               await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
             }
-            const requestedToolContext = evolution ? renderEvolutionToolContext(promptText, runtimeManager.runtimePlatformSkills(project), selected.id) : '';
             const budgetMarker = issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
               runId: episode.episodeId, dailyLimit,
-              weeklyLimit, runLimit: Number(episode.budgetCny),
+              weeklyLimit, runLimit,
             });
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
             else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
@@ -3694,7 +4175,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               },
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
-              system: prepared.system, memoryContext: (prepared.memoryContext ?? "") + requestedToolContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
+              system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
@@ -3758,9 +4239,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     steerRun: ({ user, project, runId, text }) => steerChannelRun(user, project, runId, text),
     loadSdk: overrides.loadFeishuSdk,
   });
-  const evaluationIsolation = createEvaluationIsolation({ dataDir: config.dataDir,
-    resolveRunId: identity => identity.runId ?? attributeRun(identity) });
+  // The evaluation exclusion layer exists only where evolution does: the gateways below run it on
+  // every request of every tenant, so with the module off it is not composed at all and each of
+  // them behaves as it did before the module existed (every gateway takes null). Switched on, it
+  // still answers only for the evaluation projects' own runs (`evaluationIsolation.mjs`).
+  const evaluationIsolation = config.evolutionEnabled === true
+    ? createEvaluationIsolation({ dataDir: config.dataDir, resolveRunId: identity => identity.runId ?? attributeRun(identity),
+      reportFailure: code => process.stderr.write(`evaluation isolation: ${code}\n`) })
+    : null;
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
+    // A runtime's recall of a subscribed zone is the frontier's too: an account outside its audience is offered nothing, as every zone route answers it.
+    subscriptions: zoneSubscriptions?.enabled && frontier
+      ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
     // project's running runs, each conversation's own state, and the run
     // ledger line that records what it was handed.
@@ -3837,6 +4327,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     evaluationIsolation,
     fetchImpl: gatewayFetch,
+    // The other address for a download a file server refused (publicSourceGateway.mjs `denial`): the node, whatever hosts
+    // it is routed for by default.
+    fallbackFetch: edgeProxy ? /** @type {typeof fetch} */ ((input, init) => edgeFetch(edgeProxy, /** @type {any} */ (input), /** @type {any} */ (init))) : null,
     // An open-access PDF sits on whichever publisher Unpaywall names, so it
     // is fetched like a web page: over the pinned transport.
     pdfTransport: webTransport,
@@ -3895,7 +4388,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // Unpaywall already gets for the same courtesy.
     mailto: config.publicSourceCredentials?.unpaywall ?? null,
     fetchImpl: overrides.sourceUpdatesFetch ?? globalThis.fetch,
+    // Every answer is written to the source-change record and read from it first.
+    changes: sourceChanges,
   });
+  sourceChanges?.useLookup(sourceUpdates);
   const resultSourceUpdatesRoutes = createResultSourceUpdatesRoutes({ store, results: resultProvenance,
     lookup: sourceUpdates, impacts: resultImpacts, maxJsonBytes: config.maxJsonBytes });
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex, evaluationIsolation });
@@ -3904,6 +4400,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const frontierGatewayHandler = createFrontierGatewayHandler(config, runtimeManager, {
     evaluationIsolation,
     service: frontier?.service ?? null,
+    // Published evidence cards ride beside the items, as an index only (flywheel F12).
+    cards: frontier ? createEvidenceCardSearch({ judgeService, database: productDatabase, entityVocabulary, sourceChanges }) : null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
   // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the
@@ -3917,7 +4415,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const geoGatewayHandler = createGeoGatewayHandler(config, runtimeManager, {
     geo, report: (code) => process.stderr.write(`geo gateway: ${code}\n`),
   });
-  // 「循证 GEO」's moving parts, composed into the slots the routes read at
+  // 「循证传播」's moving parts, composed into the slots the routes read at
   // request time: the market's hooks (C), the orchestrator (F) that dispatches
   // runs inside the GEO project and enqueues the measurement's rounds (B), the
   // exporter, and one worker whose loops are B's, C's and F's ticks. Off, none
@@ -3939,6 +4437,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     };
     const marketDeps = {
       judgeService,
+      catalogueJudgeContext: () => ensureEvidenceProject(store),
       store: new GeoMarketStore(productDatabase), market: marketClient, webReader, articleBody, config, timeZone: geoTimeZone,
       notify: (/** @type {any} */ event) => notifier.textChanged(event),
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
@@ -3952,7 +4451,29 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
       // A measured round moves its project on now rather than at the next tick.
       onRoundMeasured: (/** @type {{ geoProjectId: string }} */ round) => { void orchestrator?.advance(round.geoProjectId).catch(() => {}); },
+      // Whether a link an answer cites exists, and the page's text (`OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED`): a page read through the
+      // web reader, which honours robots.txt and paces per site. Only a page that is gone is `exists: false`; any other failure is
+      // unknown and leaves the citation unchecked.
+      linkChecker: config.geoLinkCheckEnabled ? async (/** @type {string} */ link) => {
+        try {
+          const page = await webReader.read(link, { signal: AbortSignal.timeout(30_000) });
+          return { exists: true, text: String(page?.text ?? "") };
+        } catch (error) {
+          if (/** @type {any} */ (error)?.code === "web_read_not_found") return { exists: false };
+          throw error;
+        }
+      } : null,
     };
+    geoParts.measureState = measureDeps.state;
+    // The platform's own medication-question bank (flywheel F22): composed only with its lever on, beside the module. It is the module's
+    // own daily loop (below) and the topic selector's observed errors; with the lever off there is nothing of it.
+    if (config.geoQuestionBankEnabled) {
+      geoParts.questionBank = createGeoQuestionBank({ store: geoParts.store, measureDeps, database: productDatabase, config, entityVocabulary,
+        report: (code) => process.stderr.write(`geo question bank: ${code}\n`) });
+      if (evidenceProgramme) evidenceProgramme.useSignals({ observedErrors: () => geoParts.questionBank.observedErrors() });
+      // The monthly figures page shows the bank's latest month under its three figures (evidencePublicMetrics.mjs).
+      evidenceMetricSections.questionBank = (query) => geoParts.questionBank.summary(query);
+    }
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,
@@ -4008,6 +4529,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         parse: () => tickGeoParse(measureDeps),
         metrics: () => tickGeoMetrics(measureDeps),
         errors: () => tickGeoErrors(measureDeps),
+        ...(geoParts.questionBank ? { questionBank: () => geoParts.questionBank.tick() } : {}),
         orchestrator: () => running.tick(),
         schedules: () => running.tickSchedules(),
         catalogue: () => tickGeoCatalogue(marketDeps),
@@ -4053,7 +4575,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
       // `matching` is the deferral recheck loop: a washout that ends is re-judged on
       // its own day, not when someone next opens the study.
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching }),
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.
@@ -4090,8 +4612,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A programme step is researcher-owned work and is charged when it ends, so
     // it asks the same allowance question a chat run does. A refusal is not a
     // terminal dispatch code: the orchestrator leaves the step pending and asks
-    // again on its next tick, so a top-up releases it.
-    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId);
+    // again on its next tick, so a top-up releases it. Nobody is watching a worker-started
+    // step, so it needs its P90 and not only its P50.
+    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId, { unattended: true });
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
     try {
@@ -4174,7 +4697,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
     // The same allowance question as a chat run's, for the same reason as the
     // 虚拟临研 step's: charged at its end, and a refusal leaves the step pending.
-    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId);
+    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId, { unattended: true });
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
     try {
@@ -4233,6 +4756,80 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (evolution) {
     runtimeManager.platformSkillSupply = evolution.supply;
     if (autopilotService) autopilotService.evolution = evolution.integration;
+    // A research-proof the evolution module records is told to the recalculation-card publisher (flywheel F03): one call, advice and never part
+    // of the loop. Composed only with its own switch, the frontier whose official zones it writes and the glossary that finds the zone.
+    if (config.evidenceRecalculationCardsEnabled && frontier && entityVocabulary && productDatabase) {
+      const recalculation = createEvidenceRecalculation({ config, evolution: evolution.service, zones: frontier.evidenceZones,
+        matchZone: createOfficialZoneMatcher({ database: productDatabase, entityVocabulary }), report: code => process.stderr.write(`${code}\n`) });
+      evidenceRecalculation = recalculation;
+      evolution.service.callbacks.recalculationProof = (/** @type {any} */ proof) => recalculation.onProofRecorded(proof);
+    }
+    // General lessons become platform handbooks (learningPlatformHandbooks.mjs, flywheel F16): composed with its switch, the evolution module (whose supply and
+    // records it uses and whose budget its two model calls spend) and the learning loop that notices the lesson. Off, `onApplied` finds nothing and no tick runs.
+    if (config.learningPlatformHandbooksEnabled && config.learningEnabled && productDatabase && productDocuments) {
+      const handbooksFetch = overrides.frontierModelFetch ?? globalThis.fetch;
+      const handbookLimits = { daily: config.evolutionDailyBudgetCny, weekly: 0 };
+      const evolutionService = evolution.service;
+      platformHandbooks = createPlatformHandbooks({
+        service: evolutionService, supply: evolution.supply, perDay: config.learningPlatformHandbooksPerDay, report: code => process.stderr.write(`${code}\n`),
+        facts: projectFactsReader({ store, documents: productDocuments }),
+        judge: async ({ text, capabilityId }) => {
+          const response = await callModelForControlPlane({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,
+            purpose: "evolution", limits: handbookLimits, signal: AbortSignal.timeout(60_000),
+            body: { model: "deepseek-flash", thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: 200, messages: handbookJudgeMessages({ text, capabilityId }) } });
+          return JSON.parse(response.choices?.[0]?.message?.content ?? "{}");
+        },
+        // Another family, or none: with the DeepSeek review provider there is no independent reviewer and a candidate stays a candidate.
+        review: config.reviewProvider === "dashscope" ? async ({ text, capabilityId }) => {
+          const result = await callReviewModel({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID, purpose: "evolution",
+            limits: handbookLimits, signal: AbortSignal.timeout(120_000), schemaName: "platform_handbook_review", maxTokens: 400,
+            schema: { type: "object", properties: { general: { type: "boolean" }, class: { type: "string", enum: [...HANDBOOK_LESSON_CLASSES] } }, required: ["general", "class"], additionalProperties: false },
+            messages: handbookJudgeMessages({ text, capabilityId }) });
+          return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
+        } : null,
+        established: (userIds) => evidenceEstablishedAuthors(productDatabase, userIds),
+        recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
+      });
+    }
+    // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): the evidence programme is read by
+    // the worker's daily scan; 循证传播 and 虚拟临研 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
+    if (config.evolutionModuleLeadsEnabled) {
+      evolutionLeadSources = createEvolutionLeadSources({
+        service: evolution.service, perDay: config.evolutionModuleLeadsPerDay, report: code => process.stderr.write(`${code}\n`),
+        programme: evidenceProgramme && productDocuments ? programmeLeadReader({ documents: productDocuments, publisherId: PLATFORM_PUBLISHER_USER_ID, decisionKind: PROGRAMME_DECISION_KIND, entityVocabulary }) : null,
+        communication: Boolean(geo), virtualStudy: Boolean(vcr),
+      });
+      const sources = evolutionLeadSources;
+      evolution.service.callbacks.scanLeadSources = () => sources.scan();
+    }
+    // The prediction registry (flywheel F25) rides the evolution module's prospective records: the module's publication match tells it of each
+    // paper the feed publishes, and a virtual study or an agenda files through `predictionRegistry.register`. Off, nothing here exists.
+    if (config.predictionRegistryEnabled) {
+      const registry = createPredictionRegistry({ config, evolution: evolution.service, isOperator: (/** @type {{ id: string }} */ user) => config.operatorUsers.includes(user.id),
+        report: code => process.stderr.write(`${code}\n`) });
+      predictionRegistry = registry;
+      evidenceMetricSections.predictionCalibration = () => registry.predictionCalibration();
+      evolution.service.callbacks.predictionPublication = (/** @type {any} */ input) => registry.onPublication(input);
+    }
+  }
+  // The flywheel's own figures (evidenceFlywheelMetrics.mjs, plan §11): composed with their switch and the frontier whose tables they read; off, no
+  // route, no family and no table read. The readers of the signals other packages add (a study's card reference, a question bank's citations) are
+  // passed here when those modules exist; until then the figure says so instead of reading 0.
+  if (config.evidenceFlywheelMetricsEnabled && frontier && productDatabase) {
+    evidenceFlywheel = createEvidenceFlywheelMetrics({
+      database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID,
+      citationReaders: { communication: geo ? createGeoCardCitationReader({ database: productDatabase }) : null },
+      predictionCalibration: predictionRegistry ? () => predictionRegistry?.predictionCalibration() : null,
+      evolutionTools: evolution ? async () => (await evolution?.service.tools() ?? []).map((/** @type {any} */ row) => row.payload) : null,
+      // The platform's question bank (循证传播, F22): this month's rounds and the share of the assistants' cited answers that cited an EviMed page.
+      assistantCoverage: geo && config.geoQuestionBankEnabled ? async () => {
+        const summary = await questionBankSummary(productDatabase, { publicUrl: config.publicUrl });
+        if (!summary.available) return { rounds: null, citedShare: null };
+        const rounds = Object.values(/** @type {any} */ (summary).coverage ?? {}).reduce((sum, /** @type {any} */ entry) => sum + (Number(entry?.rounds) || 0), 0);
+        return { rounds: rounds || null, citedShare: summary.overall?.eviMedCitedShare ?? null };
+      } : null,
+      report: code => process.stderr.write(`${code}\n`),
+    });
   }
   const reviewGatewayHandler = createReviewGatewayHandler({
     runtimeManager, service: review?.service ?? null, config,
@@ -4259,19 +4856,27 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         let busy = 0;
         let idle = 0;
         let unknown = Number(runtimeStats.starting) || 0;
+        // The platform's own background projects (learning, document understanding, evaluation cells) are scratch by
+        // the platform's own rule (`excludedFromBackup`: what they produce is kept in the product database and a run
+        // that is interrupted is retried), so they are counted apart: a release switch asks about work a researcher
+        // started (`interactive`), and a drained maintenance window still asks about everything.
+        let internalRuns = 0;
+        let internalBusy = 0;
         const observations = await Promise.all(projects.map(async (project) => {
+          const internal = isInternalProjectOf(config, project.userId, project.id);
           const running = (await agentRuns.list(project)).filter((run) => run.status === "running").length;
-          if (!runtimeManager.runtimeGeneration(project)) return { running, busy: 0, idle: 0, unknown: 0 };
+          if (!runtimeManager.runtimeGeneration(project)) return { running, busy: 0, idle: 0, unknown: 0, internal };
           try {
             const runtimeBusy = await runtimeManager.pluginRuntimeBusy(project);
-            return { running, busy: runtimeBusy ? 1 : 0, idle: runtimeBusy ? 0 : 1, unknown: 0 };
-          } catch { return { running, busy: 0, idle: 0, unknown: 1 }; }
+            return { running, busy: runtimeBusy ? 1 : 0, idle: runtimeBusy ? 0 : 1, unknown: 0, internal };
+          } catch { return { running, busy: 0, idle: 0, unknown: 1, internal }; }
         }));
         for (const observation of observations) {
           runningAgentRuns += observation.running;
           busy += observation.busy;
           idle += observation.idle;
           unknown += observation.unknown;
+          if (observation.internal) { internalRuns += observation.running; internalBusy += observation.busy; }
         }
         const classified = busy + idle + Math.max(0, unknown - (Number(runtimeStats.starting) || 0));
         unknown += Math.max(0, (Number(runtimeStats.running) || 0) - classified);
@@ -4290,6 +4895,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           learningWorker?.status?.().running,
           evolution?.worker.status().running,
           frontier?.worker.status().running,
+          evidenceProgramme?.worker?.status().running,
           review?.worker.status().running,
           geo?.worker?.status?.().running,
           vcr?.worker?.status?.().running,
@@ -4302,6 +4908,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           heavyWorkJobs: await heavyWorkBlockerCount(productDatabase),
           runningAgentRuns,
           runtimes: { busy, idle, unknown },
+          interactive: { runningAgentRuns: runningAgentRuns - internalRuns, busyRuntimes: busy - internalBusy },
         };
       },
     });
@@ -4425,6 +5032,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const dispatch = () => agentRuns.dispatch(project, {
       sessionId,
       dispatchId,
+      waitForRoom: true,
       ...(route.estimatedMinutes ? { estimatedMinutes: route.estimatedMinutes } : {}),
       question: text,
       effectiveAgentId: route.effectiveAgentId ?? null,
@@ -4459,7 +5067,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
         });
       }
-      await runtimeManager.start(project);
+      // A dispatch that finds every slot taken waits for one (`startWhenRoom`):
+      // the run is reserved and the person is waiting on this answer, so a place in
+      // line is the right shape and a refusal is the wrong one.
+      await runtimeManager.startWhenRoom(project);
       return runtimeManager.dispatchPrompt(project, session.sessionId, {
         recordPromptActor: request => recordExtensionPromptActor(user, project, request),
         text: promptText,
@@ -4509,7 +5120,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     void (async () => {
       const user = await store.userById(String(userId));
       if (!user) return;
-      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt && !isInternalProject(entry.id));
+      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt && !internalFor(user.id, entry.id));
       await runtimeManager.warmMostRecent(await Promise.all(listed.map((entry) => store.requireProject(user, entry.id))));
     })().catch(() => {
       // isolated: a warm start is a head start, never a precondition.
@@ -4560,7 +5171,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     };
     const gateway = pathname.startsWith(`${EVOLUTION_GATEWAY_PATH}/`)
-      ? (request, response) => evolution ? evolution.gateway(request, response) : sendError(response, new HttpError(404, "evolution_disabled", "Evolution is disabled."))
+      ? (request, response, onFailure) => evolution ? evolution.gateway(request, response, onFailure) : sendError(response, new HttpError(404, "evolution_disabled", "Evolution is disabled."))
       : pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
       ? resultGatewayHandler
       : pathname.startsWith(`${DATA_SEMANTICS_GATEWAY_PATH}/`)
@@ -4638,7 +5249,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // release switch before it moves `current` (host-release-switch.sh).
           const withActivity = new URL(req.url ?? "/", "http://localhost").searchParams.get("activity") === "1";
           const status = await maintenanceService.status();
-          sendJson(res, 200, { data: withActivity ? { ...status, activity: await maintenanceService.activity() } : status });
+          sendJson(res, 200, { data: withActivity
+            ? { ...status, activity: await maintenanceService.activity(), interactive: await maintenanceService.interactiveActivity() } : status });
           return;
         }
         const body = assertObject(await readJson(req, config.maxJsonBytes), "maintenance request");
@@ -4672,6 +5284,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // "Authentication required" for want of a session it was never going to
       // have.
       if (await agentMemoryRoutes(req, res)) return;
+      // The public evidence feed carries no session either: what it lists is what the platform published to be read.
+      if (await evidenceFeedRoutes(req, res)) return;
+      // The public evidence pages and their API: no session either, and nothing of them runs while their switch is off.
+      if (await evidencePublicRoutes(req, res)) return;
       // A device token (own-app reservation, off by default) is read here, so
       // the store's session and CSRF checks below recognise the request.
       await im.authenticateDevice(req, pathname);
@@ -4692,7 +5308,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
+      if (await evidenceTopicRequestRoutes(req, res)) return;
+      if (await evidenceProgrammeRoutes(req, res)) return;
+      if (await evidenceUpkeepRoutes(req, res)) return;
+      if (await evidenceCommunityRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
+      if (await evidencePublishRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
       if (await researchHandoffRoutes(req, res)) return;
       if (await reviewRoutes(req, res)) return;
@@ -4754,6 +5375,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           imMetrics: im.service ? () => im.service.metrics() : null,
           webReader,
           sourceUpdates,
+          sourceChanges,
           edgeProxy,
           frontier,
           review,
@@ -4765,7 +5387,35 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           alertReceiver,
           availability,
           eventPump: runtimeEventPump,
+          evolution,
+          evaluationIsolation,
+          evidenceBudget,
+          evidenceProgramme,
+          evidenceRecalculation,
+          predictionRegistry,
+          entityVocabulary,
+          evidencePublish,
+          evidenceUpkeep,
+          evidenceFeed,
+          evidencePublic: evidencePublicRoutes,
+          evidenceFlywheel,
+          evidenceCommunity,
+          evidenceOutcomes,
+          evolutionLeadSources,
+          platformHandbooks,
         });
+        return;
+      }
+
+      // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): the north star, the five asset groups and the guardrails, from the tables that
+      // already exist. Behind the scrape token like the usage report; off, the route answers by name once the token has been checked.
+      if (pathname === "/api/ops/evidence-flywheel" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        if (!evidenceFlywheel) throw new HttpError(404, "evidence_flywheel_not_enabled", "The evidence flywheel's figures are not enabled.");
+        const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+        const asked = url.searchParams.get("weeks");
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: await evidenceFlywheel.snapshot(asked === null ? {} : { weeks: /^\d+$/.test(asked) ? Number(asked) : Number.NaN }) });
         return;
       }
 
@@ -4958,7 +5608,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             user: store.publicUser(user),
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },
-            projects: (await store.listProjects(user)).filter((item) => !isInternalProject(item.id)),
+            projects: (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id)),
             // The conversation to reopen in this project (C4), or null when
             // the researcher has not worked here yet — or the ledger cannot be
             // read, which is not a reason the shell should fail to render.
@@ -4977,6 +5627,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // readiness uses. The last known answer is served at once and
             // refreshed behind it; an OpenList that cannot say is `false`.
             features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review),
+              // Sharing a capsule with other accounts, and subscribing a project to an evidence zone: each its own switch, and the
+              // second the frontier's audience too. The panels are drawn only where the server says so.
+              capsuleShare: Boolean(capsuleSharing),
+              zoneSubscription: Boolean(zoneSubscriptions?.enabled) && Boolean(frontier) && frontierAudienceAllows(config, user),
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),
               openList: openListConnector
@@ -5001,6 +5655,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const body = assertObject(await readJson(req, config.maxJsonBytes), "runtime UI frame");
         if (Object.keys(body).some((key) => key !== "projectId")) throw new HttpError(400, "runtime_ui_frame_payload_invalid", "Only projectId is accepted.");
         const projectId = assertString(body.projectId, "projectId", { max: 128 });
+        assertClientProject(projectId);
         const project = await store.requireProject(user, projectId);
         const frame = issueRuntimeUiFrame({ config, req, user, session, project });
         // A turn typed into this window reaches the kernel without a dispatch,
@@ -5220,8 +5875,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (body.deleted !== true) throw new HttpError(400, "invalid_payload", "deleted can only be set to true.");
         // A conversation still working is stopped first: a hidden run that
         // keeps spending is the one thing a reader could never find again.
+        // Stopped the way the stop button stops it — the kernel's own session first, then the ledger — and
+        // settled as the researcher's stop: the session must not go on spending, unseen and uncharged,
+        // behind a conversation that has been hidden (review F6).
         const current = (await agentRuns.list(ctx.project)).find((run) => run.id === runId);
-        if (current && current.status === "running") await agentRuns.cancelRun(ctx.project, runId, { by: ctx.user.id });
+        if (current && current.status === "running") await stopRunForUser(ctx.project, current);
         sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { deleted: true }) });
         return;
       }
@@ -5344,8 +6002,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (boundSession?.mode === "open-domain" && !chosenLine) {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
-          const installedTool = !named && evolution ? routeExplicitEvolutionTool(text,await evolution.service.tools(),routableAgents,boundSession,chosenLine) : null;
-          routedSpecialist = named ?? installedTool ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
+          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
             { userId: ctx.project.userId, projectId: ctx.project.id });
           if (!routedSpecialist) {
             const net = routeOpenDomainSpecialist(text, routableAgents, {
@@ -5393,10 +6050,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // after routing, so the estimate is the capability's own; before a run
         // exists, so nothing under way is ever interrupted; and never again. A
         // credits service that cannot be reached admits the start.
-        if (credits) await credits.service.assertBalanceForStart(ctx.user.id, effectiveAgent?.agentId ?? null);
+        // A replay of a dispatch that already started — the first answer was lost — is the run that exists, and
+        // asks nothing: the allowance its own start used up must not refuse it (review F8).
+        if (credits && !(await agentRuns.list(ctx.project)).some((existing) => existing.dispatchId === body.dispatchId)) {
+          await credits.service.assertBalanceForStart(ctx.user.id, effectiveAgent?.agentId ?? null);
+        }
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
+          // A person is waiting on this answer: with every runtime slot taken it waits for one.
+          waitForRoom: true,
           ...(automated ? { automated: true } : {}),
           ...(estimate ? { estimatedMinutes: estimate } : {}),
           question: text,
@@ -5468,8 +6131,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
             });
           }
-          await runtimeManager.start(ctx.project);
-          const requestedToolContext = evolution ? renderEvolutionToolContext(text, runtimeManager.runtimePlatformSkills(ctx.project), dispatchedRun.effectiveAgentId ?? dispatchedRun.agentId ?? null) : '';
+          await runtimeManager.startWhenRoom(ctx.project);
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
             text: promptText,
@@ -5477,7 +6139,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // the capsule plugin at its first step (memorySessions.mjs), for a
             // dispatch and a conversation typed in the kernel's own surface alike.
             system: prepared.system,
-            memoryContext: (prepared.memoryContext ?? "") + requestedToolContext,
+            memoryContext: prepared.memoryContext,
             residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,
@@ -5572,16 +6234,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           sendJson(res, 200, { data: { run, cancellation: { root: "not-running", children: [] } } });
           return;
         }
-        let root = "canceled";
-        try {
-          if (!(await runtimeManager.cancelRuntimeSession(ctx.project, run.sessionId))) root = "runtime-not-running";
-        } catch (error) {
-          // A session the kernel no longer holds is not running either.
-          if (error?.code !== "runtime_session_not_found") throw error;
-          root = "session-not-found";
-        }
         const children = agentRuns.knownChildSessions(run).map((childSessionId) => ({ childSessionId, stop: "with-root" }));
-        const canceled = await agentRuns.cancelRun(ctx.project, runId, { by: "user" });
+        const { root, canceled } = await stopRunForUser(ctx.project, run);
         await audit(ctx, "agent_run.cancel", "completed", { target: runId });
         sendJson(res, 200, { data: { run: canceled, cancellation: { root, children } } });
         return;
@@ -5621,8 +6275,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const user = await store.ensureUser(req, res);
         // This month, because that is the period a person is asked to pay for
         // and the one they can still change their behaviour within.
-        const now = new Date();
-        const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        // 00:00 on the first of the month in Asia/Shanghai — the same window the
+        // allowance page's month total and statements use.
+        const since = accountMonthStart(new Date());
         if (usageLedger) {
           const summary = await usageLedger.summary(user.id, { since });
           sendJson(res, 200, { data: {
@@ -5649,8 +6304,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // of its spend is `other`.
       if (pathname === "/api/account/usage/runs" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
-        const now = new Date();
-        const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const since = accountMonthStart(new Date());
         if (!usageLedger) {
           const summary = summarizeUsage(await readServerUsageJsonl(config, user), { userId: user.id, since });
           sendJson(res, 200, { data: { since: since.toISOString(), currency: summary.currency, items: [], other: { calls: summary.calls, cost: summary.cost } } });
@@ -5674,6 +6328,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       if (pathname === "/api/account/export" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
+        assertNotPlatformAccount(user);
         await withAccountExportSnapshot(productDatabase, user, config, async snapshot => {
           const projects = snapshot?.projects ?? await store.listProjects(user);
           // Written as `memory/memory.json`, from the store itself rather than
@@ -5691,6 +6346,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       if (pathname === "/api/account" && req.method === "DELETE") {
         const user = await store.ensureUser(req, res);
+        assertNotPlatformAccount(user);
         const body = await readJson(req, config.maxJsonBytes);
         const confirm = assertString(body.confirm, "confirm", { max: 64 });
         if (confirm !== user.id) {
@@ -5711,7 +6367,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             throw new HttpError(409, "account_busy", "Account has queued or running tasks.");
           }
         }
-        await Promise.all(projects.map((project) => runtimeManager.stop(project)));
+        // The account's own deletion of itself stops what was working in it: the researcher's stop.
+        await Promise.all(projects.map((project) => runtimeManager.stop(project, { by: "user" })));
         await managedBrowser.closeOwner(user.id);
         // The accounts an integration key of this one made for the people
         // behind it go first: a subject's memory has no owner once its
@@ -5721,14 +6378,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // Completeness no longer depends on it: the memory tables reference the
         // account with ON DELETE CASCADE, so `store.deleteUser` below removes
         // whatever a failed purge would have left.
-        // The derived copies go first. Either order can fail halfway; only this
-        // one fails harmlessly. An index emptied for an account whose rows are
-        // still there costs a degraded recall until the next rebuild, and the
-        // caller can simply try again. The other order destroys the memory and
-        // then answers 500, leaving an account that still exists and a
-        // researcher whose memory is gone because a component that holds no
-        // original data was unreachable for a moment.
-        await memorySubstrate.forgetUser(user.id);
+        // The derived copies are owed to the index inside the deletion's own
+        // transaction (`memoryIndexing.prepareAccountDeletion`, below) and asked
+        // for after it commits: the index holds no original data, every hit is
+        // re-read from PostgreSQL, and an account whose erasure waited on the
+        // index answering would fail on its first slow day. Without a ledger to
+        // hand them to, one attempt, never waited on.
+        await memoryWithdrawals?.migrate();
+        if (!memoryWithdrawals) void memorySubstrate.forgetUser(user.id).catch(() => false);
         // Counted, not deleted. The memory tables reference the account with ON
         // DELETE CASCADE, so `store.deleteUser` below removes them inside the
         // transaction that can still fail — where deleting them here would mean
@@ -5770,6 +6427,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await removeVcrArtifacts({ dataPlaneDir: config.vcrDataPlaneDir, artifacts: vcrArtifacts, engineRemove: vcr?.removeEngineJob ?? null,
           report: (code) => process.stderr.write(`vcr deletion cleanup: ${code}\n`) });
         taskManager.purgeUser(user);
+        void memoryIndexWorker?.drainWithdrawals();
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
         await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge, memoryIndexPurge, subjectsDeleted });
@@ -5784,7 +6442,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // as unknown activity for that row, never as a failed list.
         // The platform's own background projects are not the researcher's
         // (`internalProjects.mjs`).
-        const projects = (await store.listProjects(user)).filter((item) => !isInternalProject(item.id));
+        const projects = (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id));
         const data = await Promise.all(projects.map(async (item) => {
           try {
             return { ...item, ...(await agentRuns.activitySummary(await store.requireProject(user, item.id))) };
@@ -5858,34 +6516,33 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if (await taskManager.hasActiveProject(project)) {
             throw new HttpError(409, "project_busy", "Project has queued or running tasks.");
           }
-          await runtimeManager.stop(project);
+          // The researcher deleting their own project stops what was working in it: their stop.
+          await runtimeManager.stop(project, { by: "user" });
           // Where the learning loop's lessons from this project go instead of
           // down with it (learningPreservation.mjs): the account's learning
           // project, made now if the account never learnt anything yet, and
           // the ledger the waiting lessons' runs are read from. Before the
           // transaction, because making a project is its own.
-          const learningProject = learningService && productDatabase && !isInternalProject(project.id)
+          const learningProject = learningService && productDatabase && !internalFor(project.userId, project.id)
             ? await ensureLearningProject(store, user) : null;
           const lessonRuns = learningProject ? await agentRuns.list(project).catch(() => []) : [];
           /** @type {{moved: number, preserved: string[]}} */
           let lessons = { moved: 0, preserved: [] };
-          // Derived copies go first, and go with the record they were derived
-          // from. Awaited and not swallowed: an index that still answers with a
-          // deleted project's memories is a copy of deleted data, so a failure
-          // here fails the delete rather than reporting a deletion that did not
-          // happen. Before the rows rather than after, so that failure leaves
-          // the project and its memory both intact and the request retryable —
-          // the reverse order answers 500 with the memory already destroyed.
-          await memorySubstrate.forgetProject(user.id, project.id);
+          // The recall index holds derived copies and owns no record: every hit is
+          // re-read from PostgreSQL before it is used, so a copy whose row is gone
+          // is dropped there. The index is therefore never waited on here. The
+          // rows go, and the subtree's withdrawal is owed to the index in the
+          // same transaction (`memoryIndexWithdrawals.mjs`), asked for after the
+          // commit and again by the index worker until it answers. Until
+          // 2026-10-05 this asked the index first and failed the deletion when
+          // it timed out (live: 503 `memory_index_timeout`, and the same request
+          // succeeded two minutes later).
           if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id);
-          // Again, now that the rows are gone. Between the removal above and
-          // the delete, a queued index job for one of those records still finds
-          // its row and republishes the copy; a second pass removes what that
-          // window let back in. Not awaited for the request's verdict: the
-          // deletion the researcher asked for has happened by this line, and a
-          // derived copy that survives holds no original data and goes with the
-          // next rebuild, so failing here would report a deletion that did.
-          await memorySubstrate.forgetProject(user.id, project.id).catch(() => false);
+          // With no ledger to hand the withdrawal to (a test's store, a deployment
+          // whose index is not composed) there is nothing durable to keep: one
+          // attempt, never waited on.
+          else if (!memoryWithdrawals) void memorySubstrate.forgetProject(user.id, project.id).catch(() => false);
+          void memoryIndexWorker?.drainWithdrawals();
           // What the project's documents and runs put in the account's own
           // capsule — 「来自资料」 above all — is account-level and outlived
           // every project deletion until 2026-09-24 (62 such memories were
@@ -6321,7 +6978,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     balanceGate: credits ? async (project, payload) => {
       const sessionId = payload?.args?.request?.sessionId;
       const binding = typeof sessionId === "string" ? await researchSessions.get(project, sessionId).catch(() => null) : null;
-      await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null);
+      // A follow-up typed into a conversation a run is working in is asked against what that run does not itself hold.
+      const working = typeof sessionId === "string"
+        ? (await agentRuns.list(project).catch(() => [])).find((run) => run.sessionId === sessionId && run.status === "running") : null;
+      await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
     recordPromptActor: recordExtensionPromptActor,
     bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
@@ -6515,7 +7175,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
     for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
+      geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker, evidenceProgramme?.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -6525,6 +7185,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (worker) worker.reconcileTimer = null;
     }
     if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
+    if (evidenceLinkTimer) clearInterval(evidenceLinkTimer);
     if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
     if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
     if (notificationTimer) clearInterval(notificationTimer);
@@ -6532,6 +7193,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (sessionPurgeTimer) clearInterval(sessionPurgeTimer);
     if (idleRuntimeSweepTimer) clearInterval(idleRuntimeSweepTimer);
     capsuleCleanupTimer = null;
+    evidenceLinkTimer = null;
     autopilotScheduleTimer = null;
     consolidationScheduleTimer = null;
     notificationTimer = null;
@@ -6540,6 +7202,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     idleRuntimeSweepTimer = null;
   };
 
+  let evidenceReownRun = false;
   const startRecurringWork = async () => {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
@@ -6557,6 +7220,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution?.worker.start();
       im.worker?.start();
       frontier?.worker.start();
+      // The official zones an earlier release left in an operator's name become the platform's, once at start (idempotent; evidenceReown.mjs):
+      // until they do, their AI upkeep is booked to an operator's wallet. Said on stderr; a failure is said too and costs the start nothing.
+      if (frontier && productDatabase && !evidenceReownRun) {
+        evidenceReownRun = true;
+        void reownOperatorImportedZones(productDatabase, { operatorUsers: config.operatorUsers }).catch((/** @type {any} */ error) => process.stderr.write(`evidence re-own failed: ${error?.code ?? error?.name ?? "error"}\n`));
+      }
+      evidenceProgramme?.worker?.start();
       review?.worker.start();
       geo?.worker?.start?.();
       vcr?.worker?.start?.();
@@ -6569,6 +7239,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (capsuleTransferService && !capsuleCleanupTimer) {
         capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000);
         capsuleCleanupTimer.unref();
+      }
+      // A memory that names an evidence card or a frontier item the zone or the feed has taken back is labelled, once an hour and only
+      // while the frontier is on: the pass reads recorded links and the evidence tables, writes labels and nothing else.
+      if (config.frontierEnabled && researchMemory.configured && !evidenceLinkTimer) {
+        evidenceLinkTimer = setInterval(() => { void knowledgeChange.sweepEvidenceLinks().catch(() => {}); }, 3_600_000);
+        evidenceLinkTimer.unref();
       }
       await scheduleAutopilot();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
@@ -6633,11 +7309,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     memoryIndexWorker,
     sourceService,
     sourceWorker,
+    // The one source-change record and the modules that read it (B5), returned so the composition can be asserted.
+    sourceChanges,
+    sourceUpdates,
+    resultImpacts,
+    knowledgeChange,
     kbIndex,
     libraryService,
     sourceUnderstandingRuntime,
     autopilotService,
     autopilotWorker,
+    evidenceProgramme,
     usageLedger,
     notificationService,
     // Returned so the composition root can be asserted at the composition root.
@@ -6661,7 +7343,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     review,
     reviewService: review?.service ?? null,
     reviewWorker: review?.worker ?? null,
-    // 「循证 GEO」: null when the module is off or there is no product database.
+    // 「循证传播」: null when the module is off or there is no product database.
     geo,
     geoService: geo?.service ?? null,
     // 「虚拟临研」, on the same terms.
@@ -6711,7 +7393,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           process.stderr.write(`frontier migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "frontier_migration_failed"}\n`);
         });
       }
-      // The same for 循证 GEO: a failed migration turns `geo` red.
+      // The same for 循证传播: a failed migration turns `geo` red.
       if (geo) {
         await geo.service.ready().catch((error) => {
           process.stderr.write(`geo migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "geo_migration_failed"}\n`);
@@ -6746,6 +7428,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution?.worker.interrupt();
       for (const controller of evaluationAbortControllers) controller.abort();
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
+      if (evidenceLinkTimer) clearInterval(evidenceLinkTimer);
       await capsuleCleanupRun;
       await pluginApplyWorker?.close();
       await personalSkillWorker?.close();
@@ -6759,6 +7442,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await evolution?.worker.close();
       await im.worker?.close();
       await frontier?.worker.close();
+      await evidenceProgramme?.worker?.close();
       await review?.worker.close();
       await judgeService.close();
       jevTransport.close();
@@ -7563,7 +8247,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null }) {
+async function operatorMetricsText({ judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -7601,6 +8285,19 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
       value: memoryIndex.worker?.lastError ? 0 : 1,
       labels: { provider: String(memoryIndex.provider ?? "builtin"), code: String(memoryIndex.worker?.lastError ?? "ok") },
     });
+  // What deletions still owe the index (`memoryIndexWithdrawals.mjs`): a project, a
+  // reset or an account erased while the index was slow. Recall never reads them (every
+  // hit is re-read from PostgreSQL), so this is how long deleted data's copies outlive it.
+  const withdrawals = await memoryIndexWorker?.withdrawals?.pending?.().catch(() => null);
+  if (withdrawals) {
+    addMetric(lines, "open_science_memory_index_withdrawals_pending",
+      "Deleted subtrees the recall index has not yet been told to forget; each is asked again by the index worker until it answers.",
+      "gauge", { value: withdrawals.pending });
+    addMetric(lines, "open_science_memory_index_withdrawals_oldest_seconds",
+      "How long the oldest owed withdrawal has waited.", "gauge", { value: Math.round(withdrawals.oldestSeconds) });
+    addMetric(lines, "open_science_memory_index_withdrawals_most_attempts",
+      "The most times one owed withdrawal has been tried and refused.", "gauge", { value: withdrawals.mostAttempts });
+  }
   addMetric(lines, "open_science_memory_recall_degraded",
     "Whether a recall last had to fall back to the term matcher because the index could not answer.",
     "gauge", {
@@ -7708,6 +8405,7 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   for (const family of webReadMetricFamilies(webReader?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of alertReceiver?.metricFamilies() ?? []) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of sourceUpdateMetricFamilies(sourceUpdates?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of sourceChangeMetricFamilies(sourceChanges?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of edgeMetricFamilies(edgeProxy)) addMetric(lines, family.name, family.help, family.type, family.series);
   addMetric(lines, "open_science_task_total", "Known task records in the current process.", "gauge", {
     value: taskStats.total,
@@ -7821,6 +8519,43 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
     "counter",
     { value: runtimeStats.background?.yielded ?? 0 },
   );
+  // Starts that found every slot taken (2026-10-05): how often a person waited
+  // for a research environment and for how long — the number that says the host
+  // is too small. A wait begins at the first refusal and ends at the project's
+  // next start, or is given up on when nobody asked again for ten minutes.
+  const roomWaits = runtimeStats.roomWaits ?? {};
+  const roomAudiences = ["researcher", "background"];
+  addMetric(
+    lines,
+    "open_science_runtime_start_waits_total",
+    "Runtime starts that found every slot taken, by whose they were and how the wait ended: started, or given up on.",
+    "counter",
+    roomAudiences.flatMap((audience) => [
+      { value: Number(roomWaits[audience]?.started) || 0, labels: { audience, outcome: "started" } },
+      { value: Number(roomWaits[audience]?.gaveUp) || 0, labels: { audience, outcome: "gave_up" } },
+    ]),
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_start_wait_seconds_total",
+    "Seconds spent waiting for a runtime slot, summed over the waits that ended; divide by the waits for the mean.",
+    "counter",
+    roomAudiences.map((audience) => ({ value: Number(roomWaits[audience]?.seconds) || 0, labels: { audience } })),
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_start_wait_seconds_max",
+    "The longest wait for a runtime slot that ended since this process started.",
+    "gauge",
+    roomAudiences.map((audience) => ({ value: Number(roomWaits[audience]?.maxSeconds) || 0, labels: { audience } })),
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_start_waiting",
+    "Projects waiting for a runtime slot right now: refused for want of room and asked again in the last two minutes.",
+    "gauge",
+    roomAudiences.map((audience) => ({ value: Number(roomWaits[audience]?.waiting) || 0, labels: { audience } })),
+  );
   addMetric(
     lines,
     "open_science_runtime_background_yield_failures_total",
@@ -7904,7 +8639,51 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   // contract (frontierService.mjs `frontierMetricFamilies`).
   const frontierSnapshot = frontier ? await frontierMetricsSnapshot(frontier) : null;
   for (const family of frontierMetricFamilies(Boolean(frontier), frontierSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
-  // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
+  // The platform's evidence programme (evidenceBudget.mjs): its switches, today's spend against its budget and its slots, and who paid
+  // for the zone upkeep this process ran. No reading is taken while the programme is off.
+  const evidenceReading = evidenceBudget?.enabled ? await evidenceBudget.budget().catch(() => null) : null;
+  // The challenges' own day (their judging ceiling) is read only where the upkeep is composed, programme on or off.
+  const challengeReading = evidenceBudget && evidenceUpkeep ? await evidenceBudget.challengeBudget().catch(() => null) : null;
+  for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, evidenceReading, frontier?.evidenceEditorial?.status().counters ?? null, challengeReading)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // What the programme decided and wrote: decisions by who chose, signals read (counts only), actions and cards by outcome, claims left out by why.
+  for (const family of evidenceProgrammeMetricFamilies(evidenceProgramme)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Sharing memory inside the platform (capsuleShareMetrics.mjs): shares, imports, trials, declines, take-downs, what the write-side
+  // defences refused, zone subscriptions, and what learning did with runs that used a guest capsule.
+  if (config.capsuleShareEnabled === true) for (const family of capsuleShareMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Recalculation cards (evidenceRecalculation.mjs): the switch, and what became of each proof the evolution module recorded.
+  for (const family of evidenceRecalculationMetricFamilies(evidenceRecalculation, config)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The prediction registry (predictionRegistry.mjs): the switch, registrations, scores and what each published paper that named a registered trial led to.
+  for (const family of predictionRegistryMetricFamilies(predictionRegistry, config)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
+  // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
+  for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The co-creation loop (evidencePublishMetrics.mjs): results published as cards, research continued from a card, the runs a
+  // card started, and the citation gift, which is off. Composed only with the frontier.
+  if (evidencePublish) for (const family of evidencePublishMetricFamilies({ citationGiftEnabled: config.evidenceCitationGiftEnabled === true && Number(config.evidenceCitationGiftAmount) > 0 })) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The owner's request to have the platform read a card's sources (evidenceSourceVerification.mjs); nothing without the frontier.
+  for (const family of evidenceSourceVerificationMetricFamilies(evidencePublish?.verification?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Keeping the cards current (evidenceCurrency.mjs, evidenceChallenges.mjs, evidenceChangeLog.mjs): the loops' counters, the reader challenges and the public log.
+  // With the upkeep off these are not exported at all.
+  for (const family of [...evidenceUpkeepMetricFamilies(evidenceUpkeep?.upkeep.stats() ?? null), ...evidenceChallengeMetricFamilies(evidenceUpkeep?.challenges.stats() ?? null),
+    ...evidenceChangeLogMetricFamilies(evidenceUpkeep?.changeLog.stats() ?? null)]) addMetric(lines, family.name, family.help, family.type, family.series);
+  addMetric(lines, "open_science_evidence_upkeep_enabled", "Whether keeping the evidence cards current is switched on (OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED).", "gauge", [{ value: config.evidenceUpkeepEnabled ? 1 : 0 }]);
+  // Rule 2's guardrail: delivered reports that cite one of EviMed's own cards as a source (evidenceCitationMetrics.mjs).
+  for (const family of platformContentCitedMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The public evidence feed the knowledge-source plugin reads (evidenceFeed.mjs).
+  for (const family of evidenceFeedMetricFamilies(evidenceFeed?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The public evidence pages, their read-only API and the topic requests (evidencePublicRoutes.mjs): nothing is exported where they are off.
+  for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
+  addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
+  for (const family of platformHandbookMetricFamilies(platformHandbooks?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of evolutionLeadSourceMetricFamilies(evolutionLeadSources?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of evidenceOutcomeMetricFamilies(evidenceOutcomes?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of evidenceCommunityMetricFamilies(evidenceCommunity)) addMetric(lines, family.name, family.help, family.type, family.series);
+  if (evidenceFlywheel) for (const family of await evidenceFlywheel.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
+  // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
+  for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // 循证传播: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
   // 虚拟临研: `open_science_vcr_enabled 0` when off; queue gauges (queued,
@@ -7917,6 +8696,10 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   // `enabled` gauge alone.
   const availabilitySnapshot = availability ? await availability.service.metrics().catch(() => null) : null;
   for (const family of availabilityMetricFamilies(Boolean(availability), availabilitySnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // 循证进化's limits (evolutionOpsMetrics.mjs): the tool gateway's admission, the platform-skill supply's fallbacks, the exclusion
+  // layer's lookups and the candidate executor's slots and timeout. `open_science_evolution_enabled 0` when it is off.
+  const evolutionSnapshot = await evolutionOpsSnapshot({ evolution, evaluationIsolation }).catch(() => null);
+  for (const family of evolutionOpsMetricFamilies(Boolean(evolution), evolutionSnapshot, config.evolutionRefusal ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The independent reviewer: reviews, findings by kind, answers, reply
   // checks and safety alerts (reviewService.mjs `reviewMetricFamilies`).
   for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);
@@ -7939,7 +8722,7 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   const credentialMissing = publicSourceCredentialMissingMetricFamily();
   addMetric(lines, credentialMissing.name, credentialMissing.help, credentialMissing.type, credentialMissing.series);
   // The NCBI Gene Expression Omnibus workflow's six resource limits and its named downloads (geneExpressionMetrics.mjs;
-  // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证 GEO's.
+  // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证传播's.
   for (const family of geneExpressionMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
@@ -8102,7 +8885,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     review: await readinessCheck(async () => (review ? review.service.readiness() : config.reviewEnabled
       ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
       : { required: false, enabled: false })),
-    // 循证 GEO: red only for its own invariants (geoService.mjs `geoReadiness`).
+    // 循证传播: red only for its own invariants (geoService.mjs `geoReadiness`).
     geo: await readinessCheck(async () => withGeoWorkerWarnings(await geoReadiness({ config, geo, database: productDatabase }), geo?.worker ?? null)),
     // The research allowance's wallet: red only for its own invariants (the
     // schema, the policy's activation, a configuration it refused —

@@ -43,6 +43,9 @@ export function checkResearchBillingReadiness(config = {}, options = {}) {
   if (requireBilling && simulated) issues.push({ code: "research_billing_wallet_simulated" });
   if (refusal === "evimed_credits_simulated_conflict") issues.push({ code: "research_billing_simulated_with_real_wallet" });
   if (refusal === "evimed_credits_simulated_start_invalid") issues.push({ code: "research_billing_simulated_start_invalid" });
+  if (refusal === "evimed_credits_gift_invalid") issues.push({ code: "research_billing_simulated_gift_invalid" });
+  // The platform's wallet charges under the versioned policy and nothing else: without it the module refuses by name.
+  if (refusal === "evimed_credits_simulated_policy_required") issues.push({ code: "research_billing_simulated_policy_required" });
   if (requireBilling || policyEnabled || requireSimulated) {
     if (!walletEnabled) issues.push({ code: "research_billing_wallet_disabled" });
     if (!policyEnabled) issues.push({ code: "research_billing_policy_disabled" });
@@ -51,7 +54,9 @@ export function checkResearchBillingReadiness(config = {}, options = {}) {
     if (!simulated && !deductConfigured) issues.push({ code: "research_billing_deduct_endpoint_invalid" });
     if (!simulated && !balanceConfigured) issues.push({ code: "research_billing_balance_endpoint_invalid" });
   }
-  if (requirePrecision) issues.push({ code: "research_billing_precision_contract_unverified" });
+  // EviMed's wallet is integer-only and its decimal contract has never been verified; the platform's own wallet holds
+  // exact amounts itself (`precision-v1`), which its own tests prove, so there is nothing left to verify on it.
+  if (requirePrecision && !simulated) issues.push({ code: "research_billing_precision_contract_unverified" });
   const commerce = createResearchCommerce(config).status();
   issues.push(...checkResearchCommerceConformance(config, { requiredHandoffs, requireAutomaticCommerce }).issues);
   const status = simulated
@@ -66,7 +71,8 @@ export function checkResearchBillingReadiness(config = {}, options = {}) {
     billing: { status,
       simulated, policyEnabled, walletEnabled, conversionConfigured, deductConfigured, balanceConfigured,
       currency: "CNY", creditsPerCny: 1, walletAuthority: simulated ? "simulated" : "evimed",
-      walletContract: "legacy-integer-floor", credentialReadiness: "not_checked" },
+      // The platform's own wallet charges exactly (precision-v1); EviMed's is integer-only and is checked as that.
+      walletContract: simulated ? "precision-v1" : "legacy-integer-floor", credentialReadiness: "not_checked" },
     commerce,
     waivers: ["platform_overhead", "unconfirmed_provider_usage", "failed_platform_task", "canceled_task", "fractional_cny_remainder"],
     limitations: [...(simulated ? ["simulated_wallet_not_real_money"] : []),
@@ -94,6 +100,8 @@ export function researchBillingReadinessConfig(env) {
     evimedCreditsPerCny: rate == null || rate === "" ? 1 : Number(rate),
     evimedCreditsSimulated: bool("OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED"),
     evimedCreditsSimulatedStartCredits: Number(env.OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS || 200),
+    evimedCreditsSignupGiftDays: Number(env.OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS || 30),
+    evimedCreditsMonthlyGift: String(env.OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT || "0").trim(),
     evimedCreditsUrl: env.OPEN_SCIENCE_EVIMED_CREDITS_URL ?? "",
     evimedCreditsBalanceUrl: env.OPEN_SCIENCE_EVIMED_CREDITS_BALANCE_URL ?? "",
     researchCommerceEnabled: bool("OPEN_SCIENCE_RESEARCH_COMMERCE_ENABLED"),

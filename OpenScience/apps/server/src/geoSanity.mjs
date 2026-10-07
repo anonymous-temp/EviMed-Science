@@ -117,7 +117,8 @@ export function isRetriableRawStatus(rawStatus) {
 }
 
 /** Semantic classification preserves raw failures and empty shells. Uncertainty uses the marker verdict.
- * @param {{rawStatus?:unknown,answer?:unknown}} input @param {any} judgeService @param {any} context */
+ * @param {{rawStatus?:unknown,answer?:unknown}} input @param {any} judgeService @param {any} context
+ * @returns {Promise<GeoSanityVerdict>} */
 export async function classifyProbeAnswerWithJudge(input, judgeService, context) {
   const baseline = classifyProbeAnswer(input);
   const text = String(input.answer ?? "").trim();

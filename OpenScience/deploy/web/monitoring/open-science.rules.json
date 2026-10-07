@@ -560,8 +560,8 @@
             "severity": "warning"
           },
           "annotations": {
-            "summary": "\u5faa\u8bc1 GEO \u6709 {{ $value }} \u6761 S3/S4 \u7ea7\u300c\u8bb2\u9519\u6211\u65b9\u300d\u5c1a\u672a\u5173\u95ed",
-            "description": "\u6d88\u8d39\u7ea7 AI \u5f15\u64ce\u5728\u56de\u7b54\u91cc\u8bb2\u9519\u4e86\u5ba2\u6237\u7684\u836f\u54c1\uff0c\u4e14\u4e25\u91cd\u5ea6\u4e3a S3 \u6216 S4\uff08\u53ef\u80fd\u5f71\u54cd\u7528\u836f\u5b89\u5168\uff09\u3002\u5728\u300c\u5faa\u8bc1 GEO \u2192 \u51c6\u786e\u4e0e\u5b89\u5168\u300d\u5904\u7406\u6216\u5173\u95ed\uff1b\u6d89\u53ca\u4e34\u5e8a\u5b89\u5168\u7684\u7a3f\u4ef6\u5df2\u88ab safety_stops \u62e6\u4e0b\uff08open_science_geo_safety_stops\uff09\u3002"
+            "summary": "循证传播有 {{ $value }} 条 S3/S4 级「讲错我方」尚未关闭",
+            "description": "消费级 AI 引擎在回答里讲错了客户的药品，且严重度为 S3 或 S4（可能影响用药安全）。在「循证传播 → 准确与安全」处理或关闭；涉及临床安全的稿件已被 safety_stops 拦下（open_science_geo_safety_stops）。"
           }
         },
         {
@@ -572,8 +572,8 @@
             "severity": "warning"
           },
           "annotations": {
-            "summary": "\u5faa\u8bc1 GEO \u7684\u63a2\u6d4b\u5faa\u73af\u8d85\u8fc7 30 \u5206\u949f\u6ca1\u6709\u6210\u529f\u8dd1\u5b8c\u4e00\u8f6e",
-            "description": "\u63a2\u6d4b\u5faa\u73af\u6bcf\u4e2a\u57fa\u7840\u8282\u62cd\u90fd\u4f1a\u8dd1\u4e00\u6b21\uff08\u6ca1\u6709\u5230\u671f\u7684\u9898\u76ee\u4e5f\u7b97\u4e00\u6b21\u6210\u529f\uff09\uff0c\u6240\u4ee5\u534a\u5c0f\u65f6\u6ca1\u6709\u6210\u529f\u5c31\u662f\u5b83\u5361\u4f4f\u4e86\uff08\u8d85\u8fc7 OPEN_SCIENCE_GEO_LEASE_MS \u4ecd\u5728\u8fd0\u884c\uff09\u6216\u6bcf\u6b21\u90fd\u5728\u5931\u8d25\u3002/api/ready \u7684 geo.worker.loops.probe \u5199\u7740 lastError\uff1b\u5e38\u89c1\u539f\u56e0\u662f\u63a2\u6d4b\u4e3b\u673a\u4e0d\u53ef\u8fbe\u6216 CDP \u65ad\u5f00\u3002\u53ef\u89c1\u5ea6\u4e0e\u51c6\u786e\u5ea6\u7684\u6570\u636e\u4f1a\u505c\u5728\u6700\u540e\u4e00\u8f6e\u3002"
+            "summary": "循证传播的探测循环超过 30 分钟没有成功跑完一轮",
+            "description": "探测循环每个基础节拍都会跑一次（没有到期的题目也算一次成功），所以半小时没有成功就是它卡住了（超过 OPEN_SCIENCE_GEO_LEASE_MS 仍在运行）或每次都在失败。/api/ready 的 geo.worker.loops.probe 写着 lastError；常见原因是探测主机不可达或 CDP 断开。可见度与准确度的数据会停在最后一轮。"
           }
         },
         {
@@ -584,8 +584,8 @@
             "severity": "warning"
           },
           "annotations": {
-            "summary": "\u5faa\u8bc1 GEO \u63a2\u6d4b\u4e3b\u673a\u4e0a\u6709 {{ $value }} \u4e2a AI \u5f15\u64ce\u88ab\u7194\u65ad\u6682\u505c\u5df2\u8d85\u8fc7\u4e00\u5c0f\u65f6",
-            "description": "\u8fde\u7eed\u591a\u6b21\u7b54\u56de\u767b\u5f55\u9875\u3001\u7a7a\u58f3\u6216\u9519\u8bef\u7684\u5f15\u64ce\u4f1a\u88ab\u6682\u505c\uff0c\u6bcf\u5341\u5206\u949f\u590d\u67e5\u4e00\u6b21\uff1b\u8d85\u8fc7\u4e00\u5c0f\u65f6\u4ecd\u6682\u505c\uff0c\u57fa\u672c\u662f\u5f15\u64ce\u5728\u63a2\u6d4b\u4e3b\u673a\u4e0a\u88ab\u767b\u51fa\u4e86\uff082026-09-26\uff1aDeepSeek \u505c\u5728\u767b\u5f55\u9875\u3001\u5143\u5b9d\u4e0e\u8c46\u5305\u65e0\u6709\u6548\u56de\u7b54\uff0c\u53ea\u5269\u4e24\u4e2a\u5f15\u64ce\u5728\u7b54\uff09\u3002\u5728\u63a2\u6d4b\u4e3b\u673a\u4e0a\u91cd\u65b0\u767b\u5f55\u5bf9\u5e94\u6807\u7b7e\u9875\uff0c\u7194\u65ad\u5668\u4f1a\u5728\u5341\u5206\u949f\u5185\u81ea\u884c\u6062\u590d\uff1b\u6536\u4ef6\u7bb1\u91cc\u6709 geo_probe_engine_paused \u901a\u77e5\u5199\u660e\u662f\u54ea\u4e2a\u5f15\u64ce\u3002"
+            "summary": "循证传播探测主机上有 {{ $value }} 个 AI 引擎被熔断暂停已超过一小时",
+            "description": "连续多次答回登录页、空壳或错误的引擎会被暂停，每十分钟复查一次；超过一小时仍暂停，基本是引擎在探测主机上被登出了（2026-09-26：DeepSeek 停在登录页、元宝与豆包无有效回答，只剩两个引擎在答）。在探测主机上重新登录对应标签页，熔断器会在十分钟内自行恢复；收件箱里有 geo_probe_engine_paused 通知写明是哪个引擎。"
           }
         }
       ]

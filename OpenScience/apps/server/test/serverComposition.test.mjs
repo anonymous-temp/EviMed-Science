@@ -183,6 +183,15 @@ class FakePool extends EventEmitter {
       const rows = [...this.documents.values()].filter((row) => row.kind === values[1]);
       return { rows, rowCount: rows.length };
     }
+    // The projected list of one agenda's episodes that its own spend is asked about (`AutopilotService.ownRunIds`):
+    // only the fields named, and only the rows the payload filter (`$8`) matches.
+    if (/^SELECT user_id,kind,id,project_id,jsonb_build_object\(.*\) AS payload,revision,created_at,updated_at,deleted_at FROM evimed_product\.documents WHERE user_id=\$1 AND kind=\$2 AND \(deleted_at/.test(sql)) {
+      const filter = JSON.parse(values[7]);
+      const rows = [...this.documents.values()].filter((row) => row.kind === values[1]
+        && Object.entries(filter).every(([key, value]) => row.payload[key] === value))
+        .map((row) => ({ ...row, payload: { agendaId: row.payload.agendaId } }));
+      return { rows, rowCount: rows.length };
+    }
     // Everything below is what the feedback loop needs and nothing else needs:
     // each branch is gated on the one kind it serves, so no statement any other
     // test depends on changes its answer.
@@ -341,6 +350,12 @@ class FakePool extends EventEmitter {
     if (/^SELECT .* FROM evimed_geo\.projects WHERE id = \$1 AND user_id = \$2 AND deleted_at IS NULL$/.test(sql)) {
       const row = this.geoProjects.get(values[0]);
       return row && row.user_id === values[1] && !row.deleted_at ? { rows: [row], rowCount: 1 } : { rows: [], rowCount: 0 };
+    }
+    // The project as an account may reach it (`GeoStore.getProjectAccess`): the owner's own row, with no member roles. The double has no
+    // members table, so an account that is not the owner reads the project as nonexistent, as the real query does for a stranger.
+    if (/^SELECT .*coalesce\(\(SELECT array_agg\(m\.role .* FROM evimed_geo\.projects\s+WHERE id = \$1 AND deleted_at IS NULL AND \(user_id = \$2 OR EXISTS/s.test(sql)) {
+      const row = this.geoProjects.get(values[0]);
+      return row && row.user_id === values[1] && !row.deleted_at ? { rows: [{ ...row, member_roles: [] }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     if (/^SELECT 1 FROM evimed_control\.projects WHERE user_id = \$1 AND id = \$2 FOR UPDATE/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
@@ -829,7 +844,8 @@ function verificationFixtureRows(episodeStart = false) {
       digestId: episodeStart ? null : "digest-verify", budgetCny: 6, verificationBudgetCny: 0.67, claims: [claim] }),
     documentRow("digest", "digest-verify", { agendaId: "agenda-verify", date: "2026-09-06", costCny: 3,
       headlines: [], leads: [claim], decisions: [] }),
-  ].map(row => ({ ...row, project_id: PROJECT_ID }));
+    // The episode is recent: the agenda's own spend looks back a week, and an episode older than that has none inside it.
+  ].map(row => ({ ...row, project_id: PROJECT_ID, ...(row.kind === "episode" ? { created_at: new Date() } : {}) }));
 }
 
 test("a verification runs in a workspace that does not contain the report it is checking", async (t) => {
@@ -934,6 +950,10 @@ test("a verification runs in a workspace that does not contain the report it is 
   assert.match(text, /data written by the run you are checking/);
   assert.equal(dispatched[0].input.dispatchId, VERIFICATION_ID);
   assert.equal(reserved[0].scope.runId, VERIFICATION_ID);
+  // The scope it is signed with: the account's day and week (no cap here, so a figure no run reaches) and the share the
+  // episode held back for it. The agenda's own ¥8 a day and ¥80 a week are not in it: the gateway would compare them with
+  // everything the account spent.
+  assert.deepEqual(reserved[0].scope, { runId: VERIFICATION_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 0.67 });
 });
 
 test("a verification that could not be dispatched leaves no scratch directory behind", async (t) => {
@@ -1091,11 +1111,14 @@ test("a verification whose scratch cannot be removed still folds, and the sweep 
 
 test("an episode that spent everything it was given still leaves its own verifications affordable", async (t) => {
   // The starvation this splits the budget to prevent: verification spends into
-  // the same rolling 24h window the episode just spent into, and the shipped
-  // configuration lets one episode have the whole night. Dispatched at the full
-  // nightly budget, an episode that used it refuses every re-check of its own
-  // claims -- `usage_budget_exceeded` is terminal, so the claim would sit at
-  // `gated` forever with a verification nobody could ever run.
+  // the same rolling 24h window of the TASK's own spend that the episode just
+  // spent into, and the shipped configuration lets one episode have the whole
+  // night. Dispatched at the full nightly budget, an episode that used it
+  // refuses every re-check of its own claims -- the task's budget is spent, and
+  // that refusal is terminal, so the claim would sit at `gated` forever with a
+  // verification nobody could ever run. (The agenda's caps are compared with the
+  // agenda's own runs' spend, found by its episodes' ids: `daySpendCny` is what
+  // those runs settled in the window, never the account's other research.)
   const fixture = await composedApp(t, { autopilotEnabled: true,
     modelGatewaySigningSecret: randomBytes(32).toString("hex") });
   for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
@@ -1121,9 +1144,68 @@ test("an episode that spent everything it was given still leaves its own verific
     "an episode that used its whole budget must not have eaten its own second opinion");
 
   // And the assertion is not vacuous: at the budget the episode used to be
-  // dispatched with, the same call is refused.
+  // dispatched with, the same call is refused -- as the task's budget, which is
+  // what is spent, not as the account's.
   fixture.pool.daySpendCny = night;
-  await assert.rejects(() => fixture.app.autopilotWorker.dispatchVerification(request), { code: "usage_budget_exceeded" });
+  await assert.rejects(() => fixture.app.autopilotWorker.dispatchVerification(request), { status: 402, code: "autopilot_daily_budget_spent" });
+});
+
+// An episode's run is signed with the account's day and week and its own limit
+// (2026-10-04). The agenda's daily and weekly caps used to be signed in as the
+// gateway's day and week, which the gateway compares with everything the account
+// spent: a researcher's other research refused their scheduled research's every
+// model call. What the task has left of its own caps bounds the run instead.
+test("an episode is signed with the account's day and week and a run limit of what it and its task may spend, never the task's own caps", async (t) => {
+  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  // A dispatch binds its run to the episode, so each dispatch below starts from the queued episode again.
+  const seed = () => { for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row); };
+  seed();
+  const { app } = fixture;
+  app.memorySubstrate.recall = async () => [];
+  /** @type {any[]} */ const reserved = [];
+  /** @type {any[]} */ const prompts = [];
+  app.runtimeManager.reserveBoundedRuntimeSession = async (/** @type {any} */ _project, /** @type {any} */ scope) => {
+    reserved.push(scope);
+    return { id: "session-episode", kernel: "dsh" };
+  };
+  app.runtimeManager.dispatchPrompt = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ request) => {
+    prompts.push(request);
+    return { accepted: true };
+  };
+  app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
+  app.agentRuns.dispatch = async (/** @type {any} */ _project, /** @type {any} */ input, /** @type {any} */ sendPrompt) => {
+    await sendPrompt({ sessionId: input.sessionId }, { id: "run-episode", kernelRequestIds: [] });
+    return { id: "run-episode", status: "running" };
+  };
+  const episode = {
+    userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID, dispatchId: EPISODE_ID,
+    taskType: "literature-sentinel", budgetCny: 6, prompt: "Run the literature-sentinel proactive research episode.",
+    assertDispatchAllowed: async () => {},
+  };
+
+  // The agenda is ¥8 a day and ¥80 a week with a ¥6 episode; its own runs spent ¥3 today. The account's other research is not in
+  // that figure and cannot be: the pool answers the task's own spend, and the account has no cap here.
+  fixture.pool.daySpendCny = 3;
+  assert.equal((await app.autopilotWorker.dispatchEpisode(episode)).runId, "run-episode");
+  assert.deepEqual(reserved[0], { runId: EPISODE_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 5 },
+    "the account has no cap, so a figure no run reaches; the run's limit is what the task has left (¥8 less ¥3), the smaller of that and the episode's ¥6");
+  const marker = String(prompts[0].text).match(/<evimed-budget-scope>([^<.]+)\./)?.[1];
+  const signed = JSON.parse(Buffer.from(String(marker), "base64url").toString("utf8"));
+  assert.deepEqual([signed.runId, signed.dailyLimit, signed.weeklyLimit, signed.runLimit], [EPISODE_ID, 1_000_000, 1_000_000, 5], "and the same scope is what the gateway is signed with");
+
+  // Room beyond the episode's own budget: the episode's budget is the limit.
+  reserved.length = 0;
+  seed();
+  fixture.pool.daySpendCny = 0;
+  await app.autopilotWorker.dispatchEpisode(episode);
+  assert.equal(reserved[0].runLimit, 6);
+
+  // The task's own cap spent: the dispatch is refused as the task's, before a runtime is reserved.
+  reserved.length = 0;
+  seed();
+  fixture.pool.daySpendCny = 8;
+  await assert.rejects(() => app.autopilotWorker.dispatchEpisode(episode), { status: 402, code: "autopilot_daily_budget_spent" });
+  assert.equal(reserved.length, 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -1633,7 +1715,7 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   const off = await composedApp(t);
   // `openList` is false here because this composition configures no OpenList
   // (openListReadiness.test.mjs covers the probe that turns it on).
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, geo: false, vcr: false, openList: false });
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, capsuleShare: false, zoneSubscription: false, geo: false, vcr: false, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);
@@ -1672,26 +1754,26 @@ test("the frontier composer is composed, ticked by the worker's compose loop, an
   assert.equal(app.frontier.actions.capabilities().saveToLibrary, true);
 });
 
-// 「循证 GEO」 (build spec 2026-09-25): composed only when switched on with a
+// 「循证传播」 (build spec 2026-09-25): composed only when switched on with a
 // product database, visible to its audience in `/api/me`, its routes and its
 // runtime gateway dispatched, every slot filled (worker, orchestrator,
 // exporter, market), and a `geo.worker` that the recurring work starts,
 // pauses and closes with the rest whatever fills the slot.
-test("循证 GEO is composed when on, its slot's worker runs with the recurring work, and its routes and gateway are dispatched", async (t) => {
+test("循证传播 is composed when on, its slot's worker runs with the recurring work, and its routes and gateway are dispatched", async (t) => {
   const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
   const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID] });
   const { app } = fixture;
   const base = `http://127.0.0.1:${app.server.address().port}`;
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
-  assert.deepEqual(Object.keys(app.geo).sort(), ["articleGate", "articleRunId", "exporter", "importDelivery", "market", "orchestrator", "renameProject", "service", "social", "store", "worker"]);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["articleGate", "articleRunId", "cards", "exporter", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "worker"]);
   // Every slot is filled: the worker with all twelve loops wired (measurement,
   // orchestration, market), the orchestrator, the exporter and the market's
   // user and operator hooks.
   const status = app.geo.worker.status();
   assert.deepEqual(status.missing, [], "every loop has its function");
   assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
-    "verify", "reconcile", "topups"]);
+    "verify", "reconcile", "topups", "questionBank"], "the question bank's loop is in the table and is not wired while its lever is off");
   assert.equal(typeof app.geo.orchestrator.runStep, "function");
   assert.equal(typeof app.geo.exporter.export, "function");
   for (const hook of ["setBudget", "cancelOrder", "confirmTopup", "resolveUnknownOrder", "markOrderLost", "clearStop", "balance", "configured"]) {
@@ -1769,7 +1851,7 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
     await sendPrompt({ sessionId: input.sessionId }, { id: `run-geo-${dispatched.length}`, kernelRequestIds: [] });
     return { id: `run-geo-${dispatched.length}`, status: "running" };
   };
-  const brief = "「循证 GEO」自动运行 · 第 1–3 步（证据、旅程、问题）";
+  const brief = "「循证传播」自动运行 · 第 1–3 步（证据、旅程、问题）";
   const dispatchRun = app.geo.orchestrator.dispatchRun;
   const out = await dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
     dispatchId: "geo-insight-a1", reason: "geo:evidence", brief });
@@ -1853,7 +1935,7 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
   };
 
   await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
-    dispatchId: "geo-insight-recall", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 1 步（证据）" });
+    dispatchId: "geo-insight-recall", reason: "geo:evidence", brief: "「循证传播」自动运行 · 第 1 步（证据）" });
   await app.autopilotWorker.dispatchEpisode({ userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify",
     episodeId: EPISODE_ID, dispatchId: "episode-recall", taskType: "literature-sentinel", budgetCny: 2,
     prompt: "追踪心衰领域的新证据。" });
@@ -1868,11 +1950,11 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
   app.memorySubstrate.recall = async () => [];
   learned.length = 0;
   await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
-    dispatchId: "geo-insight-none", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 2 步" });
+    dispatchId: "geo-insight-none", reason: "geo:evidence", brief: "「循证传播」自动运行 · 第 2 步" });
   assert.deepEqual(learned, []);
 });
 
-test("循证 GEO off, or on for operators this account is not, is invisible: no feature, a named 404, no composition", async (t) => {
+test("循证传播 off, or on for operators this account is not, is invisible: no feature, a named 404, no composition", async (t) => {
   const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
   const off = await composedApp(t);
   assert.equal(off.app.geo, null);
@@ -2121,10 +2203,25 @@ test("a simulated wallet beside a real wallet's address refuses the billing modu
   const data = (await (await fetch(`${base}/api/account/allowance`, { headers })).json()).data;
   assert.deepEqual([data.enabled, data.status, data.available], [true, "unavailable", null]);
   const ready = (await (await fetch(`${base}/api/ready`)).json()).data;
-  assert.deepEqual([ready.checks.credits.ok, ready.checks.credits.code], [false, "evimed_credits_simulated_conflict"]);
+  // The module refuses and is quiet; that is a named warning on a green check — never a red line that fails the platform's readiness.
+  assert.deepEqual([ready.checks.credits.ok, ready.checks.credits.warning, ready.checks.credits.refused], [true, "evimed_credits_simulated_conflict", "evimed_credits_simulated_conflict"]);
   assert.equal((await fetch(`${base}/api/health`)).status, 200, "the platform itself is up");
   assert.equal(fixture.pool.count(/evimed_credits/), 0, "a refused module does not even migrate its schema");
   assert.equal(walletCalls, 0);
+});
+
+test("a simulated wallet without research billing refuses the billing module by name — a warning on a green readiness line — and the platform runs (review F10)", async (t) => {
+  const fixture = await composedApp(t, {
+    evimedCreditsEnabled: true, evimedCreditsSimulated: true, researchBillingEnabled: false, evimedCreditsPerCny: 1,
+    evimedCreditsUrl: "", evimedCreditsBalanceUrl: "",
+  });
+  const base = `http://127.0.0.1:${fixture.app.server.address().port}`;
+  const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
+  const ready = (await (await fetch(`${base}/api/ready`)).json()).data;
+  assert.deepEqual([ready.checks.credits.ok, ready.checks.credits.warning], [true, "evimed_credits_simulated_policy_required"], "named, and not red");
+  const data = (await (await fetch(`${base}/api/account/allowance`, { headers })).json()).data;
+  assert.deepEqual([data.enabled, data.status, data.available], [true, "unavailable", null], "the page opens and says billing is unavailable");
+  assert.equal((await fetch(`${base}/api/health`)).status, 200);
 });
 
 test("a programme step and a channel question are asked of the allowance before any run exists", async (t) => {
@@ -2155,7 +2252,7 @@ test("a programme step and a channel question are asked of the allowance before 
     return { id: `run-gate-${runs}`, status: "running" };
   };
   const step = { userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight", reason: "geo:evidence",
-    brief: "「循证 GEO」自动运行 · 第 1 步（证据）" };
+    brief: "「循证传播」自动运行 · 第 1 步（证据）" };
   // GEO: refused before a runtime is reserved — the orchestrator leaves the step pending and asks again, so a top-up releases it.
   await assert.rejects(app.geo.orchestrator.dispatchRun({ ...step, dispatchId: "geo-gate-1" }), { status: 402, code: "simulated_credits_exhausted" });
   assert.deepEqual([reserved, runs], [0, 0]);

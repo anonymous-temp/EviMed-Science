@@ -1,5 +1,16 @@
-import { METHOD_HARM_TEST } from './constants.mjs'
+import { METHOD_SCIENTIFIC_HARM_TEST } from './constants.mjs'
 import { DATA_CHECK_FAMILIES } from './dataSemantics.mjs'
+
+/**
+ * The sequential test a published tool's real use is read with: the platform's existing harm test
+ * (`methodHarmTest`), on the scientific axis's numbers.
+ *
+ * Not `METHOD_HARM_TEST`'s. Every bad outcome the tool loop records is a researcher correcting a result
+ * the tool took part in, and `constants.mjs` says why that axis has its own background rate: a
+ * correction is ordinary work (25% against a harmful 60%), where a rejected delivery is rare (10%
+ * against 40%). Feeding corrections to the delivery-axis numbers let three of them retire a tool.
+ */
+export const EVOLUTION_TOOL_HARM_TEST = METHOD_SCIENTIFIC_HARM_TEST
 
 /** Closed vocabularies and pure policy for the platform's literature-driven learning loop. */
 export const EVOLUTION_TRACKS = Object.freeze(['E', 'P', 'M', 'U', 'X', 'T'])
@@ -7,15 +18,31 @@ export const EVOLUTION_DATA_LEVELS = Object.freeze(['D0', 'D1', 'D2', 'D3', 'D4'
 export const EVOLUTION_VALIDATION_LEVELS = Object.freeze(['V0', 'V1', 'V2', 'V3', 'V4'])
 export const EVOLUTION_DECISION_CLASSES = Object.freeze(['A', 'B', 'C', 'D'])
 export const EVOLUTION_GAP_CODES = Object.freeze(['connector', 'extraction', 'method-missing', 'method-implementation', 'routing', 'skill-instruction', 'writing', 'model-capability', 'outside-product'])
-export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'autopilot', 'evaluation', 'dataset', 'handbook'])
+export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'autopilot', 'evaluation', 'dataset', 'handbook',
+  // The platform's own modules saying they could not do something (flywheel F20, 2026-10-06): the evidence programme, 循证传播 and 虚拟临研.
+  // Every lead of these three is reduced to a closed code and closed entity keys (`evolutionLeadSources.mjs`), never a researcher's words.
+  'evidence-programme', 'communication', 'virtual-study'])
 export const EVOLUTION_ORIGINS = Object.freeze(['literature', 'tool-result', 'platform-inference', 'user-statement'])
 export const EVOLUTION_BUILD_FORMS = Object.freeze(['compose', 'extend', 'wrap', 'rewrite', 'new-capability'])
 export const EVOLUTION_CASE_GROUPS = Object.freeze(['development', 'holdout', 'time-holdout', 'prospective'])
 export const EVOLUTION_TOOL_STATES = Object.freeze(['staged', 'active', 'alias', 'retired'])
 export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-self-check'])
+/**
+ * What a decision's option can do, as the control plane's executor knows it (`evolutionComposition.mjs`). This list is
+ * closed, and it is what stops the engine: an option whose operation is not here is refused when it is chosen, by a
+ * person or by default. None of these deletes data, sends anything outside the platform, spends past the daily budget
+ * or touches a clinical safety rule; the nearest to irreversible, a soft retirement, keeps every version and can be
+ * restored. Adding one that does is adding it to `EVOLUTION_ONE_WAY_OPERATIONS` as well, which makes its decision a
+ * one-way door that no default can take.
+ */
+export const EVOLUTION_EXECUTABLE_OPERATIONS = Object.freeze(['wait', 'defer', 'keep', 'build', 'retry', 'recommended', 'alternative', 'rescout',
+  'maintenance-retire', 'maintenance-merge', 'maintenance-repair'])
+/** Operations that cannot be taken back; a decision that offers one is class C whatever else it says (plan 9.1). */
+export const EVOLUTION_ONE_WAY_OPERATIONS = Object.freeze(['delete-data', 'external-send', 'over-budget-spend', 'clinical-safety-change'])
 /** @param {any} input */
 export function evolutionDecisionClass(input) {
   if (input.overBudget || input.deleteData || input.externalSend || input.clinicalSafetyChange) return 'C'
+  if ((input.options ?? []).some((/** @type {any} */ option) => EVOLUTION_ONE_WAY_OPERATIONS.includes(option?.operation ?? option?.id))) return 'C'
   if (input.resourceOnly) return 'D'
   return input.directional && new Set(input.attemptedPaths ?? []).size >= 2 ? 'B' : 'A'
 }
@@ -28,7 +55,7 @@ export function evolutionAdaptiveClass(history) {
 export function evolutionValidationLevel(assessments, usage = {}) {
   const independent = assessments.filter((a) => a.independent === true && a.passed === true
     && (a.kind === 'simulation' ? a.exposed !== true : a.exposed === false && a.retracted === false))
-  if (independent.some((a) => a.kind === 'research' && Number(a.papers) >= 5)) return usage.harmState === 'clear' && Number(usage.runs) >= METHOD_HARM_TEST.minRuns ? 'V4' : 'V3'
+  if (independent.some((a) => a.kind === 'research' && Number(a.papers) >= 5)) return usage.harmState === 'clear' && Number(usage.runs) >= EVOLUTION_TOOL_HARM_TEST.minRuns ? 'V4' : 'V3'
   if (new Set(independent.filter((a) => a.kind === 'published-case').map((a) => a.caseId)).size >= 2 && independent.every((a) => a.crossImplementationPassed !== false)) return 'V2'
   if (independent.some((a) => a.kind === 'simulation' && a.preRegistered === true
     && (typeof a.monteCarloError === 'number' ? Number.isFinite(a.monteCarloError) && a.monteCarloError >= 0
@@ -39,6 +66,8 @@ export function evolutionValidationLevel(assessments, usage = {}) {
 export function evolutionToolVisible(tool) {
   if (tool.status !== 'active') return false
   if (tool.toolKind === 'workflow') return tool.smokePassed === true
+  // A text-only handbook entry from an account's general lesson is visible once its independent re-check held (flywheel F16).
+  if (tool.toolKind === 'handbook') return tool.recheckPassed === true
   return Number(String(tool.validationLevel).slice(1)) >= (tool.noPublishedCases === true ? 1 : 2)
 }
 /** Public field contract, with no hidden expected values. @param {any} value */
@@ -98,18 +127,24 @@ export function validateEvolutionDataRequirements(requirement) {
 /** Localized module errors for the shared client boundary. */
 export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
   'paper_gold_administrative_deferred': '评测因模型额度限制暂缓，现有进度已保留。',
+  'evaluation_opaque_source_excluded': '评测期间不提供原始文件下载，请改用已解析的来源。',
+  'evaluation_policy_unreadable': '评测的排除规则暂时无法读取，这次请求没有执行，请稍后重试。',
+  'evaluation_source_excluded': '这个来源在本次评测中被排除，请换用其他来源。',
   'evolution_action_unsupported': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_assessment_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_capability_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_card_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_decision_executing': '这条裁决正在执行，稍后刷新再答复。',
   'evolution_decision_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_decision_missing': '这条研究记录已变化，请刷新后重试。',
+  'evolution_dependency_allowlist_invalid': '循证进化的依赖白名单配置有误，该模块暂未启用，其他研究不受影响。',
   'evolution_disabled': '循证进化暂未启用。',
   'evolution_dossier_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_evaluation_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_event_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_execution_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_failure_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_job_failed': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_lead_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_merge_case_conflict': '这条研究记录已变化，请刷新后重试。',
   'evolution_merge_unverified': '这项研究工作暂时无法完成，请稍后重试。',
@@ -126,10 +161,19 @@ export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
   'evolution_review_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_review_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_route_missing': '这条研究记录已变化，请刷新后重试。',
+  'evolution_run_failed': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_run_budget_exhausted': '这项研究工作需要的模型预算超过了单次运行的上限，已记录为资源缺口，其他研究不受影响。',
   'evolution_run_timeout': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_scope_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_setting_invalid': '循证进化的配置有误，该模块暂未启用，其他研究不受影响。',
   'evolution_temporarily_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_tool_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_tool_rate_limited': '这个项目调用平台工具过于频繁，请稍后重试。',
   'evolution_tool_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_version_immutable': '这条研究记录已变化，请刷新后重试。',
+  // The prediction registry (flywheel F25): a registration that is not a prediction of a trial's primary endpoint, a module that is off, a
+  // registration the viewer may not see (it answers as missing, so a private prediction is not confirmed to exist).
+  'prediction_invalid': '这条预测登记的内容不完整或格式不对：需要试验登记号、终点，以及估计值或成功概率。',
+  'prediction_registry_disabled': '预测登记模块没有启用，其他研究不受影响。',
+  'prediction_not_found': '没有找到这条预测登记。',
 })

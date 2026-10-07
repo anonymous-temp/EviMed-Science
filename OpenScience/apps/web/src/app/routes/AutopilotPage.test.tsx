@@ -2,6 +2,7 @@ import { act, fireEvent, render as renderView, screen, waitFor, within } from "@
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { AutopilotPage } from "./AutopilotPage";
 
@@ -156,6 +157,40 @@ describe("scheduled tasks", () => {
     await waitFor(() => expect(mocks.runAgendaNow).toHaveBeenCalledTimes(3));
     expect(mocks.runAgendaNow.mock.calls[2][1]).not.toEqual(mocks.runAgendaNow.mock.calls[0][1]);
   });
+  // 2026-10-04: a task with ¥3 a day was refused in the account's words (近 24 小时额度已达上限 / 超出账户设定的用量上限) by an
+  // account whose other research had cost ¥16, while the task had spent nothing. The task's own cap now has its own refusal.
+  it("says a spent task budget is the task's own, that raising it is editing the task, and when it frees", async () => {
+    mocks.runAgendaNow.mockRejectedValueOnce(new WebApiError("This task's own daily budget is spent.", { status: 402, code: "autopilot_daily_budget_spent", retryAfterSeconds: 19 * 3600 + 60 }));
+    render(); const panel = await detail();
+    await userEvent.click(within(panel).getByRole("button", { name: "立即运行" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "立即运行" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("这个任务近 24 小时的花费已达它自己设定的“每日上限”");
+    expect(alert).toHaveTextContent("账户里其他研究的花费不占用它");
+    expect(alert).toHaveTextContent("在“编辑任务”里调高每日上限");
+    expect(alert).toHaveTextContent(/请在约 19 小时 1 分后重试/);
+    expect(alert).not.toHaveTextContent(/账户设定的用量上限|近 24 小时额度|额度开始释放/);
+    expect(mocks.listEpisodes).toHaveBeenCalled(); // the page itself is still there, the refusal is not a failed load
+  });
+  it("says the weekly cap as the week's, for a follow-up as for a run", async () => {
+    mocks.followUpAgenda.mockRejectedValueOnce(new WebApiError("This task's own weekly budget is spent.", { status: 402, code: "autopilot_weekly_budget_spent", retryAfterSeconds: 3 * 86400 }));
+    render(); const panel = await detail();
+    await userEvent.type(within(panel).getByLabelText("针对任务追问"), "补充肾病亚组");
+    await userEvent.click(within(panel).getByRole("button", { name: "发送追问" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("这个任务近 7 天的花费已达它自己设定的“每周上限”");
+    expect(alert).toHaveTextContent("在“编辑任务”里调高每周上限");
+    expect(alert).toHaveTextContent(/请在约 3 天后重试/);
+    expect(alert).not.toHaveTextContent(/账户设定的用量上限|近 7 天额度|额度开始释放/);
+  });
+  it("shows an episode the task's budget did not allow to start as that, not as an unexplained failure", async () => {
+    mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, payload: { ...episode.payload, status: "failed", digestId: null, runId: null, sessionId: null,
+      error: { code: "autopilot_daily_budget_spent" } } }] });
+    render(); const panel = await detail();
+    expect(await within(panel).findByText("任务预算已用完")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("账户里其他研究的花费不占用它");
+    expect(panel).not.toHaveTextContent("未完成");
+  });
   it("sends a real follow-up and immediately shows its queued episode", async () => {
     render(); const panel = await detail();
     await userEvent.type(within(panel).getByLabelText("针对任务追问"), "补充肾病亚组");
@@ -308,6 +343,28 @@ describe("scheduled tasks", () => {
     expect(material).toHaveTextContent("年龄分布.xlsx"); expect(material).toHaveTextContent("scan.pdf"); expect(material).toHaveTextContent("正在读取");
     expect(mocks.getResearchState).toHaveBeenCalledWith(agenda.id);
     expect(panel).not.toHaveTextContent("运行记录");
+  });
+  it("says in one line each why a conclusion was not re-checked, and that a stopped task's re-checks will not be made", async () => {
+    mocks.getResearchState.mockResolvedValue(state({
+      unresolved: [{ kind: "not_rechecked", reason: "agenda_stopped", text: "停止时尚未开始" }, { kind: "not_rechecked", reason: "agenda_stopped", text: "停止时已被取消" },
+        { kind: "not_rechecked", reason: "verification_budget_unavailable", text: "单次上限太小" }, { kind: "not_rechecked", reason: "verification_cap", text: "超出条数" },
+        { kind: "not_rechecked", reason: "agenda_paused", text: "暂停时没做" }, { kind: "unchecked", text: "还在排队" }] }));
+    render(); const panel = await detail();
+    const open = await within(panel).findByRole("region", { name: "尚未解决" });
+    expect(open).toHaveTextContent("任务已停止，未做独立复核：停止时尚未开始"); expect(open).toHaveTextContent("任务已停止，未做独立复核：停止时已被取消");
+    expect(open).toHaveTextContent("单次上限不够再支付一次复核，未安排独立复核：单次上限太小"); expect(open).toHaveTextContent("超出每次研究复核的条数，未安排独立复核：超出条数");
+    expect(open).toHaveTextContent("任务已暂停，未做独立复核：暂停时没做");
+    expect(open).toHaveTextContent("尚未独立复核：还在排队");
+    expect(open).not.toHaveTextContent("尚未独立复核：停止时"); expect(open).not.toHaveTextContent("复核未能进行");
+    for (const code of ["agenda_stopped", "verification_canceled_by_stop", "queued"]) expect(open).not.toHaveTextContent(code);
+  });
+  it("says why a task whose cap cannot fund a run was paused, in the sentence the edit form gives, and says nothing of it once the pause is lifted", async () => {
+    const tooSmall = { ...agenda, payload: { ...agenda.payload, enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null, maxEpisodeCny: 0.5,
+      pauseReason: "x", pauseCode: "autopilot_episode_budget_too_small" } };
+    mocks.listAgendas.mockResolvedValue({ items: [tooSmall] }); mocks.getAgenda.mockResolvedValue(tooSmall);
+    render(); const panel = await detail();
+    expect(panel).toHaveTextContent(/已暂停：“单次上限”不能低于 ¥\d+\.\d{2}/); expect(panel).toHaveTextContent("在“编辑任务”里调高单次上限即可");
+    expect(panel).not.toHaveTextContent("autopilot_episode_budget_too_small");
   });
   it("shows no findings section for a question that has found nothing, and still offers to add material", async () => {
     render(); const panel = await detail();

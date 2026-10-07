@@ -20,7 +20,7 @@ import { createPublicSourceGatewayHandler, PUBLIC_SOURCE_ALLOWED_HOSTS } from ".
 
 // The NCBI Gene Expression Omnibus workflow's seams on the control plane: the three named downloads and their exact address
 // shapes, the two byte limits the gateway enforces and counts, the observation the runtime's tool reports for the four it
-// enforces, and the six config keys that reach the runtime. (The public data resource; nothing here touches 循证 GEO.)
+// enforces, and the six config keys that reach the runtime. (The public data resource; nothing here touches 循证传播.)
 
 const mcpDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../runtime/mcp/evimed-research");
 
@@ -93,6 +93,112 @@ test("the matrix and the two records are downloaded from exactly the addresses G
   }
   assert.equal(counts()["open_science_gene_expression_downloads_total{kind=ncbi-gene-expression-series-matrix,outcome=served}"], 3);
   assert.equal(counts()["open_science_gene_expression_downloads_total{kind=ncbi-gene-expression-platform-record,outcome=served}"], 1);
+});
+
+// 2026-10-05, production probe: NCBI's file server answered a public series matrix with 403 text/html; from another machine the
+// same URL answered 403 on 7 of 16 requests in a row and the file on the rest, whatever the User-Agent. The tool reported it as
+// "HTTP 400 ... it holds the item and does not serve it to an unauthenticated client". A refusal that comes and goes is asked
+// again before it is believed, and the route that finally served the bytes is told to the runtime.
+const matrixAsk = { download: { kind: "ncbi-gene-expression-series-matrix", accession: "GSE5583" } };
+const forbidden = () => new Response("<html>403</html>", { status: 403, headers: { "content-type": "text/html; charset=iso-8859-1" } });
+const gzipBody = () => new Response(Buffer.from("file bytes"), { status: 200, headers: { "content-type": "application/x-gzip", "content-length": "10" } });
+const waits = [];
+const pause = async (ms) => { waits.push(ms); };
+
+test("a 403 on a public GEO file is asked again from here, and the bytes are the ones the request that served them returned", async (t) => {
+  resetGeneExpressionMetrics();
+  waits.length = 0;
+  const answers = [forbidden, forbidden, gzipBody];
+  let asked = 0;
+  const { base } = await serve(t, { publicSourceGatewayTimeoutMs: 1_000, publicSourceDownloadTimeoutMs: 2_000, geneExpressionMaxMatrixBytes: 4096 }, {
+    pause, fetchImpl: async () => answers[asked++](),
+  });
+  const result = await rawPost(base, matrixAsk);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.toString(), "file bytes");
+  assert.equal(result.headers["x-evimed-download-route"], "direct-retry");
+  assert.equal(asked, 3, "the refusal was not believed twice");
+  assert.deepEqual(waits, [500, 1000], "with a growing wait between asks");
+  assert.equal(counts()["open_science_gene_expression_downloads_total{kind=ncbi-gene-expression-series-matrix,outcome=served_after_retry}"], 1);
+  assert.equal(counts()["open_science_gene_expression_downloads_total{kind=ncbi-gene-expression-series-matrix,outcome=served}"], 0);
+});
+
+test("a file served at the first ask says it came direct and waits for nothing", async (t) => {
+  resetGeneExpressionMetrics();
+  waits.length = 0;
+  const { base } = await serve(t, { publicSourceGatewayTimeoutMs: 1_000, geneExpressionMaxMatrixBytes: 4096 }, { pause, fetchImpl: async () => gzipBody() });
+  const result = await rawPost(base, matrixAsk);
+  assert.equal(result.headers["x-evimed-download-route"], "direct");
+  assert.deepEqual(waits, []);
+  assert.equal(counts()["open_science_gene_expression_downloads_total{kind=ncbi-gene-expression-series-matrix,outcome=served}"], 1);
+});
+
+test("when every ask from here is refused the file is asked for through the edge node, which is another address", async (t) => {
+  resetGeneExpressionMetrics();
+  waits.length = 0;
+  const direct = [];
+  const edge = [];
+  const { base } = await serve(t, { publicSourceGatewayTimeoutMs: 1_000, publicSourceDownloadTimeoutMs: 2_000, geneExpressionMaxMatrixBytes: 4096 }, {
+    pause,
+    fetchImpl: async (url) => { direct.push(String(url)); return forbidden(); },
+    fallbackFetch: async (url) => { edge.push(String(url)); return gzipBody(); },
+  });
+  const result = await rawPost(base, matrixAsk);
+  assert.equal(result.status, 200);
+  assert.equal(result.headers["x-evimed-download-route"], "edge");
+  assert.equal(direct.length, 3);
+  assert.deepEqual(edge, ["https://ftp.ncbi.nlm.nih.gov/geo/series/GSE5nnn/GSE5583/matrix/GSE5583_series_matrix.txt.gz"], "the same address the file layout names, never another");
+  assert.equal(counts()["open_science_gene_expression_downloads_total{kind=ncbi-gene-expression-series-matrix,outcome=served_via_edge}"], 1);
+});
+
+test("refused on every route it is the source's refusal, said with the status the source answered, and counted", async (t) => {
+  resetGeneExpressionMetrics();
+  let fetches = 0;
+  const { base, failures } = await serve(t, { publicSourceGatewayTimeoutMs: 1_000, publicSourceDownloadTimeoutMs: 2_000 }, {
+    pause, fetchImpl: async () => { fetches += 1; return forbidden(); },
+    // A node that is itself down is no better an answer than the refusal it was tried for.
+    fallbackFetch: async () => { throw new Error("edge node unreachable"); },
+  });
+  const refused = await post(base, matrixAsk);
+  assert.equal(refused.status, 400, "the gateway's status for a source's 4xx other than 404 and 429");
+  const body = (await refused.json()).error;
+  assert.equal(body.code, "public_source_gateway_upstream_denied");
+  assert.equal(body.upstreamStatus, 403, "what the source answered, which is what the runtime reports");
+  assert.equal(fetches, 4, "three asks from here, then the last again after the node failed");
+  assert.equal(failures.at(-1).upstream.status, 403);
+  assert.equal(counts()["open_science_gene_expression_downloads_total{kind=ncbi-gene-expression-series-matrix,outcome=denied}"], 1);
+  // No node configured: three asks and the refusal.
+  fetches = 0;
+  const alone = await serve(t, { publicSourceGatewayTimeoutMs: 1_000, publicSourceDownloadTimeoutMs: 2_000 }, { pause, fetchImpl: async () => { fetches += 1; return forbidden(); } });
+  assert.equal((await post(alone.base, matrixAsk)).status, 400);
+  assert.equal(fetches, 3);
+});
+
+test("only the GEO kinds are asked again after a 403; another source's refusal is believed at once", async (t) => {
+  waits.length = 0;
+  let fetches = 0;
+  const { base } = await serve(t, { publicSourceGatewayTimeoutMs: 1_000 }, { pause, fetchImpl: async () => { fetches += 1; return forbidden(); }, fallbackFetch: async () => { fetches += 100; return gzipBody(); } });
+  const refused = await post(base, { download: { kind: "dailymed-spl-zip", setid: "5e81b4a7-b971-45e1-9c31-29cea8c87ce7", version: 36 } });
+  assert.equal(refused.status, 400);
+  assert.equal(fetches, 1);
+  assert.deepEqual(waits, []);
+  // And a status that is not 403 is never retried here, for a GEO kind either.
+  fetches = 0;
+  const { base: other } = await serve(t, { publicSourceGatewayTimeoutMs: 1_000 }, { pause, fetchImpl: async () => { fetches += 1; return new Response("", { status: 500 }); } });
+  assert.equal((await post(other, matrixAsk)).status, 502);
+  assert.equal(fetches, 1);
+});
+
+test("a wait between asks ends when the caller leaves", async (t) => {
+  let fetches = 0;
+  const { base } = await serve(t, { publicSourceGatewayTimeoutMs: 1_000, publicSourceDownloadTimeoutMs: 1_000 }, {
+    fetchImpl: async () => { fetches += 1; return forbidden(); },
+    pause: (ms, signal) => new Promise((_resolve, reject) => { signal.addEventListener("abort", () => reject(signal.reason), { once: true }); }),
+  });
+  const response = await post(base, matrixAsk);
+  // The deadline (a second) ended the wait, and what the caller gets is the timeout, not a hang.
+  assert.equal(response.status, 504);
+  assert.equal(fetches, 1);
 });
 
 test("a download request that is not an accession of the kind it names is refused before any fetch", async (t) => {

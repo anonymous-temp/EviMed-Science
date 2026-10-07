@@ -90,7 +90,19 @@ COPY 项目代码/evimed_judge.py /agent/evimed_judge.py
 # This runs after the agent source is copied, so any change to that source
 # rebuilds the R layer. Keeping the list in one place is worth more than the
 # cache: the two lists silently diverged for as long as they both existed.
-RUN if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
+#
+# `remotes` resolves each GitHub package's `Remotes:` through api.github.com, whose
+# unauthenticated limit is 60 requests an hour per address, and a shared CI runner
+# spent it on about every other build (2026-10-05). A build that is handed a
+# token (the CI workflow's own, through `.github/ci/docker-compose.build-secrets.yml`)
+# receives it as a BuildKit secret: mounted for this one command, read into
+# GITHUB_PAT for the install alone, never an ARG, an ENV or a layer. The mount is
+# optional on purpose -- a host build or a fork has no secret, and the install then
+# goes out unauthenticated exactly as before. The command is not traced (no `set -x`)
+# so the value is never written to the build log.
+RUN --mount=type=secret,id=github_token,required=false \
+    if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
+      if [ -s /run/secrets/github_token ]; then GITHUB_PAT="$(cat /run/secrets/github_token)"; export GITHUB_PAT; fi; \
       R_LIB_TARGET=/usr/local/lib/R/site-library \
       CRAN_MIRROR="${CRAN_MIRROR}" \
       GITHUB_DOWNLOAD_PREFIX="${GITHUB_DOWNLOAD_PREFIX}" \

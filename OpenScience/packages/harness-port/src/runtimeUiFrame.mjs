@@ -109,11 +109,11 @@ export const FRAME_VOCABULARY = Object.freeze({
   // Where the researcher's knowledge base is synced in the workspace: the
   // `@` reference tells the model where a cited source's text is.
   knowledgeDir: KNOWLEDGE_DIR,
-  // 循证 GEO's capabilities: a conversation bound to any of them carries the
-  // module's chip, 「循证 GEO」, and none of them is offered by `/工具` — the
+  // 循证传播's capabilities: a conversation bound to any of them carries the
+  // module's chip, 「循证传播」, and none of them is offered by `/工具` — the
   // module is entered from its own sidebar row.
   geo: Object.freeze({
-    title: '循证 GEO',
+    title: '循证传播',
     capabilities: Object.freeze(['geo-insight', 'geo-strategy', 'geo-content', 'geo-proposal']),
   }),
   // 虚拟临研's capabilities, read the same way: a conversation bound to any of

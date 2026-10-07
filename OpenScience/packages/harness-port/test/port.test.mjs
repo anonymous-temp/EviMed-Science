@@ -304,6 +304,9 @@ test("an unknown turn-end kind is preserved rather than guessed", () => {
   assert.deepEqual(toTurnEnd({ type: "turn/end", data: { reason: { kind: "completed" } } }), { kind: "completed" });
   assert.deepEqual(toTurnEnd({ data: { reason: { kind: "aborted", reason: { kind: "user" } } } }), { kind: "aborted" });
   assert.deepEqual(toTurnEnd({ data: { reason: { kind: "error", error: { code: "RATE_LIMIT", message: "x" } } } }), { kind: "error", code: "RATE_LIMIT" });
+  // The HTTP status of the refused model call travels with the kernel's code: the code is upstream's word and was renamed.
+  assert.deepEqual(toTurnEnd({ data: { reason: { kind: "error", error: { code: "QUOTA", status: 402, message: "x" } } } }), { kind: "error", code: "QUOTA", status: 402 });
+  assert.deepEqual(toTurnEnd({ data: { reason: { kind: "error", error: { code: "QUOTA", status: "402" } } } }), { kind: "error", code: "QUOTA" });
   assert.deepEqual(toTurnEnd({ data: { reason: { kind: "max-tokens" } } }), { kind: "max-tokens" });
   assert.deepEqual(toTurnEnd({ data: { reason: { kind: "interrupted" } } }), { kind: "interrupted" });
   assert.deepEqual(toTurnEnd({ data: { reason: { kind: "gone-fishing" } } }), { kind: "unknown", rawKind: "gone-fishing" });

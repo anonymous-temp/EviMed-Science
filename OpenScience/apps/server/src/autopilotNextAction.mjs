@@ -20,8 +20,9 @@
  *   (`eligibleTaskTypes` — a type paused for repeated failures is not offered),
  *   what the model is shown (a bounded projection that already separates what
  *   was checked from what failed to run), the closed vocabulary of the answer,
- *   when a stop is not allowed (`stopAllowed`), the budget (the agenda's own
- *   daily and weekly caps and the account's, through the gateway's
+ *   when a stop is not allowed (`stopAllowed`), the budget (the episode's own
+ *   envelope — its cap, or what the agenda has left of its own daily and weekly
+ *   caps if less — and the account's caps, through the gateway's
  *   reserve-then-settle, under purpose `autopilot`), the timeout, and the
  *   fallback. An answer that does not parse, names a type that is not offered,
  *   or asks for a stop that is not allowed is not softened into something
@@ -118,6 +119,7 @@ const researcherInstructions = Object.freeze({
   researcherMessages: "- researcherMessages is what the researcher has written to this question, oldest first. A correction there stands over the findings it corrects: do not queue work to re-prove what they corrected unless new evidence is in reach, and say in focus what the correction changes. A question there is open until an episode answered it.",
   materials: "- materials are files the researcher added for this question. Pick the task type that reads a material whose state is ready; one that is reading is not usable yet, and one that needs attention could not be read fully.",
   earlierStop: "- earlierStop is what an earlier decision stopped for. When it asked for input, the material added after it (see materials) is what was asked for.",
+  frontierItems: "- frontierItems are what the platform's screened feed of recent medical publications and notices already holds for this question's entities since the last episode: an id, a title, a date, an evidence type and whether it is a safety alert. When they hold something new, prefer literature-sentinel or evidence-update and say in focus which of them the episode should read; do not queue a fresh search for what the feed already lists. They are leads, never evidence: the episode reads the originals and cites those.",
   pauseAllowed: "- pauseAllowed is true: request.trigger is follow-up and the researcher is writing to you now. If the note only asks to pause, hold or stop the research for the time being and asks for nothing to be looked into, choose stop with stopKind paused_by_researcher and say so in reason; this is the one stop allowed when stopAllowed is false. A question, a correction, an added requirement or a request with a condition is never a pause: choose run.",
 });
 
@@ -139,12 +141,6 @@ export function plannerInstructions(context) {
 /** @param {unknown} value @param {number} max */
 function cut(value, max) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
-}
-
-/** @param {...unknown} values @returns {number} the smallest positive value, 0 when there is none */
-function minimumPositive(...values) {
-  const positive = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
-  return positive.length ? Math.min(...positive) : 0;
 }
 
 /**
@@ -183,9 +179,11 @@ function episodeOutcome(status, claims) {
  * not an episode that found nothing.
  *
  * @param {{agenda:any, progress:any, eligible:string[], date:string, trigger:string, note?:string|null,
- *   reducedPriority:boolean, stopAllowed:boolean, pauseAllowed?:boolean, availableTools?:any[], evolutionEnabled?:boolean}} input
+ *   reducedPriority:boolean, stopAllowed:boolean, pauseAllowed?:boolean, availableTools?:any[], evolutionEnabled?:boolean,
+ *   frontier?: ReturnType<typeof plannerFrontierItems>}} input
+ *   `frontier`: the feed's items for the agenda's entities (`plannerFrontierItems`); a field with nothing in it is left out of the prompt.
  */
-export function buildPlannerContext({ agenda, progress, eligible, date, trigger, note = null, reducedPriority, stopAllowed, pauseAllowed = false, availableTools = [], evolutionEnabled = false }) {
+export function buildPlannerContext({ agenda, progress, eligible, date, trigger, note = null, reducedPriority, stopAllowed, pauseAllowed = false, availableTools = [], evolutionEnabled = false, frontier = [] }) {
   const typeState = agenda.payload.taskTypeState ?? {};
   const episodes = (progress?.episodes ?? []).map((/** @type {any} */ episode) => ({
     date: episode.date,
@@ -212,6 +210,7 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
       validationLevel: tool.validationLevel, dataLevel: tool.dataLevel, dataRequirements: tool.dataRequirements,
     })) } : {}),
     ...(pauseAllowed ? { pauseAllowed } : {}),
+    ...(frontier.length ? { frontierItems: frontier.slice(0, PLANNER_FRONTIER_ITEMS_MAX) } : {}),
     taskTypes: (agenda.payload.taskTypes ?? []).filter((/** @type {string} */ type) => AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type))).map((/** @type {string} */ type) => ({
       id: type, does: TASK_TYPE_SUMMARIES[/** @type {keyof typeof TASK_TYPE_SUMMARIES} */ (type)],
       state: eligible.includes(type) ? "available" : "paused_after_repeated_failures",
@@ -234,6 +233,27 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
     context.progressTruncated = true;
   }
   return context;
+}
+
+/** The most feed items one decision is shown, and the longest title it reads of each. */
+export const PLANNER_FRONTIER_ITEMS_MAX = 8;
+const FRONTIER_TITLE_CHARS = 160;
+
+/**
+ * What the decision is shown of the frontier items that match an agenda's entities (evidence-flywheel F04, 2026-10-05): the
+ * feed's id, a title, a date, the evidence type and whether it is a safety alert — bounded, and no text of the item. This is
+ * what "new literature" is for every agenda, the researcher's own included, so the planner chooses `literature-sentinel` or
+ * `evidence-update` from what the feed already holds instead of having each agenda crawl it again.
+ * @param {any[]} matches `frontierItemsMatching`'s rows @returns {{ id: string, title: string, date: string | null, evidenceType: string | null, safetyAlert?: true }[]}
+ */
+export function plannerFrontierItems(matches) {
+  return (Array.isArray(matches) ? matches : []).slice(0, PLANNER_FRONTIER_ITEMS_MAX).map((item) => ({
+    id: String(item.publicId),
+    title: cut(item.titleZh || item.titleRaw, FRONTIER_TITLE_CHARS),
+    date: typeof item.timelineAt === "string" ? item.timelineAt.slice(0, 10) : null,
+    evidenceType: typeof item.evidenceType === "string" ? item.evidenceType : null,
+    ...(item.safetyAlert === true ? { safetyAlert: /** @type {const} */ (true) } : {}),
+  }));
 }
 
 /** @param {string} code @param {string} message */
@@ -275,8 +295,9 @@ export function parsePlannerAnswer(content, { eligible, stopAllowed, pauseAllowe
     // The researcher's own pause is the only stop their message can ask for, and
     // the only one allowed in answer to it; every other stop is the scheduler's.
     if (answer.stopKind === RESEARCHER_PAUSE_KIND ? !pauseAllowed : !stopAllowed) throw invalid("a stop where none is allowed");
-    const need = answer.resourceNeed;
-    if (need != null && (!evolutionEnabled || answer.stopKind !== "needs_input" || !["tool", "data"].includes(need.kind))) throw invalid("an invalid resource need");
+    // A need the module can use rides on the stop; anything else — the module is off, the stop is of another kind, the
+    // need is not a tool or data — is left out, and the stop stands: the decision is the model's, the need an addition to it.
+    const need = evolutionEnabled && answer.stopKind === "needs_input" && ["tool", "data"].includes(answer.resourceNeed?.kind) ? answer.resourceNeed : null;
     const id = (value) => typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,159}$/.test(value) ? value : undefined;
     return { action: "stop", stopKind: answer.stopKind, reason,
       ...(need ? { resourceNeed: { kind: need.kind, capabilityId: id(need.capabilityId), methodId: id(need.methodId), toolId: id(need.toolId), requirementId: id(need.requirementId) } } : {}) };
@@ -313,14 +334,24 @@ export class AutopilotPlanner {
 
   /**
    * One decision, charged to the researcher's own project and, through `runId`,
-   * to the episode it chooses for. The agenda's own daily and weekly caps bound
-   * it together with the account's: the same envelope the episode will spend in.
+   * to the episode it chooses for. Two questions bound it, and they are not the
+   * same sum: the episode's own envelope (`envelopeCny`, 0 for none) is counted
+   * over what that episode has spent — the decision is the first of it — and the
+   * account's daily and weekly caps (the deployment's, zero for none) over
+   * everything the account spent. The agenda's own daily and weekly caps are
+   * never passed here: the gateway would compare them with the account's whole
+   * spend, and a researcher's other research would refuse the agenda's decision
+   * (2026-10-04); they are the agenda's allowance, checked before the episode
+   * exists (`AutopilotService.assertAffordable`), and what is left of them is the
+   * envelope.
    * Throws a coded error when no usable decision was had; the caller falls back.
    *
+   * The decision is booked under purpose `autopilot`, a researcher's own; the platform's evidence programme asks for `evidence`
+   * (its own agendas are the platform's money, `evidenceProgramme.mjs`).
    * @param {{userId: string, projectId: string, episodeId: string, context: any, eligible: string[], stopAllowed: boolean,
-   *   pauseAllowed?: boolean, limits?: {daily?: number, weekly?: number}}} input
+   *   pauseAllowed?: boolean, envelopeCny?: number, purpose?: "autopilot" | "evidence"}} input
    */
-  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, limits = {} }) {
+  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, envelopeCny = 0, purpose = "autopilot" }) {
     if (!this.available) throw plannerError("autopilot_planner_unavailable", "The next-action planner is not available.");
     if (this.now() < this.openUntil) {
       this.counters.circuitOpen += 1;
@@ -331,10 +362,11 @@ export class AutopilotPlanner {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const body = await this.callModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
-        userId, projectId, runId: episodeId, purpose: "autopilot",
+        userId, projectId, runId: episodeId, purpose,
         limits: {
-          daily: minimumPositive(limits.daily, this.config.userDailySpendLimit),
-          weekly: minimumPositive(limits.weekly, this.config.userWeeklySpendLimit),
+          daily: Number(this.config.userDailySpendLimit) || 0,
+          weekly: Number(this.config.userWeeklySpendLimit) || 0,
+          run: envelopeCny > 0 ? envelopeCny : 0,
         },
         signal: controller.signal,
         body: {

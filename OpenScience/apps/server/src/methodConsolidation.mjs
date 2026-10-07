@@ -41,6 +41,7 @@ import { createHash } from "node:crypto";
 import {
   METHOD_RELATIONS_ACTIONS,
   METHOD_RELATION_TYPES,
+  RUNTIME_ROOM_REFUSAL_CODES,
   cleanMethodDisplay,
   parseSkillFrontmatter,
   preservedSectionsIntact,
@@ -68,7 +69,7 @@ export const CONSOLIDATE_ACTIONS = Object.freeze(["sleep", "integrate", "evaluat
 export const DEFERRED_LEARNING_ERRORS = new Map([
   ["learning_paused", 60_000],
   ["runtime_busy", 60_000],
-  ["runtime_limit_exceeded", 120_000],
+  ...RUNTIME_ROOM_REFUSAL_CODES.map((code) => /** @type {[string, number]} */ ([code, 120_000])),
   ["runtime_proxy_limit_exceeded", 120_000],
   // A researcher's start took the runtime back mid-step (`RuntimeManager.
   // makeRoomFor`). The step starts again under the next attempt id once there is
@@ -237,12 +238,23 @@ export function groupPairs(pairs, limits = {}) {
   return groups;
 }
 
-/** Bounded public context for the existing relation pass, never personal method promotion. @param {any[]} tools @param {readonly any[]} members */
-export function relevantPlatformTools(tools,members) {
-  const capabilities=new Set(members.flatMap(member=>[member.payload?.capabilityId,...(member.payload?.capabilityIds??[])].filter(Boolean)));
-  const tokens=new Set(members.flatMap(member=>`${member.payload?.frontmatter?.name??''} ${member.payload?.frontmatter?.description??''}`.toLowerCase().split(/[^a-z0-9]+/).filter(word=>word.length>3)));
-  const relevant=tools.filter(tool=>tool.capabilityIds?.some(id=>capabilities.has(id)) || `${tool.name??''} ${tool.description??''}`.toLowerCase().split(/[^a-z0-9]+/).some(word=>tokens.has(word))).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
-  return {items:relevant.slice(0,30).map(tool=>({id:tool.id,digest:tool.digest??tool.artifactDigest,revision:tool.revision,capabilityIds:(tool.capabilityIds??[]).slice(0,30),name:String(tool.name??'').slice(0,160),description:String(tool.description??'').slice(0,1000)})),omitted:Math.max(0,relevant.length-30),irrelevant:tools.length-relevant.length,selectionBasis:'declared-capability-or-public-description-overlap'};
+/**
+ * What the relation pass is told about the platform's own tools, and only when there is something to tell:
+ * the tools a group's methods are declared for (`capabilityIds`, a closed list), bounded, and nothing of a
+ * tool's papers or data requirements. Whether a description is "about" the same thing as a method is a language
+ * judgement, so it is not made here by shared words; the pass reads the descriptions and decides.
+ * With none (the module off, or no tool for these capabilities) the brief carries no `platformTools` key, and is
+ * byte for byte the one the pass was given before the module existed.
+ * @param {any[]} tools @param {readonly any[]} members @returns {{platformTools: any} | {}}
+ */
+export function relevantPlatformTools(tools, members) {
+  const capabilities = new Set(members.flatMap((member) => [member.payload?.capabilityId, ...(member.payload?.capabilityIds ?? [])].filter(Boolean)));
+  const relevant = tools.filter((tool) => tool.capabilityIds?.some((/** @type {string} */ id) => capabilities.has(id)))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  if (!relevant.length) return {};
+  return { platformTools: { items: relevant.slice(0, 30).map((tool) => ({ id: tool.id, digest: tool.digest ?? tool.artifactDigest, revision: tool.revision,
+    capabilityIds: (tool.capabilityIds ?? []).slice(0, 30), name: String(tool.name ?? "").slice(0, 160), description: String(tool.description ?? "").slice(0, 1000) })),
+  omitted: Math.max(0, relevant.length - 30), irrelevant: tools.length - relevant.length, selectionBasis: "declared-capability" } };
 }
 
 /** Current, already-recorded paired evidence may complete a pending merge; default approval alone cannot.
@@ -698,7 +710,7 @@ export class MethodConsolidation {
         schemaVersion: 1,
         action: "decide",
         relationTypes: [...METHOD_RELATION_TYPES],
-        platformTools: relevantPlatformTools(await this.platformTools(),members),
+        ...relevantPlatformTools(await this.platformTools(), members),
         methods: members.map((member) => ({
           id: member.id,
           name: member.payload?.frontmatter?.name,

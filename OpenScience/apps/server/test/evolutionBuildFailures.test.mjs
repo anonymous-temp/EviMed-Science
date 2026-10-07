@@ -2,10 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEvolutionBuilder } from '../src/evolutionBuild.mjs';
 test('completed hidden evaluation failures are durable opaque findings; unavailable references are resources',async()=>{
-  const failures=[];let result={ok:false,status:'repair',failedCaseIds:['opaque-case']};
+  // The hidden cases' own ids name their publications; what reaches the builder and the failure record must not.
+  const failures=[];let result={ok:false,status:'repair',evaluatorHash:'a'.repeat(64),failedCaseIds:['darth-time-dependent','marker-net-benefit']};
   const builder=createEvolutionBuilder({dispatch:async()=>({id:'candidate',publicationKind:'isolated-tool',entrypoint:'scripts/a.py:a',files:{'SKILL.md':'Public instructions','scripts/a.py':'pass'}}),verification:{verify:async()=>({ok:true})},evaluator:{evaluate:async()=>result},publisher:{publish:async()=>{throw new Error('failed candidate cannot publish');}},recordFailure:async failure=>failures.push(failure)});
-  assert.equal((await builder.build({id:'dossier'})).status,'repair');
-  assert.deepEqual(failures,[{cardId:'dossier',code:'method_implementation',gapCode:'method-implementation',failedCaseIds:['opaque-case']}]);
+  const built=await builder.build({id:'dossier'});assert.equal(built.status,'repair');
+  assert.equal(built.feedback.failedCaseIds.length,2);assert.ok(built.feedback.failedCaseIds.every(id=>/^case-[a-f0-9]{16}$/.test(id)));assert.equal(new Set(built.feedback.failedCaseIds).size,2);
+  assert.doesNotMatch(JSON.stringify([built,failures]),/darth|marker|net-benefit|time-dependent/);
+  assert.deepEqual(failures,[{cardId:'dossier',code:'method_implementation',gapCode:'method-implementation',failedCaseIds:built.feedback.failedCaseIds}]);
+  // The same case fails under the same token next time, and under another once the definition changes.
+  assert.deepEqual((await builder.build({id:'dossier'})).feedback.failedCaseIds,built.feedback.failedCaseIds);failures.pop();
+  result={...result,evaluatorHash:'b'.repeat(64)};assert.notDeepEqual((await builder.build({id:'dossier'})).feedback.failedCaseIds,built.feedback.failedCaseIds);failures.pop();
+  // A behavioural failure reaches the builder as one closed code and no case at all.
+  result={ok:false,status:'repair',evaluatorHash:'a'.repeat(64),failedCaseIds:[],issueCodes:['candidate_generalisation_failed']};
+  assert.deepEqual((await builder.build({id:'dossier'})).feedback,{passed:false,failedCaseIds:[],issueCodes:['candidate_generalisation_failed']});assert.equal(failures.length,1);
   result={ok:false,status:'waiting_resource',resourceCode:'hidden_reference_cases_missing',failedCaseIds:[]};
   await builder.build({id:'dossier'});assert.equal(failures.length,1);
   result={ok:false,status:'waiting_resource',failedCaseIds:['execution-resource-case']};

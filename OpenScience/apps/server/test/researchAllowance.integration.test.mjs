@@ -93,8 +93,8 @@ test('authenticated allowance HTTP uses the upstream wallet and durable user-sco
     assert.equal(page.status, 200); all.push(...page.body.data.items); cursor = page.body.data.nextCursor;
   }
   assert.equal(all.length, 3); assert.equal(new Set(all.map(row => row.id)).size, 3);
-  assert.ok(all.some(row => row.id === `http_legacy_${suffix}` && row.amount === 4.8));
-  assert.ok(all.some(row => row.id === `http_task_settled_${suffix}` && row.amount === 2));
+  assert.ok(all.some(row => row.id === `http_legacy_${suffix}` && row.amount === '4.80000000'));
+  assert.ok(all.some(row => row.id === `http_task_settled_${suffix}` && row.amount === '2.00000000'));
   assert.ok(all.some(row => row.id === `http_task_pending_${suffix}` && row.status === 'pending' && row.amount === null));
   assert.ok(!JSON.stringify(all).includes(`http_other_private_${suffix}`));
   const forged = await f.get(`/statements?userId=${other.user.id}`, owner);

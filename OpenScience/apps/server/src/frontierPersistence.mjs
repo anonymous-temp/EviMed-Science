@@ -105,6 +105,9 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.sources (
   mirrored_at        timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX IF NOT EXISTS frontier_sources_lane_idx ON evimed_frontier.sources (lane) WHERE retired_at IS NULL;
+-- Contract 1.3.0 (flywheel F09, 2026-10-05): the source's content is the platform's own. A label the cards show and the
+-- reason an item of such a source is never independent corroboration of another's; scoring never reads it.
+ALTER TABLE evimed_frontier.sources ADD COLUMN IF NOT EXISTS platform_produced boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.entries (
   id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -211,6 +214,10 @@ CREATE INDEX IF NOT EXISTS frontier_items_safety_idx
   ON evimed_frontier.items (timeline_at DESC) WHERE state = 'published' AND safety_alert;
 CREATE INDEX IF NOT EXISTS frontier_items_specialties_idx ON evimed_frontier.items USING gin (specialties);
 CREATE INDEX IF NOT EXISTS frontier_items_entity_keys_idx ON evimed_frontier.items USING gin (entity_keys);
+-- Both the event clusterer's trial lookup and the shared entity vocabulary's
+-- identifier lookup (entityVocabulary.mjs, frontierItemsMatching) ask which
+-- items state a registry number; without it each is a scan of every item.
+CREATE INDEX IF NOT EXISTS frontier_items_registry_ids_idx ON evimed_frontier.items USING gin (registry_ids);
 CREATE INDEX IF NOT EXISTS frontier_items_lexemes_idx ON evimed_frontier.items USING gin (lexemes);
 CREATE INDEX IF NOT EXISTS frontier_items_event_idx ON evimed_frontier.items (event_id) WHERE event_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS frontier_items_published_idx

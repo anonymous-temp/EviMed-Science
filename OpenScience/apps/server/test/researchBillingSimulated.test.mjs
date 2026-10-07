@@ -1,25 +1,25 @@
-// Research-allowance billing on a simulated wallet, without a database: the
-// service's gate, its boot and recovery when billing cannot come up, the module
-// that refuses a configuration, the simulated wallet's own routes, the commerce
-// that is the platform's own pages, the release check, and the config keys.
-// The estimate → charge → statement path over PostgreSQL is
-// `researchBillingSimulated.integration.test.mjs`.
+// Research-allowance billing on a simulated wallet, without a database: its boot
+// and recovery when billing cannot come up, the module that refuses a
+// configuration, the simulated wallet's own routes, the commerce that is the
+// platform's own pages, the release check, and the config keys. Nothing here
+// stands in for the wallet's behaviour — lots, holds, the take-up-to — which is
+// the storage's and is tested against PostgreSQL (`evimedCreditsWallet.integration.test.mjs`,
+// `evimedCreditsPlatform.integration.test.mjs`); a wallet here is a stub that only
+// records whether it was asked.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
-import { SIMULATED_LOW_CREDITS, SIMULATED_START_CREDITS, SIMULATED_TOPUP_PACKAGES, SIMULATED_WALLET_PAGES, errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
+import YAML from "yaml";
+import { SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, errorCodeMessage } from "@evimed/domain";
 import { checkResearchBillingReadiness, parseResearchBillingReadinessArgs, researchBillingReadinessConfig } from "../../../scripts/ops/check-research-billing.mjs";
 import { loadConfig } from "../src/config.mjs";
-import { createEvimedCreditsClient } from "../src/evimedCreditsClient.mjs";
 import { EvimedCreditsService, creditsReadiness } from "../src/evimedCreditsService.mjs";
-import {
-  SIMULATED_WALLET_BALANCE_URL, SIMULATED_WALLET_DEDUCT_URL, SIMULATED_WALLET_KEY, createSimulatedWalletFetch, evimedCreditsRefusal, simulatedPayerId,
-} from "../src/evimedCreditsSimulator.mjs";
+import { evimedCreditsRefusal } from "../src/evimedCreditsSimulator.mjs";
 import { createResearchAllowanceRoutes } from "../src/researchAllowanceRoutes.mjs";
 import { checkResearchCommerceConformance, createResearchCommerce } from "../src/researchCommerce.mjs";
 import { createSimulatedWalletRoutes, simulatedWalletRoutePattern } from "../src/simulatedWalletRoutes.mjs";
-import { MemorySimulatedWallet } from "./helpers/simulatedWalletContract.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const INCARNATION = "2026-10-03T00:00:00.123456Z";
@@ -42,90 +42,35 @@ function database({ incarnations = { u_1: INCARNATION, u_2: INCARNATION }, failu
   return db;
 }
 
-/** The service as the server composes it for a simulated deployment. */
-function simulatedService({ db = database(), wallet = new MemorySimulatedWallet({ startCredits: 200 }), extra = {}, reported = [] } = {}) {
-  const client = createEvimedCreditsClient({
-    deductUrl: SIMULATED_WALLET_DEDUCT_URL, balanceUrl: SIMULATED_WALLET_BALANCE_URL, apiKey: SIMULATED_WALLET_KEY, simulated: true,
-    fetchImpl: createSimulatedWalletFetch(wallet),
-  });
-  const service = new EvimedCreditsService({ config, database: db, client, simulator: wallet, report: (code) => reported.push(code), ...extra });
-  return { service, wallet, db, client, reported, payer: (userId = "u_1") => simulatedPayerId(userId, INCARNATION) };
+/** A wallet that only records whether it was asked: what it would answer is the storage's to prove, not this file's. */
+function stubWallet() {
+  const calls = /** @type {string[]} */ ([]);
+  return {
+    calls,
+    async ready() { calls.push("ready"); },
+    async snapshot() {
+      calls.push("snapshot");
+      return { available: "200.00000000", balance: "200.00000000", purchased: "0.00000000", gifted: "200.00000000", frozen: "0.00000000", nextExpiry: null };
+    },
+    async release() { calls.push("release"); return false; },
+  };
 }
 
-test("the first read of any account is the starting allowance, marked simulated, whatever kind of account it is", async () => {
-  const { service, wallet, payer } = simulatedService();
-  assert.equal(service.simulated, true);
-  assert.deepEqual(await service.balanceFor("u_1"), { balance: 200, frozen: 0, unit: "灵豆", status: "ok", simulated: true });
-  assert.deepEqual(await service.balanceFor("u_2"), { balance: 200, frozen: 0, unit: "灵豆", status: "ok", simulated: true });
-  // Isolated per account: one account's spend is not the other's.
-  await wallet.deduct({ payer: payer("u_1"), requestId: "run_iso_1", credits: 60 });
-  assert.equal((await service.balanceFor("u_1")).balance, 140);
-  assert.equal((await service.balanceFor("u_2")).balance, 200);
-  // An account that does not exist has no wallet, and says so rather than inventing one.
-  assert.deepEqual(await service.balanceFor("nobody"), { balance: null, frozen: null, unit: "灵豆", status: "evimed_credits_account_unlinked", simulated: true });
-  assert.equal(SIMULATED_START_CREDITS, 200);
-});
+/** The service as the server composes it for a simulated deployment. */
+function simulatedService({ db = database(), wallet = stubWallet(), extra = {}, reported = [] } = {}) {
+  const service = new EvimedCreditsService({ config, database: db, client: null, simulator: wallet, report: (code) => reported.push(code), ...extra });
+  return { service, wallet, db, reported };
+}
 
-test("the balance gate: told before a task starts, never mid-run, and the refusal says 模拟 and offers the simulated top-up", async () => {
-  const { service, wallet, payer } = simulatedService();
-  // Plenty: the start is admitted and carries the estimate.
-  const admitted = await service.assertBalanceForStart("u_1", "adr-analysis");
-  assert.equal(admitted.allowed, true);
-  assert.equal(admitted.balance, 200);
-  assert.equal(admitted.estimate.simulated, true);
-  assert.equal(admitted.estimate.basis, "manifest");
-  assert.ok(admitted.estimate.low > 0 && admitted.estimate.high >= admitted.estimate.low);
-  // Below the tool's own estimate: refused at the start, before a run exists.
-  await wallet.deduct({ payer: payer(), requestId: "run_drain_1", credits: 200 - (admitted.estimate.low - 1) });
-  await assert.rejects(service.assertBalanceForStart("u_1", "adr-analysis"), (/** @type {any} */ error) => {
-    assert.equal(error.status, 402);
-    assert.equal(error.code, "simulated_credits_exhausted");
-    assert.equal(errorCodeOutcome(error.code), "capped", "a ceiling, like the real one");
-    assert.match(errorCodeMessage(error.code), /模拟/);
-    assert.match(errorCodeMessage(error.code), /模拟充值/, "it offers the simulated top-up");
-    // What the kernel's own window prints: the amounts, in the allowance page's yuan, marked 模拟.
-    assert.match(error.readerMessage, /^模拟额度不足，这次没有开始：可用模拟额度 ¥\d+\.\d{2}，这件事预计至少需要 ¥\d+\.\d{2}。到“设置 → 科研额度”做一次模拟充值后即可继续。$/);
-    assert.ok(!/credits|allowance/.test(error.readerMessage), "no English reaches the reader");
-    return true;
-  });
-  // The same balance still admits a free conversation (no estimate to be short of) …
-  assert.equal((await service.assertBalanceForStart("u_1", "")).allowed, true);
-  // … and a top-up releases the tool.
-  await service.simulatedTopUp("u_1", { packageId: "topup-50", requestId: "request-release-1" });
-  assert.equal((await service.assertBalanceForStart("u_1", "adr-analysis")).allowed, true);
-  // Empty is refused for everything.
-  await wallet.deduct({ payer: payer(), requestId: "run_drain_2", credits: (await service.balanceFor("u_1")).balance });
-  await assert.rejects(service.assertBalanceForStart("u_1", ""), { status: 402, code: "simulated_credits_exhausted" });
-  assert.equal(service.status().counters.refusedStarts, 2);
-  // The real wallet's refusal keeps its own code and sentence.
-  const real = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 100 }, database: {},
-    client: { configured: true, async balance() { return { balance: 0, frozen: 0 }; } }, evimedUserIdOf: async () => "98211" });
-  await assert.rejects(real.assertBalanceForStart("u_1", "adr-analysis"), (/** @type {any} */ error) => {
-    assert.equal(error.status, 402);
-    assert.equal(error.code, "credits_exhausted");
-    assert.match(error.readerMessage, /^科研额度不足，这次没有开始：可用 ¥0\.00，/, "a real wallet's is not marked 模拟");
-    assert.ok(!error.readerMessage.includes("模拟"));
-    return true;
-  });
-});
-
-test("a simulated top-up goes through the service once per request, as a closed package, for a simulated deployment only", async () => {
+test("the platform's wallet needs no client and no wire: the module is wired when the wallet is", () => {
   const { service } = simulatedService();
-  const first = await service.simulatedTopUp("u_1", { packageId: "topup-100", requestId: "request-0001" });
-  assert.deepEqual([first.duplicate, first.balance, first.order.amount, first.order.title], [false, 300, 100, "模拟充值"]);
-  const again = await service.simulatedTopUp("u_1", { packageId: "topup-100", requestId: "request-0001" });
-  assert.deepEqual([again.duplicate, again.balance], [true, 300]);
-  assert.equal((await service.balanceFor("u_1")).balance, 300);
-  assert.deepEqual((await service.simulatedOrders("u_1")).items.map((order) => order.amount), [100]);
-  assert.deepEqual((await service.simulatedOrders("u_2")).items, [], "another account has no orders of this one's");
-  for (const bad of [{ packageId: "topup-7", requestId: "request-0002" }, { packageId: "topup-100", requestId: "x" }, { packageId: "topup-50", requestId: "request-0001" }, {}]) {
-    await assert.rejects(service.simulatedTopUp("u_1", bad), { status: 400, code: "simulated_wallet_request_invalid" });
-  }
-  await assert.rejects(service.simulatedOrders("u_1", { cursor: "nonsense" }), { status: 400, code: "simulated_wallet_request_invalid" });
-  const live = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 1 }, database: {}, client: { configured: true } });
-  await assert.rejects(live.simulatedTopUp("u_1", { packageId: "topup-50", requestId: "request-0003" }), { status: 404, code: "simulated_wallet_not_enabled" });
-  await assert.rejects(live.simulatedOrders("u_1"), { status: 404, code: "simulated_wallet_not_enabled" });
-  assert.equal(SIMULATED_TOPUP_PACKAGES.some((entry) => entry.credits === 100), true);
+  assert.equal(service.simulated, true);
+  assert.deepEqual([service.status().walletContract, service.status().upstream], ["precision-v1", null]);
+  const live = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 1 }, database: database(), client: { configured: true } });
+  assert.equal(live.status().walletContract, "legacy-integer-floor", "EviMed's integer-only wallet keeps the whole-credit contract");
+  // A simulated deployment without its wallet, and a live one without its client, are not wired.
+  assert.equal(new EvimedCreditsService({ config, database: database(), client: null, simulator: null }).status().operating, false);
+  assert.equal(new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 1 }, database: database(), client: { configured: false } }).status().operating, false);
 });
 
 test("billing that cannot come up never stops research: the module goes quiet, admits every start, charges nothing, and says why", async () => {
@@ -153,7 +98,7 @@ test("billing that cannot come up never stops research: the module goes quiet, a
   assert.deepEqual([summary.simulated, summary.lowThreshold], [true, SIMULATED_LOW_CREDITS]);
   // … the estimate, which needs no storage, still answers, and nothing reached the wallet.
   assert.equal((await service.estimate("adr-analysis")).basis, "manifest");
-  assert.equal(wallet.wallets.size, 0, "the wallet was never asked about anyone");
+  assert.deepEqual(wallet.calls.filter((call) => call !== "release"), [], "the wallet was never asked about anyone");
   // The simulated wallet's own surface says unavailable rather than answering from a broken ledger.
   await assert.rejects(service.simulatedTopUp("u_1", { packageId: "topup-50", requestId: "request-0004" }), { status: 503 });
   // A readiness probe names it, and a sweep that finds the cause gone brings the module back.
@@ -162,7 +107,7 @@ test("billing that cannot come up never stops research: the module goes quiet, a
   assert.equal(await service.retryDue(), 0);
   assert.equal(service.failure, null);
   assert.equal(service.enabled, true);
-  assert.equal((await service.balanceFor("u_1")).balance, 200);
+  assert.equal((await service.balanceFor("u_1")).available, "200.00000000");
   assert.deepEqual(await creditsReadiness({ config, credits: { service }, database: db }), { required: true, enabled: true, simulated: true, policy: true });
 });
 
@@ -180,7 +125,10 @@ test("a configuration the module refuses boots the module refusing, for good, wi
   assert.deepEqual(await service.assertBalanceForStart("u_1", "adr-analysis"), { allowed: true, reason: "billing_unavailable" });
   assert.deepEqual(await service.settleRun({ userId: "u_1", runId: "run_refused" }), { status: "skipped", reason: "billing_unavailable" });
   assert.equal((await service.allowanceSummary("u_1")).status, "billing_unavailable");
-  await assert.rejects(creditsReadiness({ config, credits: { service }, database: db }), (/** @type {any} */ error) => error.code === refusal);
+  // A refusal is the module's own and it is quiet: readiness names it as a warning on a green check, so a typo in a billing
+  // knob never fails the platform's readiness while research goes on.
+  assert.deepEqual(await creditsReadiness({ config, credits: { service }, database: db }),
+    { required: true, enabled: true, simulated: true, policy: true, refused: refusal, warning: refusal });
   // A module that is off, or not composed, is told apart in readiness.
   assert.deepEqual(await creditsReadiness({ config: { evimedCreditsEnabled: false }, credits: null, database: null }), { required: false, enabled: false });
   await assert.rejects(creditsReadiness({ config, credits: null, database: db }), (/** @type {any} */ error) => error.code === "evimed_credits_unavailable" && error.details.reason === "not_composed");
@@ -232,7 +180,7 @@ test("every allowance answer on a simulated deployment says so, and the four com
   assert.equal(data.status, "ready");
   assert.equal(data.available, 188);
   assert.equal(data.lowThreshold, SIMULATED_LOW_CREDITS);
-  assert.deepEqual(data.month, { since: "2026-10-01T00:00:00.000Z", paid: 12, pending: 0 });
+  assert.deepEqual(data.month, { since: "2026-09-30T16:00:00.000Z", paid: 12, pending: 0 });
   assert.deepEqual(data.commerce, { rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: SIMULATED_WALLET_PAGES.membership,
     ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: SIMULATED_WALLET_PAGES.refunds });
   const statements = response();
@@ -283,9 +231,18 @@ test("every tool's estimate in one read, bounded, and a tool with no basis has n
   assert.equal(off.calls.length, 0, "a deployment without billing prices nothing");
 });
 
+/** The routes are tested for what they own — validation, status codes, paging — against a service that answers a canned wallet. */
 function walletFixture(routeConfig = { evimedCreditsEnabled: true, evimedCreditsSimulated: true }) {
   const opened = /** @type {string[]} */ ([]);
-  const { service } = simulatedService();
+  const applied = /** @type {Array<[string, string]>} */ ([]);
+  const service = {
+    async simulatedTopUp(/** @type {string} */ _user, /** @type {{ packageId: string, requestId: string }} */ { packageId, requestId }) {
+      const duplicate = applied.some(([pack, request]) => pack === packageId && request === requestId);
+      if (!duplicate) applied.push([packageId, requestId]);
+      return { order: { id: "sim_order_1", packageId, title: "模拟充值", amount: 200, at: "2026-10-05T03:00:00.000Z", status: "paid" }, balance: "400.00000000", duplicate };
+    },
+    async simulatedOrders() { return { items: [{ id: "sim_order_1" }], nextCursor: null }; },
+  };
   const routes = createSimulatedWalletRoutes({
     store: { async ensureSessionUser() { opened.push("session"); return { user: { id: "u_1" } }; }, async assertCsrf(/** @type {any} */ _req, /** @type {string} */ pathname) { opened.push(`csrf ${pathname}`); } },
     service, config: routeConfig,
@@ -299,20 +256,20 @@ test("the simulated wallet's routes: a top-up once per request id, the orders it
   assert.equal(await routes(request("POST", "/api/simulated-wallet/topups", { packageId: "topup-200", requestId: "page-attempt-1" }), topup), true);
   assert.equal(topup.status, 201);
   assert.equal(topup.headers["Cache-Control"], "private, no-store");
-  assert.deepEqual(topup.json(), { simulated: true, order: topup.json().order, available: 400, duplicate: false });
+  assert.deepEqual(topup.json(), { simulated: true, order: topup.json().order, available: "400.00000000", duplicate: false });
   assert.deepEqual([topup.json().order.amount, topup.json().order.status, topup.json().order.title], [200, "paid", "模拟充值"]);
   const retry = response();
   await routes(request("POST", "/api/simulated-wallet/topups", { packageId: "topup-200", requestId: "page-attempt-1" }), retry);
   assert.equal(retry.status, 200, "an already-applied request is answered, not applied again");
-  assert.deepEqual([retry.json().duplicate, retry.json().available, retry.json().order.id], [true, 400, topup.json().order.id]);
+  assert.deepEqual([retry.json().duplicate, retry.json().available, retry.json().order.id], [true, "400.00000000", topup.json().order.id]);
   const orders = response();
   await routes(request("GET", "/api/simulated-wallet/orders?limit=5"), orders);
   assert.deepEqual([orders.json().simulated, orders.json().currency, orders.json().items.length, orders.json().nextCursor], [true, "CNY", 1, null]);
   assert.deepEqual(opened.filter((entry) => entry === "session").length, 3);
   assert.ok(opened.includes("csrf /api/simulated-wallet/topups"));
   // Bad requests are the page's mistake, and nothing is added.
-  for (const body of [{}, { packageId: "topup-200" }, { packageId: 200, requestId: "page-attempt-2" }, { packageId: "topup-9", requestId: "page-attempt-2" },
-    { packageId: "topup-200", requestId: "page-attempt-2", credits: 1000000 }, { packageId: "topup-200", requestId: "short" }]) {
+  for (const body of [{}, { packageId: "topup-200" }, { packageId: 200, requestId: "page-attempt-2" },
+    { packageId: "topup-200", requestId: "page-attempt-2", credits: 1000000 }]) {
     await assert.rejects(routes(request("POST", "/api/simulated-wallet/topups", body), response()), { status: 400, code: "simulated_wallet_request_invalid" }, JSON.stringify(body));
   }
   for (const query of ["limit=0", "limit=51", "limit=x", "limit=1&limit=2", "cursor="]) {
@@ -380,6 +337,13 @@ test("the release check reports a simulated wallet as simulated, can never certi
   assert.equal(checkResearchBillingReadiness(simulated, { requireSimulated: true }).ok, true);
   const incomplete = checkResearchBillingReadiness({ ...simulated, researchBillingEnabled: false }, { requireSimulated: true });
   assert.ok(incomplete.issues.some((issue) => issue.code === "research_billing_policy_disabled"));
+  // The module's own refusal has its own issue code (review F10): the wallet charges under the policy and nothing else.
+  assert.ok(checkResearchBillingReadiness({ ...simulated, researchBillingEnabled: false }).issues.some((issue) => issue.code === "research_billing_simulated_policy_required"));
+  // The platform's wallet holds exact amounts, so a requirement for the precision contract is met there — and still unmet on EviMed's.
+  assert.equal(checkResearchBillingReadiness(simulated, { requirePrecision: true }).issues.some((issue) => issue.code === "research_billing_precision_contract_unverified"), false);
+  assert.equal(checkResearchBillingReadiness({ evimedCreditsEnabled: true, researchBillingEnabled: true, evimedCreditsPerCny: 1,
+    evimedCreditsUrl: "https://wallet.evimed.com/deduct", evimedCreditsBalanceUrl: "https://wallet.evimed.com/balance" }, { requirePrecision: true })
+    .issues.some((issue) => issue.code === "research_billing_precision_contract_unverified"), true);
   assert.ok(checkResearchBillingReadiness({ evimedCreditsEnabled: true, researchBillingEnabled: true, evimedCreditsPerCny: 1 }, { requireSimulated: true })
     .issues.some((issue) => issue.code === "research_billing_simulated_disabled"));
   // The refusals the module makes are the check's issues too.
@@ -388,14 +352,23 @@ test("the release check reports a simulated wallet as simulated, can never certi
   assert.ok(conflicted.issues.some((issue) => issue.code === "research_billing_simulated_with_real_wallet"));
   assert.equal(conflicted.billing.status, "invalid_configuration");
   assert.ok(checkResearchBillingReadiness({ ...simulated, evimedCreditsSimulatedStartCredits: 0 }).issues.some((issue) => issue.code === "research_billing_simulated_start_invalid"));
+  for (const gift of [{ evimedCreditsSignupGiftDays: 0 }, { evimedCreditsSignupGiftDays: 4000 }, { evimedCreditsMonthlyGift: "1.123456789" }, { evimedCreditsMonthlyGift: "abc" }]) {
+    assert.ok(checkResearchBillingReadiness({ ...simulated, ...gift }).issues.some((issue) => issue.code === "research_billing_simulated_gift_invalid"), JSON.stringify(gift));
+  }
+  assert.equal(checkResearchBillingReadiness({ ...simulated, evimedCreditsSignupGiftDays: 30, evimedCreditsMonthlyGift: "5.5" }).ok, true);
+  assert.equal(report.billing.walletContract, "precision-v1", "the platform's own wallet charges exactly");
   // A real wallet is still reported as before.
   const real = checkResearchBillingReadiness({ evimedCreditsEnabled: true, researchBillingEnabled: true, evimedCreditsPerCny: 1,
     evimedCreditsUrl: "https://wallet.evimed.com/deduct", evimedCreditsBalanceUrl: "https://wallet.evimed.com/balance" }, { requireBilling: true });
   assert.deepEqual([real.ok, real.simulated, real.assessment, real.billing.status], [true, false, "configuration_only", "configured_compatibility"]);
+  assert.equal(real.billing.walletContract, "legacy-integer-floor", "EviMed's wallet is integer-only");
   // The environment mapping and the argument parser know the new switch.
   const mapped = researchBillingReadinessConfig({ OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED: "true", OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS: "50" });
   assert.deepEqual([mapped.evimedCreditsSimulated, mapped.evimedCreditsSimulatedStartCredits], [true, 50]);
   assert.equal(researchBillingReadinessConfig({}).evimedCreditsSimulatedStartCredits, 200);
+  assert.deepEqual([researchBillingReadinessConfig({}).evimedCreditsSignupGiftDays, researchBillingReadinessConfig({}).evimedCreditsMonthlyGift], [30, "0"]);
+  const gifted = researchBillingReadinessConfig({ OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS: "7", OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT: "5" });
+  assert.deepEqual([gifted.evimedCreditsSignupGiftDays, gifted.evimedCreditsMonthlyGift], [7, "5"]);
   assert.equal(parseResearchBillingReadinessArgs(["--require-simulated"]).requireSimulated, true);
   assert.throws(() => parseResearchBillingReadinessArgs(["--require-simulated", "--require-simulated"]), /arguments_invalid/);
 });
@@ -406,14 +379,32 @@ test("the config keys are off by default, read from the environment, and a typo 
     process.env = { NODE_ENV: "production", OPEN_SCIENCE_AUTH_MODE: "local" };
     const off = loadConfig({ rootDir: repoRoot });
     assert.deepEqual([off.evimedCreditsSimulated, off.evimedCreditsSimulatedStartCredits], [false, 200]);
+    // The gifts: a sign-up gift that lasts 30 days, and no monthly gift.
+    assert.deepEqual([off.evimedCreditsSignupGiftDays, off.evimedCreditsMonthlyGift], [30, "0"]);
     process.env = { ...process.env, OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED: "true", OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS: "25" };
     const on = loadConfig({ rootDir: repoRoot });
     assert.deepEqual([on.evimedCreditsSimulated, on.evimedCreditsSimulatedStartCredits], [true, 25]);
     // The module judges a bad allowance; the platform still boots.
     process.env.OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS = "many";
-    const typo = loadConfig({ rootDir: repoRoot });
+    const typo = { ...loadConfig({ rootDir: repoRoot }), researchBillingEnabled: true };
     assert.equal(Number.isNaN(typo.evimedCreditsSimulatedStartCredits), true);
     assert.equal(evimedCreditsRefusal(typo), "evimed_credits_simulated_start_invalid");
+    // The same for the gifts: read as written, judged by the module, never a reason the platform does not load.
+    process.env.OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS = "";
+    process.env.OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS = "7";
+    process.env.OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT = "12.5";
+    const gifts = { ...loadConfig({ rootDir: repoRoot }), researchBillingEnabled: true };
+    assert.deepEqual([gifts.evimedCreditsSignupGiftDays, gifts.evimedCreditsMonthlyGift, evimedCreditsRefusal(gifts)], [7, "12.5", null]);
+    for (const bad of [["OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS", "0"], ["OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS", "soon"], ["OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT", "1.123456789"], ["OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT", "lots"]]) {
+      const saved = process.env[bad[0]];
+      process.env[bad[0]] = bad[1];
+      assert.equal(evimedCreditsRefusal({ ...loadConfig({ rootDir: repoRoot }), researchBillingEnabled: true }), "evimed_credits_gift_invalid", bad.join("="));
+      process.env[bad[0]] = saved;
+    }
+    delete process.env.OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS;
+    delete process.env.OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT;
+    // The platform's wallet charges under the versioned policy and nothing else.
+    assert.equal(evimedCreditsRefusal({ ...loadConfig({ rootDir: repoRoot }), researchBillingEnabled: false }), "evimed_credits_simulated_policy_required");
     // Beside a real wallet's address it loads too — and is refused by the module, not by the platform.
     process.env.OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS = "";
     const mixed = loadConfig({ rootDir: repoRoot, evimedCreditsUrl: "https://www.evimed.com/api-evimed/credits/deduct" });
@@ -422,4 +413,40 @@ test("the config keys are off by default, read from the environment, and a typo 
   } finally {
     process.env = saved;
   }
+});
+
+test("the compose defaults for the gift settings are the code's own, so the two cannot drift", async () => {
+  const compose = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"), { merge: true });
+  const environment = compose.services["open-science-web"].environment;
+  const saved = process.env;
+  try {
+    process.env = { NODE_ENV: "production", OPEN_SCIENCE_AUTH_MODE: "local" };
+    const defaults = loadConfig({ rootDir: repoRoot });
+    /** @param {string} name */
+    const composeDefault = (name) => {
+      const match = new RegExp(`^\\$\\{${name}:-(.*)\\}$`).exec(String(environment[name]));
+      assert.ok(match, `${name} is forwarded with its default: ${environment[name]}`);
+      return match[1];
+    };
+    assert.equal(composeDefault("OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS"), String(defaults.evimedCreditsSignupGiftDays));
+    assert.equal(composeDefault("OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT"), String(defaults.evimedCreditsMonthlyGift));
+  } finally {
+    process.env = saved;
+  }
+});
+
+test("a simulated wallet without research billing is refused by name and that is a warning on a green check, never a red one (review F10)", async () => {
+  const noPolicy = { ...config, researchBillingEnabled: false };
+  const refusal = evimedCreditsRefusal(noPolicy);
+  assert.equal(refusal, "evimed_credits_simulated_policy_required");
+  const service = new EvimedCreditsService({ config: noPolicy, database: database(), client: null, simulator: null, refusal });
+  const line = await creditsReadiness({ config: noPolicy, credits: { service }, database: database() });
+  assert.deepEqual([line.required, line.enabled, line.refused, line.warning], [true, true, "evimed_credits_simulated_policy_required", "evimed_credits_simulated_policy_required"]);
+  // The module goes quiet: every start is admitted, nothing is charged, and the answer names why.
+  assert.deepEqual(await service.assertBalanceForStart("u_1", "adr-analysis"), { allowed: true, reason: "billing_unavailable" });
+  assert.deepEqual(await service.settleRun({ userId: "u_1", runId: "run_quiet" }), { status: "skipped", reason: "billing_unavailable" });
+  // What is still red: the module's own invariants — a schema that cannot be written.
+  const outage = Object.assign(new Error("relation does not exist"), { code: "42P01" });
+  const broken = new EvimedCreditsService({ config, database: database({ failure: outage }), client: null, simulator: stubWallet() });
+  await assert.rejects(creditsReadiness({ config, credits: { service: broken }, database: database({ failure: outage }) }), (/** @type {any} */ error) => error.code === "42P01");
 });

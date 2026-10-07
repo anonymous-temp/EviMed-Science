@@ -303,6 +303,24 @@ export class MaintenanceService {
     return this.#blockers();
   }
 
+  /**
+   * What a release switch asks about instead of everything: the agent runs and busy runtimes of projects a researcher
+   * owns. A switch reaps runtimes, and a run in one dies; the platform's own background projects are scratch and their
+   * runs are retried, and a leased product job is re-claimed when its lease runs out, so neither is a reason to refuse
+   * a release. `null` when the composition does not say (an older one, or an inspection that failed): the caller then
+   * asks about everything, as before. A drained maintenance window never uses this — it needs the platform quiet.
+   * @returns {Promise<{ runningAgentRuns: number, busyRuntimes: number } | null>}
+   */
+  async interactiveActivity() {
+    await this.migrate(this.database);
+    try {
+      const interactive = (await this.inspectActivity())?.interactive;
+      const runs = count(interactive?.runningAgentRuns);
+      const busy = count(interactive?.busyRuntimes);
+      return runs === null || busy === null ? null : { runningAgentRuns: runs, busyRuntimes: busy };
+    } catch { return null; }
+  }
+
   async #blockers() {
     let activity;
     let databaseActivity = null;

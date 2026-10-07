@@ -6,7 +6,7 @@ import os from "node:os";
 import { renderMethodSkill } from "@evimed/domain";
 import { MethodDistillationRuns } from "../src/methodDistillationRuns.mjs";
 import { HandbookConsolidation } from "../src/handbookConsolidation.mjs";
-import { prepareCapabilityHandbooks } from "../src/capabilityHandbooks.mjs";
+import { handbookContextFor, prepareCapabilityHandbooks } from "../src/capabilityHandbooks.mjs";
 import { prepareResearchContext } from "../src/researchContext.mjs";
 import { recordHandbookRunObservations } from "../src/methodObservations.mjs";
 import { fixture, registry, BODY, frontmatter } from "./helpers/handbookFixture.mjs";
@@ -167,4 +167,41 @@ test("an invalid stored supplement is omitted without blocking the authorized re
   assert.equal(handbooks.omitted, 1);
   const prepared = await prepareResearchContext(project, { mode: "specialist" }, config, { routedSpecialist: { agentId: "geo-content" }, handbooks });
   assert.match(prepared.system, /geo-content/);
+}));
+
+// The block as d4ed5fd82 (before 循证进化) rendered it. With the module off, an account's supplements must reach the
+// conversation byte for byte as they did then: no line about platform tools, and no key beside them in the run record.
+const preFeatureBlock = (item, escape = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;")) =>
+  `<evimed-handbook capability="${escape(item.capabilityId)}" digest="${escape(item.contentDigest)}" path="${escape(item.path)}">\n${escape(item.body)}\nFiles: ${item.files.map(escape).join(", ")}\n</evimed-handbook>`;
+
+test("a supplement reaches the conversation exactly as before the evolution module, and no tenant document carries platform tool references", async () => workspace(async (project) => {
+  const f = fixture(); await f.learning.recordHandbookCandidate("alice", f.input());
+  const applied = await new HandbookConsolidation({ ...f, registry }).run({ job: f.queued[0] });
+  const selection = await prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config });
+  const attached = handbookContextFor(selection, project, "geo-content");
+  assert.equal(selection.items.length, 1);
+  const intro = attached.context.split("\n")[0];
+  assert.equal(attached.context, [intro, ...selection.items.map((item) => preFeatureBlock(item))].join("\n"));
+  assert.doesNotMatch(attached.context, /Platform tool references/);
+  assert.ok(attached.items.every((item) => !("platformToolReferences" in item)), "the run record keeps the keys it had");
+  assert.ok(!("platformToolReferences" in (await f.documents.get("alice", "method", applied.handbookId)).payload));
+}));
+
+test("a handbook observation carries a gap code only when the evolution module asked for it", async () => workspace(async (project) => {
+  const f = fixture(); await f.learning.recordHandbookCandidate("alice", f.input());
+  const applied = await new HandbookConsolidation({ ...f, registry }).run({ job: f.queued[0] });
+  const handbooks = await prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config });
+  const transcript = (id) => ({ sessions: [{ sessionId: "root", transcript: { messages: [
+    { role: "user", source: "user", sourceRequestId: "current", turnStartSeq: 10, parts: [] },
+    { turnStartSeq: 10, time: Date.parse("2026-09-30T01:30:00Z"), parts: [
+    { type: "tool", status: "completed", tool: "read", input: { path: handbooks.items[0].path } },
+    { type: "tool", status: "failed", error: { code: "tool_not_found" } }] }] } }],
+    run: { id, sessionId: "root", kernelRequestIds: ["current"], startedAt: "2026-09-30T01:00:00Z", finishedAt: "2026-09-30T02:00:00Z", effectiveAgentId: "geo-content", capabilityHandbooks: handbooks.items } });
+  await recordHandbookRunObservations({ learning: f.learning, userId: "alice", projection: {}, ...transcript("module-off") });
+  await recordHandbookRunObservations({ learning: f.learning, userId: "alice", projection: {}, observeGaps: true, ...transcript("module-on") });
+  const [off, on] = (await f.documents.get("alice", "method", applied.handbookId)).payload.observations;
+  // The record the learning loop wrote before the module existed, key for key.
+  assert.deepEqual(Object.keys(off), ["runId", "projectId", "at", "contentDigest", "attached", "used", "outcomes"]);
+  assert.equal(off.used, true);
+  assert.deepEqual(on.gapCodes, ["method-missing"]);
 }));

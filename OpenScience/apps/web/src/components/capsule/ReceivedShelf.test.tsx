@@ -13,6 +13,8 @@ const client = vi.hoisted(() => ({
   startCapsuleTrial: vi.fn(),
 }));
 vi.mock("@/lib/memoryClient", () => client);
+const share = vi.hoisted(() => ({ listPendingDeliveries: vi.fn(), openDelivery: vi.fn(), importDelivery: vi.fn(), declineDelivery: vi.fn() }));
+vi.mock("@/lib/capsuleShareClient", () => share);
 vi.mock("@/lib/apiClient", () => ({ getWebProjectId: () => "project-a" }));
 vi.mock("@/lib/productClient", () => ({ productErrorMessage: () => "操作未完成，请重试。" }));
 vi.mock("@/lib/projects", () => {
@@ -48,7 +50,7 @@ function shelf() {
 }
 
 describe("收到的胶囊: trusted whole, one switch each way", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => { vi.clearAllMocks(); share.listPendingDeliveries.mockResolvedValue([]); });
   afterEach(cleanup);
 
   it("says what a pack brings and what the scan dropped, and nothing of the back office", async () => {
@@ -135,5 +137,78 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     await waitFor(() => expect(client.fetchReceivedCapsules).toHaveBeenCalled());
     expect(screen.queryByRole("heading", { name: "收到的胶囊" })).toBeNull();
     expect(screen.queryByRole("list")).toBeNull();
+  });
+
+  it("a pack its author or the operator took down says so, and cannot be switched on or tried", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([{ ...structuredClone(pack), takenDown: { by: "operator", at: "2026-10-05T00:00:00Z", reason: "平台复核后下架" } }]);
+    shelf();
+    expect(await screen.findByText("已被平台下架并停用：平台复核后下架")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
+  });
+
+  // A delivery reaches a recipient as an inbox notice, but one who did not come through the inbox had no way to find it (flywheel F17).
+  describe("待收下的分享", () => {
+    const delivery = { id: "dlv_1", state: "delivered", createdAt: "2026-10-05T00:00:00Z", sender: { name: "李主任" }, card: { title: "李主任的工作方式", author: "李主任", summary: "2 条做法" } };
+    const preview = { archiveSha256: "a".repeat(64), canImport: true, card: { title: "李主任的工作方式" }, entries: [] };
+
+    it("lists a delivery the account has not answered, who sent it and what its card says, and opens the page that previews it", async () => {
+      client.fetchReceivedCapsules.mockResolvedValue([]);
+      share.listPendingDeliveries.mockResolvedValue([delivery, { ...delivery, id: "dlv_2", card: null, sender: { name: "Alice" } }]);
+      shelf();
+      const list = await screen.findByRole("list", { name: "待收下的分享" });
+      const rows = within(list).getAllByRole("listitem");
+      expect(rows[0]).toHaveTextContent("李主任的工作方式");
+      expect(rows[0]).toHaveTextContent("来自李主任 · 2 条做法");
+      expect(within(rows[0]).getByRole("link", { name: "李主任的工作方式" })).toHaveAttribute("href", "/app/memory/delivered/dlv_1");
+      expect(rows[1]).toHaveTextContent("Alice 的分享");
+      expect(rows[1]).toHaveTextContent("来自 Alice");
+      expect(screen.queryByRole("heading", { name: "收到的胶囊" })).toBeNull();
+    });
+
+    it("takes a delivery in with the digest of the pack it opened, and says it is not in force yet", async () => {
+      client.fetchReceivedCapsules.mockResolvedValue([]);
+      share.listPendingDeliveries.mockResolvedValueOnce([delivery]).mockResolvedValue([]);
+      share.openDelivery.mockResolvedValue({ preview, delivery: { id: "dlv_1", state: "opened", sender: { name: "李主任" } } });
+      share.importDelivery.mockResolvedValue({ id: "cap-new", payload: { title: "李主任的工作方式" } });
+      shelf();
+      await userEvent.click(await screen.findByRole("button", { name: "收下“李主任的工作方式”" }));
+      await waitFor(() => expect(share.importDelivery).toHaveBeenCalledWith("dlv_1", { expectedDigest: "a".repeat(64), title: "李主任的工作方式" }));
+      expect(share.openDelivery).toHaveBeenCalledWith("dlv_1");
+      expect(toasts.success.mock.calls.at(-1)![0]).toMatch(/已收下“李主任的工作方式”。它还没有生效/);
+      expect(client.announceMemoryChanged).toHaveBeenCalled();
+      await waitFor(() => expect(screen.queryByRole("list", { name: "待收下的分享" })).toBeNull());
+    });
+
+    it("does not take in a pack that cannot be imported now, and says so", async () => {
+      client.fetchReceivedCapsules.mockResolvedValue([]);
+      share.listPendingDeliveries.mockResolvedValue([delivery]);
+      share.openDelivery.mockResolvedValue({ preview: { ...preview, canImport: false }, delivery: { id: "dlv_1", state: "opened", sender: { name: "李主任" } } });
+      shelf();
+      await userEvent.click(await screen.findByRole("button", { name: "收下“李主任的工作方式”" }));
+      await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+      expect(share.importDelivery).not.toHaveBeenCalled();
+      expect(screen.getByRole("list", { name: "待收下的分享" })).toBeInTheDocument();
+    });
+
+    it("turns a delivery down and the row goes", async () => {
+      client.fetchReceivedCapsules.mockResolvedValue([]);
+      share.listPendingDeliveries.mockResolvedValueOnce([delivery]).mockResolvedValue([]);
+      share.declineDelivery.mockResolvedValue({});
+      shelf();
+      await userEvent.click(await screen.findByRole("button", { name: "不需要“李主任的工作方式”" }));
+      await waitFor(() => expect(share.declineDelivery).toHaveBeenCalledWith("dlv_1"));
+      await waitFor(() => expect(screen.queryByRole("list", { name: "待收下的分享" })).toBeNull());
+    });
+
+    it("sits above the packs already received, and a failed read of it can be retried without hiding them", async () => {
+      client.fetchReceivedCapsules.mockResolvedValue([structuredClone(pack)]);
+      share.listPendingDeliveries.mockRejectedValueOnce(new Error("down")).mockResolvedValue([delivery]);
+      shelf();
+      expect(await screen.findByText("李主任的工作方式", { selector: "[data-row-title]" })).toBeInTheDocument();
+      await userEvent.click(await screen.findByRole("button", { name: "重试" }));
+      const headings = (await screen.findAllByRole("heading", { level: 3 })).map((heading) => heading.textContent);
+      expect(headings).toEqual(["待收下的分享", "收到的胶囊"]);
+    });
   });
 });

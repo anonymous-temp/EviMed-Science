@@ -22,15 +22,16 @@ import { iconButtonClasses } from "@/components/ui/IconButton";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { AnswerChecks } from "@/components/geo/AnswerChecks";
 import { AskAi } from "@/components/geo/AskAi";
 import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
-import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
+import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_MONITORING_TITLE, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
 import { readableSourceRef } from "@/components/geo/tabs/EvidenceTab";
 import { answerPath, CITED_ATTRIBUTE_WORDS, MENTION_ONLY_WORD, mentionOnly, SNAPSHOT_STATUS_WORDS, tabPath } from "@/components/geo/tabs/geoTabText";
 import { TabError, TabSkeleton, useGeoLoad } from "@/components/geo/tabs/geoTabKit";
 
 /** The sentence a direct link lands on where the module is off (the shell's off page says the same). */
-const GEO_OFF_SENTENCE = "循证 GEO 还没有在这个工作空间开放。";
+const GEO_OFF_SENTENCE = "循证传播还没有在这个工作空间开放。";
 
 /**
  * One question, one engine, one day's answer (plan §5.4, mockup g07): on the
@@ -50,7 +51,7 @@ export function GeoAnswerPage() {
   const evidence = useGeoLoad(`evidence:${geoId}`, () => getGeoEvidence(geoId));
 
   if (answer.state.kind === "error" && answer.state.off) {
-    return <Shell title="循证 GEO"><EmptyState icon={Radar} title={GEO_OFF_SENTENCE} /></Shell>;
+    return <Shell title="循证传播" section="循证传播"><EmptyState icon={Radar} title={GEO_OFF_SENTENCE} /></Shell>;
   }
   if (answer.state.kind === "error" && answer.state.missing) {
     return (
@@ -73,11 +74,12 @@ export function GeoAnswerPage() {
   return <Answer geoId={geoId} data={data} project={loadedProject} claims={claims} />;
 }
 
-function Shell({ title, back, header, children }: { title: string; back?: string; header?: ReactNode; children: ReactNode }) {
+/** `section` is the browser tab's second part: the answer page is one of the module's measurement screens, 「AI 回答监测」. */
+function Shell({ title, section = GEO_MONITORING_TITLE, back, header, children }: { title: string; section?: string; back?: string; header?: ReactNode; children: ReactNode }) {
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-bg">
       <div className="mx-auto w-full max-w-page px-6 py-6">
-        <PageTitle page={title} section="循证 GEO" />
+        <PageTitle page={title} section={section} />
         {header ?? (
           <header className="flex min-h-8 items-center gap-2">
             {back && <BackLink to={back} />}
@@ -169,6 +171,7 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
               />
             </div>
           )}
+          <AnswerChecks facts={data.facts} />
           <Citations citations={snapshot.citations} />
         </article>
       </div>

@@ -107,7 +107,7 @@ function doiOfUrl(value) {
 }
 
 /** The PMID a link names, when it is a PubMed link. @param {string} value @returns {string} */
-function pmidOfUrl(value) {
+export function pmidOfUrl(value) {
   const url = parsed(value)
   if (!url) return ''
   const host = url.hostname.toLowerCase().replace(/^www\./, '')
@@ -370,4 +370,103 @@ export function citationUrlDefectsByLine(path, text) {
     for (const message of found.advisory) advisory.push({ line: index + 1, message: `${path} line ${index + 1}: ${message}` })
   }
   return { blocking, advisory }
+}
+
+// ---- EviMed's own card pages cited as a source (flywheel plan §4.3 rule 2) --------
+//
+// A card is the platform's reading of sources, so a report that cites one has cited the platform to itself:
+// written content becomes evidence for more written content, and the loop looks more certain at each turn
+// (the plan's reason for the rule; ICMJE 2026 says the same of AI-generated material). The rule is a notice,
+// never a refusal: it names the address, says what to cite instead and withholds nothing. A card is found in a
+// run through `frontier_search`, which returns the primary sources it stands on and asks the run to cite those
+// (`evidenceCardSearch.mjs`); this is the net for the run that cites the card anyway.
+//
+// What is recognised is an address shape, not a host: the deployment's public host is not known to a run, is
+// numeric today and will be a domain tomorrow, so a card page is the path `/evidence/c/<id>` (a card) or
+// `/evidence/z/<id>` (a zone) on any host — or the same under the other member of the closed set of public base
+// paths, `/evimed-evidence`, which a deployment whose own `/evidence/` belongs to another product serves them at
+// (`OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH`) — the in-app page `/app/frontier/zones/<zone>/evidence/<card>` on any
+// host or as a root-relative link, and — when the caller knows the configured public URL — the same paths under
+// that URL's own path prefix. Identifier formats, not prose (principle 5).
+
+/**
+ * The paths the public evidence pages may be served under: `/evidence` (the default, and the address of the eventual domain) and
+ * `/evimed-evidence` (a deployment on a numeric address whose `/evidence/` another product holds). A closed set: the server's lever
+ * refuses anything else by name, and a card address under either member is recognised on any host.
+ */
+export const EVIDENCE_PUBLIC_BASE_PATHS = Object.freeze(['/evidence', '/evimed-evidence'])
+const BASE_PATH_ALTERNATIVES = EVIDENCE_PUBLIC_BASE_PATHS.map((path) => path.slice(1)).join('|')
+
+/** What a reader is told about a card cited as a source. */
+export const PLATFORM_CARD_CITATION_SENTENCE = '这是 EviMed 自己的证据卡，请改引原始来源'
+
+const CARD_ID = '[A-Za-z0-9][A-Za-z0-9_-]{5,79}'
+const CARD_PAGE_PATH = new RegExp(`^/(?:${BASE_PATH_ALTERNATIVES})/[cz]/${CARD_ID}(?:/|$)`)
+const IN_APP_CARD_PATH = new RegExp(`^/app/frontier/zones/${CARD_ID}/evidence/${CARD_ID}(?:/|$)`)
+/** A root-relative card link in running text: never the tail of a longer path or of an absolute address. */
+const RELATIVE_CARD_LINK = new RegExp(`(?<![A-Za-z0-9_./:-])(?:/(?:${BASE_PATH_ALTERNATIVES})/[cz]/${CARD_ID}|/app/frontier/zones/${CARD_ID}/evidence/${CARD_ID})(?![A-Za-z0-9_-])`, 'g')
+
+/** The path prefix of a configured public URL, without a trailing slash; empty when it has none or is not an address. @param {unknown} publicUrl */
+function publicPathPrefix(publicUrl) {
+  const url = typeof publicUrl === 'string' && publicUrl.trim() ? parsed(publicUrl.trim()) : null
+  return url ? url.pathname.replace(/\/+$/, '') : ''
+}
+
+/**
+ * Whether an address is a page of an EviMed evidence card or zone.
+ * @param {string} value @param {{ publicUrl?: string | null }} [options] `publicUrl`: the deployment's configured public URL, when the caller has it
+ * @returns {boolean}
+ */
+export function isPlatformCardAddress(value, { publicUrl = null } = {}) {
+  const url = parsed(String(value ?? '').trim())
+  if (!url || !/^https?:$/.test(url.protocol)) return false
+  const path = url.pathname
+  if (CARD_PAGE_PATH.test(path) || IN_APP_CARD_PATH.test(path)) return true
+  const prefix = publicPathPrefix(publicUrl)
+  const own = typeof publicUrl === 'string' ? parsed(publicUrl.trim()) : null
+  if (!prefix || !own || own.host.toLowerCase() !== url.host.toLowerCase() || !path.startsWith(`${prefix}/`)) return false
+  const rest = path.slice(prefix.length)
+  return CARD_PAGE_PATH.test(rest) || IN_APP_CARD_PATH.test(rest)
+}
+
+/**
+ * The words a finding about one card address says: the reader-facing sentence first, then where it is.
+ * @param {{ path: string, line?: number | null, url: string }} entry @returns {string}
+ */
+export function platformCardCitationMessage({ path, line, url }) {
+  return `${PLATFORM_CARD_CITATION_SENTENCE}：${path}${line ? ` 第 ${line} 行` : ''}引用了 ${url}。`
+    + '请打开这张卡列出的原始来源（论文、指南、说明书），读过之后引用它们的 DOI 或原文链接。'
+}
+
+/**
+ * Every EviMed card address a text carries, by line, each address once per line: absolute links and root-relative
+ * ones alike.
+ * @param {unknown} text @param {{ publicUrl?: string | null }} [options]
+ * @returns {{ line: number, url: string }[]}
+ */
+export function platformCardCitations(text, { publicUrl = null } = {}) {
+  /** @type {{ line: number, url: string }[]} */
+  const found = []
+  for (const [index, line] of String(text ?? '').split('\n').entries()) {
+    const seen = new Set()
+    const urls = [
+      ...citedHttpUrls(line).filter((url) => isPlatformCardAddress(url, { publicUrl })),
+      ...[...line.matchAll(RELATIVE_CARD_LINK)].map((match) => match[0]),
+    ]
+    for (const url of urls) {
+      if (seen.has(url)) continue
+      seen.add(url)
+      found.push({ line: index + 1, url })
+    }
+  }
+  return found
+}
+
+/**
+ * `platformCardCitations` of one file as findings, each opening with the sentence a reader is shown and then where.
+ * @param {string} path the file's name in the deliverable @param {unknown} text @param {{ publicUrl?: string | null }} [options]
+ * @returns {{ line: number, url: string, message: string }[]}
+ */
+export function platformCardCitationsByLine(path, text, options = {}) {
+  return platformCardCitations(text, options).map(({ line, url }) => ({ line, url, message: platformCardCitationMessage({ path, line, url }) }))
 }

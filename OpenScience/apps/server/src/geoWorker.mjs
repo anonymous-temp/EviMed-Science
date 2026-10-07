@@ -1,5 +1,5 @@
 /**
- * 「循证 GEO」's background work: one timer, many loops (build spec 2026-09-25
+ * 「循证传播」's background work: one timer, many loops (build spec 2026-09-25
  * §5). The loops are other modules' tick functions — measurement (probe,
  * parse, metrics, errors), the marketplace (catalogue, orders, poll, verify,
  * reconcile, top-ups) and the orchestrator (program, schedules) — and this
@@ -60,6 +60,9 @@ export const GEO_WORKER_LOOPS = Object.freeze([
   Object.freeze({ name: "verify", package: "market", every: 10 * MINUTE, leased: true }),
   Object.freeze({ name: "reconcile", package: "market", daily: 4, leased: true }),
   Object.freeze({ name: "topups", package: "market", every: HOUR, leased: true }),
+  // The platform's medication-question bank (flywheel F22): one pass a day, which asks each engine once a month and asks again the day
+  // an engine that was down answers. `optional`: a deployment with the bank off has no function for it, which is not a missing loop.
+  Object.freeze({ name: "questionBank", package: "questionBank", daily: 3, leased: true, optional: true }),
 ]);
 
 /** @param {unknown} error */
@@ -133,7 +136,7 @@ export class GeoWorker {
     this.report = report;
     this.claimDay = claimDay;
     this.lease = lease;
-    /** @type {Array<{ name: string, package: string, every?: number, daily?: number, leased?: boolean, run: (() => Promise<unknown>) | null }>} */
+    /** @type {Array<{ name: string, package: string, every?: number, daily?: number, leased?: boolean, optional?: boolean, run: (() => Promise<unknown>) | null }>} */
     this.table = GEO_WORKER_LOOPS.map((loop) => ({ ...loop, ...(cadence[loop.name] ?? {}), run: loops[loop.name] ?? null }));
     /** @type {ReturnType<typeof setInterval> | null} cleared by the maintenance pause */
     this.timer = null;
@@ -272,7 +275,7 @@ export class GeoWorker {
       running: Object.values(this.running).some(Boolean),
       armed: Boolean(this.timer),
       lastError: this.lastError,
-      missing: this.table.filter((loop) => !loop.run).map((loop) => loop.name),
+      missing: this.table.filter((loop) => !loop.run && !loop.optional).map((loop) => loop.name),
       failing: this.table.filter((loop) => this.loops[loop.name].lastError).map((loop) => loop.name),
       stalled: Object.entries(loops).filter(([, entry]) => entry.stalled).map(([name]) => name),
       loops,

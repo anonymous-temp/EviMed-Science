@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { accountMonthStart } from "@evimed/domain";
 import { accountUsageRuns } from "../src/accountUsageRuns.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 
@@ -125,8 +126,8 @@ test("GET /api/account/usage/runs answers this month from the ledger, titled fro
     const response = await fetch(`${base}/api/account/usage/runs`, { headers: { Cookie: cookie } });
     assert.equal(response.status, 200);
     const { data } = await response.json();
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    // The month a person reads begins at 00:00 on its first day in Asia/Shanghai.
+    const monthStart = accountMonthStart(new Date()).toISOString();
     assert.deepEqual(asked, [{ userId: "alice", since: monthStart }], "the month the summary covers, and nobody else's rows");
     assert.equal(data.since, monthStart);
     assert.equal(data.currency, "CNY");
@@ -137,6 +138,35 @@ test("GET /api/account/usage/runs answers this month from the ledger, titled fro
     assert.equal(data.items[0].calls, 62);
     assert.deepEqual(data.other, { calls: 5, cost: 0.3 });
   }, ledger);
+});
+
+test("both usage endpoints open the month at 00:00 Asia/Shanghai: at 16:30Z on 31 October it is already November", async (t) => {
+  const summarySince = [];
+  const runsSince = [];
+  const ledger = {
+    health: async () => ({ ok: true }),
+    reconcileExpiredReservations: async () => ({ reconciled: 0, remaining: 0, failedAccounts: 0 }),
+    summaryRuns: async () => new Map(),
+    assertWithinLimits: async () => ({ allowed: true }),
+    summary: async (_user, options) => {
+      if (!options.purposes) summarySince.push(options.since.toISOString());
+      return { since: options.since.toISOString(), settledCalls: 0, actualCost: 0, cacheHitTokens: 0, cacheMissTokens: 0, outputTokens: 0, openCalls: 0, uncertainCalls: 0, currency: "CNY" };
+    },
+    runsSince: async (_user, options) => { runsSince.push(options.since.toISOString()); return []; },
+  };
+  // The whole server runs on the fixed clock, sign-in included, so the session is valid on it.
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-31T16:30:00Z") });
+  try {
+    await withAccount(async ({ base, cookie }) => {
+      const usage = await fetch(`${base}/api/account/usage`, { headers: { Cookie: cookie } });
+      assert.equal(usage.status, 200);
+      const runs = await fetch(`${base}/api/account/usage/runs`, { headers: { Cookie: cookie } });
+      assert.equal(runs.status, 200);
+      assert.equal((await runs.json()).data.since, "2026-10-31T16:00:00.000Z");
+    }, ledger);
+  } finally { t.mock.timers.reset(); }
+  assert.deepEqual(summarySince, ["2026-10-31T16:00:00.000Z"], "the month total");
+  assert.deepEqual(runsSince, ["2026-10-31T16:00:00.000Z"], "the per-run rows");
 });
 
 test("without the durable ledger there is no run attribution, and the month is all 其他", async () => {

@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS } from "@evimed/domain";
+import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
@@ -28,6 +28,26 @@ function runtimeEgressPeers(value) {
     throw new Error('OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS must contain unique immutable containerId/imageId tuples.');
   }
   return value.map(peer => ({ containerId: peer.containerId, imageId: peer.imageId }));
+}
+
+/**
+ * One JSON setting of the evolution module, read from the environment without
+ * ever throwing. `??` does not cover an empty value and a JSON.parse of one
+ * throws, so a setting that arrived empty or mangled (a private override line
+ * `NAME=`, `.env` quoting, `docker run -e NAME=`) used to stop the API and the
+ * runtime controller at boot — with the module off, where nothing reads it.
+ * Blank is "not set"; anything else that does not parse, or that `check`
+ * refuses, is reported as an issue and the setting falls back to empty. Whether
+ * an issue matters is `loadConfig`'s question: only a module that is on refuses
+ * to start for one, and the platform boots either way.
+ * @param {string} name @param {(value: unknown) => unknown} [check]
+ * @returns {{ value: any, issue: boolean }}
+ */
+function environmentJsonList(name, check = (value) => value) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return { value: [], issue: false };
+  try { return { value: check(JSON.parse(raw)), issue: false }; }
+  catch { return { value: [], issue: true }; }
 }
 
 // The one place a tracked upstream pin is written. A Dockerfile ARG, a seam
@@ -331,7 +351,265 @@ function frontierSettings(overrides) {
 }
 
 /**
- * 「循证 GEO」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
+ * The platform's evidence programme and its public pages (evidence-flywheel plan §5.1, §9, B7, 2026-10-05),
+ * each checked at load, with the discipline of the frontier's: a lever an operator sets in `.env`, passed
+ * value-less by compose (unset is absent, so the default here applies), and a value outside its range
+ * stops the process at start with the variable's name rather than turning into a 0 or a NaN.
+ *
+ * - The programme is the platform researching on the publisher account's own behalf; it spends model
+ *   money, so it is off by default. Its day is `OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY`
+ *   (30: about four deep syntheses at the 7 yuan measured on 2026-10-04; 0 is no cap, as every spend
+ *   limit on this platform reads 0) and it works one thing at a time
+ *   (`OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY`, 1) so it can never crowd a researcher's runtime.
+ * - The public pages are off by default; `OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE` is a second, separate
+ *   lever and also off: until the owner has chosen a domain the pages say `noindex` and no sitemap is
+ *   served, so a page reachable by IP address can never become a search result by accident.
+ * - `OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH` says where the public pages, their API, the sitemap and the feed are served: `/evidence`
+ *   (the plan's address for the eventual domain, the default) or `/evimed-evidence`, for a deployment on a numeric address whose own
+ *   `/evidence/` belongs to another product. A closed choice; anything else stops the start by the variable's name.
+ * - These are the levers only. What reads them — the programme's selector, the public routes — is the
+ *   later work packages'; each must do nothing at all, and answer 404 by its own code, while its switch
+ *   is off.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function evidenceSettings(overrides) {
+  /** @param {string} key @param {string} name @param {unknown} fallback */
+  const read = (key, name, fallback) => {
+    if (overrides[key] !== undefined) return overrides[key];
+    const value = process.env[name];
+    return value == null || value === "" ? fallback : value;
+  };
+  const budgetValue = read("evidenceProgrammeDailyBudgetCny", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY", 30);
+  const budget = Number(budgetValue);
+  if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);
+  }
+  const publicBasePath = read("evidencePublicBasePath", "OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH", EVIDENCE_PUBLIC_BASE_PATHS[0]);
+  if (typeof publicBasePath !== "string" || !EVIDENCE_PUBLIC_BASE_PATHS.includes(publicBasePath)) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH must be one of ${EVIDENCE_PUBLIC_BASE_PATHS.join(", ")}, got ${JSON.stringify(publicBasePath)}.`);
+  }
+  const concurrencyValue = read("evidenceProgrammeMaxConcurrency", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY", 1);
+  const concurrency = Number(concurrencyValue);
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 4) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY must be a whole number from 1 to 4, got ${JSON.stringify(concurrencyValue)}.`);
+  }
+  /**
+   * The programme's own limits (F01/F02, 2026-10-05), each with a floor or ceiling that keeps its rule true.
+   * @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max
+   */
+  const whole = (key, name, fallback, min, max) => {
+    const raw = read(key, name, fallback);
+    const number = Number(raw);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
+    }
+    return number;
+  };
+  const episodeValue = read("evidenceProgrammeEpisodeBudgetCny", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY", 10);
+  const episodeBudget = Number(episodeValue);
+  if (!Number.isFinite(episodeBudget) || episodeBudget < 2 || episodeBudget > 1000) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY must be a number from 2 to 1000, got ${JSON.stringify(episodeValue)}.`);
+  }
+  return {
+    evidenceProgrammeEnabled: overrides.evidenceProgrammeEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED", false),
+    // Recalculation cards (flywheel F03): the evolution module's independent reproduction of a published result, published as a first-hand
+    // card in the matching official zone. Off by default, and it does nothing unless the evolution module is on beside it.
+    evidenceRecalculationCardsEnabled: overrides.evidenceRecalculationCardsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_RECALCULATION_CARDS_ENABLED", false),
+    // The prediction registry (flywheel F25): time-stamped registrations of predictions for trials in progress, scored when the trial's result
+    // is published. Off by default; with it off no registration is read or written and no route answers.
+    predictionRegistryEnabled: overrides.predictionRegistryEnabled ?? boolEnv("OPEN_SCIENCE_PREDICTION_REGISTRY_ENABLED", false),
+    evidenceProgrammeDailyBudgetCny: budget,
+    evidenceProgrammeMaxConcurrency: concurrency,
+    // What one programme episode, with the independent checks of its claims, may spend: the agenda's per-episode cap.
+    evidenceProgrammeEpisodeBudgetCny: Math.round(episodeBudget * 100) / 100,
+    // How many distinct readers must have an entity in their 「与你相关」 profile before the topic selector sees it at all.
+    // The floor is the privacy rule (plan §13.13): a lever may raise it, never lower it, so one reader is never a signal.
+    evidenceProgrammeMinDemandUsers: whole("evidenceProgrammeMinDemandUsers", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS", 5, 5, 10_000),
+    // The most original-analysis cards the platform publishes in a rolling week (0 publishes none); the next waits.
+    evidenceProgrammeOriginalPerWeek: whole("evidenceProgrammeOriginalPerWeek", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK", 2, 0, 14),
+    // An official card whose sources were last checked longer ago than this is stale, a topic signal of its own.
+    evidenceProgrammeStaleCardDays: whole("evidenceProgrammeStaleCardDays", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS", 30, 1, 365),
+    evidencePublicWebEnabled: overrides.evidencePublicWebEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED", false),
+    evidencePublicIndexable: overrides.evidencePublicIndexable ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE", false),
+    // Where the public pages, their API, the sitemap and the feed are served (see the note above): `/evidence` or `/evimed-evidence`.
+    evidencePublicBasePath: publicBasePath,
+    // What one address may fetch of the public pages and the read-only API in a minute (the pages are outside `/api/`, so the API's own
+    // limiter never sees them). A crawler that behaves is far under it; a scraper that does not is answered 429 with Retry-After.
+    evidencePublicRatePerMinute: whole("evidencePublicRatePerMinute", "OPEN_SCIENCE_EVIDENCE_PUBLIC_RATE_PER_MINUTE", 120, 10, 100_000),
+    // How many topic requests (filed or seconded) one signed-in account may make in a day: a public list anyone may add to needs a
+    // ceiling on what one account can put on it.
+    evidenceTopicRequestsPerDay: whole("evidenceTopicRequestsPerDay", "OPEN_SCIENCE_EVIDENCE_TOPIC_REQUESTS_PER_DAY", 5, 1, 1000),
+  };
+}
+
+/**
+ * The incentive hook of the co-creation loop (evidence-flywheel plan §5.2, F07, 2026-10-05): a card cited by other
+ * accounts' research a named number of times (`EVIDENCE_CITATION_MILESTONES`) may be thanked with a gifted lot of
+ * 灵豆. Interface only: the owner has not chosen an amount, so the switch is off, the amount is 0, and while either
+ * stands the hook neither reads nor writes anything. A value outside its range stops the start by its name.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function evidenceCitationGiftSettings(overrides) {
+  const value = overrides.evidenceCitationGiftAmount ?? process.env.OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT;
+  const amount = value == null || value === "" ? 0 : Number(value);
+  if (!Number.isFinite(amount) || amount < 0 || amount > 10_000) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT must be a number from 0 to 10000, got ${JSON.stringify(value)}.`);
+  }
+  return {
+    evidenceCitationGiftEnabled: overrides.evidenceCitationGiftEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED", false),
+    evidenceCitationGiftAmount: amount,
+  };
+}
+
+/**
+ * Keeping the evidence zones' cards current and answering a reader's challenge (evidence-flywheel plan 2026-10-05 §5.4, F13, F14, §2.5),
+ * each lever checked at load with the discipline of the programme's above.
+ *
+ * - `OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED` (off): the watch for new evidence and source changes, the follow-ups and notices it causes, the
+ *   public change log, readers' challenges and a producer's retirement of a card. Off, none of it exists: no loop ticks, no table of it is read,
+ *   and its routes answer 404 `evidence_upkeep_not_enabled`. (Finding a zone's candidates by shared keys instead of a title substring, and
+ *   refusing automation on a product zone, are corrections of the existing editor and do not wait for this switch.)
+ * - `OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH` (20) cards the watch checks per pass and `OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS` (24) the least
+ *   time between two checks of one card: the watch reads the frontier feed's index and the source-change record, so this is a bound on the
+ *   database's work, not on how soon a retraction is noticed (the source-change feed is polled apart from it).
+ * - `OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY` (10): the challenges one reader may file in a day; each one on a platform card costs a model call.
+ * - `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS` (6) and `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS` (180): the exit rule of §2.5 for an AI-kept card —
+ *   this many consecutive checks without a matching new study, over at least this many days, and nobody following its zone or writing on it.
+ * - `OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY` (5): the most the platform's judging of readers' challenges may spend in a day, across every
+ *   reader (`evidenceBudget.mjs`, counted from the usage ledger by the judgements' own run scopes). Beyond it a challenge waits, and the reader is told
+ *   so (「已收到，排队复核」); 0 is no ceiling. It is the challenges' own day: judging works with the upkeep on, whether the evidence programme is on or off.
+ * - `OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY` (60): the sources the platform reads for one account in a rolling day when the account asks it to
+ *   verify a card's sources (`evidenceSourceVerification.mjs`). Not part of the upkeep: that request is the frontier's and works with the upkeep off.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function evidenceUpkeepSettings(overrides) {
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const whole = (key, name, fallback, min, max) => {
+    const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+    const value = raw == null || raw === "" ? fallback : Number(raw);
+    if (!Number.isSafeInteger(value) || value < min || value > max) throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
+    return value;
+  };
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const cny = (key, name, fallback, min, max) => {
+    const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+    const value = raw == null || raw === "" ? fallback : Number(raw);
+    if (!Number.isFinite(value) || value < min || value > max) throw new Error(`${name} must be a number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
+    return Math.round(value * 100) / 100;
+  };
+  return {
+    evidenceUpkeepEnabled: overrides.evidenceUpkeepEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED", false),
+    evidenceUpkeepBatch: whole("evidenceUpkeepBatch", "OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH", 20, 1, 200),
+    evidenceUpkeepIntervalHours: whole("evidenceUpkeepIntervalHours", "OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", 24, 1, 720),
+    evidenceChallengesPerDay: whole("evidenceChallengesPerDay", "OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", 10, 1, 100),
+    evidenceRetireAfterChecks: whole("evidenceRetireAfterChecks", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", 6, 2, 1000),
+    evidenceRetireAfterDays: whole("evidenceRetireAfterDays", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", 180, 7, 3650),
+    evidenceVerifyReadsPerDay: whole("evidenceVerifyReadsPerDay", "OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", 60, 1, 1000),
+    evidenceChallengeDailyBudgetCny: cny("evidenceChallengeDailyBudgetCny", "OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", 5, 0, 1000),
+  };
+}
+
+/**
+ * What the evidence flywheel's learning loop and its figures switch on (evidence-flywheel plan §5.2, §5.5, §11, 2026-10-06), each off by default
+ * and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
+ *
+ * - `OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED` (off): the operator's `GET /api/ops/evidence-flywheel` and the `open_science_evidence_flywheel_*`
+ *   families. It reads existing tables only; it is a switch because a scrape that verifies cards is database work an operator chooses to ask for.
+ * - `OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED` (off): the community column of an official zone, `GET /api/frontier/zones/:id/community`, which lists
+ *   other users' public cards on the zone's subjects (established authors only). `OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS` (20, at most 50) bounds one
+ *   column; a longer list is a resource cost, not an opinion about the cards.
+ * - `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED` (off): what becomes of a published card — a correction, a withdrawal — goes back into learning: an incident
+ *   document for the eval corpus and an observation on the methods of the run that produced it. Ticked by the learning worker's housekeeping timer, so it
+ *   needs the learning loop on; off, no table is read and no timer exists. `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH` (25, at most 200) is the
+ *   change-log entries one pass reads: a bound on the database's work, not on how soon an outcome is noticed.
+ * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证传播, 虚拟临研) hand 循证进化 what they could
+ *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
+ *   sources taken in a day, because each lead is a scouting run on the module's own budget.
+ * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
+ *   text-only entry, after an independent re-check; needs the evolution module and the learning loop on. `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY` (3, at most 30)
+ *   bounds the candidates re-checked and activated in a day, each a model call of the evolution module's own budget.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function evidenceFlywheelSettings(overrides) {
+  const handbooksRaw = overrides.learningPlatformHandbooksPerDay !== undefined ? overrides.learningPlatformHandbooksPerDay : process.env.OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY;
+  const handbooksPerDay = handbooksRaw == null || handbooksRaw === "" ? 3 : Number(handbooksRaw);
+  if (!Number.isSafeInteger(handbooksPerDay) || handbooksPerDay < 1 || handbooksPerDay > 30) throw new Error(`OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY must be a whole number from 1 to 30, got ${JSON.stringify(handbooksRaw)}.`);
+  const perDayRaw = overrides.evolutionModuleLeadsPerDay !== undefined ? overrides.evolutionModuleLeadsPerDay : process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY;
+  const moduleLeadsPerDay = perDayRaw == null || perDayRaw === "" ? 5 : Number(perDayRaw);
+  if (!Number.isSafeInteger(moduleLeadsPerDay) || moduleLeadsPerDay < 1 || moduleLeadsPerDay > 50) throw new Error(`OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY must be a whole number from 1 to 50, got ${JSON.stringify(perDayRaw)}.`);
+  const batchRaw = overrides.learningEvidenceOutcomesBatch !== undefined ? overrides.learningEvidenceOutcomesBatch : process.env.OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH;
+  const outcomesBatch = batchRaw == null || batchRaw === "" ? 25 : Number(batchRaw);
+  if (!Number.isSafeInteger(outcomesBatch) || outcomesBatch < 1 || outcomesBatch > 200) throw new Error(`OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH must be a whole number from 1 to 200, got ${JSON.stringify(batchRaw)}.`);
+  const raw = overrides.evidenceCommunityMaxCards !== undefined ? overrides.evidenceCommunityMaxCards : process.env.OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS;
+  const maxCards = raw == null || raw === "" ? 20 : Number(raw);
+  if (!Number.isSafeInteger(maxCards) || maxCards < 1 || maxCards > 50) throw new Error(`OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS must be a whole number from 1 to 50, got ${JSON.stringify(raw)}.`);
+  return {
+    evidenceFlywheelMetricsEnabled: overrides.evidenceFlywheelMetricsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED", false),
+    evidenceCommunityCardsEnabled: overrides.evidenceCommunityCardsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED", false),
+    evidenceCommunityMaxCards: maxCards,
+    learningEvidenceOutcomesEnabled: overrides.learningEvidenceOutcomesEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED", false),
+    learningEvidenceOutcomesBatch: outcomesBatch,
+    evolutionModuleLeadsEnabled: overrides.evolutionModuleLeadsEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED", false),
+    evolutionModuleLeadsPerDay: moduleLeadsPerDay,
+    learningPlatformHandbooksEnabled: overrides.learningPlatformHandbooksEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", false),
+    learningPlatformHandbooksPerDay: handbooksPerDay,
+  };
+}
+
+/**
+ * Sharing memory inside the platform (evidence-flywheel plan §7, F17-F19, 2026-10-05), each lever checked at load with
+ * the discipline of the frontier's: passed value-less by compose, and a value outside its range stops the process at
+ * start with the variable's name.
+ *
+ * - Every line has its own switch, and each is off until an operator turns it on (2026-10-06): `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` for sharing a
+ *   capsule with other accounts (deliveries, links, take-downs, the Agent Skills method pack: off, those routes answer 404
+ *   `capsule_share_not_enabled`, nothing of them is composed or read, and the share panel is hidden through `features.capsuleShare`), and
+ *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED` for subscribing a project to an evidence zone, which also needs the frontier on.
+ * - A share link lives `OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS` days (30) and is used at most
+ *   `OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES` times (20): both are the default and the ceiling an owner may ask for, because
+ *   a link that never ends is a pack nobody can take back without remembering it exists.
+ * - A new author's share does not feed platform learning until `OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS` other
+ *   accounts (3) have imported it and kept it enabled for `OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS` days (14)
+ *   without disabling it. Both are the write-side defence of plan §7: nothing is filtered at reading time.
+ * - An account may deliver to others at most `OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY` times in a day (50): a limit that
+ *   protects other people's inboxes, not an opinion about what is shared.
+ * - Subscribing a project to an evidence zone is off by default and needs the frontier as well (`OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED`):
+ *   with the frontier off there is no zone to read. A project holds at most
+ *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT` subscriptions (5) and a recall carries at most
+ *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS` cards of them (6).
+ *
+ * @param {Record<string, any>} overrides
+ * @param {boolean} frontierEnabled
+ */
+function memorySharingSettings(overrides, frontierEnabled) {
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const integer = (key, name, fallback, min, max) => {
+    const raw = overrides[key] !== undefined ? overrides[key] : (process.env[name] == null || process.env[name] === "" ? fallback : process.env[name]);
+    const number = Number(raw);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
+    }
+    return number;
+  };
+  return {
+    capsuleShareEnabled: overrides.capsuleShareEnabled ?? boolEnv("OPEN_SCIENCE_CAPSULE_SHARE_ENABLED", false),
+    capsuleShareLinkTtlDays: integer("capsuleShareLinkTtlDays", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS", 30, 1, 365),
+    capsuleShareLinkMaxUses: integer("capsuleShareLinkMaxUses", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES", 20, 1, 1000),
+    capsuleShareCorroborationMinAccounts: integer("capsuleShareCorroborationMinAccounts", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS", 3, 1, 100),
+    capsuleShareCorroborationKeptDays: integer("capsuleShareCorroborationKeptDays", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS", 14, 1, 365),
+    capsuleShareDeliveriesPerDay: integer("capsuleShareDeliveriesPerDay", "OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY", 50, 1, 1000),
+    evidenceZoneSubscriptionEnabled: frontierEnabled && (overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", false)),
+    evidenceZoneSubscriptionMaxPerProject: integer("evidenceZoneSubscriptionMaxPerProject", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", 5, 1, 20),
+    evidenceZoneSubscriptionMaxItems: integer("evidenceZoneSubscriptionMaxItems", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", 6, 1, 30),
+  };
+}
+
+/**
+ * 「循证传播」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
  * load, and the media marketplace it places orders through.
  *
  * Hidden knowledge — the same discipline as the frontier's: every one is a
@@ -437,6 +715,15 @@ function geoSettings(overrides) {
     // Engines measured through the marketplace's inclusion check instead of the
     // probe (spec §7.4) — only `baidu` (文心) is meant to be here.
     geoInclusionEngines: inclusionEngines,
+    // Whether the parse loop follows the links an answer cites (flywheel F21, 2026-10-06): each is a public page read through the web
+    // reader (robots honoured, paced per site) and a small judge call under the module's daily budget, at most three links per
+    // answer. Off by default: the cited sentences are recorded and called neither good nor bad. Counted as
+    // `open_science_geo_link_checks_total`.
+    geoLinkCheckEnabled: overrides.geoLinkCheckEnabled ?? boolEnv("OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED", false),
+    // The platform's own medication question bank (F22): about sixty neutral questions by drug class, measured monthly on the probe
+    // host under the module's budget, in a GEO project the platform publisher holds. Off unless this and the module are on; an
+    // engine that is down is skipped and retried the next round. Counted as `open_science_geo_question_bank_total`.
+    geoQuestionBankEnabled: overrides.geoQuestionBankEnabled ?? boolEnv("OPEN_SCIENCE_GEO_QUESTION_BANK_ENABLED", false),
     // The media marketplace's settings are `mediaMarketSettings` below.
   };
 }
@@ -463,7 +750,7 @@ export const VCR_ENGINE_SECRET_MIN_BYTES = 32;
  */
 /**
  * 「虚拟临研」 (build plan 2026-09-28 §11.2): off by default, opened per
- * account like 「循证 GEO」 and 「前沿动态」 before it.
+ * account like 「循证传播」 and 「前沿动态」 before it.
  *
  * Hidden knowledge: the two ceilings here are not opinions, they are the
  * shared host (plan §11.4). The box this runs on is four cores shared with
@@ -551,6 +838,22 @@ function vcrSettings(overrides) {
     vcrAudience: audience,
     // Accounts that see the module under `operators` without being operators.
     vcrPreviewUsers: overrides.vcrPreviewUsers ?? listEnv("OPEN_SCIENCE_VCR_PREVIEW_USERS"),
+    // The public 「模拟研究」 column (flywheel plan §5.6, 2026-10-06): a study lead may publish a report there and the public pages
+    // package reads it. Off, the publication routes answer 404 `vcr_publications_not_enabled` and no table is read. Counter:
+    // `open_science_vcr_publications_total`.
+    vcrPublicSimulationsEnabled: overrides.vcrPublicSimulationsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PUBLIC_SIMULATIONS_ENABLED", false),
+    // The frontier feed's trial events for a study's subject (flywheel F24, 2026-10-06): precedent candidates, 「有新证据」 on a card
+    // and the request for a new version, ticked by the module's worker. Off, no consumer is composed and nothing is read. Each tick
+    // looks at this many studies, the one looked at longest ago first (a resource limit: every study is one query set), and reads
+    // the feed this many days back (an item enters the feed with its own publication date, so a window, not a cursor). Counters:
+    // `open_science_vcr_frontier_events_total`.
+    // Platform knowledge packs (flywheel F26, 2026-10-06): a pack the study lead curated may be re-checked and offered as the platform's
+    // own immutable version, read by every account beside the shipped packs. Off, the request routes answer 404
+    // `vcr_platform_packs_not_enabled`, no platform row is read and the source watch does not run. Counter: `open_science_vcr_platform_packs_total`.
+    vcrPlatformPacksEnabled: overrides.vcrPlatformPacksEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PLATFORM_PACKS_ENABLED", false),
+    vcrFrontierEventsEnabled: overrides.vcrFrontierEventsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_FRONTIER_EVENTS_ENABLED", false),
+    vcrFrontierEventsStudiesPerTick: integer("vcrFrontierEventsStudiesPerTick", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_STUDIES_PER_TICK", 10, 1, 200),
+    vcrFrontierEventsWindowDays: integer("vcrFrontierEventsWindowDays", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_WINDOW_DAYS", 30, 1, 365),
     vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
     // The deterministic engine. Unset = not composed; the steps that need it say so.
@@ -620,7 +923,7 @@ function vcrSettings(overrides) {
 
 /**
  * The six limits of the NCBI Gene Expression Omnibus workflow (`gene_expression_series` / `gene_expression_differential`;
- * not 「循证 GEO」), each a whole number inside the bounds `@evimed/domain` fixes (principle 15: a reason, a key, a counter).
+ * not 「循证传播」), each a whole number inside the bounds `@evimed/domain` fixes (principle 15: a reason, a key, a counter).
  * The two byte limits for a download are enforced here, in the public-source gateway, and every limit reaches the
  * runtime as `EVIMED_GENE_EXPRESSION_*` (runtimeManager.mjs), where the tools enforce what only the runtime can see:
  * the samples and probes a matrix holds, the memory one computation may use, and the time it may take. An input over a
@@ -700,7 +1003,7 @@ function reviewSettings(overrides) {
 }
 
 /**
- * The media marketplace (「循证 GEO」 distribution, build spec §7) and the
+ * The media marketplace (「循证传播」 distribution, build spec §7) and the
  * vendor's 「GEO 查收录」 channel. Neither the base URL nor the key file has a
  * default a deployment could reach: the vendor's documentation names only a
  * placeholder host, and the key is the operator's. Either missing reads as
@@ -782,7 +1085,9 @@ function mediaMarketSettings(overrides) {
  *   addresses, and neither that nor a bad starting allowance is judged here: a
  *   typo in a billing knob must not stop the platform, so the billing module
  *   checks both when it is composed and refuses by a named code
- *   (`evimedCreditsRefusal`), the platform booting regardless.
+ *   (`evimedCreditsRefusal`), the platform booting regardless. The sign-up gift's
+ *   length and the monthly gift (`..._SIGNUP_GIFT_DAYS`, `..._MONTHLY_GIFT`) are
+ *   judged there too.
  *
  * @param {Record<string, any>} overrides
  */
@@ -845,6 +1150,12 @@ function evimedCreditsSettings(overrides) {
     // Whole credits a first read of an account's simulated wallet grants. Left
     // as the number it parses to, NaN included: the module judges it.
     evimedCreditsSimulatedStartCredits: Number(read("evimedCreditsSimulatedStartCredits", "OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS", SIMULATED_START_CREDITS)),
+    // The sign-up gift is that amount as one gifted lot; this is how many days it lasts (its date is fixed, and shown, when
+    // it is granted). Left as the number it parses to, NaN included: the module judges it.
+    evimedCreditsSignupGiftDays: Number(read("evimedCreditsSignupGiftDays", "OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS", 30)),
+    // The monthly gift, in 灵豆, on each account's own monthly date; 0 is off. Kept as the text it was written in so an
+    // amount that is not exact (more than 8 decimals) is refused by the module instead of rounded here.
+    evimedCreditsMonthlyGift: String(read("evimedCreditsMonthlyGift", "OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT", 0)).trim(),
     // How often the retry sweep looks for a settlement whose backoff elapsed.
     evimedCreditsPollMs: integer("evimedCreditsPollMs", "OPEN_SCIENCE_EVIMED_CREDITS_POLL_MS", 60_000, 5_000, 3_600_000),
   };
@@ -1349,6 +1660,14 @@ export function loadConfig(overrides = {}) {
   const runtimeTransport = runtimeProvider === "agentbay" ? "wss" : runtimeTransportSetting;
   const backupDir = overrides.backupDir ?? process.env.OPEN_SCIENCE_BACKUP_DIR ?? "";
 
+  // The two JSON settings of the evolution module are read without throwing (see
+  // `environmentJsonList`); a value a caller passes in code is still checked as before.
+  const egressPeers = overrides.runtimeEgressAllowedPeers !== undefined
+    ? { value: runtimeEgressPeers(overrides.runtimeEgressAllowedPeers), issue: false }
+    : environmentJsonList("OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS", runtimeEgressPeers);
+  const dependencyAllowlist = overrides.evolutionDependencyAllowlist !== undefined
+    ? { value: overrides.evolutionDependencyAllowlist, issue: false }
+    : environmentJsonList("OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST");
   const config = {
     host: overrides.host ?? process.env.OPEN_SCIENCE_HOST ?? "127.0.0.1",
     port,
@@ -1584,6 +1903,15 @@ export function loadConfig(overrides = {}) {
     runtimeIdleYieldAfterMs: Number(
       overrides.runtimeIdleYieldAfterMs ?? process.env.OPEN_SCIENCE_RUNTIME_IDLE_YIELD_AFTER_MS ?? 30 * 60_000,
     ),
+    // How long a run's dispatch waits for a runtime slot when every one of the
+    // deployment's is taken (`RuntimeManager.startWhenRoom`), before it is
+    // refused as `runtime_capacity_full`. The slots are the host's limit and
+    // are not raised for this: a start is a place in line. Three minutes is
+    // past the idle yield a quiet runtime gives way after and inside the five
+    // minutes a browser keeps an unanswered request; zero is no wait.
+    runtimeStartWaitMs: Number(
+      overrides.runtimeStartWaitMs ?? process.env.OPEN_SCIENCE_RUNTIME_START_WAIT_MS ?? 180_000,
+    ),
     // How long a researcher's start waits for a background runtime that is
     // still coming up or going down before it retires the ones that are up
     // (`RuntimeManager.yieldBackgroundRuntimes`): a runtime start is seconds.
@@ -1759,7 +2087,7 @@ export function loadConfig(overrides = {}) {
       (runtimeTransport === "unix" ? "none" : "bridge"),
     runtimeInternalNetworkName:
       overrides.runtimeInternalNetworkName ?? process.env.OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME ?? "",
-    runtimeEgressAllowedPeers: runtimeEgressPeers(overrides.runtimeEgressAllowedPeers ?? JSON.parse(process.env.OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS ?? '[]')),
+    runtimeEgressAllowedPeers: egressPeers.value,
     allowRuntimeNetworkEgress:
       overrides.allowRuntimeNetworkEgress ?? boolEnv("OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS", !production),
     runtimeNetworkEgressPolicyAck:
@@ -2287,11 +2615,17 @@ export function loadConfig(overrides = {}) {
     autopilotPlannerTimeoutMs: Number(overrides.autopilotPlannerTimeoutMs ?? 20_000),
     // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
     ...frontierSettings(overrides),
-    // --- 循证 GEO and the media marketplace (2026-09-25) ---
+    ...evidenceSettings(overrides),
+    ...evidenceCitationGiftSettings(overrides),
+    ...evidenceUpkeepSettings(overrides),
+    ...evidenceFlywheelSettings(overrides),
+    // --- sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05) ---
+    ...memorySharingSettings(overrides, overrides.frontierEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_ENABLED", false)),
+    // --- 循证传播 and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
     // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---
     ...vcrSettings(overrides),
-    // --- NCBI Gene Expression Omnibus: the six resource limits (2026-10-04; not 循证 GEO) ---
+    // --- NCBI Gene Expression Omnibus: the six resource limits (2026-10-04; not 循证传播) ---
     ...geneExpressionSettings(overrides),
     ...reviewSettings(overrides),
     ...mediaMarketSettings(overrides),
@@ -2325,6 +2659,7 @@ export function loadConfig(overrides = {}) {
     evolutionRunBudgetCny: Number(overrides.evolutionRunBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY ?? 10),
     evolutionMaxConcurrency: Number(overrides.evolutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY ?? 1),
     evolutionMaxDecisionCards: Number(overrides.evolutionMaxDecisionCards ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS ?? 3),
+    evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 8),
     evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
     evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),
     evolutionLeaseMs: Number(overrides.evolutionLeaseMs ?? process.env.OPEN_SCIENCE_EVOLUTION_LEASE_MS ?? 120_000),
@@ -2336,7 +2671,21 @@ export function loadConfig(overrides = {}) {
     evolutionSelfCheckMaxBytes: Number(overrides.evolutionSelfCheckMaxBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES ?? 4 * 1024 * 1024),
     evolutionSelfCheckMaxRows: Number(overrides.evolutionSelfCheckMaxRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS ?? 10_000),
     evolutionSelfCheckSampleRows: Number(overrides.evolutionSelfCheckSampleRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS ?? 256),
-    evolutionDependencyAllowlist: overrides.evolutionDependencyAllowlist ?? JSON.parse(process.env.OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST ?? "[]"),
+    // Candidate execution has its own controller instance, slots and timeout (`evolutionVerificationController.mjs`):
+    // static checks, self tests, hidden-case replicates and every tenant call of a published tool are one disposable
+    // container each, hundreds per build cycle, and they must never share a slot, an admission lock or the
+    // sticky `blocked` latch with the document tools tenants use (S2).
+    evolutionExecutionMaxConcurrency: Number(overrides.evolutionExecutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY ?? 1),
+    evolutionExecutionTimeoutMs: Number(overrides.evolutionExecutionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS ?? 30_000),
+    // What one tenant project may ask of a published tool through the gateway, so one run's loop cannot queue every
+    // other tenant behind it: calls in flight at once, and calls in a minute (S4).
+    evolutionToolMaxConcurrentPerProject: Number(overrides.evolutionToolMaxConcurrentPerProject ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT ?? 2),
+    evolutionToolCallsPerMinute: Number(overrides.evolutionToolCallsPerMinute ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE ?? 60),
+    evolutionDependencyAllowlist: dependencyAllowlist.value,
+    // Why the module is off although it was switched on: the first thing wrong with its settings
+    // (`{ code, key }`, never a value), or null. A module that is wrongly configured refuses to
+    // start and says why; it never stops the platform (principle 14).
+    evolutionRefusal: null,
     evaluationDataDir: overrides.evaluationDataDir ?? process.env.OPEN_SCIENCE_EVALUATION_DATA_DIR ?? "",
     learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", true),
     learningPollMs: Number(overrides.learningPollMs ?? process.env.OPEN_SCIENCE_LEARNING_POLL_MS ?? 5_000),
@@ -2417,6 +2766,13 @@ export function loadConfig(overrides = {}) {
     operatorUsers: String(overrides.operatorUsers
       ?? process.env.OPEN_SCIENCE_OPERATOR_USERS ?? "")
       .split(",").map((value) => value.trim()).filter(Boolean),
+    // The one account besides the operators that may hold the platform's self-measurement projects
+    // (`acceptance-*`, `audit-*`, `eval-method-*`): the deployment's acceptance account, the one the smoke
+    // and the capability battery sign in as. Empty — the default — means there is none. A project is
+    // internal (not charged, outside the project ceiling and the runtime slots) only when its name says
+    // so AND its owner is one of these accounts: a name a client chose is never a waiver
+    // (`isInternalProjectOf`). The account is an id, as `operatorUsers` are.
+    acceptanceUsername: String(overrides.acceptanceUsername ?? process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim(),
     // How long a trial lasts if the caller does not say. A trial that outlives
     // the evaluation that set it would keep an unproven method in front of
     // every later run of that project, which is the failure the allowlist above
@@ -2835,8 +3191,19 @@ export function loadConfig(overrides = {}) {
     runtimeMermaidEnabled: overrides.runtimeMermaidEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED", true),
   };
   if (config.evolutionEnabled) {
-    const issues = validateEvolutionConfiguration(config);
-    if (issues.length) throw new Error(`Invalid evolution setting: ${issues[0].key}.`);
+    // The module is on: anything wrong with its settings keeps it off, with the code and key of
+    // the first finding in `evolutionRefusal` for the entrypoints to report. It used to throw
+    // here, which stopped the API and the runtime controller — research included — for a
+    // setting of an optional module.
+    const issues = [
+      ...(egressPeers.issue ? [{ code: "evolution_setting_invalid", key: "runtimeEgressAllowedPeers" }] : []),
+      ...(dependencyAllowlist.issue ? [{ code: "evolution_dependency_allowlist_invalid", key: "evolutionDependencyAllowlist" }] : []),
+      ...validateEvolutionConfiguration(config),
+    ];
+    if (issues.length) {
+      config.evolutionEnabled = false;
+      config.evolutionRefusal = { code: issues[0].code, key: issues[0].key };
+    }
   }
   return config;
 }

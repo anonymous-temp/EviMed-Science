@@ -100,7 +100,7 @@ export const AUTOPILOT_TASK_TYPES = Object.freeze([
  * `signal-monitoring` for GEO citation monitoring while the table sent that
  * type to adverse-event analysis, so a GEO agenda item ran `adr-analysis` and
  * GEO monitoring never ran at all (build spec 2026-09-25 §1). GEO monitoring
- * is now the 「循证 GEO」 module's own scheduler, `geo-content` declares no
+ * is now the 「循证传播」 module's own scheduler, `geo-content` declares no
  * task type, and `apps/server/test/autopilotEpisodeCapabilities.test.mjs`
  * holds every declaration against this table.
  *
@@ -293,7 +293,7 @@ const DISPLAY_FIELDS = Object.freeze(['title', 'category', 'description', 'liste
  * `listed: false` keeps a public capability out of the lists a researcher picks
  * from — 科研工具 and the kernel frame's tool list — while it stays public, so
  * a session can still be bound to it by id and its chip still has a name. The
- * four 「循证 GEO」 capabilities are opened by their own module (build spec
+ * four 「循证传播」 capabilities are opened by their own module (build spec
  * 2026-09-25 §6); `visibility: internal` would make that binding answer 403.
  * Absent means listed, and only `false` is written back, so a manifest that
  * says nothing about it generates exactly what it did before.

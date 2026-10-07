@@ -28,6 +28,9 @@ export const GEO_TABS: ReadonlyArray<{ key: GeoTabKey; label: string }> = Object
   { key: "plan", label: "方案" },
 ]);
 
+/** The tabs that show how the AI assistants answer: the module's measurement screens, named 「AI 回答监测」 in the browser tab. */
+export const GEO_MONITORING_TABS: readonly GeoTabKey[] = Object.freeze(["visibility", "accuracy", "questions"] as GeoTabKey[]);
+
 /**
  * Where each of the nine old tabs went. “问题” and “信源” kept their
  * addresses because they kept their subject; the rest moved, and the two

@@ -130,6 +130,31 @@
         "Invent a source: a link or a registry id the run did not open."
       ],
       "gradedOn": "Whether the draft would pass a reader who opens each source: every entry sourced from something the run read, nothing copied that may not be, nothing numeric a calculation would use — and the study moving on."
+    },
+    {
+      "id": "vcr-protocol-006-accrual-window-in-months",
+      "title": "一句话起步，入组窗口按月给：「入组 18 个月、随访 12 个月、年脱落 8%、对照中位 8 个月、HR 0.70，要多少例？」",
+      "why": "The live incident of 2026-10-04 (release d60e3053a2a8): a protocol run turned 「两年入组」 into a trial scenario whose configuration carried accrual.months. The platform refused it by name (vcr_scenario_unknown_fields, path accrual.months) and the run's next scenarios were valid, so the refusal worked; what failed was what the run wrote from — the tool description typed the shapes by hand and gave accrual no keys. The request here is worded to invite exactly that guess (an enrolment window and a follow-up stated in months, a dropout stated per year) and asks whether the run reads the method's real keys before it writes — vcr_simulate action shape — and, if it is refused anyway, repairs that one scenario in place from the keys the refusal lists.",
+      "inputs": {
+        "question": "PFS 对照组中位 8 个月、预期 HR 0.70；入组期 18 个月、末例入组后再随访 12 个月，每年约 8% 脱落。1:1 随机，要多少例？",
+        "dataTier": "T0",
+        "intendedUse": "design_support"
+      },
+      "mustDo": [
+        "Write the minimal definition card as the single-step path requires, then — for the trial scenario the question needs — read the keys of the method before writing it: vcr_simulate with action shape and the kind (design_analytic and design_simulation), not the accrual block from memory.",
+        "State the enrolment window as accrual.duration = 18 and the follow-up as accrual.followup = 12, in the same time unit as the control median (months here), and the dropout as accrual.dropoutAnnual = 0.08 — a proportion per 12 time units, not 8.",
+        "Carry accrual only for the time-to-event endpoint this question has; write no accrual for a binary or continuous scenario.",
+        "If the platform refuses a key anyway, correct that scenario in place in the same turn from the list of keys the refusal names, and write only the refused item again.",
+        "Say in the report which job answers the sample size (design_analytic, cross-checked by design_simulation) and that the accrual, follow-up and dropout were the user's stated inputs."
+      ],
+      "mustNotDo": [
+        "Write any key the shape for the kind does not list, in particular a key named for the unit of its value (months, years, rate) in place of accrual.duration, accrual.followup or accrual.dropoutAnnual.",
+        "Write the dropout as 8 or as a monthly rate, or restate 18 months as 1.5 years while the control median is in months.",
+        "Retry the refused scenario unchanged, rewrite every scenario to repair one, or drop the accrual block to get past the refusal.",
+        "Answer with a sample size, an event count or a power figure typed from memory.",
+        "Ask the user for the dropout, the accrual shape or the analysis method before writing anything."
+      ],
+      "gradedOn": "Whether the scenario written (or its first repair) carries accrual.duration, accrual.followup and accrual.dropoutAnnual with the user's numbers and only keys the method reads, and whether the transcript shows the shape read before the write, or the refusal's own key list used for the repair without a second lookup."
     }
   ]
 }

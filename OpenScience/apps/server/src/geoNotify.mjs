@@ -2,7 +2,7 @@ import { GEO_ENGINE_LABELS_ZH, GEO_URGENT_SEVERITIES } from "@evimed/domain";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 
 /**
- * 「循证 GEO」's notices (build spec 2026-09-25 §5; plan §5.7): exactly five
+ * 「循证传播」's notices (build spec 2026-09-25 §5; plan §5.7): exactly five
  * kinds reach a person, and everything else a project does is only shown on
  * its page.
  *
@@ -73,7 +73,7 @@ function clip(value, max) {
 /** What a project is called in a notice: its brand, else its generic name. @param {any} project */
 export function geoProductName(project) {
   const product = project?.product && typeof project.product === "object" ? project.product : {};
-  return clip(product.brandName || product.genericName || "循证 GEO 项目", 30);
+  return clip(product.brandName || product.genericName || "循证传播项目", 30);
 }
 
 /**
@@ -309,7 +309,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
      */
     async alertOperator(event) {
       const type = String(event?.type ?? event?.kind ?? "");
-      const title = /** @type {Record<string, string>} */ (OPERATOR_TITLES)[type] ?? "循证 GEO 后台需要人工处理";
+      const title = /** @type {Record<string, string>} */ (OPERATOR_TITLES)[type] ?? "循证传播后台需要人工处理";
       const key = String(event?.idempotencyKey || `geo-op:${type}:${dayIn(now(), timeZone)}`);
       const operators = (config.operatorUsers ?? []).map(String).filter(Boolean);
       await audit("geo.operator.alert", "reported", { code: type || "unknown", detail: key });
@@ -375,7 +375,7 @@ const OPERATOR_WHERE = Object.freeze({
   probeHost: "检查探测机是否在线、有没有卡在某个页面。",
   probeConfig: "检查探测通道的地址和密钥配置。",
   measurement: "检查探测通道和这一轮的测量任务。",
-  market: "在“循证 GEO”的投放账户里处理。",
+  market: "在“循证传播”的投放账户里处理。",
 });
 
 /** @param {string} type */

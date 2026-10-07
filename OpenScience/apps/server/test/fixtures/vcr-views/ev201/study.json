@@ -88,8 +88,8 @@
   "budget": {
     "limitSeconds": 7200,
     "usedSeconds": 222,
-    "committedSeconds": 570,
-    "remainingSeconds": 6408,
+    "committedSeconds": 0,
+    "remainingSeconds": 6978,
     "awaitingBudget": 1
   },
   "jobs": [

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
-import { deliverableDir, deliverableIdOfPath } from "@evimed/domain";
+import { GEO_CITING_LAYERS, deliverableDir, deliverableIdOfPath } from "@evimed/domain";
 import { geoRuntimeWrite, GEO_WRITE_LIMITS } from "./geoWrites.mjs";
 import { readFileNoFollow, resolveScopedPath } from "./security.mjs";
 
@@ -126,16 +126,22 @@ export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFol
  *   listInsightFolders?: (workspaceDir: string) => Promise<string[]>,
  *   listDeliverableFolders?: (workspaceDir: string) => Promise<string[]>,
  *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null,
- *   articleRunId?: ((project: any, deliverableId: string) => Promise<string | null>) | null }} deps
+ *   articleRunId?: ((project: any, deliverableId: string) => Promise<string | null>) | null,
+ *   refreshCards?: ((geoProject: any, controlProject: any) => Promise<{ cards: unknown[], held: unknown[], failed: unknown[] } | null>) | null,
+ *   checkReferences?: ((geoProject: any, article: any, text: string) => Promise<unknown>) | null }} deps
+ *   `refreshCards` writes the project's verified claims into its product zone as cards (geoCards.mjs); what it refuses (no named
+ *   producer, no reviewer) or fails to write is reported and never ends the import. `checkReferences` reads the claim references of
+ *   each popular, question-and-answer and correction article against the cards and records the finding on the article; an
+ *   article whose text is the one it last read is not read again.
  */
 export function createGeoDeliveryImport({ store, report = () => {}, readFile = readWorkspaceFile, listInsightFolders = insightFolders,
-  listDeliverableFolders = deliverableFolders, articleGate = null, articleRunId = null }) {
+  listDeliverableFolders = deliverableFolders, articleGate = null, articleRunId = null, refreshCards = null, checkReferences = null }) {
   /** Runs already imported by this process; the writes are idempotent either way. */
   const seen = new Set();
   /**
    * @param {{ id: string, userId: string, workspaceDir: string }} project the control-plane project
    * @param {Record<string, any>} run
-   * @returns {Promise<{ imported: number, issues: number, located: number, gated: number } | null>}
+   * @returns {Promise<{ imported: number, issues: number, located: number, gated: number, carded?: number } | null>}
    */
   return async function importDelivery(project, run) {
     if (!run?.id || !TERMINAL.has(String(run.status ?? "")) || seen.has(run.id)) return null;
@@ -183,6 +189,18 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
       }
     }
     if (imported || issues) report(`claims imported ${imported}, refused ${issues}`);
+    // The claims a card's own ruler verifies become cards of the project's product zone (flywheel F21). The claim table stays as
+    // it is; a refusal here — nobody named as producer, no reviewing doctor — is one named code and changes nothing else.
+    let carded = 0;
+    if (refreshCards && (imported > 0 || ids.size > 0)) {
+      try {
+        const written = await refreshCards(geoProject, project);
+        carded = written?.cards.length ?? 0;
+        if (written && (written.held.length || written.failed.length)) report(`cards written ${carded}, claims held ${written.held.length}, cards failed ${written.failed.length}`);
+      } catch (error) {
+        report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_cards_refresh_failed");
+      }
+    }
     // Articles registered by their path inside the deliverable folder, as the
     // skill used to say (`articles/<id>.md`): with no workspace path and no
     // run, the gate could not be read, the page could not open them and the
@@ -221,6 +239,25 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
       if (await store.relocateArticle(geoProject.id, article.id, { path, deliverableId: match.folder, runId })) located += 1;
     }
     if (located) report(`articles located or given their run ${located}`);
+    // The lower layers cite the cards (flywheel F21): each citing article's text is read for its claim references and checked
+    // against the card revisions they name. It is a label on the article; a text that cannot be read or checked is left unchecked.
+    let referenced = 0;
+    if (checkReferences) {
+      // Read again: the card write above may have made the project's product zone, which the references resolve against.
+      const current = await store.projectByControlProject(project.userId, project.id) ?? geoProject;
+      for (const article of await store.listArticles(geoProject.id)) {
+        if (!article.path || !GEO_CITING_LAYERS.includes(/** @type {any} */ (article.layer))) continue;
+        try {
+          const body = String(await readFile(project.workspaceDir, article.path));
+          if (createHash("sha256").update(body).digest("hex") === article.refCheckedSha) continue;
+          await checkReferences(current, article, body);
+          referenced += 1;
+        } catch (error) {
+          report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_article_references_failed");
+        }
+      }
+      if (referenced) report(`article references checked ${referenced}`);
+    }
     // The articles written in this run have a verdict now (production,
     // 2026-09-25: five articles stayed 「draft · unverified」 after their
     // deliverable was delivered with a pass, so nothing was publishable).
@@ -237,6 +274,6 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
       }
       if (gated) report(`article gates refreshed ${gated}`);
     }
-    return { imported, issues, located, gated };
+    return { imported, issues, located, gated, ...(refreshCards ? { carded } : {}) };
   };
 }

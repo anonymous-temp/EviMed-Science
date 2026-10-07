@@ -29,10 +29,27 @@ export async function vcrBackupReadiness(config) {
     if (!plane.isDirectory() || plane.isSymbolicLink()) throw new Error('invalid');
     dataPlaneIdentity = createHash('sha256').update(`${plane.dev}:${plane.ino}`).digest('hex');
   } catch { throw failure('vcr_backup_unhealthy'); }
-  const fresh = value => Number.isFinite(Date.parse(value)) && Date.parse(value) <= now + 300000
-    && now - Date.parse(value) <= (config.vcrBackupMaxAgeSeconds ?? 90000) * 1000;
+  const maxAge = (config.vcrBackupMaxAgeSeconds ?? 90000) * 1000;
+  const within = (value, window) => Number.isFinite(Date.parse(value)) && Date.parse(value) <= now + 300000
+    && now - Date.parse(value) <= window;
+  const fresh = value => within(value, maxAge);
+  // A set the cycle could not complete because files its dump names kept being
+  // deleted under it (`scripts/ops/vcr-backup.mjs`). The PostgreSQL archive is
+  // written by the unit's own first step and is checked by the sibling check in
+  // `readinessBackup`, which runs before this one and is red on its own account
+  // when that archive is stale. So a deferral is a detail, not a failure: the next
+  // run takes the set again, and it only turns red when it has gone on for three
+  // maximum ages with no healthy set in between — a thing that is no longer a race.
+  if (state?.schemaVersion === 1 && state.status === 'deferred') {
+    if (state.code !== 'vcr_backup_references_missing' || !fresh(state.lastAttemptAt)
+      || (state.lastSuccessAt != null && !within(state.lastSuccessAt, 3 * maxAge))) throw failure('vcr_backup_unhealthy');
+    return { required: true, encrypted: true, deferred: true, code: state.code, lastAttemptAt: state.lastAttemptAt,
+      lastSuccessAt: state.lastSuccessAt ?? null };
+  }
+  // `maintenance-held` is what sets made before the platform stopped being asked
+  // for a quiet window say; they stay valid until they are a day old.
   if (state?.schemaVersion !== 1 || state.status !== 'healthy' || state.numericOwnersVerified !== true
-    || state.consistency !== 'maintenance-held' || state.atomicAcrossComponents !== false
+    || !['references-verified', 'maintenance-held'].includes(state.consistency) || state.atomicAcrossComponents !== false
     || !Array.isArray(state.coverage) || state.coverage.length !== 2 || !state.coverage.includes('data-plane') || !state.coverage.includes('jobs')
     || !/^vcr-backup-[a-f0-9-]{36}$/.test(state.recoverySet ?? '') || !/^[a-f0-9]{64}$/.test(state.receiptSha256 ?? '')
     || state.dataPlaneIdentity !== dataPlaneIdentity

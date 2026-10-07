@@ -6,7 +6,7 @@ import test from "node:test";
 import { RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 
-async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null } = {}) {
+async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -27,7 +27,7 @@ async function fixture(t, { memorySubstrate = null, sessions = null, recallItems
   const authorized = new Promise((resolve) => { authorize = resolve; });
   const store = { userById: async () => exists ? { id: project.userId } : null,
     requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); authorize(); return project; } };
-  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate, sessions, handbooks });
+  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate, sessions, handbooks, subscriptions });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await rm(dir, { recursive: true, force: true }); });
@@ -274,4 +274,35 @@ test("native handbook reads and acknowledgements keep workload ownership and clo
   assert.equal((await f.request("handbook-context", input, f.issue({ userId: "other" }))).status, 401);
   assert.equal((await f.request("handbook-attached", { sessionId: "session", receipts: [{ requestId: "A", digest: "a".repeat(64) }] })).status, 200);
   assert.equal(calls[1].action, "ack");
+});
+
+test("the project's evidence-zone subscriptions are one more provider of a recall, for this project only, after what the capsules returned", async (t) => {
+  const asked = [];
+  const subscriptions = { recall: async (userId, projectId, query) => { asked.push([userId, projectId, query]); return [{ id: "ec_1", source: "evidence_zone", label: "来自证据专区《房颤抗凝》", contextOnly: true }]; } };
+  const f = await fixture(t, { recallItems: [{ id: "fact-1", content: "own", mode: "own" }], subscriptions });
+  const answer = await (await f.request("recall", { query: "房颤抗凝" })).json();
+  assert.deepEqual(answer.items.map((item) => item.id), ["fact-1", "ec_1"]);
+  assert.equal(answer.sources.zone, 1);
+  assert.deepEqual(asked, [["owner", "project-one", "房颤抗凝"]], "the account and project come from the credential");
+  const conversation = await (await f.request("recall", { query: "房颤抗凝", scope: "conversation" })).json();
+  assert.ok(!conversation.items.some((item) => item.source === "evidence_zone"), "a conversation-only recall reads no zone");
+  const broken = await fixture(t, { subscriptions: { recall: async () => { throw new Error("tables missing"); } } });
+  assert.equal((await broken.request("recall", { query: "房颤抗凝" })).status, 200, "a zone that cannot be read costs the recall this part only");
+  const none = await fixture(t, { recallItems: [{ id: "fact-1", content: "own", mode: "own" }] });
+  assert.deepEqual((await (await none.request("recall", { query: "x" })).json()).items.map((item) => item.id), ["fact-1"], "with no subscriptions the recall is what it was");
+});
+
+test("a recall of subscribed zones asks the frontier's audience first, like every zone route: an account outside it is offered nothing, quietly", async (t) => {
+  const { subscriptionsForAudience } = await import("../src/evidenceZoneSubscription.mjs");
+  const asked = [];
+  const inner = { recall: async (userId, projectId, query) => { asked.push([userId, projectId, query]); return [{ id: "ec_1", source: "evidence_zone", contextOnly: true }]; } };
+  const users = new Map([["owner", { id: "owner" }], ["outsider", { id: "outsider" }]]);
+  const audience = new Set(["owner"]);
+  const guarded = subscriptionsForAudience({ subscriptions: inner, userById: async (id) => users.get(id) ?? null, allows: (user) => audience.has(user.id) });
+  assert.deepEqual((await guarded.recall("owner", "project-one", "房颤")).map((item) => item.id), ["ec_1"]);
+  assert.deepEqual(await guarded.recall("outsider", "project-one", "房颤"), [], "subscribed, but the frontier is not shown to this account");
+  assert.deepEqual(await guarded.recall("nobody", "project-one", "房颤"), [], "an account that is not there");
+  assert.deepEqual(asked, [["owner", "project-one", "房颤"]], "nothing of the zones was read for the others");
+  const f = await fixture(t, { recallItems: [{ id: "fact-1", content: "own", mode: "own" }], subscriptions: guarded });
+  assert.deepEqual((await (await f.request("recall", { query: "房颤" })).json()).items.map((item) => item.id), ["fact-1", "ec_1"], "through the gateway for the project's own account");
 });

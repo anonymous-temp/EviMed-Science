@@ -62,13 +62,15 @@
 
 import { createHash } from "node:crypto";
 
-import { VCR_ENGINE_PROTOCOL_VERSION, canonicalScenarioJson, vcrResultOutputPayload } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, VCR_ENGINE_PROTOCOL_VERSION, canonicalScenarioJson, vcrResultOutputPayload } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
 import { VcrDataPlane } from "./vcrDataPlane.mjs";
 import { VcrDataStore } from "./vcrDataStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
+import { createVcrEngineProbe } from "./vcrEngineProbe.mjs";
+import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
@@ -84,6 +86,9 @@ import { VcrMembers } from "./vcrMembers.mjs";
 import { createVcrModelPlans } from "./vcrModelDocuments.mjs";
 import { createVcrSeal } from "./vcrSeal.mjs";
 import { VcrService } from "./vcrService.mjs";
+import { createVcrPublications, createVcrPublicSimulations } from "./vcrPublications.mjs";
+import { createVcrFrontierEvents } from "./vcrFrontierEvents.mjs";
+import { createVcrPredictions } from "./vcrPredictions.mjs";
 import { VcrStore } from "./vcrStore.mjs";
 import { createChictrAdapter, createTrialRegistryClient } from "./trialRegistryClient.mjs";
 import { createVcrImporter } from "./vcrImport.mjs";
@@ -224,10 +229,17 @@ export function matchingContextOf(inputs) {
  * One subject that cannot be evaluated is one subject counted in
  * `diagnostics.errors`; it never stops the others (CS-34).
  *
+ * **A study whose subjects are rows of the data plane's subject table is matched from that table** (`vcrMatchingTable.mjs`):
+ * each row is a candidate, and the columns the field map and the dictionary describe are read as facts for the same
+ * evaluator — judged for the study's owner for this purpose like every other read of patient-level data, held in memory
+ * for this evaluation only, and never written down. A person who is a row of the table and has documents is one candidate
+ * with both kinds of fact (the two keys are the same pseudonym); a row with no documents is a candidate who is table-only.
+ *
  * @param {{ matchStore: VcrMatchStore, store: VcrStore,
- *   documents?: { read: (study: any, input: { subjectKey: string, documentId: string }) => Promise<{ text: string } | null> } | null }} parts
+ *   documents?: { read: (study: any, input: { subjectKey: string, documentId: string }) => Promise<{ text: string } | null> } | null,
+ *   subjectTable?: { read: (study: any) => Promise<any> } | null }} parts
  */
-export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
+export function vcrMatchingExecutor({ matchStore, store, documents = null, subjectTable = null }) {
   /** @param {{ job: Record<string, any>, onProgress: (progress: { done: number, total: number }) => Promise<unknown> }} input */
   return async ({ job, onProgress }) => {
     const startedAt = new Date().toISOString();
@@ -247,6 +259,24 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
     /** @type {Map<string, any[]>} */
     const factsBySubject = new Map();
     for (const fact of allFacts) factsBySubject.set(fact.subjectKey, [...(factsBySubject.get(fact.subjectKey) ?? []), fact]);
+    // The subject table, when the study has one: every row a candidate. Read through the plane's judged reader; a refusal
+    // (no grant, sealed columns, a table that changed under its hash) leaves the other sources as they were and is said in
+    // the result's diagnostics by its code.
+    /** @type {any} */
+    let tableRead = null;
+    if (subjectTable) {
+      try { tableRead = await subjectTable.read(study); }
+      catch (error) { tableRead = { available: false, reason: String(/** @type {any} */ (error)?.code ?? "vcr_subject_table_unreadable") }; }
+    }
+    const tableFacts = tableRead?.available
+      ? subjectTableFacts({ ...tableRead, variables: matchingVariablesOf(criteria), limit: VCR_MATCHING_MAX_SUBJECTS })
+      : null;
+    /** @type {Set<string>} candidates that exist only as a row of the table */
+    const tableOnly = new Set();
+    for (const { subjectKey, facts } of tableFacts?.subjects ?? []) {
+      if (!factsBySubject.has(subjectKey) && !languageBySubject.has(subjectKey)) tableOnly.add(subjectKey);
+      factsBySubject.set(subjectKey, [...(factsBySubject.get(subjectKey) ?? []), ...facts]);
+    }
     const subjects = [...new Set([...factsBySubject.keys(), ...languageBySubject.keys()])].sort().slice(0, VCR_MATCHING_MAX_SUBJECTS);
 
     /** @type {any[]} */
@@ -273,7 +303,8 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
           studyId, protocolVersionId, subjectKey, asOf, direction: "trial_to_patient", criteria, facts, documents: loaded, modelJudgments, provenance: { vocabularyVersion },
         });
         voidedTotal += assessment.voidedFacts.length;
-        assessments.push({ ...assessment, counts: { ...assessment.counts, voidedFacts: assessment.voidedFacts.length } });
+        assessments.push({ ...assessment, counts: { ...assessment.counts, voidedFacts: assessment.voidedFacts.length },
+          ...(tableOnly.has(subjectKey) ? { source: "subject_table" } : {}) });
       } catch (error) {
         errors.push(String(/** @type {any} */ (error)?.code ?? "vcr_evaluation_failed"));
       }
@@ -303,6 +334,11 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
         errors: errors.length, ...(errors.length ? { errorCodes: [...new Set(errors)] } : {}),
         // What this run did not see: subjects past the cap wait for the next run.
         subjectsNotEvaluated: Math.max(0, new Set([...factsBySubject.keys(), ...languageBySubject.keys()]).size - subjects.length),
+        // The subject table, by what it was and what of it answered: names and counts, never a cell.
+        ...(subjectTable ? { subjectTable: tableFacts
+          ? { snapshotId: tableRead.snapshotId, rows: tableFacts.rows, subjects: tableFacts.subjects.length, notEvaluated: tableFacts.notEvaluated,
+            variablesMapped: tableFacts.mapped, variablesUnmapped: tableFacts.unmapped, variablesAmbiguous: tableFacts.ambiguous, withheld: tableRead.withheld }
+          : { available: false, reason: String(tableRead?.reason ?? "unavailable"), ...(tableRead?.fields?.length ? { fields: tableRead.fields } : {}) } } : {}),
       },
       tables: [],
       // Per-subject rows leave through the finish hook only: a result row
@@ -377,10 +413,32 @@ export function vcrDocumentsSeam({ dataPlane }) {
   };
 }
 
+/**
+ * The subject-table seam of the matching flow: the plane's judged read of the study's subject table for the study's
+ * owner, and the identity (snapshot and hash) a job freezes so a changed table is a different job. A refusal is an
+ * answer — `{ available: false, reason }` — never an error that stops the other sources.
+ * @param {{ dataPlane: VcrDataPlane | null }} parts
+ */
+export function vcrSubjectTableSeam({ dataPlane }) {
+  return {
+    /** @param {any} study */
+    async read(study) {
+      if (!dataPlane) return { available: false, reason: "vcr_data_plane_unavailable" };
+      return dataPlane.subjectTableForMatching({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE });
+    },
+    /** @param {any} study */
+    async identity(study) {
+      if (!dataPlane) return null;
+      return dataPlane.subjectTableIdentity(study.id).catch(() => null);
+    },
+  };
+}
+
 /** The frozen inputs of one matching job, and the facts token that keeps two runs of different facts apart. */
-function matchingInputs({ asOf, protocolVersionId, facts, judgments }) {
+function matchingInputs({ asOf, protocolVersionId, facts, judgments, table = null }) {
+  // The table's identity joins the token only when there is a table, so a study without one keeps the token it had.
   const token = createHash("sha256").update(JSON.stringify([
-    facts.map((/** @type {any} */ fact) => fact.id), judgments,
+    facts.map((/** @type {any} */ fact) => fact.id), judgments, ...(table ? [table.snapshotId, table.sha256] : []),
   ])).digest("hex").slice(0, 16);
   return [
     { kind: "evidence", id: `${CONTEXT_INPUT.asOf}${asOf}` },
@@ -398,9 +456,10 @@ function matchingInputs({ asOf, protocolVersionId, facts, judgments }) {
  * the object the service and the gateway read through is assembled here.
  *
  * @param {{ matchStore: VcrMatchStore, store: VcrStore, jobs?: VcrJobs | null,
- *   getNotifier?: (() => any) | null, report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string }} parts
+ *   getNotifier?: (() => any) | null, report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string,
+ *   subjectTable?: { identity: (study: any) => Promise<{ snapshotId: string, sha256: string } | null> } | null }} parts
  */
-export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "" }) {
+export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "", subjectTable = null }) {
   /** @param {any} study */
   const languageKeys = async (study) => {
     const criteria = await matchStore.listCriteria({ studyId: study.id }).catch(() => []);
@@ -562,7 +621,7 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
         scenario: { criteria: criteria.map((criterion) => ({
           id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: "unknown",
         })) },
-        inputs: matchingInputs({ asOf: minute, protocolVersionId: protocol.id, facts, judgments }),
+        inputs: matchingInputs({ asOf: minute, protocolVersionId: protocol.id, facts, judgments, table: await subjectTable?.identity(study) ?? null }),
       };
     },
 
@@ -602,7 +661,11 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
       }
       let created = 0;
       let needsEvidence = 0;
-      for (const candidate of candidateReferrals({ studyId: study.id, assessments: saved })) {
+      // A row of the subject table is a person the study already holds data on, not a patient a site might be asked to
+      // contact: its verdicts are saved and counted, and no referral is made for it. A person who also has documents is
+      // the recruitment flow's as before.
+      const tableOnly = new Set(list(result.assessments).filter((assessment) => assessment?.source === "subject_table").map((assessment) => String(assessment.subjectKey)));
+      for (const candidate of candidateReferrals({ studyId: study.id, assessments: saved.filter((assessment) => !tableOnly.has(String(assessment.subjectKey))) })) {
         try {
           const referral = await matchStore.createReferral({
             userId: study.userId,
@@ -838,12 +901,17 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   report?: (code: string) => void,
  *   connectorCredentials?: { resolveOwn(userId: string, connector: string): Promise<string | null> } | null,
  *   intakeController?: { runVcrIntake?: Function } | null,
+ *   entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null>, frontierItemsMatching?: (query: any) => Promise<any[]> } | null,
+ *   sourceChanges?: { getMany?: (identifiers: unknown[]) => Promise<Map<string, any>> } | null,
+ *   officialZoneForKeys?: ((keys: string[]) => Promise<string | null>) | null,
+ *   predictionRegistry?: { register: (prediction: Record<string, any>) => Promise<any> } | null,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
-  const store = new VcrStore({ database: productDatabase });
+  // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
+  const store = new VcrStore({ database: productDatabase, entityVocabulary });
   const dataStore = new VcrDataStore({ database: productDatabase });
   const matchStore = new VcrMatchStore({ database: productDatabase });
   const evidenceStore = new VcrEvidenceStore({ database: productDatabase });
@@ -877,13 +945,16 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // The engine runs on the output-hash check alone; the log says why results are unsigned, once, at composition.
   if (engine && engineStatus.receiptKeyError) report(`vcr_engine_receipt_key_unusable:${engineStatus.receiptKeyError}`);
   const removeEngineJob = createVcrEngineJobRemover({ config, fetchImpl, engine });
+  // One reading of whether the engine answers, for the job the page shows, readiness and the capability's label.
+  const engineProbe = createVcrEngineProbe({ engine });
 
   // Patient documents are read through the plane's own judged, audited reader;
   // with no plane there are none, and a fact a run wrote about a document is void.
   const documents = vcrDocumentsSeam({ dataPlane });
+  const subjectTable = dataPlane ? vcrSubjectTableSeam({ dataPlane }) : null;
   const jobs = new VcrJobs({
-    store, config, engine, report, dataPlane,
-    localExecutors: { "matching.evaluate": vcrMatchingExecutor({ matchStore, store, documents }) },
+    store, config, engine, report, dataPlane, engineObserver: engineProbe,
+    localExecutors: { "matching.evaluate": vcrMatchingExecutor({ matchStore, store, documents, subjectTable }) },
   });
   // The seal asks the plane to lift, per study, as of the instant the plan froze
   // (`liftStudySeal`); the plane records the first outcome read through the seal
@@ -918,7 +989,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   /** @type {any} */
   let composed = null;
   const matching = vcrMatchingSeam({
-    matchStore, store, jobs, report, getNotifier: () => composed?.notifier ?? null, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""),
+    matchStore, store, jobs, report, getNotifier: () => composed?.notifier ?? null, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""), subjectTable,
   });
   // A matching job that has finished has its assessments persisted, its
   // candidates made referrals and its coordinators told — by the control plane,
@@ -934,11 +1005,30 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
   // by the runtime's `pack` and `library` and by the population writer; the job queue is the comparison's.
   const knowledgeStore = new VcrKnowledgeStore({ database: productDatabase });
-  const knowledge = new VcrKnowledge({ store: knowledgeStore, studyStore: store, dataStore, jobs });
+  const knowledge = new VcrKnowledge({ store: knowledgeStore, studyStore: store, dataStore, jobs,
+    // Platform packs (flywheel F26): off, no platform row is read and the request is a 404 by its own code.
+    platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
+      people: (ids) => store.personNames(ids) } });
   service.attach({ corrections, knowledge });
+  // The public 「模拟研究」 column: the lead's publish and withdraw, and the reader the public pages package takes. Neither exists
+  // while the switch is off, so nothing reads the table and the routes answer 404 by their own code.
+  const publications = config.vcrPublicSimulationsEnabled ? createVcrPublications({ store, service, matchStore }) : null;
+  const simulations = config.vcrPublicSimulationsEnabled ? createVcrPublicSimulations({ store }) : null;
+  // The frontier feed's trial events (flywheel F24): a consumer the module's worker ticks. The orchestrator and the notifier are
+  // composed later, so it asks for them when it needs them.
+  const frontierEvents = config.vcrFrontierEventsEnabled
+    ? createVcrFrontierEvents({
+      store, entityVocabulary, sourceChanges, report: (code) => report(code),
+      orchestrator: () => composed?.orchestrator ?? null, notifier: () => composed?.notifier ?? null,
+      levers: { studiesPerTick: config.vcrFrontierEventsStudiesPerTick, windowDays: config.vcrFrontierEventsWindowDays },
+    }) : null;
+  if (frontierEvents) service.attach({ frontierEvents });
+  // Filing a prediction with the learning package's registry (flywheel F25): absent without one.
+  const predictions = createVcrPredictions({ store, registry: predictionRegistry });
   composed = {
+    publications, simulations, frontierEvents, predictions,
     store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
-    access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
+    access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
     notifier: null, orchestrator: null, worker: null, exporter: null, review: null,
@@ -1036,6 +1126,12 @@ export async function vcrMetricsSnapshot(vcr) {
     worker: vcr.worker?.status?.() ?? null,
     engine: vcr.engineStatus ?? null,
     intake: vcr.intake ? { counters: { ...vcr.intake.counters } } : null,
+    evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
+    publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
+    predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
+    frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
+    platformPacks: vcr.knowledge?.platform?.enabled
+      ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
   };
 }
 
@@ -1076,6 +1172,27 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.intake?.counters) {
     add("intake_total", "What the intake conversions did since this process started: record documents converted or refused (needsText, unreadable, tooLong, tooLarge), conversions that timed out, failed or had no converter, and figures digitized or refused.", "counter",
       Object.entries(snapshot.intake.counters).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.evidence) {
+    add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",
+      [{ labels: { outcome: "written" }, value: Number(snapshot.evidence.cardCandidates ?? 0) },
+        { labels: { outcome: "verified" }, value: Number(snapshot.evidence.cardCandidatesVerified ?? 0) }]);
+  }
+  if (snapshot.predictions) {
+    add("predictions_total", "Predictions of a registered trial's primary endpoint filed with the registry from a study's trial scenario (flywheel F25): filed, asked again, refused, and filings the registry did not take.", "counter",
+      Object.entries(snapshot.predictions).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
+  }
+  if (snapshot.platformPacks) {
+    add("platform_packs_total", "What the platform knowledge packs did since this process started (flywheel F26): packs that passed the re-check and were copied, requests that failed it, authors who took their name off, and platform packs labelled 来源有变更.", "counter",
+      Object.entries(snapshot.platformPacks).map(([kind, value]) => ({ labels: { kind: kind.replace(/^platform/, "").replace(/^./, (letter) => letter.toLowerCase()) }, value: Number(value) })));
+  }
+  if (snapshot.frontierEvents) {
+    add("frontier_events_total", "What the frontier-events consumer did since this process started (flywheel F24): studies scanned, feed items read, precedent candidates raised or already in the library, cards labelled 有新证据, new-version runs requested, versions that took the news in (and those written after the plan froze), and scans that failed.", "counter",
+      Object.entries(snapshot.frontierEvents).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.publications) {
+    add("publications_total", "What the public 「模拟研究」 column did since this process started: reports published, publishes that found the live one, reports withdrawn, publications refused (the report not written, a subject named, not the lead's), and reads by the public reader.", "counter",
+      Object.entries(snapshot.publications).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
   const loops = Object.entries(snapshot.worker?.loops ?? {}).filter(([, loop]) => loop?.wired);
   if (loops.length) {

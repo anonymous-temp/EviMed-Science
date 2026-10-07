@@ -218,6 +218,48 @@ test("a message steered into a running turn from the kernel's window is counted 
   assert.equal((await counted()).corrections, 3);
 });
 
+test("a stop pressed in the kernel's own window is noted on the run before it reaches the kernel, on both transports, and is forwarded exactly as sent (review F4)", async t => {
+  // The frame stops a turn with `session/cancel`: nothing recorded who asked, so the monitor, reading the
+  // aborted turn, wrote a cancel nobody was named for, and the user's own stop on the primary conversation surface
+  // was free. The stop is recorded where it passes, before it goes upstream.
+  const ledger = new AgentRunStore({ get: async () => null }, { model: "deepseek/deepseek-v4-pro", readSessionHistory: async () => [] });
+  ledger.scheduleMonitor = () => {};
+  const f = await fixture(t, {}, {}, { agentRuns: ledger });
+  const project = await f.store.requireProject(f.user, "default");
+  const binding = (sessionId) => ({ sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null });
+  const noted = async (id) => ledger.stopRequests.has(id);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const cancel = (streamId, sessionId) => open(streamId, "session/cancel", { request: { sessionId } });
+
+  const first = await ledger.reserveRun(project, binding("s-mux"), { baselineCursor: null, kernelRequestIds: ["req-mux"] });
+  assert.equal(await noted(first.run.id), false);
+  const frame = cancel("stop-mux", "s-mux");
+  c.send(frame);
+  assert.equal((await c.next()).value.reached, "session/cancel");
+  assert.deepEqual(f.received.at(-1), frame, "the kernel receives the frame exactly as it was sent");
+  assert.equal(await noted(first.run.id), true, "the user's intent is on the run by the time the kernel has the cancel");
+  // The monitor reads the aborted turn and writes a cancel naming nobody: it is the user's.
+  await ledger.finishInternal(project, first.run.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [] });
+  assert.equal((await ledger.list(project)).find((item) => item.id === first.run.id)?.canceledBy, "user");
+
+  // A stop for a session with nothing running notes nothing, and still reaches the kernel.
+  c.send(cancel("stop-idle", "s-idle"));
+  assert.equal((await c.next()).value.reached, "session/cancel");
+  assert.equal(ledger.stopRequests.size, 0);
+
+  // The HTTP RPC records at the same point.
+  const second = await ledger.reserveRun(project, binding("s-http"), { baselineCursor: null, kernelRequestIds: ["req-http"] });
+  const http = await fetch(`${f.base}/api/session/cancel`, { method: "POST",
+    headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "rpc-stop", method: "session/cancel", payload: { args: { request: { sessionId: "s-http" } } } }) });
+  assert.equal(http.status, 200);
+  assert.equal(await noted(second.run.id), true);
+  // A cancel the proxy cannot read is still forwarded, and notes nothing.
+  const odd = await fetch(`${f.base}/api/session/cancel`, { method: "POST",
+    headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body: "not json" });
+  assert.equal(odd.status, 200);
+});
+
 test("a steer the ledger cannot count still reaches the kernel, and the failure is audited", async t => {
   const audits = [];
   const f = await fixture(t, {}, {}, {
@@ -913,9 +955,12 @@ test("interleaved frame assets, unary calls and reconnects retain independent pr
   const secondCookie = `${f.loginCookie}; ${secondFrame.cookie.split(";")[0]}`;
   const routed = [];
   f.manager.proxy = async (_req, res, project, suffix) => { routed.push([project.id, suffix]); res.end("ok"); };
+  // One socket at a time: `f.started` below is read in order, and two upgrades sent together reach the server in
+  // whichever order the loop takes them (in CI the second arrived first, 2026-10-04). What interleaves is the
+  // traffic after both are open, which is what the bindings are tested against.
   const first = f.connect();
-  const other = f.connect({ Cookie: secondCookie }, `${secondFrame.prefix}api/remote.mux`);
   assert.equal(await first.opened, 101);
+  const other = f.connect({ Cookie: secondCookie }, `${secondFrame.prefix}api/remote.mux`);
   assert.equal(await other.opened, 101);
   for (const [base, cookie, suffix] of [
     [f.base, f.cookie, "/assets/a.js"],
@@ -1388,8 +1433,16 @@ test("a notice page says what stopped the conversation in the shell's own words,
   const capped = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
   assert.equal(capped.status, 429);
   const cappedPage = await capped.text();
-  assert.ok(cappedPage.includes("同时进行的研究已达上限，先结束一个再试。"), cappedPage);
+  assert.ok(cappedPage.includes("你同时进行的研究已达上限，先结束一个再试。"), cappedPage);
   assert.ok(cappedPage.includes('"runtime_limit_exceeded"'), "the shell is told the code");
+  // The deployment's full house is a different sentence and a different code: the shell waits it out by itself.
+  f.manager.proxy = async () => { throw new HttpError(429, "runtime_capacity_full", "Every runtime slot of the server is taken; limit is 4.", { retryAfterSeconds: 5 }); };
+  const full = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
+  assert.equal(full.status, 429);
+  const fullPage = await full.text();
+  assert.ok(fullPage.includes("所有研究环境都在使用中，空出后会自动开始。"), fullPage);
+  assert.ok(fullPage.includes('"runtime_capacity_full"'), "the shell is told the code");
+  assert.ok(!fullPage.includes("limit is 4"), "and never the English reason");
   f.config.runtimeUiProxyEnabled = false;
   const off = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
   assert.equal(off.status, 404);

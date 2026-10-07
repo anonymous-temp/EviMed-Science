@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { isResearcherOwnedWork } from "@evimed/domain";
+import { isChargeableResearchRun, isResearcherOwnedWork } from "@evimed/domain";
 
 const SRC = path.resolve(import.meta.dirname, "../src");
 /** What a function that dispatches a researcher's run must contain before it does. */
@@ -26,7 +26,7 @@ const RESEARCHER_OWNED = [
   "dispatchVerification", // autopilot: an independent check of a proactive claim
   "dispatchEpisode",    // autopilot: one budgeted episode
   "dispatchVcrRun",     // 虚拟临研 programme step
-  "dispatchGeoRun",     // 循证 GEO programme step
+  "dispatchGeoRun",     // 循证传播 programme step
   "dispatchChannelRun", // a question that arrived through a messaging channel
 ];
 /** The platform's own background work: charged to nobody, so asked of nobody. */
@@ -64,6 +64,24 @@ test("every researcher-owned dispatch asks the allowance first, and the platform
   for (const site of elsewhere) assert.doesNotMatch(site.before, /assertBalanceForStart\(/, `${site.file} gates work nobody is charged for`);
 });
 
+/** The starts nobody is watching: they need their P90, not the P50 a person at the keyboard needs. */
+const UNATTENDED = ["dispatchVcrRun", "dispatchGeoRun"];
+
+test("a run nobody is watching asks for its P90, and a person's run for its P50", async () => {
+  const server = await readFile(path.join(SRC, "server.mjs"), "utf8");
+  const sites = [...server.matchAll(/assertBalanceForStart\(([^)]*)\)/g)].map((match) => match[1]);
+  const unattended = sites.filter((call) => /unattended: true/.test(call));
+  // Two programme steps and the autopilot's episode and verification (one shared check).
+  assert.equal(unattended.length, 3, `${unattended.length} unattended gates: ${sites.join(" | ")}`);
+  for (const holder of UNATTENDED) {
+    const start = server.indexOf(`async function ${holder}`);
+    assert.ok(start > 0, holder);
+    assert.match(server.slice(start, server.indexOf("agentRuns.dispatch(", start)), /assertBalanceForStart\([^)]*unattended: true/, `${holder} must ask for its P90`);
+  }
+  // The person-facing gates (the page's dispatch, a messaging channel, the kernel's own window) do not.
+  assert.equal(sites.length - unattended.length, 3);
+});
+
 test("a turn typed into the kernel's own window is asked at the one method that begins a turn, and never for a steer", async () => {
   const ui = await readFile(path.join(SRC, "runtimeUiServer.mjs"), "utf8");
   const server = await readFile(path.join(SRC, "server.mjs"), "utf8");
@@ -84,5 +102,7 @@ test("what is gated is what is charged: programme and proactive steps are the re
     assert.equal(isResearcherOwnedWork({ automated: true, effectiveAgentId: agent }), false, agent);
     assert.equal(isResearcherOwnedWork({ automated: false, effectiveAgentId: agent }), false, agent);
   }
-  assert.equal(isResearcherOwnedWork({ automated: true, dispatchId: "methodeval_x", effectiveAgentId: "adr-analysis" }), false, "a paired evaluation is the platform's");
+  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: "platform-learning", effectiveAgentId: "adr-analysis" }), false, "a paired evaluation is the platform's");
+  assert.equal(isResearcherOwnedWork({ automated: true, dispatchId: "methodeval_x", effectiveAgentId: "adr-analysis" }), false, "a harness's own run teaches nothing");
+  assert.equal(isChargeableResearchRun({ automated: true, dispatchId: "methodeval_x", effectiveAgentId: "adr-analysis" }), true, "but a name typed into a dispatch is not what the platform dispatched");
 });

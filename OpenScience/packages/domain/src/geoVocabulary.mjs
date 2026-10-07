@@ -1,5 +1,5 @@
 /**
- * 「循证 GEO」's closed vocabularies (build spec 2026-09-25 §2, §4).
+ * 「循证传播」's closed vocabularies (build spec 2026-09-25 §2, §4).
  *
  * Hidden knowledge:
  *
@@ -95,6 +95,42 @@ export const GEO_FAILURE_MODE_LABELS_ZH = Object.freeze({
   omitted: '漏提我方', correct: '讲对我方', wrong_ours: '讲错我方', wrong_competitor: '讲错竞品', none: '未涉及',
 })
 
+/**
+ * What a statement about the product is about. The four specified kinds — indication, dosage, contraindication and adverse
+ * reaction — are the information whose agreement with the label is measured first (指定信息正确率); a statement of another
+ * kind is judged all the same and counts in the overall accuracy.
+ */
+export const GEO_STATEMENT_TOPICS = frozen(['indication', 'dosage', 'contraindication', 'adverse_reaction', 'other'])
+export const GEO_STATEMENT_TOPIC_LABELS_ZH = Object.freeze({
+  indication: '适应证', dosage: '用法用量', contraindication: '禁忌', adverse_reaction: '不良反应', other: '其他',
+})
+export const GEO_SPECIFIED_TOPICS = frozen(['indication', 'dosage', 'contraindication', 'adverse_reaction'])
+/** Whether a cited link says what the answer says it does: the page's own words decide, `unclear` when they do not. */
+export const GEO_CITATION_SUPPORTS = frozen(['yes', 'no', 'unclear'])
+
+/**
+ * 指定信息正确率 of a set of judged statements: of the statements about indication, dosage, contraindication and adverse reaction
+ * the judge could decide, how many agree with the label — computed here from the verdicts and never typed by a model. A statement
+ * the claims could not decide (`unverifiable`) is neither right nor wrong and is left out of the denominator; `rate` is null when
+ * nothing could be decided, never zero. `byTopic` gives the same for each of the four kinds.
+ * @param {readonly { verdict?: string, topic?: string }[]} statements
+ * @returns {{ correct: number, wrong: number, decided: number, rate: number | null, byTopic: Record<string, { correct: number, wrong: number }> }}
+ */
+export function geoSpecifiedInfoAccuracy(statements) {
+  /** @type {Record<string, { correct: number, wrong: number }>} */
+  const byTopic = Object.fromEntries(GEO_SPECIFIED_TOPICS.map((topic) => [topic, { correct: 0, wrong: 0 }]))
+  let correct = 0
+  let wrong = 0
+  for (const statement of Array.isArray(statements) ? statements : []) {
+    const topic = statement?.topic ?? ''
+    if (!GEO_SPECIFIED_TOPICS.includes(/** @type {any} */ (topic))) continue
+    if (statement.verdict === 'correct') { correct += 1; byTopic[topic].correct += 1 }
+    else if (statement.verdict === 'wrong') { wrong += 1; byTopic[topic].wrong += 1 }
+  }
+  const decided = correct + wrong
+  return { correct, wrong, decided, rate: decided ? correct / decided : null, byTopic }
+}
+
 /** Errors (讲错我方) and their trace. */
 export const GEO_ERROR_TYPES = frozen(['label_conflict', 'number', 'dropped_condition', 'unfounded', 'attribute_swap'])
 export const GEO_ERROR_TYPE_LABELS_ZH = Object.freeze({
@@ -172,6 +208,56 @@ export const GEO_ARTICLE_GATES = frozen(['passed', 'unverified', 'failed'])
 /** `open` is the safety stop: an unresolved clinical-safety finding; `released` is a person having looked (「放行」). */
 export const GEO_ARTICLE_SAFETY = frozen(['clear', 'open', 'released'])
 export const GEO_ARTICLE_STATUSES = frozen(['draft', 'publishable', 'placed', 'published', 'withdrawn'])
+/**
+ * What the platform found when it read the claim references of an article (flywheel F21): `unchecked` before it was read, `none`
+ * when the text cites no card claim, `resolved` when every cited claim exists in the card revision it cites, `unresolved` when
+ * one does not. A label on the article; nothing here withholds it.
+ */
+export const GEO_ARTICLE_REFERENCE_STATUSES = frozen(['unchecked', 'none', 'resolved', 'unresolved'])
+/**
+ * The label a paid placement carries on the article's record and in the text sent (the advertising rules ask paid content to say
+ * so): 「广告」 or 「商业合作」. A placement through the market is `commercial_cooperation` until its owner says otherwise.
+ */
+export const GEO_PLACEMENT_LABELS = frozen(['advertisement', 'commercial_cooperation'])
+export const GEO_PLACEMENT_LABELS_ZH = Object.freeze({ advertisement: '广告', commercial_cooperation: '商业合作' })
+
+/**
+ * Who may do what in a project (flywheel F29, the same shape as 虚拟临研's study members): the account that made the project is its
+ * owner and holds every ability without a row; colleagues and outside agencies are members by role. A role is judged per operation
+ * — `geoRoleAllows` — and an account that is neither the owner nor a member reads the project as one that does not exist.
+ *
+ * - `editor` writes and runs: the claim library, the cards, the articles, 「让 AI 做」, the exports.
+ * - `medical_reviewer` reads and looks at what must be looked at: releases a safety stop and is the reviewing doctor a card names.
+ * - `viewer` reads.
+ * - the owner alone manages members, the budget and the orders (money), and deletes the project.
+ */
+export const GEO_MEMBER_ROLES = frozen(['editor', 'medical_reviewer', 'viewer'])
+export const GEO_MEMBER_ROLE_LABELS_ZH = Object.freeze({ owner: '负责人', editor: '编辑', medical_reviewer: '医学审核', viewer: '只读' })
+export const GEO_ABILITIES = frozen(['read', 'edit', 'run', 'review', 'manage_money', 'manage_members', 'delete'])
+export const GEO_ROLE_ABILITIES = Object.freeze({
+  owner: GEO_ABILITIES,
+  editor: frozen(['read', 'edit', 'run']),
+  medical_reviewer: frozen(['read', 'review']),
+  viewer: frozen(['read']),
+})
+
+/**
+ * Whether a role may do an ability. An unknown role may do nothing.
+ * @param {string} role @param {string} ability
+ */
+export function geoRoleAllows(role, ability) {
+  const allowed = /** @type {Record<string, readonly string[]>} */ (GEO_ROLE_ABILITIES)[role]
+  return Array.isArray(allowed) && allowed.includes(ability)
+}
+
+/**
+ * The union of what a set of roles allows, in the order of `GEO_ABILITIES`: one person may hold several roles (the single physician
+ * at a small company is its editor and its reviewing doctor), and collapsing them into the strongest would grant what neither said.
+ * @param {readonly string[]} roles
+ */
+export function geoAbilitiesOf(roles) {
+  return GEO_ABILITIES.filter((ability) => (roles ?? []).some((role) => geoRoleAllows(role, ability)))
+}
 
 /** Media marketplace. */
 export const GEO_MEDIA_TYPES = frozen(['website', 'wemedia'])
@@ -213,14 +299,14 @@ export const GEO_OWNED_LINK_STATUSES = frozen(['active', 'retired'])
 
 /** The runtime tools' words (`geo_read` / `geo_write`, spec §4). */
 export const GEO_READ_WHATS = frozen(['project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
-  'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring'])
+  'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring', 'cards'])
 export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
   'articles', 'placement_plan', 'owned_links', 'step'])
 /** How a read or a write narrates in the conversation (`narration.mjs`). */
 export const GEO_READ_WHAT_LABELS_ZH = Object.freeze({
   project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
   errors: '讲错记录', sources: '信源', strategy: '信源布局', targets: '三档目标', articles: '稿件', orders: '投放订单', owned_links: '自有发布',
-  monitoring: '监测',
+  monitoring: '监测', cards: '证据卡片',
 })
 export const GEO_WRITE_WHAT_LABELS_ZH = Object.freeze({
   product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
@@ -269,6 +355,8 @@ export const GEO_VOCABULARIES = Object.freeze({
   statementVerdict: GEO_STATEMENT_VERDICTS,
   failureMode: GEO_FAILURE_MODES,
   errorType: GEO_ERROR_TYPES,
+  statementTopic: GEO_STATEMENT_TOPICS,
+  citationSupport: GEO_CITATION_SUPPORTS,
   severity: GEO_SEVERITIES,
   errorStability: GEO_ERROR_STABILITIES,
   errorAction: GEO_ERROR_ACTIONS,
@@ -285,6 +373,10 @@ export const GEO_VOCABULARIES = Object.freeze({
   articleGate: GEO_ARTICLE_GATES,
   articleSafety: GEO_ARTICLE_SAFETY,
   articleStatus: GEO_ARTICLE_STATUSES,
+  articleReferenceStatus: GEO_ARTICLE_REFERENCE_STATUSES,
+  memberRole: GEO_MEMBER_ROLES,
+  ability: GEO_ABILITIES,
+  placementLabel: GEO_PLACEMENT_LABELS,
   mediaType: GEO_MEDIA_TYPES,
   orderState: GEO_ORDER_STATES,
   ledgerKind: GEO_LEDGER_KINDS,

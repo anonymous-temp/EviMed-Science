@@ -36,6 +36,27 @@ beforeEach(() => {
     jobs: { running: 0, pending: 1, failed: 0 },
   });
 });
+describe("who pays for the upkeep", () => {
+  it("tells the owner of a zone that the model cost is theirs, before they switch it on", async () => {
+    client.fetchEvidenceMaintenance.mockResolvedValue({ ...maintenance, automation: { ...maintenance.automation, enabled: false }, billing: { payer: "owner", official: false, purpose: "evidence-upkeep" } });
+    render(<EvidenceMaintenance zone={zone} onUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByText("持续更新"));
+    expect(await screen.findByText("自动更新的模型费用由你的额度支付")).toBeInTheDocument();
+    expect(screen.queryByText(/由平台支付/)).not.toBeInTheDocument();
+  });
+  it("says the platform pays for an official zone, and says nothing about money when the server did not say who", async () => {
+    client.fetchEvidenceMaintenance.mockResolvedValue({ ...maintenance, billing: { payer: "platform", official: true, purpose: "frontier" } });
+    const { unmount } = render(<EvidenceMaintenance zone={zone} onUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByText("持续更新"));
+    expect(await screen.findByText("自动更新的模型费用由平台支付")).toBeInTheDocument();
+    unmount();
+    client.fetchEvidenceMaintenance.mockResolvedValue(maintenance);
+    render(<EvidenceMaintenance zone={zone} onUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByText("持续更新"));
+    await screen.findByText("自动寻找新证据");
+    expect(screen.queryByText(/模型费用/)).not.toBeInTheDocument();
+  });
+});
 describe("zone evidence upkeep", () => {
   it("saves real settings and starts a bounded refresh from the current zone", async () => {
     render(<EvidenceMaintenance zone={zone} onUpdated={vi.fn()} />);

@@ -16,7 +16,7 @@ import net from "node:net";
 import path from "node:path";
 import { loadConfig } from "./config.mjs";
 import { assertDockerDataVolumeSupport } from "./dockerMounts.mjs";
-import { backgroundRuntimeLimit, isInternalProject, isEvolutionProject } from "./internalProjects.mjs";
+import { backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject } from "./internalProjects.mjs";
 import {
   RUNTIME_EXIT_OUTPUT_BYTES,
   appendTailOutput,
@@ -342,7 +342,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   // Protected construction supplies descriptors and signed/current authority resolvers.
   // An absent composition never falls back to a development image or direct execution.
   const extensionTools = hooks.extensionTools ?? null;
-  const evolutionVerification = createEvolutionVerificationController(config, { tools: extensionTools ?? undefined, ...(hooks.evolutionVerification ?? {}) });
+  // Candidate execution gets an executor of its own, never the extension controller that serves tenants' document tools.
+  const evolutionVerification = createEvolutionVerificationController(config, { ...(hooks.evolutionVerification ?? {}) });
   const assessmentAuthority = hooks.extensionGenerationAssessmentAuthority ?? null;
   assertExtensionAssessmentAuthority(assessmentAuthority);
   const verifyGeneration = (project, reference) => verifyExtensionGeneration(config, project, reference, {assessmentAuthority});
@@ -406,15 +407,21 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     });
   }
 
+  // The same question the control plane asks (`RuntimeManager.isBackgroundProject`): a name that a client can choose
+  // is background work only for an operator or the acceptance account, from the same two settings.
+  const isBackground = (userId, projectId) => isInternalProjectOf(config, userId, projectId);
+
   function evolutionAdmissionAvailable() {
     const limits=runtimeCapacityLimits(config),inventory=dockerRuntimeInventory(config);
     for(const [name,owner] of runtimeOwners)inventory.set(name,owner);
     const enabled=config.evolutionEnabled===true,reservedResearchSlots=enabled?1:0;
-    const background=[...inventory.values()].filter(owner=>isInternalProject(owner.projectId)).length;
+    const background=[...inventory.values()].filter(owner=>isBackground(owner.userId,owner.projectId)).length;
     const maxBackground=backgroundRuntimeLimit(limits.maxGlobal,limits.maxPerUser);
     return {enabled,total:inventory.size,maxGlobal:limits.maxGlobal,reservedResearchSlots,
       availableSlots:Math.max(0,limits.maxGlobal-reservedResearchSlots-inventory.size),background,maxBackground,
-      available:inventory.size<limits.maxGlobal-reservedResearchSlots&&(maxBackground==null||background<maxBackground)};
+      available:inventory.size<limits.maxGlobal-reservedResearchSlots&&(maxBackground==null||background<maxBackground),
+      // What the candidate executor has done and refused, for the control plane's metrics: this process exposes none of its own.
+      executor:evolutionVerification.counters?.()??null};
   }
 
   function reserveRuntimeCapacity(project) {
@@ -423,39 +430,19 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     for (const [containerName, owner] of runtimeOwners) {
       inventory.set(containerName, owner);
     }
-    if(config.evolutionEnabled===true&&isEvolutionProject(project.id)&&inventory.size>=limits.maxGlobal-1){
-      throw controllerFailure(429,'runtime_limit_exceeded','Evolution waits to preserve the final research runtime slot.',{retryAfterSeconds:60});
-    }
-    if (inventory.size >= limits.maxGlobal) {
-      throw controllerFailure(
-        429,
-        "runtime_limit_exceeded",
-        `Too many running runtimes for the server; limit is ${limits.maxGlobal}.`,
-        { retryAfterSeconds: 5 },
-      );
-    }
-    // Background work holds at most its share of the deployment, the same
-    // number the control plane computes (`backgroundRuntimeLimit`).
-    if (isInternalProject(project.id)) {
-      const background = [...inventory.values()].filter((owner) => isInternalProject(owner.projectId)).length;
-      const maxBackground = backgroundRuntimeLimit(limits.maxGlobal, limits.maxPerUser);
-      if (maxBackground != null && background >= maxBackground) {
-        throw controllerFailure(
-          429,
-          "runtime_limit_exceeded",
-          `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`,
-          { retryAfterSeconds: 60 },
-        );
-      }
-    }
+    const background = isBackground(project.userId, project.id);
+    // The researcher's own ceiling first, as the control plane asks it
+    // (`RuntimeManager.enforceRuntimeCapacity`): a start held by it must not be
+    // told to wait for a slot it could not take once one was free.
+    //
     // The platform's own background projects (learning, document
     // understanding, the paired evaluation) never take one of a researcher's
     // slots — the control plane has not counted them since 2026-09-21, and
     // this count disagreeing refused every upload's understanding run for an
     // account whose learning and evaluation were running (reproduced live).
-    // The global ceiling above still counts every container.
-    const userCount = isInternalProject(project.id) ? 0 : [...inventory.values()]
-      .filter((owner) => owner.userId === project.userId && !isInternalProject(owner.projectId)).length;
+    // The global ceiling below still counts every container.
+    const userCount = background ? 0 : [...inventory.values()]
+      .filter((owner) => owner.userId === project.userId && !isBackground(owner.userId, owner.projectId)).length;
     if (userCount >= limits.maxPerUser) {
       throw controllerFailure(
         429,
@@ -463,6 +450,33 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         `Too many running runtimes for this user; limit is ${limits.maxPerUser}.`,
         { retryAfterSeconds: 5 },
       );
+    }
+    if(config.evolutionEnabled===true&&isEvolutionProject(project.id)&&inventory.size>=limits.maxGlobal-1){
+      throw controllerFailure(429,'runtime_capacity_full','Evolution waits to preserve the final research runtime slot.',{retryAfterSeconds:60});
+    }
+    if (inventory.size >= limits.maxGlobal) {
+      // Every slot of the host is taken: a place in line for the caller
+      // (`RUNTIME_ROOM_WAIT_CODES`), unlike the researcher's own ceiling above.
+      throw controllerFailure(
+        429,
+        "runtime_capacity_full",
+        `Every runtime slot of the server is taken; limit is ${limits.maxGlobal}.`,
+        { retryAfterSeconds: 5 },
+      );
+    }
+    // Background work holds at most its share of the deployment, the same
+    // number the control plane computes (`backgroundRuntimeLimit`).
+    if (background) {
+      const held = [...inventory.values()].filter((owner) => isBackground(owner.userId, owner.projectId)).length;
+      const maxBackground = backgroundRuntimeLimit(limits.maxGlobal, limits.maxPerUser);
+      if (maxBackground != null && held >= maxBackground) {
+        throw controllerFailure(
+          429,
+          "runtime_capacity_full",
+          `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`,
+          { retryAfterSeconds: 60 },
+        );
+      }
     }
     runtimeOwners.set(runtimeContainerName(project), { userId: project.userId, projectId: project.id });
   }
@@ -936,7 +950,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     async close() {
       let skillValidationFailure = null;
       let extensionFailure = null;
-      await evolutionVerification.close();
+      // Its own executor is closed here now; a failure to close it must not skip the others.
+      await evolutionVerification.close().catch(() => {});
       try { await extensionTools?.close(); } catch (error) { extensionFailure = error; }
       try { await skillValidation.close(); } catch (error) { skillValidationFailure = error; }
       await documents.close();

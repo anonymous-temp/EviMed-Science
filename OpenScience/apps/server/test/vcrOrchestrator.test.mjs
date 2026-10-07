@@ -280,10 +280,10 @@ test("a runtime reserved for another dispatch is not the export's run; the resea
   assert.equal((await orchestrator.exportDispatch("std_1", {}))?.exportId, "exp_9");
 });
 
-test("there are exactly five notices, and they are the domain's five", () => {
+test("there are exactly six notices, and they are the domain's six: the five of the plan and the new-evidence notice of the flywheel (F24)", () => {
   assert.equal(VCR_NOTICE_KINDS, VCR_NOTIFICATION_KINDS);
   assert.deepEqual([...VCR_NOTICE_KINDS],
-    ["package_ready", "not_estimable", "budget_confirm", "new_candidates", "accrual_off_forecast"]);
+    ["package_ready", "not_estimable", "budget_confirm", "new_candidates", "accrual_off_forecast", "new_evidence"]);
 });
 
 test("a notice opens the page it is about", () => {
@@ -497,6 +497,38 @@ test("a design the engine does not implement is said in a sentence and never run
   // The words a page shows an object by are the only keys allowed to go without a word.
   const shown = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ cost: 180, notes: "x", design: { nTreat: 10, nControl: 10 } }) }, context));
   assert.equal(shown.ok, true);
+});
+
+test("a refusal of an unread key names the keys the engine does read in that place, from the same help the runtime renders (2026-10-04: accrual.months)", () => {
+  const refuse = (/** @type {Record<string, any>} */ configuration, /** @type {Record<string, any>} */ row = {}) =>
+    /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow(configuration, row) }, context)).refused;
+  const months = refuse({ design: { nTreat: 120, nControl: 120 }, analysis: { method: "logrank", alpha: 0.025 }, accrual: { months: 24, followup: 12 } });
+  assert.equal(months.code, "vcr_scenario_unknown_fields");
+  assert.deepEqual(months.paths, ["accrual.months"]);
+  assert.match(months.message, /accrual\.months/);
+  // The sentence lists what accrual reads, so the repair needs no second lookup, and says where the whole shape is.
+  const file = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../runtime/mcp/evimed-research/vcr_scenario_help.json"), "utf8"));
+  for (const method of ["design.analytic", "design.simulate"]) {
+    const reads = file.methods[method].rows.filter((/** @type {any} */ row) => /^accrual\.[A-Za-z]+$/.test(row.path)).map((/** @type {any} */ row) => row.path.slice("accrual.".length));
+    assert.ok(reads.length >= 3, method);
+    for (const key of reads) assert.ok(months.message.includes(key), `${key} is read by ${method} and the refusal does not name it`);
+  }
+  assert.match(months.message, /action shape/);
+  assert.doesNotMatch(months.message, /dropoutRate|accrual\.rate/, "it lists what is read, never the guesses");
+  // A top-level key is answered with the scenario's own keys; a binary endpoint is not told about accrual, which it may not carry.
+  const top = refuse({ design: { nTreat: 10, nControl: 10 }, covariates2: 1 });
+  assert.deepEqual(top.paths, ["covariates2"]);
+  assert.match(top.message, /顶层引擎读：design、endpoint、truth、analysis、accrual/);
+  const binary = refuse({ design: { nTreat: 10, nControl: 10 }, truth: { controlRate: 0.3, treatmentRate: 0.4 }, accrual: { duration: 12 } },
+    { endpointType: "binary" });
+  assert.deepEqual(binary.paths, ["accrual"]);
+  assert.doesNotMatch(binary.message, /accrual 里引擎读/, "accrual is not read for a binary endpoint, so there is nothing inside it to list");
+  // A key of a list's item is answered with the item's keys.
+  const item = /** @type {any} */ (vcrBuildStages({ kind: "comparator", row: { route: "external_control", estimand: "ATT",
+    configuration: { covariates: ["age"], tau: 12, cohortRules: [{ name: "adult", rule: { op: "compare", column: "age", comparator: "gte", value: 18 }, why: "x" }] } } },
+  { ...context, study: { ...seedStudy, dataTier: "T2" }, definition: { ...definition, endpointType: "time_to_event" } })).refused;
+  assert.deepEqual(item.paths, ["cohortRules[0].why"]);
+  assert.match(item.message, /cohortRules\[\] 里引擎读：name、rule、unknownAs/);
 });
 
 test("Simon simulation freezes the selected analytic result and both declared null/alternative laws", () => {

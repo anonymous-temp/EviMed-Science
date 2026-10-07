@@ -20,6 +20,9 @@
  * - **A lookup that could not be made is unknown.** It is returned as `{ unknown: reason }`, which the record keeps as
  *   such; a failure here never fails the check that called it, and a failed check never lowers what an earlier one found
  *   (`linkStatesLeftFor`).
+ * - **The one record of source changes is read, not re-detected.** `labelSince` takes what `sourceChanges.mjs` recorded
+ *   since a position of its feed — whoever detected it: Crossref, the frontier, the evidence zone — and labels the memories
+ *   that name those works, with no lookup of its own.
  * - **What is shown follows what the reader may see.** Every memory dependent is labelled (the label is about the
  *   source), but only the ones in this project's scope or the account's own are listed in a project's panel, and only
  *   those in use: a replaced or archived memory is history that still names its source.
@@ -27,8 +30,9 @@
  * @module knowledgeChange
  */
 import { createHash } from "node:crypto";
-import { doiOf, linkReasonOf, linkStateOf, linkStatesLeftFor } from "@evimed/domain";
+import { doiOf, doiOfSourceIdentifier, linkReasonOf, linkStateOf, linkStatesLeftFor, sourceUpdateStatusOfFact } from "@evimed/domain";
 import { methodLabel } from "./learningService.mjs";
+import { cardFinding, itemFinding } from "./evidenceZoneSubscription.mjs";
 import { sourceLinkOf } from "./researchMemory.mjs";
 
 /** How many result versions one source change looks up methods for; a link is a handful, and a count is never a ledger. */
@@ -40,9 +44,13 @@ const codeOf = (error) => (typeof error?.code === "string" && /^[a-z][a-z0-9_.-]
 /**
  * The memory source link a source identity can be: a published work by its DOI, a knowledge-base document by its `src_`
  * id. Anything else (a preserved file's path) names nothing a memory records, so it is no link.
- * @param {{ id?: string, doi?: string }} ref @returns {{ type: string, id: string } | null}
+ * @param {{ id?: string, doi?: string, cardId?: string, itemId?: string }} ref @returns {{ type: string, id: string } | null}
  */
 export function memoryLinkOf(ref) {
+  // An evidence card or a frontier item names itself (F19): the identifiers are the zone's and the feed's own, never a DOI.
+  const named = ref?.cardId ? sourceLinkOf({ type: "evidence_card", id: String(ref.cardId) })
+    : ref?.itemId ? sourceLinkOf({ type: "frontier_item", id: String(ref.itemId) }) : null;
+  if (named) return { type: named.type, id: named.id };
   const doi = doiOf(ref?.doi ?? ref?.id);
   const link = doi ? sourceLinkOf({ type: "doi", id: doi }) : sourceLinkOf({ type: "knowledge_source", id: String(ref?.id ?? "") });
   return link ? { type: link.type, id: link.id } : null;
@@ -52,10 +60,66 @@ export class KnowledgeChangeService {
   /**
    * `memory` is the research-memory store (`dependentsOfSource`, `markSourceLinks`), `methods` the learning service
    * (`methodsLinkedTo`, `recordSourceChange`). Either absent, its class is reported unknown, never none.
-   * @param {{ memory?: any, methods?: any, report?: (code: string) => void, now?: () => Date }} dependencies
+   * `sourceChanges` is the one record of what was published about a work after it was published (`sourceChanges.mjs`).
+   * `evidence` reads the state of an evidence card or a frontier item by id (`createEvidenceLinkStates`); absent, the two kinds are not looked at.
+   * @param {{ memory?: any, methods?: any, sourceChanges?: any, evidence?: { cardStates: (ids: readonly string[]) => Promise<Map<string, any>>, itemStates: (ids: readonly string[]) => Promise<Map<string, any>> } | null,
+   *   report?: (code: string) => void, now?: () => Date }} dependencies
    */
-  constructor({ memory = null, methods = null, report = () => {}, now = () => new Date() }) {
-    this.memory = memory; this.methods = methods; this.report = report; this.now = now;
+  constructor({ memory = null, methods = null, sourceChanges = null, evidence = null, report = () => {}, now = () => new Date() }) {
+    this.memory = memory; this.methods = methods; this.sourceChanges = sourceChanges; this.evidence = evidence; this.report = report; this.now = now;
+  }
+
+  /**
+   * Label the memories that name an evidence card or a frontier item the zone or the feed has since taken back, replaced or marked
+   * as resting on a changed source: the same label a retracted DOI gives (`markSourceLinks`: `retracted` or `changed`, with a short
+   * reason such as `card_withdrawn`), by recorded link only, and never moving a memory's version or withholding it. One bounded pass
+   * over the links not yet looked at; `ownerId` narrows it to one account. A lookup that cannot be made is `unknown`, never "clean".
+   * @param {{ ownerId?: string | null, limit?: number }} [options]
+   * @returns {Promise<{ checked?: number, labelled?: number, unknown?: string }>}
+   */
+  async sweepEvidenceLinks({ ownerId = null, limit = 500 } = {}) {
+    if (!this.evidence || !this.memory?.linkedEvidenceSources) return { unknown: "unavailable" };
+    try {
+      const links = await this.memory.linkedEvidenceSources({ userId: ownerId, limit });
+      const [cards, items] = await Promise.all([
+        this.evidence.cardStates([...new Set(links.filter((/** @type {any} */ link) => link.type === "evidence_card").map((/** @type {any} */ link) => link.id))]),
+        this.evidence.itemStates([...new Set(links.filter((/** @type {any} */ link) => link.type === "frontier_item").map((/** @type {any} */ link) => link.id))]),
+      ]);
+      let labelled = 0;
+      for (const link of links) {
+        const finding = link.type === "evidence_card" ? cardFinding(cards.get(link.id)) : itemFinding(items.get(link.id));
+        if (!finding || link.state === finding.state) continue;
+        const from = linkStatesLeftFor(finding.state);
+        if (!from.includes(link.state)) continue;
+        labelled += (await this.memory.markSourceLinks(link.userId, { type: link.type, id: link.id }, { state: finding.state, reason: finding.reason, onlyFrom: from })).recordIds.length;
+      }
+      return { checked: links.length, labelled };
+    } catch (error) { this.report(codeOf(error)); return { unknown: "lookup_failed" }; }
+  }
+
+  /**
+   * Label the memories that name the works whose changes were recorded since a position of the source-change feed, and
+   * list the ones this project may be shown, per work. The same labelling a check makes (`memories`), taken from what
+   * was recorded rather than from a lookup: a retraction the frontier noticed reaches a memory that names the work
+   * without anybody asking Crossref. Keep the `cursor` and give it back to go on from there.
+   * @param {string} ownerId @param {string} projectId @param {{ since?: number | string | null, limit?: number }} [options]
+   * @returns {Promise<{ items?: Array<{ identifier: string, memories: any[] }>, cursor?: number, hasMore?: boolean, unknown?: string }>}
+   */
+  async labelSince(ownerId, projectId, { since = 0, limit = 50 } = {}) {
+    if (!this.sourceChanges) return { unknown: "unavailable" };
+    let page;
+    try { page = await this.sourceChanges.changedSince(since, limit); }
+    catch (error) { this.report(codeOf(error)); return { unknown: "lookup_failed" }; }
+    /** @type {Array<{ identifier: string, memories: any[] }>} */
+    const items = [];
+    for (const fact of page.items) {
+      const doi = doiOfSourceIdentifier(fact.identifier);
+      const status = sourceUpdateStatusOfFact(fact);
+      if (!doi || status.state !== "changed") continue;
+      const found = await this.memories(ownerId, projectId, { id: doi, doi }, status);
+      if (found.items?.length) items.push({ identifier: fact.identifier, memories: found.items });
+    }
+    return { items, cursor: page.cursor, hasMore: page.hasMore };
   }
 
   /**

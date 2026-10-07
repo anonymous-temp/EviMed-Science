@@ -11,7 +11,7 @@
 # conversation can be bound to it, `display.listed: false` so it is entered
 # only from 「虚拟临研」.
 id: vcr-analysis
-version: 1.1.0
+version: 1.1.2
 title: Virtual Clinical Research Analysis
 category: Study Design
 description: Steps 3–6 of a virtual clinical research study — the research population and its screening

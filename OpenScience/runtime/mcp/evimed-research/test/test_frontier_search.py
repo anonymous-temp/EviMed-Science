@@ -47,6 +47,35 @@ def gateway_item(**overrides):
     return item
 
 
+def gateway_card(**overrides):
+    """One evidence card as the server's gateway projects it (evidenceCardSearch.mjs)."""
+    card = {
+        "kind": "card",
+        "id": "ec_0123456789abcdef0123456789abcdef",
+        "zoneId": "ez_0123456789abcdef0123456789abcdef",
+        "title": "司美格鲁肽用于射血分数保留的心衰",
+        "question": "司美格鲁肽能降低 HFpEF 患者的心衰事件吗？",
+        "answer": "一项随机对照试验显示心衰事件减少。",
+        "zone": {"title": "心肾与慢性肾病", "kind": "official"},
+        "producer": {"kind": "platform", "name": "EviMed 证据中心", "relation": "none"},
+        "originality": "synthesis",
+        "primary": False,
+        "claims": {"total": 3, "verified": 2},
+        "lastCheckedAt": "2026-10-04T08:15:00.000Z",
+        "revision": 4,
+        "currency": "current",
+        "matchedBy": "entity",
+        "primarySources": [{
+            "title": "Semaglutide and Heart Failure Outcomes in Obesity-Related HFpEF",
+            "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2600001", "doi": "10.1056/nejmoa2600001", "pmid": None,
+        }],
+        "primarySourcesTotal": 1,
+        "instruction": "EviMed's own index, not evidence: read the primary sources below and cite them; never cite this card.",
+    }
+    card.update(overrides)
+    return card
+
+
 def gateway_answer(items, **overrides):
     data = {
         "query": {"q": "GLP-1 心衰", "lane": None, "specialty": None, "window": "30d", "mode": "selected", "limit": 8},
@@ -298,6 +327,61 @@ class FrontierSearchTests(_GatewayCase):
         self.assertLess(sizes["longest"][1], 11_000, sizes)
 
 
+    def test_a_card_is_shown_as_an_index_entry_with_its_primary_sources_and_the_instruction(self):
+        _Gateway.answer = (200, gateway_answer([gateway_item()], cards=[gateway_card()], cardsMore=False))
+        result = frontier_search.search({"q": "司美格鲁肽 心衰"})
+        self.assertEqual(result["status"], "success")
+        [card] = result["data"]["cards"]
+        self.assertEqual(card["title"], "司美格鲁肽用于射血分数保留的心衰")
+        self.assertEqual(card["zone"], "心肾与慢性肾病 (official)")
+        self.assertEqual(card["producer"], {"kind": "platform", "name": "EviMed 证据中心", "relation": "none"})
+        self.assertEqual(card["claimsVerified"], "2 of 3")
+        self.assertEqual(card["lastCheckedAt"], "2026-10-04T08:15Z")
+        self.assertEqual(card["currency"], "current")
+        self.assertEqual(card["primarySources"], [{
+            "title": "Semaglutide and Heart Failure Outcomes in Obesity-Related HFpEF",
+            "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2600001", "doi": "10.1056/nejmoa2600001",
+        }])
+        self.assertIn("never cite this card", card["instruction"])
+        for internal in ("id", "zoneId", "revision", "matchedBy", "primary"):
+            self.assertNotIn(internal, card, "the card is an index entry: its own address is not offered to be cited")
+        self.assertEqual(result["data"]["cardCount"], 1)
+        self.assertIn("1 evidence card(s) match", result["summary"])
+        self.assertTrue(any("cite those, never the card" in action for action in result["next_actions"]))
+        self.assertNotIn("sources", result, "cards are not evidence either: the run records what it reads next")
+        self.assertEqual(len(result["data"]["items"]), 1, "the items are what they were")
+
+    def test_cards_alone_are_a_success_and_a_commercial_producer_is_said(self):
+        paid = gateway_card(producer={"kind": "enterprise", "name": "Acme Pharma", "relation": "own_product"},
+                            zone={"title": "产品专区", "kind": "product"}, currency=None, lastCheckedAt=None, claims={"total": 0, "verified": 0})
+        _Gateway.answer = (200, gateway_answer([], cards=[paid]))
+        result = frontier_search.search({"q": "Drug A"})
+        self.assertEqual(result["status"], "success", "a card is a result: this is not the empty feed")
+        self.assertIn("No item in 前沿动态", result["summary"])
+        self.assertIn("1 evidence card(s) match", result["summary"])
+        self.assertTrue(any("commercial or personal relation" in warning for warning in result["warnings"]))
+        self.assertFalse(any("An empty feed is not evidence" in warning for warning in result["warnings"]))
+        [card] = result["data"]["cards"]
+        for absent in ("currency", "lastCheckedAt"):
+            self.assertNotIn(absent, card, "a fact the server did not know is left out, not filled")
+        self.assertEqual(card["claimsVerified"], "0 of 0")
+
+    def test_a_card_search_that_failed_is_said_and_never_read_as_no_match(self):
+        _Gateway.answer = (200, gateway_answer([gateway_item()], cards=[], cardsMore=False, cardsUnavailable=True))
+        result = frontier_search.search({"q": "x"})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["cards"], [])
+        self.assertTrue(any("Evidence cards could not be searched" in warning for warning in result["warnings"]))
+
+    def test_an_answer_without_cards_is_the_tool_as_it_was(self):
+        _Gateway.answer = (200, gateway_answer([gateway_item()]))
+        result = frontier_search.search({"q": "x"})
+        self.assertNotIn("cards", result["data"])
+        self.assertNotIn("cardCount", result["data"])
+        self.assertFalse(any("card" in action.lower() for action in result["next_actions"]))
+        self.assertNotIn("evidence card", result["summary"])
+
+
 class FrontierSearchThroughTheServerTests(_GatewayCase):
     """What a run actually receives: the tool as `call_tool` dispatches it."""
 
@@ -313,6 +397,14 @@ class FrontierSearchThroughTheServerTests(_GatewayCase):
         self.assertEqual(result["data"]["provenance"]["arguments"], {"q": "GLP-1 心衰", "mode": "selected"})
         self.assertNotIn("sources", result)
         self.assertEqual(result["data"]["items"][0]["doi"], "10.1056/NEJMoa2600001")
+
+    def test_a_card_reaches_the_run_through_call_tool_with_the_instruction_and_no_sources(self):
+        _Gateway.answer = (200, gateway_answer([], cards=[gateway_card()]))
+        result = self.mcp.call_tool("frontier_search", {"q": "司美格鲁肽 心衰"})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["cards"][0]["primarySources"][0]["doi"], "10.1056/nejmoa2600001")
+        self.assertIn("never cite this card", result["data"]["cards"][0]["instruction"])
+        self.assertNotIn("sources", result)
 
     def test_off_is_an_error_the_run_can_answer_around(self):
         with mock.patch.dict(os.environ, {"EVIMED_FRONTIER_GATEWAY_URL": ""}):

@@ -114,13 +114,13 @@ function measureControls(controls) {
     if (attribute) return attribute[2] === undefined ? attribute[1] in el.attributes : el.attributes[attribute[1]] === attribute[2];
     return el.tag === part;
   };
-  const make = ({ tag, text = "", height, width = 120, declaredHeight = "auto", icon = false, style = {}, statusMark = false, chartMark = false, chartRoot = false }) => {
+  const make = ({ tag, text = "", height, width = 120, declaredHeight = "auto", declaredMinHeight = "auto", icon = false, style = {}, statusMark = false, chartMark = false, chartRoot = false }) => {
     const el = {
       tag, text, attributes: {}, tagName: tag.toUpperCase(), id: "", style: { ...base, ...style },
       children: [], childNodes: text ? [{ nodeType: 3, textContent: text }] : [],
       get textContent() { return text; },
       getBoundingClientRect: () => ({ width, height, left: 0 }),
-      computedStyleMap: () => ({ get: (property) => ({ toString: () => (property === "height" ? declaredHeight : "auto") }) }),
+      computedStyleMap: () => ({ get: (property) => ({ toString: () => (property === "height" ? declaredHeight : property === "min-height" ? declaredMinHeight : "auto") }) }),
       matches: (selector) => selector.split(",").some((part) => matchesOne(el, part.trim())),
       querySelector: (selector) => el.children.find((child) => child.matches(selector)) ?? null,
       getAttribute: (name) => el.attributes[name] ?? null,
@@ -182,6 +182,19 @@ test("a text control that wraps is one kind of control, and a control with a hei
   assert.deepEqual(measured.controlLooks["text+8 14px/400 r0px"], { count: 2, example: "button: 一个很长的资料标题" });
   // An inline link stays what it was.
   assert.equal(measureControls([{ tag: "a", text: "原文", height: 44, style: { display: "inline" } }]).controlLooks["inline 14px/400 r0px"].count, 1);
+});
+
+test("a card its text grows past its minimum height is one kind at every height", () => {
+  // 科研工具's tools are `min-h-32` cards with an icon: descriptions of three
+  // lengths drew 136, 162 and 182 px and read as three kinds (2026-10-06 walk).
+  const card = (height) => ({ tag: "button", text: "用“工具”开始一次对话", height, icon: true, declaredMinHeight: "128px", style: { borderTopLeftRadius: "12px" } });
+  const grown = measureControls([card(136), card(162), card(182)]);
+  assert.deepEqual(Object.keys(grown.controlLooks), ["min128+ 14px/400 r12px"]);
+  assert.equal(grown.controlLooks["min128+ 14px/400 r12px"].count, 3);
+  // At its minimum it is measured as any control is, and a control whose CSS
+  // sets its height keeps that height as its kind.
+  const atMinimum = measureControls([card(128), { tag: "button", text: "开始研究", height: 44, declaredHeight: "44px" }]);
+  assert.deepEqual(Object.keys(atMinimum.controlLooks), ["128h 14px/400 r12px", "44h 14px/400 r0px"]);
 });
 
 test("a status ring drawn by code is a mark, not a kind of border", () => {

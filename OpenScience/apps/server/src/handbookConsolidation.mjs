@@ -1,6 +1,6 @@
 /** Consume reviewed lessons as owner-scoped supplements, without claiming a measured benefit. */
 import { createHash } from "node:crypto";
-import { LEARNING_EVALUATION_DISPATCH_PREFIX } from "@evimed/domain";
+import { usagePurposeOfRun } from "@evimed/domain";
 import { HANDBOOK_CANDIDATE_RECORD_TYPE } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -19,8 +19,12 @@ export const shippedCapabilityDigest = (registry, id) => {
 
 export class HandbookConsolidation {
   /** @param {{learning:any, jobs:any, registry:any, resolveSourceRun:(userId:string,projectId:string,runId:string)=>Promise<any>,
-   * enabled?:(userId:string,projectId:string|null)=>boolean|Promise<boolean>, evaluate?:((request:any)=>Promise<any>)|null, now?:()=>Date}} input */
-  constructor({ learning, jobs, registry, resolveSourceRun, enabled = () => true, evaluate = null, now = () => new Date() }) {
+   * enabled?:(userId:string,projectId:string|null)=>boolean|Promise<boolean>, evaluate?:((request:any)=>Promise<any>)|null, now?:()=>Date,
+   * onApplied?:((applied:{userId:string,capabilityId:string,handbookId:string,handbook:any,sourceProjectId:string|null,runId:string}) => unknown)|null}} input
+   * `onApplied` is told, after a lesson became an account's active handbook, which it was: the one place a lesson that may be general is noticed (flywheel F16).
+   * It is told and never asked: whatever it does or fails to do leaves the handbook exactly as it was applied. */
+  constructor({ learning, jobs, registry, resolveSourceRun, enabled = () => true, evaluate = null, now = () => new Date(), onApplied = null }) {
+    this.onApplied = onApplied;
     this.learning = learning;
     this.documents = learning.documents;
     this.jobs = jobs;
@@ -82,7 +86,7 @@ export class HandbookConsolidation {
     const fail = (reason) => this.complete(job, candidate, { ...base, disposition: "failed", reason });
     const source = await this.resolveSourceRun(job.userId, payload.provenance?.sourceProjectId, payload.provenance?.runId);
     if (!source || source.id !== payload.provenance?.runId || source.learningEvaluation
-      || String(source.dispatchId ?? "").startsWith(LEARNING_EVALUATION_DISPATCH_PREFIX)) return fail("handbook_source_unavailable");
+      || usagePurposeOfRun(source) !== "kernel") return fail("handbook_source_unavailable");
     const capability = this.registry.get(source.effectiveAgentId);
     if (!capability || capability.visibility === "internal") return fail("handbook_capability_unavailable");
     if ((payload.capabilityId && payload.capabilityId !== capability.id)
@@ -126,14 +130,22 @@ export class HandbookConsolidation {
     const result = { ...base, disposition: "applied", reason: "source_review_and_validation", handbookId: id,
       handbookRevision: binding.baselineRevision + 1, verification, binding, ...(evaluation ? { evaluation } : {}) };
     try {
-      return await this.complete(job, candidate, result, { id, expectedRevision: binding.baselineRevision, payload: {
+      const handbook = { id, expectedRevision: binding.baselineRevision, payload: {
         recordType: CAPABILITY_HANDBOOK_RECORD_TYPE, capabilityId: capability.id, status: "active",
         frontmatter: payload.frontmatter, body: payload.body, ...(payload.files ? { files: payload.files } : {}),
         dependencies: payload.dependencies, contentDigest: payload.contentDigest, display: payload.display,
         version: (baseline?.payload?.version ?? 0) + 1, verification, binding, ...(evaluation ? { evaluation } : {}),
         source: { candidateId: candidate.id, candidateDigest: payload.contentDigest, runId: source.id, projectId: payload.provenance.sourceProjectId, sessionId: source.sessionId ?? null },
         previousRevision: baseline?.revision ?? null, observations: [], createdAt: baseline?.payload?.createdAt ?? at, appliedAt: at,
-      } });
+      } };
+      const done = await this.complete(job, candidate, result, handbook);
+      if (this.onApplied && done?.disposition === "applied") {
+        try {
+          await this.onApplied({ userId: job.userId, capabilityId: capability.id, handbookId: id, handbook: handbook.payload,
+            sourceProjectId: payload.provenance.sourceProjectId ?? null, runId: source.id });
+        } catch { /* told, never asked: the lesson is applied */ }
+      }
+      return done;
     } catch (error) {
       if (error?.code !== "product_revision_conflict") throw error;
       return this.complete(job, candidate, { ...base, disposition: "stale", reason: "handbook_revision_changed", binding });

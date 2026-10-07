@@ -165,3 +165,13 @@ def test_the_slot_module_is_the_specialist_adapters_byte_for_byte():
 def _service_app():
     from new_meta.evimed_service import app
     return app
+
+
+def test_health_says_whether_the_engine_is_ready_in_the_keys_the_control_plane_reads(meta, monkeypatch):
+    # availabilityEngineProbe.mjs labels an engine ready only on `ready: true`.
+    health = TestClient(_service_app()).get("/health").json()
+    assert health["ready"] is True and health["serving"] is True and health["status"] == "ok"
+    monkeypatch.setenv("LLM_MODEL", "another-model")
+    not_ready = TestClient(_service_app()).get("/health")
+    assert not_ready.status_code == 200, "the container healthcheck reads only that the route answers"
+    assert not_ready.json()["ready"] is False and not_ready.json()["serving"] is False

@@ -37,6 +37,32 @@ WHERE c.relkind IN ('r','p') AND n.nspname NOT LIKE 'pg\\_%' ESCAPE '\\'
 ORDER BY n.nspname,c.relname
 \\gexec
 """
+# The data-plane files the VCR module's rows name, read inside the capture's own
+# exported snapshot so the list is exactly what the dump holds. The recovery set
+# is verified against it (`scripts/ops/vcr-backup.mjs`): this is what lets the
+# files be copied while the platform is busy, because "every file this dump
+# names is in the file archive, with the bytes it names" is checked rather than
+# assumed from a quiet window. A file is named by its location and, where the
+# row records one, its sha256; the study's pseudonym key and each snapshot's
+# identity map are named by location only (they are written once and replaced
+# atomically, never named by their hash). A deployment whose VCR schema does not
+# exist yet names nothing.
+VCR_REFERENCES_PRESENT_SQL = (
+    "SELECT to_regclass('evimed_vcr.source_files') IS NOT NULL AND to_regclass('evimed_vcr.analysis_tables') IS NOT NULL;"
+)
+VCR_REFERENCES_SQL = """
+SELECT json_build_object('location', location, 'sha256', sha256) FROM (
+  SELECT location, sha256 FROM evimed_vcr.source_files
+  UNION SELECT detail->'original'->>'location', detail->'original'->>'sha256' FROM evimed_vcr.source_files
+    WHERE detail->'original'->>'location' IS NOT NULL
+  UNION SELECT location, sha256 FROM evimed_vcr.analysis_tables
+  UNION SELECT 'studies/' || study_id || '/.pseudonym-key', NULL::text FROM evimed_vcr.analysis_tables
+  UNION SELECT 'studies/' || study_id || '/identity/' || snapshot_id || '.csv', NULL::text FROM evimed_vcr.analysis_tables
+) named ORDER BY location, sha256 NULLS FIRST;
+"""
+# A bound on what one receipt carries. A deployment past it has said something
+# about its data plane that this receipt cannot hold, and the capture refuses.
+VCR_REFERENCES_LIMIT = 200_000
 # Tables whose rows are derived from other tables of the same database, each
 # with the command that regenerates them after a restore. The dump keeps their
 # definitions and indexes and leaves their rows out (`pg_dump
@@ -881,6 +907,28 @@ def copy_descriptor(source: int, target: int, expected_digest: str) -> None:
         raise BackupError("postgres_archive_changed")
 
 
+def file_references(session: "PsqlSession") -> list[dict]:
+    """The data-plane files the exporting snapshot's VCR rows name (see above)."""
+    if session.query(VCR_REFERENCES_PRESENT_SQL) != ["t"]:
+        return []
+    rows = session.query(VCR_REFERENCES_SQL)
+    if len(rows) > VCR_REFERENCES_LIMIT:
+        raise BackupError("postgres_references_too_many")
+    references = []
+    for row in rows:
+        try:
+            value = json.loads(row)
+            location, sha256 = value["location"], value["sha256"]
+            if (not isinstance(location, str) or not location or location.startswith("/") or "\\" in location
+                    or "\0" in location or ".." in location.split("/")
+                    or not (sha256 is None or (isinstance(sha256, str) and re.fullmatch(r"[a-f0-9]{64}", sha256)))):
+                raise ValueError()
+        except (ValueError, KeyError, TypeError):
+            raise BackupError("postgres_references_invalid") from None
+        references.append({"location": location, "sha256": sha256})
+    return references
+
+
 def capture_member(output_dir: Path) -> dict:
     root = RecoveryRoot()
     output = None
@@ -904,6 +952,7 @@ def capture_member(output_dir: Path) -> dict:
             if not expected:
                 raise BackupError("postgres_source_application_empty")
             expected, excluded = exclude_derived_data(expected)
+            references = file_references(session)
             descriptor = temporary.open_file("snapshot.dump", os.O_WRONLY | os.O_CREAT | os.O_EXCL)
             with os.fdopen(descriptor, "wb") as dump:
                 command(base + ["pg_dump", "--format=custom", "--compress=9", "--no-owner", "--no-acl",
@@ -955,6 +1004,7 @@ def capture_member(output_dir: Path) -> dict:
             "tables": expected,
             "tablesSha256": table_digest(expected),
             "excludedTableData": excluded,
+            "fileReferences": references,
             "runnerSha256": digest(Path(__file__)),
         }
         receipt = temporary.open_file(receipt_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL)

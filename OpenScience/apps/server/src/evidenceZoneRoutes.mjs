@@ -73,6 +73,9 @@ export function createEvidenceZoneRoutes({
     }
     if(parts.length===3 && parts[2]==="automation" && editorial && ["GET","PUT","POST"].includes(method))
       return reply(await editorial.automation(user,zoneId,method==="GET"?{}:await body(),method));
+    // Who may read a published zone is the owner's own choice, made apart from publishing it.
+    if (parts.length === 3 && parts[2] === "visibility" && method === "PUT")
+      return reply(await service.setVisibility(user, zoneId, await body()));
     if (parts.length === 3 && parts[2] === "evidence") {
       if (method === "GET")
         return reply(await service.list(user, url.searchParams, zoneId));

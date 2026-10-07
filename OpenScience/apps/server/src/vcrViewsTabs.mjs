@@ -676,7 +676,9 @@ function failureOfNode(bundle, node) {
   const mark = list(bundle.jobMarks).map(object).find((entry) => entry.state === "failed" && object(entry.detail).node === node);
   const job = list(bundle.jobs).map(object).find((entry) => entry.state === "failed" && object(entry.checkpoint).node === node);
   const said = text(object(mark?.detail).message) ?? text(object(job?.error).message);
-  return said ? said.slice(0, 200) : null;
+  // Long enough for a refusal that names the keys of the place it was refused (`readsHint` in the orchestrator): that list is what
+  // a run repairs from, and the same words are what the researcher's page shows.
+  return said ? said.slice(0, 400) : null;
 }
 
 /** One reconstruction check as a row: the largest difference, the way the paper's own table states it. @param {string} key @param {Record<string, any>} check */
@@ -1167,6 +1169,8 @@ function forestOf(card, evidence, precedentById) {
       n: numeric(item.sample_size ?? item.sampleSize),
       value: numeric(item.value), low: numeric(item.ci_low ?? item.ciLow), high: numeric(item.ci_high ?? item.ciHigh),
       weight: null, highlighted: Boolean(object(item.applicability).chinesePopulation), pooled: false, prediction: false,
+      // The card a run says led it to this value (flywheel F23): the page says so, and nothing about the row's check reads it.
+      ...(object(item.detail).candidateFrom ? { candidateFrom: object(item.detail).candidateFrom } : {}),
     };
   });
   if (!studies.length) return [];
@@ -1225,8 +1229,13 @@ export function presentDataTab(bundle, query = {}) {
     const pooling = object(card.pooling);
     const versions = (bundle.assumptionVersions?.get?.(card.key) ?? []).map((/** @type {any} */ row) => ({
       version: row.version, at: zhTime(row.createdAt, now), text: text(row.note) ?? `${row.name || row.key}${row.pointValue != null ? ` = ${row.pointValue}` : ""}`,
-      note: row.reviewState === "reviewed" ? "已复核" : null,
+      note: row.afterFreeze === true ? "冻结后新增，不影响已冻结的计划" : row.reviewState === "reviewed" ? "已复核" : null,
+      ...(row.afterFreeze === true ? { afterFreeze: true } : {}),
     }));
+    // News about this card's sources (flywheel F24): open signals say what, a version after the freeze says it is already beside the frozen one.
+    const signals = bundle.evidenceSignals?.get?.(card.key) ?? null;
+    const newEvidence = signals && (signals.open.length || signals.afterFreeze)
+      ? { label: "有新证据", open: signals.open.slice(0, 5), afterFreezeVersion: signals.afterFreeze ?? null } : null;
     return {
       id: card.id,
       key: card.key,
@@ -1240,6 +1249,7 @@ export function presentDataTab(bundle, query = {}) {
       applicability: applicabilityText(card),
       sensitivity: sensitivityText(card),
       review: reviewOf(card),
+      ...(newEvidence ? { newEvidence } : {}),
       // What an edit starts from. A person's value is an expert setting: it keeps the card's endpoint and applicability but not the pooled
       // evidence, which no longer supports the number (AC-25).
       edit: { pointValue: numeric(card.pointValue), unit: text(card.unit), note: text(card.note), endpoint: text(card.endpoint), applicability: object(card.applicability) },
@@ -1281,6 +1291,8 @@ export function presentDataTab(bundle, query = {}) {
     precedents,
     precedentSources: precedents.length ? `${precedents.length} 项试验先例` : null,
     precedentNote: null,
+    // Trial events the feed reported for this study's subject: pointers marked as candidates, never precedents (flywheel F24).
+    ...(bundle.candidates?.length ? { precedentCandidates: bundle.candidates } : {}),
     snapshots,
     // The intake flow: sources, files, field maps, snapshots, tables, grants and the seal (contract §6).
     intake: presentIntake(bundle),

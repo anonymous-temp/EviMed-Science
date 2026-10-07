@@ -1,5 +1,5 @@
 {
- "_about": "Hand-kept runtime rows that are not in the probe registry (tools/build_registry.py appends them; enabled is decided by the same rule as every other row). The EviMed API scans of plan 12.2: request shapes as measured on 2026-09-22 (tools/evimed_api_freshness.py in the plan's assets): 20 ChiCTR terms, 30 guideline publisher groups. The key is injected by the fetcher from KNOWLEDGE_PLUGIN_EVIMED_API_KEY_FILE.",
+ "_about": "Hand-kept runtime rows that are not in the probe registry (tools/build_registry.py appends them; enabled is decided by the same rule as every other row). The EviMed API scans of plan 12.2: request shapes as measured on 2026-09-22 (tools/evimed_api_freshness.py in the plan's assets): 20 ChiCTR terms, 30 guideline publisher groups. The key is injected by the fetcher from KNOWLEDGE_PLUGIN_EVIMED_API_KEY_FILE. evimed-evidence (flywheel F09, 2026-10-05): the platform's own feed of what its evidence may offer the frontier, read like any other publisher's; its address is the deployment's (config.url_env, EVIMED_EVIDENCE_FEED_URL) and unset, the source loads disabled and nothing is polled.",
  "sources": [
   {
    "id": "evimed-chictr",
@@ -177,6 +177,30 @@
     "allowed_hosts": [
      "www.evimed.com"
     ]
+   }
+  },
+  {
+   "id": "evimed-evidence",
+   "name": "EviMed 证据中心（平台出品的证据卡）",
+   "homepage": "https://www.evimed.com/evidence/",
+   "lane": "evidence",
+   "source_type": "evidence-body",
+   "access": "json-api",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "EviMed 证据中心",
+   "launch_tier": "P0",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "category": "evidence-platform",
+   "platform_produced": true,
+   "config": {
+    "family": "evimed-evidence",
+    "url_env": "EVIMED_EVIDENCE_FEED_URL",
+    "max_pages": 5
    }
   }
  ]

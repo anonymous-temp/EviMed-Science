@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { EVIDENCE_ZONE_KINDS, EVIDENCE_ZONE_KIND_LABELS_ZH } from "@evimed/domain";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useEvidenceScope } from "@/components/frontier/useEvidenceScope";
 import { ZoneEditor } from "@/components/frontier/EvidenceEditors";
+import { TopicRequests } from "@/components/frontier/TopicRequests";
+import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
@@ -47,6 +50,7 @@ export function EvidenceZonesPage() {
   const [refresh, setRefresh] = useState(0);
   const capture = useEvidenceScope(`${query}:${scope}:${refresh}`);
   const [busy, setBusy] = useState<string | null>(null);
+  const features = useEvidenceFeatures();
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -194,46 +198,58 @@ export function EvidenceZonesPage() {
       ) : !error && items.length === 0 ? (
         <EmptyState title={query ? "没有找到匹配的专区" : "暂无证据专区"} />
       ) : (
-        <ul className="mt-4 divide-y divide-border">
-          {items.map((zone) => (
-            <li
-              key={zone.id}
-              className="flex items-start justify-between gap-4 py-4"
-            >
-              <div className="min-w-0">
-                <Link
-                  to={`/app/frontier/zones/${encodeURIComponent(zone.id)}${fromItem ? `?fromItem=${encodeURIComponent(fromItem)}` : ""}`}
-                  className="text-ui font-medium text-text hover:text-accent"
-                >
-                  {zone.title}
-                </Link>
-                {zone.description && (
-                  <p className="mt-1 max-w-measure text-caption text-text-2 line-clamp-2">
-                    {zone.description}
-                  </p>
-                )}
-                {zone.state === "draft" && (
-                  <p className="mt-2 text-caption text-text-3">草稿</p>
-                )}
-                {zone.evidenceCount !== null && (
-                  <p className="mt-2 text-caption text-text-3">
-                    {zone.evidenceCount} 条证据
-                  </p>
-                )}
-              </div>
-              {zone.canFollow && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  loading={busy === zone.id}
-                  onClick={() => void follow(zone)}
-                >
-                  {zone.following ? "取消关注" : "关注"}
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
+        <div className="mt-4 space-y-6">
+          {EVIDENCE_ZONE_KINDS.map((kind) => {
+            const zones = items.filter((zone) => (zone.kind ?? "user") === kind);
+            if (!zones.length) return null;
+            const label = (EVIDENCE_ZONE_KIND_LABELS_ZH as Record<string, string>)[kind];
+            return (
+              <section key={kind} aria-label={label}>
+                <h2 className="text-ui font-medium text-text">{label}</h2>
+                <ul className="divide-y divide-border">
+                  {zones.map((zone) => (
+                    <li
+                      key={zone.id}
+                      className="flex items-start justify-between gap-4 py-4"
+                    >
+                      <div className="min-w-0">
+                        <Link
+                          to={`/app/frontier/zones/${encodeURIComponent(zone.id)}${fromItem ? `?fromItem=${encodeURIComponent(fromItem)}` : ""}`}
+                          className="text-ui font-medium text-text hover:text-accent"
+                        >
+                          {zone.title}
+                        </Link>
+                        {zone.description && (
+                          <p className="mt-1 max-w-measure text-caption text-text-2 line-clamp-2">
+                            {zone.description}
+                          </p>
+                        )}
+                        {zone.state === "draft" && (
+                          <p className="mt-2 text-caption text-text-3">草稿</p>
+                        )}
+                        {zone.evidenceCount !== null && (
+                          <p className="mt-2 text-caption text-text-3">
+                            {zone.evidenceCount} 条证据
+                          </p>
+                        )}
+                      </div>
+                      {zone.canFollow && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          loading={busy === zone.id}
+                          onClick={() => void follow(zone)}
+                        >
+                          {zone.following ? "取消关注" : "关注"}
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
       )}
       {cursor && (
         <div className="mt-4">
@@ -245,6 +261,13 @@ export function EvidenceZonesPage() {
             加载更多
           </Button>
         </div>
+      )}
+      {features.publicPages && !fromItem && (
+        <TopicRequests
+          zones={items
+            .filter((zone) => zone.kind === "official" && zone.state === "published")
+            .map((zone) => ({ id: zone.id, title: zone.title }))}
+        />
       )}
     </PageShell>
   );

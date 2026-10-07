@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
 import { screenRetractions, validateRewrite } from '../../../evals/paper-gold/evaluator.mjs';
 import { resolvePublicationIdentity } from './evolutionPublicationIdentity.mjs';
-import { prospectiveNumericQuoteMatches, validProspectiveNumericReference } from './evolutionProspectiveScore.mjs';
+import { prospectiveNumericQuoteMatches } from './evolutionProspectiveScore.mjs';
+import { curatedCaseNumeric, printedTokenIn, TOLERANCE_QUANTITIES } from '../../../evals/paper-gold/tolerance.mjs';
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const sourceHash = text => createHash('sha256').update(text).digest('hex');
 const waiting = resourceCode => ({ ok: false, status: 'waiting_resource', resourceCode });
@@ -91,9 +92,16 @@ export function createEvolutionTemporalGoldCuration({ config, write, review, fet
     if (!proposal || typeof proposal.question !== 'string' || !proposal.question.trim() || !Array.isArray(proposal.variants) || proposal.variants.length !== 3 || new Set(proposal.variants).size !== 3 || proposal.variants.some(item => typeof item !== 'string' || !item.trim())) return waiting('temporal_question_extraction_incomplete');
     if (proposal.writerModelReported !== true || !/^deepseek/i.test(proposal.writerModel ?? '')) return waiting('temporal_writer_identity_unconfirmed');
     if (!Array.isArray(proposal.sourceQuotes) || !proposal.sourceQuotes.length || proposal.sourceQuotes.some(quote => typeof quote !== 'string' || !quote || !primary.includes(quote))) return waiting('temporal_primary_quote_bond_failed');
-    const numeric = proposal.numeric ?? {};
-    if (kind === 'prospective' && !Object.keys(numeric).length) return waiting('prospective_numeric_gold_unavailable');
-    if (Object.keys(numeric).length > 3 || Object.entries(numeric).some(([key, ref]) => !/^[a-zA-Z][a-zA-Z0-9_.-]{0,120}$/.test(key) || !validProspectiveNumericReference(ref) || typeof ref.quote !== 'string' || !primary.includes(ref.quote) || !prospectiveNumericQuoteMatches(ref.quote, ref.value, primary))) return waiting('temporal_numeric_quote_bond_failed');
+    const drafted = proposal.numeric ?? {};
+    if (kind === 'prospective' && !Object.keys(drafted).length) return waiting('prospective_numeric_gold_unavailable');
+    if (Object.keys(drafted).length > 3 || Object.entries(drafted).some(([key, ref]) => !/^[a-zA-Z][a-zA-Z0-9_.-]{0,120}$/.test(key) || !Number.isFinite(ref?.value) || typeof ref.quote !== 'string' || !primary.includes(ref.quote) || !prospectiveNumericQuoteMatches(ref.quote, ref.value, primary) || !printedTokenIn(ref.quote, ref.value))) return waiting('temporal_numeric_quote_bond_failed');
+    // Tolerance is derived from the printed number here; whatever the writer supplied is not read.
+    let numeric = {};
+    if (Object.keys(drafted).length) {
+      const curated = curatedCaseNumeric(Object.fromEntries(Object.entries(drafted).map(([key, ref]) => [key, { value: ref.value, printed: printedTokenIn(ref.quote, ref.value), quote: ref.quote, ...(TOLERANCE_QUANTITIES.includes(ref.quantity) ? { quantity: ref.quantity } : {}) }])));
+      if (!curated.ok) return waiting(curated.code === 'case_accepts_trivial_answer' ? 'temporal_numeric_cannot_discriminate_trivial_answer' : 'temporal_numeric_quote_bond_failed');
+      numeric = curated.numeric;
+    }
     const checked = await cached(directory, 'independent-review', () => review({ kind, targetIdentity: publicationId, source: primary, sourceHash: hash, proposed: proposal }, { signal }));
     if (checked?.passed !== true || checked.modelReported !== true || !/^qwen/i.test(checked.model ?? '') || checked.provider !== 'dashscope' || !Array.isArray(checked.evidenceIds) || !checked.evidenceIds.includes(hash) || checked.evidenceIds.some(item => item !== hash)) return waiting('temporal_independent_qa_unconfirmed');
     const limitations = 'No hash-verified same-version research input asset is supplied to this evaluation. Assess the resulting reproducibility limits without inventing inputs or claiming that data are globally unavailable.';

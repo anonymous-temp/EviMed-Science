@@ -5186,7 +5186,7 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     "../src/webRead.mjs", "../src/webReadNetwork.mjs", "../src/webReadLimits.mjs", "../src/webReadExtract.mjs", "../src/agentbay/browser.mjs",
     "../src/webRender.mjs", "../src/webRenderPage.mjs", "../src/localBrowser.mjs", "../src/webRenderEgress.mjs",
     "../src/kbSearchGateway.mjs", "../src/frontierGateway.mjs",
-    // 循证 GEO's gateway, the write module it hands writes to, and the social
+    // 循证传播's gateway, the write module it hands writes to, and the social
     // channel behind `social_posts_search` (2026-09-25).
     "../src/geoGateway.mjs", "../src/geoWrites.mjs", "../src/socialCrawlClient.mjs",
   ]) {
@@ -8516,6 +8516,39 @@ test("a plain answer typed into the kernel's page counts the persona its session
     await writeIndex("ses_other");
     assert.equal((await loadedOrInjectedSkillsForTest(project, [], run)).has("open-domain-answer"), false, "another session's record does not");
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("only a dispatch a person is waiting on asks the runtime to wait for a free slot; a worker's dispatch does not", async () => {
+  // 2026-10-05: with every runtime slot taken a researcher's dispatch is a place in line. A worker (autopilot,
+  // GEO, 虚拟临研) defers on its own backoff and must not hold its lease for minutes behind the same wait.
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-wait-for-room-"));
+  const projectAt = async (id) => {
+    const rootDir = path.join(root, id);
+    await mkdir(path.join(rootDir, "workspace"), { recursive: true });
+    await mkdir(path.join(rootDir, ".openscience"), { recursive: true });
+    return { id, userId: "researcher", rootDir, workspaceDir: path.join(rootDir, "workspace"), metaDir: path.join(rootDir, ".openscience") };
+  };
+  const person = await projectAt("person");
+  const worker = await projectAt("worker");
+  const binding = { sessionId: "ses_room", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  const reads = [];
+  const store = new AgentRunStore({ get: async () => binding }, {
+    model: "deepseek/deepseek-v4-flash", monitorIntervalMs: 60_000,
+    readSessionHistory: async (_project, _session, options) => { reads.push(options); return []; },
+  });
+  try {
+    await store.dispatch(person, { sessionId: "ses_room", dispatchId: "person-1", question: "q", waitForRoom: true }, async () => ({ accepted: true }));
+    await store.dispatch(worker, { sessionId: "ses_room", dispatchId: "worker-1", question: "q" }, async () => ({ accepted: true }));
+    // The baseline read is the one that wakes the runtime; the monitor's reads never do.
+    const waking = reads.filter((options) => options.wake === true);
+    assert.deepEqual(waking.map((options) => options.waitForRoom === true), [true, false]);
+    await assert.rejects(store.dispatch(await projectAt("bad"), { sessionId: "ses_room", dispatchId: "bad-1", question: "q", waitForRoom: "yes" }, async () => ({ accepted: true })),
+      (error) => error instanceof HttpError && error.status === 400);
+  } finally {
+    await store.closeProject(person);
+    await store.closeProject(worker);
     await rm(root, { recursive: true, force: true });
   }
 });

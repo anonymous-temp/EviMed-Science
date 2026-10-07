@@ -6,7 +6,7 @@
  * - **One list per word, read by everyone.** The control plane's schema CHECKs,
  *   the routes' validation, the runtime gateway's per-item checks, the MCP
  *   tools' schemas, the engine's scenario validator and the page's labels all
- *   derive from these arrays. 「循证 GEO」 learned this the expensive way: a
+ *   derive from these arrays. 「循证传播」 learned this the expensive way: a
  *   second copy is the one that drifts, and the drift shows up as a row the
  *   ledger refuses.
  * - **Nine value sources, not seven.** The owner's v1.0 had seven; literature
@@ -689,18 +689,34 @@ export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
   queued: '排队中', running: '进行中', succeeded: '已完成', failed: '未完成', canceled: '已取消', awaiting_budget: '待确认预算',
 })
 
+/**
+ * Why a job that is live is not moving, when the reason is not the researcher's to
+ * act on: the page says it in one line under the job and asks for nothing. Closed on
+ * purpose — a reason joins this table when the job's own row can state it (the queue
+ * records `engine` when the engine did not answer; `vcrJobs.mjs`, `jobView`).
+ */
+export const VCR_JOB_WAIT_LABELS_ZH = Object.freeze({
+  engine: '计算引擎暂时没有回应，它恢复后这项计算会自动继续，无需操作。',
+})
+
 /** The three places a human is required to stop (§10.1). Nothing else stops. */
 export const VCR_HUMAN_STOPS = frozen(['contact_patient', 'compute_over_budget', 'clinical_safety'])
 export const VCR_HUMAN_STOP_LABELS_ZH = Object.freeze({
   contact_patient: '联系真实患者之前', compute_over_budget: '计算超出研究预算', clinical_safety: '出现临床安全问题',
 })
 
-/** The only five notifications this module sends (§10.4). */
-export const VCR_NOTIFICATION_KINDS = frozen(['package_ready', 'not_estimable', 'budget_confirm', 'new_candidates', 'accrual_off_forecast'])
+/** The only six notifications this module sends: the five of §10.4 and, since the evidence flywheel (F24, 2026-10-06), new evidence for a card. */
+export const VCR_NOTIFICATION_KINDS = frozen(['package_ready', 'not_estimable', 'budget_confirm', 'new_candidates', 'accrual_off_forecast', 'new_evidence'])
 export const VCR_NOTIFICATION_LABELS_ZH = Object.freeze({
   package_ready: '研究包完成', not_estimable: '结论为不可估计或假设冲突', budget_confirm: '计算预算需要确认',
-  new_candidates: '有新的匹配候选', accrual_off_forecast: '实际入组偏离预测',
+  new_candidates: '有新的匹配候选', accrual_off_forecast: '实际入组偏离预测', new_evidence: '假设卡有了新证据',
 })
+
+/**
+ * The one sentence every public 「模拟研究」 publication and every page that offers to publish says about itself (flywheel ruling 10,
+ * 2026-10-06): a simulated result is the model's output under stated assumptions, and it is not evidence.
+ */
+export const VCR_SIMULATION_NOT_EVIDENCE_ZH = '模拟研究的结果是模型按假设算出来的，不是证据：不能当作临床结论，也不能当作循证依据引用。'
 
 /** Why a result went stale (§6.3). Stale results are never deleted or hidden. */
 export const VCR_STALE_REASONS = frozen(['assumption_changed', 'criterion_changed', 'source_corrected', 'protocol_revised', 'method_version_changed'])

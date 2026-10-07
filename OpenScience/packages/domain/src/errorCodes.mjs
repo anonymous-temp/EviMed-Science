@@ -1,8 +1,12 @@
 import { EVOLUTION_ERROR_MESSAGES } from './evolution.mjs';
+import { AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY } from './agenda.mjs';
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
+import { SOURCE_CHANGE_ERROR_MESSAGES } from "./sourceChange.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
 import { DATA_SEMANTICS_ERROR_CODES, DATA_SEMANTICS_ERROR_MESSAGE_ZH } from "./dataSemantics.mjs";
+import { EVIDENCE_CARD_ERROR_MESSAGES_ZH } from "./evidenceCard.mjs";
+import { EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH } from "./evidenceUpkeep.mjs";
 import { GENE_EXPRESSION_ERROR_MESSAGE_ZH, GENE_EXPRESSION_LIMITATION_ERROR_CODES, GENE_EXPRESSION_LIMIT_MESSAGE_ZH, GENE_EXPRESSION_RUN_FIX_ERROR_CODES } from "./geneExpression.mjs";
 
 /** The tool's own refusals a run repairs by changing what it sent, as opposed to the outages it waits out. */
@@ -229,7 +233,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "frontier_search_response_too_large",
   "frontier_search_gateway_token_missing",
   "frontier_search_gateway_token_invalid",
-  // 「循证 GEO」's runtime tools (geo_platform.py → geoGateway.mjs) not
+  // 「循证传播」's runtime tools (geo_platform.py → geoGateway.mjs) not
   // answering: the module off or not open to this account, a conversation
   // outside a GEO project, the social channel not configured, an outage. The
   // run records that the platform's data was not reachable and goes on with
@@ -265,6 +269,9 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "vcr_upstream_error",
   "vcr_response_invalid",
   "vcr_response_too_large",
+  // The scenario help the runtime renders on request (`vcr_simulate` action shape) is generated into the
+  // image from the domain's schemas; a build that lacks it says so and the run writes from the refusal's own list.
+  "vcr_scenario_help_unavailable",
   "engine_unavailable",
   "registry_unavailable",
   // The trial registry answered, or could not, in a way that is a fact about the
@@ -288,6 +295,8 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // written by the run instead.
   "vcr_engine_unconfigured",
   "vcr_engine_not_composed",
+  // Composed and configured, but not answering its `/health` (readiness's warning).
+  "vcr_engine_not_answering",
   "vcr_engine_unreachable",
   "vcr_engine_timeout",
   "vcr_engine_secret_missing",
@@ -586,7 +595,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "frontier_search_limit_invalid",
   "frontier_search_request_invalid",
   "frontier_search_request_too_large",
-  // And for 「循证 GEO」's tools: a `what` outside the tool's vocabulary, a
+  // And for 「循证传播」's tools: a `what` outside the tool's vocabulary, a
   // filter or payload the gateway cannot read, a social query it cannot send.
   // A single invalid item of a write is not one of these — it is refused in the
   // answer's `issues` while the rest are written (principle 14).
@@ -632,6 +641,8 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_write_value_invalid",
   "vcr_criterion_malformed",
   "vcr_evidence_unverified",
+  // An evidence item whose source is an EviMed card's page (flywheel F23): the run reads the card's primary source and writes that.
+  "vcr_evidence_source_is_card",
   "vcr_evaluation_input_restricted",
   "vcr_evaluation_input_changed",
   "vcr_evaluation_input_unavailable",
@@ -765,7 +776,21 @@ export const TURN_END_ERROR_CODES = Object.freeze({
  */
 export const TURN_END_WIRE_ERROR_CODES = Object.freeze({
   HTTP_402: 'runtime_spend_limit_reached',
-  QUOTA: 'runtime_spend_limit_reached',
+})
+
+/**
+ * The same refusal, keyed by the HTTP status the kernel recorded beside its
+ * code. The code is the kernel's vocabulary and was renamed under us: 0.1.5
+ * said `HTTP_402`, 0.1.7 says `QUOTA` — and from the pin change of 2026-09-28
+ * a run its budget stopped read `runtime_session_error` again (found on
+ * production 2026-10-05). The status is ours: the gateway answers 402 for the spending limit and
+ * nothing else. `QUOTA` alone is not read as the limit, because the kernel
+ * derives it from wording as well, and the gateway's 502 for a provider whose
+ * own balance is exhausted would qualify — that one is the operator's to fix,
+ * not the researcher's budget.
+ */
+export const TURN_END_WIRE_STATUS_ERROR_CODES = Object.freeze({
+  402: 'runtime_spend_limit_reached',
 })
 
 /** Sub-codes that qualify a kernel-boundary code without multiplying the codes. */
@@ -830,6 +855,10 @@ export const SOCKET_TOOL_ERROR_CODES = Object.freeze([
   // A link over plain HTTP: reachable, so a notice (the manifest's
   // `citationsResolvable`, applied in the run's gate since 2026-09-28).
   'citation_plain_http',
+  // A link to one of EviMed's own evidence-card pages: the platform's reading of
+  // sources is an index, so the run is asked to cite the card's primary sources
+  // (flywheel plan §4.3 rule 2). Advice; nothing is withheld.
+  'platform_card_cited',
   'deliverable_run_receipt_shape',
   'deliverable_run_receipt_unbound',
   'deliverable_run_artifact_missing',
@@ -979,6 +1008,21 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * The two ways a runtime start meets a ceiling, and what each asks of the
+ * caller (2026-10-05). The deployment's slots are shared with other products
+ * on a small host, so a start that finds every one of them taken is a place in
+ * line: `runtime_capacity_full` is waited out — by the shell with a backoff, by
+ * a run's dispatch for a bounded time, by every worker as a deferral. The
+ * per-user ceiling (`runtime_limit_exceeded`) is the researcher's own doing —
+ * their other conversations are what hold the room — and stays an honest
+ * refusal with its own sentence. Both are 429.
+ */
+export const RUNTIME_ROOM_WAIT_CODES = Object.freeze(['runtime_capacity_full'])
+
+/** Every refusal of a runtime start for want of room, whoever's it is: the codes a worker defers on without spending an attempt. */
+export const RUNTIME_ROOM_REFUSAL_CODES = Object.freeze([...RUNTIME_ROOM_WAIT_CODES, 'runtime_limit_exceeded'])
+
+/**
  * Codes a person meets outside a run's verdict: a refusal before anything
  * starts, and the autopilot verification episode's own outcomes.
  *
@@ -993,7 +1037,11 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'runtime_reserved_for_autopilot',
   'runtime_busy',
   'runtime_cleanup_required',
+  // 2026-10-05: the per-user ceiling — the researcher's own doing, refused as
+  // such — and the deployment's own: every research environment taken, which
+  // is a place in line and not a failure (`RUNTIME_ROOM_WAIT_CODES`).
   'runtime_limit_exceeded',
+  'runtime_capacity_full',
   // 2026-10-04: a start or a prompt that met a plugin apply on its project
   // after the control plane's own wait ran out — the first conversation after a
   // release, while the runtime is restarted and verified.
@@ -1011,6 +1059,10 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'verification_result_schema_invalid',
   'verification_verdict_invalid',
   'verification_verdict_missing',
+  // A re-check that was cancelled together with its agenda, and the floor an
+  // agenda's per-episode cap is held to (`AGENDA_MIN_EPISODE_BUDGET_CNY`).
+  'verification_canceled_by_stop',
+  'autopilot_episode_budget_too_small',
 ])
 
 /**
@@ -1059,6 +1111,23 @@ const autopilotMaterialErrorCodes = Object.freeze([
 ])
 
 /**
+ * The two refusals a scheduled task's own spending caps raise before an episode
+ * starts (`AutopilotService.assertAffordable`): what this task has spent in the
+ * last 24 hours or 7 days has reached the 每日上限 or 每周上限 written on the
+ * task. They are not the account's ceiling and must not read as one — on
+ * 2026-10-04 a task with ¥3 a day was refused in the account's words because
+ * the researcher's own other research that day had cost ¥16, and the task had
+ * spent nothing. Shown on the page where the researcher presses 立即运行 or
+ * sends a follow-up, and on an episode that was refused at dispatch because the
+ * budget was spent in between; the weekly one is named first when both are
+ * spent, since it frees later.
+ */
+export const AUTOPILOT_BUDGET_ERROR_CODES = Object.freeze([
+  'autopilot_daily_budget_spent',
+  'autopilot_weekly_budget_spent',
+])
+
+/**
  * Codes the personal library answers with (`libraryService.mjs`): shown where
  * a document is added to the library, removed from it, or published from it
  * into the capsule. Private for the same reason as the intake list.
@@ -1093,7 +1162,7 @@ const capsuleTransferErrorCodes = Object.freeze([
 ])
 
 /**
- * Codes the 「循证 GEO」 routes answer with (`geoRoutes.mjs`, `/api/geo/*`):
+ * Codes the 「循证传播」 routes answer with (`geoRoutes.mjs`, `/api/geo/*`):
  * the module off, a project that is not this account's, a request the page
  * built wrong, an action whose worker is not composed. The page reads them
  * (it never shows one); they are here so each is held to a Chinese sentence
@@ -1143,6 +1212,17 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_definition_not_found',
   'vcr_definition_invalid',
   'vcr_model_assessment_not_found',
+  'vcr_publications_not_enabled',
+  'vcr_publication_not_found',
+  'vcr_publication_not_ready',
+  'vcr_publication_patient_data',
+  'vcr_platform_packs_not_enabled',
+  'vcr_pack_not_curated',
+  'vcr_predictions_not_enabled',
+  'vcr_prediction_number_refused',
+  'vcr_prediction_scenario_not_found',
+  'vcr_prediction_not_from_engine',
+  'vcr_prediction_unreadable',
 ])
 
 export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
@@ -1191,6 +1271,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_write_value_invalid',
   'vcr_criterion_malformed',
   'vcr_evidence_unverified',
+  'vcr_evidence_source_is_card',
   'vcr_curve_provenance_unavailable',
   'vcr_method_validation_untrusted',
   'vcr_curve_provenance_invalid',
@@ -1218,7 +1299,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
-  'vcr_backup_status_unavailable', 'vcr_backup_unhealthy',
+  'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing', 'vcr_subject_table_unreadable',
   'review_proof_stale', 'document_review_conversion_incomplete', 'document_review_conversion_failed',
   'vcr_evaluation_input_restricted', 'vcr_evaluation_input_changed', 'vcr_evaluation_input_unavailable',
   'vcr_evaluation_dataset_not_found', 'vcr_evaluation_request_invalid', 'vcr_evaluation_holdout_unavailable',
@@ -1341,7 +1422,7 @@ export const VCR_PROTOCOL_ISSUE_CODES = Object.freeze([
  * result's reason.
  */
 export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
-  'constraint_unsatisfiable', 'cpu_budget_exhausted', 'grid_cell_failed', 'handler_error',
+  'constraint_unsatisfiable', 'cpu_budget_exhausted', 'design_effect_null', 'grid_cell_failed', 'handler_error',
   'input_format_unsupported', 'input_hash_mismatch', 'input_out_of_range', 'input_parse_failed', 'input_source_not_reconstructed',
   'input_too_large',
   'job_invalid', 'mechanistic_engine_unknown', 'mechanistic_field_missing', 'missing_covariate',
@@ -1378,6 +1459,18 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_unavailable',
   // A paused project runs nothing: 「让 AI 做」 and 导出 wait until it is resumed.
   'geo_project_paused',
+  // One evidence chain (flywheel F21): the producer settings, and the product-zone cards made from the claims.
+  'geo_producer_invalid',
+  'geo_card_producer_required',
+  'geo_card_reviewer_required',
+  'geo_cards_unavailable',
+  'geo_article_text_unavailable',
+  // Project members (F29): the refusals of the member list, and a member's ability.
+  'geo_member_forbidden',
+  'geo_member_role_invalid',
+  'geo_member_user_required',
+  'geo_member_owner_fixed',
+  'geo_member_detail_invalid',
 ])
 
 /**
@@ -1403,6 +1496,135 @@ export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
   // top-up the page built wrong.
   'simulated_wallet_not_enabled',
   'simulated_wallet_request_invalid',
+  // An operator's grant of gifted 灵豆 (compensation, campaign) and the one charge a
+  // statement line is opened for: who may grant, a grant that is not well formed,
+  // a request id already used for another grant, an account that is not here, a line
+  // that is not this account's.
+  'credit_grant_forbidden',
+  'credit_grant_invalid',
+  'credit_grant_conflict',
+  'credit_grant_account_not_found',
+  'credit_statement_not_found',
+])
+
+/**
+ * Codes the platform publisher account and the upkeep of an evidence zone answer with
+ * (evidence-flywheel plan §3.3, B2, B6). `platform_account_protected` is a deletion or an export of
+ * the publisher account refused by name; `platform_account_reserved` is a registration or a
+ * display name that would pass for it; `evidence_upkeep_no_allowance` is the reason an upkeep job of
+ * an account's own zone was set aside — the account has no allowance to pay for it, and the
+ * platform never pays in its place — which the owner reads on the zone's update settings.
+ */
+export const EVIDENCE_PLATFORM_ERROR_CODES = Object.freeze([
+  'platform_account_protected',
+  'platform_account_reserved',
+  'evidence_upkeep_no_allowance',
+])
+
+/**
+ * What an evidence card's publication from a research result, and the continuation of research from a card, refuse
+ * with (evidence-flywheel plan §5.2, F05–F07, 2026-10-05): each names the one operation it stopped — a result that is
+ * not a clinical package, a zone that is not the caller's — and never a verdict on a run. Several sentences are
+ * written for the dialog that shows them, which lists the claims and the zones the reader can choose between.
+ */
+export const EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH = Object.freeze({
+  evidence_result_request_invalid: '这次发布的内容不对，没有生成证据卡。请重新选择专区和结论后再试。',
+  evidence_result_not_clinical_package: '这个结果不是带证据矩阵的临床证据综述，不能直接发布为证据卡。',
+  evidence_result_matrix_unreadable: '这个结果的证据矩阵现在读不出来，没有生成证据卡。',
+  evidence_result_no_verified_claim: '这个结果里没有已核验的结论可以发布。可以勾选其他结论，它们在卡片上仍会标 ⚠。',
+  evidence_result_claim_unknown: '所选的结论不在这个结果里，没有生成证据卡。',
+  evidence_result_too_many_claims: '一张证据卡最多放 60 条结论，请少选一些。',
+  evidence_result_zone_required: '请选择一个自己的专区，或者新建一个。',
+  evidence_result_zone_not_owned: '研究结果只能发布到你自己的专区。',
+  evidence_result_zone_kind_refused: '研究结果只能发布到用户专区；官方专区和产品专区不接受这种发布。',
+  evidence_continue_unavailable: '这个部署没有开通知识库，不能从证据卡带着来源继续研究。',
+  evidence_continue_request_invalid: '这次继续研究的内容不对，没有建项目也没有存入来源。',
+  evidence_author_not_found: '没有这位作者公开的内容。',
+  evidence_author_handle_unavailable: '暂时没能生成这位作者的公开地址，请稍后再试。',
+  evidence_lineage_previous_not_own: '这张卡只能接在你自己专区里的另一张卡之后；要引用别人的卡，请把它设为“研究始于”。',
+  evidence_lineage_origin_unreadable: '“研究始于”只能指向一张已发布、而且你有权阅读的卡片。',
+  evidence_source_verification_rate_limited: '你今天让平台读取来源的次数已达上限，明天再试；已经读取过的来源不会再占用次数。',
+})
+
+/**
+ * Codes the platform's own evidence programme answers with (evidence-flywheel plan §5.1, F01/F02, 2026-10-05).
+ * Each touches the one operation it names and never a researcher's conversation:
+ *
+ * - `evidence_programme_decision_required`: a card the programme would write has no recorded topic decision behind it.
+ *   An original analysis may only answer a topic the selector chose (the anti-paper-mill rule), and a card with no
+ *   decision to trace its topic to is not written.
+ * - `evidence_programme_budget_spent`: the day's programme budget cannot pay for another episode. At scheduling it is a
+ *   recorded deferral on the day's decision; at dispatch the episode waits for budget (the autopilot worker's resource
+ *   wait) and is not failed.
+ * - `evidence_programme_slot_busy`: another programme episode is still working and the programme holds one slot (default),
+ *   so this one waits its turn; recorded like the budget's deferral and never a failure.
+ * - `evidence_programme_original_weekly_cap`: a third original analysis in a rolling week. Deferred, not dropped.
+ * - `evidence_programme_operator_required` and `evidence_programme_not_enabled`: the operator's page of the programme and its
+ *   run-today button (2026-10-06), refused to anyone who is not an operator and answered by name where the switch is off.
+ */
+export const EVIDENCE_PROGRAMME_ERROR_CODES = Object.freeze([
+  'evidence_programme_decision_required',
+  'evidence_programme_budget_spent',
+  'evidence_programme_slot_busy',
+  'evidence_programme_original_weekly_cap',
+  'evidence_programme_operator_required',
+  'evidence_programme_not_enabled',
+])
+
+/**
+ * The public evidence pages' own refusals (flywheel F08, F09): the feed that lets the knowledge-source plugin read
+ * what the platform publishes is a public URL, and with the module's switch off it is a route that answers by name
+ * rather than a path that never existed.
+ */
+export const EVIDENCE_PUBLIC_ERROR_CODES = Object.freeze([
+  'evidence_public_not_enabled',
+  'evidence_feed_cursor_invalid',
+  'evidence_feed_query_invalid',
+  // The pages and the read-only API (F08, F27) and the public topic requests (2026-10-06).
+  'evidence_public_not_found',
+  'evidence_public_card_withdrawn',
+  'evidence_public_rate_limited',
+  'evidence_public_query_invalid',
+  'evidence_topic_request_invalid',
+  'evidence_topic_request_limit',
+  'evidence_topic_request_not_found',
+])
+
+/**
+ * What the flywheel's operator figures and the community column of an official zone answer with when their switch is off or
+ * what they were asked for is not there (evidence-flywheel plan §5.2, §11, 2026-10-06). Each is about the module, never a
+ * verdict on a run.
+ */
+export const EVIDENCE_FLYWHEEL_ERROR_CODES = Object.freeze([
+  'evidence_flywheel_not_enabled',
+  'evidence_community_not_enabled',
+  'evidence_community_not_found',
+])
+
+/**
+ * Codes sharing memory inside the platform answers with (evidence-flywheel plan §7, F17-F19,
+ * 2026-10-05): a pack that carries anything but text, a share that is not this account's to
+ * make, a link or delivery that can no longer be used, a pack the author or the operator took
+ * down, and the evidence-zone subscription. Each refuses the one operation it names, never a
+ * run. A recipient who cannot be reached is deliberately NOT a code: an unknown name and a
+ * refusing one answer alike, so a name cannot be probed.
+ */
+export const CAPSULE_SHARE_ERROR_CODES = Object.freeze([
+  'capsule_share_not_enabled',
+  'capsule_share_not_text_only',
+  'capsule_share_not_own',
+  'capsule_share_not_found',
+  'capsule_share_link_expired',
+  'capsule_share_link_revoked',
+  'capsule_share_link_exhausted',
+  'capsule_share_delivery_closed',
+  'capsule_share_links_limit',
+  'capsule_share_rate_limited',
+  'capsule_share_operator_required',
+  'capsule_pack_taken_down',
+  'evidence_zone_subscription_not_enabled',
+  'evidence_zone_subscription_not_found',
+  'evidence_zone_subscription_limit',
 ])
 
 /**
@@ -1426,6 +1648,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...EXTENSION_ERROR_CODES,
   ...MANAGED_BROWSER_ERROR_CODES,
   ...Object.keys(DOCUMENT_EXPORT_ERROR_MESSAGES),
+  ...Object.keys(SOURCE_CHANGE_ERROR_MESSAGES),
   ...RUNTIME_ERROR_CODES,
   ...SOCKET_TOOL_ERROR_CODES,
   ...ANALYSIS_ERROR_CODES,
@@ -1437,6 +1660,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...terminalEvidenceSourceErrorCodes,
   ...sourceIntakeErrorCodes,
   ...autopilotMaterialErrorCodes,
+  ...AUTOPILOT_BUDGET_ERROR_CODES,
   ...libraryErrorCodes,
   ...capsuleTransferErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
@@ -1447,6 +1671,14 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...VCR_PROTOCOL_ISSUE_CODES,
   ...VCR_ENGINE_ISSUE_CODES,
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
+  ...EVIDENCE_PLATFORM_ERROR_CODES,
+  ...EVIDENCE_PROGRAMME_ERROR_CODES,
+  ...EVIDENCE_PUBLIC_ERROR_CODES,
+  ...CAPSULE_SHARE_ERROR_CODES,
+  ...EVIDENCE_FLYWHEEL_ERROR_CODES,
+  ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
+  ...Object.keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH),
+  ...Object.keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
 ])])
 
 /**
@@ -1469,11 +1701,15 @@ export function classifyEvidenceSourceError(code) {
  * adds a variant shows up as a counted unknown instead of a silent success.
  * @param {string} kind
  * @param {string} [wireCode] the kernel's code for the error that ended the turn
+ * @param {number} [wireStatus] the HTTP status the kernel recorded for the refused model call
  * @returns {{ errorCode: string | null, subCode?: string, unknownKind?: string }}
  */
-export function turnEndErrorCode(kind, wireCode) {
+export function turnEndErrorCode(kind, wireCode, wireStatus) {
   const text = String(kind ?? '')
   const wire = String(wireCode ?? '')
+  if (text === 'error' && Object.prototype.hasOwnProperty.call(TURN_END_WIRE_STATUS_ERROR_CODES, String(wireStatus))) {
+    return { errorCode: TURN_END_WIRE_STATUS_ERROR_CODES[/** @type {keyof typeof TURN_END_WIRE_STATUS_ERROR_CODES} */ (wireStatus)] }
+  }
   if (text === 'error' && Object.prototype.hasOwnProperty.call(TURN_END_WIRE_ERROR_CODES, wire)) {
     return { errorCode: TURN_END_WIRE_ERROR_CODES[/** @type {keyof typeof TURN_END_WIRE_ERROR_CODES} */ (wire)] }
   }
@@ -1493,6 +1729,11 @@ export function turnEndErrorCode(kind, wireCode) {
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
   ...EVOLUTION_ERROR_MESSAGES,
+  // The evidence card's own refusals (`evidenceCard.mjs`): who may write where, a simulated value, a producer a card
+  // must name. Each touches the one write it names.
+  ...EVIDENCE_CARD_ERROR_MESSAGES_ZH,
+  ...EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH,
+  ...EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH,
   // Why a data-semantics check could not read a table. The check is reported as
   // not run; the other checks and the analysis go on.
   file_unreadable: '这个数据文件没能读取，对应的数据检查未执行；其他检查和分析不受影响。',
@@ -1514,16 +1755,29 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   extension_storage_capacity: '技能存储空间暂时不足，请整理技能文件后重试。',
   vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
   vcr_backup_unhealthy: '恢复备份尚未通过检查。',
+  vcr_subject_table_unreadable: '这份受试者数据表现在读不出来；这次匹配只用病历文档和已有事实，其余步骤照常。',
+  vcr_backup_references_missing: '这一轮恢复备份没有做成：数据库记录的部分文件在备份时被删除了，下一轮会重新备份；PostgreSQL 备份不受影响。',
   review_proof_stale: '复核对应的报告或数据版本已变更，原文件仍保留。',
   document_review_conversion_incomplete: '复核后的文件转换尚未完成，原文件仍可下载。',
   document_review_conversion_failed: '复核后的文件转换未完成，原文件仍保留。',
   ...DOCUMENT_EXPORT_ERROR_MESSAGES,
+  ...SOURCE_CHANGE_ERROR_MESSAGES,
   ...RESULT_WORKBENCH_ERROR_MESSAGES,
   tooluniverse_upstream_unavailable: '补充科研数据源暂时无法访问，可继续使用其他文献和指南来源。',
   tooluniverse_unavailable: '补充科研数据源尚未配置，可继续使用其他文献和指南来源。',
   tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',
   tooluniverse_rate_limited: '补充科研数据源请求过于频繁，请稍后再试。',
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
+  geo_producer_invalid: '出品方设置不对：类型选“企业”或“医生”，医生要写姓名，与产品的关系只能选列出的几种。',
+  geo_card_producer_required: '先在项目里写明由谁出品（企业或医生），才能生成产品专区的证据卡；结论库里的结论都还在。',
+  geo_card_reviewer_required: '产品专区的证据卡要写明作者和审核医生。先在项目成员里加一位医学审核，再生成；结论库里的结论都还在。',
+  geo_cards_unavailable: '这个部署没有开通证据专区，结论暂时不能生成证据卡；结论库里的结论都还在。',
+  geo_article_text_unavailable: '这篇稿件的正文现在读不到，暂时不能核对它引用的结论；稿件本身没有变化。',
+  geo_member_forbidden: '你在这个项目里的角色不能做这件事；请联系项目负责人调整角色。',
+  geo_member_role_invalid: '成员角色只能选：编辑、医学审核、只读。',
+  geo_member_user_required: '请填写成员的账号。',
+  geo_member_owner_fixed: '项目负责人就是创建项目的账号，不能在成员里增减。',
+  geo_member_detail_invalid: '成员的补充信息只能写医院、科室、专业、职称、所属机构和备注，每项不超过 120 个字。',
   // 「虚拟临研」's page refusals. Every one of these is permanent for the request
   // that caused it — retrying the same thing gets the same answer — so none of
   // them says 「稍后再试」, which is what the family sentence for an unknown
@@ -1532,6 +1786,17 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_forbidden: '你在这个研究里没有做这件事的权限。',
   vcr_unavailable: '这个操作在当前部署里还没有开放。',
   vcr_not_enabled: '这个部署没有开通虚拟临研。',
+  vcr_publications_not_enabled: '这个部署没有开通模拟研究栏目。',
+  vcr_publication_not_found: '找不到这条发布，或它已经撤回。',
+  vcr_publication_not_ready: '这份报告还没有写完，写完后再发布到模拟研究。',
+  vcr_publication_patient_data: '这份报告的文字里出现了本研究受试者的编号，不能公开；去掉后再发布。',
+  vcr_platform_packs_not_enabled: '这个部署没有开通平台知识包。',
+  vcr_predictions_not_enabled: '这个部署没有开通预测登记。',
+  vcr_prediction_number_refused: '预测的数不由请求给出：它只从引擎结果的指定位置读取。',
+  vcr_prediction_scenario_not_found: '这项研究里没有这个试验情景。',
+  vcr_prediction_not_from_engine: '这个情景还没有引擎算出的、可估计的结果；有了再登记预测。',
+  vcr_prediction_unreadable: '结果里这个位置没有“估计值加区间”或“成功概率”：换一个指标，例如 measure(power) 或带区间的效应估计。',
+  vcr_pack_not_curated: '只有研究负责人已经标为「已整理」的知识包，才能申请成为平台知识包；先在研究页上确认整理。',
   vcr_path_invalid: '这个地址不是虚拟临研的页面；从研究列表重新进入。',
   vcr_payload_invalid: '提交的内容格式不对，没有保存；刷新页面后重新填写。',
   vcr_study_not_found: '找不到这个研究，或它不属于你的账号；从研究列表重新进入。',
@@ -1567,6 +1832,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_upstream_error: '虚拟临研的研究数据这次没能读写；运行会如实记下这一点，用已有的资料继续。',
   vcr_response_invalid: '虚拟临研返回的内容读不出来，这次没有采用；运行会如实记下，用已有的资料继续。',
   vcr_response_too_large: '虚拟临研返回的内容太大，这次没有采用；缩小范围再问。',
+  vcr_scenario_help_unavailable: '这个运行环境里没有各计算方法的字段清单；按平台拒绝时给出的字段列表改写，其余研究步骤照常。',
   vcr_write_empty: '这次写入没有任何内容，什么都没有保存。',
   vcr_write_field_forbidden: '这次写入里带了不允许由运行写入的字段，那一项没有保存，其余照常。',
   vcr_write_refused: '平台拒绝了这一项，原因见提示；其余各项照常保存。',
@@ -1589,6 +1855,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   registry_unsupported: '本部署尚未接入这个注册库，不把未查询当成没有记录。',
   registry_terms_forbid_commercial_use: '这个注册库的使用条款禁止商业使用，所以不接入；它没有被查询，不等于没有记录。',
   vcr_evidence_unverified: '这条证据没能对上它引用的登记记录或文献原文，没有保存；重新核对原文位置后再写。',
+  vcr_evidence_source_is_card: '证据条目的出处写成了证据卡的页面，没有保存；卡只是线索，去读它列出的原始来源，再按原文写这一条。',
   vcr_number_format_unknown: '报告里引用的数字格式不认识；改用平台支持的写法。',
   vcr_number_mcse_missing: '这个数字来自仿真，引用它必须带蒙特卡洛标准误。',
   vcr_number_typed: '报告里有手打的数字，已在报告中写成「未计算」；改成对结果字段的引用，由平台渲染。',
@@ -1607,6 +1874,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // The engine channel and its jobs.
   vcr_engine_unconfigured: '本部署还没有配置计算引擎，需要计算的步骤暂不可用；其余步骤照常。',
   vcr_engine_not_composed: '本部署没有接入计算引擎，需要计算的步骤暂不可用；其余步骤照常。',
+  vcr_engine_not_answering: '计算引擎现在没有回应；排队和进行中的计算会在它恢复后自动继续，无需操作。',
   vcr_engine_unreachable: '连不上计算引擎；这一步暂不可用，研究的其余部分照常，引擎恢复后可以重新计算。',
   vcr_engine_timeout: '计算引擎这次没有及时应答；作业会自动重试。',
   vcr_engine_secret_missing: '计算引擎的口令没有配置，引擎按未配置处理；请联系管理员。',
@@ -1746,6 +2014,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_model_interface_not_hosted: '这个模型用的调用接口，本部署还没有接入能执行它的模型包；这一步不用替代模型，其他研究继续。',
   constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
+  design_effect_null: '这个情景没有效应，解析法给不出样本量；方案的 I 类错误请用同一情景的模拟来测。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',
   handler_error: '统计引擎在这项计算里遇到了意外错误，没有给出任何数字。',
   input_format_unsupported: '数据文件的格式不受支持：请用 CSV、TSV、JSON 或 Excel（.xlsx）；Parquet 请先转成 CSV。',
@@ -1795,6 +2064,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   deliverable_json_unparseable: '交付包里的 JSON 文件无法解析，下游读不到它写的内容。',
   cited_source_unretrieved: '报告链接的来源只出现在运行自己写的证据快照里，本次运行的检索工具没有取回过它。',
   citation_plain_http: '报告里有引用使用未加密的 http 链接；来源可以打开，结论不受影响，出版方提供 https 地址时换用即可。',
+  platform_card_cited: '这是 EviMed 自己的证据卡，请改引原始来源。证据卡只是索引，引用它等于平台引用自己；打开卡片列出的论文、指南或说明书，引用它们。',
   deliverable_run_receipt_shape: '引擎运行回执缺少必要字段（作业 id、终态、产物清单）。',
   deliverable_run_receipt_unbound: '引擎运行回执没有作业 id，交付包无法与产生它的那次引擎运行对上。',
   deliverable_run_artifact_missing: '运行回执点名的产物不在交付包里。',
@@ -1842,6 +2112,32 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evimed_credits_unreachable: '科研额度的记录暂时读不出来，稍后再试。',
   simulated_wallet_not_enabled: '这个部署没有开启模拟额度，没有可以充值的内容。',
   simulated_wallet_request_invalid: '这次模拟充值的内容不对，没有入账。换一个充值额度再试。',
+  credit_grant_forbidden: '只有运营账号可以赠送灵豆，这次没有入账。',
+  credit_grant_invalid: '这笔赠送的内容不对，没有入账。检查账户、来源（补偿或活动）、金额和到期日后再试。',
+  credit_grant_conflict: '这个请求编号已经用于另一笔不同的赠送，没有重复入账。换一个请求编号再试。',
+  credit_grant_account_not_found: '没有找到这个账户，这笔赠送没有入账。',
+  credit_statement_not_found: '没有找到这一条流水。',
+  // The platform's publishing account and the upkeep of an account's own zone (2026-10-05).
+  platform_account_protected: '这是平台出版方账号，不能删除或导出。',
+  platform_account_reserved: '这个账号名或显示名留给平台出版方，请换一个。',
+  evidence_upkeep_no_allowance: '科研额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。',
+  // The platform's own evidence programme (2026-10-05): what an operator reads on a day's topic decision.
+  evidence_programme_decision_required: '这张卡没有对应的选题记录，没有写入：平台只为选题器当天选定的题目发布结论。',
+  evidence_programme_budget_spent: '证据中心今天的预算已经用完，这次研究顺延到预算恢复后再做。',
+  evidence_programme_slot_busy: '证据中心正在做另一项研究，这次排在它后面，不会丢。',
+  evidence_programme_original_weekly_cap: '平台每周最多发布两张原创分析卡，这张顺延到下一周。',
+  evidence_programme_operator_required: '证据中心的运行情况只有运营账号可以查看和手动运行。',
+  evidence_programme_not_enabled: '这个部署没有开启证据中心的每日选题。',
+  evidence_public_not_enabled: '这个部署没有开放证据专区的公开页面和订阅源。',
+  evidence_feed_cursor_invalid: '订阅源的翻页游标已经失效，请从第一页重新读取。',
+  evidence_feed_query_invalid: '订阅源的参数不对：每页条数要在 1 到 200 之间。',
+  evidence_public_not_found: '没有找到这个公开页面。它可能不存在，或者作者没有把它公开到互联网。',
+  evidence_public_card_withdrawn: '这张证据卡已被撤回，不再作为证据；撤回的原因和日期保留在它的说明页上。',
+  evidence_public_rate_limited: '访问太频繁了，请稍等一分钟再试。',
+  evidence_public_query_invalid: '公开接口的参数不对：请检查 kind、view、limit 和 cursor。',
+  evidence_topic_request_invalid: '选题申请要写 4 到 200 个字，不能含控制字符；指定的专区必须是已公开的专区。',
+  evidence_topic_request_limit: '你今天申请和附议的选题已经到上限了，明天再来。',
+  evidence_topic_request_not_found: '没有找到这条选题申请。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -1957,7 +2253,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     + '等这一轮结束后即可继续，或在“主动研究”里先暂停它。',
   runtime_busy: '这个项目的运行时正被另一次任务占用，稍后会自动重试。',
   runtime_cleanup_required: '上一次任务的运行环境尚未关闭，清理完成后可继续研究。',
-  runtime_limit_exceeded: '运行时的并发或用量上限已到，这次请求没有被受理。稍后重试。',
+  runtime_limit_exceeded: '你同时进行的研究已达上限，这次没有开始。先结束一个再试。',
+  runtime_capacity_full: '所有研究环境都在使用中，这次没有开始。空出来之后再试，或先结束一个正在进行的研究。',
   plugin_apply_in_progress: '正在为这个项目准备运行环境，通常半分钟内完成。完成后再试一次即可。',
   agent_run_active: '这个研究会话已经有一次运行在进行中。等它结束，或先取消它，再发起新的。',
   agent_run_limit_reached: '这个项目同时进行的研究运行已达上限。等其中一次结束后再发起。',
@@ -1975,6 +2272,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   verification_result_schema_invalid: '独立复核的结论文件格式与约定不符，这次不采信它。原结论未被推翻。',
   verification_verdict_invalid: '独立复核给出的结论不在允许的取值范围内，这次不采信它。原结论未被推翻。',
   verification_verdict_missing: '独立复核没有给出结论。原结论未被推翻。',
+  verification_canceled_by_stop: '任务被停止时，这条结论的独立复核还在进行，已随任务一起取消，所以没有复核结果。原结论未被推翻。'
+    + '重新启用任务不会补做这次复核；下一次研究会重新检查新的结论。',
 
   // ——— Knowledge-base intake: what a source card and an upload refusal say ———
   // The in-house parser's refusals reach a researcher on the source card, and
@@ -2005,6 +2304,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
   autopilot_material_not_found: '找不到这份资料，或它不属于这个研究问题所在的项目。先把文件加入这个项目的知识库，再关联到问题。',
   autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
+  autopilot_daily_budget_spent:
+    '这个任务近 24 小时的花费已达它自己设定的“每日上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
+    + '等预算随时间释放，或在“编辑任务”里调高每日上限即可。',
+  autopilot_weekly_budget_spent:
+    '这个任务近 7 天的花费已达它自己设定的“每周上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
+    + '等预算随时间释放，或在“编辑任务”里调高每周上限即可。',
+  autopilot_episode_budget_too_small:
+    `“单次上限”不能低于 ¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)}：一次模型调用要先预留约 ¥1 才能发出，预算低于 ¥${MIN_RUN_BUDGET_CNY.toFixed(2)} 的研究一开始就会被拒绝。`
+    + '在“编辑任务”里调高单次上限即可，每日、每周上限也不能低于它。',
   library_item_not_found: '这份资料不在个人资料库里。',
   library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',
   library_source_removed: '这份资料在各个项目里都已删除，它的资料理解结果也随之删除，没有可以发布到记忆胶囊的内容；资料库里的正文副本仍然可以阅读和检索。',
@@ -2014,6 +2322,26 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   capsule_export_empty: '还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。',
   capsule_recipient_unknown: '要分享给的账号不在这个平台上，请核对账号名。',
   capsule_password_required: '这个胶囊需要发送者设定的口令才能打开。',
+  // Sharing inside the platform (`capsuleTransferService.mjs`, `capsuleShareLinks.mjs`): text only, the author's own
+  // pack, and what the recipient hears when a share can no longer be used.
+  capsule_share_not_enabled: '这个部署没有开放胶囊分享。',
+  capsule_share_not_text_only: '这个胶囊里含有文字以外的内容，平台不接收：用户之间只分享纯文字的方法，不分享脚本、附件或工具。',
+  capsule_share_not_own: '只能分享你自己的胶囊；收到的胶囊不能再转发。',
+  capsule_share_not_found: '这个分享不存在，或已经不能用了。',
+  capsule_share_link_expired: '这个分享链接已过期，请向分享的人要一个新的。',
+  capsule_share_link_revoked: '这个分享链接已被分享的人撤回。',
+  capsule_share_link_exhausted: '这个分享链接的使用次数已用完，请向分享的人要一个新的。',
+  capsule_share_delivery_closed: '这份分享已经处理过，或已被撤回。',
+  capsule_share_links_limit: '有效的分享链接太多了，先撤回不用的再新建。',
+  capsule_share_rate_limited: '今天发出的分享已经够多了，明天再试。',
+  capsule_share_operator_required: '只有平台管理员可以下架一位作者的全部分享。',
+  capsule_pack_taken_down: '这个胶囊已被下架，不能再启用或试用。',
+  evidence_zone_subscription_not_enabled: '证据专区订阅这个部署没有开放。',
+  evidence_zone_subscription_not_found: '这个证据专区不存在，或还没有发布。',
+  evidence_zone_subscription_limit: '这个项目订阅的证据专区已经够多了，先取消不用的再订阅。',
+  evidence_flywheel_not_enabled: '这个部署没有开启证据飞轮的运营指标。',
+  evidence_community_not_enabled: '这个部署没有开放官方专区的社区卡片。',
+  evidence_community_not_found: '这个官方专区不存在，或还没有发布。',
   method_no_earlier_version: '这个做法没有更早的版本。',
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
@@ -2068,12 +2396,12 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // family and not 64 sentences: a table that size is the table nobody keeps
   // current, which is the failure the family mechanism exists to prevent.
   [/^geo_probe_/, '生成式检索的可见度探测这次没能完成，报告会把它记为限制。'],
-  // 「循证 GEO」's runtime tools, then its routes. The tool family comes first:
+  // 「循证传播」's runtime tools, then its routes. The tool family comes first:
   // a run reading the platform's data has a different next step (go on with
   // what it has) from a person whose page action was refused (try again).
   [/^(?:geo_(?:disabled$|no_project$|unconfigured$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
-    '循证 GEO 的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
-  [/^geo_(?!probe_)/, '循证 GEO 这次没能完成这个操作，稍后再试。'],
+    '循证传播的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
+  [/^geo_(?!probe_)/, '循证传播这次没能完成这个操作，稍后再试。'],
   // 「虚拟临研」, read the same way and for the same reason: a run whose study
   // data could not be read carries on with what it has, and a person whose
   // page action was refused tries again. The engine family is separate — a
@@ -2222,6 +2550,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   runtime_busy: 'capped',
   runtime_cleanup_required: 'capped',
   runtime_limit_exceeded: 'capped',
+  runtime_capacity_full: 'capped',
   plugin_apply_in_progress: 'capped',
   agent_run_active: 'capped',
   agent_run_limit_reached: 'capped',
@@ -2248,6 +2577,9 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   verification_result_schema_invalid: 'stopped',
   verification_verdict_invalid: 'stopped',
   verification_verdict_missing: 'stopped',
+  verification_canceled_by_stop: 'stopped',
+  // A floor on a setting, raised by editing the task: a ceiling's sibling, not a verdict on any run.
+  autopilot_episode_budget_too_small: 'capped',
   illegal_state_transition: 'stopped',
   // Prefixed like a ceiling, but nothing was refused: the run went ahead and
   // the usage is recorded late. Calling it `capped` would tell a reader to wait
@@ -2261,6 +2593,36 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   evimed_credits_unreachable: 'upstream',
   simulated_wallet_not_enabled: 'upstream',
   simulated_wallet_request_invalid: 'upstream',
+  credit_grant_forbidden: 'upstream',
+  credit_grant_invalid: 'upstream',
+  credit_grant_conflict: 'upstream',
+  credit_grant_account_not_found: 'upstream',
+  credit_statement_not_found: 'upstream',
+  // A refusal of one operation on the publisher account, and a name it keeps for itself: about the
+  // account, never a verdict on work. The upkeep that waits for an allowance is a ceiling.
+  platform_account_protected: 'upstream',
+  platform_account_reserved: 'upstream',
+  evidence_upkeep_no_allowance: 'capped',
+  // The platform's own programme (2026-10-05): a topic without a decision is a refusal of one card; its budget, its one slot and the
+  // weekly cap on original analyses are ceilings that free by themselves.
+  evidence_programme_decision_required: 'upstream',
+  evidence_programme_budget_spent: 'capped',
+  evidence_programme_slot_busy: 'capped',
+  evidence_programme_original_weekly_cap: 'capped',
+  evidence_programme_operator_required: 'upstream',
+  evidence_programme_not_enabled: 'upstream',
+  // The public evidence pages are off in this deployment: about the module, never a verdict on work.
+  evidence_public_not_enabled: 'upstream',
+  evidence_feed_cursor_invalid: 'upstream',
+  evidence_feed_query_invalid: 'upstream',
+  // The pages and the read-only API: a missing or withdrawn page is about the page; a rate limit and the daily topic-request cap free by themselves.
+  evidence_public_not_found: 'upstream',
+  evidence_public_card_withdrawn: 'upstream',
+  evidence_public_rate_limited: 'capped',
+  evidence_public_query_invalid: 'upstream',
+  evidence_topic_request_invalid: 'upstream',
+  evidence_topic_request_limit: 'capped',
+  evidence_topic_request_not_found: 'upstream',
 })
 
 /**
@@ -2295,21 +2657,33 @@ export function errorCodeOutcome(code) {
   // A question's material is a list the researcher keeps: a full list is a
   // ceiling, and a source that is not there is nothing to act on.
   if (text === 'autopilot_materials_full') return 'capped'
+  // A task's own spending cap is a ceiling like the account's, and frees the same way.
+  if (AUTOPILOT_BUDGET_ERROR_CODES.includes(text)) return 'capped'
   if (autopilotMaterialErrorCodes.includes(text)) return 'upstream'
   if (libraryErrorCodes.includes(text)) return 'upstream'
   // Sharing a capsule refuses for what the pack holds or who it is for —
   // nothing to share yet, an account that is not here, a missing password —
   // never as a verdict on a run.
   if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
+  // Sharing memory inside the platform refuses one share, link or subscription, never a run.
+  if (CAPSULE_SHARE_ERROR_CODES.includes(text)) return 'upstream'
+  // The flywheel's figures and the community column refuse about the module, never about a run.
+  if (EVIDENCE_FLYWHEEL_ERROR_CODES.includes(text)) return 'upstream'
   // Optional extension refusals affect that operation, not research delivery.
   if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'
+  // An evidence card's refusals are about one write to one zone, never a verdict on a run.
+  if (Object.hasOwn(EVIDENCE_CARD_ERROR_MESSAGES_ZH, text)) return 'upstream'
+  if (Object.hasOwn(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH, text)) return 'upstream'
+  // Keeping a card current refuses one operation on one card (a challenge, a switch), never a run.
+  if (Object.hasOwn(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH, text)) return 'upstream'
   if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
   if (text === 'managed_browser_busy') return 'capped'
   if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'
-  // 循证 GEO's page refusals are about the module and what it holds — a
+  // 循证传播's page refusals are about the module and what it holds — a
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.
   if (Object.hasOwn(DOCUMENT_EXPORT_ERROR_MESSAGES, text)) return 'upstream'
+  if (Object.hasOwn(SOURCE_CHANGE_ERROR_MESSAGES, text)) return 'upstream'
   if (GEO_ROUTE_ERROR_CODES.includes(text)) return 'upstream'
   if (VCR_ROUTE_ERROR_CODES.includes(text) || VCR_GATEWAY_ERROR_CODES.includes(text)) return 'upstream'
   // The rest of the module's codes and the protocol's per-field issues are about

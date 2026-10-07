@@ -161,6 +161,7 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS: ["eq", "runtimeQuotaCheckIntervalMs", "cadence"],
   OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS: ["eq", "runtimeIdleTimeoutMs", "how long an idle runtime stays warm; twelve hours is product policy"],
   OPEN_SCIENCE_RUNTIME_IDLE_YIELD_AFTER_MS: ["eq", "runtimeIdleYieldAfterMs", "when an idle runtime gives way to another researcher's start"],
+  OPEN_SCIENCE_RUNTIME_START_WAIT_MS: ["eq", "runtimeStartWaitMs", "how long a run's dispatch waits for a free runtime slot"],
   OPEN_SCIENCE_BACKUP_INTERVAL_SECONDS: ["eq", "backupIntervalSeconds", "cadence"],
   OPEN_SCIENCE_BACKUP_HEALTH_GRACE_SECONDS: ["eq", "backupHealthGraceSeconds", "alert grace"],
   OPEN_SCIENCE_SESSION_TTL_MS: ["lte", "sessionTtlMs", "a login's lifetime"],

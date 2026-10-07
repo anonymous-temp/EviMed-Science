@@ -312,6 +312,7 @@ export class GeoProbeBreaker {
  * @property {number} lastJudgedTick the parse tick of the latest successful judgement
  * @property {number} recountAt when the parse loop last looked for facts counted under an older registry (epoch ms, 0 = never)
  * @property {any} judge
+ * @property {Record<string, number>} checkTotals   what the judge's three checks and the link checks found, since this process started (counted, never decided on)
  * @property {any} upstream
  * @property {Set<string>} alerted
  * @property {string} owner
@@ -342,6 +343,7 @@ export function geoMeasureState(key) {
     lastJudgedTick: -1,
     recountAt: 0,
     judge: null,
+    checkTotals: {},
     upstream: null,
     alerted: new Set(),
     owner: `geo-probe-${process.pid}-${randomId().slice(0, 8)}`,
@@ -676,7 +678,18 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     }
     state.retriable.delete(job.id);
   }
-  const verdict = await classifyProbeAnswerWithJudge({ rawStatus: row.status === "ok" ? "ok" : (rawStatus || "failed"), answer: row.answer }, deps.judgeService, { userId: config.operatorUsers?.[0], projectId: job.geoProjectId, taskId: job.id, module: "geo" });
+  const sanityInput = { rawStatus: row.status === "ok" ? "ok" : (rawStatus || "failed"), answer: row.answer };
+  let verdict = classifyProbeAnswer(sanityInput);
+  if (deps.judgeService) {
+    try {
+      const project = await store.project(job.geoProjectId);
+      if (project?.userId === job.userId && project.projectId) {
+        verdict = await classifyProbeAnswerWithJudge(sanityInput, deps.judgeService, {
+          userId: job.userId, projectId: project.projectId, taskId: job.id, module: "geo",
+        });
+      }
+    } catch { /* Missing or changed ownership keeps the original sanity verdict. */ }
+  }
 
   /** @type {string[]} */
   const warnings = [];

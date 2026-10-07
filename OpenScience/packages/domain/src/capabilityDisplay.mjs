@@ -76,7 +76,7 @@ export function capabilityTitle(id) {
  * 科研工具 and the kernel frame's tool list.
  *
  * Everything is, except a capability whose display block says `listed: false`:
- * the 「循证 GEO」 capabilities are opened by their own module and bound to a
+ * the 「循证传播」 capabilities are opened by their own module and bound to a
  * session by id, which is why they stay public (a bound internal capability
  * answers 403) and are hidden here instead. What a list does with an id this
  * build has no display entry for stays that list's decision.

@@ -66,6 +66,7 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'runtime-leakage': '报告写入了检索或工具过程',
   'claim-marker-format': '结论标记格式不正确',
   'internal-api-citation': '引用了内部接口地址',
+  'platform-card-citation': '引用了 EviMed 自己的证据卡',
   'exclusive-safety': '把有限建议写成了绝对安全',
   'matrix-present': '缺少证据矩阵',
   'matrix-schema': '证据矩阵结构不符合要求',
@@ -279,6 +280,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   specialist_evidence_repair_failed: '修订请求未能送达运行',
   specialist_evidence_repair_snapshot_failed: '修订前未能保存已通过版本',
   citation_plain_http: '引用使用了未加密的链接',
+  platform_card_cited: '引用了 EviMed 自己的证据卡',
   // A run-side gate's advisory note on an accepted package that its own gate
   // run no longer names (the receipt keeps only the sentence).
   gate_advisory: '运行内核验留下的建议',

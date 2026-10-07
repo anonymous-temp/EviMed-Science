@@ -197,3 +197,19 @@ test("a project records at most its limit of datasets, and an asset that cannot 
   }));
   await assert.rejects(() => roomy.write("u", "p", { datasetId: "huge", bindings: tables }, { via: "conversation" }), (error) => error.code === "semantics_asset_too_large");
 });
+
+test("a consumer of the change cannot fail the write it was told about, nor make it run twice", async () => {
+  const documents = ledger();
+  const seen = [];
+  // A consumer whose own failure looks exactly like the write's lost race: the write must not read it as one.
+  const service = new DataSemanticsService({ documents, now: () => "2026-10-05T08:00:00.000Z",
+    onChanged: async (event) => { seen.push(event); throw new HttpError(409, "product_revision_conflict", "the consumer's own record changed"); } });
+  const written = await service.write("u", "p1", { datasetId: "visits", title: "Sepsis visits", ...inferred,
+    tables: [{ name: "visits.csv", observationUnit: "one row per patient visit" }] }, { via: "conversation" });
+  assert.equal(written.revision, 1);
+  assert.equal(documents.control.puts, 1, "the record was written once");
+  assert.equal(seen.length, 1);
+  assert.equal((await service.get("u", "p1", "visits")).revision, 1);
+  const synchronous = new DataSemanticsService({ documents, now: () => "2026-10-05T08:00:01.000Z", onChanged: () => { throw new Error("not even a synchronous one"); } });
+  assert.equal((await synchronous.write("u", "p2", { datasetId: "visits", title: "Other", ...inferred, tables: [{ name: "visits.csv", observationUnit: "one row per visit" }] }, { via: "conversation" })).revision, 1);
+});

@@ -251,7 +251,7 @@ describe("the tools on a blank conversation", () => {
   });
 });
 
-describe("the 循证 GEO chip", () => {
+describe("the 循证传播 chip", () => {
   afterEach(() => { cleanup(); });
 
   function geoFrame() {
@@ -278,17 +278,17 @@ describe("the 循证 GEO chip", () => {
       sessionId: "session-a", controls: true, coverageDays: 90, coverageOptions: [30, 60, 90, 180],
       engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"],
       offered: [{ id: "doubao", name: "豆包" }, { id: "qianwen", name: "千问" }, { id: "deepseek", name: "DeepSeek" }, { id: "yuanbao", name: "元宝" }, { id: "kimi", name: "Kimi" }, { id: "baidu", name: "百度" }],
-      starters: [{ label: "完整方案", draft: "做一套完整的 GEO 方案，从证据、问题、诊断到内容、投放和监测，产品是：" }, { label: "去 AI 味", draft: "给这批稿件去 AI 味：" }],
+      starters: [{ label: "完整方案", draft: "做一套完整的循证传播方案，从证据、问题、诊断到内容、投放和监测，产品是：" }, { label: "去 AI 味", draft: "给这批稿件去 AI 味：" }],
     };
     return { components, drafts, kit, sent, options };
   }
 
-  it("says 「循证 GEO」 and changes the coverage window and the engines through the shell, never sending the composer", () => {
+  it("says 「循证传播」 and changes the coverage window and the engines through the shell, never sending the composer", () => {
     const f = geoFrame();
     const Hero = f.components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<Hero />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "geo-insight", sessionId: "session-a" }));
-    expect(view.getByText("循证 GEO")).toBeInTheDocument();
+    expect(view.getByText("循证传播")).toBeInTheDocument();
     expect(view.queryByRole("combobox", { name: "覆盖周期" })).toBeNull();
     act(() => f.kit.hub.deliver("geo", f.options));
 
@@ -308,7 +308,7 @@ describe("the 循证 GEO chip", () => {
 
     // A starter fills the composer; nothing is sent.
     fireEvent.click(view.getByRole("button", { name: "完整方案" }));
-    expect(f.drafts).toEqual(["做一套完整的 GEO 方案，从证据、问题、诊断到内容、投放和监测，产品是："]);
+    expect(f.drafts).toEqual(["做一套完整的循证传播方案，从证据、问题、诊断到内容、投放和监测，产品是："]);
     expect(f.sent.filter(([type]) => type !== "geo-options")).toEqual([]);
   });
 

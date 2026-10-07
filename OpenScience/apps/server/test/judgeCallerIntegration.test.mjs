@@ -57,14 +57,22 @@ test('J22 adds blacklist evidence, keeps regex exclusions and rechecks persisted
   const raw = (resourceId, remarks) => ({ resourceId, remarks, title: 'News outlet', fields: {}, priceCny: 1, publishRate: 1, caseLink: '', available: true });
   const market = { configured: true, fields: async () => [], mediaList: async (type, { page }) => type === 'website' && page === 1 ? { rows: [raw('1', '不接医疗'), raw('2', '需要提供联系电话'), raw('3', '需要提供联系电话')], received: 3 } : { rows: [], received: 0 } };
   let calls = 0;
-  const deps = { store, market, config, judgeService: { judge: async (site, input) => { calls++; assert.equal(site, 'J22'); return settled({ blacklisted: input.remark.includes('电话'), medicalExcluded: false, contactRequired: input.remark.includes('电话'), changesCopy: false, promisesIndex: false, weekendPosting: true, linkRetention: false }); } } };
+  let owners = 0;
+  const catalogueOwner = { userId: 'publisher', projectId: 'evimed-evidence' };
+  const deps = { store, market, config, catalogueJudgeContext: async () => { owners++; return catalogueOwner; }, judgeService: { judge: async (site, input, context) => { calls++; assert.equal(site, 'J22'); assert.deepEqual(context, { ...catalogueOwner, module: 'geo' }); return settled({ blacklisted: input.remark.includes('电话'), medicalExcluded: false, contactRequired: input.remark.includes('电话'), changesCopy: false, promisesIndex: false, weekendPosting: true, linkRetention: false }); } } };
   await tickCatalogue(deps);
   assert.equal(calls, 2, 'identical remarks are judged once');
+  assert.equal(owners, 1, 'resolve the real catalogue owner once per sync');
   assert.equal(stored.get('website:1').blacklisted, true, 'semantic no never releases a regex exclusion');
   assert.equal(stored.get('website:2').blacklisted, true);
   await tickCatalogue(deps);
   assert.equal(calls, 4, 'persisted decisions cannot bypass current calibration or disablement');
   assert.equal(stored.get('website:2').blacklisted, true);
+  const fallback = await tickCatalogue({ ...deps, catalogueJudgeContext: async () => { throw new Error('Owner unavailable'); } });
+  assert.equal(fallback.rows, 3);
+  assert.equal(fallback.blacklisted, 1, 'ordinary counts and persistence survive a missing billing owner');
+  assert.equal(calls, 4, 'missing attribution keeps lexical rules without a provider call');
+  assert.equal(stored.get('website:1').blacklisted, true);
 });
 
 test('J7 classifies parsed text before capture and respects manual overrides and generation changes', async () => {

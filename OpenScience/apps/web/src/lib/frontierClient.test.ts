@@ -104,6 +104,14 @@ describe("reading an item", () => {
     expect(item.source.homepage).toBeNull();
   });
 
+  it("reads whether the source's content is the platform's own, and only a true says so", () => {
+    expect(parseFrontierItem(rawItem({ source: { id: "evimed-evidence", name: "EviMed 证据中心", platformProduced: true } }))!.source.platformProduced).toBe(true);
+    for (const value of [false, "true", 1, null, undefined]) {
+      expect(parseFrontierItem(rawItem({ source: { id: "nejm", name: "NEJM", platformProduced: value } }))!.source.platformProduced).toBe(false);
+    }
+    expect(parseFrontierItem(rawItem({ source: { id: "nejm", name: "NEJM" } }))!.source.platformProduced).toBe(false);
+  });
+
   it("drops what a card cannot stand without, and fills words the server left out", () => {
     expect(parseFrontierItem(rawItem({ id: "" }))).toBeNull();
     expect(parseFrontierItem(rawItem({ source: { id: "x" } }))).toBeNull();
@@ -263,6 +271,25 @@ describe("the routes of the second wave", () => {
     expect(await fetchFrontierDaily("2026-09-23")).toMatchObject({ itemCount: 52, readingMinutes: 9, previousDay: "2026-09-22", nextDay: null });
     fetchMock.mockResolvedValue(reply(200, { data: { daily: { day: "2026-09-21", sections: [], safety: [], markdown: "", itemCount: 3 } } }));
     expect(await fetchFrontierDaily("2026-09-21")).toMatchObject({ readingMinutes: 1, previousDay: null, nextDay: null });
+  });
+
+  it("reads the reader's own followed zones off an issue, and drops what is not a zone with a card", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { daily: { day: "2026-09-23", sections: [], safety: [], markdown: "", followedZones: [
+      { zoneId: "ez_1", zoneTitle: "房颤抗凝", cards: [
+        { id: "ec_1", title: "新卡", summary: "摘要", change: "new", revision: 1, updatedAt: "2026-09-23T01:00:00.000Z" },
+        { id: "ec_2", title: "旧卡", change: "anything else", revision: 3 },
+        { title: "no id" },
+      ] },
+      { zoneId: "ez_2", zoneTitle: "空专区", cards: [] },
+      { zoneTitle: "no id", cards: [{ id: "ec_3", title: "x" }] },
+    ] } } }));
+    const daily = await fetchFrontierDaily("2026-09-23");
+    expect(daily?.followedZones).toEqual([{ zoneId: "ez_1", zoneTitle: "房颤抗凝", cards: [
+      { id: "ec_1", title: "新卡", summary: "摘要", change: "new", revision: 1, updatedAt: "2026-09-23T01:00:00.000Z" },
+      { id: "ec_2", title: "旧卡", summary: "", change: "updated", revision: 3, updatedAt: null },
+    ] }]);
+    fetchMock.mockResolvedValue(reply(200, { data: { daily: { day: "2026-09-21", sections: [], safety: [], markdown: "" } } }));
+    expect((await fetchFrontierDaily("2026-09-21"))?.followedZones).toEqual([]);
   });
 
   it("reads each reason's topic alone, what 「与我相关」 groups by", async () => {

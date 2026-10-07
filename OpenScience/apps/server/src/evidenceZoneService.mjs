@@ -1,7 +1,37 @@
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
-import { evidenceHash, evidenceStructuredContent, evidenceEditorialReceipt, evidencePublicationStatus, evidenceContentHash } from "./evidenceCardContent.mjs";
+import {
+  EVIDENCE_PLATFORM_LINEAGE_KEYS,
+  EVIDENCE_WRITE_ORIGINS,
+  EVIDENCE_ZONE_KINDS,
+  EVIDENCE_ZONE_VISIBILITY,
+  assertEvidenceCardForZone,
+  evidenceCalculationReceiptIds,
+  assertEvidenceProducerName,
+  evidenceCardClaims,
+  evidenceCardClinicalView,
+  evidenceCardIdentifiers,
+  evidenceCardPublicView,
+  evidenceCardTexts,
+  evidenceDefaultProducer,
+  evidenceDisclosure,
+  evidenceEntityKeys,
+  evidenceJourneyStage,
+  evidenceLineage,
+  evidenceMergeEntityKeys,
+  evidenceOriginality,
+  evidenceOriginalityBasisIssues,
+  evidenceOriginalityIsPrimary,
+  evidenceProducer,
+  evidencePublicViewContent,
+  evidenceValueSourceIssues,
+  evidenceWriteAllowed,
+  verifyEvidenceCardClaims,
+} from "@evimed/domain";
+import { asHttpError, evidenceContract, evidenceHash, evidenceStructuredContent, evidenceEditorialReceipt, evidencePublicationStatus, evidenceContentHash } from "./evidenceCardContent.mjs";
+import { recordEvidenceSimulatedRefused, recordEvidenceWriteAccepted, recordEvidenceWriteRefused } from "./evidenceCardMetrics.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
+import { EVIDENCE_ZONE_CURRENCY_SQL, evidenceCurrencyView, evidenceZoneCurrencyView } from "./evidenceCurrency.mjs";
 
 const error = (
   /** @type {number} */ status,
@@ -64,6 +94,16 @@ function revision(row, body) {
       "Content changed; reload before saving.",
     );
 }
+/**
+ * The editorial receipt as a reader other than the card's owner sees it: the last editor's name and the time, never the account (its id
+ * is the login name of a local account, and another account's reading page has no use for it).
+ * @param {any} editorial
+ */
+function editorialForOtherReader(editorial) {
+  if (!editorial?.lastEditor) return editorial ?? null;
+  const { userId: _account, ...editor } = editorial.lastEditor;
+  return { ...editorial, lastEditor: editor };
+}
 /** @param {string} prefix @param {string} userId @param {any} body */
 function identity(prefix, userId, body) {
   if (body.requestId == null)
@@ -74,6 +114,36 @@ function identity(prefix, userId, body) {
   )
     throw error(400, "invalid", "Invalid request identity.");
   return `${prefix}_${createHash("sha256").update(`${userId}:${body.requestId}`).digest("hex").slice(0, 32)}`;
+}
+const DROPPED_TEXT = Symbol("droppedSourceText");
+/**
+ * A source whose text the card does not keep (no public address) keeps the passages the card's own claims quote from it,
+ * each found verbatim in the text the platform read, as its excerpt beside the read receipt — so those claims stay ✓
+ * whichever writer saved them (2026-10-06: a 循证传播 card written from a project's preserved label lost every check
+ * mark when its text was dropped; the result publisher did this for itself, now every writer has it). A quotation the
+ * text does not hold is never added: its claim stays ⚠, as it would have against the full text.
+ * @param {any[]} list @param {any[]} claims
+ */
+function keepQuotedPassages(list, claims) {
+  return list.map((source, position) => {
+    const dropped = source?.[DROPPED_TEXT];
+    if (typeof dropped !== "string") return source;
+    const index = position + 1;
+    /** @type {string[]} */
+    const found = [];
+    for (const claim of claims ?? []) {
+      const quoted = claim?.claimType === "synthesized" ? (claim.supportingSources ?? []).map((/** @type {any} */ bond) => [bond.sourceIndex, bond.supportQuote])
+        : claim?.claimType === "direct" ? [[claim.sourceIndexes?.[0], claim.supportQuote]] : [];
+      for (const [at, quote] of quoted) {
+        if (at !== index || typeof quote !== "string" || !quote || found.includes(quote)) continue;
+        const checked = verifyEvidenceCardClaims({ claims: [{ claimId: "Q", claimType: "direct", claim: "q", sourceIndexes: [1], supportQuote: quote }],
+          sources: [{ title: "s", documentText: dropped }] });
+        if (checked.claims[0]?.status === "verified") found.push(quote);
+      }
+    }
+    const excerpt = found.length ? found.join("\n\n").slice(0, 12000) : source.excerpt;
+    return { ...source, excerpt, sha256: evidenceHash(excerpt ?? ""), fetchedSha256: source.fetchedSha256 ?? evidenceHash(dropped) };
+  });
 }
 /** @param {any} value */
 function sources(value) {
@@ -90,20 +160,76 @@ function sources(value) {
     const coverage = source.coverage ?? "excerpt";
     if (!["full-text", "abstract", "excerpt"].includes(coverage)) throw error(400, "invalid", "Invalid source coverage.");
     const documentText = source.documentText == null ? null : (typeof source.documentText === "string" && source.documentText.length<=2000000 ? source.documentText : text(source.documentText,2000000));
-    const sha256 = evidenceHash(documentText ?? excerpt ?? "");
-    if (source.sha256 != null && source.sha256 !== sha256) throw error(400,"invalid","Source hash does not match its retained text.");
+    // A card never stores the full text of a source that has no public address (2026-10-06 review): a researcher's own uploaded
+    // document reached a card as a source's `documentText`, and "continue research from this card" handed it to another account.
+    // Such a source keeps its citation, its excerpt and the receipt of what the platform read, and nothing else; the passages
+    // its claims quote are the excerpt (`evidenceCardFromResult.mjs`), which is all a reader's ✓ needs.
+    const heldText = url ? documentText : null;
+    const sha256 = evidenceHash(heldText ?? excerpt ?? "");
+    const hashOfDropped = Boolean(documentText && !heldText && source.sha256 === evidenceHash(documentText));
+    if (source.sha256 != null && source.sha256 !== sha256 && !hashOfDropped) throw error(400,"invalid","Source hash does not match its retained text.");
     if (source.fetchedSha256 != null && (typeof source.fetchedSha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.fetchedSha256))) throw error(400,"invalid","Invalid fetched document hash.");
     if (sha256 != null && (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256))) throw error(400,"invalid","Invalid source hash.");
     if (source.checkedAt != null && (typeof source.checkedAt !== "string" || !Number.isFinite(Date.parse(source.checkedAt)))) throw error(400,"invalid","Invalid source check date.");
-    if (coverage === "full-text" && !documentText) throw error(400,"invalid","Full-text coverage requires retained document text.");
-    return { title, url, excerpt, sha256, ...(source.fetchedSha256 ? {fetchedSha256:source.fetchedSha256} : {}), ...(source.checkedAt ? {checkedAt:source.checkedAt} : {}), coverage, ...(documentText ? {documentText} : {}), ...(publicationStatus ? {publicationStatus} : {}) };
+    if (coverage === "full-text" && !heldText && !documentText) throw error(400,"invalid","Full-text coverage requires retained document text.");
+    // What is no longer held is no longer full text.
+    const held = coverage === "full-text" && !heldText ? "excerpt" : coverage;
+    const normalized = { title, url, excerpt, sha256, ...(source.fetchedSha256 ? {fetchedSha256:source.fetchedSha256} : {}), ...(source.checkedAt ? {checkedAt:source.checkedAt} : {}), coverage: held, ...(heldText ? {documentText:heldText} : {}), ...(publicationStatus ? {publicationStatus} : {}) };
+    // The text dropped above is kept out of the row but not out of reach of this save: the claims it carries quote it, and the
+    // passages they quote are what the card keeps (`keepQuotedPassages`). Never enumerable, so nothing stores or answers it.
+    if (documentText && !heldText) Object.defineProperty(normalized, DROPPED_TEXT, { value: documentText, enumerable: false });
+    return normalized;
   });
 }
 
+/** The new card fields a writer may send, validated by the domain; each is kept as the caller's own business. */
+const CARD_CONTRACT_FIELDS = ["claims", "producer", "originality", "lineage", "entityKeys", "journeyStage", "disclosure", "publicView"];
+/** @param {unknown} value */
+const jsonOrNull = (value) => (value == null ? null : JSON.stringify(value));
+/** Stored lineage never repeats the frontier item: `source_item_id` is the one place it lives.
+ * @param {any} row */
+function cardLineage(row) {
+  const lineage = { ...(row.lineage ?? {}), ...(row.source_item_id ? { frontierItemId: row.source_item_id } : {}) };
+  return Object.keys(lineage).length ? lineage : null;
+}
+
 export class EvidenceZoneService {
-  /** @param {{database:any}} options */
-  constructor({ database }) {
+  /**
+   * `entityKeysFor` fills a card's entity keys from the frontier glossary and
+   * `platformPublisherUserId` is the account official zones belong to; both
+   * belong to other packages. With no publisher account configured (the state
+   * before flywheel B2), the owner of an official zone stands in for it.
+   * `onCardSaved` is told after a card was saved (its origin, ids and new revision), so the loops that keep a card current can record a
+   * producer's own edit; it is advice to them and never part of the save — one that throws is ignored.
+   * `onCardPublished` hears, once a write has committed, that a card became published or that its published content
+   * changed (`change` is `"published"` or `"revised"`; a refresh of check dates alone is neither) — the followers'
+   * notice hangs on it (flywheel F10). It is told and never asked: a failure of it never reaches the writer.
+   * `calculationReceipts` reads the engine receipts a first-hand card's calculated claims and comparisons stand on
+   * (`evidenceCalculationReceipts.mjs`): `get(receiptId)` answers the receipt or null. Without it every such claim reads as
+   * unverified (its receipt is unavailable), never ✓ — and a card with no calculated claim needs none.
+   * @param {{database:any, entityKeysFor?:((input:{texts:string[],identifiers:string[]})=>Promise<string[]>)|null, platformPublisherUserId?:string|null,
+   *   calculationReceipts?:{get:(receiptId:string)=>Promise<any>}|null,
+   *   onCardSaved?:((event:{origin:string,zoneId:string,cardId:string,revision:number,state:string})=>Promise<unknown>)|null,
+   *   onCardPublished?:((event:{zoneId:string,cardId:string,revision:number,change:"published"|"revised",origin:string})=>Promise<unknown>|unknown)|null}} options
+   */
+  constructor({ database, entityKeysFor = null, platformPublisherUserId = null, calculationReceipts = null, onCardSaved = null, onCardPublished = null }) {
     this.database = database;
+    this.calculationReceipts = calculationReceipts;
+    this.entityKeysFor = entityKeysFor;
+    this.platformPublisherUserId = platformPublisherUserId;
+    this.onCardSaved = onCardSaved;
+    this.onCardPublished = onCardPublished;
+  }
+  /** What the operator metrics read: the guardrail that must stay at zero. */
+  async metrics() {
+    await this.ready();
+    const row = (await this.database.query("SELECT count(*)::integer AS n FROM evimed_frontier.evidence_cards WHERE producer IS NULL OR producer='null'::jsonb")).rows[0];
+    return { cardsWithoutProducer: row.n };
+  }
+  /** Whether this account writes for the platform in this zone.
+   * @param {any} user @param {any} zone */
+  actorIsPlatformPublisher(user, zone) {
+    return this.platformPublisherUserId != null ? user.id === this.platformPublisherUserId : zone.user_id === user.id;
   }
   async ready() {
     await migrateEvidenceZones(this.database);
@@ -113,6 +239,101 @@ export class EvidenceZoneService {
     await client.query(
       "UPDATE evimed_frontier.evidence_zone_meta SET version=version+1 WHERE singleton",
     );
+  }
+  /** A write reaches a zone only from an origin its kind accepts (plan §4.3 rule 1). The refusal names the origin and the kind and touches this write alone.
+   *
+   * Until the platform publisher account exists the operator import writes into the zone of the account it names, which is
+   * a user zone, and `import` is not one of a user zone's origins; it keeps that reach for now rather than be refused by a
+   * rule written for the day the publisher exists. Nothing but an operator script can send it.
+   * @param {string} origin @param {any} zone @param {any} user */
+  assertWriteOrigin(origin, zone, user) {
+    const actorIsZoneOwner = zone.user_id === user.id;
+    const legacyImport = origin === "import" && zone.kind === "user" && actorIsZoneOwner && this.platformPublisherUserId == null;
+    const verdict = legacyImport ? { allowed: true } : evidenceWriteAllowed({ origin, zoneKind: zone.kind, actorIsZoneOwner, actorIsPlatformPublisher: this.actorIsPlatformPublisher(user, zone) });
+    if (verdict.allowed) return;
+    recordEvidenceWriteRefused(origin, zone.kind);
+    throw error(403, "write_origin_refused", /** @type {any} */ (verdict).message);
+  }
+  /**
+   * The card's contract fields beyond its text — who made it, how it came to be, where it stands on the patient's
+   * journey, who stands behind it, which entities it is about — validated by the domain and joined to the zone it sits
+   * in. A field the writer did not send keeps what the card has; a card with no producer gets the one its writer can
+   * truthfully be: the platform in an official zone, the owner in a user zone. A product zone has no such default, because
+   * only the company or doctor can say who they are.
+   * @param {{body:any,existing:any,parent:any,value:any,origin:string,internalOperation:any,lineage:any}} input
+   */
+  async cardContractFields({ body, existing, parent, value, origin, internalOperation, lineage }) {
+    const parse = evidenceContract((/** @type {(value:any)=>any} */ validate, /** @type {any} */ input) => validate(input));
+    let producer = body.producer === undefined ? (existing?.producer ?? null) : parse(evidenceProducer, body.producer);
+    const producerChanged = body.producer !== undefined || !existing?.producer;
+    producer ??= evidenceDefaultProducer({ zoneKind: parent.kind, ownerName: parent.creator });
+    const aiAuthored = value.editorial?.author?.kind === "ai";
+    const originality = body.originality === undefined ? (existing?.originality ?? (aiAuthored ? "brief" : "synthesis")) : parse(evidenceOriginality, body.originality);
+    // A session may link a card to what it came from; the platform's own writers alone stamp a run, a result or an agenda.
+    const platformLineage = Object.fromEntries(EVIDENCE_PLATFORM_LINEAGE_KEYS.filter(key => existing?.lineage?.[key] != null).map(key => [key, existing.lineage[key]]));
+    const { frontierItemId: _frontierItemId, ...linked } = lineage === undefined ? (existing?.lineage ?? {}) : (lineage ?? {});
+    const stored = { ...(internalOperation ? {} : platformLineage), ...linked };
+    const journeyStage = body.journeyStage === undefined ? (existing?.journey_stage ?? null) : parse(evidenceJourneyStage, body.journeyStage);
+    let disclosure = body.disclosure === undefined ? (existing?.disclosure ?? null) : parse(evidenceDisclosure, body.disclosure);
+    // What an AI did is disclosed by the code that ran it, not by the AI's own say-so: the model it names, when the card
+    // was made and last checked, and the steps the editor takes. Who stands behind a card is a human's to name.
+    if (body.disclosure === undefined && aiAuthored && ["import", "model"].includes(origin)) {
+      const author = value.editorial.author;
+      disclosure = parse(evidenceDisclosure, {
+        ...disclosure,
+        ...(typeof author.model === "string" && author.model ? { model: author.model } : {}),
+        generatedAt: disclosure?.generatedAt ?? new Date().toISOString(),
+        ...(value.editorial.sourceCheckedAt ? { lastCheckedAt: value.editorial.sourceCheckedAt } : {}),
+        aiSteps: ["screen", "extract", "synthesize", ...(value.editorial.status === "ai-reviewed" ? ["review"] : [])],
+      });
+    }
+    try {
+      assertEvidenceCardForZone({ zoneKind: parent.kind, producer, journeyStage, disclosure, producerChanged });
+      // The platform's name is signed only by the platform's publisher, whether the writer typed it or the default (the owner's own
+      // display name) came to be it; a card that already carries a producer is not asked again. The writer is the zone's owner (checked
+      // before this runs), so the zone's owner is the actor.
+      if (producerChanged) assertEvidenceProducerName({ producer, actorIsPlatformPublisher: this.actorIsPlatformPublisher({ id: parent.user_id }, parent) });
+    } catch (failure) {
+      throw asHttpError(failure);
+    }
+    const [issue] = evidenceValueSourceIssues({ claims: value.claims, content: value.content });
+    if (issue) {
+      recordEvidenceSimulatedRefused(issue.valueSource);
+      throw error(400, "value_source_refused", issue.message);
+    }
+    // First-hand work in the platform's voice stands on a calculation, and interpretation never claims one: each refuses this write alone.
+    const [basisIssue] = evidenceOriginalityBasisIssues({ originality, claims: value.claims, zoneKind: parent.kind });
+    if (basisIssue) throw error(400, basisIssue.code.replace(/^evidence_/, ""), basisIssue.message);
+    let entityKeys = body.entityKeys === undefined ? (existing?.entity_keys ?? []) : parse(evidenceEntityKeys, body.entityKeys);
+    if (this.entityKeysFor) {
+      const draft = { ...value, lineage: { ...stored, ...(value.source_item_id ? { frontierItemId: value.source_item_id } : {}) } };
+      // A resolver that cannot answer leaves the card as it was written: the keys are a label, never a gate.
+      const found = await this.entityKeysFor({ texts: evidenceCardTexts(draft), identifiers: evidenceCardIdentifiers(draft) }).catch(() => null);
+      entityKeys = evidenceMergeEntityKeys(entityKeys, found);
+    }
+    return { producer, originality, lineage: Object.keys(stored).length ? stored : null, entity_keys: entityKeys, journey_stage: journeyStage, disclosure };
+  }
+  /**
+   * An account's own lineage links to other cards. `previousCardId` is a card in a zone the writer owns; `originCardId` is a
+   * published card the writer can read. A link the card already carried is not asked again: the card is what it was.
+   * Each refusal is its own named code and touches that one field of that one write.
+   * @param {any} client @param {any} user @param {any} existing @param {{ previousCardId?: string, originCardId?: string }} lineage
+   */
+  async assertLineageLinks(client, user, existing, lineage) {
+    const previous = lineage.previousCardId;
+    if (previous != null && previous !== existing?.lineage?.previousCardId) {
+      const own = previous !== existing?.id && (await client.query(
+        `SELECT 1 FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+          WHERE c.id=$1 AND c.user_id=$2 AND z.user_id=$2`, [previous, user.id])).rowCount;
+      if (!own) throw error(400, "lineage_previous_not_own", "A card can follow only another card in a zone of the writer's own.");
+    }
+    const origin = lineage.originCardId;
+    if (origin != null && origin !== existing?.lineage?.originCardId) {
+      const readable = (await client.query(
+        `SELECT 1 FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+          WHERE c.id=$1 AND c.state='published' AND (z.state='published' OR (c.user_id=$2 AND z.user_id=$2))`, [origin, user.id])).rowCount;
+      if (!readable) throw error(400, "lineage_origin_unreadable", "A card's research can begin only from a published card the writer can read.");
+    }
   }
   /** @param {any} client @param {any} user @param {string} id @param {boolean} [lock] */
   async zoneRow(client, user, id, lock = false) {
@@ -144,7 +365,7 @@ export class EvidenceZoneService {
   async zoneView(client, user, row) {
     const counts = (
       await client.query(
-        "SELECT count(*) FILTER(WHERE state='published')::integer AS n,count(*) FILTER(WHERE state='draft')::integer AS drafts FROM evimed_frontier.evidence_cards WHERE zone_id=$1",
+        `SELECT count(*) FILTER(WHERE state='published')::integer AS n,count(*) FILTER(WHERE state='draft')::integer AS drafts,${EVIDENCE_ZONE_CURRENCY_SQL} FROM evimed_frontier.evidence_cards WHERE zone_id=$1`,
         [row.id],
       )
     ).rows[0];
@@ -165,6 +386,8 @@ export class EvidenceZoneService {
       background: row.background,
       experts: [],
       state: row.state,
+      kind: row.kind,
+      visibility: row.visibility,
       creator: row.creator,
       canEdit: row.user_id === user.id,
       following,
@@ -173,9 +396,25 @@ export class EvidenceZoneService {
       canResearch: published,
       evidenceCount: published ? counts.n : 0,
       draftCount: row.user_id === user.id ? counts.drafts : null,
+      ...evidenceZoneCurrencyView(counts),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+  }
+  /**
+   * The engine receipts a card's calculated claims name, read once before the card is checked. A receipt that cannot be read is
+   * left out and its claim says so; reading never fails the card.
+   * @param {any} card @returns {Promise<Map<string, any>>}
+   */
+  async receiptsFor(card) {
+    /** @type {Map<string, any>} */
+    const found = new Map();
+    if (!this.calculationReceipts) return found;
+    for (const id of evidenceCalculationReceiptIds(card)) {
+      const receipt = await this.calculationReceipts.get(id).catch(() => null);
+      if (receipt) found.set(id, receipt);
+    }
+    return found;
   }
   /** @param {any} client @param {any} user @param {any} row @param {boolean} [detail] */
   async cardView(client, user, row, detail = false) {
@@ -203,6 +442,20 @@ export class EvidenceZoneService {
           )
         ).rows
       : [];
+    // The card as the domain's rules read it: the stored claims are checked
+    // against the sources' preserved text on every read, so a ✓ is never older
+    // than the text it was made against. The list is light and carries none.
+    const lineage = cardLineage(row);
+    // A card taken back keeps its page and its explanation but no claims: nothing it said stands as evidence (`withdrawn`).
+    const currency = evidenceCurrencyView(row);
+    const contract = detail && !currency.withdrawn ? {
+      title: row.title, content: row.content ?? null, sources: row.sources ?? [], claims: row.claims ?? [], producer: row.producer ?? null,
+      originality: row.originality ?? null, lineage, journeyStage: row.journey_stage ?? null, disclosure: row.disclosure ?? null,
+      publicView: row.public_view ?? null, editorial: row.editorial ?? null,
+    } : null;
+    const receipts = contract ? await this.receiptsFor(contract) : null;
+    const verification = contract ? verifyEvidenceCardClaims(contract, { locations: contract.claims.length > 0, receipts }) : null;
+    const verdicts = new Map((verification?.claims ?? []).map((/** @type {any} */ claim) => [claim.claimId, claim]));
     return {
       id: row.id,
       zoneId: row.zone_id,
@@ -214,10 +467,23 @@ export class EvidenceZoneService {
       creator: row.creator,
       reviewer: current?.author ?? null,
       reviewedAt: current?.createdAt ?? null,
-      claims: [],
+      // `text` is the statement under the name the reading page has always rendered its 「证据要点」 from.
+      claims: contract ? contract.claims.map((/** @type {any} */ claim) => ({ ...claim, text: claim.claim, verification: verdicts.get(claim.claimId) ?? null })) : [],
+      claimCount: contract ? contract.claims.length : currency.withdrawn ? 0 : Number(row.claim_count ?? 0),
+      ...currency,
+      claimVerification: verification?.counts ?? null,
+      producer: row.producer ?? null,
+      originality: row.originality ?? null,
+      primary: evidenceOriginalityIsPrimary(row.originality),
+      lineage,
+      entityKeys: row.entity_keys ?? [],
+      journeyStage: row.journey_stage ?? null,
+      disclosure: row.disclosure ?? null,
+      publicView: row.public_view ?? null,
+      views: contract && verification ? { clinical: evidenceCardClinicalView(contract, { verification }), public: evidenceCardPublicView(contract, { verification }) } : null,
       sources: detail ? (row.sources ?? []).map((/** @type {any} */ source) => { const { documentText: _documentText, ...visible } = source; return visible; }) : [],
       content: row.content ?? null,
-      editorial: row.editorial ?? null,
+      editorial: row.user_id === user.id ? row.editorial ?? null : editorialForOtherReader(row.editorial),
       revisions: detail ? (await client.query(`SELECT revision,recorded_at AS "recordedAt",snapshot->>'title' AS title,
         snapshot->'editorial'->>'sourceFingerprint' AS "sourceFingerprint",snapshot->'editorial'->>'status' AS "reviewStatus"
         FROM evimed_frontier.evidence_card_revisions WHERE card_id=$1 ORDER BY revision DESC LIMIT 30`,[row.id])).rows : [],
@@ -365,7 +631,7 @@ export class EvidenceZoneService {
       );
       const rows = (
         await client.query(
-          `SELECT ${cards ? "c.id,c.zone_id,c.user_id,c.revision,c.title,c.subtype,c.summary,c.state,c.source_item_id,c.content,c.editorial,c.created_at,c.updated_at" : "z.*"},z.state AS zone_state,u.name AS creator FROM ${from} WHERE ${predicate} ORDER BY ${alias}.updated_at DESC,${alias}.id LIMIT ${param(limit)} OFFSET ${param(offset)}`,
+          `SELECT ${cards ? "c.id,c.zone_id,c.user_id,c.revision,c.title,c.subtype,c.summary,c.state,c.source_item_id,c.content,c.editorial,c.producer,c.originality,c.lineage,c.entity_keys,c.journey_stage,c.disclosure,jsonb_array_length(c.claims) AS claim_count,c.currency,c.pending_item_ids,c.last_checked_at,c.withdrawn,c.retired_at,c.created_at,c.updated_at" : "z.*"},z.state AS zone_state,u.name AS creator FROM ${from} WHERE ${predicate} ORDER BY ${alias}.updated_at DESC,${alias}.id LIMIT ${param(limit)} OFFSET ${param(offset)}`,
           values,
         )
       ).rows;
@@ -436,8 +702,10 @@ export class EvidenceZoneService {
     });
   }
   /** Internal operator import / model worker entry; never mounted as an HTTP route.
-   * @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {"model"|"import"} [origin] @param {{jobId:string,workerId:string}|null} [lease] */
+   * `origin` is one of `EVIDENCE_WRITE_ORIGINS`: which writer this is decides which zones accept it.
+   * @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {"owner"|"import"|"model"|"programme"|"result"|"geo"} [origin] @param {{jobId:string,workerId:string}|null} [lease] */
   async saveEditorial(user, body, zoneId = null, cardId = null, createCard = false, origin = "import", lease = null) {
+    if (!EVIDENCE_WRITE_ORIGINS.includes(origin)) throw error(400, "invalid", "Unknown evidence write origin.");
     const operation = {origin,lease,id:`er_${randomUUID().replaceAll("-","")}`};
     return this.save(user,body,zoneId,cardId,createCard,operation);
   }
@@ -460,6 +728,7 @@ export class EvidenceZoneService {
             "sourceItemId",
             "content",
             "editorial",
+            ...CARD_CONTRACT_FIELDS,
             "state",
             "expectedRevision",
             "requestId",
@@ -468,13 +737,21 @@ export class EvidenceZoneService {
             "title",
             "description",
             "background",
+            "kind",
             "state",
             "expectedRevision",
             "requestId",
           ],
     );
+    const origin = internalOperation?.origin ?? "owner";
+    // Platform-stamped lineage (a run, a result version, an agenda) is vouched for by the platform's own writers.
+    // A signed-in session may link a frontier item or an earlier card, and nothing it cannot prove.
+    if (!internalOperation && card && body.lineage != null && typeof body.lineage === "object" && EVIDENCE_PLATFORM_LINEAGE_KEYS.some(key => body.lineage[key] != null))
+      throw error(400, "invalid", "Run lineage is written by the platform, not by a session.");
     await this.ready();
-    return this.database.transaction(async (/** @type {any} */ client) => {
+    /** @type {"published"|"revised"|null} */
+    let publication = null;
+    const saved = await this.database.transaction(async (/** @type {any} */ client) => {
       if(internalOperation?.lease) {
         const lease=internalOperation.lease;
         const held=await client.query(`SELECT j.id FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id
@@ -492,11 +769,13 @@ export class EvidenceZoneService {
           "owner_required",
           "Only the zone owner may edit its evidence.",
         );
+      if (parent) this.assertWriteOrigin(origin, parent, user);
       const existing = cardId
         ? await this.cardRow(client, user, zoneId ?? "", cardId, true)
         : !card && zoneId
           ? await this.zoneRow(client, user, zoneId, true)
           : null;
+      if (!card && existing && existing.user_id === user.id) this.assertWriteOrigin(origin, existing, user);
       if (existing) {
         if(internalOperation?.lease && card && existing.state!=="published") throw error(409,"revision_conflict","The card was withdrawn during the editorial operation.");
         if (existing.user_id !== user.id)
@@ -528,19 +807,52 @@ export class EvidenceZoneService {
       value.state = body.state ?? existing?.state ?? "draft";
       if (!["draft", "published"].includes(value.state))
         throw error(400, "invalid", "Invalid publication state.");
+      if (!card) {
+        // A zone's kind is who owns its voice. It is fixed when the zone is made: a product zone by its owner, an official
+        // zone only by the platform's own operations, and nothing changes it afterwards.
+        if (existing && body.kind !== undefined && body.kind !== existing.kind)
+          throw error(403, "zone_kind_forbidden", "A zone's kind cannot be changed.");
+        value.kind = existing?.kind ?? body.kind ?? "user";
+        if (!EVIDENCE_ZONE_KINDS.includes(value.kind)) throw error(400, "invalid", "Invalid zone kind.");
+        if (!existing && value.kind === "official") {
+          const publisher = this.platformPublisherUserId != null ? user.id === this.platformPublisherUserId : true;
+          const verdict = internalOperation ? evidenceWriteAllowed({ origin, zoneKind: "official", actorIsZoneOwner: true, actorIsPlatformPublisher: publisher }) : { allowed: false };
+          if (!verdict.allowed) {
+            recordEvidenceWriteRefused(origin, "official");
+            throw error(403, "zone_kind_forbidden", "Official zones are made only by the platform's own operations.");
+          }
+        }
+        // Reading on the open internet is the owner's separate choice (setVisibility); a zone taken back to a draft leaves it.
+        // An official zone is the platform's public voice and has no owner who could choose: published, it is read on the
+        // open internet (plan §5.3, §8) — without this the feed listed official cards whose public pages answered 404.
+        value.visibility = value.state === "draft" ? "platform" : value.kind === "official" ? "internet" : (existing?.visibility ?? "platform");
+      }
       if (card) {
         value.subtype = body.subtype ?? existing?.subtype;
         if (!["knowledge", "academic"].includes(value.subtype))
           throw error(400, "invalid", "Invalid evidence type.");
+        // A card's lineage names the frontier item it grew from; `source_item_id` is the one place that fact lives, so a
+        // lineage that names one sets it (or must agree with it).
+        const lineage = body.lineage === undefined ? undefined : evidenceContract(evidenceLineage)(body.lineage);
+        let sourceItemInput = body.sourceItemId;
+        if (lineage?.frontierItemId) {
+          if (sourceItemInput === undefined && !existing?.source_item_id) sourceItemInput = lineage.frontierItemId;
+          else if ((sourceItemInput ?? existing?.source_item_id) !== lineage.frontierItemId)
+            throw error(400, "invalid", "Lineage names a different frontier item than sourceItemId.");
+        }
+        // What a card says it follows and what its research began from is a claim about another card, so the writer proves it
+        // (review 2026-10-06: a session could name another author's card as its `previousCardId` and appear as that card's
+        // next version). The platform's own writers stamp their own links and are not asked.
+        if (origin === "owner" && lineage) await this.assertLineageLinks(client, user, existing, lineage);
         value.source_item_id =
-          body.sourceItemId === undefined
+          sourceItemInput === undefined
             ? (existing?.source_item_id ?? null)
-            : body.sourceItemId;
+            : sourceItemInput;
         if (
           value.source_item_id != null &&
           (!existing ||
-            (body.sourceItemId !== undefined &&
-              body.sourceItemId !== existing.source_item_id))
+            (sourceItemInput !== undefined &&
+              sourceItemInput !== existing.source_item_id))
         ) {
           if (
             typeof value.source_item_id !== "string" ||
@@ -570,7 +882,15 @@ export class EvidenceZoneService {
           return {...retained,publicationStatus};
         });
         value.content = evidenceStructuredContent(body.content === undefined ? existing?.content ?? null : body.content, value.sources.length);
-        const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]));
+        // Claims quote the card's own sources by index, so they are checked against the sources the card now has; the
+        // public view's panels may name only claims the card has.
+        value.claims = evidenceContract(evidenceCardClaims)(body.claims === undefined ? (existing?.claims ?? []) : body.claims, value.sources.length);
+        value.sources = keepQuotedPassages(value.sources, value.claims);
+        value.public_view = evidenceContract(evidencePublicViewContent)(body.publicView === undefined ? (existing?.public_view ?? null) : body.publicView, value.claims);
+        const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]))
+          || ["claims","public_view"].some(key => evidenceHash(value[key] ?? null) !== evidenceHash(existing?.[key] ?? null));
+        // What a follower of the zone is told about (F10): the card becoming published, or its published content changing.
+        publication = value.state === "published" && parent.state === "published" ? (existing?.state !== "published" ? "published" : changed ? "revised" : null) : null;
         const receipt = body.editorial === undefined
           ? changed && existing?.editorial ? {...existing.editorial,status:"review-pending",reviewer:null,...(!internalOperation ? {sourceChecks:[],...(JSON.stringify(value.sources)!==JSON.stringify(existing.sources) ? {sourceCheckedAt:null} : {})} : {})} : existing?.editorial ?? null
           : body.editorial;
@@ -584,6 +904,7 @@ export class EvidenceZoneService {
         if(value.editorial) value.editorial={...value.editorial,automationContentHash:internalOperation ? value.editorial.contentHash : existing?.editorial?.automationContentHash ?? null};
         if (body.editorial !== undefined && value.editorial?.status === "ai-reviewed")
           value.editorial = {...value.editorial,reviewOperationId:internalOperation?.id,reviewOrigin:internalOperation?.origin};
+        Object.assign(value, await this.cardContractFields({ body, existing, parent, value, origin, internalOperation, lineage }));
         if (
           value.state === "published" &&
           (!value.body || !value.sources.length)
@@ -607,11 +928,21 @@ export class EvidenceZoneService {
             "source_item_id",
             "content",
             "editorial",
+            "claims",
+            "producer",
+            "originality",
+            "lineage",
+            "entity_keys",
+            "journey_stage",
+            "disclosure",
+            "public_view",
             "state",
           ]
-        : ["title", "description", "background", "state"];
+        : ["title", "description", "background", "state", "visibility"];
+      // JSONB sorts object keys, so the fields added with the card contract are compared by their canonical hash.
+      const canonicalColumns = ["claims", "producer", "lineage", "journey_stage", "disclosure", "public_view"];
       const values = columns.map((key) =>
-        ["sources","content","editorial"].includes(key) ? JSON.stringify(value[key]) : value[key],
+        ["sources","content","editorial"].includes(key) ? JSON.stringify(value[key]) : canonicalColumns.includes(key) ? jsonOrNull(value[key]) : value[key],
       );
       const table = card ? "evidence_cards" : "evidence_zones";
       if (existing)
@@ -620,8 +951,8 @@ export class EvidenceZoneService {
           [id, ...values],
         );
       else {
-        const extras = card ? ["zone_id", "user_id"] : ["user_id"],
-          extraValues = card ? [zoneId, user.id] : [user.id];
+        const extras = card ? ["zone_id", "user_id"] : ["user_id", "kind"],
+          extraValues = card ? [zoneId, user.id] : [user.id, value.kind];
         const inserted = await client.query(
           `INSERT INTO evimed_frontier.${table}(id,${extras.join(",")},${columns.join(",")}) VALUES(${[id, ...extraValues, ...values].map((_, i) => `$${i + 1}`).join(",")}) ON CONFLICT(id) DO NOTHING RETURNING id`,
           [id, ...extraValues, ...values],
@@ -637,8 +968,9 @@ export class EvidenceZoneService {
             !old ||
             old.user_id !== user.id ||
             (card && old.zone_id !== zoneId) ||
+            (!card && old.kind !== value.kind) ||
             columns.some(
-              (key) => JSON.stringify(old[key]) !== JSON.stringify(value[key]),
+              (key) => canonicalColumns.includes(key) ? evidenceHash(old[key] ?? null) !== evidenceHash(value[key] ?? null) : JSON.stringify(old[key]) !== JSON.stringify(value[key]),
             )
           )
             throw error(
@@ -670,6 +1002,38 @@ export class EvidenceZoneService {
               await this.zoneRow(client, user, id),
             ),
           };
+    });
+    if (card) recordEvidenceWriteAccepted(origin);
+    if (card && this.onCardSaved) {
+      try { await this.onCardSaved({ origin, zoneId: saved.evidence.zoneId, cardId: saved.evidence.id, revision: saved.evidence.revision, state: saved.evidence.state }); }
+      catch { /* what keeps a card current is told of the save and is never part of it */ }
+    }
+    if (publication && this.onCardPublished) {
+      try { await this.onCardPublished({ zoneId: zoneId ?? "", cardId: saved.evidence.id, revision: saved.evidence.revision, change: publication, origin }); } catch { /* told, never asked: the publication stands */ }
+    }
+    return saved;
+  }
+  /**
+   * Whether a published zone is read by the platform's signed-in accounts or by anyone: the owner's own choice, made apart
+   * from publishing. A zone must be published to be opened to the internet, and a zone taken back to a draft leaves it.
+   * @param {any} user @param {string} zoneId @param {any} body
+   */
+  async setVisibility(user, zoneId, body) {
+    fields(body, ["visibility", "expectedRevision"]);
+    if (!EVIDENCE_ZONE_VISIBILITY.includes(body.visibility)) throw error(400, "invalid", "Invalid zone visibility.");
+    await this.ready();
+    return this.database.transaction(async (/** @type {any} */ client) => {
+      const zone = await this.zoneRow(client, user, zoneId, true);
+      if (zone.user_id !== user.id) throw error(403, "owner_required", "Only the zone owner may choose who reads it.");
+      revision(zone, body);
+      if (body.visibility === "internet" && zone.state !== "published")
+        throw error(409, "visibility_requires_publication", "Publish the zone before opening it to the internet.");
+      await client.query(
+        "UPDATE evimed_frontier.evidence_zones SET visibility=$2,revision=revision+1,updated_at=clock_timestamp() WHERE id=$1 AND visibility<>$2",
+        [zoneId, body.visibility],
+      );
+      await this.bump(client);
+      return { zone: await this.zoneView(client, user, await this.zoneRow(client, user, zoneId)) };
     });
   }
   /** @param {any} user @param {string} zoneId @param {string} action @param {any} body @param {string|null} [cardId] @param {boolean} [remove] */
@@ -746,7 +1110,7 @@ export class EvidenceZoneService {
         const total = Number(
           (
             await client.query(
-              "SELECT count(*) AS n FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published'",
+              "SELECT count(*) AS n FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published' AND withdrawn IS NULL",
               [zoneId],
             )
           ).rows[0].n,
@@ -755,7 +1119,7 @@ export class EvidenceZoneService {
           ? [card]
           : (
               await client.query(
-                "SELECT * FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published' ORDER BY updated_at DESC,id LIMIT 10",
+                "SELECT * FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published' AND withdrawn IS NULL ORDER BY updated_at DESC,id LIMIT 10",
                 [zoneId],
               )
             ).rows;

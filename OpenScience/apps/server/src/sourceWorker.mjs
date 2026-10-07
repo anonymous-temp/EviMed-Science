@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { RUNTIME_ROOM_REFUSAL_CODES } from "@evimed/domain";
 import { RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { extractorRevision, readCopyOf } from "./sourceService.mjs";
 
@@ -9,7 +10,7 @@ import { extractorRevision, readCopyOf } from "./sourceService.mjs";
  *  took it back (`RuntimeManager.makeRoomFor`); its run is released first
  *  (`SourceUnderstandingRuns`), so the next claim launches a new one. */
 const CAPACITY_DEFERRALS = new Map([
-  ["runtime_limit_exceeded", 60_000],
+  ...RUNTIME_ROOM_REFUSAL_CODES.map((code) => /** @type {[string, number]} */ ([code, 60_000])),
   ["runtime_proxy_limit_exceeded", 60_000],
   [RUNTIME_YIELDED_CODE, 60_000],
   ["usage_budget_exceeded", 3_600_000],

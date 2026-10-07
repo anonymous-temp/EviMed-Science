@@ -1,0 +1,199 @@
+/**
+ * The author page and the links between cards (evidence-flywheel plan §5.2, F07, 2026-10-05).
+ *
+ * Hidden knowledge:
+ *
+ * - **A reader sees what the reader may see.** An author's page lists their published zones and the published cards in
+ *   them, and nothing else: a draft, an unpublished zone and a card in a withdrawn zone are not on it, whoever
+ *   looks — the author included, because the page is the public face and not a workbench. An account with nothing
+ *   published has no page: the answer is the same `evidence_author_not_found` as for an id that is not an account, so the
+ *   page cannot be used to find out who has signed up.
+ * - **The only citation signal that exists is runs started.** 「由这位作者的卡片发起的研究」 counts research runs another
+ *   account started from one of the author's cards (`EvidenceOrigins`): not runs read, trusted or cited in a paper, and
+ *   not the author's own. It is named for what it is.
+ * - **Who signed, as the author's cards say.** A doctor's or a company's cards carry the people they name (a disclosure's authors and reviewers, each with the
+ *   hospital and department as an affiliation and the title and specialty as a title) and a producer record; the page shows them, once each, and shows
+ *   nothing for an account whose cards name nobody and whose producer is the account itself.
+ * - **No ranking.** Nothing here orders authors, scores them or compares one with another; the page is one author's
+ *   own record, the most recently updated first.
+ * - **The change log is another package's.** When a reader of an author's recent corrections and updates is given, the
+ *   page carries it; when it is absent or cannot answer, the page leaves it out and is otherwise the same.
+ * - **Links read lineage, and only published cards.** A card's `relatedCards` are the published cards whose lineage names
+ *   it — as the earlier card they follow (`previousCardId`) or as the card their research began from (`originCardId`).
+ *   What a card points back to is shown to the reader only when the reader may read it. A card is the *next version* of
+ *   another only when the same account made both (a link another account's card names is never a version of it, whatever
+ *   it says; the write refuses it and an old row is not believed); anyone else's card that names it is listed as research
+ *   that followed from it, with its author.
+ *
+ * @module evidenceAuthors
+ */
+
+import { HttpError } from "./security.mjs";
+import { EVIDENCE_CARD_ID, migrateEvidenceOrigins } from "./evidenceOrigins.mjs";
+import { EVIDENCE_AUTHOR_HANDLE, accountOfHandle, authorHandlesFor } from "./evidenceAuthorHandles.mjs";
+
+export { EVIDENCE_AUTHOR_HANDLE };
+
+/** How much of an author's record one page carries: the zones, the cards (newest first), the recent changes. */
+export const EVIDENCE_AUTHOR_PAGE_LIMITS = Object.freeze({ zones: 50, cards: 30, changes: 10 });
+/** The most related cards one card lists. */
+export const EVIDENCE_RELATED_CARD_LIMIT = 20;
+
+/** The most people one author page lists. */
+const PEOPLE_LIMIT = 20;
+/** @param {unknown} value */
+const text = (value) => (typeof value === "string" && value.trim() ? value.trim() : null);
+
+/**
+ * The people an author's cards name — the authors and reviewers of each card's disclosure — each once by name, as the producer wrote them.
+ * @param {{ disclosure?: any }[]} cards
+ * @returns {{ name: string, affiliation: string | null, title: string | null }[]}
+ */
+export function disclosedPeople(cards) {
+  /** @type {Map<string, { name: string, affiliation: string | null, title: string | null }>} */
+  const people = new Map();
+  for (const card of cards) {
+    for (const person of [...(card.disclosure?.authors ?? []), ...(card.disclosure?.reviewers ?? [])]) {
+      if (person?.name && !people.has(person.name)) people.set(person.name, { name: String(person.name), affiliation: text(person.affiliation), title: text(person.title) });
+    }
+  }
+  return [...people.values()].slice(0, PEOPLE_LIMIT);
+}
+
+const notFound = () => new HttpError(404, "evidence_author_not_found", "No evidence published by this author.");
+
+/** A card another card points to, as a reader sees it in a list. @param {any} row */
+const cardRef = (row) => ({
+  id: String(row.id),
+  zoneId: String(row.zone_id),
+  title: String(row.title),
+  creator: row.creator ?? null,
+  producer: row.producer ? { kind: row.producer.kind, name: row.producer.name } : null,
+});
+
+export class EvidenceAuthors {
+  /**
+   * @param {{ database: any, platformPublisherUserId?: string | null,
+   *   changeLog?: { recentForAuthor: (authorId: string, options: { limit: number }) => Promise<unknown[]> } | null }} options
+   *   `changeLog` is the change log's reader (another package); absent, the page has no change section.
+   */
+  constructor({ database, platformPublisherUserId = null, changeLog = null }) {
+    this.database = database;
+    this.platformPublisherUserId = platformPublisherUserId;
+    this.changeLog = changeLog;
+  }
+
+  /**
+   * The public handle of an account, made on first need and the same ever after. The one place a handle is made: the author page,
+   * a card's links and every public page name an author by it.
+   * @param {string} userId
+   * @returns {Promise<string>}
+   */
+  async handleFor(userId) {
+    const handle = (await authorHandlesFor(this.database, [userId])).get(userId);
+    if (!handle) throw new HttpError(503, "evidence_author_handle_unavailable", "An author handle could not be made.");
+    return handle;
+  }
+
+  /**
+   * One author's page, as a reader sees it. `authorHandle` is the public handle; an account id, a handle nobody holds and a
+   * malformed one are the same answer, so the page cannot be used to find out who has signed up.
+   * @param {{ id: string }} _reader @param {string} authorHandle
+   */
+  async page(_reader, authorHandle) {
+    const author = await accountOfHandle(this.database, authorHandle);
+    if (!author) throw notFound();
+    const authorId = author.id;
+    const zones = (await this.database.query(
+      `SELECT z.id,z.title,z.description,z.kind,z.visibility,z.updated_at,
+         (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published' AND c.withdrawn IS NULL) AS evidence_count,
+         (SELECT count(*)::integer FROM evimed_frontier.evidence_zone_follows f WHERE f.zone_id=z.id) AS follows
+       FROM evimed_frontier.evidence_zones z WHERE z.user_id=$1 AND z.state='published' ORDER BY z.updated_at DESC, z.id LIMIT $2`,
+      [authorId, EVIDENCE_AUTHOR_PAGE_LIMITS.zones],
+    )).rows;
+    if (!zones.length) throw notFound();
+    const cards = (await this.database.query(
+      `SELECT c.id,c.zone_id,c.title,c.summary,c.producer,c.disclosure,c.originality,c.updated_at,jsonb_array_length(c.claims) AS claim_count,u.name AS creator
+         FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
+        WHERE z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL AND c.user_id=$1
+        ORDER BY c.updated_at DESC, c.id LIMIT $2`,
+      [authorId, EVIDENCE_AUTHOR_PAGE_LIMITS.cards],
+    )).rows;
+    const totals = (await this.database.query(
+      `SELECT
+         (SELECT count(DISTINCT f.user_id)::integer FROM evimed_frontier.evidence_zone_follows f JOIN evimed_frontier.evidence_zones z ON z.id=f.zone_id
+           WHERE z.user_id=$1 AND z.state='published') AS followers,
+         (SELECT count(*)::integer FROM evimed_frontier.evidence_card_runs r JOIN evimed_frontier.evidence_cards c ON c.id=r.card_id
+           JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL AND r.user_id<>$1) AS runs_from_cards,
+         (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL) AS cards`,
+      [authorId],
+    )).rows[0];
+    /** @type {unknown[] | null} */
+    let changes = null;
+    if (this.changeLog) {
+      try { changes = await this.changeLog.recentForAuthor(authorId, { limit: EVIDENCE_AUTHOR_PAGE_LIMITS.changes }); } catch { changes = null; }
+    }
+    const people = disclosedPeople(cards);
+    // An account that signs as itself has no producer record worth a line: only a doctor's or a company's.
+    const producer = cards.map((/** @type {any} */ card) => card.producer).find((/** @type {any} */ entry) => entry && ["doctor", "enterprise"].includes(entry.kind)) ?? null;
+    return {
+      author: { id: authorHandle, name: String(author.name), platform: this.platformPublisherUserId != null && author.id === this.platformPublisherUserId },
+      ...(producer ? { producer: { kind: String(producer.kind), name: String(producer.name ?? ""), relation: String(producer.relation ?? "none"), products: Array.isArray(producer.products) ? producer.products.map(String).slice(0, 20) : [] } } : {}),
+      ...(people.length ? { people } : {}),
+      zones: zones.map((/** @type {any} */ zone) => ({
+        id: String(zone.id), title: String(zone.title), description: String(zone.description ?? ""), kind: zone.kind, visibility: zone.visibility,
+        evidenceCount: zone.evidence_count, follows: zone.follows, updatedAt: zone.updated_at,
+      })),
+      cards: cards.map((/** @type {any} */ card) => ({
+        ...cardRef(card), summary: String(card.summary ?? ""), originality: card.originality ?? null, claimCount: card.claim_count, updatedAt: card.updated_at,
+      })),
+      totals: { cards: totals.cards, followers: totals.followers, runsFromCards: totals.runs_from_cards },
+      ...(Array.isArray(changes) ? { changes } : {}),
+    };
+  }
+
+  /**
+   * What a card points to and what points to it, for the reading page: its author, the card its research began from, the
+   * card it follows (each only when the reader may read it) and the published cards that follow it or began from it.
+   * @param {{ id: string }} user @param {string} cardId
+   */
+  async links(user, cardId) {
+    if (typeof cardId !== "string" || !EVIDENCE_CARD_ID.test(cardId)) throw new HttpError(404, "evidence_not_found", "No such visible evidence content.");
+    await migrateEvidenceOrigins(this.database);
+    const readable = `((c.state='published' AND z.state='published') OR (c.user_id=$2 AND z.user_id=$2))`;
+    const card = (await this.database.query(
+      `SELECT c.id,c.user_id,c.lineage,u.name AS author FROM evimed_frontier.evidence_cards c
+         JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
+        WHERE c.id=$1 AND ${readable}`,
+      [cardId, user.id],
+    )).rows[0];
+    if (!card) throw new HttpError(404, "evidence_not_found", "No such visible evidence content.");
+    /** @param {unknown} id */
+    const pointed = async (id) => {
+      if (typeof id !== "string" || !EVIDENCE_CARD_ID.test(id)) return null;
+      const row = (await this.database.query(
+        `SELECT c.id,c.zone_id,c.title,c.producer,u.name AS creator FROM evimed_frontier.evidence_cards c
+           JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
+          WHERE c.id=$1 AND ${readable}`,
+        [id, user.id],
+      )).rows[0];
+      return row ? cardRef(row) : null;
+    };
+    const related = (await this.database.query(
+      `SELECT c.id,c.zone_id,c.title,c.producer,u.name AS creator,
+              CASE WHEN c.lineage->>'previousCardId'=$1 AND c.user_id=$3 THEN 'next_version' ELSE 'research_from_card' END AS relation
+         FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
+        WHERE c.state='published' AND z.state='published' AND c.withdrawn IS NULL AND c.id<>$1 AND (c.lineage->>'originCardId'=$1 OR c.lineage->>'previousCardId'=$1)
+        ORDER BY c.updated_at DESC, c.id LIMIT $2`,
+      [cardId, EVIDENCE_RELATED_CARD_LIMIT, card.user_id],
+    )).rows;
+    return {
+      author: { id: await this.handleFor(String(card.user_id)), name: String(card.author) },
+      origin: await pointed(card.lineage?.originCardId),
+      previous: await pointed(card.lineage?.previousCardId),
+      related: related.map((/** @type {any} */ row) => ({ ...cardRef(row), relation: row.relation })),
+    };
+  }
+}

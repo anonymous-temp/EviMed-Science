@@ -145,7 +145,7 @@ test("a durable cancellation job terminates one runtime session and records comp
 const EPISODE_ID = `episode-${"0123456789abcdef".repeat(2)}`;
 const VERIFICATION_ID = verificationIdFor(EPISODE_ID, 0);
 
-function verifyFixture({ enabled = true, dispatchError = null, finishError = null, attempts = 1, verifier = true } = {}) {
+function verifyFixture({ enabled = true, status = enabled ? "active" : "paused", pending = true, dispatchError = null, finishError = null, attempts = 1, verifier = true } = {}) {
   const calls = [];
   const job = { id: "job-verify", kind: "verify", userId: "user-one", projectId: "project-one",
     leaseToken: "lease-one", attempts, maxAttempts: 3,
@@ -153,9 +153,12 @@ function verifyFixture({ enabled = true, dispatchError = null, finishError = nul
       verificationId: VERIFICATION_ID, claimId: "claim-one", statement: "A finding",
       sources: ["doi:10.1000/one"], artifact: "reports/evidence.md", budgetCny: 2 } };
   const agenda = { id: "agenda-one", projectId: "project-one", revision: 2,
-    payload: { enabled, status: enabled ? "active" : "paused" } };
+    payload: { enabled, status } };
   const service = {
     recordVerificationDispatched: async () => {},
+    // The claim says whether the re-check is still wanted; the job only says it was once.
+    verificationPending: async () => pending,
+    endVerificationsOfAgenda: async (...args) => { calls.push({ method: "end", args }); },
     get: async () => agenda,
     checkInactivity: async (...args) => { calls.push({ method: "checkInactivity", args }); return agenda; },
     getEpisode: async () => ({ id: EPISODE_ID, projectId: "project-one", revision: 1, payload: { status: "merged" } }),
@@ -213,6 +216,41 @@ test("the stop rules bind a verification exactly as they bind the episode that e
   assert.equal(calls.some((call) => call.method === "verify"), false, "a parked direction must not spend on re-checking");
   assert.equal(calls.find((call) => call.method === "finish").args[3].skipped, true);
   assert.equal(calls.some((call) => call.method === "record"), false);
+});
+
+test("a verification job of an agenda that is not running ends its claim in a named state before the job is skipped", async () => {
+  // Skipping the job alone left the claim "queued" for ever: nothing was ever going to run it.
+  const paused = verifyFixture({ enabled: false });
+  await paused.worker.tick();
+  assert.deepEqual(paused.calls.find((call) => call.method === "end").args, ["user-one", EPISODE_ID, "agenda_paused", VERIFICATION_ID]);
+  assert.equal(paused.calls.some((call) => call.method === "verify"), false);
+  assert.equal(paused.calls.find((call) => call.method === "finish").args[3].reason, "agenda_inactive");
+
+  const stopped = verifyFixture({ enabled: false, status: "stopped" });
+  await stopped.worker.tick();
+  assert.deepEqual(stopped.calls.find((call) => call.method === "end").args, ["user-one", EPISODE_ID, "agenda_stopped", VERIFICATION_ID],
+    "a stop is named as one, not as a pause");
+});
+
+test("a re-check that already ended is not run for the old episode because its agenda was started again", async () => {
+  // The stop ended the claim (`unscheduled`, "agenda_stopped") and left the job in the queue; a restart makes the agenda
+  // active, and the worker used to dispatch the old verification as if nothing had happened.
+  const { calls, worker } = verifyFixture({ pending: false });
+  await worker.tick();
+  assert.equal(calls.some((call) => call.method === "verify"), false, "no run, no spend");
+  assert.deepEqual(calls.find((call) => call.method === "finish").args[3], { skipped: true, reason: "verification_settled" });
+  assert.equal(calls.some((call) => call.method === "end"), false, "nothing to end: it has ended");
+  assert.equal(worker.status().lastError, null);
+});
+
+test("a dispatch the stop refused ends the claim as not run, never as a re-check that was unavailable", async () => {
+  const error = new Error("This research agenda is no longer active.");
+  error.code = "autopilot_stopped";
+  const { calls, worker } = verifyFixture({ dispatchError: error });
+  await worker.tick();
+  assert.deepEqual(calls.find((call) => call.method === "end").args, ["user-one", EPISODE_ID, "agenda_stopped", VERIFICATION_ID]);
+  assert.equal(calls.some((call) => call.method === "record"), false, "the claim is not told its check failed");
+  assert.equal(calls.find((call) => call.method === "finish").args[3].skipped, true);
 });
 
 test("a verification nobody can afford is terminal, and the claim is told so instead of being promoted", async () => {

@@ -414,7 +414,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -662,7 +662,7 @@ export class VcrService {
     const ceiling = useCeilingOf({ study, results, reviews, stale, current });
     return {
       id: study.id, projectId: study.projectId, name: study.name, question: study.question,
-      dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status,
+      dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status, entityKeys: study.entityKeys ?? [],
       steps: study.steps, progress: this.#progress(study), tabs: [...VCR_TABS],
       definition,
       counts: vcrCountBand(object(headline?.counts)),
@@ -831,6 +831,9 @@ export class VcrService {
       const versions = await Promise.all(assumptions.map(async (/** @type {any} */ card) =>
         /** @type {[string, any[]]} */ ([card.key, await this.store.assumptionVersions(study.id, card.key)])));
       bundle.assumptionVersions = new Map(versions);
+      // 「有新证据」 on a card, and the versions written after the plan froze (flywheel F24).
+      bundle.evidenceSignals = await this.packages.frontierEvents?.signalsFor?.(study.id).catch(() => null) ?? null;
+      bundle.candidates = await this.packages.frontierEvents?.candidatesFor?.(study.userId, { studyId: study.id }).catch(() => null) ?? null;
     }
     // The overview drills into a card's quotation, so it reads the extracted
     // values too; only the data tab asks the data plane.
@@ -1094,7 +1097,8 @@ export class VcrService {
     const limit = Math.min(200, Math.max(1, Number.parseInt(asked.limit ?? "", 10) || 100));
     const rows = await evidenceStore.listPrecedents({ userId: String(user.id), search: String(asked.q ?? ""), limit });
     const registryCoverage = await (this.packages.evidence?.registryCoverageFor?.(String(user.id)) ?? this.packages.evidence?.registryCoverage?.() ?? []);
-    return presentPrecedents({ available: true, rows, registryCoverage, sources: rows.length ? `${rows.length} 项试验先例` : null });
+    const candidates = this.packages.frontierEvents?.candidatesFor ? await this.packages.frontierEvents.candidatesFor(String(user.id)) : null;
+    return presentPrecedents({ available: true, rows, registryCoverage, sources: rows.length ? `${rows.length} 项试验先例` : null, candidates });
   }
 
   // --- the runtime's read (build contract §3.2, §4) ---------------------------------------
@@ -1400,14 +1404,23 @@ export async function vcrReadiness({ config, vcr, database }) {
   if (config.vcrEngineReceiptKeyError) {
     throw readinessFailure("vcr_engine_receipt_key_unusable", { reason: String(config.vcrEngineReceiptKeyError) });
   }
+  // Composed is not answering (`vcrEngineProbe.mjs`): a stopped engine container read `wired` here until the
+  // two were told apart. `wired` stays for an engine nobody has asked yet, `answering` and `not_answering` are
+  // what the last contact (a job's, or a `/health` read) said. Not answering is a warning on a green check —
+  // an engine down makes the computations that need it wait, not the platform fail.
+  const composed = Boolean(vcr.engine?.configured?.());
+  const reading = composed ? vcr.engineProbe?.snapshot?.() ?? null : null;
+  const engine = !composed ? "missing" : reading?.state === "answering" ? "answering" : reading?.state === "not_answering" ? "not_answering" : "wired";
   const warnings = [
-    ...(vcr.engine?.configured?.() ? [] : ["vcr_engine_not_composed"]),
+    ...(composed ? [] : ["vcr_engine_not_composed"]),
+    ...(engine === "not_answering" ? ["vcr_engine_not_answering"] : []),
     ...(config.vcrDataPlaneDir ? [] : ["vcr_data_plane_not_configured"]),
     ...(vcr.service.engineMismatch?.length ? ["vcr_engine_catalogue_mismatch"] : []),
   ];
   return {
     enabled: true, status: "ok", audience: config.vcrAudience,
-    engine: vcr.engine?.configured?.() ? "wired" : "missing",
+    engine,
+    ...(engine === "not_answering" && reading?.checkedAt ? { engineCheckedAt: reading.checkedAt } : {}),
     ...(warnings.length ? { warning: warnings[0], warnings } : {}),
   };
 }

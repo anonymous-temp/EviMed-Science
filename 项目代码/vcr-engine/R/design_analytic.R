@@ -154,6 +154,72 @@ vcr_gs_inflation <- function(design, power = 0.9, nodes = 4001L) {
   (drift / fixed)^2
 }
 
+# --- a design is sized for an effect ---------------------------------------
+
+#' Refuse a closed-form sample size for a scenario whose effect is exactly null.
+#'
+#' Hidden knowledge: every fixed-sample formula here divides by the effect
+#' (Schoenfeld by log(HR)^2, the means formula by delta^2, the two-proportion
+#' formula by (p1 - p0)^2), so at a null effect the required size is infinite:
+#' no number of patients gives a trial any power against nothing. The first
+#' version let the infinity through to the result validator, which refused the
+#' non-finite measure by index and said nothing about the scenario (live
+#' acceptance, 2026-10-04: three `design.analytic` jobs failed with no reason a
+#' reader could use, all asked of a scenario with no effect). What the asker
+#' wants of such a scenario is the type I error of the design, and that is a
+#' simulation's measure (`design.simulate` on the same scenario), so the refusal
+#' says so instead of leaving the question to be re-asked in other words.
+#'
+#' The single-arm exact design is not here: it is given its sample size and
+#' enumerates the binomial exactly, so at a null response rate it has an answer
+#' (the type I error) and computes it.
+#'
+#' Returns the scenario's treatment-arm rate for a binary two-arm design (so the
+#' caller resolves it once), otherwise NULL. Aborts with `design_effect_null`
+#' naming the field the scenario states its effect in.
+vcr_analytic_effect_guard <- function(kind, endpoint, truth) {
+  tiny <- function(x) is.finite(x) && abs(x) < 1e-12
+  refuse <- function(field, what) {
+    vcr_abort("design_effect_null", field, sprintf(
+      "The scenario has no effect (%s), so there is no sample size to compute. The type I error of a design is design.simulate's measure on this same scenario; give design.analytic the effect the design is meant to detect.", what))
+  }
+  if (identical(kind, "single_arm") || identical(kind, "simon_two_stage")) return(invisible(NULL))
+  if (identical(endpoint, "time_to_event")) {
+    hr <- vcr_scalar(truth$hazardRatio, NULL)
+    if (!is.null(hr) && hr > 0 && tiny(log(hr))) refuse("scenario.truth.hazardRatio", "hazardRatio 1")
+  } else if (identical(endpoint, "continuous")) {
+    eff <- vcr_scalar(truth$effect, NULL)
+    if (!is.null(eff) && tiny(eff)) refuse("scenario.truth.effect", "effect 0")
+  } else if (identical(endpoint, "binary")) {
+    p0 <- vcr_scalar(truth$controlRate, NULL)
+    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth$treatmentRate, NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
+    if (tiny(p1 - p0)) {
+      field <- if (!is.null(truth$treatmentRate)) "scenario.truth.treatmentRate"
+               else if (!is.null(truth$riskDifference)) "scenario.truth.riskDifference" else "scenario.truth.oddsRatio"
+      refuse(field, switch(field, scenario.truth.treatmentRate = "treatmentRate equal to controlRate",
+                           scenario.truth.riskDifference = "riskDifference 0", "oddsRatio 1"))
+    }
+    return(invisible(p1))
+  }
+  invisible(NULL)
+}
+
+#' No result of a calculation is a number a reader cannot use. The effect guard
+#' names the usual cause; this is the net under it, so that a family added later
+#' either computes or refuses by name and never hands the validator an infinity.
+vcr_analytic_finite_or_refuse <- function(measures) {
+  if (!length(measures)) {
+    vcr_abort("scenario_value_invalid", "scenario", "The calculation gave no measure for this scenario; check the design kind and the endpoint.")
+  }
+  for (m in measures) {
+    if (!(is.numeric(m$value) && length(m$value) == 1L && is.finite(m$value))) {
+      vcr_abort("scenario_value_invalid", "scenario", sprintf(
+        "The calculation of %s did not give a finite number for this scenario; check the stated effect, alpha and power.", as.character(m$name)))
+    }
+  }
+  invisible(measures)
+}
+
 # --- fixed designs ---------------------------------------------------------
 
 #' Schoenfeld's required number of events.

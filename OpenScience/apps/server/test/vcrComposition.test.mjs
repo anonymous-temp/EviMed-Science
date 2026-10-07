@@ -19,7 +19,7 @@ import { removeVcrArtifacts } from "../src/vcrStoreBase.mjs";
 import { createIntakeCounters } from "../src/vcrRecordExtract.mjs";
 import {
   composeVcr, createVcrEngineJobRemover, matchingContextOf, vcrDataPlaneSeam, vcrDocumentsSeam, vcrEngineStatus,
-  vcrMatchingExecutor, vcrMatchingSeam, vcrMetricFamilies, withVcrEngineWarnings,
+  vcrMatchingExecutor, vcrMatchingSeam, vcrMetricFamilies, vcrSubjectTableSeam, withVcrEngineWarnings,
 } from "../src/vcrComposition.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -646,4 +646,158 @@ test("CS-43 removing a deleted study's files stays inside the data plane: `..`, 
   assert.deepEqual(told, ["job_a", "job_b"]);
   assert.deepEqual(outcome, { files: 0, engineJobs: 1, studyDirectories: 0 });
   assert.deepEqual(engineReport, ["vcr_engine_job_remove_failed"]);
+});
+
+// ---------------------------------------------------------------------------
+// Matching from the subject table
+// ---------------------------------------------------------------------------
+
+/** A subject table as the plane's judged reader hands it over: a header, the rows, and what each column is. */
+function subjectTable({ ages = [34, 17, 71, 55], extra = {} } = {}) {
+  return {
+    available: true, snapshotId: "snp_1", sha256: "c".repeat(64), valueSource: "observed", withheld: [],
+    header: ["USUBJID", "arm", "age", "sex", "creat"],
+    rows: ages.map((age, index) => [`P${String(index + 1).padStart(16, "0")}`, "TRT", String(age), index % 2 ? "女" : "男", index === 3 ? "" : String(80 + index * 40)]),
+    columns: [
+      { name: "arm", source: "ARM", concept: "treatment_arm", unit: null, type: null },
+      { name: "age", source: "AGE", concept: "age", unit: "year", type: "integer" },
+      { name: "sex", source: "SEX", concept: "sex", unit: null, type: null },
+      { name: "creat", source: "CREAT", concept: "creatinine", unit: "umol/L", type: "number" },
+    ],
+    ...extra,
+  };
+}
+const TABLE_CRITERIA = [
+  { id: "crt_age", ordinal: 1, kind: "inclusion", criterionType: "demographic", sourceText: "年龄 ≥ 18 岁", applicability: null, requirement: { op: "compare", variable: "age", comparator: "gte", value: 18 } },
+  { id: "crt_sex", ordinal: 2, kind: "inclusion", criterionType: "demographic", sourceText: "女性", applicability: null, requirement: { op: "compare", variable: "sex", comparator: "eq", value: "female" } },
+  { id: "crt_creat", ordinal: 3, kind: "exclusion", criterionType: "lab", sourceText: "肌酐 > 1.5 mg/dL 者除外", applicability: null,
+    requirement: { op: "compare", variable: "creatinine", comparator: "gt", value: 1.5, unit: "mg/dL" } },
+  { id: "crt_mi", ordinal: 4, kind: "exclusion", criterionType: "comorbidity", sourceText: "既往心梗者除外", applicability: null, requirement: { op: "absent", variable: "myocardial_infarction" } },
+];
+const tableJob = () => ({ id: "job_t", studyId: "std_1", scenarioHash: "d".repeat(64), seed: 1, inputs: matchingInputs(),
+  scenario: { criteria: TABLE_CRITERIA.map((criterion) => ({ id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: "unknown" })) } });
+const owner = { async studyById() { return { id: "std_1", userId: "u1" }; } };
+const stateOf = (assessment, id) => assessment.judgments.find((judgment) => judgment.criterionId === id).state;
+
+test("a study whose subjects are rows of the subject table is matched from the table: each row a candidate, unknown where the table holds nothing", async () => {
+  const matchStore = matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return []; } });
+  const asked = [];
+  const run = vcrMatchingExecutor({ matchStore, store: owner, subjectTable: { async read(study) { asked.push(study.id); return subjectTable(); } } });
+  const result = await run({ job: tableJob(), onProgress: async () => {} });
+  assert.deepEqual(validateEngineResult(result), []);
+  assert.deepEqual(asked, ["std_1"]);
+  assert.equal(result.assessments.length, 4, "four rows, four candidates: no document and no fact was needed to have them");
+  assert.ok(result.assessments.every((assessment) => assessment.source === "subject_table"), "table-only candidates are marked as such");
+  const [young, minor, elder, last] = result.assessments.map((assessment) => assessment);
+  // age and sex are columns the field map names; sex is read through the sex vocabulary (女 is female)
+  assert.equal(stateOf(young, "crt_age"), "satisfied");
+  assert.equal(stateOf(minor, "crt_age"), "not_satisfied");
+  assert.equal(stateOf(young, "crt_sex"), "not_satisfied");
+  assert.equal(stateOf(minor, "crt_sex"), "satisfied");
+  // a lab in the other unit the evaluator knows converts: 80 umol/L is 0.9 mg/dL, 160 is 1.8
+  assert.equal(stateOf(young, "crt_creat"), "not_satisfied", "an exclusion of 'above 1.5' that this person does not meet");
+  assert.equal(stateOf(minor, "crt_creat"), "not_satisfied");
+  assert.equal(stateOf(elder, "crt_creat"), "satisfied", "200 umol/L is 2.3 mg/dL: the exclusion applies");
+  // a blank cell is a value nobody recorded
+  assert.equal(stateOf(last, "crt_creat"), "unknown");
+  // a variable no column answers to decides nothing, for anyone
+  for (const assessment of result.assessments) assert.equal(stateOf(assessment, "crt_mi"), "unknown");
+  // what the table said about itself: names and counts, never a cell
+  const note = result.diagnostics.subjectTable;
+  assert.deepEqual({ snapshotId: note.snapshotId, rows: note.rows, subjects: note.subjects, notEvaluated: note.notEvaluated }, { snapshotId: "snp_1", rows: 4, subjects: 4, notEvaluated: 0 });
+  assert.deepEqual(note.variablesUnmapped, ["myocardial_infarction"]);
+  assert.deepEqual(note.variablesMapped.map((item) => item.variable), ["age", "creatinine", "sex"]);
+  // the evidence of a verdict names the column and carries no value: a person who may see the state may not read the age off it
+  const text = JSON.stringify(result);
+  for (const value of ["34", "71", "55"]) assert.equal(new RegExp(`age = ${value}|"quote":"[^"]*= ${value}`).test(text), false, `${value} must not be written into a verdict`);
+  const evidence = young.judgments.find((judgment) => judgment.criterionId === "crt_age").evidence[0];
+  assert.equal(evidence.quoteKind, "snapshot_cell");
+  assert.match(evidence.quote, /数据表列 age/);
+  assert.deepEqual(evidence.locator, { snapshotId: "snp_1", field: "age" });
+});
+
+test("a person who is a row of the table and has documents is one candidate with both kinds of fact, and is not table-only", async () => {
+  const person = subjectTable().rows[0][0];
+  const documentFact = { id: "fac_doc", subjectKey: person, variable: "myocardial_infarction", value: null, polarity: "negated", visibleAt: AS_OF,
+    surface: "否认心梗史", source: { documentId: "doc-1", start: 0, end: 5, quote: "否认心梗史" }, extractedBy: "model" };
+  const matchStore = matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return [documentFact]; } });
+  const documents = { async read(_study, { subjectKey }) { return subjectKey === person ? { text: "否认心梗史。" } : null; } };
+  const run = vcrMatchingExecutor({ matchStore, store: owner, documents, subjectTable: { read: async () => subjectTable() } });
+  const result = await run({ job: tableJob(), onProgress: async () => {} });
+  assert.equal(result.assessments.length, 4, "the same pseudonym: one person, not two");
+  const both = result.assessments.find((assessment) => assessment.subjectKey === person);
+  assert.equal(both.source, undefined, "a person with documents stays the recruitment flow's");
+  assert.equal(stateOf(both, "crt_mi"), "satisfied", "the document's denial decides what the table has no column for");
+  assert.equal(stateOf(both, "crt_age"), "satisfied", "and the table decides what the document does not say");
+});
+
+test("a table the plane will not hand over leaves the other sources as they were, and the result says why by name", async () => {
+  const matchStore = matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return [{ id: "f1", subjectKey: "P-001", variable: "age", value: 62, unit: "year",
+    polarity: "affirmed", occurredAt: null, visibleAt: AS_OF, surface: "62", source: null, extractedBy: "code" }]; } });
+  for (const [label, read, expected] of [
+    ["sealed", async () => ({ available: false, reason: "sealed", fields: ["OS_MONTHS"] }), { available: false, reason: "sealed", fields: ["OS_MONTHS"] }],
+    ["refused", async () => { throw Object.assign(new Error("no grant"), { code: "vcr_no_grant" }); }, { available: false, reason: "vcr_no_grant" }],
+    ["absent", async () => ({ available: false, reason: "no_subject_table" }), { available: false, reason: "no_subject_table" }],
+  ]) {
+    const run = vcrMatchingExecutor({ matchStore, store: owner, subjectTable: { read } });
+    const result = await run({ job: tableJob(), onProgress: async () => {} });
+    assert.deepEqual(result.assessments.map((assessment) => assessment.subjectKey), ["P-001"], `${label}: only the fact-based candidate`);
+    assert.deepEqual(result.diagnostics.subjectTable, expected, label);
+  }
+  // No table seam at all (no plane composed) is how every deployment behaved before, and says nothing.
+  const none = await vcrMatchingExecutor({ matchStore, store: owner })({ job: tableJob(), onProgress: async () => {} });
+  assert.equal("subjectTable" in none.diagnostics, false);
+});
+
+test("a table that has columns withheld by the access judgment answers only with what was released", async () => {
+  const released = subjectTable({ extra: { header: ["USUBJID", "arm", "sex"], rows: [["P9000000000000001", "TRT", "女"], ["P9000000000000002", "TRT", "男"]],
+    withheld: [{ shape: "subject", reason: "sealed", fields: ["AGE"] }] } });
+  const run = vcrMatchingExecutor({ matchStore: matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return []; } }), store: owner,
+    subjectTable: { read: async () => released } });
+  const result = await run({ job: tableJob(), onProgress: async () => {} });
+  for (const assessment of result.assessments) assert.equal(stateOf(assessment, "crt_age"), "unknown", "a column the judgment withheld is a criterion nobody can decide from a value");
+  assert.equal(stateOf(result.assessments[0], "crt_sex"), "satisfied");
+  assert.deepEqual(result.diagnostics.subjectTable.variablesUnmapped.sort(), ["age", "creatinine", "myocardial_infarction"]);
+  assert.deepEqual(result.diagnostics.subjectTable.withheld, [{ shape: "subject", reason: "sealed", fields: ["AGE"] }]);
+});
+
+test("a row of the table is a person the study holds data on, not a patient to contact: its verdicts are saved and no referral is made", async () => {
+  const saved = []; const referrals = [];
+  const matchStore = matchStoreDouble({
+    async listCriteria() { return TABLE_CRITERIA; },
+    async listFacts() { return []; },
+    async saveAssessment({ assessment }) { const row = { id: `mas_${saved.length + 1}`, ...assessment, summary: "eligible", judgments: assessment.judgments }; saved.push(row); return row; },
+    async createReferral({ referral }) { referrals.push(referral); return { state: referral.state }; },
+    async listReferrals() { return []; },
+  });
+  const seam = vcrMatchingSeam({ matchStore, store: owner });
+  const assessment = (subjectKey, source) => ({ subjectKey, protocolVersionId: "prt_1", direction: "trial_to_patient", asOf: AS_OF, summary: "eligible", counts: {}, evidenceGaps: [], judgments: [],
+    ...(source ? { source } : {}) });
+  const done = await seam.onJobFinished({ state: "succeeded", job: { kind: "match_criteria", studyId: "std_1", id: "job_t" },
+    engineResult: { diagnostics: { protocolVersionId: "prt_1" }, assessments: [assessment("P-table", "subject_table"), assessment("P-chart")] } });
+  assert.equal(done.persisted, 2, "both are saved and counted");
+  assert.deepEqual(referrals.map((referral) => referral.subjectKey), ["P-chart"], "only the person who came with a chart is offered to a site");
+});
+
+test("a job's frozen inputs name the subject table it will read, and a study with no table keeps the token it had", async () => {
+  const study = { id: "std_1", userId: "u1" };
+  const withoutTable = await vcrMatchingSeam({ matchStore: matchStoreDouble(), store: storeDouble }).matchScenario(study);
+  const alsoNone = await vcrMatchingSeam({ matchStore: matchStoreDouble(), store: storeDouble, subjectTable: { identity: async () => null } }).matchScenario(study);
+  const first = await vcrMatchingSeam({ matchStore: matchStoreDouble(), store: storeDouble, subjectTable: { identity: async () => ({ snapshotId: "snp_1", sha256: "a".repeat(64) }) } }).matchScenario(study);
+  const changed = await vcrMatchingSeam({ matchStore: matchStoreDouble(), store: storeDouble, subjectTable: { identity: async () => ({ snapshotId: "snp_1", sha256: "b".repeat(64) }) } }).matchScenario(study);
+  const token = (built) => built.inputs.find((input) => input.id.startsWith("matching:facts:")).id;
+  assert.equal(token(withoutTable), token(alsoNone), "no table: the facts token is the one every earlier job had");
+  assert.notEqual(token(first), token(withoutTable));
+  assert.notEqual(token(first), token(changed), "a changed table is a different job");
+});
+
+test("the plane's seam answers a refusal as an answer and the identity as metadata", async () => {
+  const seam = vcrSubjectTableSeam({ dataPlane: {
+    subjectTableForMatching: async ({ studyId, principal, purpose }) => ({ available: true, studyId, principal, purpose }),
+    subjectTableIdentity: async () => { throw new Error("db"); },
+  } });
+  assert.deepEqual(await seam.read({ id: "std_1", userId: "u1" }), { available: true, studyId: "std_1", principal: "u1", purpose: "vcr" },
+    "judged for the study's owner for the module's purpose, like every other read of a patient-level document");
+  assert.equal(await seam.identity({ id: "std_1" }), null, "an identity that cannot be read is no table, not an error");
+  assert.deepEqual(await vcrSubjectTableSeam({ dataPlane: null }).read({ id: "std_1" }), { available: false, reason: "vcr_data_plane_unavailable" });
 });

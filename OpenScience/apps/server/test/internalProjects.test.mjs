@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, backgroundRuntimeLimit, isInternalProject } from "../src/internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, backgroundRuntimeLimit, isInternalProject, isInternalProjectOf, isMeasurementAccount, isReservedProjectId } from "../src/internalProjects.mjs";
 import { createLearningRuntime } from "../src/learningRuntime.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 
@@ -13,19 +13,21 @@ test("the platform's background projects are named, and nothing else is", () => 
   assert.equal(isInternalProject(LEARNING_PROJECT_ID), true);
   assert.equal(isInternalProject(SOURCES_PROJECT_ID), true, "where uploaded documents are understood");
   assert.equal(isInternalProject(FRONTIER_PROJECT_ID), true, "where the frontier feed's model calls are billed");
+  assert.equal(isInternalProject(EVIDENCE_PROJECT_ID), true, "where the evidence programme works and bills");
   assert.equal(isInternalProject("eval-method-release"), true, "the paired evaluation's own project");
   assert.equal(isInternalProject(`methodeval-${"0a".repeat(12)}`), true, "one evaluation cell's project");
   assert.equal(isInternalProject("acceptance-meta-analysis"), true, "the capability acceptance battery measures the platform");
   assert.equal(isInternalProject("acceptance-mr-0928h"), true, "a dated acceptance project");
   assert.equal(isInternalProject("audit-worker-probe"), true, "the standing integration audit");
-  for (const id of ["default", "0921a", "evimed-learning-notes", "evimed-frontier-notes", "eval-methods", "my-eval-method-release", "methodeval-notes",
+  for (const id of ["default", "0921a", "evimed-learning-notes", "evimed-frontier-notes", "evimed-evidence-notes", "my-evimed-evidence", "eval-methods", "my-eval-method-release", "methodeval-notes",
     "acceptance", "audit", "my-acceptance-notes", "audit_2026"]) {
     assert.equal(isInternalProject(id), false, id);
   }
 });
 
 test("a background runtime never takes one of the researcher's runtime slots", () => {
-  const manager = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 8 });
+  // `u1` owns a self-measurement project, so it must be an account that may: an operator.
+  const manager = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 8, operatorUsers: ["u1"] });
   manager.runtimes.set(`u1:${LEARNING_PROJECT_ID}`, {});
   manager.runtimes.set("u1:eval-method-release", {});
   manager.runtimes.set("u1:default", {});
@@ -57,7 +59,7 @@ test("background work holds at most all but one researcher's share of the runtim
   const manager = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 4 });
   manager.runtimes.set(`u1:${LEARNING_PROJECT_ID}`, {});
   manager.runtimes.set(`u2:methodeval-${"ab".repeat(12)}`, {});
-  assert.throws(() => manager.enforceRuntimeCapacity({ userId: "u3", id: SOURCES_PROJECT_ID }), { code: "runtime_limit_exceeded" },
+  assert.throws(() => manager.enforceRuntimeCapacity({ userId: "u3", id: SOURCES_PROJECT_ID }), { code: "runtime_capacity_full" },
     "a third background runtime waits");
   assert.doesNotThrow(() => manager.enforceRuntimeCapacity({ userId: "u3", id: "paper1" }), "a researcher still opens a project");
 });
@@ -275,4 +277,98 @@ test("a finished step's result survives the next step's clear, outside the works
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+// A name a client chose is never a waiver (follow-up to the review of 「循证进化」, 2026-10-05, B1). `acceptance-*`, `audit-*`
+// and `eval-method-*` are typed by the account that makes the project — or derived from the title it gives it — so they
+// are the platform's own only for an operator or the deployment's acceptance account.
+const accounts = { operatorUsers: ["operator"], acceptanceUsername: "cdss-access" };
+
+test("a self-measurement name is internal only for the accounts that may hold one", () => {
+  for (const id of ["acceptance-meta-analysis", "audit-worker-probe", "eval-method-release"]) {
+    assert.equal(isInternalProjectOf(accounts, "operator", id), true, `${id} for an operator`);
+    assert.equal(isInternalProjectOf(accounts, "cdss-access", id), true, `${id} for the acceptance account`);
+    assert.equal(isInternalProjectOf(accounts, "researcher", id), false, `${id} for anyone else is an ordinary project`);
+    assert.equal(isInternalProjectOf({ operatorUsers: [], acceptanceUsername: "" }, "researcher", id), false);
+    assert.equal(isInternalProjectOf({ operatorUsers: [], acceptanceUsername: "" }, "", id), false, "no owner, no waiver");
+  }
+  // An unset acceptance account matches nobody, even an empty id.
+  assert.equal(isMeasurementAccount({ operatorUsers: [], acceptanceUsername: "" }, ""), false);
+  assert.equal(isMeasurementAccount(accounts, "operator"), true);
+  assert.equal(isMeasurementAccount(accounts, "cdss-access"), true);
+  assert.equal(isMeasurementAccount(accounts, "cdss-access2"), false);
+  // What the server makes itself stays internal by name for any owner — and cannot be typed.
+  for (const id of [LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_ID, EVIDENCE_PROJECT_ID, `methodeval-${"0a".repeat(12)}`]) {
+    assert.equal(isInternalProjectOf(accounts, "researcher", id), true, id);
+    assert.equal(isReservedProjectId(id), true, `${id} is refused at creation`);
+  }
+  for (const id of ["acceptance-x", "audit-x", "eval-method-x", "default"]) assert.equal(isReservedProjectId(id), false, id);
+  assert.equal(isInternalProjectOf(accounts, "researcher", "default"), false);
+});
+
+test("an ordinary account's acceptance-x project takes its runtime slot like any other; an operator's and the acceptance account's do not", () => {
+  const config = { maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 8, ...accounts };
+  const manager = new RuntimeManager(config);
+  manager.runtimes.set("researcher:acceptance-x", {});
+  manager.runtimes.set("researcher:default", {});
+  assert.equal(manager.runtimeCountForUser("researcher"), 2, "both count against the researcher's ceiling");
+  assert.throws(() => manager.enforceRuntimeCapacity({ userId: "researcher", id: "third" }), { code: "runtime_limit_exceeded" });
+  assert.equal(manager.backgroundRuntimeCount(), 0, "and neither is background work");
+  for (const userId of ["operator", "cdss-access"]) {
+    const own = new RuntimeManager(config);
+    own.runtimes.set(`${userId}:acceptance-x`, {});
+    own.runtimes.set(`${userId}:default`, {});
+    assert.equal(own.runtimeCountForUser(userId), 1, `${userId}: the measurement project takes no slot`);
+    assert.equal(own.backgroundRuntimeCount(), 1);
+    assert.doesNotThrow(() => own.enforceRuntimeCapacity({ userId, id: "second" }));
+  }
+});
+
+// 2026-10-05 (evidence-flywheel B7): `evimed-evidence` is the platform programme's project (the publisher account's) and the project an
+// account's own zone upkeep is booked to. It must be in every list `evimed-frontier` is in, or one of the exclusions it exists for
+// (learning, memory, 「与你相关」, capsule export, a researcher's runtime slot, the project ceiling) silently does not apply.
+test("the evidence project is internal in every exclusion list the frontier project is in", async () => {
+  const { learnedMethodFamilyForRuntime } = await import("../src/learnedMethodMount.mjs");
+  // The platform's own method-free runtimes: no researcher's learned method is mounted into them.
+  for (const projectId of [LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_ID, EVIDENCE_PROJECT_ID]) assert.equal(learnedMethodFamilyForRuntime({ projectId }), null, projectId);
+  assert.equal(learnedMethodFamilyForRuntime({ projectId: "default" }), "research");
+  // A researcher can never create one by typing it, for the publisher or for themselves.
+  assert.equal(isReservedProjectId(EVIDENCE_PROJECT_ID), true);
+  // The walk that makes a new list impossible to forget: every source file that names the frontier project as a member of a list
+  // names the evidence project too; the files that use it as the feed's own are the only exceptions, and are named.
+  const { readdir, readFile } = await import("node:fs/promises");
+  const directory = new URL("../src/", import.meta.url);
+  const feedOnly = new Set(["frontierService.mjs", "frontierWorker.mjs"]);
+  const naming = [];
+  for (const name of await readdir(directory)) {
+    if (!name.endsWith(".mjs")) continue;
+    const text = await readFile(new URL(name, directory), "utf8");
+    if (!/\bFRONTIER_PROJECT_ID\b/.test(text)) continue;
+    naming.push(name);
+    if (!feedOnly.has(name)) assert.match(text, /\bEVIDENCE_PROJECT_ID\b/, `${name} lists the frontier project without the evidence project`);
+  }
+  assert.ok(naming.length >= 4, `the walk found ${naming.length} files that name the frontier project; it is wrong, not the source`);
+});
+
+test("the evidence project's runtime takes no researcher's slot, and background work waits for room instead", async () => {
+  const manager = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 4 });
+  manager.runtimes.set("publisher:default", { project: { userId: "publisher", id: "default" } });
+  manager.runtimes.set(`publisher:${EVIDENCE_PROJECT_ID}`, { project: { userId: "publisher", id: EVIDENCE_PROJECT_ID } });
+  assert.equal(manager.runtimeCountForUser("publisher"), 1, "only the researcher-shaped project counts against a per-user ceiling");
+  assert.equal(manager.backgroundRuntimeCount(), 1);
+  assert.equal(manager.isBackgroundProject("anyone", EVIDENCE_PROJECT_ID), true);
+  assert.equal(manager.isBackgroundProject("anyone", "evimed-evidence-notes"), false, "a lookalike name is an ordinary project");
+  /** @type {string[]} */
+  const stopped = [];
+  manager.stopIdleRuntime = async (project) => { stopped.push(project.id); };
+  manager.runtimeBusy = async () => false;
+  manager.hasRunningRuns = async () => false;
+  await manager.makeRoomFor({ userId: "publisher", id: EVIDENCE_PROJECT_ID });
+  assert.deepEqual(stopped, [], "the programme never stops a researcher's idle runtime to start");
+  // The global share background work may hold: all but one researcher's.
+  const full = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 4 });
+  full.runtimes.set(`u1:${LEARNING_PROJECT_ID}`, {});
+  full.runtimes.set(`u2:${FRONTIER_PROJECT_ID}`, {});
+  assert.throws(() => full.enforceRuntimeCapacity({ userId: "publisher", id: EVIDENCE_PROJECT_ID }), { code: "runtime_capacity_full" }, "a third background runtime waits");
+  assert.doesNotThrow(() => full.enforceRuntimeCapacity({ userId: "someone", id: "default" }), "a researcher still opens a project");
 });

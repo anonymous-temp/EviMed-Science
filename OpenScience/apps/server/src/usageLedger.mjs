@@ -25,10 +25,15 @@ const openCostWindowValues = new Set(Object.values(openCostWindows));
  *  public feed on its own schedule, billed to an operator's internal project
  *  and held by the module's own daily budget: counted against that operator's
  *  caps, the feed would spend their research allowance, and their research
- *  would starve the feed. 「循证 GEO」's rows (`geo`) are the same: the
+ *  would starve the feed. 「循证传播」's rows (`geo`) are the same: the
  *  platform parsing and judging measured answers on its own schedule, held by
- *  the module's own daily budget. Bound as a query parameter, never spliced. */
-export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo", "vcr", "evolution"]);
+ *  the module's own daily budget. So are the evidence programme's (`evidence`,
+ *  2026-10-05): the publisher account's own research, held by its own daily
+ *  budget (`evidenceBudget.mjs`). `evidence-upkeep` is deliberately NOT here:
+ *  it is an account's own zone kept current, booked to that account, counted
+ *  against its caps and charged to it. Bound as a query parameter, never
+ *  spliced. */
+export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo", "vcr", "evolution", "evidence"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
 /**
@@ -182,6 +187,20 @@ export function openCostPredicate(window, instantPlaceholder) {
     + ` OR (status='uncertain' AND created_at >= ${at} - interval '${window}'))`;
 }
 
+/**
+ * The four sums every spend-window question asks of a set of rows, with `$2`
+ * bound to the decision instant: what settled in the last day and in the last
+ * week, and what is still open (reserved, or lost and counted at its bound) in
+ * each. Written once, because the account's admission check, a reservation and
+ * a task's own spend (`spendOfRuns`) must answer to the same clock and the same
+ * arithmetic, and a divergence between them is invisible until it costs money.
+ * Spliced into SQL; a constant, never built from input.
+ */
+const SPEND_WINDOW_SUMS = `coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
+        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS day_open,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS week_open`;
+
 /** @param {unknown} value @param {string} name @param {number} max */
 function text(value, name, max = 200) {
   if (typeof value !== "string" || !value.trim() || value.length > max || /[\0\r\n]/.test(value)) {
@@ -327,10 +346,7 @@ export class UsageLedger {
         if(Number(budget.rows[0]?.committed??0)+values.estimatedCost>Number(input.moduleLimit))throw new HttpError(402,'usage_module_budget_exceeded','The module daily budget is exhausted.');
       }
       const totals = await client.query(`SELECT
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS day_open,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS week_open,
+        ${SPEND_WINDOW_SUMS},
         coalesce(sum(CASE WHEN run_id=$3 AND status='settled' THEN actual_cost
           WHEN run_id=$3 AND ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS run_committed
         FROM evimed_usage.model_requests WHERE user_id=$1 AND
@@ -771,6 +787,38 @@ export class UsageLedger {
     });
   }
 
+  /**
+   * What one purpose has cost one project since `since`: settled cost, plus what is still reserved or uncertain
+   * at the bound its client recorded — the rule the account caps use (`OPEN_COST_VALUE`), so a burst of lost
+   * calls priced at the reservation ceiling cannot spend a day's budget on money nobody was charged. The sum a
+   * module's own daily budget gates on (`evidenceBudget.mjs`, the frontier pipeline's `budget()`).
+   * `until`, when given, closes the window (exclusive): a day's budget read at an injected instant — a test's, a replay's —
+   * must not count rows written after that day. Absent, the window is open-ended, as the frontier pipeline's is.
+   * `runIdPrefix` narrows the sum to the calls whose run id starts with it (the evidence challenges' judgements are booked under
+   * `evch_…` scopes, which is how their day is told from the programme's own).
+   * @param {{ userId: string, projectId: string, purpose: string, since: Date, until?: Date | null, runIdPrefix?: string | null }} input
+   * @returns {Promise<number>} CNY, to 4 decimals
+   */
+  async purposeSpend({ userId, projectId, purpose, since, until = null, runIdPrefix = null }) {
+    if (!isUsagePurpose(purpose)) throw new HttpError(400, "usage_payload_invalid", "Invalid usage purpose.");
+    const at = instant(since, "spend window start");
+    const end = until == null ? null : instant(until, "spend window end");
+    await migrateUsageLedger(this.database);
+    // Read through to_jsonb so a database whose usage migration has not yet added `estimated_cost` still answers,
+    // at the reservation.
+    const result = await this.database.query(`SELECT coalesce(sum(CASE
+        WHEN m.status='settled' THEN coalesce(m.actual_cost, 0)
+        WHEN m.status='reserved' THEN m.reserved_cost
+        WHEN m.status='uncertain' THEN LEAST(m.reserved_cost, coalesce((to_jsonb(m)->>'estimated_cost')::numeric, m.reserved_cost))
+        ELSE 0 END), 0) AS spent
+      FROM evimed_usage.model_requests m
+      WHERE m.user_id=$1 AND m.project_id=$2 AND m.purpose=$3 AND m.created_at >= $4::timestamptz
+        AND ($5::timestamptz IS NULL OR m.created_at < $5::timestamptz)
+        AND ($6::text IS NULL OR left(coalesce(m.run_id, ''), length($6::text)) = $6::text)`,
+    [productId(userId, "user"), productId(projectId, "project"), purpose, at, end, runIdPrefix]);
+    return Math.round(Number(result.rows[0]?.spent ?? 0) * 10_000) / 10_000;
+  }
+
   /** Refuse a new interactive entry point that is already at its configured limit. */
   async assertWithinLimits(userId, { dailyLimit = 0, weeklyLimit = 0, purposes = null, now = new Date() } = {}) {
     const user = productId(userId, "user");
@@ -788,13 +836,15 @@ export class UsageLedger {
     await migrateUsageLedger(this.database);
     return this.database.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${user}`]);
+      // The named purposes are counted exactly, even a purpose the account's caps leave out:
+      // a cap that belongs to one kind of work (the module's own daily budget) is the only
+      // place that work is counted, as `reserveModel` does for `evolution`. Excluding the
+      // uncapped set first emptied the set for such a purpose, so its check could never
+      // refuse (2026-10-05 review, S7/F9).
       const result = await client.query(`SELECT
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS day_open,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS week_open
-        FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[])
-          AND ($4::text[] IS NULL OR purpose = ANY($4::text[]))`,
+        ${SPEND_WINDOW_SUMS}
+        FROM evimed_usage.model_requests WHERE user_id=$1 AND
+          (CASE WHEN $4::text[] IS NULL THEN purpose <> ALL($3::text[]) ELSE purpose = ANY($4::text[]) END)`,
       [user, at, [...UNCAPPED_USAGE_PURPOSES], only]);
       const day = Number(result.rows[0].day_settled) + Number(result.rows[0].day_open);
       const week = Number(result.rows[0].week_settled) + Number(result.rows[0].week_open);
@@ -803,6 +853,59 @@ export class UsageLedger {
       if (exceeded) throw new HttpError(402, "usage_budget_exceeded", "This account reached its spending limit.", { ...exceeded, currency: "CNY" });
       return { allowed: true };
     });
+  }
+
+  /**
+   * What a set of runs has spent in the rolling day and week, counted exactly as
+   * the account's own windows count (`SPEND_WINDOW_SUMS`: settled calls at what
+   * they cost, open ones at `OPEN_COST_VALUE`, and the purposes the caps leave
+   * out left out here too). The question a task's own caps ask: a scheduled
+   * agenda's ¥3 a day is compared with what its own episodes spent — their
+   * planner decisions, their runs and their verifications are all booked under
+   * the episode's id or its verifications' — never with everything the account
+   * spent, which is what an account cap is for (`assertWithinLimits`).
+   *
+   * A read, not an admission: no lock, nothing reserved. Zero runs spent zero.
+   * @param {string} userId @param {{ runIds: readonly string[], now?: Date }} options
+   * @returns {Promise<{ day: number, week: number }>}
+   */
+  async spendOfRuns(userId, { runIds, now = new Date() }) {
+    const user = productId(userId, "user");
+    const ids = [...new Set(runIds)].map((id) => productId(id, "run"));
+    if (ids.length === 0) return { day: 0, week: 0 };
+    const at = instant(now, "spend window time");
+    await migrateUsageLedger(this.database);
+    const result = await this.database.query(`SELECT
+      ${SPEND_WINDOW_SUMS}
+      FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[]) AND run_id = ANY($4::text[])`,
+    [user, at, [...UNCAPPED_USAGE_PURPOSES], ids]);
+    const row = result.rows[0];
+    return { day: Number(row.day_settled) + Number(row.day_open), week: Number(row.week_settled) + Number(row.week_open) };
+  }
+
+  /**
+   * When the spend `spendOfRuns` counts was made, one entry per minute, oldest
+   * first, over the last week: what a refusal needs to say when its window frees.
+   * Minute buckets keep the answer small for a run that made hundreds of calls;
+   * `at` is the start of the minute, so a caller adding the window to it errs
+   * early by under a minute, which is the direction it must add a minute for.
+   * Only read when something was refused.
+   * @param {string} userId @param {{ runIds: readonly string[], now?: Date }} options
+   * @returns {Promise<Array<{ at: string, cost: number }>>}
+   */
+  async spendTimelineOfRuns(userId, { runIds, now = new Date() }) {
+    const user = productId(userId, "user");
+    const ids = [...new Set(runIds)].map((id) => productId(id, "run"));
+    if (ids.length === 0) return [];
+    const at = instant(now, "spend window time");
+    await migrateUsageLedger(this.database);
+    const result = await this.database.query(`SELECT date_trunc('minute',created_at) AS minute,
+      sum(CASE WHEN status='settled' THEN actual_cost ELSE ${OPEN_COST_VALUE} END) AS cost
+      FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[]) AND run_id = ANY($4::text[])
+        AND created_at >= $2::timestamptz - interval '${openCostWindows.week}'
+        AND (status='settled' OR ${openCostPredicate(openCostWindows.week, "$2")})
+      GROUP BY 1 ORDER BY 1`, [user, at, [...UNCAPPED_USAGE_PURPOSES], ids]);
+    return result.rows.map((row) => ({ at: new Date(row.minute).toISOString(), cost: Number(row.cost) }));
   }
 
   /** @param {any} client @param {string} userId @param {string} id */

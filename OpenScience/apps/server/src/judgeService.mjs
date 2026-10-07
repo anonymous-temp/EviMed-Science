@@ -424,10 +424,14 @@ export function createJudgeService({
           promptFingerprint: fingerprint,
         });
     }
-    const controller = new AbortController(),
-      timeout = policy.interactive
-        ? Number(config.jevOnlineTimeoutMs ?? 3000)
-        : Number(config.reviewJevTimeoutMs ?? 15000);
+    const configuredTimeout = policy.interactive
+      ? Number(config.jevOnlineTimeoutMs ?? 3000)
+      : Number(config.reviewJevTimeoutMs ?? 15000);
+    // A trusted server workflow may shorten its total budget. Gateway request
+    // bodies cannot supply context, and this never changes calibrated prompts.
+    const remaining = Number.isFinite(context.deadlineMs) ? context.deadlineMs - Date.now() : configuredTimeout;
+    if (remaining <= 0) return finish("fallback", "judge_timeout");
+    const controller = new AbortController(), timeout = Math.min(configuredTimeout, remaining);
     let observedCost = 0;
     let timer;
     const expired = new Promise((_, reject) => {

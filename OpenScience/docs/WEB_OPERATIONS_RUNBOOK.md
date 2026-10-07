@@ -498,7 +498,7 @@ cannot reach its own public address, add that name to the host's `/etc/hosts`.
 | `ReviewMedicineClaimContradicted` | The run's reply check: `SELECT verdicts FROM evimed_review.reply_checks WHERE run_id=…` | Informational: the researcher has been told in the inbox (and in the chat, for a chat-started run). Read the answer and the source; a real error in the persona's medicine answers is an eval case in `evals/tiered-review`. |
 | `PublicSourceCredentialUnusable` (critical) | `open_science_public_source_credential_missing_total{source,reason="unusable"}`; `/api/ready` `checks.publicSourceCredentials.credentials.<source>.error` (e.g. `public_source_evimed_evidence_file_permissions`); `ls -l` of the key file the release `.env` names | The deployment configured a key the web process cannot read, so every request to that source is refused and runs quietly use other sources. Fix the file (mode `0600`, or `0440` with the shared group for the EviMed key the knowledge plugin also reads; not a symlink) and recreate the web container. On 2026-09-22 the EviMed key lost its group bit and 325 literature searches fell back to PubMed over three days. |
 | `EvimedEvidenceRefused` | The same counter with `source="evimed-evidence"`, both reasons; `OPEN_SCIENCE_EVIMED_API_KEY_FILE` in the release `.env` | EviMed's own literature, guideline, trial, patent and label API is refused and every search falls back to public sources (the tool result names the source as not configured, and a researcher may add their own key under 设置 → 数据源): configure or repair the key as above. A deployment that deliberately runs without it, leaving the key to researchers, silences this alert. |
-| `GeoUrgentFindingsOpen` | 循证 GEO → 准确与安全 of the project; `open_science_geo_open_errors{severity}`, `open_science_geo_safety_stops` | An engine states something wrong about the client's medicine at S3/S4. Handle or close the finding in the page; an article held by a safety finding stays held until then. |
+| `GeoUrgentFindingsOpen` | 循证传播 → 准确与安全 of the project; `open_science_geo_open_errors{severity}`, `open_science_geo_safety_stops` | An engine states something wrong about the client's medicine at S3/S4. Handle or close the finding in the page; an article held by a safety finding stays held until then. |
 | `GeoProbeLoopStalled` | `/api/ready` `checks.geo.worker.loops.probe` (running, stalled, lastError, lastOkAt); `geo probe:` lines in the web container's stderr; the probe host's `/providers` | The probe loop runs every base tick, so half an hour without a success is a stuck or failing loop: usually the probe host unreachable or its CDP gone. Visibility and accuracy stop at their last round until it recovers. A loop past `OPEN_SCIENCE_GEO_LEASE_MS` cannot be cancelled; restarting the web container is. |
 | `GeoProbeEnginesPaused` | `open_science_geo_probe_paused_engines`; the inbox's `geo_probe_engine_paused` item names the engine; the probe host's tab for it | An engine answered with a login page, an empty shell or errors repeatedly and has been paused for an hour: log it in again on the probe host. The breaker re-checks every ten minutes and resumes it by itself. |
 | `MemoryRerankFailing` | `open_science_memory_rerank_total{outcome,code}`; `/api/ready`'s memory check | Nothing breaks: recall keeps the index's vector order, so answers only lose ranking quality. The `code` label names the cause — the DashScope key file (`OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE`), the account's balance (`ModelProviderBalanceExhausted` fires too), `OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS`, or the pinned model withdrawn (move `OPEN_SCIENCE_MEMORY_RERANK_MODEL` after checking `deps-version.json`). |
@@ -595,9 +595,16 @@ not sufficient containment for those events.
   special file or a second name for a file where a file was, a directory
   replaced by a link, a path that escapes, another filesystem under the same
   name, an I/O error. `OPEN_SCIENCE_BACKUP_STRICT=true` keeps its meaning —
-  capture a source nobody writes, and refuse any change, which is what the VCR
-  data plane and a cutover capture with the writers stopped want — and is not
-  the mode to run against a live deployment.
+  capture a source nobody writes, and refuse any change, which is what a cutover
+  capture with the writers stopped wants — and is not the mode to run against a
+  live deployment. The VCR recovery set (`scripts/ops/vcr-backup.mjs`, the host
+  unit's `ExecStartPost`) does not ask the platform to stop: it takes the
+  PostgreSQL snapshot first, archives the data plane and the jobs volume live, and
+  holds the restored data plane against the files that dump names, so a set marked
+  healthy is restorable whatever was running. Files deleted under it make it retry
+  and, after three attempts, report `deferred` — a detail of `/api/ready`'s
+  `backup` check while the PostgreSQL archive is fresh, a failure only after three
+  maximum ages without a healthy set.
 - The production host also has the single `evimed-postgres-backup.timer` unit.
   Its versioned implementation is `scripts/ops/postgres-backup.py`, installed
   as `/usr/local/sbin/evimed-postgres-backup`; the existing unit names and daily
@@ -852,6 +859,58 @@ what it may hold while nobody needs the room, and how often it gave way. A drive
 that leaves its runtime up (the stream acceptance, the conversation walk) still
 holds a researcher's slot; stop it with `stop_runtime` under that project's
 header.
+
+### When every runtime slot is taken
+
+A start that finds all of the host's slots taken answers 429
+`runtime_capacity_full` (since 2026-10-05); the researcher's own ceiling stays
+`runtime_limit_exceeded`. The slot counts are the host's limit and are not
+raised for this. The shell says 「所有研究环境都在使用中，空出后会自动开始。」 and
+asks again by itself (every 5 to 15 seconds, never faster than `Retry-After`); a
+run's dispatch waits for a slot for `OPEN_SCIENCE_RUNTIME_START_WAIT_MS` (3
+minutes) before it is refused; the workers defer without spending an attempt.
+`open_science_runtime_start_waits_total{audience,outcome}`,
+`open_science_runtime_start_wait_seconds_total`,
+`open_science_runtime_start_wait_seconds_max` and
+`open_science_runtime_start_waiting` say how often people waited, how long and
+how many are waiting now; a mean wait that grows (seconds_total over waits) or a
+`gave_up` that is not zero is the host being too small.
+
+### NCBI's file server refuses a public GEO file
+
+`gene_expression_series` reads the series matrix from `ftp.ncbi.nlm.nih.gov`,
+which answers some requests for a public file with 403 text/html and the next
+identical request with the file (2026-10-05: 7 of 16 requests from one machine in
+one ten-minute window, any User-Agent, then 70 in a row served). The gateway no
+longer believes the first refusal: the three GEO download kinds are asked again
+twice from this host (after 0.5 s and 1 s) and then once through the Tokyo node
+(`OPEN_SCIENCE_EDGE_PROXY_URL`; the node is used for this whatever
+`OPEN_SCIENCE_EDGE_PROXY_HOSTS` lists), and the answer carries
+`x-evimed-download-route` (`direct`, `direct-retry`, `edge`), which the tool
+reports as `data.downloadRoutes`. Counted on
+`open_science_gene_expression_downloads_total{outcome}`: `served_after_retry`,
+`served_via_edge`, and `denied` when every route refused. The
+`geo/download/?acc=…&format=file&file=…_series_matrix.txt.gz` page is not a second
+route to the matrix: it redirects to the file server's `suppl/` directory (no
+matrix there) or answers a reCAPTCHA page.
+
+### Deleting a project, resetting memory or erasing an account while the memory index is slow
+
+The recall index (OpenViking) owns no record: every hit is re-read from PostgreSQL
+and a copy whose row is gone is dropped there. So none of these actions waits on
+it any more (until 2026-10-05 a project deletion answered 503
+`memory_index_timeout` when the index was slow). The authoritative rows go, and
+the withdrawal of the deleted subtrees is a row of its own in
+`evimed_memory.index_withdrawals`, written in the same transaction (it has no
+foreign key to the account, so an erased account's debt outlives it). The index
+worker asks the index at once and again every thirty seconds at most, with a
+backoff of thirty seconds doubling to an hour, until it answers.
+`open_science_memory_index_withdrawals_pending`, `..._oldest_seconds` and
+`..._most_attempts` say what the index still owes; a count that does not fall
+means the index is down, and deleted data's copies outlive their rows until it is
+back (recall never serves them). Deleting or archiving one memory record and
+deleting a source never called the index: they queue one record job in their own
+transaction, which the worker retries.
 
 ### Specialist job slots on a small host
 
@@ -1331,7 +1390,7 @@ a simulated wallet beside a real wallet's address is refused by name
 (`evimed_credits_simulated_conflict`, as is a start allowance that is not a whole
 number, `evimed_credits_simulated_start_invalid`). Only the billing module refuses; the
 platform boots, the allowance reads as unavailable, nothing is charged and
-`/api/ready` carries the code in its `credits` check. `pnpm check:research-billing
+`/api/ready` carries the code as a `warning` in its `credits` check (the check stays green). `pnpm check:research-billing
 --require-simulated` checks the configuration; it reports `simulated: true`, and
 `--require-billing` fails in this mode because a simulated wallet never satisfies a
 requirement for real billing. Recreate the web container to apply.
@@ -1344,6 +1403,30 @@ a simulated row is never sent to a real wallet (the real client refuses a `sim:`
 payer). Each account gets its starting allowance on its first read, deduction or top-up;
 an account deleted and registered again under the same name starts a new wallet, and its
 wallet rows go with the account (the settlement rows stay, marked and redacted).
+
+Since 2026-10-05 the simulated wallet is the platform's own wallet and holds 灵豆 as lots
+(`simulated_lots`, `simulated_draws`, `simulated_holds`, `simulated_reminders`): 充值 (a
+top-up) never expires; each gift (sign-up, monthly, an operator's compensation or campaign)
+is a lot with a source and an expiry fixed at grant time, ending at 24:00 Asia/Shanghai on
+its date. `OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS` (default 30) and
+`OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT` (default 0, off) set the platform's gifts;
+`POST /api/credits/grants` (operators only) makes the others and
+`GET /api/credits/absorbed` reads what the platform carried when a balance could not cover
+a charge. The first start of this build moves every existing wallet onto lots once (gifted
+left = max(0, grants − deductions), purchased the rest; entries untouched).
+
+Rolling back, and two releases serving one database: the one-number build keeps working
+on the migrated tables, but it moves a wallet's balance and appends entries without
+touching a lot. That is not a hazard to fence: every operation of this build begins, under
+the wallet's lock, by reconciling the lots with whatever was written since
+(`simulated_wallets.reconciled_through` is the last entry the lots reflect) — a sign-up
+becomes a gifted lot, a top-up a purchased lot, a charge is drawn from the lots in the
+normal order — so a rollback followed by a roll forward needs no repair. What it cannot
+repair: a database that ran the first lots build, was then written by the one-number build,
+and only then moved to this build (the mark appears with this build and trusts what it
+finds). A refused billing configuration (including a simulated wallet without
+`OPEN_SCIENCE_RESEARCH_BILLING_ENABLED`) is a named warning in the `credits` line of
+`/api/ready`, never a red one.
 
 What a researcher sees, every amount marked 「模拟」: the balance and month on 设置 →
 科研额度; an estimate on each tool of 科研工具; a charge per finished task and the

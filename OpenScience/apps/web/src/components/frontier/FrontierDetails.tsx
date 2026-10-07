@@ -19,7 +19,7 @@ export function FrontierDetails({ item, onClose, onOpened }: { item: FrontierIte
   const pdf = item.openAccess?.pdfUrl && item.openAccess.pdfUrl !== item.url ? item.openAccess.pdfUrl : null;
   const published = publishedLabel(item);
   const rows: Array<[string, string, string | undefined]> = [
-    ["来源", item.source.name, undefined],
+    ["来源", item.source.platformProduced ? `${item.source.name}（EviMed 出品）` : item.source.name, undefined],
     ...(published ? [["发布", published, undefined] as [string, string, undefined]] : []),
     ...(item.titleZh && item.titleRaw !== item.titleZh ? [["原标题", item.titleRaw, item.lang !== "und" ? item.lang : undefined] as [string, string, string | undefined]] : []),
     ...facts.map((fact) => [fact.label, fact.text, undefined] as [string, string, undefined]),

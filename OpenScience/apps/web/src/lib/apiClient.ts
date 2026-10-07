@@ -758,6 +758,8 @@ export interface WebAgentRun {
   deliverables?: WebRunDeliverable[];
   /** Set when this run's session was forked from another session. */
   forkedFrom?: string | null;
+  /** The evidence card this conversation was started from (「用这张卡继续研究」). */
+  originCardId?: string | null;
   /** How many of the report's claims were checked against a preserved source. */
   claimSummary?: { total: number; verified: number; unverified: number } | null;
   progress?: WebRunProgress | null;
@@ -1800,18 +1802,33 @@ export async function exportWebProject(projectId: string): Promise<Blob> {
  * control plane older than it answers without them, and an answer without them
  * means what it always did: a wallet that is not simulated, with no threshold.
  */
+/**
+ * An amount of 灵豆 as the control plane sends it: an exact decimal string from
+ * the platform's own wallet (`"12.30000000"`, 8 decimals), a number from EviMed's.
+ * It is only ever drawn, with `formatCredits`; nothing in the browser adds or
+ * compares one.
+ */
+export type WebAmount = string | number;
+
 export interface WebResearchAllowance {
   enabled: boolean;
   /** The wallet behind this allowance is simulated: no amount it carries is money. Absent reads as false. */
   simulated?: boolean;
   status: "ready" | "unavailable" | "unlinked" | "disabled";
   currency: "CNY";
-  available: number | null;
-  held: number | null;
-  balances?: { paid: number | null; member: number | null; promotional: number | null } | null;
+  /** 可用 = 充值 + 赠送 − 冻结. */
+  available: WebAmount | null;
+  /** 冻结: what the runs under way have frozen. Part of the balance, not available. Null where the wallet does not say. */
+  held: WebAmount | null;
+  /** What is held in each kind. The platform's wallet only; null, or absent, where there is none. */
+  balances?: { purchased: WebAmount; gifted: WebAmount } | null;
+  /** The next gift to end — how much of it is left, and when it ends. The platform's wallet only. */
+  nextExpiry?: { amount: WebAmount; at: string } | null;
+  /** Whether the allowance is low, decided by the control plane in exact units. Absent from an older one. */
+  low?: boolean | null;
   /** At or below this the allowance reads as low. A simulated wallet's only; null, or absent, where there is none. */
   lowThreshold?: number | null;
-  /** The month's confirmed and pending charges, or null when the ledger could not be read — unknown, never zero. */
+  /** The month's confirmed and pending charges (the Asia/Shanghai month), or null when the ledger could not be read — unknown, never zero. */
   month: { since: string; paid: number; pending: number } | null;
   membership?: { name: string; status: string; expiresAt: string | null } | null;
   /** An app path (the simulated wallet's own pages) or a configured HTTPS page; null where there is none. */
@@ -1823,20 +1840,56 @@ export interface WebResearchStatement {
   runId: string | null;
   title: string | null;
   at: string | null;
-  status: "pending" | "settled" | "failed" | "waived";
-  amount: number | null;
+  /**
+   * `waived` is a run that was not charged (its reason is `notChargedReason`);
+   * `absorbed` one whose balance could not cover it, the platform carrying the rest.
+   */
+  status: "pending" | "settled" | "failed" | "waived" | "absorbed";
+  amount: WebAmount | null;
   /**
    * What the row is: a research task charged against the allowance, or credits
-   * going in (a simulated top-up, the simulated starting grant). Absent on a row
-   * from a control plane older than the simulated wallet, where every row is a
-   * charge.
+   * going in (a top-up, a gift) or out (a gift's expiry, an adjustment). Absent on a
+   * row from a control plane older than the simulated wallet, where every row is a charge.
    */
-  kind?: "charge" | "topup" | "grant";
+  kind?: "charge" | "topup" | "grant" | "expire" | "adjust";
   /** The row belongs to a simulated wallet. Absent reads as the list's own answer. */
   simulated?: boolean;
   waivedCny?: string;
   pricingVersion?: string;
-  settlementPrecision?: "legacy-integer-floor" | "legacy-integer";
+  settlementPrecision?: "legacy-integer-floor" | "legacy-integer" | "precision-v1";
+  /** A charge: what the run cost in full (the amount taken, plus what the platform carried). */
+  requestedAmount?: WebAmount;
+  /** A charge: the part the platform carried because the balance could not cover it. */
+  absorbed?: string | null;
+  /** A charge: which kind of 灵豆 paid for it. */
+  paidBy?: { gifted: string; purchased: string } | null;
+  /** The balance after this line. */
+  balanceAfter?: string | null;
+  /** A run that was not charged: why, in words. */
+  notChargedReason?: string | null;
+  /** A gift's source (`signup`, `monthly`, `compensation`, `campaign`), in words, and when it ends. */
+  source?: string | null;
+  sourceLabel?: string | null;
+  expiresAt?: string | null;
+}
+
+/** A charge in full, on request: what it is made of, so it can be checked by multiplication. */
+export interface WebResearchStatementDetail extends WebResearchStatement {
+  detail: {
+    /** Model calls billed; null for a charge from before the detail was kept. */
+    calls: number | null;
+    cacheHitTokens: string | null;
+    cacheMissTokens: string | null;
+    outputTokens: string | null;
+    priceVersions: string[];
+    pricingVersion: string | null;
+    walletContract: string | null;
+    /** The amount taken, to the full 8 decimals. */
+    amount: string;
+    requestedAmount: string;
+    absorbed: string;
+    lots: Array<{ kind: "gifted" | "purchased"; source: string; expiresAt: string | null; amount: string }>;
+  };
 }
 
 export interface WebResearchStatements {
@@ -1888,7 +1941,7 @@ export interface WebSimulatedTopUp {
   simulated: true;
   order: WebSimulatedOrder;
   /** The allowance after this top-up. */
-  available: number;
+  available: WebAmount;
   /** The same request had already been applied: nothing was added a second time. */
   duplicate: boolean;
 }
@@ -1896,6 +1949,12 @@ export interface WebSimulatedTopUp {
 export async function fetchWebResearchAllowance(): Promise<WebResearchAllowance> {
   if (!hasWebApi) throw new BackendUnavailableError("account.allowance");
   return parseApiResponse<WebResearchAllowance>(await fetchWithWebAuth(apiUrl("/account/allowance")));
+}
+
+/** One charge in full — the calls, the tokens, the price list and the amount to 8 decimals behind it. */
+export async function fetchWebResearchStatementDetail(id: string): Promise<WebResearchStatementDetail> {
+  if (!hasWebApi) throw new BackendUnavailableError("account.allowance.statements");
+  return parseApiResponse<WebResearchStatementDetail>(await fetchWithWebAuth(apiUrl(`/account/allowance/statements/${encodeURIComponent(id)}`)));
 }
 
 export async function fetchWebResearchStatements(cursor?: string): Promise<WebResearchStatements> {
@@ -1950,7 +2009,7 @@ export async function topUpWebSimulatedWallet(packageId: string, requestId: stri
 }
 
 export interface WebUsageSummary {
-  /** Start of the period the totals cover (the current calendar month, UTC). */
+  /** Start of the period the totals cover: 00:00 on the first of the current month in Asia/Shanghai. */
   since: string;
   calls: number;
   cost: number;

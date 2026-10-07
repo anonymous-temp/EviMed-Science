@@ -1,17 +1,139 @@
-import { methodHarmTest, METHOD_HARM_TEST } from '@evimed/domain';
+import { methodHarmTest, EVOLUTION_TOOL_HARM_TEST, canonicalJson } from '@evimed/domain';
+import { setTimeout as delay } from 'node:timers/promises';
 import { HttpError } from './security.mjs';
 import { evolutionKey } from './evolutionService.mjs';
+import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
 
-/** @param {any[]} observations */
-const assessHarm = observations => methodHarmTest(/** @type {any} */ ({ observations }));
-/** Execution/dependency exceptions are not evidence of a wrong scientific calculation. @param {any} result */
+/**
+ * Retirement evidence for a published tool: the platform's existing sequential harm test, applied the
+ * way the learned-methods loop applies it (`retirementProposal` in the domain's `methodGraph.mjs`):
+ * `methodHarmTest` read over the revision's own history, in the order it happened, each run at its
+ * latest outcome, stopped at its verdict. Not a second sequential test, and never restarted.
+ *
+ * What was wrong before (scientific finding B3): every concluded test was followed by a fresh one
+ * ("epochs"), each with its own false-alarm chance, and any of them reaching `harm` retired the tool. A
+ * harmless tool at the test's own 10% background rate was retired 33% of the time by 100 runs and 87% by 500.
+ *
+ * Three things are fixed about the evidence:
+ *  - one trial per account. Runs of one researcher are not independent draws (someone who revises every
+ *    result they are handed would be read as many failures), and the test's error control assumes
+ *    independent trials. A trial is an account's first evaluated run of this revision. It is also what
+ *    stops one account's ordinary corrections from retiring a tool for everyone (security finding S3);
+ *  - the scientific axis's numbers (`EVOLUTION_TOOL_HARM_TEST`): a correction is ordinary work;
+ *  - one test per revision, at most 40 trials. Once it reads `clear` or `harm` it is over. A tool that
+ *    cleared and later drifts is the release replay's and the monthly review's to catch, and a repaired
+ *    revision starts its own test; continuous monitoring would need an alpha-spending boundary and its
+ *    own control simulation before it could retire anything (principles 4 and 11).
+ *
+ * False retirement. For a harmless tool the probability that the test ever reads `harm` is the operating
+ * characteristic of one capped test, whatever the volume of use: 3.6% when corrections run at the 25%
+ * background rate, 0.34% at 15%, 0.06% at 10% (`harmTestOperatingCharacteristics`, exact;
+ * `test/evolutionHarmTest.test.mjs` reproduces it by seeded simulation of this very loop and shows that
+ * it does not grow with use). At a harmful 60% the test reads `harm` 84% of the time.
+ *
+ * And `harm` proposes; it does not retire. The verdict opens a maintenance review and a decision an
+ * operator sees (plan section 9.1: retiring a tool that agendas use is a direction decision); the tool
+ * is retired by that decision or its default, and the same decision reverses it afterwards.
+ */
+const EVALUATED_OUTCOMES = ['accepted', 'repaired', 'rejected'];
+const USAGE_COUNTERS = ['retrieved', 'invoked', 'executionSucceeded', 'executionFailed', 'succeeded', 'corrected', 'costCny', 'runs'];
+/** Call and retrieval identities remembered per run for idempotency; a run that goes past this has its
+ *  further calls counted without being remembered, so one looping run cannot grow a record without bound. */
+const IDENTITIES_PER_RUN = 500;
+/** Optimistic writes are retried on a revision conflict; two runs calling one tool at once is ordinary. */
+const WRITE_ATTEMPTS = 8;
+/** Usage accounting of one tool is queued inside a process, so a burst of calls of one tool holds one pooled
+ *  connection at a time rather than one per caller waiting on the same lock. */
+const usageQueues = new WeakMap();
+
+/**
+ * Exact operating characteristics of the capped sequential test `methodHarmTest` implements, by dynamic
+ * programming over (trials, bad): the probability it ends in `harm`, in `clear`, and the mean number of
+ * trials it reads, when each trial is bad independently with probability `rate`.
+ * @param {{baseRate:number,harmRate:number,alpha:number,beta:number,minRuns:number,maxRuns:number}} parameters @param {number} rate
+ */
+export function harmTestOperatingCharacteristics(parameters, rate) {
+  const { baseRate, harmRate, alpha, beta, minRuns, maxRuns } = parameters;
+  const upper = Math.log((1 - beta) / alpha), lower = Math.log(beta / (1 - alpha));
+  const badStep = Math.log(harmRate / baseRate), goodStep = Math.log((1 - harmRate) / (1 - baseRate));
+  let open = new Map([[0, 1]]), harm = 0, clear = 0, trials = 0;
+  for (let n = 1; n <= maxRuns; n++) {
+    const next = new Map();
+    for (const [bad, mass] of open) for (const [count, probability] of [[bad + 1, rate], [bad, 1 - rate]]) {
+      const llr = count * badStep + (n - count) * goodStep, weight = mass * probability;
+      // The same boundary order and tolerance as methodHarmTest.
+      if (n >= minRuns && llr >= upper - 1e-9) { harm += weight; trials += weight * n; }
+      else if (llr <= lower + 1e-9) { clear += weight; trials += weight * n; }
+      else next.set(count, (next.get(count) ?? 0) + weight);
+    }
+    open = next;
+  }
+  const capped = [...open.values()].reduce((sum, value) => sum + value, 0);
+  return { harm, clear: clear + capped, meanTrials: trials + capped * maxRuns };
+}
+
+/** What one run's observation adds to a tool's counters. @param {any} observation */
+function contribution(observation) {
+  const outcomes = Object.values(observation?.callOutcomes ?? {}), ids = observation?.callIds ?? [], overflow = Number(observation?.callOverflow ?? 0);
+  const invoked = observation?.invoked === true;
+  return { retrieved: (observation?.retrievalIds?.length ?? 0) + Number(observation?.retrievalOverflow ?? 0), invoked: invoked ? ids.length + overflow : 0,
+    executionSucceeded: outcomes.filter(value => value === true).length, executionFailed: outcomes.filter(value => value === false).length,
+    succeeded: invoked && observation.outcome === 'accepted' ? ids.filter(id => observation.callOutcomes?.[id] !== false).length + overflow : 0,
+    corrected: invoked && observation.corrected ? 1 : 0, costCny: Number(observation?.costCny ?? 0),
+    runs: invoked && EVALUATED_OUTCOMES.includes(observation.outcome) ? 1 : 0 };
+}
+
+/** Fold one report about a run into what is already known about it. @param {any} previous @param {any} incoming @param {string} now */
+function foldRun(previous, incoming, now) {
+  let observation = incoming;
+  // A later "pending" from the run finishing does not undo what the researcher already said about it.
+  if (previous?.feedbackEventId && !observation.feedbackEventId) observation = { ...observation, outcome: previous.outcome, corrected: previous.corrected };
+  const remember = (known, added) => { const fresh = added.filter(id => !known.includes(id)), room = Math.max(0, IDENTITIES_PER_RUN - known.length); return { ids: [...known, ...fresh.slice(0, room)], overflow: Math.max(0, fresh.length - room), added: fresh.length }; };
+  const calls = remember(previous?.callIds ?? [], observation.invoked === true && (observation.callId || !previous?.invoked) ? [observation.callId ?? observation.runId] : []);
+  const retrievals = remember(previous?.retrievalIds ?? [], observation.retrieved ? [observation.retrievalId ?? observation.runId] : []);
+  const callOutcomes = { ...previous?.callOutcomes };
+  if (observation.callId && typeof observation.executionOk === 'boolean' && (Object.hasOwn(callOutcomes, observation.callId) || Object.keys(callOutcomes).length < IDENTITIES_PER_RUN)) callOutcomes[observation.callId] = observation.executionOk;
+  // The account is kept as a keyed digest: enough to count distinct researchers, and no identity in a platform record.
+  const { callId: _call, retrievalId: _retrieval, executionOk: _ok, retrieved: _retrieved, userId, costCny, ...carried } = observation;
+  return { ...previous, ...carried, callIds: calls.ids, callOverflow: Number(previous?.callOverflow ?? 0) + calls.overflow, callOutcomes,
+    retrievalIds: retrievals.ids, retrievalOverflow: Number(previous?.retrievalOverflow ?? 0) + retrievals.overflow,
+    costCny: Number(previous?.costCny ?? 0) + (calls.added ? Number(costCny ?? 0) : 0),
+    accountKey: previous?.accountKey ?? (typeof userId === 'string' && userId ? evolutionKey(['evolution-account', userId]) : null), at: previous?.at ?? observation.at ?? now };
+}
+
+/** Fold one run into the harm test's trials and read the test again. @param {any} current @param {any} observation */
+function foldHarmTrial(current, observation) {
+  const trials = [...(current?.trials ?? [])];
+  const evaluated = observation.invoked === true && EVALUATED_OUTCOMES.includes(observation.outcome);
+  const index = trials.findIndex(trial => trial.runId === observation.runId);
+  if (index >= 0) { if (evaluated) trials[index] = { ...trials[index], outcome: observation.outcome }; else trials.splice(index, 1); }
+  // A new trial needs an account that has none yet, and a test that is still open: one trial per account, one test per revision.
+  else if (evaluated && observation.accountKey && (current?.state ?? 'watching') === 'watching' && trials.length < EVOLUTION_TOOL_HARM_TEST.maxRuns && !trials.some(trial => trial.accountKey === observation.accountKey)) {
+    trials.push({ accountKey: observation.accountKey, runId: observation.runId, outcome: observation.outcome, at: observation.at });
+  }
+  const read = methodHarmTest(/** @type {any} */ ({ observations: trials.map(trial => ({ runId: trial.runId, family: trial.runId, outcome: trial.outcome, invoked: true, at: trial.at })) }), EVOLUTION_TOOL_HARM_TEST);
+  return { ...current, axis: 'researcher-correction', trials, state: read.state, runs: read.runs, bad: read.bad, llr: read.llr };
+}
+/**
+ * What a failed replay of a released tool means.
+ *
+ * A sandbox that could not run the tool is a resource and says nothing about the tool. A tool whose own
+ * code started and then failed on every replicate of a hidden case is something else: it is broken for
+ * every researcher who calls it, and dependency and environment drift is exactly what the replay after
+ * each release exists to find (plan section 7.4). That used to be read as `resource` with "wait"
+ * recommended, so a released tool that crashed on every case stayed active.
+ * @param {any} result
+ */
 export function evolutionReplayDisposition(result) {
   if (result.ok === true) return 'passed';
   if (result.status === 'waiting_resource' || result.resourceCode) return 'resource';
-  const wrong = (result.assessments ?? []).some(row => row.independent === true && row.passed === false && row.exposed === false && row.retracted === false
-    && (row.reason === 'outside_reference_tolerance' || (row.kind === 'simulation' && row.preRegistered === true && row.monteCarloError
-      && Object.values(row.monteCarloError).every(Number.isFinite))));
-  return wrong ? 'method-regression' : 'resource';
+  const scored = (result.assessments ?? []).filter(row => row.independent === true && row.passed === false && row.exposed === false && row.retracted === false);
+  if (scored.some(row => row.reason === 'outside_reference_tolerance' || (row.kind === 'simulation' && row.preRegistered === true && row.monteCarloError
+    && Object.values(row.monteCarloError).every(Number.isFinite)))) return 'method-regression';
+  // Two independent executions of the same case, both started, both failed in the tool's own code.
+  const crashes = new Map();
+  for (const row of scored) if (row.reason === 'candidate_execution_failed' && row.candidateStarted === true) crashes.set(row.caseId, (crashes.get(row.caseId) ?? 0) + 1);
+  return [...crashes.values()].some(count => count >= 2) ? 'execution-regression' : 'resource';
 }
 
 /** Reference identities remain opaque; gold values never enter retrieval tasks. @param {any[]} tools */
@@ -39,59 +161,159 @@ export function evolutionRetrievalScore(cases, selections) {
 export class EvolutionMaintenance {
   /** @param {any} dependencies */
   constructor({ service, callbacks = {}, judgeService = null }) { this.service = service; this.callbacks = callbacks; this.judgeService = judgeService; }
-  /** @param {string} id @param {any} observation */
+  /** A strict optimistic write: a revision conflict is thrown to the retry loop, never absorbed.
+   * `telemetry` is the ledger's own kind of write for counters derived from a record rather than a change of it
+   * (`ProductDocuments.put`): the revision still moves, no history row is kept and `updated_at` stays, which is how
+   * the learned-methods loop counts use. It cannot create a record.
+   * @param {string} type @param {string} id @param {any} payload @param {any} previous @param {{telemetry?:boolean}} [options] */
+  async write(type, id, payload, previous, { telemetry = false } = {}) {
+    return this.service.documents.put(await this.service.owner(), 'knowledge', id, { ...payload, recordType: `evolution-${type}` },
+      { expectedRevision: previous?.revision ?? 0, projectId: payload.projectId ?? EVOLUTION_PROJECT_ID, ...(telemetry && previous ? { telemetry: true } : {}) });
+  }
+  /**
+   * Run `work` as one unit for one tool: on PostgreSQL, one transaction on one connection (every ledger read and
+   * write inside it uses that connection) holding the tool's usage lock until it commits.
+   *
+   * Optimistic writes with a few retries were the whole protection at first, and against the real ledger they were
+   * not enough: forty runs calling one tool at the same moment left fourteen refused with a revision conflict after
+   * eight attempts each, their run records written and their counts never added. A lock held for a few short
+   * statements is the plain answer to many writers of one row. The transaction also makes the run's record and the
+   * tool's counters one write: both are kept or neither is. Callers in this process queue for the tool first, so
+   * the lock is contended between processes and not between forty connections of one. A ledger without a
+   * database (the in-memory double of the unit tests) has no transaction to offer and runs `work` in its turn.
+   * @template T @param {string} toolId @param {() => Promise<T>} work @returns {Promise<T>}
+   */
+  async atomically(toolId, work) {
+    const database = this.service.documents.database;
+    const unit = database?.transaction && database.withTransactionClient
+      ? () => database.transaction((/** @type {any} */ client) => database.withTransactionClient(client, async () => {
+        await database.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`evimed-evolution:tool-usage:${toolId}`]);
+        return work();
+      })) : work;
+    // Called from inside a transaction someone else holds, the unit joins that transaction and must not wait in this
+    // process's queue: the caller ahead of it there may be waiting for the lock that transaction already has.
+    if (database?.transactionScope?.()) return unit();
+    const queue = usageQueues.get(this.service) ?? usageQueues.set(this.service, new Map()).get(this.service);
+    const pending = (queue.get(toolId) ?? Promise.resolve()).catch(() => {}).then(unit);
+    queue.set(toolId, pending);
+    try { return await pending; } finally { if (queue.get(toolId) === pending) queue.delete(toolId); }
+  }
+  /** @template T @param {() => Promise<T|undefined>} attempt @returns {Promise<T>} */
+  async retried(attempt) {
+    for (let count = 0; count < WRITE_ATTEMPTS; count++) {
+      try { const result = await attempt(); if (result !== undefined) return result; }
+      catch (error) { if (error?.code !== 'product_revision_conflict') throw error; }
+      await delay(Math.floor(Math.random() * 5 * (count + 1)));
+    }
+    throw new HttpError(409, 'product_revision_conflict', 'The tool record is being updated; retry.');
+  }
+  /** @param {any} tool @param {string} runId */
+  observationId(tool, runId) { return `evolution-observation-${evolutionKey([tool.id, tool.payload.artifactDigest ?? tool.payload.revision ?? null, runId])}`; }
+  /** What is known about one run's use of a tool. @param {string} id @param {string} runId */
+  async observationOf(id, runId) {
+    const tool = await this.service.get(id);
+    if (!tool) return null;
+    return (await this.service.get(this.observationId(tool, runId)))?.payload ?? tool.payload.observations?.find((/** @type {any} */ item) => item.runId === runId) ?? null;
+  }
+  /**
+   * Record what one run did with a tool.
+   *
+   * Each run has its own record, and the tool keeps counters and the harm test's trials (at most 40).
+   * Both used to live in one array on the tool's record (integration finding F16): two runs calling a
+   * tool at once lost one of the two observations to the revision conflict, and past roughly 500 runs
+   * the record exceeded the ledger's 256 KiB limit, after which the most used tool could record nothing
+   * and could not be retired. Now the run's record and the tool's counters are written as one unit under the
+   * tool's usage lock (`atomically`), the counter update is an increment of what this report added, and the harm
+   * trial is an idempotent upsert. Counting use writes no history: a call is not a version of the tool.
+   * @param {string} id @param {any} observation `userId` is the account whose run this is
+   */
   async observe(id, observation) {
-    const row = await this.service.get(id);
-    if (!row) throw new HttpError(404, 'evolution_tool_missing', 'Tool not found.');
-    const observations = [...row.payload.observations ?? []];
-    const previousObservation = observations.find((/** @type {any} */ item) => item.runId === observation.runId);
-    if (previousObservation?.feedbackEventId && !observation.feedbackEventId) observation = { ...observation,
-      outcome: previousObservation.outcome, corrected: previousObservation.corrected };
-    const callIds = [...new Set([...(previousObservation?.callIds ?? []), ...(observation.invoked === true && (observation.callId || !previousObservation?.invoked) ? [observation.callId ?? observation.runId] : [])])];
-    const oldCalls = previousObservation?.callIds?.length ?? (previousObservation?.invoked ? 1 : 0);
-    const retrievalIds = [...new Set([...(previousObservation?.retrievalIds ?? []), ...(observation.retrieved ? [observation.retrievalId ?? observation.runId] : [])])];
-    const callOutcomes = { ...previousObservation?.callOutcomes };
-    if (observation.callId && typeof observation.executionOk === 'boolean') callOutcomes[observation.callId] = observation.executionOk;
-    const oldSucceeded = Object.values(previousObservation?.callOutcomes ?? {}).filter(value => value === true).length;
-    const executedSuccessfully = Object.values(callOutcomes).filter(value => value === true).length;
-    if (previousObservation && previousObservation.outcome === observation.outcome && previousObservation.corrected === observation.corrected
-      && callIds.length === oldCalls && retrievalIds.length === (previousObservation.retrievalIds?.length ?? 0)
-      && JSON.stringify(callOutcomes) === JSON.stringify(previousObservation.callOutcomes ?? {})) return row;
-    const usage = { ...row.payload.usage };
-    usage.retrieved += retrievalIds.length - (previousObservation?.retrievalIds?.length ?? 0);
-    usage.executionSucceeded = Number(usage.executionSucceeded ?? 0) + executedSuccessfully - oldSucceeded;
-    usage.executionFailed = Number(usage.executionFailed ?? 0) + Object.values(callOutcomes).filter(value => value === false).length
-      - Object.values(previousObservation?.callOutcomes ?? {}).filter(value => value === false).length;
-    if (observation.invoked === true) {
-      usage.invoked += callIds.length - oldCalls;
-      usage.executionCount = usage.invoked;
-      if (callIds.length > oldCalls) usage.costCny += Number(observation.costCny ?? 0);
-      const acceptedCalls = callIds.filter(callId => callOutcomes[callId] !== false).length;
-      const previousAcceptedCalls = (previousObservation?.callIds ?? []).filter(callId => previousObservation?.callOutcomes?.[callId] !== false).length;
-      usage.succeeded += (observation.outcome === 'accepted' ? acceptedCalls : 0) - (previousObservation?.outcome === 'accepted' ? previousAcceptedCalls : 0);
-      usage.corrected += (observation.corrected ? 1 : 0) - (previousObservation?.corrected ? 1 : 0);
-    }
-    if (previousObservation) observations.splice(observations.indexOf(previousObservation), 1);
-    observations.push({ ...previousObservation, ...observation, callIds, callOutcomes, retrievalIds, at: previousObservation?.at ?? observation.at ?? this.service.now().toISOString() });
-    const evaluated = observations.filter(item => item.invoked === true && ['accepted', 'repaired', 'rejected'].includes(item.outcome));
-    const epochs = (usage.harmEpochs ?? []).map(epoch => ({ ...epoch, runIds: [...epoch.runIds] }));
-    for (const item of evaluated) {
-      if (epochs.some(epoch => epoch.runIds.includes(item.runId))) continue;
-      let epoch = epochs.at(-1);
-      if (!epoch || epoch.state !== 'watching' || epoch.runIds.length >= METHOD_HARM_TEST.maxRuns) {
-        epoch = { index: epochs.length, runIds: [], state: 'watching' }; epochs.push(epoch);
-      }
-      epoch.runIds.push(item.runId);
-      Object.assign(epoch, assessHarm(evaluated.filter(sample => epoch.runIds.includes(sample.runId))));
-    }
-    for (const epoch of epochs) Object.assign(epoch, assessHarm(evaluated.filter(sample => epoch.runIds.includes(sample.runId))));
-    const harm = epochs.find(epoch => epoch.state === 'harm') ?? epochs.at(-1) ?? assessHarm([]);
-    usage.harmEpochs = epochs; usage.harmState = harm.state; usage.runs = evaluated.length;
-    const saved = await this.service.save('tool', id, { ...row.payload, usage, observations }, row);
-    if (harm.state === 'harm') return this.retire(saved, 'sequential-harm');
-    // Existing shared test parameters decide when live evidence is sufficient.
-    if (row.payload.validationLevel === 'V3' && harm.state === 'clear' && usage.invoked >= METHOD_HARM_TEST.minRuns) return this.service.save('tool', id, { ...saved.payload, validationLevel: 'V4' }, saved);
+    // Read once before the transaction: an unknown tool is refused without taking a lock, and the ledger's own
+    // one-time schema preparation never happens inside a transaction that may roll back.
+    if (!await this.service.get(id)) throw new HttpError(404, 'evolution_tool_missing', 'Tool not found.');
+    const saved = await this.atomically(id, async () => {
+      let tool = await this.service.get(id);
+      if (!tool) throw new HttpError(404, 'evolution_tool_missing', 'Tool not found.');
+      if (Array.isArray(tool.payload.observations) && tool.payload.observations.length) tool = await this.migrateObservations(tool);
+      const observationId = this.observationId(tool, observation.runId);
+      const folded = await this.retried(async () => {
+        const row = await this.service.get(observationId);
+        const merged = foldRun(row?.payload ?? null, observation, this.service.now().toISOString());
+        if (row && canonicalJson({ ...row.payload, recordType: null }) === canonicalJson({ toolId: tool.id, ...merged, recordType: null })) return { state: row.payload, delta: null };
+        const before = contribution(row?.payload), after = contribution(merged);
+        // The run's record is nothing but what the run did: its first write creates it, every later one is a count.
+        const written = await this.write('observation', observationId, { toolId: tool.id, ...merged }, row, { telemetry: true });
+        return { state: written.payload, delta: Object.fromEntries(USAGE_COUNTERS.map(key => [key, after[key] - before[key]])) };
+      });
+      if (!folded.delta) return null;
+      // What the tool's record says, as opposed to what it counts: the harm test's trials and verdict.
+      const said = (/** @type {any} */ harm) => canonicalJson([harm?.trials ?? [], harm?.state ?? 'watching', harm?.reviewId ?? null, harm?.overriddenAt ?? null]);
+      // Other writers of the tool's record (an assessment, a retirement) do not take the usage lock; they are rare, and a conflict with one is retried.
+      return this.retried(async () => {
+        const current = await this.service.get(id);
+        const usage = { ...current.payload.usage };
+        for (const key of USAGE_COUNTERS) usage[key] = Number(usage[key] ?? 0) + folded.delta[key];
+        usage.executionCount = usage.invoked;
+        usage.harm = foldHarmTrial(usage.harm, folded.state);
+        usage.harmState = usage.harm.overriddenAt ? 'overridden' : usage.harm.state;
+        delete usage.harmEpochs;
+        const { observations: _migrated, ...payload } = current.payload;
+        const countersOnly = said(usage.harm) === said(current.payload.usage?.harm) && usage.harmState === (current.payload.usage?.harmState ?? usage.harmState)
+          && current.payload.observations === undefined && current.payload.usage?.harmEpochs === undefined;
+        return this.write('tool', id, { ...payload, usage }, current, { telemetry: countersOnly });
+      });
+    });
+    if (!saved) return this.service.get(id);
+    const harm = saved.payload.usage.harm;
+    if (harm.state === 'harm' && !harm.reviewId && !harm.overriddenAt) return this.proposeHarmReview(saved);
+    // The shared test's own parameters decide when live evidence is sufficient.
+    if (saved.payload.validationLevel === 'V3' && harm.state === 'clear' && saved.payload.usage.invoked >= EVOLUTION_TOOL_HARM_TEST.minRuns) return this.service.save('tool', id, { ...saved.payload, validationLevel: 'V4' }, saved);
     return saved;
+  }
+  /** One-time move of a record written before runs had their own: each legacy observation becomes its
+   * own record, already counted. They carry no account, so none of them is a harm trial. @param {any} tool */
+  async migrateObservations(tool) {
+    for (const legacy of tool.payload.observations) {
+      if (!legacy?.runId) continue;
+      const observationId = this.observationId(tool, legacy.runId);
+      if (!await this.service.get(observationId)) await this.service.save('observation', observationId, { toolId: tool.id, ...legacy, accountKey: null, migrated: true });
+    }
+    return this.retried(async () => {
+      const current = await this.service.get(tool.id);
+      const { observations: _legacy, ...payload } = current.payload;
+      const { harmEpochs: _epochs, ...usage } = payload.usage ?? {};
+      return this.write('tool', tool.id, { ...payload, usage }, current);
+    });
+  }
+  /** The harm verdict becomes a review and a decision an operator sees; it is never the retirement itself. @param {any} tool */
+  async proposeHarmReview(tool) {
+    const harm = tool.payload.usage.harm;
+    const reviewId = `evolution-harm-review-${evolutionKey([tool.id, tool.payload.artifactDigest ?? tool.payload.revision ?? null])}`;
+    if (!await this.service.get(reviewId)) await this.service.save('maintenance-review', reviewId, { kind: 'sequential-harm', parentToolIds: [tool.id], status: 'pending',
+      evidence: { test: 'methodHarmTest', parameters: EVOLUTION_TOOL_HARM_TEST, accounts: harm.runs, corrected: harm.bad, llr: harm.llr,
+        // What the reader of this evidence needs beside it: how often a harmless tool reaches this verdict.
+        falseAlarmAtBackgroundRate: harmTestOperatingCharacteristics(EVOLUTION_TOOL_HARM_TEST, EVOLUTION_TOOL_HARM_TEST.baseRate).harm, association: 'not-cause' },
+      proposedAt: this.service.now().toISOString() });
+    // `tool-retire` is the category the decision module already names for the operator (工具退役).
+    await this.callbacks.proposeReview?.({ category: 'tool-retire', subjectId: reviewId, materialVersion: tool.payload.artifactDigest ?? 1, directional: true,
+      attemptedPaths: ['sequential-harm-test', 'distinct-account-evidence'], title: '复核被多位研究者纠正的科研工具',
+      body: `${harm.runs} 位研究者首次使用该工具得到的结果中，有 ${harm.bad} 位作了纠正，高于平常的纠正水平。这是关联，不说明问题由工具造成。软退役后新研究不再使用它，历史结果和版本都保留，之后可以恢复。`,
+      options: [{ id: 'retire', label: '软退役并保留历史', operation: 'maintenance-retire' }, { id: 'keep', label: '保留现有工具', operation: 'keep' }], recommended: 'retire', conservative: 'keep' });
+    return this.retried(async () => {
+      const current = await this.service.get(tool.id);
+      if (current.payload.usage?.harm?.reviewId === reviewId) return current;
+      return this.write('tool', tool.id, { ...current.payload, usage: { ...current.payload.usage, harm: { ...current.payload.usage.harm, reviewId } } }, current);
+    });
+  }
+  /** The operator kept a tool the harm test flagged: recorded on the tool, so the verdict is not raised again
+   * and the tool is never read as cleared. @param {string} id @param {any} action */
+  async recordHarmOverride(id, action) {
+    return this.retried(async () => {
+      const current = await this.service.get(id);
+      if (!current || current.payload.usage?.harm?.overriddenAt) return current ?? null;
+      const harm = { ...current.payload.usage?.harm, overriddenAt: this.service.now().toISOString(), overriddenByActionId: action.actionId };
+      return this.write('tool', id, { ...current.payload, usage: { ...current.payload.usage, harm, harmState: 'overridden' } }, current);
+    });
   }
   /** @param {any} row @param {string} reason */
   async retire(row, reason) {
@@ -122,15 +344,17 @@ export class EvolutionMaintenance {
     const unique = (tool.payload.holdoutCases ?? []).some(item => !tools.some(other => other.id !== tool.id && other.payload.status === 'active'
       && (other.payload.holdoutCases ?? []).some(reference => reference.id === item.id && reference.sha256 === item.sha256)));
     let current = await this.service.get(tool.id);
+    const crashed = disposition === 'execution-regression';
     if (current.payload.maintenanceState !== 'deprecating') current = await this.service.save('tool', tool.id, { ...current.payload, maintenanceState: 'deprecating',
-      regression: { releaseId, at: this.service.now().toISOString(), failedCaseIds: result.failedCaseIds, evaluatorHash: result.evaluatorHash, protectedCoverage: unique } }, current);
+      regression: { kind: disposition, releaseId, at: this.service.now().toISOString(), failedCaseIds: result.failedCaseIds, evaluatorHash: result.evaluatorHash, protectedCoverage: unique } }, current);
     if (!unique) await this.retire(current, 'published-replay-regression');
     const prior = await this.service.get(id);
-    const review = prior ?? await this.service.save('maintenance-review', id, { kind: 'release-regression', parentToolIds: [tool.id],
+    const review = prior ?? await this.service.save('maintenance-review', id, { kind: 'release-regression', regression: disposition, parentToolIds: [tool.id],
       status: 'pending', releaseId, protectedCoverage: unique, failedCaseIds: result.failedCaseIds });
     await this.callbacks.proposeReview?.({ category: 'tool-repair', subjectId: id, materialVersion: releaseId, directional: true,
-      attemptedPaths: ['independent-published-case-replay', 'alternate-reference-coverage-check'], title: '修复科研工具的回放偏差',
-      body: unique ? '实际独立算例发现数值偏差；此工具提供唯一算例覆盖，保留并标记待修复。新版本须通过全部原算例。' : '实际独立算例发现数值偏差，旧版本已软退役。可研发修复版本，并通过全部原算例后替换。',
+      attemptedPaths: ['independent-published-case-replay', 'alternate-reference-coverage-check'], title: crashed ? '修复发布后无法运行的科研工具' : '修复科研工具的回放偏差',
+      body: crashed ? (unique ? '发布后回放时，这个工具在独立算例上已无法运行；它提供唯一算例覆盖，保留并标记待修复。新版本须通过全部原算例。' : '发布后回放时，这个工具在独立算例上已无法运行，旧版本已软退役。可研发修复版本，并通过全部原算例后替换。')
+        : unique ? '实际独立算例发现数值偏差；此工具提供唯一算例覆盖，保留并标记待修复。新版本须通过全部原算例。' : '实际独立算例发现数值偏差，旧版本已软退役。可研发修复版本，并通过全部原算例后替换。',
       options: [{ id: 'repair', label: '研发修复版本', operation: 'maintenance-repair' }, { id: 'retire', label: unique ? '保留唯一覆盖并复核' : '保留退役状态', operation: 'maintenance-retire' }],
       recommended: 'repair', conservative: 'repair' });
     return { disposition, reviewId: review.id, protectedCoverage: unique };
@@ -172,7 +396,11 @@ export class EvolutionMaintenance {
       const replacement=replacements.length===1?await this.service.get(replacements[0]):null;
       const pending=review.payload.restoration?.state==='pending' && review.payload.restoration.actionId===action.actionId;
       if(parents.every(row=>row.payload.status==='active') && !pending) return {state:'kept'};
-      if(parents.some(row=>row.payload.usage?.harmState==='harm' || (row.payload.status==='retired' && !['monthly-direction-review','alias-quiet-period'].includes(row.payload.retirement?.reason)))) throw new HttpError(409,'evolution_evaluation_invalid','A harmful or regressed version requires repair rather than reactivation.');
+      // A retirement the harm test proposed is a decision, and the same decision reverses it; a regression of the method itself is not.
+      const harmReview=review.payload.kind==='sequential-harm';
+      const reversible=['monthly-direction-review','alias-quiet-period',...(harmReview?['sequential-harm']:[])];
+      const blocked=row=>(!harmReview && row.payload.usage?.harmState==='harm') || (row.payload.status==='retired' && !reversible.includes(row.payload.retirement?.reason));
+      if(parents.some(blocked)) throw new HttpError(409,'evolution_evaluation_invalid','A harmful or regressed version requires repair rather than reactivation.');
       if(review.payload.kind==='merge' && (!replacement || replacements.length!==1 || replacement.payload.replacedBy || !['active','retired'].includes(replacement.payload.status) || JSON.stringify([...(replacement.payload.lineage?.parents??[])].sort())!==JSON.stringify([...review.payload.parentToolIds].sort()))) throw new HttpError(409,'evolution_evaluation_invalid','A newer branch cannot be overwritten by this reversal.');
       if(review.payload.kind!=='merge' && parents.some(row=>row.payload.replacedBy)) throw new HttpError(409,'evolution_evaluation_invalid','A superseding version requires its own review.');
       if(!pending) review=await this.service.save('maintenance-review',review.id,{...review.payload,restoration:{state:'pending',actionId:action.actionId,decisionId:action.id,replacementId:replacement?.id??null,requestedAt:this.service.now().toISOString()}},review);
@@ -180,18 +408,18 @@ export class EvolutionMaintenance {
         await this.service.withLock(`tool-lifecycle:${parent.id}`,async()=>{
         parent=await this.service.get(parent.id);
         if(parent.payload.status==='active' && parent.payload.restorationHistory?.some(item=>item.actionId===action.actionId)) return;
-        if(parent.payload.usage?.harmState==='harm' || (parent.payload.replacedBy??null)!==(review.payload.kind==='merge'?replacement.id:null) || (parent.payload.status==='retired' && !['monthly-direction-review','alias-quiet-period'].includes(parent.payload.retirement?.reason))) throw new HttpError(409,'evolution_evaluation_invalid','The current branch is not eligible for restoration.');
+        if(blocked(parent) || (parent.payload.replacedBy??null)!==(review.payload.kind==='merge'?replacement.id:null)) throw new HttpError(409,'evolution_evaluation_invalid','The current branch is not eligible for restoration.');
         if(!this.callbacks.restorePin) throw new HttpError(503,'evolution_execution_unavailable','Exact pin restoration is unavailable.');
         const expectedReplacement=parent.payload.replacedBy??null;
         try {
         await this.callbacks.restorePin({id:parent.id,digest:parent.payload.artifactDigest,revision:parent.payload.revision});
         parent=await this.service.get(parent.id);
-        if(parent.payload.usage?.harmState==='harm' || (parent.payload.status==='retired' && !['monthly-direction-review','alias-quiet-period'].includes(parent.payload.retirement?.reason)) || (parent.payload.replacedBy??null)!==expectedReplacement) throw new HttpError(409,'evolution_evaluation_invalid','The parent branch changed during restoration.');
+        if(blocked(parent) || (parent.payload.replacedBy??null)!==expectedReplacement) throw new HttpError(409,'evolution_evaluation_invalid','The parent branch changed during restoration.');
         await this.service.save('tool',parent.id,{...parent.payload,status:'active',replacedBy:null,aliasSince:null,
           restorationHistory:[...(parent.payload.restorationHistory??[]),{actionId:action.actionId,previousStatus:parent.payload.status,previousReplacement:parent.payload.replacedBy??null,at:this.service.now().toISOString()}],retirement:parent.payload.retirement?{...parent.payload.retirement,state:'reversed'}:undefined},parent);
         } catch(error) {
           const current=await this.service.get(parent.id);
-          if(current.payload.status!=='active' || current.payload.usage?.harmState==='harm') await this.callbacks.retirePin?.(parent.id);
+          if(current.payload.status!=='active' || (!harmReview && current.payload.usage?.harmState==='harm')) await this.callbacks.retirePin?.(parent.id);
           throw error;
         }
         });
@@ -207,7 +435,10 @@ export class EvolutionMaintenance {
     const review = await this.service.get(action.subjectId);
     if (!review || review.payload.recordType !== 'evolution-maintenance-review') throw new HttpError(404, 'evolution_tool_missing', 'Maintenance review unavailable.');
     const ids = review.payload.parentToolIds;
-    if(action.option==='keep') return this.restoreReview(review,action);
+    if(action.option==='keep') {
+      if(review.payload.kind==='sequential-harm') await this.recordHarmOverride(ids[0],action);
+      return this.restoreReview(review,action);
+    }
     if (action.option === 'repair') {
       const tool = await this.service.get(ids[0]);
       const original = (await this.service.dossiers()).find(row => row.id === tool.payload.dossierId || row.payload.toolId === tool.id);
@@ -225,6 +456,8 @@ export class EvolutionMaintenance {
       if (!row) throw new HttpError(404, 'evolution_tool_missing', 'Tool unavailable.');
       const unique = (row.payload.holdoutCases ?? []).some(item => !tools.some(other => other.id !== row.id && other.payload.status === 'active'
         && (other.payload.holdoutCases ?? []).some(reference => reference.id === item.id && reference.sha256 === item.sha256)));
+      // Unique reference coverage protects a tool that is merely little used, not one researchers keep correcting.
+      if (review.payload.kind === 'sequential-harm') return this.retire(row, 'sequential-harm');
       if (unique) return { state: 'protected-coverage' };
       return this.retire(row, 'monthly-direction-review');
     }

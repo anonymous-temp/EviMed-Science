@@ -1,4 +1,4 @@
-import { validatePlatformSkillPackage } from './platformSkillPackage.mjs';
+import { validatePlatformSkillPackage, runtimeSkillText } from './platformSkillPackage.mjs';
 import { PLATFORM_SKILL_GENERATION_MAX_PINS, PLATFORM_SKILL_MAX_TOOLS } from './platformSkillLimits.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -37,16 +37,40 @@ export async function verifyPlatformSkillGeneration(config,reference){
 }
 /** Immutable shared methods only; researcher data/results never enter this store.
  * Active selection is copied to a generation at runtime launch and never changed during a run.
- * @param {any} config @param {{listActive?:()=>Promise<any[]>}} [dependencies] */
-export function createPlatformSkillSupply(config,{listActive}={}){
+ * @param {any} config @param {{listActive?:()=>Promise<any[]>,report?:(code:string)=>void}} [dependencies] */
+export function createPlatformSkillSupply(config,{listActive,report=()=>{}}={}){
   const root=path.join(config.dataDir,'.openscience','platform-skills'),activeFile=path.join(root,'active.json');
   let mutation=Promise.resolve();
+  /** What went wrong and was not allowed to cost a runtime start or a dispatch, for the operator (`status()`). An optional
+   * extension failing never withholds unrelated research: a start without platform skills is a start. */
+  const status={failures:0,fallbacks:0,rebuilt:0,lastFailure:/** @type {any} */(null)};
+  /** The last generation each selection scope verified, which a failing selection falls back to. */
+  const lastVerified=new Map();
+  let reportedAt=0,reportedCode='';
+  /** @param {string} code */
+  function noteFailure(code){
+    status.failures+=1;status.lastFailure={code,at:new Date().toISOString()};
+    // Once a minute per code: every runtime start and dispatch meets the same broken file.
+    if(code!==reportedCode||Date.now()-reportedAt>60000){reportedCode=code;reportedAt=Date.now();try{report(code);}catch{/* reporting never fails a start */}}
+  }
   async function active(){try{return JSON.parse(await fs.readFile(activeFile,'utf8'));}catch(error){if(error.code==='ENOENT')return[];throw error;}}
+  /** A generation is content-addressed: what stands at its path and does not verify is wrong, never an authority. */
+  const corrupt=error=>error?.code==='extension_contract_invalid'||error instanceof SyntaxError;
   async function materialize(pins){
     if(pins.length>PLATFORM_SKILL_GENERATION_MAX_PINS)throw invalid();
     const manifest={schemaVersion:1,pins:pins.map(pin=>({...pin,files:Object.entries(pin.content).sort(([a],[b])=>a.localeCompare(b)).map(([file,content])=>({path:file,digest:`sha256:${sha(content)}`})),content:undefined,sourceFiles:undefined}))};
     const reference={schemaVersion:1,generationHash:sha(canonicalJson(manifest))},target=platformSkillGenerationRoot(config,reference);
-    if(await fs.stat(target).catch(()=>null))return verifyPlatformSkillGeneration(config,reference);
+    if(await fs.stat(target).catch(()=>null)){
+      try{return await verifyPlatformSkillGeneration(config,reference);}
+      catch(error){
+        if(!corrupt(error))throw error;
+        // Altered after it was written (a restore, a copy as another user): move it aside — never delete — and rebuild
+        // it from the pins in hand. The hash is deterministic, so nothing else would ever heal it.
+        const aside=path.join(root,'quarantine',`${reference.generationHash}-${Date.now()}`);
+        await fs.mkdir(path.dirname(aside),{recursive:true,mode:0o700});await fs.rename(target,aside).catch(failure=>{if(failure.code!=='ENOENT')throw failure;});
+        status.rebuilt+=1;noteFailure('platform_skill_generation_rebuilt');
+      }
+    }
     const staging=path.join(root,'staging',randomUUID());await fs.mkdir(staging,{recursive:true,mode:0o755});
     try{
       for(const pin of pins)for(const [relative,content]of Object.entries(pin.content)){
@@ -56,7 +80,9 @@ export function createPlatformSkillSupply(config,{listActive}={}){
       await writeFileExclusiveNoFollow(config.dataDir,path.join(staging,'manifest.json'),canonicalJson(manifest)+'\n',{mode:0o444});
       const readable = async directory => {await fs.chmod(directory,0o755);for(const item of await fs.readdir(directory,{withFileTypes:true}))if(item.isDirectory())await readable(path.join(directory,item.name));};
       await readable(staging);await fs.mkdir(path.dirname(target),{recursive:true,mode:0o755});await fs.rename(staging,target);
-    }catch(error){await fs.rm(staging,{recursive:true,force:true});if(error.code!=='EEXIST')throw error;}
+    // Two starts that both found it missing both stage it; the second rename meets a non-empty directory (Linux answers
+    // ENOTEMPTY, not EEXIST). The winner's directory is the same content, so it is verified and used like any other.
+    }catch(error){await fs.rm(staging,{recursive:true,force:true});if(error.code!=='EEXIST'&&error.code!=='ENOTEMPTY')throw error;}
     return verifyPlatformSkillGeneration(config,reference);
   }
   return{
@@ -64,12 +90,15 @@ export function createPlatformSkillSupply(config,{listActive}={}){
       if(config.evolutionEnabled!==true||evaluation?.ok!==true||!['V0','V1','V2','V3','V4'].includes(evaluation.verificationLevel))throw invalid();
       const packageCheck=validatePlatformSkillPackage(candidate,{card});
       if(!packageCheck.ok)throw new HttpError(400,'extension_contract_invalid',packageCheck.issues.map(issue=>`${issue.field}: ${issue.message}`).join(' '));
-      const {files,skillBody,hasFrontmatter,id}=packageCheck;
+      const {files,skillBody,hasFrontmatter,description,body,id}=packageCheck;
       if(card?.toolKind==='workflow'&&evaluation.verificationLevel==='V0'&&evaluation.smokePassed!==true)throw invalid();
-      if(card?.toolKind!=='workflow'&&evaluation.verificationLevel==='V0')throw invalid();
+      // A text-only handbook entry (flywheel F16) is effective only after its independent re-check, which the caller states and this refuses to run without.
+      if(card?.toolKind==='handbook'&&(evaluation.recheckPassed!==true||candidate.publicationKind!=='skill'||Object.keys(candidate.files??{}).some(name=>name!=='SKILL.md')))throw invalid();
+      if(card?.toolKind!=='workflow'&&card?.toolKind!=='handbook'&&evaluation.verificationLevel==='V0')throw invalid();
       const digest=`sha256:${sha(canonicalJson(files))}`,nativeName=`platform-${sha(id+'\0'+digest).slice(0,24)}`;
       // Discovery metadata is platform-owned; frozen candidate bytes remain untouched.
-      const runtimeSkill=hasFrontmatter?skillBody.replace(/^name:.*$/m,`name: ${nativeName}`):`---\nname: ${nativeName}\ndescription: ${JSON.stringify(String(candidate.title??card?.title??id).replace(/[\r\n]/g,' ').slice(0,500))}\n---\n\n${skillBody}`;
+      // Written whole by the platform from two checked fields (`runtimeSkillText`): the builder's front matter never reaches a tenant.
+      const runtimeSkill=runtimeSkillText({nativeName,description:hasFrontmatter?description:candidate.title??card?.title??id,body:hasFrontmatter?body:skillBody});
       const content={...files,'SKILL.md':runtimeSkill};
       if(candidate.publicationKind==='skill'){
         const scripts=Object.keys(files).filter(name=>/^scripts\/[A-Za-z0-9_-]+\.py$/.test(name));
@@ -145,7 +174,29 @@ export function createPlatformSkillSupply(config,{listActive}={}){
       if(!frozen.pins.some(item=>item.id===pin.id&&item.digest===pin.digest&&item.revision===pin.revision))throw invalid();
       return structuredClone({id:pin.id,digest:pin.digest,revision:pin.revision,files:pin.sourceFiles,sourceFiles:pin.sourceFiles,entrypoint:pin.entrypoint,dependencies:pin.dependencies,track:pin.track,capabilityIds:pin.capabilityIds,publicationKind:pin.publicationKind,executionTools:pin.executionTools,verificationLevel:pin.verificationLevel});
     },
-    async prepareForRuntime(project){
+    /** The generation to mount for this scope, or the last one that verified, or none — and whether it is a fallback.
+     * Never throws: a corrupt `active.json`, a generation that fails verification and cannot be rebuilt, or more pins
+     * than a generation holds are counted and reported, and the runtime starts without them.
+     * @param {any} project @returns {Promise<{generation:any,degraded:boolean}>} */
+    async selectForRuntime(project){
+      if(config.evolutionEnabled!==true)return{generation:null,degraded:false};
+      const scope=JSON.stringify([project?.capabilityId??null,project?.track??null]);
+      try{
+        const generation=await this.selectionForRuntime(project);
+        if(generation)lastVerified.set(scope,generation);else lastVerified.delete(scope);
+        return{generation,degraded:false};
+      }catch(error){
+        noteFailure('platform_skill_selection_failed');
+        const previous=lastVerified.get(scope);
+        if(previous){try{await verifyPlatformSkillGeneration(config,previous.reference);status.fallbacks+=1;return{generation:previous,degraded:true};}catch{lastVerified.delete(scope);}}
+        return{generation:null,degraded:true};
+      }
+    },
+    async prepareForRuntime(project){return(await this.selectForRuntime(project)).generation;},
+    status:()=>structuredClone(status),
+    noteFailure,
+    /** The selection itself; it throws, and `selectForRuntime` is what callers use. @param {any} project */
+    async selectionForRuntime(project){
       if(config.evolutionEnabled!==true)return null;
       const pins=listActive?await listActive():await active();
       if(pins.length>PLATFORM_SKILL_MAX_TOOLS)throw invalid();

@@ -99,7 +99,7 @@ export function CapabilitiesPage() {
     return () => { active = false; };
   }, [reloads]);
 
-  // A capability its own module opens (the 「循证 GEO」 ones, `display.listed:
+  // A capability its own module opens (the 「循证传播」 ones, `display.listed:
   // false`) is not a tool to pick here; it stays public so that module can
   // bind a conversation to it.
   const catalogue = useMemo(() => agents.filter((agent) => capabilityListed(agent.id)).map(researchAgentUi), [agents]);

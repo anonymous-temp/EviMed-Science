@@ -36,7 +36,7 @@
  * @module frontierActions
  */
 
-import { FRONTIER_SOURCE_TYPE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
+import { DISPLAY_TIME_ZONE, FRONTIER_SOURCE_TYPE_LABELS_ZH, agendaLocalDate, frontierSourceDisplayName } from "@evimed/domain";
 import { isChineseProse } from "./frontierEditor.mjs";
 import { FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
@@ -92,9 +92,11 @@ export function frontierLibrarySlug({ publicId, title, day }) {
 /**
  * The Markdown record a non-open-access item is saved as: what a reader needs
  * to cite it and find it again, and the summary the feed wrote about it.
- * @param {{ item: any, savedAt: Date, day: string, reason?: string | null }} input
+ * `day` is the item's publication day and `savedAt` the moment it was saved, each read as a day in
+ * `timeZone` (the feed's own): the saved file says when it was stored in the reader's day, not the UTC one.
+ * @param {{ item: any, savedAt: Date, day: string, reason?: string | null, timeZone?: string }} input
  */
-export function frontierLibraryRecord({ item, savedAt, day, reason = null }) {
+export function frontierLibraryRecord({ item, savedAt, day, reason = null, timeZone = DISPLAY_TIME_ZONE }) {
   const title = String(item.title_zh || item.title_raw).replace(/\s+/g, " ").trim();
   const sourceType = /** @type {Record<string, string>} */ (FRONTIER_SOURCE_TYPE_LABELS_ZH)[item.source_type] ?? null;
   const lines = [`# ${title}`, ""];
@@ -112,7 +114,7 @@ export function frontierLibraryRecord({ item, savedAt, day, reason = null }) {
   if (item.reason_zh) lines.push("", "## 为什么值得看", "", String(item.reason_zh));
   if (item.abstract_raw) lines.push("", "## 原文摘要", "", String(item.abstract_raw).trim());
   lines.push("", "---", "",
-    `由 EviMed「前沿动态」于 ${savedAt.toISOString().slice(0, 10)} 存入。${reason ? `${reason}` : ""}导读由模型根据原文写成，数字已逐字核对；引用前请阅读原文。`, "");
+    `由 EviMed「前沿动态」于 ${agendaLocalDate(timeZone, savedAt)} 存入。${reason ? `${reason}` : ""}导读由模型根据原文写成，数字已逐字核对；引用前请阅读原文。`, "");
   return lines.join("\n");
 }
 
@@ -228,8 +230,8 @@ export class FrontierActions {
     const item = await this.#item(publicId);
     const project = await this.library.project(user, projectId);
     const published = item.published_at && item.date_precision !== "inferred" ? item.published_at : item.timeline_at;
-    const day = new Intl.DateTimeFormat("en-CA", { timeZone: String(this.config.frontierTimeZone || "Asia/Shanghai"), year: "numeric", month: "2-digit", day: "2-digit" })
-      .format(new Date(published));
+    const timeZone = String(this.config.frontierTimeZone || DISPLAY_TIME_ZONE);
+    const day = agendaLocalDate(timeZone, new Date(published));
     const slug = frontierLibrarySlug({ publicId: item.public_id, title: item.title_raw, day });
     /** @type {string | null} */
     let note = null;
@@ -257,7 +259,7 @@ export class FrontierActions {
       }
     }
     const rel = `${FRONTIER_LIBRARY_FOLDER}/${slug}.md`;
-    const record = frontierLibraryRecord({ item, savedAt: this.now(), day, reason: note ? "开放获取全文这次没有下载成功。" : null });
+    const record = frontierLibraryRecord({ item, savedAt: this.now(), day, timeZone, reason: note ? "开放获取全文这次没有下载成功。" : null });
     await this.library.save({ user, project, rel, buffer: Buffer.from(record, "utf8") });
     this.counters.savedRecord += 1;
     return { saved: { kind: "md", path: rel, note } };

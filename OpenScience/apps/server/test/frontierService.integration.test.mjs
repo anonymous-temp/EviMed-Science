@@ -98,7 +98,7 @@ test("the selected view lists selected, published items of enabled sources, newe
   assert.deepEqual(card.alsoReportedBy, [{ sourceId: "lancet", sourceName: "The Lancet", url: "https://lancet.example.org/1" }],
     "the primary source never reports itself");
   assert.equal(card.alsoReportedCount, 1);
-  assert.deepEqual(card.source, { id: "nejm", name: "NEJM Journal", homepage: "https://nejm.example.org/" });
+  assert.deepEqual(card.source, { id: "nejm", name: "NEJM Journal", homepage: "https://nejm.example.org/", platformProduced: false });
   assert.deepEqual(card.state, { starred: false, hidden: false, read: false });
   assert.equal(card.selectedRule, "threshold");
   assert.equal(card.timelineAt, "2026-09-22T03:00:00.000Z");

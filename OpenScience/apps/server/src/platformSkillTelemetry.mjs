@@ -8,6 +8,9 @@ const canonicalTool=value=>String(value??'').replace(/^mcp__evimed__/,'').split(
 export function createPlatformSkillTelemetry(pins,scope=''){
   const identity=(kind,key,toolId)=>{const hex=createHash('sha256').update(JSON.stringify([scope,kind,key,toolId])).digest('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-8${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;};
   pins=Array.isArray(pins)?pins:[];
+  // No platform tool is mounted (the module is off, or nothing is published): there is nothing to observe, and every tool event of every
+  // run would otherwise be copied, remembered for the life of the run and parsed a second time.
+  if(!pins.length)return{observe:()=>[]};
   const readable=pins.filter(pin=>pin.id!=='platform-tool-search'),methods=readable.filter(pin=>pin.publicationKind==='skill'),calls=new Map(),opened=new Set(),completed=new Map(),emitted=new Set();
   return{observe(event){
     const key=String(event.callId??`seq:${event.seq}`);

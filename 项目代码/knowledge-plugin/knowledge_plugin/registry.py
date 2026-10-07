@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -48,7 +49,11 @@ REQUIRED: dict[str, type | tuple] = {
 OPTIONAL: dict[str, type | tuple] = {
     "homepage": (str, type(None)), "language": (str, type(None)), "region": (str, type(None)),
     "disabled_reason": (str, type(None)), "category": (str, type(None)),
+    # Contract 1.3.0: the content is produced by the platform that consumes the plugin (flywheel F09).
+    "platform_produced": bool,
 }
+_URL_ENV = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
+FEED_URL_UNSET = "feed_url_unset"
 
 
 class RegistryError(ValueError):
@@ -78,6 +83,32 @@ def list_configured(config: dict) -> bool:
     if (config.get("selectors") or {}).get("item"):
         return True
     return config.get("mode") == "script-json" and bool(config.get("script_var")) and bool(config.get("fields"))
+
+
+def resolve_env_url(row: dict, environ: dict | os._Environ | None = None) -> dict:
+    """A row whose address is the deployment's, not the registry's (``config.url_env``): the feed the platform
+    publishes of its own evidence lives at the platform's public URL, which a registry in a repository cannot name.
+
+    The row is returned with ``config.url`` read from that environment variable, and with the host it names as its
+    ``allowed_hosts``; unset, empty or not an http(s) address, it is returned **disabled** with the reason
+    ``feed_url_unset``, so nothing is polled. A row with no ``url_env`` is returned as it is. The resolved row is what
+    is validated, hashed and synced: a changed address is a changed source, its cursor starts again.
+    """
+    config = row.get("config")
+    name = config.get("url_env") if isinstance(config, dict) else None
+    if not isinstance(name, str):
+        return row
+    value = ((os.environ if environ is None else environ).get(name) or "").strip() if _URL_ENV.match(name) else ""
+    host = _host_of(value) if value.startswith(("http://", "https://")) else None
+    resolved = dict(row)
+    resolved["config"] = dict(config)
+    if host:
+        resolved["config"]["url"] = value
+        resolved["config"].setdefault("allowed_hosts", [host])
+    else:
+        resolved["enabled"] = False
+        resolved["disabled_reason"] = FEED_URL_UNSET
+    return resolved
 
 
 def validate_row(row: dict) -> list[str]:
@@ -128,8 +159,13 @@ def validate_row(row: dict) -> list[str]:
     hosts = config.get("allowed_hosts")
     if hosts is not None and not (isinstance(hosts, list) and all(isinstance(h, str) and h for h in hosts)):
         problems.append(f"{sid}: config.allowed_hosts must be a list of host names")
+    url_env = config.get("url_env")
+    if url_env is not None and not (isinstance(url_env, str) and _URL_ENV.match(url_env)):
+        problems.append(f"{sid}: config.url_env must be the name of an environment variable")
     if row["enabled"]:
-        if not templates:
+        # An address read from the environment is resolved before the row is loaded (``resolve_env_url``); in the file
+        # the row only names the variable.
+        if not templates and not url_env:
             problems.append(f"{sid}: enabled without config.url")
         if row["access"] not in IMPLEMENTED_ACCESSES:
             problems.append(f"{sid}: enabled with access {row['access']} that this build does not implement")
@@ -140,7 +176,7 @@ def validate_row(row: dict) -> list[str]:
     return problems
 
 
-def parse_registry(document: dict) -> list[RegistryRow]:
+def parse_registry(document: dict, environ: dict | os._Environ | None = None) -> list[RegistryRow]:
     rows = document.get("sources") if isinstance(document, dict) else None
     if not isinstance(rows, list):
         raise RegistryError(["the registry file has no 'sources' list"])
@@ -151,6 +187,7 @@ def parse_registry(document: dict) -> list[RegistryRow]:
         if not isinstance(row, dict):
             problems.append("a registry row is not an object")
             continue
+        row = resolve_env_url(row, environ)
         row_problems = validate_row(row)
         if isinstance(row.get("id"), str) and row["id"] in seen:
             row_problems.append(f"{row['id']}: duplicate id")
@@ -164,7 +201,7 @@ def parse_registry(document: dict) -> list[RegistryRow]:
                 source_type=row["source_type"], access=row["access"], egress=row["egress"], authority=row["authority"],
                 safety_feed=row["safety_feed"], owner_entity=row["owner_entity"].strip(), launch_tier=row["launch_tier"],
                 language=row.get("language"), region=row.get("region"), poll_floor_s=row["poll_floor_s"],
-                poll_ceiling_s=row["poll_ceiling_s"], config=row["config"],
+                poll_ceiling_s=row["poll_ceiling_s"], config=row["config"], platform_produced=bool(row.get("platform_produced", False)),
             ),
             enabled=row["enabled"],
             disabled_reason=row.get("disabled_reason"),
@@ -176,24 +213,24 @@ def parse_registry(document: dict) -> list[RegistryRow]:
     return out
 
 
-def load_registry(path: str | Path) -> list[RegistryRow]:
+def load_registry(path: str | Path, environ: dict | os._Environ | None = None) -> list[RegistryRow]:
     try:
         document = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise RegistryError([f"cannot read the registry file: {type(error).__name__}"]) from None
-    return parse_registry(document)
+    return parse_registry(document, environ)
 
 
 _UPSERT = """
 INSERT INTO evimed_knowledge.sources AS s
   (id, name, homepage, lane, source_type, access, egress, authority, safety_feed, owner_entity, launch_tier, language,
    region, config, registry_sha256, registry_enabled, enabled, disabled_reason, category, priority, poll_interval_s,
-   poll_floor_s, poll_ceiling_s, next_poll_at, health, retired_at, updated_at, host)
+   poll_floor_s, poll_ceiling_s, next_poll_at, health, retired_at, updated_at, host, platform_produced)
 VALUES
   (%(id)s, %(name)s, %(homepage)s, %(lane)s, %(source_type)s, %(access)s, %(egress)s, %(authority)s, %(safety_feed)s,
    %(owner_entity)s, %(launch_tier)s, %(language)s, %(region)s, %(config)s, %(sha)s, %(enabled)s, %(enabled)s,
    %(disabled_reason)s, %(category)s, %(priority)s, %(floor)s, %(floor)s, %(ceiling)s, %(now)s,
-   CASE WHEN %(enabled)s THEN 'new' ELSE 'disabled' END, NULL, %(now)s, %(host)s)
+   CASE WHEN %(enabled)s THEN 'new' ELSE 'disabled' END, NULL, %(now)s, %(host)s, %(platform_produced)s)
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name, homepage = EXCLUDED.homepage, lane = EXCLUDED.lane, source_type = EXCLUDED.source_type,
   access = EXCLUDED.access, egress = EXCLUDED.egress, authority = EXCLUDED.authority,
@@ -213,7 +250,7 @@ ON CONFLICT (id) DO UPDATE SET
                 ELSE s.health END,
   next_poll_at = CASE WHEN s.health = 'disabled' AND (EXCLUDED.disabled_reason IS DISTINCT FROM 'owner_excluded' AND coalesce(s.operator_enabled, EXCLUDED.registry_enabled))
                       THEN EXCLUDED.next_poll_at ELSE s.next_poll_at END,
-  retired_at = NULL, updated_at = EXCLUDED.updated_at, host = EXCLUDED.host
+  retired_at = NULL, updated_at = EXCLUDED.updated_at, host = EXCLUDED.host, platform_produced = EXCLUDED.platform_produced
 WHERE s.registry_sha256 IS DISTINCT FROM EXCLUDED.registry_sha256
    OR s.host IS DISTINCT FROM EXCLUDED.host
    OR s.retired_at IS NOT NULL
@@ -233,7 +270,7 @@ async def sync_registry(conn: AsyncConnection, rows: list[RegistryRow], now: dat
         "category": r.category,
         "priority": priority(safety_feed=r.source.safety_feed, source_type=r.source.source_type, access=r.source.access),
         "floor": r.source.poll_floor_s, "ceiling": r.source.poll_ceiling_s, "now": now,
-        "host": _host_of(r.source.config.get("url")),
+        "host": _host_of(r.source.config.get("url")), "platform_produced": r.source.platform_produced,
     } for r in rows]
     async with conn.transaction():
         async with conn.cursor() as cur:
@@ -264,5 +301,5 @@ def source_from_row(row: dict) -> SourceConfig:
         access=row["access"], egress=row["egress"], authority=row["authority"], safety_feed=row["safety_feed"],
         owner_entity=row["owner_entity"], launch_tier=row["launch_tier"], language=row["language"],
         region=row["region"], poll_floor_s=row["poll_floor_s"], poll_ceiling_s=row["poll_ceiling_s"],
-        config=row["config"] or {},
+        config=row["config"] or {}, platform_produced=bool(row.get("platform_produced")),
     )

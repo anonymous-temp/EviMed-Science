@@ -11,7 +11,7 @@ has several platforms, the platform; the gateway builds the address.
 `gene_expression.py` runs in a child process under the six limits and writes its results, a rendered table and a
 receipt as files. Numbers reach the report through `research_calculate` action=render from those files.
 
-Both are named for the data resource (`gene_expression`, `ncbi_geo`); neither has anything to do with the 循证 GEO
+Both are named for the data resource (`gene_expression`, `ncbi_geo`); neither has anything to do with the 循证传播
 module's `geo_read` / `geo_write`.
 
 An input over a limit is refused for that computation with the reason (`gene_expression_input_over_limit`, with
@@ -362,6 +362,9 @@ def series(arguments):
             warnings.append("Identity check %s failed: %s No differential expression can be computed from this capture." % (name, entry["detail"]))
         elif entry["status"] == "unknown":
             warnings.append("Identity check %s is unknown: %s" % (name, entry["detail"]))
+    # Which way each file reached us when the gateway said (a refused public file is asked again before the refusal is believed): recorded in
+    # the result, not in the capture, so the same bytes are the same capture whichever way they came.
+    routes = {name: download.route for name, download in (("matrix", matrix_download), ("platformRecord", platform_download)) if download is not None and download.route}
     data = {
         "accession": record["series"]["accession"], "title": series_title,
         "series": {key: record["series"][key] for key in ("status", "submissionDate", "lastUpdateDate", "type", "pubmedIds", "sampleCount", "platforms")},
@@ -377,6 +380,8 @@ def series(arguments):
         "terms": TERMS, "retrievedAt": _now(), "limits": limit_values,
         "outcome": source_outcome.complete(),
     }
+    if routes:
+        data["downloadRoutes"] = routes
     summary = "Preserved GEO series %s (%s; %d samples, %d probes on %s) %s; identities %s." % (
         data["accession"], series_title[:80] or "untitled", len(matrix.sample_ids), len(matrix.probe_ids), record["platform"]["accession"],
         "with the platform's probe annotation" if platform_record is not None else "WITHOUT the platform's probe annotation (its record could not be used)",

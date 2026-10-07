@@ -122,7 +122,7 @@ test("a stop pauses the agenda in place, spends no episode, and the occurrence i
   assert.equal(planner.calls.length, 2);
 });
 
-test("the decision is metered under purpose autopilot against the episode it chooses for, and a spent envelope falls back to the rotation", options, async () => {
+test("the decision is metered under purpose autopilot against the episode it chooses for, and an account cap with no room for it falls back to the rotation", options, async () => {
   const usage = new UsageLedger(database);
   const providerConfig = { deepseekProviderEnabled: true, deepseekApiKey: "provider-key", deepseekBaseUrl: "https://api.deepseek.com",
     deepseekModel: "deepseek-flash", modelGatewayReservationMaxOutputTokens: 4096, userDailySpendLimit: 0, userWeeklySpendLimit: 0 };
@@ -142,17 +142,22 @@ test("the decision is metered under purpose autopilot against the episode it cho
   assert.ok(run.actualCost < 0.05, "a decision is fractions of a yuan, not a run");
 
   // (The gateway reads the wall clock, so the spend is booked on it, whatever day the scheduler thinks it is.)
-  // The agenda's own daily cap is half a yuan with five hundredths of a fen left of it: the episode is still admitted, the decision's reservation no longer fits.
+  // The ACCOUNT's own daily cap is half a yuan with five hundredths of a fen left of it — what the account spent on its own research
+  // (this test used to put the cap on the agenda, which compared the agenda's cap with the account's spend: 2026-10-04): the episode is
+  // still admitted, the decision's reservation no longer fits.
   now = new Date("2026-10-02T06:00:00Z");
-  let tight = await service.create(owner, { projectId: "project-test", title: "Tight envelope", prompt: "Preserve the full instruction.",
+  const accountCaps = () => ({ userDailySpendLimit: 0.5, userWeeklySpendLimit: 0 });
+  const cappedPlanner = new AutopilotPlanner({ ...providerConfig, userDailySpendLimit: 0.5 }, { usageLedger: usage, fetchImpl });
+  const capped = new AutopilotService({ documents, jobs, usage, planner: cappedPlanner, accountCaps, now: () => now });
+  let tight = await capped.create(owner, { projectId: "project-test", title: "Tight envelope", prompt: "Preserve the full instruction.",
     taskTypes: ["literature-sentinel", "evidence-update"], schedule: { kind: "daily", timeZone: "UTC", time: "07:35" },
-    dailyBudgetCny: 0.5, weeklyBudgetCny: 80, maxEpisodeCny: 0.5 });
-  tight = await service.start(owner, tight.id, { expectedRevision: tight.revision });
+    dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8 });
+  tight = await capped.start(owner, tight.id, { expectedRevision: tight.revision });
   await usage.recordSettled({ id: randomUUID(), userId: owner, projectId: "project-test", purpose: "kernel", model: "deepseek-flash",
     priceVersion: "test", currency: "CNY", requestFingerprint: createHash("sha256").update(randomUUID()).digest("hex"),
     usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 }, actualCost: Math.round((0.4999 - run.actualCost) * 1e8) / 1e8, priced: true, now: new Date() });
   now = new Date("2026-10-02T07:35:00Z");
-  const refused = await service.scheduleDue(owner, tight.id);
+  const refused = await capped.scheduleDue(owner, tight.id);
   assert.equal(refused.episode.payload.selection.source, "date-rotation");
   assert.equal(refused.episode.payload.selection.fallbackReason, "usage_budget_exceeded");
   assert.equal(refused.episode.payload.status, "queued", "the research itself is not held back by the decision's budget");

@@ -12,6 +12,13 @@ export const PRODUCT_KINDS = Object.freeze([
   "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
   // What a project's datasets mean: one document per dataset, the recorded interpretation a repeat analysis starts from.
   "dataset-semantics",
+  // What was published about a work after it was published (a retraction, a correction, an expression of concern, a new
+  // version), one document per source identifier. Platform-level: owned by the platform publisher account, holding only
+  // public bibliographic facts and never which tenant asked (`sourceChanges.mjs`, plan 2026-10-05 B5).
+  "source-change",
+  // What the platform's evidence programme decided on one day, and why: the counts it read, the zones it chose, what became of each
+  // episode. One document per day, owned by the platform publisher in its internal evidence project (`evidenceProgramme.mjs`).
+  "programme-decision",
 ]);
 // Frontier issues, reader notifications and operator rebuilds use the shared
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
@@ -20,7 +27,9 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify", "document-export", "study-review", "result-replay",
   // One finished run joined to the capability, skill and tool versions it used and to the result versions it
   // produced (`availabilityCollector.mjs`), and the sweep that finds runs the finish hook missed.
-  "availability-collect", ...EVOLUTION_JOB_KINDS, ...EXTENSION_JOB_KINDS]);
+  "availability-collect", ...EVOLUTION_JOB_KINDS, ...EXTENSION_JOB_KINDS,
+  // The evidence programme's one decision a day (`evidenceProgramme.mjs`): the topic selector's run, leased like every other job.
+  "evidence-programme"]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -297,6 +306,34 @@ BEGIN
   END IF;
 END $dataset_semantics_kind$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-04-dataset-semantics-kind-v1') ON CONFLICT DO NOTHING;
+DO $source_change_kind$
+BEGIN
+  -- Its own block, for the reason the method-trial block gives: the blocks before this one rebuild the
+  -- constraint only when it lacks *their* kind.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.documents'::regclass
+      AND c.conname='product_documents_kind_check' AND position('''source-change''' in pg_get_constraintdef(c.oid)) > 0) THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
+      CHECK (kind IN (${PRODUCT_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $source_change_kind$;
+-- The feed of source changes is read by position ('changedSince'): the last position of the one owner, and the
+-- records after a position, both from this index. A record that holds no change yet has no position and is not in it.
+CREATE INDEX IF NOT EXISTS product_source_change_seq_idx ON evimed_product.documents (user_id, ((payload->>'seq')::bigint))
+  WHERE kind='source-change' AND deleted_at IS NULL;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-source-change-kind-v1') ON CONFLICT DO NOTHING;
+DO $programme_decision_kind$
+BEGIN
+  -- Its own block, for the reason the method-trial block gives: the blocks before this one rebuild the
+  -- constraint only when it lacks *their* kind.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.documents'::regclass
+      AND c.conname='product_documents_kind_check' AND position('''programme-decision''' in pg_get_constraintdef(c.oid)) > 0) THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
+      CHECK (kind IN (${PRODUCT_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $programme_decision_kind$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-programme-decision-kind-v1') ON CONFLICT DO NOTHING;
 DO $availability_kind$
 BEGIN
   -- Its own block, for the reason the method-trial block gives: the blocks before
@@ -308,6 +345,33 @@ BEGIN
       CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
   END IF;
 END $availability_kind$;
+DO $evolution_job_kinds$
+BEGIN
+  -- 「循证进化」's eight job kinds. Its own block, for the reason the method-trial block gives: every
+  -- block before this one rebuilds the constraint only when it lacks *its* kind, so on a deployment
+  -- that has run them all (every one that exists) nothing else would ever let these in, and the
+  -- first enqueue would be refused by the database. A fresh database builds the constraint from
+  -- the list above and never shows it.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.jobs'::regclass
+      AND c.conname='product_jobs_kind_check'
+      AND ${EVOLUTION_JOB_KINDS.map(kind => `position('''${kind}''' in pg_get_constraintdef(c.oid)) > 0`).join(" AND ")}) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $evolution_job_kinds$;
+DO $programme_job_kind$
+BEGIN
+  -- The evidence programme's job kind, in its own block for the same reason: the evolution block above rebuilds
+  -- the constraint only when it lacks *its* kinds.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.jobs'::regclass
+      AND c.conname='product_jobs_kind_check' AND position('''evidence-programme''' in pg_get_constraintdef(c.oid)) > 0) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $programme_job_kind$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-evolution-job-kinds-v1') ON CONFLICT DO NOTHING;
 -- What finished operations say about a capability version, a tool, a skill or an extension on THIS
 -- deployment (the availability projection's evidence). One row per subject and exact version, folded
 -- by the collector in the same transaction that completes the job for one run. Deployment-wide by

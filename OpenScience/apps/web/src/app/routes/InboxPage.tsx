@@ -1,5 +1,5 @@
 import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
-import { frontierNoticeHref } from "@evimed/domain";
+import { frontierNoticeHref, shareNoticeHref } from "@evimed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -241,9 +241,12 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   // Only the ledger knows which conversation that is, so this stays the run's
   // own address and `RunRedirect` resolves it (router.tsx).
   if (item.source.type === "run") return `/app/runs?run=${encodeURIComponent(item.source.id)}`;
+  // A share (flywheel F17): a delivery opens the preview-and-try page; its withdrawal and a take-down open the memory page, where the
+  // pack's shelf says what happened.
+  if (item.source.type === "share") return shareNoticeHref(item.source);
   // A memory's confirm, correct and delete controls are on its own page.
   if (item.source.type === "memory") return `/app/memory?record=${encodeURIComponent(item.source.id)}`;
-  // A 循证 GEO notice names the page it is about: `<geoId>/<tab>[/<item>]`.
+  // A 循证传播 notice names the page it is about: `<geoId>/<tab>[/<item>]`.
   if (item.source.type === "geo" && /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80}){0,2}$/.test(item.source.id)) return `/app/geo/${item.source.id}`;
   // A 虚拟临研 notice names a study and, optionally, its tab: `<studyId>[/<tab>]`.
   // The study page's address has exactly those two segments, so a third one —

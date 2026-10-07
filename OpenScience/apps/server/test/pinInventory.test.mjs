@@ -117,6 +117,7 @@ test("what a live kernel produced is never filed as a pin", async () => {
   const kindAt = (file, words) => report.occurrences.find((entry) => entry.file === file && entry.text.includes(words))?.verdict?.kind;
   assert.equal(kindOf("OpenScience/apps/server/test/fixtures/dsh/golden-frames.json", 3), "provenance");
   assert.equal(kindAt("OpenScience/apps/server/src/dshRuntimeAdapter.mjs", "Recorded live from"), "provenance");
+  assert.equal(kindAt("OpenScience/evals/judge-sites/release-readiness.json", '"kernel"'), "provenance");
   assert.equal(kindOf("OpenScience/scripts/ops/check-kernel-defaults.mjs", 101), "provenance");
 });
 

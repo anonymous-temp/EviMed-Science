@@ -1,12 +1,18 @@
 import { webErrorMessage } from "./apiClient";
 import { productRequest } from "./productClient";
 
+/** Who owns a zone's voice: the platform (official), a company or doctor (product), a researcher (user). */
+export type EvidenceZoneKind = "official" | "product" | "user";
+/** Who may read a published zone: signed-in accounts, or anyone (the owner's own choice). */
+export type EvidenceZoneVisibility = "platform" | "internet";
 export interface EvidenceZone {
   id: string;
   createdAt?: string;
   creator?: string | null;
   revision: number;
   state: "draft" | "published";
+  kind?: EvidenceZoneKind;
+  visibility?: EvidenceZoneVisibility;
   canEdit: boolean;
   title: string;
   description: string | null;
@@ -33,7 +39,25 @@ export interface EvidenceCard {
   creator: string | null;
   reviewer: string | null;
   reviewedAt: string | null;
-  claims: Array<{ text: string }>;
+  claims: EvidenceClaim[];
+  claimCount?: number;
+  claimVerification?: EvidenceClaimCounts | null;
+  producer?: EvidenceProducer | null;
+  originality?: EvidenceOriginality | null;
+  /** First-hand work (original analysis, recalculation, original research) as opposed to interpretation. */
+  primary?: boolean;
+  lineage?: EvidenceLineage | null;
+  entityKeys?: string[];
+  journeyStage?: { key: string; label: string } | null;
+  disclosure?: EvidenceDisclosure | null;
+  /**
+   * The 时效 label of plan §4.4 (`SOURCE_CURRENCY_LABELS` in `@evimed/domain`), when the server has computed one.
+   * Absent until it has: the page shows no 时效 tag rather than a guessed 「现行」.
+   */
+  currency?: string | null;
+  publicView?: EvidencePublicViewContent | null;
+  /** The two views of this card, computed by the server from the same verified claims; absent in lists. */
+  views?: { clinical: EvidenceClinicalView; public: EvidencePublicView } | null;
   sources: Array<{
     title: string;
     url: string | null;
@@ -58,7 +82,7 @@ export interface EvidenceCard {
   content?: EvidenceContent | null;
   editorial?: {
     author: { kind: "ai" | "human"; name: string; model?: string };
-    lastEditor?: { userId: string; name: string; editedAt: string };
+    lastEditor?: { userId?: string; name: string; editedAt: string };
     reviewer: { kind: "ai"; name: string; model?: string } | null;
     sourceFingerprint?: string;
     sourceCheckedAt?: string | null;
@@ -81,6 +105,163 @@ export interface EvidenceCard {
     sourceFingerprint: string | null;
     reviewStatus: string | null;
   }>;
+}
+export type EvidenceProducerKind = "platform" | "enterprise" | "doctor" | "user" | "external";
+export type EvidenceProducerRelation = "none" | "own_product" | "competitor_product" | "user_of_therapy" | "commercial_cooperation";
+export interface EvidenceProducer {
+  kind: EvidenceProducerKind;
+  name: string;
+  relation: EvidenceProducerRelation;
+  products?: string[];
+}
+export type EvidenceOriginality = "original_analysis" | "recalculation" | "original_research" | "synthesis" | "brief";
+export interface EvidenceLineage {
+  frontierItemId?: string;
+  resultVersionId?: string;
+  runId?: string;
+  agendaId?: string;
+  episodeId?: string;
+  previousCardId?: string;
+  originCardId?: string;
+  verifiedStudy?: { doi?: string; pmid?: string; registryId?: string };
+}
+export interface EvidenceDisclosure {
+  model?: string;
+  modelVersion?: string;
+  generatedAt?: string;
+  lastCheckedAt?: string;
+  aiSteps: Array<"search" | "screen" | "extract" | "synthesize" | "review">;
+  authors: Array<{ name: string; affiliation?: string; title?: string }>;
+  reviewers: Array<{ name: string; affiliation?: string; title?: string }>;
+}
+/** ✓ verified, ⚠ a quotation not found or not checkable, null for a derived claim (it has no quotation). */
+export type EvidenceClaimMark = "✓" | "⚠" | null;
+export interface EvidenceClaimCounts {
+  total: number;
+  verified: number;
+  quote_not_found: number;
+  source_unavailable: number;
+  no_quote: number;
+  /** The quotation is in an excerpt its author supplied; the platform has not read the source. */
+  author_excerpt_only?: number;
+  derived: number;
+}
+export interface EvidenceClaimVerification {
+  claimId: string;
+  claimType: string;
+  status: "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "author_excerpt_only" | "derived" | "calculation_unverified";
+  mark: EvidenceClaimMark;
+  /** Why a calculated claim could not be checked against its receipt (`EVIDENCE_CALCULATION_REASONS`). */
+  reason?: string;
+  sources: Array<{ sourceIndex: number | null; status: string; mark: EvidenceClaimMark; location?: unknown }>;
+}
+export interface EvidenceClaim {
+  /** The statement, under the name the reading page renders. */
+  text: string;
+  claimId?: string;
+  claimType?: "direct" | "synthesized" | "derived" | "calculated";
+  claim?: string;
+  /** What a calculated claim stands on: the engine's receipt and the path of its number in it. */
+  calculation?: { engine: string; method: string; receiptId: string; valuePath: string; machineValue: number; format?: string };
+  /** The label, engine, method and receipt a reader is shown for a claim the platform computed. */
+  platformCalculation?: { label: string; engine: string | null; method: string | null; receiptId: string | null };
+  /** 1-based positions in the card's own sources. */
+  sourceIndexes?: number[];
+  supportQuote?: string;
+  supportingSources?: Array<{ sourceIndex: number; supportQuote?: string }>;
+  confidence?: "high" | "moderate" | "low";
+  applicability?: string;
+  uncertainty?: string;
+  derivedFrom?: string[];
+  method?: string;
+  assumptions?: string;
+  sensitivity?: string;
+  verification?: EvidenceClaimVerification | null;
+}
+export interface EvidencePublicViewContent {
+  oneLineAnswer?: { text: string; claimIds: string[] };
+  whatItIs?: { text: string; claimIds: string[] };
+  labelSays?: { text: string; claimIds: string[] };
+  notApplicable?: { text: string; claimIds: string[] };
+  seekCareWhen?: { text: string; claimIds: string[] };
+  commonMisunderstandings?: Array<{ misunderstanding: string; correction: string; observedIn?: string; claimIds: string[] }>;
+}
+export type EvidenceAbsoluteEffect =
+  | { status: "computed"; per: 1000; unit: "people" | "person-years"; control: number; intervention: number; difference: number }
+  | { status: "unavailable"; reason: "no_comparison" | "counts_missing" | "events_exceed_denominator" | "calculation_unverified" };
+/** The GRADE summary-of-findings layout for doctors and pharmacists. */
+export interface EvidenceClinicalView {
+  kind: "clinical";
+  header: {
+    title: string | null;
+    producer: EvidenceProducer | null;
+    originality: EvidenceOriginality | null;
+    primary: boolean;
+    journeyStage: { key: string; label: string } | null;
+    disclosure: EvidenceDisclosure | null;
+    lastCheckedAt: string | null;
+  };
+  population: string | null;
+  rows: Array<{
+    title: string;
+    outcome: string;
+    timeframe: string;
+    comparator: string | null;
+    intervention: string | null;
+    relativeEffect: string | null;
+    absoluteEffect: EvidenceAbsoluteEffect;
+    participants: number | null;
+    studies: number | null;
+    certainty: string | null;
+    outcomeRole: "benefit" | "harm" | null;
+    note: string | null;
+    sourceIndexes: number[];
+    /** Present when the row's counts were produced by a machine: where they can be read back from. */
+    platformCalculation?: { label: string; engine: string | null; method: string | null; receiptId: string | null };
+  }>;
+  claims: EvidenceClaim[];
+  /** Calculated claims whose receipt did not hold, with why; they are not listed as claims. */
+  withheldCalculations?: Array<{ claimId: string; reason: string }>;
+  counts: EvidenceClaimCounts;
+}
+export interface EvidenceFactBoxRow {
+  index: number;
+  outcome: string;
+  timeframe: string;
+  denominator: number;
+  control: { label: string; per1000: number };
+  intervention: { label: string; per1000: number };
+  difference: number;
+  sourceIndexes: number[];
+}
+/** Per 1000 people, one denominator for both arms, computed by the server; when it cannot be, `reason` says why. */
+export interface EvidenceFactBox {
+  status: "available" | "unavailable";
+  reason?: "no_comparisons" | "outcome_role_missing" | "counts_missing" | "events_exceed_denominator" | "not_per_people" | "calculation_unverified" | "nothing_usable";
+  per: 1000;
+  unit: "people";
+  benefits: EvidenceFactBoxRow[];
+  harms: EvidenceFactBoxRow[];
+  excluded: Array<{ index: number; reason: string }>;
+}
+/** The public layout: six panels the author filled, a seventh from the card, and the fact box. */
+export interface EvidencePublicView {
+  kind: "public";
+  header: Omit<EvidenceClinicalView["header"], "lastCheckedAt">;
+  panels: Array<{
+    key: string;
+    label: string;
+    status: "written" | "missing";
+    text?: string | null;
+    claimIds?: string[];
+    traced?: boolean;
+    items?: Array<{ misunderstanding: string; correction: string; observedIn?: string; claimIds: string[]; traced: boolean }>;
+    sources?: Array<{ title: string; url: string | null }>;
+    checkedAt?: string | null;
+  }>;
+  factBox: EvidenceFactBox;
+  /** What the platform computed itself, each with where the number can be read back from. */
+  calculations?: Array<{ claimId: string; text: string; label: string; engine: string | null; method: string | null; receiptId: string | null }>;
 }
 export interface EvidenceContent {
   question: string;
@@ -109,6 +290,10 @@ export interface EvidenceContent {
     certainty?: string;
     sourceIndexes: number[];
     note?: string;
+    participants?: number;
+    studies?: number;
+    outcomeRole?: "benefit" | "harm";
+    valueSource?: "observed" | "extracted" | "calculated" | "imputed" | "aggregate" | "reconstructed" | "predicted" | "assumed" | "synthetic";
   }>;
 }
 export interface EvidencePage<T> {
@@ -335,6 +520,8 @@ export interface EvidenceAutomation {
   lastError: string | null;
 }
 export interface EvidenceMaintenance {
+  /** Who pays for keeping the zone current: the platform's frontier budget (an official zone) or the owner's own allowance. */
+  billing?: { payer: "platform" | "owner"; official: boolean; purpose: string };
   automation: EvidenceAutomation;
   jobs: { pending: number; running: number; failed: number };
   recent: Array<{
@@ -373,6 +560,100 @@ export const refreshEvidenceZone = (zone: EvidenceZone) =>
     "POST",
     {},
   );
+
+/** Who may read a published zone is the owner's own choice, apart from publishing it. */
+export async function setEvidenceZoneVisibility(zone: EvidenceZone, visibility: EvidenceZoneVisibility) {
+  return (
+    await productRequest<{ zone: EvidenceZone }>(
+      `/frontier/zones/${id(zone.id)}/visibility`,
+      "PUT",
+      { visibility, expectedRevision: zone.revision },
+    )
+  ).zone;
+}
+
+/** The zones a research result may be published to: the caller's own user zones (an older server's zones have no kind and are user zones). */
+export async function listOwnUserZones(): Promise<EvidenceZone[]> {
+  const zones: EvidenceZone[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 5; page += 1) {
+    const result: EvidencePage<EvidenceZone> = await listEvidenceZones("", cursor, "owned");
+    zones.push(...result.items.filter((zone) => (zone.kind ?? "user") === "user"));
+    cursor = result.nextCursor;
+    if (!cursor) break;
+  }
+  return zones;
+}
+
+/** What a request to publish a result as an evidence card names: its project, one own zone or a new one, and the claims. */
+export interface ResultCardRequest {
+  projectId: string;
+  zoneId?: string;
+  newZone?: { title: string };
+  /** Exactly these claims; absent, the verified ones. */
+  claimIds?: string[];
+}
+export interface ResultCardAnswer {
+  evidence: EvidenceCard;
+  zone: EvidenceZone;
+  created: boolean;
+  outcome: "created" | "existing" | "next_version";
+  previousCardId: string | null;
+  /** Claims left out of the card, each with the code of why. */
+  omitted: Array<{ claimId: string; reason: string }>;
+}
+export const publishResultAsEvidenceCard = (versionId: string, request: ResultCardRequest) =>
+  productRequest<ResultCardAnswer>(`/results/${id(versionId)}/evidence-card`, "POST", request);
+
+export interface EvidenceContinuation {
+  projectId: string;
+  sessionId: string;
+  originCardId: string;
+  /** The question, written and not sent. */
+  draft: string;
+  library: {
+    folder: string;
+    saved: Array<{ index: number; title: string; path: string; kind: "text" | "record" }>;
+    failed: Array<{ index: number; code: string }>;
+  };
+}
+/** 「用这张卡继续研究」: a project, the card's primary sources in its knowledge base, and an unsent question. */
+export const continueResearchFromCard = (cardId: string, input: { projectId?: string } = {}) =>
+  productRequest<EvidenceContinuation>(`/frontier/evidence/${id(cardId)}/continue`, "POST", input);
+
+export interface EvidenceCardRef {
+  id: string;
+  zoneId: string;
+  title: string;
+  creator: string | null;
+  producer: { kind: EvidenceProducerKind; name: string } | null;
+}
+export interface EvidenceCardLinks {
+  author: { id: string; name: string };
+  /** The card this card's research began from, when the reader may read it. */
+  origin: EvidenceCardRef | null;
+  /** The earlier card this one follows, when the reader may read it. */
+  previous: EvidenceCardRef | null;
+  related: Array<EvidenceCardRef & { relation: "next_version" | "research_from_card" }>;
+}
+export const fetchEvidenceCardLinks = (cardId: string) =>
+  productRequest<EvidenceCardLinks>(`/frontier/evidence/${id(cardId)}/links`);
+
+export interface EvidenceAuthorPage {
+  /** `id` is the author's public handle, never the account id. */
+  author: { id: string; name: string; platform: boolean };
+  /** A doctor's or a company's producer record, from the author's cards; absent for an account that signs as itself. */
+  producer?: { kind: "doctor" | "enterprise"; name: string; relation: string; products: string[] };
+  /** The people the author's cards name (a disclosure's authors and reviewers), each once; absent when no card names anyone. */
+  people?: Array<{ name: string; affiliation: string | null; title: string | null }>;
+  zones: Array<{ id: string; title: string; description: string; kind: EvidenceZoneKind; visibility: EvidenceZoneVisibility; evidenceCount: number; follows: number; updatedAt: string }>;
+  cards: Array<EvidenceCardRef & { summary: string; originality: EvidenceOriginality | null; claimCount: number; updatedAt: string }>;
+  totals: { cards: number; followers: number; runsFromCards: number };
+  /** The author's recent change-log entries, when the deployment keeps a change log. */
+  changes?: Array<{ id?: string; summary?: string; categoryLabel?: string; cardTitle?: string | null; occurredAt?: string }>;
+}
+/** `authorId` is the author's public handle, as the card's links and the author page carry it; an account id is never in a URL. */
+export const fetchEvidenceAuthor = (authorId: string) => productRequest<EvidenceAuthorPage>(`/frontier/authors/${id(authorId)}`);
 
 /** Native evidence failures explain the action while keeping unsaved input intact. */
 export function evidenceErrorMessage(error: unknown): string {

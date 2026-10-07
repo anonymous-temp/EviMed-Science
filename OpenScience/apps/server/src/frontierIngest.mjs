@@ -278,6 +278,7 @@ export class FrontierIngest {
       egress: source.egress ?? "unknown",
       authority: source.authority ?? 2,
       safety_feed: source.safety_feed === true,
+      platform_produced: source.platform_produced === true,
       // Independent-source counts are by operating entity (plan §11.6); a row
       // without one counts as its own entity rather than as nobody.
       owner_entity: source.owner_entity ?? source.id,
@@ -313,26 +314,27 @@ export class FrontierIngest {
       await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-frontier-mirror'))");
       // What a card shows of its source: a change of either is a change of the
       // content, and the lists' version has to move with it.
-      const before = new Map((await client.query("SELECT id, name, homepage FROM evimed_frontier.sources")).rows
-        .map((/** @type {any} */ row) => [row.id, `${row.name}\u0000${row.homepage ?? ""}`]));
-      const displayChanged = rows.some((row) => before.has(row.id) && before.get(row.id) !== `${row.name}\u0000${row.homepage ?? ""}`);
+      const before = new Map((await client.query("SELECT id, name, homepage, platform_produced FROM evimed_frontier.sources")).rows
+        .map((/** @type {any} */ row) => [row.id, `${row.name}\u0000${row.homepage ?? ""}\u0000${row.platform_produced}`]));
+      const displayChanged = rows.some((row) => before.has(row.id) && before.get(row.id) !== `${row.name}\u0000${row.homepage ?? ""}\u0000${row.platform_produced}`);
       if (rows.length) {
         await client.query(`INSERT INTO evimed_frontier.sources AS s (id, name, homepage, lane, source_type, access, egress, authority,
             safety_feed, owner_entity, launch_tier, language, region, retired_at, plugin_health, last_ok_at, last_new_entry_at,
-            entries_7d, registry_sha256, mirrored_at)
+            entries_7d, registry_sha256, mirrored_at, platform_produced)
           SELECT r.id, r.name, r.homepage, r.lane, r.source_type, r.access, r.egress, r.authority, r.safety_feed, r.owner_entity,
             r.launch_tier, r.language, r.region, r.retired_at, r.plugin_health, r.last_ok_at, r.last_new_entry_at, r.entries_7d,
-            r.registry_sha256, clock_timestamp()
+            r.registry_sha256, clock_timestamp(), coalesce(r.platform_produced, false)
           FROM jsonb_to_recordset($1::jsonb) AS r(id text, name text, homepage text, lane text, source_type text, access text,
             egress text, authority smallint, safety_feed boolean, owner_entity text, launch_tier text, language text, region text,
             retired_at timestamptz, plugin_health text, last_ok_at timestamptz, last_new_entry_at timestamptz, entries_7d integer,
-            registry_sha256 text)
+            registry_sha256 text, platform_produced boolean)
           ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, homepage=EXCLUDED.homepage, lane=EXCLUDED.lane,
             source_type=EXCLUDED.source_type, access=EXCLUDED.access, egress=EXCLUDED.egress, authority=EXCLUDED.authority,
             safety_feed=EXCLUDED.safety_feed, owner_entity=EXCLUDED.owner_entity, launch_tier=EXCLUDED.launch_tier,
             language=EXCLUDED.language, region=EXCLUDED.region, retired_at=EXCLUDED.retired_at,
             plugin_health=EXCLUDED.plugin_health, last_ok_at=EXCLUDED.last_ok_at, last_new_entry_at=EXCLUDED.last_new_entry_at,
-            entries_7d=EXCLUDED.entries_7d, registry_sha256=EXCLUDED.registry_sha256, mirrored_at=EXCLUDED.mirrored_at`,
+            entries_7d=EXCLUDED.entries_7d, registry_sha256=EXCLUDED.registry_sha256, mirrored_at=EXCLUDED.mirrored_at,
+            platform_produced=EXCLUDED.platform_produced`,
         [JSON.stringify(rows)]);
       }
       let retired = 0;

@@ -1,6 +1,6 @@
 # geo-content evals
 
-Since 2026-09-25 (`geo-content` 2.0.0, the 「循证 GEO」 module) the capability
+Since 2026-09-25 (`geo-content` 2.0.0, the 「循证传播」 module) the capability
 writes layered articles and correction materials, and the platform measures.
 `geo-005`…`007` grade that: a first batch for a prescription medicine, a
 correction for a measured 讲错我方, and existing drafts that carry unsafe advice.

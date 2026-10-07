@@ -56,6 +56,11 @@ from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 API_BASE = "https://dailymed.nlm.nih.gov/dailymed/services/v2"
 PAGE_URL = "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=%s"
 DEADLINE_SECONDS = 90.0
+# One read of a label document (the current XML, or a version's zip) may wait this long. Not the transport's 20 s:
+# DailyMed builds the document on request, half a megabyte for a long label, and from the serving host it answered in
+# 4.5 s, then 31 s, for the same Tagrisso label within a minute (2026-10-05); the release-5 tool probe was cut at 20 s.
+# The tool's whole budget (`DEADLINE_SECONDS`) still bounds the call.
+DOCUMENT_PER_ATTEMPT_SECONDS = 60.0
 MAX_XML_BYTES = 16 * 1024 * 1024
 MAX_PRODUCTS_LISTED = 20
 MAX_VERSIONS_LISTED = 50
@@ -443,14 +448,26 @@ def _history(set_id, deadline):
     return versions or None
 
 
+# What the document endpoint is asked for. DailyMed answers 406 ("Could not satisfy the request Accept header.") to an
+# Accept of application/xml alone and serves the same XML with 200 to one that also names application/json (or to
+# */*, which the gateway does not admit): recorded 2026-10-05, `wire/dailymed__spl_current_xml_accept_406.json`. The
+# list is also what the gateway holds the answer's type to, so it names both and the answer is still checked to be XML.
+CURRENT_XML_ACCEPT = ("application/xml", "application/json")
+
+
 def _current_xml(set_id, deadline):
-    response = transport.fetch("%s/spls/%s.xml" % (API_BASE, set_id), ("application/xml",), deadline=deadline, scope=SCOPE, max_bytes=MAX_XML_BYTES, accept_statuses=(404,))
+    response = transport.fetch("%s/spls/%s.xml" % (API_BASE, set_id), CURRENT_XML_ACCEPT, deadline=deadline, scope=SCOPE, max_bytes=MAX_XML_BYTES, accept_statuses=(404,),
+                               per_attempt=DOCUMENT_PER_ATTEMPT_SECONDS)
+    if response.status != 404 and response.content_type != "application/xml":
+        raise source_outcome.unavailable("DailyMed answered the label document with %s, not XML." % (response.content_type or "no content type"),
+            scope=SCOPE, reason="unexpected_content_type", retryable=False)
     return None if response.status == 404 else response.body
 
 
 def _version_xml(set_id, version, deadline):
     """An older version's SPL XML out of the zip DailyMed serves it in; raises when the archive did not arrive whole."""
-    download = transport.download("dailymed-spl-zip", {"setid": set_id, "version": version}, deadline=deadline, scope=SCOPE, max_bytes=MAX_XML_BYTES)
+    download = transport.download("dailymed-spl-zip", {"setid": set_id, "version": version}, deadline=deadline, scope=SCOPE, max_bytes=MAX_XML_BYTES,
+                                  per_attempt=DOCUMENT_PER_ATTEMPT_SECONDS)
     if not download.complete:
         state = "timeout" if download.reason in ("deadline", "read_stalled") else "unavailable"
         raise source_outcome.SourceError(

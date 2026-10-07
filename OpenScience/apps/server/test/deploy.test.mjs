@@ -1353,6 +1353,38 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
   assert.equal(script.includes("mock-agent-artifact.md"), false);
 });
 
+test("the engine image build hands the workflow's token to the R install as a BuildKit secret, and works without one", async () => {
+  // 2026-10-05: the Mendelian randomization engine installs its pinned R packages from GitHub and `remotes` resolves their
+  // `Remotes:` through api.github.com, whose 60-requests-an-hour unauthenticated limit a shared runner spent on about every
+  // other run. The token must reach that one command and nothing else: no build argument, no ENV, no layer, no trace.
+  const workflowText = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
+  const step = workflowStep(workflowText, "Build hosted Web, agent runtime and deterministic replay images");
+  assert.match(step, /^        env:\n(?:          #[^\n]*\n)+          GITHUB_TOKEN: \$\{\{ github\.token \}\}\n        run: \|/, "the step, and only the step, is given the workflow's own token");
+  assert.match(step, /-f \.\.\/\.github\/ci\/docker-compose\.build-secrets\.yml/);
+  assert.doesNotMatch(workflowText.replace(step, ""), /GITHUB_TOKEN: \$\{\{/, "no other step or job env carries it");
+  const commands = step.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
+  assert.doesNotMatch(commands, /--build-arg[^\n]*(?:TOKEN|PAT)|GITHUB_PAT/, "never a build argument");
+
+  const overlay = YAML.parse(await readFile(path.join(repoRoot, "../.github/ci/docker-compose.build-secrets.yml"), "utf8"));
+  assert.deepEqual(overlay.secrets, { github_token: { environment: "GITHUB_TOKEN" } });
+  assert.deepEqual(Object.keys(overlay.services), ["evimed-mr-agent"], "only the engine that reaches the GitHub API is given it");
+  assert.deepEqual(overlay.services["evimed-mr-agent"].build, { secrets: ["github_token"] });
+  // A build that is not handed it (a host build, a fork) must not be asked for one: the deployment's compose never names it.
+  const base = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  assert.doesNotMatch(base, /github_token|GITHUB_TOKEN|GITHUB_PAT/);
+
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/specialist-adapter/Dockerfile"), "utf8");
+  const install = dockerfile.match(/^RUN --mount=type=secret[^\n]*\n(?:[^\n]*\\\n)*[^\n]*\n/m)?.[0] ?? "";
+  assert.match(install, /Rscript \/agent\/install_r_packages\.R/, "the R install is one RUN");
+  assert.match(install, /^RUN --mount=type=secret,id=github_token,required=false \\$/m, "an optional mount");
+  assert.match(install, /if \[ -s \/run\/secrets\/github_token \]; then GITHUB_PAT="\$\(cat \/run\/secrets\/github_token\)"; export GITHUB_PAT; fi;/, "read into GITHUB_PAT inside the command, only when the secret is non-empty");
+  assert.doesNotMatch(dockerfile, /^\s*(?:ARG|ENV)\s+[^\n]*(?:GITHUB_PAT|GITHUB_TOKEN|github_token)/mi, "never an ARG or ENV");
+  assert.doesNotMatch(install, /set -[a-z]*x/, "the command that holds the token is not traced");
+  const uses = dockerfile.split("\n").filter((line) => !line.startsWith("#") && line.includes("GITHUB_PAT"));
+  assert.ok(uses.length > 0);
+  assert.ok(uses.every((line) => install.includes(line)), "GITHUB_PAT appears nowhere but that command");
+});
+
 test("Web CI includes a Linux Docker Compose release and real runtime smoke job", async () => {
   const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
   assert.match(workflow, /docker-hosted:/);
@@ -1976,7 +2008,8 @@ test("a capability's two skill copies never drift apart by more than their known
   const knownDivergence = {
     "adr-analysis": 63,
     "bibliometric-analysis": 58,
-    "clinical-evidence-synthesis": 267,
+    // Raised on 2026-10-05 (evidence-flywheel F04): one sentence saying to look in the frontier feed first for what is new (+1).
+    "clinical-evidence-synthesis": 268,
     "comprehensive-drug-evaluation": 45,
     // The optional-output scoping revision synchronized the retained body too.
     "dataset-research-scoping": 0,
@@ -2150,7 +2183,9 @@ test("file-delivery capabilities fix the two pre-delivery steps instead of leavi
     // use proportional numerical checks and optional companions, as covered by
     // their capability suites: their numbers are rendered from a tool's or a
     // script's results, not typed from sources. They do not inherit the full
-    // report pipeline's mandatory skill sequence.
+    // report pipeline's mandatory skill sequence. The two 循证进化 packages
+    // (evolution-scout, tool-builder) deliver one JSON artifact to a platform job,
+    // not prose to a reader, so they have no report to trace or humanize.
     if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis", "evolution-scout", "tool-builder"].includes(name)) continue;
     for (const step of ["traceability-review", "manuscript-humanize"]) {
       assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);

@@ -1,5 +1,5 @@
 /**
- * “循证 GEO” — the browser's side of `/api/geo/*` (build spec 2026-09-25 §3).
+ * “循证传播” — the browser's side of `/api/geo/*` (build spec 2026-09-25 §3).
  *
  * Hidden knowledge:
  *
@@ -192,6 +192,12 @@ export interface GeoProject {
   startedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  /** Who speaks for the product; null until the project says. Cards cannot be written without it. */
+  producer?: GeoProducer | null;
+  /** The one product zone the project's cards are in, once there is one. */
+  productZoneId?: string | null;
+  /** Who is reading, and what their roles in the project allow (the owner has every ability). */
+  access?: { roles: string[]; abilities: string[]; owner: boolean };
 }
 
 export interface GeoClaim {
@@ -327,6 +333,18 @@ export interface GeoStatementFact {
   severity: GeoSeverity | null;
   evidence: string | null;
 }
+export interface GeoSpecifiedInfo {
+  correct: number;
+  wrong: number;
+  decided: number;
+  rate: number | null;
+  byTopic: Record<string, { correct: number; wrong: number }>;
+}
+export interface GeoAnswerChecks {
+  offLabel?: string[];
+  omittedSafety?: Array<{ claimId: string; claimKey: string | null; cardId: string | null; cardClaimId: string | null; cardRevision: number | null }>;
+  citations?: Array<{ link: string; url: string; statement: string; exists: boolean | null; supports: "yes" | "no" | "unclear" | null; evidence: string | null }>;
+}
 export interface GeoAnswer {
   question: { id: string; text: string; pool: GeoPool | null };
   snapshot: {
@@ -351,7 +369,14 @@ export interface GeoAnswer {
     wrongOurs?: number | null;
     citesOurs?: boolean | null;
   }>;
-  facts: { brands: GeoBrandFact[]; statements: GeoStatementFact[] } | null;
+  facts: {
+    brands: GeoBrandFact[];
+    statements: GeoStatementFact[];
+    /** 指定信息正确率 of this answer, computed on the server from the verdicts: indication, dosage, contraindication, adverse reaction. */
+    specifiedInfo?: GeoSpecifiedInfo;
+    /** The judge's checks beside the statements: beyond the label, safety left out, what the cited links say. */
+    checks?: GeoAnswerChecks;
+  } | null;
   errors: GeoErrorRow[];
   history: Array<{ sampleDate: string; snapshotId: string }>;
 }
@@ -400,6 +425,15 @@ export interface GeoArticle {
   claimCount: number;
   placements: number;
   cited: boolean;
+  /** The card a card-layer article is made from (it has no file of its own), and the revision it was made from. */
+  cardId?: string | null;
+  cardRevision?: number | null;
+  /** What the platform found reading the article's claim references against the cards. */
+  referenceStatus?: "unchecked" | "none" | "resolved" | "unresolved";
+  /** The references a card's change log says were corrected, updated in their conclusion or withdrawn since the article cited them. */
+  staleReferences?: { cardId: string; claimId: string; revision: number; category: string; summary: string; occurredAt: string }[];
+  /** 广告 or 商业合作, on an article that was paid for. */
+  placementLabel?: "advertisement" | "commercial_cooperation" | null;
 }
 export interface GeoArticles {
   articles: GeoArticle[];
@@ -580,8 +614,49 @@ export async function getGeoProject(geoId: string): Promise<GeoProject> {
   return readProject(await productRequest<GeoProject>(project(geoId)));
 }
 
-export function patchGeoProject(geoId: string, input: { coverageDays?: number; engines?: string[]; tier?: GeoTierId; status?: GeoProjectStatus }) {
+/** Who speaks for the product: a company, or a doctor about their own specialty; the relation to the product is read at the top of every card. */
+export interface GeoProducer {
+  kind: "enterprise" | "doctor";
+  name?: string | null;
+  relation?: "none" | "own_product" | "competitor_product" | "user_of_therapy" | "commercial_cooperation";
+  hospital?: string;
+  department?: string;
+  specialty?: string;
+  title?: string;
+}
+
+export function patchGeoProject(geoId: string, input: { coverageDays?: number; engines?: string[]; tier?: GeoTierId; status?: GeoProjectStatus; producer?: GeoProducer | null }) {
   return productRequest<unknown>(project(geoId), "PATCH", input);
+}
+
+export type GeoMemberRole = "editor" | "medical_reviewer" | "viewer";
+export interface GeoMember {
+  userId: string;
+  name: string | null;
+  owner: boolean;
+  roles: string[];
+  roleLabels: string[];
+  abilities: string[];
+  detail: Record<string, string>;
+}
+export interface GeoMembers {
+  members: GeoMember[];
+  /** What the reader of the list may do in this project. */
+  you: { roles: string[]; abilities: string[] };
+}
+
+/** The project's members: colleagues and outside agencies by role, the owner first. */
+export function getGeoMembers(geoId: string) {
+  return productRequest<GeoMembers>(`${project(geoId)}/members`);
+}
+
+export function addGeoMember(geoId: string, input: { userId: string; role: GeoMemberRole; detail?: Record<string, string> }) {
+  return productRequest<unknown>(`${project(geoId)}/members`, "POST", input);
+}
+
+/** Take one role (or, with none named, every role) away from an account; a member may remove themselves. */
+export function removeGeoMember(geoId: string, userId: string, role?: GeoMemberRole) {
+  return productRequest<{ removed: number }>(`${project(geoId)}/members/${id(userId)}${role ? `?role=${id(role)}` : ""}`, "DELETE", {});
 }
 
 export function deleteGeoProject(geoId: string) {
@@ -636,6 +711,19 @@ export function getGeoArticles(geoId: string) {
 
 export function withdrawGeoArticle(geoId: string, articleId: string) {
   return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/withdraw`, "POST", {});
+}
+
+/** An article as it leaves the platform: the claim references taken off, its author named, the relation to the product said and the AI label. */
+export interface GeoArticleText {
+  articleId: string;
+  layer: GeoArticleLayer | null;
+  aiGenerated: boolean;
+  markdown: string;
+}
+
+/** The text of an article — for a card-layer article, the card's public view rendered now, since it has no file of its own. */
+export function getGeoArticleText(geoId: string, articleId: string) {
+  return productRequest<GeoArticleText>(`${project(geoId)}/articles/${id(articleId)}/text`);
 }
 
 /** “放行”: the safety stop, after a person has looked at the article. */

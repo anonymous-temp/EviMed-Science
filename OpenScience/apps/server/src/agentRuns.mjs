@@ -98,9 +98,13 @@ import {
   auditCitedSources,
   citationUrlDefects,
   citationUrlDefectsByLine,
+  platformCardCitationMessage,
+  platformCardCitations,
+  platformCardCitationsByLine,
   unrecordedCitationMessage,
   unretrievedCitationMessage,
 } from "@evimed/domain";
+import { recordPlatformContentCited } from "./evidenceCitationMetrics.mjs";
 import { normalizePagesRead } from "./webReadPages.mjs";
 
 export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
@@ -133,6 +137,9 @@ const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
   "automated",
+  // A person is waiting on this dispatch (an interactive route, a messaging channel): waking the
+  // runtime waits for a free slot instead of refusing. Read by `dispatch` itself, not recorded.
+  "waitForRoom",
   "estimatedMinutes",
   "question",
   "effectiveAgentId",
@@ -142,6 +149,8 @@ const dispatchFields = new Set([
   "effectiveProducts",
 ]);
 const dispatchStatuses = new Set(["dispatching", "accepted", "unknown", "rejected"]);
+/** An evidence card's id (`evidenceOrigins.mjs`), the one shape a run's `originCardId` may take. */
+const originCardIdPattern = /^ec_[A-Za-z0-9]{8,64}$/;
 const defaultMaxRuns = 1000;
 const defaultMaxBytes = 1024 * 1024;
 // How many gate issues one deliverable frame carries. The repair loop sends the
@@ -314,6 +323,7 @@ function normalizeDispatchInput(input) {
   const effectiveProducts = normalizeEffectiveProducts(input.effectiveProducts, { strict: true });
   if (effectiveProducts && input.effectiveAgentId == null) throw invalid("Effective products need the specialist they belong to.");
   if (input.automated != null && typeof input.automated !== "boolean") throw invalid("automated must be a boolean.");
+  if (input.waitForRoom != null && typeof input.waitForRoom !== "boolean") throw invalid("waitForRoom must be a boolean.");
   const estimatedMinutes = input.estimatedMinutes == null ? null : normalizeRunEstimate(input.estimatedMinutes);
   if (input.estimatedMinutes != null && !estimatedMinutes) throw invalid("estimatedMinutes must be { min, max } minutes.");
   return {
@@ -495,6 +505,8 @@ function foldEvents(events) {
         // The session this run's session was forked from (C3), so a branch
         // can be followed back to the conversation it came from.
         ...(typeof event.forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(event.forkedFrom) ? { forkedFrom: event.forkedFrom } : {}),
+        // The evidence card this conversation was started from (flywheel F06): read by shape, like the fields around it.
+        ...(typeof event.originCardId === "string" && originCardIdPattern.test(event.originCardId) ? { originCardId: event.originCardId } : {}),
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
         startedAt,
@@ -829,12 +841,23 @@ function normalizeMountedSkills(value) {
   return names.length > 0 ? [...new Set(names)].slice(0, 32) : undefined;
 }
 
-/** Exact observed personal revisions, without resources, instructions or
- * filesystem locations. Malformed observational metadata cannot break a run.
- * @param {any} value */
-/** Public provenance contains only exact method identities, never code, evaluator assets or researcher values. @param {any} value */
+/**
+ * What a run records of the platform tools that were mounted for it: which generation and how many pins, never the
+ * pins. A generation is content-addressed, so `generationId` names the exact manifest — every tool, revision and digest
+ * — under `<data>/.openscience/platform-skills/generations/`, immutable and verified; and what a run actually used is
+ * in the evolution module's own use records, keyed by run. The ledger is one file capped at 1 MiB per project, past
+ * which `serializeNext` answers 413 and the project can record no more runs, and the full pin list (about 250 bytes a
+ * pin, written at the start and again when learning is recorded) was about 7 KB twice over for thirty tools and 37 KB
+ * twice over for an unscoped session of a hundred and fifty. Personal skills, the precedent, cap their list at 64.
+ * A stored record that still carries pins (written before) is validated and reduced to the same two fields.
+ * Public provenance contains only identities, never code, evaluator assets or researcher values. @param {any} value
+ */
 function normalizePlatformSkillGeneration(value) {
   const raw = Array.isArray(value) ? value : value?.pins
+  const generationShape = /^[a-f0-9]{64}$/.test(value?.generationId ?? '')
+  if (raw === undefined && generationShape && Number.isSafeInteger(value.pinCount) && value.pinCount > 0 && value.pinCount <= PLATFORM_SKILL_GENERATION_MAX_PINS) {
+    return { generationId: value.generationId, pinCount: value.pinCount }
+  }
   if (!Array.isArray(raw) || raw.length > PLATFORM_SKILL_GENERATION_MAX_PINS || raw.length === 0) return undefined
   const pins = [], seen = new Set()
   for (const pin of raw) {
@@ -844,11 +867,14 @@ function normalizePlatformSkillGeneration(value) {
     seen.add(pin.id)
     pins.push({ id: pin.id, revision: pin.revision, digest: pin.digest, nativeName: pin.nativeName, publicationKind: pin.publicationKind, source: 'platform' })
   }
-  const generationId = /^[a-f0-9]{64}$/.test(value?.generationId ?? '') ? value.generationId
+  const generationId = generationShape ? value.generationId
     : createHash('sha256').update(JSON.stringify(pins)).digest('hex')
-  return { generationId, pins }
+  return { generationId, pinCount: pins.length }
 }
 
+/** Exact observed personal revisions, without resources, instructions or
+ * filesystem locations. Malformed observational metadata cannot break a run.
+ * @param {any} value */
 function normalizePersonalSkillGeneration(value) {
   if (!value || !/^[a-f0-9]{64}$/.test(value.generationId ?? "") || !Array.isArray(value.pins) || value.pins.length > 64) return undefined;
   const pins = [], seen = new Set();
@@ -2455,6 +2481,15 @@ async function requiredSpecialistArtifacts(
   // verbatim; the findings carry each one's identity, so the record can title
   // it in Chinese without translating the sentence (C2).
   const findings = qualityFindingsOf(outcome);
+  // A card page cited as a source is said once: the manifest's citation check and the clinical gate read the same
+  // report, and an invalid package carries the gate's own finding of the same link in the same words.
+  const said = new Set(findings.map((finding) => finding.text));
+  for (let index = advisories.length - 1; index >= 0; index -= 1) {
+    if (advisories[index].code === "platform_card_cited" && said.has(advisories[index].text)) advisories.splice(index, 1);
+  }
+  // Rule 2's counter (plan §11): distinct citations, once per run.
+  recordPlatformContentCited(String(run.id), new Set([...findings, ...advisories]
+    .filter((notice) => notice.check === "platform-card-citation" || notice.code === "platform_card_cited").map((notice) => notice.text)).size);
   if (advisories.length === 0) return { ...outcome, ...unchecked, ...(findings.length ? { qualityFindings: findings } : {}) };
   // An advisory riding along is a second fact, so the rejection is no longer
   // attributable to the structural cause alone and must be charged normally.
@@ -2617,8 +2652,13 @@ async function specialistCompletionOutcome(
       }
     }
     if (agent.completionChecks.includes("citationsResolvable")) {
-      const { blocking, advisory } = citationUrlDefects(assistantProse(assistantMessages));
+      const prose = assistantProse(assistantMessages);
+      const { blocking, advisory } = citationUrlDefects(prose);
       advisories.push(...advisory.map((text) => runNotice("citation_plain_http", text)));
+      // One of EviMed's own card pages cited as a source: advice, never a reason to withhold (plan §4.3 rule 2).
+      for (const { url } of platformCardCitations(prose)) {
+        advisories.push(runNotice("platform_card_cited", platformCardCitationMessage({ path: "回答", url }), { check: "platform-card-citation" }));
+      }
       if (blocking.length > 0) {
         return {
           artifacts: [],
@@ -2775,6 +2815,10 @@ async function specialistCompletionOutcome(
     for (const [relative, text] of markdown) {
       for (const { line, message } of citationUrlDefectsByLine(relative, text).advisory) {
         advisories.push(runNotice("citation_plain_http", message, { file: relative, line }));
+      }
+      // One of EviMed's own card pages cited as a source: advice, never a reason to withhold (plan §4.3 rule 2).
+      for (const { line, message } of platformCardCitationsByLine(relative, text)) {
+        advisories.push(runNotice("platform_card_cited", message, { file: relative, line, check: "platform-card-citation" }));
       }
     }
     const blocking = defects.flatMap((defect) => defect.blocking);
@@ -4002,6 +4046,13 @@ export class AgentRunStore {
     this.runtimePersonalSkills = options.runtimePersonalSkills ?? (() => null);
     this.runtimePlatformSkills = options.runtimePlatformSkills ?? (() => null);
     this.captureRuntimeEgressProof = options.captureRuntimeEgressProof ?? null;
+    // The evidence card a research session was started from (flywheel F06, `evidenceOrigins.mjs`): asked when a run is
+    // reserved, so both roads that start one — the dispatch route and an adopted native turn — record it the same way,
+    // and told once the run exists so the card's citations can be counted. Absent, no run carries one.
+    /** @type {((project: any, session: any) => Promise<string | null>) | null} */
+    this.originCardOf = typeof options.originCardOf === "function" ? options.originCardOf : null;
+    /** @type {((project: any, run: any) => Promise<unknown>) | null} */
+    this.onOriginCardRun = typeof options.onOriginCardRun === "function" ? options.onOriginCardRun : null;
     this.setRuntimePlatformSkillScope = options.setRuntimePlatformSkillScope ?? (() => {});
     this.onPlatformSkillExecution = options.onPlatformSkillExecution ?? (async () => {});
     this.onPlatformSkillRetrieval = options.onPlatformSkillRetrieval ?? (async () => {});
@@ -4060,6 +4111,20 @@ export class AgentRunStore {
     // Consecutive polls with no new message and no new tool call before a run
     // is called stalled. Zero disables the check and waits out the timeout.
     this.monitorStallPolls = options.monitorStallPolls ?? 0;
+    // Called once, when this process has created a dispatched run and its brief is kept, immediately before its
+    // prompt goes out — the moment a run exists and has not begun to spend. Billing's hold on the run's
+    // budget is placed here. It can never refuse or fail a run: an error is swallowed (principle 14).
+    /** @type {(project: any, run: any) => Promise<any>} */
+    this.onRunReserved = options.onRunReserved ?? (async () => {});
+    // Who asked for a run to stop, recorded before the stop reaches the kernel (`noteStopRequest`), so the
+    // monitor — which may see the aborted turn and write the terminal first — cannot leave a user's own
+    // stop unattributed. Held in memory and for a few minutes only: a stop that did not end the run must
+    // never turn a platform cancel, a long time after, into the user's. runId -> when it was asked.
+    /** @type {Map<string, number>} */
+    this.stopRequests = new Map();
+    /** Runs whose runtime the user stopped (`noteRuntimeStop`): run id -> when. */
+    this.runtimeStopRequests = new Map();
+    this.stopRequestWindowMs = options.stopRequestWindowMs ?? 5 * 60_000;
     this.onRunFinished = options.onRunFinished ?? (async () => {});
     this.onRunFinishedError = options.onRunFinishedError ?? (async () => {});
     // Every state change the ledger commits is announced. The browser's live
@@ -4433,10 +4498,16 @@ export class AgentRunStore {
     return record;
   }
 
-  async captureBaseline(project, sessionId) {
+  /**
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @param {{ waitForRoom?: boolean }} [options] `waitForRoom`: a person is waiting on this
+   *   dispatch, so waking the runtime stands in line for a free slot instead of refusing
+   *   (`RuntimeManager.startWhenRoom`). A worker's dispatch leaves it off and defers.
+   */
+  async captureBaseline(project, sessionId, { waitForRoom = false } = {}) {
     let history;
     try {
-      history = await this.readSessionHistory(project, sessionId, { wake: true });
+      history = await this.readSessionHistory(project, sessionId, { wake: true, ...(waitForRoom ? { waitForRoom: true } : {}) });
     } catch (error) {
       if (error instanceof HttpError) throw error;
       throw new HttpError(502, "runtime_history_unavailable", "Runtime session history is unavailable.");
@@ -4538,6 +4609,8 @@ export class AgentRunStore {
       if (runs.has(id)) throw new HttpError(409, "agent_run_id_conflict", "Agent run id already exists.");
       const personalSkillGeneration = normalizePersonalSkillGeneration(await this.runtimePersonalSkills(project, { nativeTurn, startedAt }));
       const platformSkillGeneration = normalizePlatformSkillGeneration(await this.runtimePlatformSkills(project, { nativeTurn, startedAt }));
+      // A label that cannot be read leaves the run as it would have been (`evidenceOrigins.mjs`).
+      const originCardId = this.originCardOf ? await Promise.resolve().then(() => this.originCardOf?.(project, session)).catch(() => null) : null;
       const event = {
         event: "started",
         id,
@@ -4560,6 +4633,7 @@ export class AgentRunStore {
         ...(automated === true ? { automated: true } : {}),
         ...(normalizeRunEstimate(estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(estimatedMinutes) } : {}),
         ...(typeof forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? { forkedFrom } : {}),
+        ...(typeof originCardId === "string" && originCardIdPattern.test(originCardId) ? { originCardId } : {}),
         createdAt: now,
         // Exact financial ownership comes from the trusted project, never prompt input.
         accountCreatedAt: project.accountCreatedAt == null ? null : storedTimestamp(project.accountCreatedAt, "accountCreatedAt"),
@@ -4578,6 +4652,12 @@ export class AgentRunStore {
       }
       const run = foldEvents([...events, event]).get(id);
       this.notifyState(project, run);
+      if (run.originCardId && this.onOriginCardRun) {
+        // Counted behind the run, never in front of it, and tracked like the label writes so a close waits for it.
+        const pending = Promise.resolve().then(() => this.onOriginCardRun?.(project, run)).then(() => {}, () => {});
+        this.backgroundLabels.add(pending);
+        void pending.finally(() => this.backgroundLabels.delete(pending));
+      }
       return { run, owner: true };
     });
   }
@@ -4622,7 +4702,7 @@ export class AgentRunStore {
     const session = await this.researchSessions.get(project, sessionId);
     if (!session) throw new HttpError(404, "research_session_not_found", "Research session not found.");
     await this.reconcileSession(project, sessionId);
-    const baselineCursor = await this.captureBaseline(project, sessionId);
+    const baselineCursor = await this.captureBaseline(project, sessionId, { waitForRoom: input.waitForRoom === true });
     const selected = session.mode === "specialist"
       ? {
           effectiveAgentId: session.agentId,
@@ -4645,6 +4725,11 @@ export class AgentRunStore {
       await this.writeWorkspaceBrief(project, briefText);
     }
     try {
+      // The hold on the run's budget is placed here, after the brief is kept and immediately before the prompt goes
+      // out (review F7): a start that fails before this point never froze anything, and one that fails after it ends
+      // `failed` through the catch below, which is what releases the hold. A hold that could not be placed never
+      // stops research.
+      try { await this.onRunReserved(project, record); } catch { /* billing failing never stops a run */ }
       try{await this.captureRuntimeEgressProof?.(project,record);}catch{/* Missing observed proof is unknown exposure, never a delivery gate. */}
       const result = await sendPrompt(session, record);
       if (result?.accepted === false) {
@@ -5166,7 +5251,19 @@ export class AgentRunStore {
         });
       }
       // Nothing on disk and no finished answer on record: the turn had not
-      // finished, and the runtime stopping is the truthful reason.
+      // finished. When the user stopped the runtime it ran in, that stop is
+      // what ended it (`noteRuntimeStop`); otherwise the runtime stopping is
+      // the truthful reason.
+      const stoppedAt = this.runtimeStopRequests.get(run.id);
+      if (stoppedAt !== undefined && this.now().getTime() - stoppedAt <= this.stopRequestWindowMs) {
+        return this.finishInternal(project, run.id, {
+          status: "canceled",
+          errorCode: "runtime_canceled",
+          artifacts: [],
+          canceledBy: "user",
+          qualityNotices: labels.slice(0, 20),
+        });
+      }
       return this.finishInternal(project, run.id, {
         status: "failed",
         errorCode: "runtime_stopped",
@@ -5367,6 +5464,15 @@ export class AgentRunStore {
       ...(terminal.status === "canceled" && (terminal.canceledBy === "user" || terminal.canceledBy === "platform")
         ? { canceledBy: terminal.canceledBy } : {}),
     };
+    // A cancel that names nobody — the monitor reading a turn the kernel aborted — is the user's if the user's stop
+    // was recorded for this run a moment ago. What names itself (the platform shutting a runtime) stays as named.
+    const askedAt = this.stopRequests.get(runId);
+    this.stopRequests.delete(runId);
+    this.runtimeStopRequests.delete(runId);
+    if (normalized.status === "canceled" && !("canceledBy" in normalized) && askedAt !== undefined
+      && this.now().getTime() - askedAt <= this.stopRequestWindowMs) {
+      /** @type {any} */ (normalized).canceledBy = "user";
+    }
 
     // Delivery is a label, not a switch.
     //
@@ -5493,6 +5599,48 @@ export class AgentRunStore {
       }
     }
     return result;
+  }
+
+  /**
+   * Record that the user asked for a run to stop, before the stop reaches the kernel (review F4). The run is named
+   * by its id (the runs page's stop) or by the session the kernel's own `session/cancel` names. Nothing that is not
+   * running, or not this project's, is noted. Never throws: attributing a stop is an observation, and a stop is
+   * never held up by it.
+   * @param {any} project @param {{ runId?: string | null, sessionId?: string | null }} target
+   * @returns {Promise<string | null>} the run it was noted for
+   */
+  async noteStopRequest(project, { runId = null, sessionId = null } = {}) {
+    try {
+      const wanted = typeof runId === "string" && runId ? runId : null;
+      const session = typeof sessionId === "string" && sessionId ? sessionId : null;
+      if (!wanted && !session) return null;
+      const run = (await this.list(project)).find((item) => item.status === "running" && (wanted ? item.id === wanted : item.sessionId === session));
+      if (!run) return null;
+      this.stopRequests.set(run.id, this.now().getTime());
+      return run.id;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * A runtime stop the user asked for (stop or restart of their own runtime, deleting the project or the
+   * account), noted on every run it holds before the container goes. The container's exit is read by
+   * whichever path sees it first, and the monitor's — no transcript, no package, `runtime_stopped` — used
+   * to win over the stop's own cancel, so a run the user stopped this way read as a failure the platform
+   * absorbs (live check of 2026-10-05: `stop_runtime` with three calls settled, recorded `failed`,
+   * waived). A stop the platform asked for is not noted: its own cancel names it, and a container that
+   * dies by itself is still a failure.
+   * @param {any} project @param {{ by?: 'user' | 'platform' | null }} [options]
+   */
+  async noteRuntimeStop(project, { by = null } = {}) {
+    if (by !== "user") return;
+    try {
+      const at = this.now().getTime();
+      for (const run of (await this.list(project)).filter((item) => item.status === "running")) this.runtimeStopRequests.set(run.id, at);
+    } catch {
+      // A note that cannot be written leaves the verdict the gone container gives.
+    }
   }
 
   /** @param {any} project @param {string} rawSessionId @param {{ by?: 'user' | 'platform' | null }} [options] */
@@ -7398,8 +7546,9 @@ export class AgentRunStore {
    * @param {string} [errorCode] why, for a cancel: `runtime_canceled` unless the
    *   platform stopped the runtime for someone else's start
    *   (`RUNTIME_YIELDED_CODE`), which the owner of the work reads as "ask again"
+   * @param {{ by?: 'user' | 'platform' | null }} [options] who asked for the stop
    */
-  async closeProject(project, status = "canceled", errorCode = "runtime_canceled") {
+  async closeProject(project, status = "canceled", errorCode = "runtime_canceled", { by = null } = {}) {
     const runs = await this.list(project);
     for (const run of runs.filter((item) => item.status === "running")) {
       const monitor = this.monitors.get(run.id);
@@ -7430,9 +7579,11 @@ export class AgentRunStore {
         status,
         errorCode,
         artifacts: [],
-        // The platform stopping, not the researcher: said, because the inbox
-        // tells the one and not the other.
-        ...(status === "canceled" ? { canceledBy: "platform" } : {}),
+        // Who asked: the researcher, when they stopped or restarted their own runtime or deleted the
+        // project (`runtimeManager.stop`'s `by`), and otherwise the platform shutting down, yielding
+        // its slot or reaping an idle runtime. Said, because the inbox and the charge tell the one
+        // from the other; and when nobody says, the platform — which cannot overcharge.
+        ...(status === "canceled" ? { canceledBy: by === "user" ? "user" : "platform" } : {}),
       });
     }
   }

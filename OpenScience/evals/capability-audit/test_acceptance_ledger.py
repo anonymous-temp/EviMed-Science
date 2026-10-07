@@ -377,7 +377,7 @@ class RealLedgerTests(unittest.TestCase):
         # skill call as a load), eight still never run (three of them internal).
         # On 2026-09-10 evidence-appraisal was accepted again on the release
         # carrying the gate fix, read rather than trusted: seven accepted.
-        # On 2026-09-25 the 「循证 GEO」 module added geo-insight, geo-strategy
+        # On 2026-09-25 the 「循证传播」 module added geo-insight, geo-strategy
         # and geo-proposal, none of them run yet: eleven never run. The
         # 2026-09-26 platform audit read the production run ledger: geo-insight
         # had two failed attempts that day, so it moved to failed — ten never
@@ -405,6 +405,8 @@ class RealLedgerTests(unittest.TestCase):
         # (2026-10-04, N17: three briefs and an offline reference check against base R, no capability-level delivery yet).
         # The two internal evolution development capabilities are registered not-run: their offline contracts and partial platform acceptance do not establish capability-level live delivery.
         # Delivery acceptance does not imply an unqualified scientific-quality pass.
+        # The two internal 循证进化 packages (tool-builder, evolution-scout) are not-run too: the module has never been
+        # switched on in production. They are not public, so the coverage notice below does not count them.
         self.assertEqual(statuses.count("not-run"), 8)
         self.assertEqual(statuses.count("accepted"), 22)
         self.assertEqual(statuses.count("failed"), 0)

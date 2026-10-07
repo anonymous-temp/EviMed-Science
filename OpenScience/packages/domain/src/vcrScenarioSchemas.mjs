@@ -1186,19 +1186,26 @@ function checkGrid(schema, scenario, ctx) {
   }
 }
 
+/**
+ * The analyses a two-arm simulation may run, by endpoint, and the one analysis each single-arm design runs. The coupled
+ * check below reads them, and so does the help a model is given (`vcrScenarioHelp.mjs`): one table, not a sentence kept beside it.
+ */
+export const VCR_TWO_ARM_ANALYSIS_METHODS = deepFreeze({ continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst'] })
+export const VCR_SINGLE_ARM_ANALYSIS_METHODS = deepFreeze({ single_arm: 'exact_binomial', single_arm_external: 'stratified_risk_difference', simon_two_stage: 'simon_boundary' })
+
 /** Coupled design fields, mirrored by protocol.R. @param {any} scenario @param {string} path @param {WalkContext} ctx */
 function checkDesignSemantics(scenario, path, ctx) {
   const kind = scenario?.design?.kind
   const method = scenario.analysis?.method
   const bad = (/** @type {string} */ field, /** @type {string} */ detail) => raise(ctx, 'scenario_value_invalid', at(path, field), detail)
   if (!['single_arm', 'single_arm_external', 'simon_two_stage'].includes(kind)) {
-    const methods = { continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst'] }
-    if (method && !(methods[/** @type {keyof typeof methods} */ (scenario.endpoint?.type)] ?? []).includes(method)) bad('analysis.method', 'The analysis must match the endpoint.')
+    const methods = /** @type {Record<string, readonly string[]>} */ (VCR_TWO_ARM_ANALYSIS_METHODS)
+    if (method && !(methods[/** @type {string} */ (scenario.endpoint?.type)] ?? []).includes(method)) bad('analysis.method', 'The analysis must match the endpoint.')
     return
   }
   if (scenario.endpoint?.type !== 'binary') bad('endpoint.type', 'This single-arm implementation requires a binary endpoint.')
-  const methods = { single_arm: 'exact_binomial', single_arm_external: 'stratified_risk_difference', simon_two_stage: 'simon_boundary' }
-  if (method && method !== methods[/** @type {keyof typeof methods} */ (kind)]) bad('analysis.method', 'The analysis must match the declared single-arm design.')
+  const methods = /** @type {Record<string, string>} */ (VCR_SINGLE_ARM_ANALYSIS_METHODS)
+  if (method && method !== methods[/** @type {string} */ (kind)]) bad('analysis.method', 'The analysis must match the declared single-arm design.')
   const sided = scenario.analysis?.sided ?? 1
   if (sided === 1 && Number.isFinite(scenario.analysis?.alpha) && scenario.analysis.alpha >= 0.5) bad('analysis.alpha', 'A one-sided analysis uses alpha below one half.')
   if (kind === 'single_arm' && sided !== (scenario.analysis?.alternative === 'two.sided' ? 2 : 1)) bad('analysis.sided', 'Sidedness must agree with the exact binomial alternative.')

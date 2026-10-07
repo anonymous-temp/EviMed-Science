@@ -19,23 +19,26 @@ describe('evolution discovery boundaries', () => {
     expect(screen.getByText('已复现已发表算例')).toBeInTheDocument(); expect(screen.getByText('公开数据')).toBeInTheDocument();
     expect(mocks.dossiers).toHaveBeenCalledOnce();
   });
-  it('shows public paper citations and actual calls separately from retrievals or evaluated runs', async () => {
+  it('shows public paper citations and the tool\'s state, and no call counts or raw requirement structure', async () => {
     mocks.access = {enabled: true, operator: false};
     mocks.tools.mockResolvedValue([{...tool, maintenanceState: 'deprecating', usage: {invoked: 7, retrieved: 99, runs: 2}, papers: [{id: '123', title: 'Published method', url: 'https://pubmed.ncbi.nlm.nih.gov/123/'}]}]);
     render(<MemoryRouter><EvolutionPanel projectId="p" /></MemoryRouter>);
-    expect(await screen.findByText('实际调用 7 次')).toBeInTheDocument();
-    expect(screen.getByText('待修复')).toBeInTheDocument();
+    expect(await screen.findByText('待修复')).toBeInTheDocument();
+    expect(screen.queryByText(/"schema"/)).not.toBeInTheDocument();
     expect(screen.getByText('Published method')).toHaveAttribute('href', 'https://pubmed.ncbi.nlm.nih.gov/123/');
-    expect(screen.queryByText('实际调用 99 次')).not.toBeInTheDocument();
+    expect(screen.queryByText(/实际调用|暂无调用记录/)).not.toBeInTheDocument();
   });
   it('shows V4 research runs separately from actual invocation count', async () => {
     mocks.access = {enabled: true, operator: false}; mocks.tools.mockResolvedValue([{...tool, validationLevel: 'V4', usage: {runs: 9, invoked: 72}}]);
     render(<MemoryRouter><EvolutionPanel projectId="p" /></MemoryRouter>);
-    expect(await screen.findByText('已用于 9 次研究')).toBeInTheDocument();expect(screen.getByText('实际调用 72 次')).toBeInTheDocument();
+    expect(await screen.findByText('已用于 9 次研究')).toBeInTheDocument();expect(screen.queryByText(/实际调用/)).not.toBeInTheDocument();
   });
   it('unknown units do not advertise a dataset as matched and never fetch operator dossiers', async () => {
     mocks.access = {enabled: true, operator: false}; render(<MemoryRouter><EvolutionPanel projectId="p" dataset={{fields: [{name: 'weight', type: 'number'}], semanticsChecksPassed: true}} /></MemoryRouter>);
-    expect(await screen.findByText('暂无已匹配的工具')).toBeInTheDocument();
-    expect(mocks.tools).toHaveBeenCalledWith('p'); expect(mocks.dossiers).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.tools).toHaveBeenCalledWith('p'));
+    expect(mocks.dossiers).not.toHaveBeenCalled();
+    // Beside a dataset's meaning the panel is silent when no tool can use the data yet: no heading, no empty state.
+    await waitFor(() => expect(screen.queryByText('这份数据可用的工具')).not.toBeInTheDocument());
+    expect(screen.queryByText('暂无已匹配的工具')).not.toBeInTheDocument(); expect(screen.queryByText('调查加权分析')).not.toBeInTheDocument();
   });
 });

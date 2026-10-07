@@ -77,7 +77,7 @@ export function createEvolutionRuns({ config, store, registry, runtimeManager, r
     if (evaluationPolicy) await evaluationIsolation.registerPending({ userId, projectId }, evaluationPolicy);
     const runs = await agentRuns.list(project), existing = runs.find(run => run.dispatchId === dispatchId);
     if (existing) {
-      if (evaluationPolicy) await evaluationIsolation.bindRun({ userId, projectId }, existing.id);
+      if (evaluationPolicy) await evaluationIsolation.bindRun({ userId, projectId }, existing.id, { dispatchId });
       return existing;
     }
     if (runs.some(run => run.status === "running")) throw new HttpError(409, "runtime_busy", "Evolution waits for its preceding run.");
@@ -92,7 +92,7 @@ export function createEvolutionRuns({ config, store, registry, runtimeManager, r
       return await agentRuns.dispatch(project, { sessionId: session.id, dispatchId, automated: true, question: brief,
         effectiveAgentId: selected.id, effectiveAgentVersion: selected.version, effectiveRuntimeAgent: selected.runtimeAgent,
         effectiveRouteReason: "platform-evolution" }, async (binding, run, repairText = null) => {
-        if (evaluationPolicy) await evaluationIsolation.bindRun({ userId, projectId }, run.id);
+        if (evaluationPolicy) await evaluationIsolation.bindRun({ userId, projectId }, run.id, { dispatchId });
         const prepared = await prepareResearchContext(project, binding, config, { query: brief, memories: [], specialists: [],
           routedSpecialist: { agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
             skill: selected.skill, companionSkills: selected.companionSkills } });

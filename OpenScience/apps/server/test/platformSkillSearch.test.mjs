@@ -29,7 +29,11 @@ test('generation capacity reserves one search pin and rejects oversized librarie
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'platform-search-limit-'));
   const supply = createPlatformSkillSupply({ dataDir, evolutionEnabled: true }, { listActive: async () => Array.from({ length: PLATFORM_SKILL_MAX_TOOLS + 1 }, () => ({})) });
   try {
-    await assert.rejects(supply.prepareForRuntime({ id: 'project' }), error => error.code === 'extension_contract_invalid');
+    // The selection itself still refuses an oversized library before writing anything; what a runtime start does with that
+    // refusal is the supply's fallback (an optional extension never withholds unrelated research): none, and degraded.
+    await assert.rejects(supply.selectionForRuntime({ id: 'project' }), error => error.code === 'extension_contract_invalid');
+    assert.deepEqual(await supply.selectForRuntime({ id: 'project' }), { generation: null, degraded: true });
+    assert.equal(await supply.prepareForRuntime({ id: 'project' }), null);
     assert.deepEqual(await fs.readdir(dataDir), []);
   } finally { await fs.rm(dataDir, { recursive: true, force: true }); }
 });

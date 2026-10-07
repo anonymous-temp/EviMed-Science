@@ -25,8 +25,8 @@
  * @module evimedCreditsPersistence
  */
 
-import { RESEARCH_BILLING_VERSION } from "@evimed/domain";
-import { eraseSimulatedWallets } from "./evimedCreditsSimulator.mjs";
+import { RESEARCH_BILLING_VERSION, RESEARCH_BILLING_VERSION_WHOLE_CREDIT, WALLET_CONTRACT_EXACT, WALLET_CONTRACT_WHOLE_CREDIT } from "@evimed/domain";
+import { eraseSimulatedWallets } from "./evimedCreditsWallet.mjs";
 
 const migrations = new WeakMap();
 
@@ -122,6 +122,35 @@ CREATE INDEX IF NOT EXISTS evimed_credits_capability_idx
   ON evimed_credits.settlements(capability_id, created_at DESC) WHERE status = 'settled';
 CREATE INDEX IF NOT EXISTS evimed_credits_account_idx
   ON evimed_credits.settlements(user_id, created_at DESC);
+
+-- The exact charge (2026-10-05). A charge is now an exact amount, so the column
+-- that held whole credits holds numeric(20,8); a live wallet's rows stay whole
+-- numbers in it. 'requested' is what the run cost to the last 1e-8, 'credits' is
+-- what was actually taken, 'absorbed' is the part the platform carried because
+-- the balance could not cover it (requested = credits + absorbed on the platform
+-- wallet), 'wallet_contract' says which rule priced it and 'charge_basis' why it
+-- was charged at all.
+DO $exactcredits$
+BEGIN
+  IF (SELECT data_type FROM information_schema.columns WHERE table_schema = 'evimed_credits'
+      AND table_name = 'settlements' AND column_name = 'credits') = 'bigint' THEN
+    ALTER TABLE evimed_credits.settlements ALTER COLUMN credits TYPE numeric(20,8);
+  END IF;
+END $exactcredits$;
+ALTER TABLE evimed_credits.settlements ADD COLUMN IF NOT EXISTS requested numeric(20,8) CHECK (requested IS NULL OR requested >= 0);
+ALTER TABLE evimed_credits.settlements ADD COLUMN IF NOT EXISTS absorbed numeric(20,8) NOT NULL DEFAULT 0 CHECK (absorbed >= 0);
+ALTER TABLE evimed_credits.settlements ADD COLUMN IF NOT EXISTS wallet_contract text NOT NULL DEFAULT '${WALLET_CONTRACT_WHOLE_CREDIT}'
+  CHECK (wallet_contract IN ('${WALLET_CONTRACT_WHOLE_CREDIT}','${WALLET_CONTRACT_EXACT}'));
+ALTER TABLE evimed_credits.settlements ADD COLUMN IF NOT EXISTS charge_basis text
+  CHECK (charge_basis IS NULL OR charge_basis IN ('completed','user_stop','not_charged'));
+-- Which rule a version of the charging policy is, and when it began. A version's
+-- activation is sticky: a run that started before it stays under the rule before
+-- it, and no later flag change reopens that. The whole-credit rule's own
+-- activation stays in research_policy, where it was first written.
+CREATE TABLE IF NOT EXISTS evimed_credits.billing_policies (
+  pricing_version text PRIMARY KEY,
+  activated_at timestamptz(3) NOT NULL
+);
 `;
 
 /**
@@ -147,13 +176,30 @@ export async function migrateEvimedCredits(database) {
   }
 }
 
-/** An activation is sticky; a later flag rollback cannot reopen old charging rules.
+/**
+ * The whole-credit rule's activation. Sticky: a later flag rollback cannot reopen
+ * old charging rules.
  * @param {any} database @param {{activate?:boolean,now?:Date}} [options] */
 export async function researchBillingPolicy(database, { activate = false, now = new Date() } = {}) {
   await migrateEvimedCredits(database);
   if (activate) await database.query(`INSERT INTO evimed_credits.research_policy(singleton,pricing_version,activated_at)
-    VALUES(true,$1,$2) ON CONFLICT(singleton) DO NOTHING`, [RESEARCH_BILLING_VERSION,now.toISOString()]);
+    VALUES(true,$1,$2) ON CONFLICT(singleton) DO NOTHING`, [RESEARCH_BILLING_VERSION_WHOLE_CREDIT,now.toISOString()]);
   const result = await database.query('SELECT pricing_version,activated_at FROM evimed_credits.research_policy WHERE singleton=true');
+  return result.rows[0] ?? null;
+}
+
+/**
+ * The exact-charge rule's activation, with its own instant (2026-10-05). A run
+ * that started before it stays under the whole-credit rule; nothing already
+ * settled is recomputed. Written once, the first time a platform wallet runs with
+ * research billing on, and never moved by a later flag change.
+ * @param {any} database @param {{activate?:boolean,now?:Date}} [options]
+ * @returns {Promise<{ pricing_version: string, activated_at: Date } | null>} */
+export async function exactBillingPolicy(database, { activate = false, now = new Date() } = {}) {
+  await migrateEvimedCredits(database);
+  if (activate) await database.query(`INSERT INTO evimed_credits.billing_policies(pricing_version,activated_at)
+    VALUES($1,$2) ON CONFLICT(pricing_version) DO NOTHING`, [RESEARCH_BILLING_VERSION, now.toISOString()]);
+  const result = await database.query('SELECT pricing_version,activated_at FROM evimed_credits.billing_policies WHERE pricing_version=$1', [RESEARCH_BILLING_VERSION]);
   return result.rows[0] ?? null;
 }
 

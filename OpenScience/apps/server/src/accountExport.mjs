@@ -1,12 +1,14 @@
 import { DOCUMENT_EXPORT_FORMATS, priceListFor, projectAffected, projectCorrectionOutcome, projectResultInput, projectResultVersion } from "@evimed/domain";
 import { PLUGIN_REGISTRY, exportPluginPayload, projectPluginId } from "./pluginService.mjs";
 import { HttpError } from "./security.mjs";
+import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { migrateUsageLedger } from "./usagePersistence.mjs";
 import { projectSourceDerivedRecord, projectSourceManifestRecord } from "./sourceService.mjs";
 import { EXTENSION_CUSTOMER_KINDS, exportExtensionAccountRow, exportPersonalSkillResources } from "./extensionAccountExport.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
+import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
 
 const MAX_ROWS = 50000;
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -41,6 +43,8 @@ export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
   "method-trial": "an evaluation identity's time-limited instruction to mount named methods in one project's next launches, expired on read; it steers this deployment's runtime and means nothing outside it, and the methods it names are exported under method",
   "extension-generation": "which prepared package and skill generation a project's runtime was built from and which one is live; the platform derives it from the installations, defaults and skills that are themselves exported, and it is runtime authority an archive must never carry",
   "extension-proof": "qualification the platform measures for itself; an archive carrying one would offer a compatibility claim no import may accept, and no product code writes this kind today",
+  "source-change": "what was published about a work after it was published (a retraction, a correction, a new version), one record per source identifier, owned by the platform publisher account and never by a customer; it holds only public bibliographic facts and which tenant asked is never written to it, so there is nothing of the account's in it to carry",
+  "programme-decision": "the platform's own evidence programme's decision of one day (the counts it read, the zones it chose, what became of each episode), owned by the platform publisher account in its internal evidence project and never by a customer; it holds counts and entity keys only, no reader is named in it, and the publisher account cannot be exported at all, so there is nothing of an account's in it to carry",
   "extension-resource": "the platform's own operation records: public-document grants and accepted-actor bindings signed with a deployment secret, and the journals of skill copies and adoptions; the documents and skills they refer to are workspace files and skill records, which are exported",
 });
 
@@ -57,6 +61,26 @@ const queries = [
   ["evidenceComments", "SELECT * FROM evimed_frontier.evidence_comments WHERE user_id=$1 ORDER BY id"],
   ["evidenceReviews", "SELECT * FROM evimed_frontier.evidence_reviews WHERE user_id=$1 ORDER BY card_id"],
   ["evidenceZoneFeedback", "SELECT * FROM evimed_frontier.evidence_zone_feedback WHERE user_id=$1 ORDER BY id"],
+  ["evidenceChallenges", "SELECT * FROM evimed_frontier.evidence_challenges WHERE user_id=$1 ORDER BY id"],
+  // The public topic requests the account filed or seconded (flywheel F08): the title it asked for and when. The request itself belongs to no one.
+  ["evidenceTopicRequestVotes", "SELECT v.request_id,r.title,v.created_at FROM evimed_frontier.evidence_topic_request_votes v JOIN evimed_frontier.evidence_topic_requests r ON r.id=v.request_id WHERE v.user_id=$1 ORDER BY v.created_at,v.request_id"],
+  // What the account shared and was shared with (`evimed_share`, flywheel F17): the links it made, the links it opened, the deliveries it sent and
+  // the ones it received. Never the credential of a link (`token_hash`, `archive_secret`), never another account's id, and never a pack: a received
+  // delivery carries who sent it by display name, the pack's title and its hash, and what became of it. The sender's capsule and snapshot ids are the
+  // sender's own and are not here; neither are the accounts that opened a link, only how many imported it.
+  ["shareLinks", `SELECT l.id,l.capsule_id AS "capsuleId",l.snapshot_id AS "snapshotId",l.manifest_sha256 AS "manifestSha256",l.archive_sha256 AS "archiveSha256",
+    l.max_uses AS "maxUses",l.uses,(SELECT count(*)::integer FROM evimed_share.link_uses u WHERE u.link_id=l.id AND u.imported_at IS NOT NULL) AS "importedCount",
+    l.expires_at AS "expiresAt",l.revoked_at AS "revokedAt",l.created_at AS "createdAt"
+    FROM evimed_share.links l WHERE l.owner_id=$1 ORDER BY l.created_at,l.id`],
+  ["shareLinkUses", `SELECT link_id AS "linkId",first_used_at AS "firstUsedAt",imported_at AS "importedAt"
+    FROM evimed_share.link_uses WHERE user_id=$1 ORDER BY first_used_at,link_id`],
+  ["shareDeliveriesSent", `SELECT d.id,d.capsule_id AS "capsuleId",d.snapshot_id AS "snapshotId",d.archive_sha256 AS "archiveSha256",d.state,u.name AS "recipientName",
+    d.created_at AS "createdAt",d.opened_at AS "openedAt",d.imported_at AS "importedAt",d.closed_at AS "closedAt"
+    FROM evimed_share.deliveries d JOIN evimed_control.users u ON u.id=d.recipient_id WHERE d.owner_id=$1 ORDER BY d.created_at,d.id`],
+  ["shareDeliveriesReceived", `SELECT d.id,d.state,u.name AS "senderName",
+    (SELECT s.payload->'card'->>'title' FROM evimed_product.documents s WHERE s.user_id=d.owner_id AND s.kind='preferences' AND s.id=d.snapshot_id) AS "packTitle",
+    d.archive_sha256 AS "packSha256",d.created_at AS "createdAt",d.opened_at AS "openedAt",d.imported_at AS "importedAt",d.closed_at AS "closedAt"
+    FROM evimed_share.deliveries d JOIN evimed_control.users u ON u.id=d.owner_id WHERE d.recipient_id=$1 ORDER BY d.created_at,d.id`],
   ["projects", `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.projects WHERE user_id=$1 ORDER BY id`],
   ["researchSessions", `SELECT project_id AS "projectId",session_id AS "sessionId",mode,agent_id AS "agentId",
@@ -341,6 +365,8 @@ export function exportedPriceLists(usageRows) {
  * @param {(snapshot:any) => Promise<any>} operation
  * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any,report?:(line:string)=>void}} limits */
 export async function withAccountExportSnapshot(database, user, config, operation, limits = {}) {
+  // The platform's publishing account is nobody's to take a copy of (evidence-flywheel B2).
+  assertNotPlatformAccount(user);
   if (!database) return operation(null);
   const report = limits.report ?? ((/** @type {string} */ line) => { process.stderr.write(line); });
   if (typeof user.accountCreatedAt !== "string" || !user.accountCreatedAt) {
@@ -354,6 +380,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
   await migrateNotifications(database);
   await migrateUsageLedger(database);
   await migrateEvidenceZones(database);
+  await migrateCapsuleShare(database);
   return database.transaction(async client => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await client.query("SET LOCAL statement_timeout = '15s'");
@@ -424,7 +451,8 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
       priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, omissions,
       evidenceCardRevisions:tables.evidenceCardRevisions,evidenceAutomation:tables.evidenceAutomation,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
-      evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,
+      evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,evidenceTopicRequestVotes:tables.evidenceTopicRequestVotes,
+      shareLinks:tables.shareLinks,shareLinkUses:tables.shareLinkUses,shareDeliveriesSent:tables.shareDeliveriesSent,shareDeliveriesReceived:tables.shareDeliveriesReceived,
     };
     const skillResources = await exportPersonalSkillResources({ artifacts: limits.skillArtifacts, user,
       rows: [...tables.documents, ...tables.revisions], maxBytes: Math.min(32 * 1024 * 1024, maxBytes) });

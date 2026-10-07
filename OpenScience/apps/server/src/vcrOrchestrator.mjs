@@ -2,7 +2,7 @@
  * 「虚拟临研」's seven-step program (build plan 2026-09-28 §4, §6.3, §10):
  * which step runs next, decided by platform rules and never by the model.
  *
- * The division of labour is the one 「循证 GEO」 paid for and proved: **the
+ * The division of labour is the one 「循证传播」 paid for and proved: **the
  * steps that think run as AI runs; the steps that compute run as platform
  * jobs.** Drafting the research definition, structuring eligibility criteria,
  * extracting precedents, choosing a comparator route, writing the package —
@@ -62,7 +62,7 @@ import {
   VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
   VCR_HOSTED_MODEL_INTERFACES, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
-  allowanceWaitingNote, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, vcrModelInterfaceOf, whenHolds,
+  allowanceWaitingNote, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -756,10 +756,33 @@ function externalControlRefusal(jobKind, configuration, endpoint, estimand) {
 
 // --- robustness methods ---
 
-/** The refusal for keys a plan's stages do not read. @param {string[]} paths @returns {{ code: string, message: string, paths: string[] }} */
-function unknownFieldsRefusal(paths) {
+/**
+ * What the engine reads inside the places a refusal names, as the refusal's own sentence: a run that guessed `accrual.months` is
+ * told that `accrual` reads duration, followup and dropoutAnnual, so the repair needs no second lookup. Read from the domain's
+ * schemas through the same rows the runtime's shape help is generated from (`vcrScenarioHelp.mjs`), never typed here. At most two
+ * places, so the sentence stays what a page can show.
+ * @param {string[]} paths @param {ReadonlyArray<{ jobKind: string, scenario: Record<string, any> }>} stages
+ */
+function readsHint(paths, stages) {
+  const methods = [...new Set(stages.map((stage) => /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[stage.jobKind]).filter(Boolean))];
+  const root = stages[0]?.scenario;
+  const nodes = [...new Set(paths.slice(0, 8).map(vcrScenarioParentOf))].slice(0, 2);
+  const places = [];
+  for (const node of nodes) {
+    const keys = vcrScenarioChildKeys(methods, node, root);
+    if (keys.length) places.push(`${node ? `${node} 里` : "顶层"}引擎读：${keys.map((entry) => (entry.variant ? `${entry.key}（${entry.variant.join("、")}）` : entry.key)).join("、")}`);
+  }
+  return places.length ? `${places.join("；")}。` : "";
+}
+
+/**
+ * The refusal for keys a plan's stages do not read.
+ * @param {string[]} paths @param {ReadonlyArray<{ jobKind: string, scenario: Record<string, any> }>} [stages]
+ * @returns {{ code: string, message: string, paths: string[] }}
+ */
+function unknownFieldsRefusal(paths, stages = []) {
   return { code: "vcr_scenario_unknown_fields", paths,
-    message: `配置里有引擎不读的字段：${paths.slice(0, 8).join("、")}。只写引擎认识的字段（见 vcr_simulate 的场景说明），其余字段会被拒绝而不是忽略。` };
+    message: `配置里有引擎不读的字段：${paths.slice(0, 8).join("、")}。${readsHint(paths, stages)}只写引擎认识的字段（vcr_simulate 的 action shape 按方法列出全部字段），其余字段会被拒绝而不是忽略。` };
 }
 
 /**
@@ -926,7 +949,7 @@ export function vcrBuildStages(item, context) {
     // the superset (`analysis.power` for the analytic stage, `targetMcse` for the
     // simulation), and each stage keeps what its own schema takes.
     const unknown = built.length ? built[0].unknown.filter((path) => built.every((entry) => entry.unknown.includes(path))) : [];
-    if (unknown.length) return { ok: false, refused: unknownFieldsRefusal(unknown) };
+    if (unknown.length) return { ok: false, refused: unknownFieldsRefusal(unknown, built.map((entry) => entry.built)) };
     return { ok: true, stages: built.map((entry) => entry.built) };
   };
 
@@ -953,7 +976,7 @@ export function vcrBuildStages(item, context) {
         snapshot: tippingReadsPatients(scenario) }));
     }
     const unknown = extras.flatMap((entry) => entry.unknown);
-    return unknown.length ? { refused: unknownFieldsRefusal(unknown) } : { extras };
+    return unknown.length ? { refused: unknownFieldsRefusal(unknown, extras.map((entry) => entry.built)) } : { extras };
   };
   /**
    * The primary comparison held to the keys it reads (finish), with the robustness stages after it. A plan with robustness stages names
@@ -1270,6 +1293,38 @@ export function vcrGapsForRule(rule) {
   return table[rule] ? [table[rule]] : [];
 }
 
+/**
+ * How long a study's results must have stood still before an advisory review of
+ * them is queued, and how recent they must be to be reviewed at all.
+ *
+ * Hidden knowledge: a review is two paid calls of a minute or more each over the
+ * whole frozen study, and a study's results change in bursts — an assumption is
+ * edited, the light half recomputes at once and the heavy half queues behind it,
+ * and each time the queue drained a review of that moment was asked for. On
+ * 2026-10-04 one project held sixteen distinct snapshots reviewed this way, nearly
+ * all of them states a later one replaced a few minutes on. A review exists to
+ * give a second opinion on what the study concluded, so it is asked of the state
+ * the study settles into: results older than the quiet period, none newer than the
+ * last review, no work open. A study with no review at all is not reviewed from
+ * the day this shipped, only when it produces something (a day's freshness): an
+ * old study never costs two calls for being opened.
+ */
+export const VCR_REVIEW_QUIET_MS = 10 * 60_000;
+export const VCR_REVIEW_FRESH_MS = 24 * 3_600_000;
+
+/**
+ * Whether a study's results have settled and are not yet reviewed. Pure: the
+ * orchestrator reads the three times and decides here.
+ * @param {{ lastResultAt: unknown, lastReviewAt: unknown, now: Date, quietMs?: number, freshMs?: number }} input
+ */
+export function vcrReviewDue({ lastResultAt, lastReviewAt, now, quietMs = VCR_REVIEW_QUIET_MS, freshMs = VCR_REVIEW_FRESH_MS }) {
+  const result = lastResultAt ? new Date(/** @type {any} */ (lastResultAt)).getTime() : NaN;
+  if (!Number.isFinite(result)) return false;
+  const review = lastReviewAt ? new Date(/** @type {any} */ (lastReviewAt)).getTime() : -Infinity;
+  const at = now.getTime();
+  return result > review && at - result >= quietMs && at - result <= freshMs;
+}
+
 export class VcrOrchestrator {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, jobs: import("./vcrJobs.mjs").VcrJobs, config?: Record<string, any>,
@@ -1308,8 +1363,10 @@ export class VcrOrchestrator {
     this.leaseSeconds = Math.max(60, Math.round(Number(config.vcrLeaseMs ?? 900_000) / 1000));
     /** @type {Map<string, Promise<unknown>>} one advance per study at a time, in this process */
     this.locks = new Map();
+    /** @type {Map<string, number>} when a settled-review request was last attempted for a study, so a review that cannot be queued is not rebuilt every tick */
+    this.reviewAttempts = new Map();
     this.counters = { ticks: 0, dispatched: 0, deferred: 0, dispatchFailed: 0, runsFinished: 0, jobsEnqueued: 0,
-      jobsSkipped: 0, recomputes: 0, notices: 0, studyErrors: 0, verdicts: 0 };
+      jobsSkipped: 0, recomputes: 0, notices: 0, studyErrors: 0, verdicts: 0, evidenceRefreshes: 0 };
     /** @type {string | null} */
     this.lastDeferral = null;
     /** @type {string | null} */
@@ -1576,6 +1633,43 @@ export class VcrOrchestrator {
   }
 
   /**
+   * Ask for a run that takes new evidence into a study's assumption cards (flywheel F24, 2026-10-06). The consumer of the frontier
+   * feed calls this once it has labelled the cards; this only records the request, as a pending run mark named by `token` (the same
+   * news asked twice is one request), and the next pass dispatches it by the rules of any programme run (`#pendingEvidenceRefresh`).
+   * A study that is not active asks for nothing.
+   * @param {string} studyId @param {{ token: string, keys: readonly string[], items?: readonly unknown[], brief: string }} request
+   * @returns {Promise<{ requested: boolean, reason?: string, key?: string }>}
+   */
+  async requestEvidenceRefresh(studyId, { token, keys, items = [], brief }) {
+    const study = await this.store.studyById(studyId);
+    if (!study || study.status !== "active") return { requested: false, reason: "study_not_active" };
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(token))) throw new TypeError("requestEvidenceRefresh: the token is a short word.");
+    const key = `run:evidence-refresh:${token}`;
+    const claimed = await this.#claim(study, key, "run", "pending", { detail: { purpose: "evidence_refresh", keys: [...keys], items: [...items], brief: String(brief) } });
+    if (!claimed) return { requested: false, reason: "already_requested", key };
+    this.counters.evidenceRefreshes += 1;
+    return { requested: true, key };
+  }
+
+  /**
+   * The evidence-refresh run this runtime is out for right now, or null: the mark the study's one run slot holds (claimed and not
+   * stale, or running) when the run was dispatched for new evidence. What the runtime's gateway binds an assumption write to — the
+   * dispatch names the purpose, and nothing a run types does. `runtimeRunId` is the dispatch the calling runtime is reserved for,
+   * when the gateway knows one; a runtime reserved for another dispatch is not this run.
+   * @param {string} studyId @param {{ runtimeRunId?: string | null }} [caller]
+   * @returns {Promise<{ key: string, dispatchId: string | null, runId: string | null } | null>}
+   */
+  async evidenceRefreshRun(studyId, { runtimeRunId = null } = {}) {
+    const mark = await this.store.one(`SELECT key, dispatch_id, run_id, detail FROM ${VCR_SCHEMA}.schedule_marks
+      WHERE study_id = $1 AND kind = 'run'
+        AND (state = 'running' OR (state = 'claimed' AND updated_at > now() - make_interval(mins => $2)))
+      ORDER BY updated_at DESC LIMIT 1`, [studyId, VCR_RUN_RULES.staleClaimMinutes]);
+    if (!mark || object(mark.detail).purpose !== "evidence_refresh") return null;
+    if (runtimeRunId && mark.dispatch_id && String(mark.dispatch_id) !== String(runtimeRunId)) return null;
+    return { key: String(mark.key), dispatchId: mark.dispatch_id == null ? null : String(mark.dispatch_id), runId: mark.run_id == null ? null : String(mark.run_id) };
+  }
+
+  /**
    * The digest of the study's version nodes as they stand now: what a document
    * written at this moment is written from (the `inputDigest` a cover records).
    * @param {any} study @returns {Promise<string>}
@@ -1713,8 +1807,30 @@ export class VcrOrchestrator {
       study = await this.#observe(study, plan);
       await this.#nextRun(study, plan, result);
       await this.#notices(study);
+      await this.#reviewSettled(study);
       return result;
     });
+  }
+
+  /**
+   * Queue the advisory review of a study whose results have settled (`vcrReviewDue`). Pulled by the orchestrator's
+   * minute tick from the data itself, so it survives a restart and needs no mark: the review's own row is what
+   * says it was asked, and a review already asked for the same bytes is the same review (`studyReview.mjs`).
+   * @param {any} study
+   */
+  async #reviewSettled(study) {
+    if (!this.queueReviews) return;
+    try {
+      const times = await this.store.one(`SELECT
+        (SELECT max(created_at) FROM ${VCR_SCHEMA}.results WHERE study_id = $1) AS last_result,
+        (SELECT max(created_at) FROM ${VCR_SCHEMA}.reviews WHERE study_id = $1 AND reviewer_kind = 'ai') AS last_review`, [study.id]);
+      const now = this.now();
+      if (!vcrReviewDue({ lastResultAt: times?.last_result, lastReviewAt: times?.last_review, now })) return;
+      const tried = this.reviewAttempts.get(study.id) ?? 0;
+      if (now.getTime() - tried < VCR_REVIEW_QUIET_MS) return;
+      this.reviewAttempts.set(study.id, now.getTime());
+      await this.#queueReview(study.id, { reason: "results_settled" });
+    } catch (error) { this.report(codeOf(error)); }
   }
 
   // --- reading the steps from the data ---------------------------------------------------
@@ -2281,8 +2397,9 @@ export class VcrOrchestrator {
       }
       if (job.state === "succeeded" && result) await this.#registerForecasts(study, job, result);
     });
+    // No review here: the study's results are reviewed once they have stopped changing (`#reviewSettled`), not
+    // each time the queue drains, and the review of a package or a finished programme is queued by its run.
     await this.advance(job.studyId);
-    if (result) await this.#queueReview(String(job.studyId), { reason: "compute_finished" });
     return true;
   }
 
@@ -2443,6 +2560,7 @@ export class VcrOrchestrator {
     const candidates = [
       () => this.#pendingReviewRepair(study),
       () => this.#pendingExport(study),
+      () => this.#pendingEvidenceRefresh(study),
       () => this.#stepRun(study, plan, "definition"),
       () => this.#stepRun(study, plan, "evidence"),
       () => this.#analysisRun(study, plan),
@@ -2503,6 +2621,25 @@ export class VcrOrchestrator {
       key: String(mark.key), purpose: "export", capabilityId: "vcr-package", reason: `vcr:export-${detail.kind ?? "study_package"}`,
       brief: await this.#brief(study, String(mark.key), [], { kind: detail.kind, exportId: detail.exportId }),
       steps: [], detail: { kind: detail.kind, exportId: detail.exportId },
+    };
+  }
+
+  /**
+   * The run the frontier consumer asked for to take new evidence into a study's cards (flywheel F24): an `evidence` run with a brief
+   * naming the cards and the news. It is dispatched exactly as every other run of the study is — the study active, the one run slot
+   * free, the key within its attempts, and the allowance and the bounded budget `dispatchRun` asks of any programme run — and when
+   * any of those says no the key stays pending and nothing else happens.
+   * @param {any} study @returns {Promise<VcrRunSpec | null>}
+   */
+  async #pendingEvidenceRefresh(study) {
+    const mark = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'run'
+      AND starts_with(key, 'run:evidence-refresh:') AND state = 'pending' ORDER BY created_at LIMIT 1`, [study.id]);
+    if (!mark || !this.#allowed(mark)) return null;
+    const detail = object(mark.detail);
+    return {
+      key: String(mark.key), purpose: "evidence_refresh", capabilityId: /** @type {Record<string, string>} */ (VCR_STEP_CAPABILITIES).evidence,
+      reason: "vcr:evidence-refresh", brief: String(detail.brief ?? ""), steps: [],
+      detail: { keys: list(detail.keys), items: list(detail.items) },
     };
   }
 
@@ -2685,6 +2822,9 @@ export class VcrOrchestrator {
     if (!moved) return;
     this.counters.runsFinished += 1;
     const detail = object(mark.detail);
+    // A run for new evidence has no step to read and nothing to review: what it wrote is on the cards (`ai_set`), and the frontier
+    // consumer sees the versions arrive and closes the labels.
+    if (detail.purpose === "evidence_refresh") return;
     if (detail.purpose === "export" && detail.exportId) {
       const existing = await this.store.exportRow(study.id, String(detail.exportId));
       // The report's snapshot owns its cover; completion cannot relabel old

@@ -347,7 +347,12 @@ export function createLearningRuntime({
           effectiveAgentId: selected.id,
           effectiveAgentVersion: selected.version,
           effectiveRuntimeAgent: selected.runtimeAgent,
-          effectiveRouteReason: capabilityId,
+          // A paired-evaluation cell is an ordinary capability run the loop makes
+          // to measure a method (`isolatedProject`), and only this call knows it
+          // is: its spend is the learning loop's, not the account's research.
+          // The dispatch id used to say so, and the dispatch route takes that
+          // from its caller (`usagePurposeOfRun`).
+          effectiveRouteReason: request.isolatedProject === true ? "platform-learning" : capabilityId,
         }, async (sessionBinding, dispatchedRun, repairText = null) => {
           let promptAttempted = false;
           try {

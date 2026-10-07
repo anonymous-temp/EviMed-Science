@@ -148,14 +148,21 @@ export {
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
+  AUTOPILOT_BUDGET_ERROR_CODES,
   BALANCE_REFUSAL_CODES,
+  CAPSULE_SHARE_ERROR_CODES,
   CONTROL_PLANE_ERROR_CODES,
   CREDIT_ERROR_CODES,
   ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
   ERROR_DETAIL_FIELDS,
+  EVIDENCE_FLYWHEEL_ERROR_CODES,
   EXTENSION_ERROR_CODES,
   EVIMED_CREDITS_ROUTE_ERROR_CODES,
+  EVIDENCE_PLATFORM_ERROR_CODES,
+  EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH,
+  EVIDENCE_PROGRAMME_ERROR_CODES,
+  EVIDENCE_PUBLIC_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
   MANAGED_BROWSER_ERROR_CODES,
   VCR_GATEWAY_ERROR_CODES,
@@ -165,12 +172,15 @@ export {
   VCR_ROUTE_ERROR_CODES,
   VCR_WRITE_ISSUE_CODES,
   RUNTIME_ERROR_CODES,
+  RUNTIME_ROOM_REFUSAL_CODES,
+  RUNTIME_ROOM_WAIT_CODES,
   RUN_OUTCOME_KINDS,
   RUN_VERDICT_ERROR_CODES,
   SOCKET_TOOL_ERROR_CODES,
   TURN_END_ERROR_CODES,
   TURN_END_SUB_CODES,
   TURN_END_WIRE_ERROR_CODES,
+  TURN_END_WIRE_STATUS_ERROR_CODES,
   classifyEvidenceSourceError,
   errorCodeMessage,
   errorCodeOutcome,
@@ -460,19 +470,26 @@ export {
   traceNumber,
 } from './src/numericTraceability.mjs'
 
-// citedSources — 15 exports
+// citedSources — 22 exports
 export {
   EMPTY_SNAPSHOT_MESSAGE,
+  EVIDENCE_PUBLIC_BASE_PATHS,
   EVIDENCE_SNAPSHOT_FILE,
   INVALID_SNAPSHOT_MESSAGE,
   NOT_OBJECT_SNAPSHOT_MESSAGE,
+  PLATFORM_CARD_CITATION_SENTENCE,
   SNAPSHOT_RETRIEVED_KEY,
   UNRECORDED_LIMIT,
   auditCitedSources,
   citationUrlDefects,
   citationUrlDefectsByLine,
   citedHttpUrls,
+  isPlatformCardAddress,
   normalizedUrl,
+  platformCardCitationMessage,
+  platformCardCitations,
+  platformCardCitationsByLine,
+  pmidOfUrl,
   unrecordedCitationMessage,
   unresolvableCitationHost,
   unretrievedCitationMessage,
@@ -563,7 +580,7 @@ export {
   outputBelowFloor,
 } from './src/analysis.mjs'
 
-// agenda — 17 exports
+// agenda — 24 exports
 export {
   AGENDA_ITEM_TYPES,
   ALLOWED_EFFECT_MEASURES,
@@ -573,11 +590,18 @@ export {
   DEFAULT_ENABLED_TASK_TYPES,
   EPISODE_STATES,
   REFUTATION_VERDICTS,
+  AGENDA_DEFAULT_BUDGETS,
+  AGENDA_MIN_EPISODE_BUDGET_CNY,
+  MIN_RUN_BUDGET_CNY,
   STOPPING_RULES,
   USER_SIGNALS,
+  VERIFICATION_BUDGET_SHARE,
+  VERIFICATION_CANCELED_BY_STOP,
+  VERIFICATION_UNSCHEDULED_REASONS,
   datasetPartitionOf,
   digestPlacement,
   directionVerdict,
+  splitEpisodeBudget,
   standingVerdict,
   tierRaiseAllowed,
   userSignalScore,
@@ -869,7 +893,7 @@ export {
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
 
-// usagePurpose — 8 exports: what a metered model request was for (X1)
+// usagePurpose — 14 exports: what a metered model request was for (X1)
 export {
   USAGE_PURPOSES,
   USAGE_PURPOSE_LABELS_ZH,
@@ -877,9 +901,23 @@ export {
   usagePurpose,
   usagePurposeOfRun,
   isResearcherOwnedWork,
+  isChargeableResearchRun,
   LEARNING_AGENT_IDS,
+  PLATFORM_ROUTE_PURPOSES,
   LEARNING_EVALUATION_DISPATCH_PREFIX,
+  EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX,
+  EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON,
+  evidenceProgrammeRouteReason,
+  isEvidenceProgrammeRouteReason,
 } from './src/usagePurpose.mjs'
+// platformAccount — the platform's own publishing account: its id, name and auth type (evidence-flywheel B2, 2026-10-05)
+export {
+  PLATFORM_PUBLISHER_USER_ID,
+  PLATFORM_PUBLISHER_NAME,
+  PLATFORM_ACCOUNT_AUTH_TYPE,
+  isPlatformAccountId,
+  isPlatformAccountName,
+} from './src/platformAccount.mjs'
 // sourceUpdates — 5 exports (retraction and correction notices on a cited work, 2026-09-20)
 export {
   SOURCE_UPDATE_KINDS,
@@ -909,6 +947,61 @@ export {
   methodSourceChanges,
   projectAffected,
 } from './src/knowledgeChange.mjs'
+// sourceChange — one durable fact per source identifier: the closed vocabulary of what was published about a work
+// after it was published, the pure rules that fold detectors' findings into one record, the status the result impact
+// path reads back out of it, and the five 时效 labels (plan 2026-10-05 §5.4, B5).
+export {
+  SOURCE_CHANGE_ASSERTERS,
+  SOURCE_CHANGE_ERROR_MESSAGES,
+  SOURCE_CHANGE_KINDS,
+  SOURCE_CHANGE_LABELS_ZH,
+  SOURCE_CHANGE_MAX_CHANGES,
+  SOURCE_CHANGE_NOTICE_KINDS,
+  SOURCE_CHANGE_OUTCOMES,
+  SOURCE_CHANGE_STATES,
+  SOURCE_CHANGE_WEIGHT,
+  SOURCE_CURRENCY_LABELS,
+  SOURCE_CURRENCY_LABELS_ZH,
+  canonicalSourceIdentifier,
+  changeFromFrontierLink,
+  changesFromCrossrefUpdates,
+  changesFromPublicationStatus,
+  currencyLabel,
+  doiOfSourceIdentifier,
+  emptySourceChangeRecord,
+  foldSourceChanges,
+  mergeSourceUpdateStatus,
+  normalizeSourceChange,
+  noticeIdentifierOf,
+  sourceChangeFact,
+  sourceIdentifierScheme,
+  sourceUpdateStatusOfFact,
+  sourceUpdatesOfChanges,
+} from './src/sourceChange.mjs'
+// evidenceUpkeep — keeping evidence current (flywheel plan 2026-10-05 §5.4, §8): the public change log's categories and
+// triggers, a reader's challenge, who answers when something bears on a card, and the sentence an entry reads as.
+export {
+  EVIDENCE_CHALLENGE_OUTCOMES,
+  EVIDENCE_CHALLENGE_OUTCOME_LABELS_ZH,
+  EVIDENCE_CHALLENGE_REASON_LIMITS,
+  EVIDENCE_CHALLENGE_ROUTES,
+  EVIDENCE_CHALLENGE_STATES,
+  EVIDENCE_CHANGE_CATEGORIES,
+  EVIDENCE_CHANGE_CATEGORY_LABELS_ZH,
+  EVIDENCE_CHANGE_SUMMARY_MAX_CHARS,
+  EVIDENCE_CHANGE_TRIGGERS,
+  EVIDENCE_CHANGE_TRIGGER_LABELS_ZH,
+  EVIDENCE_CHALLENGE_WAITING_LABEL_ZH,
+  EVIDENCE_UPKEEP_ERROR_CODES,
+  EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH,
+  EVIDENCE_UPKEEP_ROUTES,
+  evidenceChallengeRoute,
+  evidenceChangeSummaryZh,
+  evidenceConclusionChanged,
+  evidenceConclusionOf,
+  evidenceNewEvidenceNoticeTitleZh,
+  evidenceUpkeepRoute,
+} from './src/evidenceUpkeep.mjs'
 // sourceDocuments — 12 exports: what the knowledge base accepts, where each
 // format is read, where its pages begin, how a quotation's offset becomes a
 // page number, and what a personal-library document's state reads as.
@@ -1062,7 +1155,7 @@ export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
-// geoVocabulary — 81 exports: 「循证 GEO」's closed vocabularies (pools, engines,
+// geoVocabulary — 81 exports: 「循证传播」's closed vocabularies (pools, engines,
 // steps, measurement and error states, source and article words, order and
 // ledger states, the social channel, the runtime tools' words), their Chinese
 // labels, the metric ids the platform's own views read, and the one
@@ -1075,6 +1168,19 @@ export {
   GEO_ARTICLE_LAYER_LABELS_ZH,
   GEO_ARTICLE_SAFETY,
   GEO_ARTICLE_STATUSES,
+  GEO_CITATION_SUPPORTS,
+  GEO_SPECIFIED_TOPICS,
+  GEO_STATEMENT_TOPICS,
+  GEO_STATEMENT_TOPIC_LABELS_ZH,
+  GEO_ABILITIES,
+  GEO_ARTICLE_REFERENCE_STATUSES,
+  GEO_MEMBER_ROLES,
+  GEO_MEMBER_ROLE_LABELS_ZH,
+  GEO_ROLE_ABILITIES,
+  geoAbilitiesOf,
+  geoRoleAllows,
+  GEO_PLACEMENT_LABELS,
+  GEO_PLACEMENT_LABELS_ZH,
   GEO_AUDIENCES,
   GEO_CELL_STATUSES,
   GEO_CLAIM_SOURCE_KINDS,
@@ -1148,9 +1254,10 @@ export {
   GEO_WRITE_WHATS,
   GEO_WRITE_WHAT_LABELS_ZH,
   geoArticlePublishable,
+  geoSpecifiedInfoAccuracy,
   isGeoValue,
 } from './src/geoVocabulary.mjs'
-// geoMetrics — 20 exports: 「循证 GEO」's metric table (the owner's
+// geoMetrics — 20 exports: 「循证传播」's metric table (the owner's
 // geo-skills metrics.yaml as `geo/metrics.json`, with its constants and their
 // provenance), the probe sanity markers (`geo/sanity.json`), and the pure
 // computation — per-scope cells with Wilson intervals and the no-fake-number
@@ -1182,10 +1289,11 @@ export {
   wilsonInterval,
 } from './src/geoMetrics.mjs'
 export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresentation.mjs';
+export { shareNoticeHref } from './src/shareNotice.mjs';
 
-export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, agendaDueOccurrence, agendaNextOccurrence } from "./src/agendaSchedule.mjs";
+export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence } from "./src/agendaSchedule.mjs";
 
-// vcrVocabulary — 127 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
+// vcrVocabulary — 128 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and
 // the study's seven steps and tabs)
 export {
@@ -1244,6 +1352,7 @@ export {
   VCR_JOB_KINDS,
   VCR_JOB_STATES,
   VCR_JOB_STATE_LABELS_ZH,
+  VCR_JOB_WAIT_LABELS_ZH,
   VCR_LINEAGE_NODE_KINDS,
   VCR_MAP_CONFLICT_BOUND,
   VCR_MEMBER_ROLES,
@@ -1263,6 +1372,7 @@ export {
   VCR_NON_INDIVIDUAL_SOURCES,
   VCR_NOTIFICATION_KINDS,
   VCR_NOTIFICATION_LABELS_ZH,
+  VCR_SIMULATION_NOT_EVIDENCE_ZH,
   VCR_NOT_ESTIMABLE_RULES,
   VCR_NOT_ESTIMABLE_RULE_LABELS_ZH,
   VCR_OPTIONAL_COUNT_KEYS,
@@ -1489,11 +1599,26 @@ export {
   vcrResultOutputPayload,
 } from './src/vcrEngineJob.mjs'
 
-// vcrScenarioSchemas — 2 exports: the walker that checks a scenario against its method's schema
+// vcrScenarioSchemas — 4 exports: the walker that checks a scenario against its method's schema, and the two tables of
+// which analysis a design may run
 export {
+  VCR_SINGLE_ARM_ANALYSIS_METHODS,
+  VCR_TWO_ARM_ANALYSIS_METHODS,
   validateScenario,
   whenHolds,
 } from './src/vcrScenarioSchemas.mjs'
+
+// vcrScenarioHelp — 7 exports: what a model is given to write a scenario from, rendered from the schemas above
+// (`runtime/mcp/evimed-research/vcr_scenario_help.json` is generated from it), and the keys read inside a node
+export {
+  VCR_RUN_SCENARIO_FIELDS,
+  VCR_SCENARIO_EXAMPLES,
+  VCR_SCENARIO_HELP_VERSION,
+  vcrScenarioChildKeys,
+  vcrScenarioHelp,
+  vcrScenarioParentOf,
+  vcrScenarioRows,
+} from './src/vcrScenarioHelp.mjs'
 
 // vcrLineage — 8 exports: lineage: which results a changed input makes stale, and whether a
 // countersignature still holds
@@ -1628,7 +1753,30 @@ export {
 
 export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, projectResultMethod, resultMethodDifference, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
 export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
-export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';
+export { RESEARCH_BILLING_VERSION, RESEARCH_BILLING_VERSION_WHOLE_CREDIT, RESEARCH_BILLING_VERSIONS, WALLET_CONTRACT_WHOLE_CREDIT, WALLET_CONTRACT_EXACT, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, creditUnitsOrNull, formatCredits, estimateRunCostUnits, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';
+
+// creditLots — 灵豆 held as lots: the two kinds, where a gift comes from, and the Asia/Shanghai calendar of expiry and monthly dates.
+export {
+  CREDIT_EXPIRY_REMINDER_DAYS,
+  CREDIT_GIFT_MAX_DAYS,
+  CREDIT_GIFT_SOURCES,
+  CREDIT_LOT_KINDS,
+  CREDIT_LOT_SOURCES,
+  CREDIT_NOT_CHARGED_REASONS,
+  CREDIT_OPERATOR_GRANT_DEFAULT_DAYS,
+  CREDIT_OPERATOR_GRANT_SOURCES,
+  CREDIT_SOURCE_LABELS,
+  CREDIT_STATEMENT_KINDS,
+  CREDIT_TIME_ZONE,
+  accountMonthStart,
+  expiryDateOf,
+  expiryInstantAfterDays,
+  expiryInstantOfDate,
+  expiryReminderDue,
+  expiryWords,
+  monthlyCycleAt,
+  monthlyDateOf,
+} from './src/creditLots.mjs';
 
 // dataSemantics — the reusable meaning of a researcher's tables (plan 2026-10-02 §11.3 N03): facts with a basis,
 // exact source versions, versioned transformations and the named outcomes of the deterministic data checks.
@@ -1682,8 +1830,11 @@ export {
   summarizeSemantics,
 } from './src/dataSemantics.mjs'
 
+// evolution — the sequential test a published tool's real use is read with (the rest of the module's vocabulary is exported at the end of this file)
+export { EVOLUTION_TOOL_HARM_TEST } from './src/evolution.mjs'
+
 // geneExpression — NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17): the
-// accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证 GEO」.
+// accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证传播」.
 export {
   GENE_EXPRESSION_ACCESSIONS,
   GENE_EXPRESSION_CAPABILITY_ID,
@@ -1707,4 +1858,143 @@ export {
   geneExpressionFindings,
 } from './src/geneExpression.mjs'
 
-export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'
+export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, EVOLUTION_EXECUTABLE_OPERATIONS, EVOLUTION_ONE_WAY_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'
+
+// geoEvidenceChain — 「循证传播」 as one evidence chain (flywheel F21, F28, 2026-10-06): the product zone's cards made from a
+// project's verified claims, the closed vocabulary of how a difference is known, the producer settings and the disclosure's
+// people, and the claim-reference grammar the lower layers cite the cards by
+export {
+  EVIDENCE_FEED_ZONE_KINDS,
+  GEO_CARD_HELD_REASONS_ZH,
+  GEO_COMPARISON_EVIDENCE_TYPES,
+  GEO_AI_LABEL_ZH,
+  GEO_CITING_LAYERS,
+  GEO_COMPARISON_EVIDENCE_TYPE_LABELS_ZH,
+  GEO_DEFAULT_PRODUCER_RELATION,
+  GEO_PRODUCER_KINDS,
+  GEO_PRODUCER_KIND_LABELS_ZH,
+  GEO_STALE_CHANGE_CATEGORIES,
+  geoCardClaimId,
+  geoCardLayerMarkdown,
+  geoCardPlan,
+  geoCardProducer,
+  geoClaimJourneyStage,
+  geoClaimReferenceMarker,
+  geoComparisonEvidenceType,
+  geoDisclosurePerson,
+  geoNumberTokens,
+  geoProducerSettingsIssues,
+  geoPublishableText,
+  geoReferenceGraph,
+  geoSentences,
+  geoSourceUrl,
+  geoStaleReferences,
+  parseGeoClaimReferences,
+  stripGeoClaimReferences,
+  isFeedEligibleCard,
+  isFeedEligibleZone,
+  normalizeGeoProducerSettings,
+} from './src/geoEvidenceChain.mjs'
+
+// geoQuestionBank — the platform's own medication-question bank (flywheel F22): about sixty neutral questions by drug class, the month
+// they are measured in, and the per-class accuracy and the share of answers citing an EviMed page, computed from the judged answers
+export {
+  GEO_QUESTION_BANK,
+  GEO_QUESTION_BANK_CLASSES,
+  GEO_QUESTION_BANK_CLASS_LABELS_ZH,
+  GEO_QUESTION_BANK_VERSION,
+  geoQuestionBankClassOf,
+  geoQuestionBankMonth,
+  summarizeQuestionBank,
+} from './src/geoQuestionBank.mjs'
+
+// evidenceCard — 80 exports: the evidence card, the platform's single evidence unit (flywheel plan 2026-10-05 §4): its contract
+// (producer, originality, lineage, entity keys, journey stage, disclosure, claims, the public view's content), the two
+// views of one card, the three rules (who may write where, no paid ranking input, no simulated value) and the error
+// codes they raise
+export {
+  EvidenceCardError,
+  EVIDENCE_CARD_ERROR_MESSAGES_ZH,
+  EVIDENCE_CARD_ERROR_CODES,
+  EVIDENCE_ZONE_KINDS,
+  EVIDENCE_ZONE_KIND_LABELS_ZH,
+  EVIDENCE_ZONE_VISIBILITY,
+  EVIDENCE_ZONE_VISIBILITY_LABELS_ZH,
+  EVIDENCE_PRODUCER_KINDS,
+  EVIDENCE_PRODUCER_KIND_LABELS_ZH,
+  EVIDENCE_PRODUCER_RELATIONS,
+  EVIDENCE_PRODUCER_RELATION_LABELS_ZH,
+  EVIDENCE_ZONE_PRODUCER_KINDS,
+  EVIDENCE_PLATFORM_PRODUCER_NAME,
+  EVIDENCE_PRIMARY_ORIGINALITY,
+  EVIDENCE_INTERPRETIVE_ORIGINALITY,
+  EVIDENCE_ORIGINALITY,
+  EVIDENCE_ORIGINALITY_LABELS_ZH,
+  evidenceOriginalityIsPrimary,
+  EVIDENCE_AI_STEPS,
+  EVIDENCE_AI_STEP_LABELS_ZH,
+  EVIDENCE_CLAIM_TYPES,
+  EVIDENCE_CARD_CLAIM_TYPES,
+  EVIDENCE_CALCULATION_LABEL_ZH,
+  EVIDENCE_CALCULATION_FORMATS,
+  EVIDENCE_CALCULATION_REASONS,
+  EVIDENCE_CALCULATION_REASON_LABELS_ZH,
+  EVIDENCE_CALCULATION_EXTRA_VALUES,
+  EVIDENCE_METHOD_ENGINES,
+  EVIDENCE_REPORTING_STANDARDS,
+  EVIDENCE_RECALCULATION_VERDICTS,
+  EVIDENCE_RECALCULATION_VERDICT_LABELS_ZH,
+  evidenceReportingStandard,
+  evidenceCalculationBasis,
+  evidenceComparisonCalculation,
+  evidenceCalculationVerdict,
+  evidenceComparisonCalculationVerdict,
+  evidenceCalculationReceiptIds,
+  evidenceOriginalityBasisIssues,
+  EVIDENCE_CLAIM_CONFIDENCE,
+  EVIDENCE_OUTCOME_ROLES,
+  EVIDENCE_WRITE_ORIGINS,
+  EVIDENCE_WRITE_ORIGIN_LABELS_ZH,
+  EVIDENCE_RANKING_INPUTS,
+  evidencePublicationStatus,
+  createEvidenceCardHashing,
+  evidencePublicExcerpt,
+  evidenceStructuredContent,
+  evidenceProducer,
+  evidenceProducerNameIsPlatform,
+  assertEvidenceProducerName,
+  evidenceDefaultProducer,
+  evidenceOriginality,
+  EVIDENCE_PLATFORM_LINEAGE_KEYS,
+  evidenceLineage,
+  EVIDENCE_ENTITY_KEY_LIMITS,
+  evidenceEntityKeys,
+  evidenceMergeEntityKeys,
+  evidenceJourneyStage,
+  evidenceDisclosure,
+  assertEvidenceCardForZone,
+  EVIDENCE_CLAIM_LIMIT,
+  evidenceCardClaims,
+  verifyEvidenceCardClaims,
+  EVIDENCE_SIMULATED_VALUE_SOURCES,
+  EVIDENCE_DERIVED_ONLY_VALUE_SOURCES,
+  evidenceValueSourceIssues,
+  assertEvidenceValueSources,
+  EVIDENCE_ABSOLUTE_EFFECT_PER,
+  evidenceAbsoluteEffect,
+  EVIDENCE_FACT_BOX_REASONS,
+  evidenceFactBox,
+  EVIDENCE_PUBLIC_TEXT_PANELS,
+  EVIDENCE_PUBLIC_PANEL_LABELS_ZH,
+  EVIDENCE_PUBLIC_PANEL_LIMITS,
+  evidencePublicViewContent,
+  evidenceCardClinicalView,
+  evidenceCardPublicView,
+  evidenceCardIdentifiers,
+  evidenceCardTexts,
+  evidenceWriteAllowed,
+  assertEvidenceWriteAllowed,
+  evidenceRankingComparator,
+} from './src/evidenceCard.mjs'
+
+/** @typedef {import('./src/evidenceCard.mjs').EvidenceCalculationReceipt} EvidenceCalculationReceipt */

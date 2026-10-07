@@ -15,6 +15,7 @@ import {
 } from "../src/vcrGateway.mjs";
 import { VCR_READ_WHATS, VCR_WRITE_WHATS, VcrService } from "../src/vcrService.mjs";
 import { vcrReportModel } from "../src/vcrRender.mjs";
+import { HttpError } from "../src/security.mjs";
 
 /** The one saved result the fixture's study has. */
 async function vcrStoreResults() {
@@ -541,6 +542,38 @@ test("the robustness kinds start through the gateway; none of them takes a recon
 });
 // --- end robustness methods ---
 
+test("a refused scenario tells the run where it was refused as a code and a path, so its tool can name the keys read there — and nothing of the engine's own words", async () => {
+  /** @param {Record<string, any>} [extra] */
+  const refusing = (extra = {}) => {
+    const error = Object.assign(new HttpError(400, "vcr_job_scenario_invalid", "作业不符合引擎协议：scenario.accrual.months（scenario_field_unknown）。"), {
+      issues: [
+        { code: "scenario_field_unknown", field: "scenario.accrual.months", detail: "The engine does not read \"months\" here." },
+        { code: "scenario_field_missing", field: "scenario.accrual.duration", detail: "duration is required." },
+        { code: "Not A Code", field: "scenario.x" }, { code: "scenario_value_invalid", field: "" }, { code: "scenario_value_invalid" }, "text",
+      ], ...extra });
+    return fixture({ jobs: { async enqueue() { throw error; } } });
+  };
+  const send = async (/** @type {any} */ handler, /** @type {string} */ kind) => {
+    const res = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "start", kind, scenario: { accrual: { months: 24 } } }), res);
+    return res;
+  };
+  const analytic = await send(refusing().handler, "design_analytic");
+  assert.equal(analytic.status, 400);
+  assert.equal(analytic.json().code, "vcr_request_invalid");
+  assert.deepEqual(analytic.json().issues, [{ code: "scenario_field_unknown", field: "scenario.accrual.months" }, { code: "scenario_field_missing", field: "scenario.accrual.duration" }],
+    "a code and a path each; the engine's sentences, malformed entries and anything that is not a finding are not passed on");
+  assert.doesNotMatch(analytic.body, /does not read|is required/);
+  // The generators answer in their own code, with the alternatives, and the findings ride along.
+  const patients = await send(refusing().handler, "generate_patients");
+  assert.equal(patients.json().code, "vcr_simulate_payload_invalid");
+  assert.equal(patients.json().alternatives.length, 3);
+  assert.deepEqual(patients.json().issues.map((/** @type {any} */ issue) => issue.field), ["scenario.accrual.months", "scenario.accrual.duration"]);
+  // A refusal with no findings sends none, and a failure that is not a refusal never invents any.
+  const plain = fixture({ jobs: { async enqueue() { throw new HttpError(400, "vcr_job_scenario_invalid", "no fields"); } } });
+  assert.equal("issues" in (await send(plain.handler, "design_analytic")).json(), false);
+});
+
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
   const { calls, handler } = fixture();
   const started = response();
@@ -564,6 +597,17 @@ test("simulate is start / status / cancel, and a job over budget says so plainly
   await overBudget(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation" }), waiting);
   assert.equal(waiting.json().data.awaitingBudget, true);
   assert.match(waiting.json().data.message, /预算/);
+  assert.match(waiting.json().data.message, /不必等它/, "a run is told the job is not coming, so it does not wait or poll");
+
+  // The status of a job that waits for a person says the same: a run that asks again is not left to read a bare state.
+  const polled = createVcrGatewayHandler(config, runtimeManager, {
+    vcr: { ...fixture().vcr, jobs: { ...fixture().vcr.jobs, async get() { return { id: "job_2", state: "awaiting_budget", progress: {}, cpuSecondsUsed: 0, error: null }; } } },
+  });
+  const again = response();
+  await polled(request("/internal/vcr/v1/simulate", { action: "status", jobId: "job_2" }), again);
+  assert.equal(again.json().data.state, "awaiting_budget");
+  assert.equal(again.json().data.awaitingBudget, true);
+  assert.match(again.json().data.message, /只有研究者确认后才会继续/);
 });
 
 test("digitize hands a calibration to the digitizer for the token's own study and answers a receipt, a refusal, or a named error", async () => {

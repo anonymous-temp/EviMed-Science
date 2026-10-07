@@ -592,7 +592,7 @@ export const CJK_PUNCT_FACES = Object.freeze([
  * Nine, up from five. The five-rung scale of 2026-09-23 was the right cure for
  * a page carrying eleven size × weight pairs, and the wrong medicine for a
  * dashboard: with 24 px as the ceiling a KPI could not out-shout its own
- * label, which is a large part of why 循证 GEO reads as small. The dense end
+ * label, which is a large part of why 循证传播 reads as small. The dense end
  * gains 13 and the loud end gains 32 and 40, and the loud end is admissible
  * only on a data page.
  *
@@ -662,7 +662,7 @@ export const SPACE = Object.freeze({
  *
  * The single 960 column of 2026-09-23 is gone: it made a reading page too wide
  * and a dashboard too narrow, and a dashboard squeezed into a document column
- * is the structural half of why 循证 GEO looks cheap.
+ * is the structural half of why 循证传播 looks cheap.
  *
  *  - `read` 720 — an answer, a report, an article, an evidence card
  *  - `page` 1040 — a list: tools, the frontier feed, capsules, settings

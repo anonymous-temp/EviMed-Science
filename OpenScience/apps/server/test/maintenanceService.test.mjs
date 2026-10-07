@@ -282,3 +282,20 @@ test("expired physical render and compute work remains in the release switch's r
   assert.equal(held.state, "draining");
   assert.equal(held.blockers.runningProductJobs, 2);
 });
+
+// What a release switch asks about instead of everything (host-release-switch.sh, item 11): the work a researcher started,
+// reported apart from the platform's own background work. A drained window never uses it — its blockers are the whole platform.
+test("the interactive activity is what a researcher owns, and says nothing when the composition does not", async () => {
+  const base = { activeCommands: 0, activeTasks: 0, backgroundOperations: 0, runningAgentRuns: 3, runtimes: { busy: 2, idle: 0, unknown: 0 } };
+  const ask = async (activity) => fixture(async () => activity).service.interactiveActivity();
+  assert.deepEqual(await ask({ ...base, interactive: { runningAgentRuns: 1, busyRuntimes: 0 } }), { runningAgentRuns: 1, busyRuntimes: 0 });
+  assert.equal(await ask(base), null, "an older composition does not say");
+  assert.equal(await ask({ ...base, interactive: { runningAgentRuns: -1, busyRuntimes: 0 } }), null);
+  assert.equal(await ask({ ...base, interactive: { runningAgentRuns: 1.5, busyRuntimes: 0 } }), null);
+  assert.equal(await fixture(async () => { throw new Error("inspection failed"); }).service.interactiveActivity(), null);
+  // The blockers a drained window waits on still count everything.
+  const { service } = fixture(async () => ({ ...base, interactive: { runningAgentRuns: 0, busyRuntimes: 0 } }));
+  await service.initialize();
+  assert.equal((await service.activity()).runningAgentRuns, 3);
+  assert.equal((await service.activity()).busyRuntimes, 2);
+});

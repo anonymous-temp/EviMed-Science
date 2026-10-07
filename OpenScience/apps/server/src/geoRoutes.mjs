@@ -2,12 +2,12 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
   GEO_COVERAGE_DAYS_MAX, GEO_COVERAGE_DAYS_MIN, GEO_ENGINES, GEO_EXPORT_KINDS, GEO_ORDER_CANCELLABLE_STATES, GEO_PROJECT_STATUSES, GEO_STEPS,
-  GEO_TIERS,
+  GEO_TIERS, geoProducerSettingsIssues, normalizeGeoProducerSettings,
 } from "@evimed/domain";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
- * The browser's routes for 「循证 GEO」 (`/api/geo/*`, build spec 2026-09-25 §3).
+ * The browser's routes for 「循证传播」 (`/api/geo/*`, build spec 2026-09-25 §3).
  *
  * Hidden knowledge:
  *
@@ -34,7 +34,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
  * @module geoRoutes
  */
 
-const NOT_ENABLED = () => new HttpError(404, "geo_not_enabled", "循证 GEO is not enabled.");
+const NOT_ENABLED = () => new HttpError(404, "geo_not_enabled", "循证传播 is not enabled.");
 const UNAVAILABLE = () => new HttpError(503, "geo_unavailable", "This GEO action is not available on this deployment yet.");
 /** A project name is 1–40 characters (`projectDisplayName`); a brand given at creation becomes it. */
 const BRAND_NAME_MAX = 40;
@@ -60,7 +60,7 @@ export function geoRoutePattern(pathname) {
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
   const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "screenshots", "sources", "tier", "articles", "distribution", "budget",
-    "orders", "monitoring", "run", "export"].includes(parts[2]) ? parts[2] : ":route";
+    "orders", "monitoring", "run", "export", "cards", "members"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
   return `/api/geo/projects/:id/${tab}/:item/:action`;
@@ -98,6 +98,25 @@ function tier(value) {
   return value;
 }
 
+/**
+ * The producer settings of a project (who speaks for the product): the domain's own check, so the route and a card agree.
+ * @param {unknown} value
+ */
+function producerSettings(value) {
+  if (value === null) return null;
+  const issues = geoProducerSettingsIssues(value);
+  if (issues.length) throw new HttpError(400, "geo_producer_invalid", `The producer settings are not valid: ${issues.join("; ")}.`);
+  return normalizeGeoProducerSettings(value);
+}
+
+/**
+ * The account a hook acts as: the project's owner. The run, its workspace and its money are the owner's whoever asked, and the hooks
+ * (the orchestrator, the exporter, the market) check that the account is the project's; the ability the member needed was judged by
+ * the route before this.
+ * @param {{ id?: string }} user @param {{ userId: string }} project
+ */
+const asOwner = (user, project) => ({ ...user, id: project.userId });
+
 /** @param {unknown} value */
 function brandName(value) {
   if (value == null) return null;
@@ -126,6 +145,9 @@ function money(value, field) {
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null> } | null,
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ sessionId: string, runId?: string | null }> } | null,
  *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ sessionId: string, runId: string | null }> } | null,
+ *   cards?: { list?: (project: any) => Promise<any>, refresh?: (user: any, project: any) => Promise<any>,
+ *     articleReferences?: (project: any, articleId: string) => Promise<any>, articlePublishable?: (project: any, articleId: string) => Promise<any> } | null,
+ *   members?: { list: (project: any) => Promise<any[]>, add: (input: any) => Promise<any>, remove: (input: any) => Promise<any> } | null,
  *   market?: { setBudget?: (user: any, project: any, budget: { totalCny: number, dailyCny: number }) => Promise<any>,
  *     cancelOrder?: (user: any, project: any, orderId: string) => Promise<any>, confirmTopup?: (user: any, topupId: string) => Promise<any>,
  *     resolveUnknownOrder?: (user: any, orderId: string, input: { created: boolean, vendorOrderNid?: string }) => Promise<any>,
@@ -155,6 +177,8 @@ export function createGeoRoutes(dependencies) {
     const hooks = {
       get orchestrator() { return dependencies.orchestrator ?? null; },
       get exporter() { return dependencies.exporter ?? null; },
+      get cards() { return dependencies.cards ?? null; },
+      get members() { return dependencies.members ?? null; },
       get market() { return dependencies.market ?? null; },
     };
 
@@ -247,7 +271,7 @@ export function createGeoRoutes(dependencies) {
         return reply({ ...view, sessionId });
       }
       if (method === "PATCH") {
-        const body = await bodyOf(req, maxJsonBytes, ["coverageDays", "engines", "tier", "status"]);
+        const body = await bodyOf(req, maxJsonBytes, ["coverageDays", "engines", "tier", "status", "producer"]);
         /** @type {Record<string, any>} */
         const patch = {};
         if (body.coverageDays !== undefined) patch.coverageDays = coverageDays(body.coverageDays);
@@ -257,6 +281,7 @@ export function createGeoRoutes(dependencies) {
           if (!GEO_PROJECT_STATUSES.includes(body.status)) throw new HttpError(400, "geo_status_invalid", `status must be one of: ${GEO_PROJECT_STATUSES.join(", ")}.`);
           patch.status = body.status;
         }
+        if (body.producer !== undefined) patch.producer = producerSettings(body.producer);
         return reply(await service.updateProject(user, id, patch));
       }
       if (method === "DELETE") {
@@ -267,6 +292,31 @@ export function createGeoRoutes(dependencies) {
       }
     }
     const tab = parts[2];
+    // --- members: colleagues and outside agencies, by role (the owner alone manages them) ---
+    if (tab === "members") {
+      if (!hooks.members) throw UNAVAILABLE();
+      if (parts.length === 3 && method === "GET") {
+        const project = await service.requireProject(user, id);
+        return reply({ members: await hooks.members.list(project), you: { roles: project.access.roles, abilities: project.access.abilities } });
+      }
+      if (parts.length === 3 && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["userId", "role", "detail"]);
+        const project = await service.requireProject(user, id, "manage_members");
+        const added = await hooks.members.add({ project, actorId: String(user.id), userId: body.userId, role: body.role, detail: body.detail });
+        await audit("geo.member.add", "completed", { userId: user.id, code: id, detail: String(body.role) });
+        return reply(added, 201);
+      }
+      if (parts.length === 4 && method === "DELETE") {
+        await bodyOf(req, maxJsonBytes, []);
+        const role = url.searchParams.get("role");
+        // A member may leave on their own; taking someone else off is the owner's.
+        const project = await service.requireProject(user, id, parts[3] === String(user.id) ? "read" : "manage_members");
+        const removed = await hooks.members.remove({ project, userId: parts[3], role });
+        await audit("geo.member.remove", "completed", { userId: user.id, code: id, detail: role ?? "all" });
+        return reply(removed);
+      }
+      throw new HttpError(404, "not_found", "GEO route not found.");
+    }
     if (parts.length === 3 && method === "GET") {
       if (tab === "evidence") return reply(await service.evidence(user, id));
       if (tab === "journey") return reply(await service.journey(user, id));
@@ -288,6 +338,21 @@ export function createGeoRoutes(dependencies) {
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
       }
       if (tab === "monitoring") return reply(await service.monitoring(user, id));
+      // The project's product zone and its cards: each claim with its quotation, its ✓/⚠ and the card revision it stands in.
+      if (tab === "cards") {
+        const project = await service.requireProject(user, id);
+        if (!hooks.cards?.list) throw UNAVAILABLE();
+        return reply(await hooks.cards.list(project));
+      }
+    }
+    // Write the verified claims of the project into its product zone as cards; the answer says what was written and what was held.
+    if (parts.length === 4 && method === "POST" && tab === "cards" && parts[3] === "refresh") {
+      await bodyOf(req, maxJsonBytes, []);
+      const project = await service.requireProject(user, id, "edit");
+      if (!hooks.cards?.refresh) throw UNAVAILABLE();
+      const result = await hooks.cards.refresh(asOwner(user, project), project);
+      await audit("geo.cards.refresh", "completed", { userId: user.id, code: id, detail: `${result.cards?.length ?? 0}` });
+      return reply(result);
     }
     if (parts.length === 4 && method === "GET" && tab === "answers") return reply(await service.answer(user, id, parts[3]));
     if (parts.length === 4 && method === "GET" && tab === "screenshots") {
@@ -312,6 +377,19 @@ export function createGeoRoutes(dependencies) {
       const body = await bodyOf(req, maxJsonBytes, ["tier"]);
       return reply(await service.setTier(user, id, tier(body.tier)));
     }
+    // What the platform reads in an article's claim references: each against the card revision it cites, and the ones a card's change
+    // log says have moved since. A card-layer article is read as the card renders it now.
+    if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "references") {
+      const project = await service.requireProject(user, id);
+      if (!hooks.cards?.articleReferences) throw UNAVAILABLE();
+      return reply(await hooks.cards.articleReferences(project, parts[3]));
+    }
+    // The article as it leaves the platform: references off, its author named, the relation to the product said and the AI label.
+    if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "text") {
+      const project = await service.requireProject(user, id);
+      if (!hooks.cards?.articlePublishable) throw UNAVAILABLE();
+      return reply(await hooks.cards.articlePublishable(project, parts[3]));
+    }
     if (parts.length === 5 && method === "POST" && tab === "articles" && parts[4] === "withdraw") {
       await bodyOf(req, maxJsonBytes, []);
       return reply(await service.withdrawArticle(user, id, parts[3]));
@@ -326,9 +404,9 @@ export function createGeoRoutes(dependencies) {
       const body = await bodyOf(req, maxJsonBytes, ["totalCny", "dailyCny"]);
       const budget = { totalCny: money(body.totalCny, "totalCny"), dailyCny: money(body.dailyCny, "dailyCny") };
       if (budget.dailyCny > budget.totalCny) throw new HttpError(400, "geo_budget_invalid", "dailyCny cannot exceed totalCny.");
-      const project = await service.requireProject(user, id);
+      const project = await service.requireProject(user, id, "manage_money");
       if (!hooks.market?.setBudget) throw UNAVAILABLE();
-      const result = await hooks.market.setBudget(user, project, budget);
+      const result = await hooks.market.setBudget(asOwner(user, project), project, budget);
       await audit("geo.budget.set", "completed", { userId: user.id, code: id, detail: `${budget.totalCny}/${budget.dailyCny}` });
       return reply(result);
     }
@@ -339,25 +417,25 @@ export function createGeoRoutes(dependencies) {
         throw new HttpError(409, "geo_order_not_cancellable", "An order can be cancelled only before the outlet accepts it.");
       }
       if (!hooks.market?.cancelOrder) throw UNAVAILABLE();
-      const result = await hooks.market.cancelOrder(user, project, order.id);
+      const result = await hooks.market.cancelOrder(asOwner(user, project), project, order.id);
       await audit("geo.order.cancel", "completed", { userId: user.id, code: order.id, detail: id });
       return reply(result);
     }
     if (parts.length === 3 && method === "POST" && tab === "run") {
       const body = await bodyOf(req, maxJsonBytes, ["step"]);
       if (typeof body.step !== "string" || !GEO_STEPS.includes(body.step)) throw new HttpError(400, "geo_step_invalid", `step must be one of: ${GEO_STEPS.join(", ")}.`);
-      const project = await service.requireProject(user, id);
+      const project = await service.requireProject(user, id, "run");
       if (!hooks.orchestrator?.runStep) throw UNAVAILABLE();
-      return reply(await hooks.orchestrator.runStep(user, project, body.step));
+      return reply(await hooks.orchestrator.runStep(asOwner(user, project), project, body.step));
     }
     if (parts.length === 3 && method === "POST" && tab === "export") {
       const body = await bodyOf(req, maxJsonBytes, ["kind"]);
       if (typeof body.kind !== "string" || !GEO_EXPORT_KINDS.includes(body.kind)) {
         throw new HttpError(400, "geo_export_kind_invalid", `kind must be one of: ${GEO_EXPORT_KINDS.join(", ")}.`);
       }
-      const project = await service.requireProject(user, id);
+      const project = await service.requireProject(user, id, "run");
       if (!hooks.exporter?.export) throw UNAVAILABLE();
-      return reply(await hooks.exporter.export(user, project, body.kind));
+      return reply(await hooks.exporter.export(asOwner(user, project), project, body.kind));
     }
     throw new HttpError(404, "not_found", "GEO route not found.");
   };

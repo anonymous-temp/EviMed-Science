@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { numericScore } from "../../../evals/paper-gold/evaluator.mjs";
+import { curatedReference } from "../../../evals/paper-gold/tolerance.mjs";
 const hash = value => createHash("sha256").update(value).digest("hex");
 export const AGGREGATE_REFERENCE_METHODS = ["diagnostic-posterior", "decision-net-benefit"];
 /** Independently reproduce preserved primary-paper arithmetic with R before freezing.
@@ -20,17 +21,24 @@ export function createEvolutionAggregateCasePreparation({ config, controller }) 
       if (seed.methodId !== methodId || new Set(seed.cases.map(row => row.publicationId)).size < 2) throw new Error("Two independent primary publications are required.");
       const code = await readFile(new URL("../../../evals/paper-gold/aggregate_reference.py", import.meta.url), "utf8");
       const cases = [];
-      for (const reference of seed.cases) {
+      for (let reference of seed.cases) {
         signal?.throwIfAborted();
         if (!/^[A-Za-z0-9_.-]+$/.test(reference.sourceFile)) throw new Error("Invalid primary source path.");
         const root = await realpath(directory), sourcePath = await realpath(path.join(root, reference.sourceFile));
         if (!sourcePath.startsWith(`${root}${path.sep}`)) throw new Error("Primary source escaped evaluator storage.");
         const source = await readFile(sourcePath, "utf8");
         if (hash(source) !== reference.sourceHash || reference.independentQa?.passed !== true) throw new Error("Preserved primary source or extraction QA changed.");
-        for (const row of Object.values(reference.numeric)) {
+        const frozenNumeric = {};
+        for (const [key, row] of Object.entries(reference.numeric)) {
           const numeric = /** @type {any} */ (row);
-          if (!source.includes(numeric.sourceToken) || !Number.isFinite(numeric.value) || !Number.isFinite(numeric.absoluteTolerance) || numeric.absoluteTolerance < 0) throw new Error("Published numerical quotation bond failed.");
+          if (typeof numeric.sourceToken !== "string" || !source.includes(numeric.sourceToken)) throw new Error("Published numerical quotation bond failed.");
+          // The token has to print this very number, and its tolerance is the printed precision unless the seed
+          // names a reason inside the rule's bounds (`tolerance.mjs`). Being in the source somewhere is not a bond.
+          const curated = curatedReference({ value: numeric.value, printed: numeric.sourceToken, quantity: numeric.quantity, absoluteTolerance: numeric.absoluteTolerance, relativeTolerance: numeric.relativeTolerance, toleranceReason: numeric.toleranceReason }, { allowLoosening: true });
+          if (!curated.ok) throw new Error(`Published numerical reference refused: ${curated.code}.`);
+          frozenNumeric[key] = { ...numeric, ...curated.reference };
         }
+        reference = { ...reference, numeric: frozenNumeric };
         const result = await controller.execVerify({ files: {}, code, input: { referenceMethod: methodId, specification: reference.input.specification } }, { signal });
         if (result.ok !== true || result.joined !== true) return { ok: false, status: "waiting_resource", resourceCode: "independent_R_reference_execution_unavailable" };
         const independentlyComputed = JSON.parse(String(result.output).trim().split("\n").at(-1)).numeric;

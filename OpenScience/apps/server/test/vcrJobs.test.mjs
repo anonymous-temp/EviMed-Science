@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatesForJob,
-  VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
+  VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrEngineStoppedError, vcrErrorFromIssues, vcrFailureReason, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
 } from "../src/vcrJobs.mjs";
 import { VCR_RESULT_KINDS } from "../src/vcrStore.mjs";
 import { VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_ENGINE_METHODS, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, canonicalScenarioJson, replicatesForMcse, vcrReplicateFloorFor } from "@evimed/domain";
@@ -243,3 +243,54 @@ test("the robustness job kinds are filed under the comparator", () => {
 });
 
 // --- end robustness methods ---
+
+test("a failed job's reason is read from the engine's refusal first, then from what the engine found wrong with its own result, and is always a code and a sentence", () => {
+  const refusal = { diagnostics: { issues: [{ code: "design_effect_null", field: "scenario.truth.hazardRatio", detail: "The scenario has no effect (hazardRatio 1)." }] } };
+  const validation = { diagnostics: { resultValidationIssues: [
+    { code: "measure_value_invalid", field: "measures[0].value", detail: "A measure carries a finite number." },
+    { code: "measure_value_invalid", field: "measures[1].value", detail: "A measure carries a finite number." }] } };
+  const both = { diagnostics: { ...refusal.diagnostics, ...validation.diagnostics } };
+
+  const refused = /** @type {any} */ (vcrErrorFromIssues(refusal));
+  assert.equal(refused.code, "design_effect_null");
+  assert.equal(refused.field, "scenario.truth.hazardRatio");
+  assert.match(refused.message, /这个情景没有效应.*hazardRatio 1/, "the domain's sentence, then the engine's own words");
+
+  const checked = /** @type {any} */ (vcrErrorFromIssues(validation));
+  assert.equal(checked.code, "measure_value_invalid");
+  assert.match(checked.message, /measures\[0\]\.value: A measure carries a finite number/, "a validator's sentence is the same for every field, so the field is in it");
+  assert.deepEqual(checked.issues.map((/** @type {any} */ issue) => issue.field), ["measures[0].value", "measures[1].value"]);
+
+  assert.deepEqual(/** @type {any} */ (vcrErrorFromIssues(both)).issues.map((/** @type {any} */ issue) => issue.code), ["design_effect_null", "measure_value_invalid", "measure_value_invalid"], "refusal first");
+  const long = { diagnostics: { resultValidationIssues: Array.from({ length: 30 }, (_, index) => ({ code: "measure_value_invalid", field: `measures[${index}].value`, detail: "x".repeat(900) })) } };
+  const bounded = /** @type {any} */ (vcrErrorFromIssues(long));
+  assert.equal(bounded.issues.length, 10, "bounded as the record always was");
+  assert.ok(bounded.issues.every((/** @type {any} */ issue) => issue.detail.length <= 400) && bounded.message.length < 600);
+  assert.equal(vcrErrorFromIssues({ diagnostics: {} }), null);
+  assert.equal(/** @type {any} */ (vcrErrorFromIssues({ diagnostics: {} }, [{ code: "result_not_object", field: "", detail: "A result is an object." }])).code, "result_not_object", "the control plane's own validation of an answer");
+
+  // vcrFailureReason: the caller's error wins, then the result's issues, then the honest unknown; never nothing.
+  assert.equal(vcrFailureReason({ code: "engine_unavailable", message: "m" }, validation).code, "engine_unavailable");
+  assert.equal(vcrFailureReason(null, validation).code, "measure_value_invalid");
+  assert.equal(vcrFailureReason(undefined, refusal).code, "design_effect_null");
+  for (const nothing of [null, undefined, {}, { partial: true }, { code: "", message: "" }, { message: "  " }]) {
+    const reason = vcrFailureReason(nothing, { diagnostics: {} });
+    assert.equal(reason.code, "vcr_job_failed");
+    assert.ok(reason.message.trim().length > 0, "an unknown reason is said as unknown");
+  }
+  assert.equal(vcrFailureReason({ partial: true }, { diagnostics: {} }).partial, true, "what the caller already said is kept");
+  assert.match(vcrFailureReason({ code: "vcr_engine_rejected", message: "" }, {}).message, /./, "a code with no sentence gets the registry's");
+});
+
+test("an engine that ended a job with no result is named in the sentence, and an engine word that is not a code is never echoed", () => {
+  for (const code of ["engine_crashed", "cpu_limit_exceeded", "memory_limit_exceeded", "spawn_failed", "result_unreadable"]) {
+    const error = vcrEngineStoppedError(code);
+    assert.equal(error.code, "vcr_job_failed");
+    assert.equal(error.engineError, code);
+    assert.ok(error.message.includes(`（${code}）`), code);
+  }
+  const strange = vcrEngineStoppedError("Not A Code; drop table");
+  assert.equal(strange.engineError, undefined);
+  assert.ok(!/drop table/.test(strange.message));
+  assert.ok(strange.message.length > 0);
+});
