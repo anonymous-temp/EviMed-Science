@@ -969,6 +969,19 @@ test("C2-4 a design's number is stale while the design is marked and its result 
   assert.equal(page.stale.queued, true);
 });
 
+test("C2-4 a stage that is carried over says so on each of its numbers: the closed form's are fresh while yesterday's simulated power stays yesterday's", () => {
+  const design = scenario("a", 1, "A", { resultId: "res_a2" });
+  const marked = { node: "trial_scenario:a@1", reason: "assumption_changed", markedAt: "2026-09-28T02:00:00.000Z", queuedJobId: "job_9" };
+  const merged = { ...result("a", [measure("required_events", 300), { ...measure("power", 0.5), simulated: true, mcse: 0.004, stale: true }]),
+    id: "res_a2", version: 2, createdAt: "2026-09-28T03:00:00.000Z",
+    diagnostics: { stageResults: {
+      analytic: { stage: "analytic", jobId: "job_a", stale: false, measures: [measure("required_events", 300)], diagnostics: {} },
+      simulation: { stage: "simulation", jobId: "job_s", stale: true, measures: [{ ...measure("power", 0.5), simulated: true, mcse: 0.004 }], diagnostics: {} } } } };
+  const measures = presentDesigns({ ...emptyBundle(), scenarios: [design], stale: [marked], results: [merged], allResults: [merged] }).designs[0].measures;
+  assert.equal(measures.required_events.stale, false, "what was just recomputed is fresh");
+  assert.equal(measures.power.stale, true, "the stage that made the simulated power has not been redone");
+});
+
 test("C2-4 a stage the recomputation did not run again is not left on the page: it is dropped and said", () => {
   const design = scenario("a", 1, "A", { resultId: "res_a" });
   const dropped = { ...result("a", [measure("power", 0.5)]), diagnostics: { notRerun: [{ stage: "assurance", measures: ["assurance"] }] } };
@@ -976,6 +989,17 @@ test("C2-4 a stage the recomputation did not run again is not left on the page: 
   assert.deepEqual(page.footnotes, ["方案 A：成功把握不再显示——效应假设卡现在没有预测分布，没有可以积分的先验，这一项没有重算。"]);
   const other = { ...dropped, diagnostics: { notRerun: [{ stage: "simulation", measures: ["power"] }] } };
   assert.match(presentTrialTab({ ...emptyBundle(), scenarios: [design], results: [other], allResults: [other] }).footnotes[0], /仿真没有重算/);
+});
+
+test("C2-4 an older result's assurance is not read back once the newest result dropped that stage", () => {
+  const design = scenario("a", 1, "A", { resultId: "res_a2" });
+  const older = { ...result("a", [{ name: "assurance", value: 0.8, source: "calculated" }]), id: "res_a1", subjectId: "a", createdAt: "2026-09-28T01:00:00.000Z" };
+  const newest = { ...result("a", [measure("power", 0.5)]), id: "res_a2", version: 2, subjectId: "a", createdAt: "2026-09-28T03:00:00.000Z",
+    diagnostics: { notRerun: [{ stage: "assurance", measures: ["assurance"] }],
+      stageResults: { simulation: { stage: "simulation", jobId: "job_s", stale: false, measures: [measure("power", 0.5)], diagnostics: {} } } } };
+  const measures = presentDesigns({ ...emptyBundle(), scenarios: [design], results: [newest], allResults: [newest, older] }).designs[0].measures;
+  assert.equal(measures.power.value, 50);
+  assert.equal(measures.assurance, undefined, "no prior to integrate over any more: the old assurance is not left beside the new numbers");
 });
 
 test("C3-11 the run record says an analytic value is an approximation and what tolerance the simulation was held to", () => {

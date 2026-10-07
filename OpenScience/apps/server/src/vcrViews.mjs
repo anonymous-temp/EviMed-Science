@@ -805,13 +805,24 @@ function designStages(scenario, results) {
     .sort((a, b) => Date.parse(String(b.createdAt)) - Date.parse(String(a.createdAt)) || Number(b.version) - Number(a.version));
   /** @type {Record<string, { result: Record<string, any>, measures: any[], diagnostics: Record<string, any>, jobId: string | null }>} */
   const stages = {};
+  // A result filed in stages holds every stage the design has (`vcrMergeStageResult` carries the earlier ones forward): the newest of
+  // them is the whole truth, and a stage it dropped (`notRerun`: nothing will compute it again) is not read back out of an older one.
+  let whole = false;
+  /** @type {Set<string>} */
+  const dropped = new Set();
   for (const result of mine) {
     const staged = object(object(result.diagnostics).stageResults);
     if (Object.keys(staged).length) {
+      if (whole) continue;
+      whole = true;
+      for (const entry of list(object(result.diagnostics).notRerun)) dropped.add(String(object(entry).stage));
       for (const [name, entry] of Object.entries(staged)) {
-        if (stages[name]) continue;
         const stage = object(entry);
-        stages[name] = { result, measures: list(stage.measures), diagnostics: object(stage.diagnostics), jobId: text(stage.jobId) };
+        // A stage carried over from before a change is said so on each of its numbers (`vcrMergeStageResult`): the page shows
+        // yesterday's simulated power as yesterday's until the stage that made it has run again.
+        const carried = stage.stale === true;
+        stages[name] = { result, measures: list(stage.measures).map((measure) => (carried ? { ...object(measure), stale: true } : measure)),
+          diagnostics: object(stage.diagnostics), jobId: text(stage.jobId) };
       }
       continue;
     }
@@ -824,7 +835,7 @@ function designStages(scenario, results) {
       (held[stage] ??= []).push(measure);
     }
     for (const [name, measures] of Object.entries(held)) {
-      if (!stages[name]) stages[name] = { result, measures, diagnostics: object(result.diagnostics), jobId: null };
+      if (!stages[name] && !dropped.has(name)) stages[name] = { result, measures, diagnostics: object(result.diagnostics), jobId: null };
     }
   }
   return { stages, latest: mine[0] ?? null };
