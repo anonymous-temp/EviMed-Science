@@ -1,5 +1,9 @@
 // scripts/ops/ui-walk.mjs: its budgets name the pages it walks, it walks every
-// GEO tab, it starts no runtime, and a font-pair count is a notice.
+// GEO tab, it starts no runtime, and a font-pair count is a notice. R10 added
+// four checks (DESIGN.md 「页面结构」): neither retired module name on any page,
+// one primary action in a page header, a page body that stacks no more kinds of
+// section than its budget, and a first row of each list that shows something
+// when it is clicked.
 //
 // The walk drives a real browser against a live deployment. Its verdict and
 // budget tables are imported directly; its control flow is run against a
@@ -12,7 +16,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { BACK_OFFICE, BUDGET_BY_PAGE, GEO_TABS, ROUTES, VCR_TABS_WALK, TYPE_PAIR_NOTICE, measure, pageFindings } from "../../../scripts/ops/ui-walk.mjs";
+import {
+  BACK_OFFICE, BUDGET_BY_PAGE, GEO_TABS, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, SECTION_SHAPES_BY_PAGE, VCR_TABS_WALK, TYPE_PAIR_NOTICE,
+  measure, pageFindings, rowClickFindings, rowClickShown, rowProbe,
+} from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -20,8 +27,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 function clean(overrides = {}) {
   return {
     title: "知识库 · EviMed", controlKinds: 5, colorKinds: 4, borderKinds: 2, sizeWeightPairs: ["14px/400", "24px/600"],
-    pageLefts: [240], rowTitleLefts: [], subtitle: [], backOfficeHits: [], leakHits: [], unnamedControls: [],
-    overflowX: false, smallTargets: 0, decorativeSvgs: 0, ...overrides,
+    pageLefts: [240], rowTitleLefts: [], subtitle: [], backOfficeHits: [], retiredNameHits: [], headerPrimaryActions: [], sectionShapes: ["ul>li"],
+    leakHits: [], unnamedControls: [], overflowX: false, smallTargets: 0, decorativeSvgs: 0, ...overrides,
   };
 }
 
@@ -30,6 +37,8 @@ test("every page the budget table names is a page the walk visits", () => {
   // kept the reading budget and failed on its ninth control.
   const walked = new Set([...ROUTES.map(([name]) => name), ...GEO_TABS.map(([name]) => name), ...VCR_TABS_WALK.map(([name]) => name)]);
   for (const name of Object.keys(BUDGET_BY_PAGE)) assert.ok(walked.has(name), `the budget names ${name}, which no route walks`);
+  for (const name of Object.keys(SECTION_SHAPES_BY_PAGE)) assert.ok(walked.has(name), `the section budget names ${name}, which no route walks`);
+  for (const name of ROW_CLICK_PAGES) assert.ok(walked.has(name), `the row-click list names ${name}, which no route walks`);
   assert.deepEqual(pageFindings("files", "desktop", clean({ controlKinds: 9 }), []).failures, []);
   assert.equal(pageFindings("files", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
 });
@@ -147,7 +156,7 @@ function measureControls(controls) {
     CSS: { escape: (value) => value },
   });
   try {
-    return measure([[], BACK_OFFICE.map(re => [re.source, re.flags])]);
+    return measure([[], BACK_OFFICE.map(re => [re.source, re.flags]), RETIRED_NAMES.map(re => [re.source, re.flags])]);
   } finally {
     Object.assign(globalThis, saved);
   }
@@ -226,6 +235,193 @@ test("a visually hidden control is not a kind of control on the page", () => {
 });
 
 /**
+ * A small DOM for the structural measures — what a page stacks, what its
+ * header holds, and the first row of a list — which read the page's shape, not
+ * only its controls. `node(tag, options, children)` builds an element with its
+ * parent links; `inPage(root, fn)` installs it as `document` for one call. The
+ * selector engine knows what `measure` and `rowProbe` ask: comma lists, a
+ * descendant chain, a tag, `.class`, `[attr]`, `[attr='value']`, `*`, and the
+ * one `:scope > li [data-row-title]`.
+ */
+function node(tag, { attrs = {}, text = "", w = 600, h = 24, left = 0, style = {} } = {}, children = []) {
+  const el = {
+    tag, text, attrs, children, parent: null, tagName: tag.toUpperCase(), clicks: 0, rect: { width: w, height: h, left },
+    style: {
+      display: "block", visibility: "visible", opacity: "1", color: "rgb(20, 20, 20)", backgroundColor: "rgba(0, 0, 0, 0)", fontSize: "14px",
+      fontWeight: "400", lineHeight: "22px", borderTopLeftRadius: "0px", paddingTop: "0px", paddingBottom: "0px", clip: "auto", clipPath: "none",
+      ...Object.fromEntries(["Top", "Right", "Bottom", "Left"].flatMap((side) => [[`border${side}Width`, "0px"], [`border${side}Style`, "none"], [`border${side}Color`, "rgb(20, 20, 20)"]])),
+      ...style,
+    },
+    id: "", childNodes: text ? [{ nodeType: 3, textContent: text }] : [],
+    get textContent() { return text + children.map((child) => child.textContent).join(""); },
+    get parentElement() { return el.parent; },
+    classList: { contains: (name) => (attrs.class ?? "").split(/\s+/).includes(name) },
+    getAttribute: (name) => attrs[name] ?? null,
+    getBoundingClientRect: () => ({ ...el.rect, top: 0 }),
+    computedStyleMap: () => ({ get: () => ({ toString: () => "auto" }) }),
+    click() { el.clicks += 1; },
+    contains: (other) => { for (let at = other; at; at = at.parent) if (at === el) return true; return false; },
+    matches: (selector) => selector.split(",").some((part) => simple(el, part.trim())),
+    closest: (selector) => { for (let at = el; at; at = at.parent) if (at.matches(selector)) return at; return null; },
+    querySelectorAll: (selector) => queryAll(el, selector),
+    querySelector: (selector) => queryAll(el, selector)[0] ?? null,
+  };
+  for (const child of children) child.parent = el;
+  return el;
+}
+
+function simple(el, selector) {
+  if (selector === "*") return true;
+  const tag = /^[a-z][a-z0-9]*/.exec(selector)?.[0];
+  if (tag && el.tag !== tag) return false;
+  for (const [, name] of selector.matchAll(/\.([\w-]+)/g)) if (!el.classList.contains(name)) return false;
+  for (const [, name, value] of selector.matchAll(/\[([\w-]+)(?:='([^']*)')?\]/g)) {
+    if (value === undefined ? !(name in el.attrs) : el.attrs[name] !== value) return false;
+  }
+  return true;
+}
+
+function descendants(root) { return root.children.flatMap((child) => [child, ...descendants(child)]); }
+
+function queryAll(root, selector) {
+  const found = [];
+  for (const part of selector.split(/,(?![^[]*\])/).map((entry) => entry.trim())) {
+    if (part.startsWith(":scope > ")) {
+      const [first, ...rest] = part.slice(":scope > ".length).split(" ");
+      for (const child of root.children.filter((entry) => simple(entry, first))) {
+        found.push(...(rest.length ? queryAll(child, rest.join(" ")) : [child]));
+      }
+      continue;
+    }
+    const chain = part.split(/\s+/);
+    for (const el of descendants(root)) {
+      if (!simple(el, chain[chain.length - 1])) continue;
+      let at = el.parent;
+      let ok = true;
+      for (let i = chain.length - 2; i >= 0 && ok; i -= 1) {
+        while (at && !simple(at, chain[i])) at = at.parent;
+        ok = Boolean(at);
+        at = at?.parent;
+      }
+      if (ok) found.push(el);
+    }
+  }
+  // Document order, as the browser answers.
+  const order = descendants(root);
+  return [...new Set(found)].sort((left, right) => order.indexOf(left) - order.indexOf(right));
+}
+
+/** Run `fn` with `root` (a <body>) installed as the page. */
+function inPage(root, fn, { path = "/app/files" } = {}) {
+  const saved = Object.fromEntries(["document", "window", "getComputedStyle", "CSS", "location"].map((name) => [name, globalThis[name]]));
+  const body = Object.assign(root, { innerText: descendants(root).map((el) => el.text).filter(Boolean).join("\n") });
+  Object.assign(globalThis, {
+    document: { body, title: "页面 · EviMed", documentElement: { scrollWidth: 1512 }, querySelector: (selector) => queryAll(body, selector)[0] ?? null, querySelectorAll: (selector) => queryAll(body, selector) },
+    window: { innerWidth: 1512 },
+    getComputedStyle: (el) => el.style,
+    CSS: { escape: (value) => value },
+    location: { pathname: path, search: "" },
+  });
+  try { return fn(); } finally { Object.assign(globalThis, saved); }
+}
+
+const row = (title, extra = {}) => node("li", {}, [node("button", { attrs: { "data-row-title": "" }, text: title, ...extra })]);
+const list = (rows, label = "资料") => node("ul", { attrs: { "aria-label": label }, h: 24 * rows.length }, rows.map((title) => row(title)));
+const header = (...buttons) => node("header", {}, [node("h1", { text: "知识库" }), node("div", {}, buttons.map(([name, classes]) => node("button", { text: name, attrs: { class: classes } })))]);
+const page = (...blocks) => node("body", {}, [node("main", {}, [node("div", {}, blocks)])]);
+const shapesOf = (...blocks) => inPage(page(header(), ...blocks), () => measure([[], [], []])).sectionShapes;
+
+test("a page that stacks a list, a table and a chart stacks three kinds of section; repeated groups are one kind", () => {
+  const group = (name) => node("section", { h: 80 }, [node("h2", { text: name }), list(["一行"])]);
+  const table = node("table", { h: 120 }, [node("thead"), node("tbody")]);
+  const chart = node("svg", { w: 480, h: 200 }, [node("g")]);
+  assert.deepEqual(shapesOf(list(["一行", "二行"])), ["ul>li"]);
+  // The skills page's six groups, a feed's one group per day: one shape however many the data has.
+  assert.deepEqual(shapesOf(group("我的技能"), group("科研分析"), group("写作与核查"), group("办公文档")), ["section>h2+ul"]);
+  assert.deepEqual(shapesOf(chart, list(["一行"]), table), ["svg>g", "ul>li", "table>thead+tbody"]);
+  // What sits inside a section, a dialog, the sidebar or a tab strip is not a section of the page; neither is an icon.
+  const inside = node("section", { h: 300 }, [node("h2", { text: "组" }), list(["一行"]), node("svg", { w: 480, h: 200 }, [node("g")])]);
+  const dialog = node("div", { attrs: { role: "dialog" } }, [list(["抽屉里的清单"]), table]);
+  const sidebar = node("nav", {}, [list(["项目"])]);
+  const tabs = node("div", { attrs: { role: "tablist" } }, [node("ul", {}, [node("li")])]);
+  const icon = node("svg", { w: 16, h: 16 }, [node("path")]);
+  assert.deepEqual(shapesOf(inside, dialog, sidebar, tabs, icon), ["section>h2+ul"]);
+});
+
+test("a page over its section budget fails, one inside it does not, and a page with no budget is not held to one", () => {
+  const stacked = ["ul>li", "table>thead+tbody", "svg>g"];
+  assert.deepEqual(pageFindings("files", "desktop", clean({ controlKinds: 9, sectionShapes: stacked }), []).failures,
+    ["files@desktop: the page stacks 3 kinds of section (budget 2): ul>li, table>thead+tbody, svg>g"]);
+  assert.deepEqual(pageFindings("files", "desktop", clean({ controlKinds: 9, sectionShapes: stacked.slice(0, 2) }), []).failures, []);
+  assert.deepEqual(pageFindings("account", "desktop", clean({ sectionShapes: stacked }), []).failures, []);
+  // Measured at the desktop width, like the rest of the style budget.
+  assert.deepEqual(pageFindings("files", "phone", clean({ sectionShapes: stacked }), []).failures, []);
+  // The pages R10 rebuilt are all held to one, and the study's tabs to three.
+  for (const name of ["files", "memory", "frontier", "capabilities", "extensions-skills", "extensions-plugins", "virtual-research", "vcr-overview"]) {
+    assert.ok(Number.isInteger(SECTION_SHAPES_BY_PAGE[name]), `${name} has a section budget`);
+  }
+});
+
+test("a header holds one primary action: two solid accent buttons fail, a primary beside quiet ones does not", () => {
+  const measured = (...buttons) => inPage(page(header(...buttons), list(["一行"])), () => measure([[], [], []]));
+  const accent = "bg-accent text-accent-fg";
+  assert.deepEqual(measured(["添加", accent], ["导出", "bg-surface-2"], ["更多", "bg-transparent"]).headerPrimaryActions, ["添加"]);
+  assert.deepEqual(measured().headerPrimaryActions, []);
+  const two = measured(["添加", accent], ["新建笔记", accent]);
+  assert.deepEqual(two.headerPrimaryActions, ["添加", "新建笔记"]);
+  assert.deepEqual(pageFindings("files", "desktop", clean({ controlKinds: 9, headerPrimaryActions: two.headerPrimaryActions }), []).failures,
+    ["files@desktop: the page header has 2 primary actions (at most one): 添加 / 新建笔记"]);
+  assert.deepEqual(pageFindings("files", "desktop", clean({ controlKinds: 9, headerPrimaryActions: ["添加"] }), []).failures, []);
+});
+
+test("neither retired module name may be on a page: in its text, a control's name or the tab title", () => {
+  // The renames of 2026-10-07; each name is looked for as a closed word, wherever a reader or a screen reader meets it.
+  assert.deepEqual(RETIRED_NAMES.map((re) => re.source), ["循证传播", "虚拟临研"]); // retired-word-ok
+  const hits = (...blocks) => inPage(page(header(), ...blocks), () => measure([[], [], RETIRED_NAMES.map((re) => [re.source, re.flags])])).retiredNameHits;
+  assert.deepEqual(hits(node("p", { text: "循证 GEO 与虚拟临床研究" })), []);
+  assert.deepEqual(hits(node("p", { text: "进入虚拟临研" })), ["虚拟临研"]); // retired-word-ok
+  assert.deepEqual(hits(node("button", { attrs: { "aria-label": "打开循证传播" }, text: "" })), ["循证传播"]); // retired-word-ok
+  assert.deepEqual(hits(node("input", { attrs: { placeholder: "搜索循证传播" } })), ["循证传播"]); // retired-word-ok
+  for (const viewport of ["desktop", "phone"]) {
+    assert.deepEqual(pageFindings("geo", viewport, clean({ retiredNameHits: ["循证传播"] }), []).failures, // retired-word-ok
+      [`geo@${viewport}: a retired module name on the page: 循证传播`]); // retired-word-ok
+  }
+});
+
+test("rowProbe finds the first row of each list whose title is a control, clicks it, and reads what is on screen", () => {
+  const stat = node("li", {}, [node("span", { attrs: { "data-row-title": "" }, text: "只读的一行" })]);
+  const open = page(header(), list(["第一行", "第二行"], "资料"), node("ul", { attrs: { "aria-label": "结果" } }, [stat]), node("div", { attrs: { role: "dialog" }, w: 0, h: 0 }, [list(["抽屉里"], "抽屉")]));
+  inPage(open, () => {
+    // A list of results whose title is not a control is not a place to go; a dialog's own list is not the page's.
+    assert.deepEqual(rowProbe(["targets"]), ["资料"]);
+    assert.deepEqual(rowProbe(["state"]), { dialog: false, path: "/app/files", expanded: 0 });
+    assert.equal(rowProbe(["click", 0]), true);
+    assert.equal(rowProbe(["click", 5]), false);
+  });
+  assert.equal(descendants(open).find((el) => el.text === "第一行").clicks, 1);
+  assert.equal(descendants(open).find((el) => el.text === "第二行").clicks, 0);
+  // A row that opens in place says so in aria-expanded.
+  const expanding = page(header(), node("ul", {}, [node("li", {}, [node("button", { attrs: { "data-row-title": "", "aria-expanded": "true" }, text: "已展开" })])]));
+  assert.equal(inPage(expanding, () => rowProbe(["state"])).expanded, 1);
+  // A dialog on screen is read as one.
+  const withDialog = page(header(), node("div", { attrs: { role: "dialog" } }, [node("p", { text: "详情" })]));
+  assert.equal(inPage(withDialog, () => rowProbe(["state"])).dialog, true);
+});
+
+test("a row click shows something when it opens a drawer, goes to a page, opens a tab or opens the row; nothing else", () => {
+  const closed = { dialog: false, path: "/app/files", expanded: 0 };
+  assert.equal(rowClickShown(closed, { ...closed, dialog: true }, 0), true);
+  assert.equal(rowClickShown(closed, { ...closed, path: "/app/files/src_1" }, 0), true);
+  assert.equal(rowClickShown(closed, closed, 1), true);
+  assert.equal(rowClickShown(closed, { ...closed, expanded: 1 }, 0), true);
+  assert.equal(rowClickShown(closed, closed, 0), false);
+  // A dialog that was already open and still is has not been opened by the click.
+  assert.equal(rowClickShown({ ...closed, dialog: true }, { ...closed, dialog: true }, 0), false);
+  assert.deepEqual(rowClickFindings("files", [{ label: "资料", shown: true }, { label: "笔记", shown: false }]),
+    ["files@desktop: clicking the first row of the list “笔记” showed nothing — no drawer, no page, no opened row"]);
+});
+
+/**
  * A stand-in for playwright-core: every page load fires the shell's runtime
  * warm-up through the context's routes, and everything the walk did is
  * written to a log the test reads.
@@ -246,6 +442,7 @@ function context() {
   const newPage = async () => {
     let url = "";
     let routeSettled = false;
+    let dialogOpen = false;
     const failed = [];
     // FAKE_CHAT=network-changed: the chat page drops its requests with
     // ERR_NETWORK_CHANGED and shows 打开超时 until 重试 is pressed;
@@ -263,14 +460,23 @@ function context() {
       frames: () => [{ url: () => "https://evimed.example.org/__evimed/f/x", evaluate: async () => ({ composer: !chatFailing(), stats: [] }) }],
       getByRole: (role, { name }) => ({ count: async () => (chatFailing() && role === "button" && name === "重试" ? 1 : 0), first: () => ({ click: async () => { retried = true; log({ click: name }); } }) }),
       async goto(target) {
-        url = target; routeSettled = false; log({ goto: target }); await fire(new URL("/api/commands/start_runtime", target).href);
+        url = target; routeSettled = false; dialogOpen = false; log({ goto: target }); await fire(new URL("/api/commands/start_runtime", target).href);
         if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
       },
-      async evaluate(fn) {
+      async evaluate(fn, arg) {
         if (url.endsWith("/app/chat") && typeof fn === "function" && String(fn).includes("document.body.innerText")) return chatFailing() ? "打开超时，请重试\n重试" : "";
+        // FAKE_ROWS=dead: a row that does nothing when clicked; FAKE_ROWS=two: two lists on every page, so the walk loads the page again between clicks.
+        if (typeof fn === "function" && fn.name === "rowProbe") {
+          const [action] = arg;
+          if (action === "targets") return process.env.FAKE_ROWS === "two" ? ["第一张清单", "第二张清单"] : ["资料清单"];
+          if (action === "state") return { dialog: dialogOpen, path: new URL(url).pathname, expanded: 0 };
+          dialogOpen = process.env.FAKE_ROWS !== "dead";
+          log({ rowClick: new URL(url).pathname, index: arg[1] });
+          return true;
+        }
         if (typeof fn === "function" && fn.name === "measure") {
           return { title: (process.env.FAKE_SLOW_ROUTE && !routeSettled && new URL(url).pathname === "/app/account") || process.env.FAKE_MISSING_TITLE ? "" : "页面 · EviMed", controlKinds: 3, colorKinds: 3, borderKinds: 1, sizeWeightPairs: ["12px/400", "13px/400", "14px/400", "14px/500", "24px/600"],
-            pageLefts: [240], rowTitleLefts: [], subtitle: [], backOfficeHits: [], leakHits: [], unnamedControls: [], overflowX: false, smallTargets: 0, decorativeSvgs: 0 };
+            pageLefts: [240], rowTitleLefts: [], subtitle: [], backOfficeHits: [], retiredNameHits: process.env.FAKE_RETIRED ? ["循证传播"] : [], headerPrimaryActions: process.env.FAKE_TWO_PRIMARY ? ["新建", "导入"] : ["新建"], sectionShapes: process.env.FAKE_STACKED ? ["ul>li", "table>thead+tbody", "svg>g+g"] : ["ul>li"], leakHits: [], unnamedControls: [], overflowX: false, smallTargets: 0, decorativeSvgs: 0 };
         }
         return { english: false, sidebar: true, text: "" };
       },
@@ -396,4 +602,48 @@ test("a slow route is measured after it settles, and an unresolved route or miss
   const missing = await walk({ FAKE_MISSING_TITLE: "1" });
   assert.equal(missing.code, 1);
   assert.ok(missing.report.failures.some(line => line.includes("the page has no title of its own")));
+});
+
+test("the walk clicks the first row of each list on the pages R10 rebuilt, at the desktop width only, and reports what it clicked", async () => {
+  const { code, stdout, stderr, log, report } = await walk();
+  assert.equal(code, 0, stdout + stderr);
+  const clicked = new Set(log.filter((entry) => entry.rowClick).map((entry) => entry.rowClick));
+  assert.deepEqual([...clicked].sort(), [...ROW_CLICK_PAGES].map((name) => ROUTES.find(([route]) => route === name)[1].split("?")[0]).filter((value, index, all) => all.indexOf(value) === index).sort());
+  // One click per page view that has a list: the page walked at the desktop width, never the phone's.
+  assert.deepEqual(report.pages["files@desktop"].rowClicks, [{ label: "资料清单", shown: true }]);
+  assert.equal(report.pages["files@phone"].rowClicks, undefined);
+  // 科研工具's cards start a conversation, so the walk does not click them.
+  assert.equal(report.pages["capabilities@desktop"].rowClicks, undefined);
+});
+
+test("a row that shows nothing when clicked fails the page it is on", async () => {
+  const { code, report } = await walk({ FAKE_ROWS: "dead" });
+  assert.equal(code, 1);
+  for (const name of ROW_CLICK_PAGES) {
+    assert.ok(report.failures.includes(`${name}@desktop: clicking the first row of the list “资料清单” showed nothing — no drawer, no page, no opened row`), name);
+  }
+  assert.equal(report.failures.length, ROW_CLICK_PAGES.size);
+});
+
+test("with two lists on a page the walk loads the page again before the second click", async () => {
+  const { code, stdout, stderr, log } = await walk({ FAKE_ROWS: "two" });
+  assert.equal(code, 0, stdout + stderr);
+  const events = log.filter((entry) => (entry.goto && entry.goto.endsWith("/app/files")) || entry.rowClick === "/app/files");
+  assert.deepEqual(events.map((entry) => (entry.rowClick ? `click ${entry.index}` : "goto")), ["goto", "click 0", "goto", "click 1", "goto"]);
+});
+
+test("a retired module name, a second primary action or a stacked page fails the walk, naming the page", async () => {
+  const retired = await walk({ FAKE_RETIRED: "1" });
+  assert.equal(retired.code, 1);
+  for (const view of ["files@desktop", "files@phone", "geo@desktop", "memory@phone"]) {
+    assert.ok(retired.report.failures.includes(`${view}: a retired module name on the page: 循证传播`), view); // retired-word-ok
+  }
+  const two = await walk({ FAKE_TWO_PRIMARY: "1" });
+  assert.equal(two.code, 1);
+  assert.ok(two.report.failures.includes("files@desktop: the page header has 2 primary actions (at most one): 新建 / 导入"));
+  const stacked = await walk({ FAKE_STACKED: "1" });
+  assert.equal(stacked.code, 1);
+  assert.ok(stacked.report.failures.includes("files@desktop: the page stacks 3 kinds of section (budget 2): ul>li, table>thead+tbody, svg>g+g"));
+  // A page with no section budget is not held to one.
+  assert.ok(!stacked.report.failures.some((failure) => failure.startsWith("account@")), stacked.report.failures.join("\n"));
 });

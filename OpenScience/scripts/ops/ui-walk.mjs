@@ -15,11 +15,19 @@
  *     a researcher sets a key for in 设置 → 数据源);
  *   - every visible control has a name;
  *   - the page has its own title (not the bare product name), and its header
- *     carries no subtitle;
+ *     carries no subtitle and at most one primary action (a solid accent
+ *     button; DESIGN.md 「页面结构」 rule 3);
+ *   - neither retired module name — 「循证传播」, 「虚拟临研」 — is on any page
+ *     (the owner's renames of 2026-10-07; RETIRED_NAMES);
+ *   - on the pages rebuilt in R10, the page's body stacks no more kinds of
+ *     section than its budget says (SECTION_SHAPES_BY_PAGE; rule 1), and
+ *     clicking the first row of each of its lists shows a drawer, a new page
+ *     or an opened row — a row that looks clickable does something where the
+ *     reader is looking (rule 6);
  *   - at 390 px nothing overflows horizontally;
  *   - at the desktop width, the style budget of §7: at most 8 kinds of
  *     control (9 on the frontier feed, whose headlines are links; 10 on a
- *     data page — the knowledge base and 循证传播), 5 text colours (8 on the
+ *     data page — the knowledge base and 循证 GEO), 5 text colours (8 on the
  *     frontier feed, which adds the safety red and the rank colours; 7 on a
  *     data page) and 3 kinds of border (6 on a GEO project's tabs, the
  *     measured number — see GEO_BUDGET), with each kind of control named in
@@ -96,15 +104,20 @@ export const ROUTES = [
   // content addresses with ids; the home is the one every account can open.
   ["frontier-zones", "/app/frontier/zones"],
   ["capabilities", "/app/capabilities"],
-  // 循证传播's home — its one sentence where the account is not offered the
+  // 循证 GEO's home — its one sentence where the account is not offered the
   // module; one project's seven tabs are added when the account has one
   // (`geoProjectRoutes`).
   ["geo", "/app/geo"],
-  // 虚拟临研's home — its one sentence where the account is not offered
+  // 虚拟临床研究's home — its one sentence where the account is not offered
   // the module; one study's seven tabs are added when the account has one.
   ["virtual-research", "/app/virtual-research"],
   ["files", "/app/files"],
   ["memory", "/app/memory"],
+  // The memory page's other three tabs (R10): one list each, and the growth
+  // tab's curve over its timeline. The default tab was the only one walked.
+  ["memory-project", "/app/memory?tab=project"],
+  ["memory-methods", "/app/memory?tab=methods"],
+  ["memory-growth", "/app/memory?tab=growth"],
   ["autopilot", "/app/autopilot"],
   ["inbox", "/app/inbox"],
   ["account", "/app/account"],
@@ -138,6 +151,16 @@ export const BACK_OFFICE = [
 ];
 
 /**
+ * The two module names the owner replaced on 2026-10-07 (R10 plan §1): none may
+ * be on any page of the deployment, in any viewport. A closed list of words,
+ * not a pattern over prose — the rename's own acceptance: "searching the test
+ * server finds neither" (plan §12). The sources are the walk's and are never
+ * shown back to a reader: a search still reads them as the new names until
+ * 2027-01-07 (`@evimed/domain`'s `retiredNames.mjs`), but only as input.
+ */
+export const RETIRED_NAMES = [/循证传播/, /虚拟临研/]; // retired-word-ok
+
+/**
  * The style budget per page (2026-09-23 plan §7 gate 3). The frontier feed may
  * spend three more text colours — the safety red and the rank colours — and
  * one more kind of control: an item's headline is the link to its original
@@ -150,10 +173,10 @@ const FRONTIER_BUDGET = { controls: 9, colors: 8 };
  * borders, against the reading page's 8 / 5 / 3. A dashboard legitimately
  * carries more — a metric band, a chart's legend and axis labels, a severity
  * scale, a table's own header — and it is a wider budget, not the absence of
- * one: 循证传播 shipped inside the old budget and still looked cheap, which is
+ * one: 循证 GEO shipped inside the old budget and still looked cheap, which is
  * why the fix was its information architecture and not its allowance.
  *
- * 循证传播 is the page it was written for (fusion plan §5.5, §5.9): it spends
+ * 循证 GEO is the page it was written for (fusion plan §5.5, §5.9): it spends
  * the severity reds of 讲错我方 and the single-hue heat ramp on top of the
  * chrome, and its header carries a rail of eight steps beside the tabs. The
  * per-number 「问 AI」 buttons are gone — one 「对话」 in the header replaced
@@ -177,7 +200,7 @@ export const GEO_TABS = [
   ["geo-questions", "/questions"], ["geo-sources", "/sources"], ["geo-actions", "/actions"], ["geo-plan", "/plan"],
 ];
 /**
- * The seven tabs of one 虚拟临研 study, by the report's name and path segment
+ * The seven tabs of one 虚拟临床研究 study, by the report's name and path segment
  * (build plan 2026-09-28 §9.4). Walked like GEO's: the module's home page is
  * one sentence for an account it is not open to, and a study's own pages only
  * exist where that account has a study.
@@ -212,6 +235,50 @@ export const BUDGET_BY_PAGE = {
   // control (2026-09-26 walk).
   files: DATA_BUDGET,
 };
+
+/**
+ * What a page stacks (DESIGN.md 「页面结构」 rule 1: one page, one kind of
+ * object; the 2026-10-07 plan's R1: two kinds of section one above the other,
+ * on nineteen pages). `measure` reads the page body's top-level sections — a
+ * `<section>`, a list of rows, a table, a chart — and names each by its shape
+ * (its tag and its first two distinct kinds of child). Sections of one shape are one kind: the
+ * skills page's five groups, the feed's one group per day and the memory page's
+ * small headers each repeat a single shape however many the data has. What is
+ * counted is the number of different shapes, so a page that gains a chart, a
+ * statistics block or a second list of another kind beside its list passes a
+ * budget of one fewer and fails this one.
+ *
+ * The numbers are the designed ones, the pages R10 rebuilt and nothing else:
+ * one list is one shape, a banner or a hot list beside it two, and the feed's
+ * safety strip, hot list and day groups three. They are not yet measured on a
+ * live deployment — the first walk of R10 reports each page's shapes
+ * (`sectionShapes`), and a number it contradicts is moved with that reason in
+ * this table, not around it. A page not named here is not held to a budget.
+ */
+export const SECTION_SHAPES_BY_PAGE = {
+  files: 2,
+  memory: 2, "memory-project": 2, "memory-methods": 2, "memory-growth": 2,
+  frontier: 3, "frontier-hot": 3, "frontier-daily": 3, "frontier-all": 3,
+  capabilities: 2,
+  "extensions-plugins": 2, "extensions-skills": 2,
+  "virtual-research": 2,
+  ...Object.fromEntries(VCR_TABS_WALK.map(([name]) => [name, 3])),
+};
+
+/**
+ * The pages whose lists are clicked: the first row of each list must show
+ * something where the reader is looking (DESIGN.md 「页面结构」 rule 6). The
+ * same pages as the section budget, minus 科研工具, whose grid is cards that
+ * start a conversation — a click there would write to the deployment — and
+ * minus the study's own tabs, whose rows are results, not a place to go.
+ */
+export const ROW_CLICK_PAGES = new Set([
+  "files", "memory", "memory-project", "memory-methods", "memory-growth",
+  "frontier", "frontier-hot", "frontier-daily", "frontier-all",
+  "extensions-plugins", "extensions-skills", "virtual-research",
+]);
+/** The lists of one page the walk clicks at most; a skills page has six groups, and the first row of each is enough to prove the pattern. */
+const ROW_CLICK_LISTS_PER_PAGE = 8;
 
 /**
  * One GEO project's seven tabs, when the account has a GEO project to walk —
@@ -288,9 +355,11 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
   if (refused.length) failures.push(`${current}: the page's API refused it: ${refused.join(", ")}`);
   if (measured.leakHits.length) failures.push(`${current}: runtime vocabulary on the page: ${measured.leakHits.join(", ")}`);
   if (measured.backOfficeHits.length) failures.push(`${current}: the back office on the page: ${measured.backOfficeHits.join(", ")}`);
+  if (measured.retiredNameHits?.length) failures.push(`${current}: a retired module name on the page: ${measured.retiredNameHits.join(", ")}`);
   if (measured.unnamedControls.length) failures.push(`${current}: ${measured.unnamedControls.length} control(s) without a name`);
   if (!measured.title || measured.title.trim() === "EviMed") failures.push(`${current}: the page has no title of its own`);
   if (measured.subtitle.length) failures.push(`${current}: the page header has a subtitle: ${measured.subtitle.join(" / ")}`);
+  if ((measured.headerPrimaryActions?.length ?? 0) > 1) failures.push(`${current}: the page header has ${measured.headerPrimaryActions.length} primary actions (at most one): ${measured.headerPrimaryActions.join(" / ")}`);
   if (viewportName === "phone" && measured.overflowX) failures.push(`${current}: the page overflows horizontally at 390 px`);
   if (viewportName === "desktop") {
     const budget = { ...BUDGET, ...(BUDGET_BY_PAGE[name] ?? {}) };
@@ -301,10 +370,37 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
     for (const lefts of measured.rowTitleLefts) {
       if (lefts.length > 1) failures.push(`${current}: a list's row titles start on ${lefts.length} left edges (${lefts.join(", ")})`);
     }
+    const sectionBudget = SECTION_SHAPES_BY_PAGE[name];
+    const shapes = measured.sectionShapes ?? [];
+    if (sectionBudget !== undefined && shapes.length > sectionBudget) failures.push(`${current}: the page stacks ${shapes.length} kinds of section (budget ${sectionBudget}): ${shapes.join(", ")}`);
     const pairs = measured.sizeWeightPairs ?? [];
     if (pairs.length > TYPE_PAIR_NOTICE) notices.push(`${current}: ${pairs.length} font-size × weight pairs (rule ${TYPE_PAIR_NOTICE}): ${pairs.join(", ")}`);
   }
   return { failures, notices };
+}
+
+/**
+ * What clicking the first row of a page's lists showed. A row that looks
+ * clickable has to do something where the reader is looking: open a drawer,
+ * go to another page, open a new tab, or open itself in place (rule 6).
+ * @param {string} name the report's page name
+ * @param {Array<{ label: string, shown: boolean }>} rows one entry per list clicked
+ * @returns {string[]} failures
+ */
+export function rowClickFindings(name, rows) {
+  return rows.filter((row) => !row.shown)
+    .map((row) => `${name}@desktop: clicking the first row of the list “${row.label}” showed nothing — no drawer, no page, no opened row`);
+}
+
+/**
+ * Whether a click on a row changed what the reader sees: a dialog that was not
+ * there, another address, a new tab, or more opened rows on the page.
+ * @param {{ dialog: boolean, path: string, expanded: number }} before
+ * @param {{ dialog: boolean, path: string, expanded: number }} after
+ * @param {number} popups tabs the click opened
+ */
+export function rowClickShown(before, after, popups) {
+  return (after.dialog && !before.dialog) || after.path !== before.path || popups > 0 || after.expanded > before.expanded;
 }
 
 function required(name) {
@@ -321,9 +417,10 @@ function required(name) {
  * (`page.evaluate`), so it reads nothing from this module; exported so a test
  * can run it over a page it describes.
  */
-export function measure([leakSources, backOfficeSources]) {
+export function measure([leakSources, backOfficeSources, retiredSources = []]) {
   const leaks = leakSources.map(([source, flags]) => new RegExp(source, flags));
   const backOffice = backOfficeSources.map(([source, flags]) => new RegExp(source, flags));
+  const retired = retiredSources.map(([source, flags]) => new RegExp(source, flags));
   // Visually hidden is not visible: the skip link until it has focus and a
   // screen-reader-only phrase are clipped to a 1 px box (`sr-only`), and the
   // skip link counted as a kind of control on every page (2026-09-27 walk).
@@ -440,6 +537,33 @@ export function measure([leakSources, backOfficeSources]) {
     const wrapped = el.closest("label")?.textContent?.trim();
     return !name && !labelled && !wrapped && !el.getAttribute("aria-labelledby");
   });
+  // DESIGN.md 「页面结构」 rule 3: the header's one primary action. A primary
+  // button is the solid accent one (`bg-accent`); a header with two has a
+  // second main thing to do, which is what the rule is there to remove.
+  const nameOf = (el) => (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 30);
+  const headerPrimaryActions = header
+    ? [...header.querySelectorAll("button, a, [role='button']")].filter((el) => visible(el) && el.classList.contains("bg-accent")).map(nameOf)
+    : [];
+  // Rule 1: what the page body stacks. Its top-level sections — a <section>, a
+  // list of rows, a table, a chart — each named by its shape; sections of one
+  // shape (a group per day, a group per use) are one kind.
+  const sectionScope = document.querySelector("main");
+  const SECTION = "section, ul, ol, table, canvas, svg";
+  const sectionUnits = sectionScope ? [...sectionScope.querySelectorAll(SECTION)].filter((el) => {
+    if (!visible(el) || el.closest("header, nav, aside, [role='tablist'], [role='dialog'], li, button, a, [role='button']")) return false;
+    const box = el.getBoundingClientRect();
+    if (el.matches("svg, canvas") && (box.width < 160 || box.height < 64)) return false;
+    if (el.matches("ul, ol") && !el.querySelector(":scope > li")) return false;
+    const outer = el.parentElement?.closest(SECTION);
+    return !(outer && sectionScope.contains(outer));
+  }) : [];
+  // A shape is the element and its first two distinct kinds of child, so a
+  // list of two rows and a list of twenty are the one shape.
+  const sectionShapes = [...new Set(sectionUnits.map((el) => `${el.tagName.toLowerCase()}>${[...new Set([...el.children].map((child) => child.tagName.toLowerCase()))].slice(0, 2).join("+")}`))];
+  // Text a reader or a screen reader meets: the body, the tab title and the names on controls.
+  const named = [...document.querySelectorAll("[aria-label], [title], [placeholder]")]
+    .map((el) => `${el.getAttribute("aria-label") ?? ""} ${el.getAttribute("title") ?? ""} ${el.getAttribute("placeholder") ?? ""}`).join("\n");
+  const everything = `${document.title}\n${text}\n${named}`;
   return {
     title: document.title,
     controlKinds: kinds(controlLooks),
@@ -451,6 +575,9 @@ export function measure([leakSources, backOfficeSources]) {
     rowTitleLefts,
     subtitle: header ? [...header.querySelectorAll("p")].filter(visible).map((el) => el.textContent.trim().slice(0, 60)) : [],
     backOfficeHits: backOffice.map((re) => text.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
+    retiredNameHits: retired.map((re) => everything.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
+    headerPrimaryActions,
+    sectionShapes,
     leakHits: leaks.map((re) => text.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
     unnamedControls: unnamed.map((el) => el.outerHTML.slice(0, 90)),
     overflowX: document.documentElement.scrollWidth > window.innerWidth + 1,
@@ -468,6 +595,43 @@ export function routeReady() {
     return node.textContent?.trim() === "正在载入" && rect.width > 0 && rect.height > 0
       && getComputedStyle(node).visibility !== "hidden";
   });
+}
+
+/**
+ * The first row of each list on the page, found, clicked and read again, in the
+ * page (`page.evaluate`, so it reads nothing from this module). `["targets"]`
+ * names the lists whose first row is a control; `["click", i]` clicks the
+ * i-th; `["state"]` reports what is on screen: whether a dialog is open, the
+ * address, and how many rows are open in place. A row whose title is not a
+ * control — a list of results, not a place to go — is not a target.
+ */
+export function rowProbe([action, index = 0]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  if (action === "state") {
+    return {
+      dialog: [...document.querySelectorAll("[role='dialog']")].some(visible),
+      path: `${location.pathname}${location.search}`,
+      expanded: document.querySelectorAll("main [aria-expanded='true']").length,
+    };
+  }
+  const targets = [];
+  for (const list of document.querySelectorAll("main ul, main ol")) {
+    if (!visible(list) || list.closest("[role='dialog'], nav, aside")) continue;
+    const title = [...list.querySelectorAll(":scope > li [data-row-title]")].find(visible);
+    if (!title) continue;
+    const control = title.matches("a, button, [role='button']") ? title : title.querySelector("a, button, [role='button']");
+    if (!control) continue;
+    targets.push({ control, label: (list.getAttribute("aria-label") || title.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40) });
+  }
+  if (action === "targets") return targets.map(({ label }) => label);
+  const target = targets[index];
+  if (!target) return false;
+  target.control.click();
+  return true;
 }
 
 async function main() {
@@ -522,6 +686,10 @@ async function main() {
     const leaks = [...LEAKS, ...shoutedCapabilityKeys([...ids, "open-domain-answer"])];
     const routes = [...ROUTES, ...await geoProjectRoutes(context, base), ...await vcrStudyRoutes(context, base)];
     const page = await context.newPage();
+    // A row that opens a link in a new tab has shown something: the tab is
+    // counted and closed.
+    let popups = 0;
+    page.on("popup", (popup) => { popups += 1; popup.close?.().catch(() => {}); });
     const consoleErrors = {};
     const httpErrors = {};
     page.on("console", (message) => { if (message.type() === "error") (consoleErrors[current] ||= []).push(message.text().slice(0, 160)); });
@@ -570,12 +738,35 @@ async function main() {
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
           await page.waitForTimeout(3_000);
           await page.screenshot({ path: path.join(out, `${current}.png`) });
-          const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags])]);
+          const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
+            RETIRED_NAMES.map((re) => [re.source, re.flags])]);
           report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
             runtimeStartsRefused: runtimeStartsRefused[current] ?? 0 };
           const verdict = pageFindings(name, viewportName, measured, httpErrors[current] ?? []);
           failures.push(...verdict.failures);
           notices.push(...verdict.notices);
+          if (viewportName === "desktop" && ROW_CLICK_PAGES.has(name)) {
+            // Read-only by construction: a row's title opens a drawer, a page
+            // or itself; nothing on these pages writes when it is clicked.
+            const rows = [];
+            const labels = ((await page.evaluate(rowProbe, ["targets"])) ?? []).slice(0, ROW_CLICK_LISTS_PER_PAGE);
+            for (let index = 0; index < labels.length; index += 1) {
+              if (index > 0) {
+                // The last click may have opened a drawer or left the page: start the next from the page as it loads.
+                await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+                await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
+                await page.waitForTimeout(1_500);
+              }
+              const before = await page.evaluate(rowProbe, ["state"]);
+              popups = 0;
+              await page.evaluate(rowProbe, ["click", index]);
+              await page.waitForTimeout(1_500);
+              const after = await page.evaluate(rowProbe, ["state"]);
+              rows.push({ label: labels[index], shown: rowClickShown(before, after, popups) });
+            }
+            report.pages[current].rowClicks = rows;
+            failures.push(...rowClickFindings(name, rows));
+          }
         } catch (error) {
           failures.push(`${current}: did not load (${String(error).slice(0, 120)})`);
         }
