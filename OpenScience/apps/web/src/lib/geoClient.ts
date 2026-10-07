@@ -291,6 +291,8 @@ export interface GeoErrorRow {
   evidenceQuote?: string | null;
   claimId?: string | null;
   questionId?: string | null;
+  /** When the error was first recorded. */
+  createdAt?: string | null;
 }
 export interface GeoRoundRef {
   id: string;

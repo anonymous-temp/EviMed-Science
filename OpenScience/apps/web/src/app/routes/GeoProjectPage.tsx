@@ -27,7 +27,7 @@ import { GeoOffPage, GeoProjectSkeleton } from "@/components/geo/GeoStates";
 import { MembersDialog } from "@/components/geo/MembersDialog";
 import { ProducerDialog } from "@/components/geo/ProducerDialog";
 import { RenameDialog } from "@/components/geo/RenameDialog";
-import { railSteps } from "@/components/geo/geoOverviewModel";
+import { railSteps, railSummary } from "@/components/geo/geoOverviewModel";
 import { coverageText, GEO_MONITORING_TITLE, weekOf } from "@/components/geo/geoText";
 import { GEO_MONITORING_TABS, GEO_TAB_REDIRECTS, GEO_TABS, geoTabPath, resolveGeoTab, type GeoTabKey } from "@/components/geo/geoTabs";
 import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation";
@@ -200,7 +200,8 @@ export function GeoProjectPage() {
         </>
       )}
     >
-      <ProgressRail label="进度" steps={railSteps(project, (step) => geoTabPath(geoId, GEO_TAB_REDIRECTS[step] ?? "overview"))} className="mb-6" />
+      {/* The programme is the overview's: its waiting step is also the first row of 下一步, and the other tabs are for reading. */}
+      {tab === "overview" && <OverviewRail geoId={geoId} project={project} />}
       <Tabs
         label="项目视图"
         items={GEO_TABS.map((item) => ({ value: item.key, label: item.label }))}
@@ -210,6 +211,8 @@ export function GeoProjectPage() {
         className="gap-4 overflow-x-auto sm:gap-6 [&>button]:shrink-0"
       />
       <div id="geo-tab-panel" role="tabpanel" aria-labelledby={`geo-tab-panel-tab-${tab}`} className="pt-6">
+        {/* The panel's heading, so the outline reads page title, tab, blocks — the blocks' own titles are third-level. */}
+        <h2 className="sr-only">{GEO_TABS.find((item) => item.key === tab)?.label}</h2>
         <Tab geoId={geoId} project={project} />
       </div>
       {panel === "members" && <MembersDialog geoId={geoId} onClose={() => setPanel(null)} />}
@@ -239,4 +242,10 @@ export function GeoProjectPage() {
       )}
     </PageShell>
   );
+}
+
+/** The eight steps as the overview's header rail; folded to one line on a phone. */
+function OverviewRail({ geoId, project }: { geoId: string; project: GeoProject }) {
+  const steps = railSteps(project, (step) => geoTabPath(geoId, GEO_TAB_REDIRECTS[step] ?? "overview"));
+  return <ProgressRail label="进度" steps={steps} summary={railSummary(steps)} className="mb-6" />;
 }

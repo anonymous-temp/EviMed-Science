@@ -1,5 +1,5 @@
-import { Fragment, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
+import { Link, useNavigate, useNavigationType, useParams } from "react-router";
 import { ArrowLeft, ExternalLink, Image as ImageIcon, Radar } from "lucide-react";
 import {
   geoScreenshotUrl,
@@ -9,14 +9,14 @@ import {
   type GeoAnswer,
   type GeoClaim,
   type GeoErrorRow,
-  type GeoStatementFact,
 } from "@/lib/geoClient";
 import { safeWebHref } from "@/lib/readPages";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
-import { buttonClasses } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { FilterSelect } from "@/components/ui/FilterChips";
 import { iconButtonClasses } from "@/components/ui/IconButton";
 import { navItemClasses } from "@/components/ui/NavItem";
@@ -24,6 +24,7 @@ import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { AnswerChecks } from "@/components/geo/AnswerChecks";
 import { AskAi } from "@/components/geo/AskAi";
+import { answerFindings, type AnswerFinding } from "@/components/geo/answerFindings";
 import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
 import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_MONITORING_TITLE, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
 import { readableSourceRef } from "@/components/geo/tabs/EvidenceTab";
@@ -55,14 +56,14 @@ export function GeoAnswerPage() {
   }
   if (answer.state.kind === "error" && answer.state.missing) {
     return (
-      <Shell title="回答" back={tabPath(geoId, "diagnosis")}>
+      <Shell title="回答" back={<BackLink geoId={geoId} fallback="overview" />}>
         <EmptyState icon={Radar} title="这条回答不存在或已删除。" />
       </Shell>
     );
   }
   if (answer.state.kind !== "ready") {
     return (
-      <Shell title="回答" back={tabPath(geoId, "diagnosis")}>
+      <Shell title="回答" back={<BackLink geoId={geoId} fallback="overview" />}>
         {answer.state.kind === "error" ? <TabError message={answer.state.message} onRetry={answer.reload} /> : <TabSkeleton rows={4} />}
       </Shell>
     );
@@ -75,14 +76,14 @@ export function GeoAnswerPage() {
 }
 
 /** `section` is the browser tab's second part: the answer page is one of the module's measurement screens, 「AI 回答监测」. */
-function Shell({ title, section = GEO_MONITORING_TITLE, back, header, children }: { title: string; section?: string; back?: string; header?: ReactNode; children: ReactNode }) {
+function Shell({ title, section = GEO_MONITORING_TITLE, back, header, children }: { title: string; section?: string; back?: ReactNode; header?: ReactNode; children: ReactNode }) {
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-bg">
       <div className="mx-auto w-full max-w-page px-6 py-6">
         <PageTitle page={title} section={section} />
         {header ?? (
           <header className="flex min-h-8 items-center gap-2">
-            {back && <BackLink to={back} />}
+            {back}
             <h1 className={PAGE_TITLE_CLASS}>{title}</h1>
           </header>
         )}
@@ -92,12 +93,28 @@ function Shell({ title, section = GEO_MONITORING_TITLE, back, header, children }
   );
 }
 
-function BackLink({ to }: { to: string }) {
+const BACK_NAMES = { accuracy: "准确与安全", questions: "问题与回答", overview: "总览" } as const;
+
+/**
+ * The way back. A reader who came from inside the app goes back to where they came from — the list as they left it, the filter in
+ * its address included; one who opened the answer from a link has no such place, and is taken to the tab that holds it.
+ */
+function BackLink({ geoId, fallback }: { geoId: string; fallback: keyof typeof BACK_NAMES }) {
+  const navigate = useNavigate();
+  const arrived = useNavigationType();
+  const fromInside = arrived !== "POP";
+  const label = fromInside ? "返回" : `返回${BACK_NAMES[fallback]}`;
   return (
-    <Tooltip content="返回诊断" kind="label">
-      <Link to={to} aria-label="返回诊断" className={iconButtonClasses()}>
-        <ArrowLeft size={16} aria-hidden="true" />
-      </Link>
+    <Tooltip content={label} kind="label">
+      {fromInside ? (
+        <button type="button" aria-label={label} onClick={() => navigate(-1)} className={iconButtonClasses()}>
+          <ArrowLeft size={16} aria-hidden="true" />
+        </button>
+      ) : (
+        <Link to={tabPath(geoId, fallback)} aria-label={label} className={iconButtonClasses()}>
+          <ArrowLeft size={16} aria-hidden="true" />
+        </Link>
+      )}
     </Tooltip>
   );
 }
@@ -110,22 +127,36 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
   const question = data.question?.text || "回答";
   const date = monthDay(snapshot.askedAt);
   const pool = data.question?.pool && data.question.pool in GEO_POOL_KINDS ? GEO_POOL_KINDS[data.question.pool] : null;
-  const errors = (Array.isArray(data.errors) ? data.errors : []).filter((error) => error && error.statement);
-  const statements = (Array.isArray(data.facts?.statements) ? data.facts.statements : []).filter((statement) => statement && statement.verdict === "wrong" && statement.text);
-  const wrongSentences = [...statements.map((statement) => statement.text), ...errors.map((error) => error.statement)];
+  // What is marked in the answer is what the answer says; a row about an earlier answer is kept apart from its text.
+  const found = answerFindings(data);
+  const wrongSentences = found.findings.map((finding) => finding.sentence);
   const history = dedupeHistory(data.history, snapshot.id, snapshot.askedAt);
   const product = project?.product;
   const ours = [
     ...(Array.isArray(data.facts?.brands) ? data.facts.brands.filter((brand) => brand?.ours).map((brand) => brand.name) : []),
     product?.brandName, product?.genericName, ...(Array.isArray(product?.aliases) ? product.aliases : []),
   ].filter((name): name is string => typeof name === "string" && !!name);
+  const marked = snapshot.answerText && snapshot.status !== "suspect" && snapshot.status !== "failed"
+    ? markAnswer(snapshot.answerText, { wrong: wrongSentences, ours })
+    : { paragraphs: [] as AnswerParagraph[], unplaced: [] as string[] };
+  const placed = marked.paragraphs.reduce((sum, paragraph) => sum + paragraph.wrong.length, 0);
   const screenshot = snapshot.screenshot && snapshot.screenshotSha256 ? geoScreenshotUrl(geoId, snapshot.screenshotSha256) : null;
   const target = project ? { projectId: project.projectId, sessionId: project.sessionId } : null;
+  const article = useRef<HTMLElement>(null);
+  const firstWrong = () => {
+    const span = article.current?.querySelector<HTMLElement>("[data-geo-wrong]");
+    if (!span || typeof span.scrollIntoView !== "function") return;
+    const still = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    span.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+  };
+  // The page opens on the sentence it is about: the first wrong one is brought to the middle, once for each answer.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(firstWrong, [snapshot.id]);
 
   const header = (
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2">
-        <BackLink to={tabPath(geoId, "diagnosis")} />
+        <BackLink geoId={geoId} fallback={found.findings.length > 0 || found.elsewhere.length > 0 ? "accuracy" : "questions"} />
         <h1 className={cn(PAGE_TITLE_CLASS, "min-w-0")}>{question}</h1>
         {pool && <span className="shrink-0 text-caption text-text-3">{pool}</span>}
       </div>
@@ -135,7 +166,8 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
             label="测量日期"
             options={history.map((entry) => ({ value: entry.snapshotId, label: monthDay(entry.sampleDate) ?? entry.sampleDate }))}
             value={snapshot.id}
-            onChange={(value) => { if (value && value !== snapshot.id) navigate(answerPath(geoId, value)); }}
+            // Another day's answer replaces this one in the history: the way back is still the list.
+            onChange={(value) => { if (value && value !== snapshot.id) navigate(answerPath(geoId, value), { replace: true }); }}
           />
         ) : date && <span className="text-caption tabular-nums text-text-3">{date}</span>}
         {screenshot && (
@@ -151,16 +183,15 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
   return (
     <Shell title={question} header={header}>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-8 md:grid-cols-[13rem_minmax(0,1fr)]">
-        <Engines geoId={geoId} data={data} errors={errors} statements={statements} />
-        <article data-geo-answer={snapshot.id} className="min-w-0">
-          <AnswerBody
-            data={data}
-            wrong={wrongSentences}
-            ours={ours}
-            errors={errors}
-            statements={statements}
-            claims={claims}
-          />
+        <Engines geoId={geoId} data={data} wrongCount={found.findings.length} />
+        <article ref={article} data-geo-answer={snapshot.id} className="min-w-0">
+          {placed > 0 && (
+            <p data-geo-answer-note="" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-ui text-text-2">
+              <span>{zh`${engineName(snapshot.engine)}的原回答，标红处与说明书不一致。`}</span>
+              <Button variant="text" size="sm" onClick={firstWrong}>看第 1 处</Button>
+            </p>
+          )}
+          <AnswerBody data={data} marked={marked} findings={found.findings} claims={claims} />
           {target && (
             <div className="mt-4">
               <AskAi
@@ -173,6 +204,7 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
           )}
           <AnswerChecks facts={data.facts} />
           <Citations citations={snapshot.citations} />
+          <Elsewhere geoId={geoId} current={snapshot.id} errors={found.elsewhere} unplaced={marked.unplaced} findings={found.findings} />
         </article>
       </div>
     </Shell>
@@ -199,7 +231,7 @@ function engineWord(sibling: GeoAnswer["siblings"][number]): { text: string; wro
   return { text: "", wrong: false };
 }
 
-function Engines({ geoId, data, errors, statements }: { geoId: string; data: GeoAnswer; errors: GeoErrorRow[]; statements: GeoStatementFact[] }) {
+function Engines({ geoId, data, wrongCount }: { geoId: string; data: GeoAnswer; wrongCount: number }) {
   const current = data.snapshot;
   const siblings = (Array.isArray(data.siblings) ? data.siblings : []).filter((sibling) => sibling && sibling.engine);
   if (!siblings.some((sibling) => sibling.engine === current.engine)) {
@@ -208,7 +240,7 @@ function Engines({ geoId, data, errors, statements }: { geoId: string; data: Geo
   // What this answer did is known from its own facts, whatever the sibling row says.
   const brands = Array.isArray(data.facts?.brands) ? data.facts.brands : [];
   const own = {
-    wrongOurs: new Set([...errors.map((error) => error.statement.trim()), ...statements.map((statement) => statement.text.trim())]).size,
+    wrongOurs: wrongCount,
     mentionsOurs: data.facts ? brands.some((brand) => brand?.ours) : null,
   };
   return (
@@ -228,7 +260,7 @@ function Engines({ geoId, data, errors, statements }: { geoId: string; data: Geo
           return (
             <li key={sibling.engine} data-geo-sibling={sibling.engine}>
               {sibling.snapshotId && !selected ? (
-                <Link to={answerPath(geoId, sibling.snapshotId)} className={rowClass}>{label}</Link>
+                <Link to={answerPath(geoId, sibling.snapshotId)} replace className={rowClass}>{label}</Link>
               ) : (
                 <span aria-current={selected ? "page" : undefined} className={rowClass}>{label}</span>
               )}
@@ -242,17 +274,13 @@ function Engines({ geoId, data, errors, statements }: { geoId: string; data: Geo
 
 function AnswerBody({
   data,
-  wrong,
-  ours,
-  errors,
-  statements,
+  marked,
+  findings,
   claims,
 }: {
   data: GeoAnswer;
-  wrong: string[];
-  ours: string[];
-  errors: GeoErrorRow[];
-  statements: GeoStatementFact[];
+  marked: { paragraphs: AnswerParagraph[]; unplaced: string[] };
+  findings: AnswerFinding[];
   claims: GeoClaim[];
 }) {
   const snapshot = data.snapshot;
@@ -270,26 +298,21 @@ function AnswerBody({
       </p>
     );
   }
-  const { paragraphs, unplaced } = markAnswer(snapshot.answerText, { wrong, ours });
   const citations = Array.isArray(snapshot.citations) ? snapshot.citations : [];
-  const correction = (sentence: string, key: string) => (
-    <Correction key={key} sentence={sentence} errors={errors} statements={statements} claims={claims} citations={citations} />
-  );
+  const bySentence = new Map(findings.map((finding) => [finding.sentence.trim(), finding]));
+  const correction = (sentence: string, key: string) => {
+    const finding = bySentence.get(sentence.trim());
+    return finding ? <Correction key={key} finding={finding} claims={claims} citations={citations} /> : null;
+  };
 
   return (
     <div className="flex max-w-content flex-col gap-4 text-body text-text">
       {snapshot.status === "refusal" && <p><Tag>{SNAPSHOT_STATUS_WORDS.refusal}</Tag></p>}
-      {paragraphs.map((paragraph, index) => (
+      {marked.paragraphs.map((paragraph, index) => (
         <Fragment key={index}>
           <Paragraph paragraph={paragraph} />
           {paragraph.wrong.map((sentence, wrongIndex) => correction(sentence, `${index}-${wrongIndex}`))}
         </Fragment>
-      ))}
-      {unplaced.length > 0 && unplaced.map((sentence, index) => (
-        <div key={`unplaced-${index}`} className="flex flex-col gap-2">
-          <p data-geo-wrong="" className="text-body text-text underline decoration-danger decoration-wavy underline-offset-4">{sentence}</p>
-          {correction(sentence, `unplaced-${index}`)}
-        </div>
       ))}
       <Mentioned brands={brands} />
     </div>
@@ -319,21 +342,15 @@ function Paragraph({ paragraph }: { paragraph: AnswerParagraph }) {
  * have is left out rather than guessed.
  */
 function Correction({
-  sentence,
-  errors,
-  statements,
+  finding,
   claims,
   citations,
 }: {
-  sentence: string;
-  errors: GeoErrorRow[];
-  statements: GeoStatementFact[];
+  finding: AnswerFinding;
   claims: GeoClaim[];
   citations: GeoAnswer["snapshot"]["citations"];
 }) {
-  const same = (text: string | null | undefined) => !!text && text.trim() === sentence.trim();
-  const error = errors.find((row) => same(row.statement)) ?? null;
-  const statement = statements.find((row) => same(row.text)) ?? null;
+  const { error, statement } = finding;
   const claimId = error?.claimId ?? statement?.claimId ?? null;
   const claim = claimId ? claims.find((row) => row.id === claimId) ?? null : null;
   const right = claim?.statement || statement?.evidence || error?.evidenceQuote || null;
@@ -354,6 +371,8 @@ function Correction({
   return (
     <div data-geo-correction="" className="flex max-w-measure-body flex-col gap-1 border-l-2 border-danger pl-4 text-ui text-text-2">
       <p>
+        {/* The platform's finding, not the engine's words: it is marked as such. */}
+        <Tag className="mr-2 align-middle">核查</Tag>
         <span className="text-danger">讲错我方</span>
         {right ? <>：对的是{right.endsWith("。") ? right : `${right}。`}</> : kind ? `：${GEO_ERROR_TYPE_WORDS[kind]}。` : null}
       </p>
@@ -361,6 +380,53 @@ function Correction({
       {source && <p>{`出处：${source}`}</p>}
       {(action || status) && <p>{`处置：${[action, status].filter(Boolean).join(" · ")}`}</p>}
     </div>
+  );
+}
+
+/**
+ * Findings the answer's text does not hold: a record of an earlier answer that said the claim in other words, or a sentence of
+ * this one the text no longer carries word for word. They are listed after the answer, never inside it — the page must not print
+ * a sentence the engine did not say here — with where each was said, when there is such a place.
+ */
+function Elsewhere({
+  geoId,
+  current,
+  errors,
+  unplaced,
+  findings,
+}: {
+  geoId: string;
+  current: string;
+  errors: GeoErrorRow[];
+  unplaced: string[];
+  findings: AnswerFinding[];
+}) {
+  const own = unplaced.map((sentence) => findings.find((finding) => finding.sentence.trim() === sentence.trim())).filter((finding): finding is AnswerFinding => !!finding);
+  const count = errors.length + own.length;
+  if (count === 0) return null;
+  const summary = own.length === 0 ? `更早的回答里也出现过（${errors.length} 条）` : `另有 ${count} 条讲错记录，原句不在上面的回答里`;
+  return (
+    <Disclosure summary={summary} className="mt-8">
+      <ul data-geo-elsewhere="" className="flex flex-col divide-y divide-faint">
+        {own.map((finding) => (
+          <li key={`own:${finding.sentence}`} className="py-2 text-ui text-text-2">
+            <span>{`“${finding.sentence}”`}</span>
+            <span className="ml-2 text-caption text-text-3">这条回答里的说法</span>
+          </li>
+        ))}
+        {errors.map((error) => {
+          const where = error.firstSnapshotId && error.firstSnapshotId !== current ? error.firstSnapshotId : error.snapshotId && error.snapshotId !== current ? error.snapshotId : null;
+          const detail = [monthDay(error.createdAt), GEO_ERROR_STATUS_WORDS[error.status]].filter(Boolean).join(" · ");
+          return (
+            <li key={error.id} className="flex flex-wrap items-baseline gap-x-2 py-2 text-ui text-text-2">
+              <span className="min-w-0">{`“${error.statement}”`}</span>
+              {detail && <span className="text-caption text-text-3">{detail}</span>}
+              {where && <Link to={answerPath(geoId, where)} replace className="text-caption text-link hover:underline">看那次回答</Link>}
+            </li>
+          );
+        })}
+      </ul>
+    </Disclosure>
   );
 }
 

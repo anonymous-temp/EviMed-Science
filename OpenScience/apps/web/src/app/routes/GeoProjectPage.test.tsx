@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { GEO_PROJECT } from "@/components/geo/__fixtures__/geoProjects";
-import { diagnosisFilled, monitoringFilled } from "@/components/geo/__fixtures__/geoTabs";
+import { diagnosisFilled, diagnosisWith, monitoringFilled } from "@/components/geo/__fixtures__/geoTabs";
 import { GEO_OFF_SENTENCE } from "@/components/geo/GeoStates";
 import { GeoProjectPage } from "./GeoProjectPage";
 
@@ -63,13 +63,10 @@ function renderProject(path = "/app/geo/geo_masi") {
 }
 
 /** The measured round, with one statement severe enough to reach a patient. */
-const severeDiagnosis = {
-  ...diagnosisFilled,
-  errors: [
-    { ...diagnosisFilled.errors[0], id: "err_s3", severity: "S3" as const, statement: "甲状腺结节患者禁用信尔美", status: "open" as const },
-    diagnosisFilled.errors[0],
-  ],
-};
+const severeDiagnosis = diagnosisWith([
+  { ...diagnosisFilled.errors[0], id: "err_s3", severity: "S3" as const, statement: "甲状腺结节患者禁用信尔美", status: "open" as const },
+  diagnosisFilled.errors[0],
+]);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -106,6 +103,52 @@ describe("a GEO project's page", () => {
     expect(within(rail).getByRole("link", { name: /诊断/ })).toHaveAttribute("href", "/app/geo/geo_masi/accuracy");
     // The rail is the only progress there is: no second bar underneath it.
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("shows the programme's rail on 总览 only: the other tabs are for reading, and the waiting step is also the first row of 下一步", async () => {
+    renderProject();
+    await screen.findByRole("list", { name: "进度" });
+    await userEvent.click(screen.getByRole("tab", { name: "准确与安全" }));
+    await screen.findByTestId("accuracy-tab");
+    expect(screen.queryByRole("list", { name: "进度" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "总览" }));
+    expect(await screen.findByRole("list", { name: "进度" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "方案" }));
+    await screen.findByTestId("plan-tab");
+    expect(screen.queryByRole("list", { name: "进度" })).not.toBeInTheDocument();
+  });
+
+  it("opens each tab with a heading of its own, so the outline never jumps from the title to a third-level block", async () => {
+    renderProject();
+    await screen.findByRole("list", { name: "进度" });
+    const panel = document.getElementById("geo-tab-panel") as HTMLElement;
+    const headings = [...panel.querySelectorAll("h2, h3")];
+    expect(headings[0].tagName).toBe("H2");
+    expect(headings[0]).toHaveTextContent("总览");
+    expect(headings[0]).toHaveClass("sr-only");
+    await userEvent.click(screen.getByRole("tab", { name: "信源" }));
+    await screen.findByTestId("sources-tab");
+    expect(panel.querySelector("h2")).toHaveTextContent("信源");
+  });
+
+  it("folds the rail to one line on a phone, with the steps under it", async () => {
+    const real = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === "(max-width: 639px)", media: query, onchange: null, addListener: () => {}, removeListener: () => {},
+      addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, budget: null, market: { configured: false } });
+      renderProject();
+      const folded = await screen.findByText(/^已完成 \d \/ 8 步 · 投放等媒介集市接通$/);
+      const details = folded.closest("details") as HTMLElement;
+      expect(details).not.toHaveAttribute("open");
+      // The steps are inside it, once.
+      expect(within(details).getAllByRole("list", { name: "进度" })).toHaveLength(1);
+      expect(screen.getAllByRole("list", { name: "进度" })).toHaveLength(1);
+    } finally {
+      window.matchMedia = real;
+    }
   });
 
   it("marks the step that is waiting on the reader, and says what it waits for", async () => {

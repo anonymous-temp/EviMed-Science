@@ -20,8 +20,8 @@ import { useOpenGeoConversation } from "./useOpenGeoConversation";
  * sentences is a page a reader stops reading, and that is what the old board
  * was.
  *
- * Two actions, both real: read the answer it was said in, and have the
- * correction written — which, like everything else here, happens in the
+ * Two actions, both real: read the answer it was said in (the one the quoted
+ * sentence is in), and have the correction written — which, like everything else here, happens in the
  * project's own conversation.
  */
 export function GeoErrorCard({
@@ -43,6 +43,9 @@ export function GeoErrorCard({
     ? `出处 ${cited.domain}${cited.attribute && CITED_ATTRIBUTE_WORDS[cited.attribute] ? `（${CITED_ATTRIBUTE_WORDS[cited.attribute]}）` : ""}`
     : cited?.attribute === "none" ? CITED_ATTRIBUTE_WORDS.none : null;
   const closed = error.status === "closed";
+  // The card quotes the first sentence the error was seen as: the link opens the answer that says it word for word, not a later
+  // one that repeats the claim in other words.
+  const answerId = error.firstSnapshotId ?? error.snapshotId;
   const product = project.product?.brandName || project.product?.genericName || project.name;
   const draft = zh`${engineName(error.engine)}在回答里说“${error.statement}”，和${product}的说明书不一致${error.evidenceQuote ? `（说明书：${error.evidenceQuote}）` : ""}。写一篇纠错稿，把正确的说法讲清楚。`;
   const correct = () => {
@@ -63,8 +66,8 @@ export function GeoErrorCard({
           {!busy && <PenLine size={16} aria-hidden="true" />}
           写纠错稿
         </Button>
-        {error.snapshotId && (
-          <Link to={answerPath(geoId, error.snapshotId)} className={buttonClasses({ variant: "text", size: "sm", className: "text-accent hover:text-accent" })}>
+        {answerId && (
+          <Link to={answerPath(geoId, answerId)} className={buttonClasses({ variant: "text", size: "sm", className: "text-accent hover:text-accent" })}>
             看回答
           </Link>
         )}

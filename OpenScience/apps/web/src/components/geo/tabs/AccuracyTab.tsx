@@ -1,25 +1,28 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import {
   getGeoDiagnosis,
   getGeoMonitoring,
   readGeoCell,
   type GeoDiagnosis,
+  type GeoErrorCounts,
   type GeoErrorRow,
-  type GeoErrorStatus,
   type GeoMonitoring,
   type GeoProject,
 } from "@/lib/geoClient";
+import { Button } from "@/components/ui/Button";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { DataTable, InlineBar } from "@/components/ui/DataTable";
 import { Delta } from "@/components/ui/Delta";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
 import { StatBand, StatTile } from "@/components/ui/StatTile";
 import { isSeverityLevel, SeverityBadge, type SeverityLevel } from "@/components/ui/SeverityBadge";
 import { ShareBar, type ShareSegment } from "@/components/charts/ShareBar";
 import { GeoErrorCard } from "../GeoErrorCard";
 import { formatGeoValue, geoCellPhrase } from "../GeoCellText";
-import { denominatorLine, readingDelta, tileValue } from "../geoOverviewModel";
-import { engineName, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, zh } from "../geoText";
+import { denominatorLine, readingChange, shownDelta, tileValue } from "../geoOverviewModel";
+import { engineName, GEO_ERROR_TYPE_WORDS, zh } from "../geoText";
 import { metricName, metricUnit } from "./geoTabText";
 import { TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 
@@ -36,7 +39,8 @@ import { TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
  * wall of red the old board was.
  */
 
-const STATUS_ORDER: readonly GeoErrorStatus[] = ["open", "acting", "awaiting_remeasure", "closed"];
+/** How many findings the list shows before 「显示更多」. */
+const PAGE = 20;
 const SAFETY_METRICS: ReadonlyArray<{ ids: readonly string[]; polarity: "up" | "down" }> = [
   { ids: ["M-11"], polarity: "up" },
   { ids: ["M-12"], polarity: "up" },
@@ -70,6 +74,7 @@ function Accuracy({
     ...(Array.isArray(diagnosis.errors) ? diagnosis.errors : []),
     ...fresh.filter((error) => error && error.id && !known.has(error.id)),
   ].filter((error) => error && error.id);
+  const counts = errorTotals(diagnosis, errors);
   const accuracy = project.overview.metrics.find((metric) => metric.key === "accuracy") ?? null;
   const modes = diagnosis.failureModes ?? null;
   const correct = readGeoCell(modes?.correct);
@@ -82,7 +87,8 @@ function Accuracy({
       key: "accuracy",
       label: "事实准确率",
       ...tileValue(accuracy?.cell, "percent"),
-      delta: accuracy ? readingDelta(accuracy.trend.map((point) => point.value)) : null,
+      // The accuracy rate has no measured band: its change is stated as a change, by the one rule.
+      delta: accuracy ? shownDelta(readingChange(accuracy.trend)) : null,
       note: accuracy?.target != null ? `目标 ${formatGeoValue(accuracy.target, "percent")}` : null,
       hint: accuracy ? geoCellPhrase(accuracy.cell, "percent") : undefined as string | undefined,
       polarity: "up" as const,
@@ -92,14 +98,15 @@ function Accuracy({
     {
       key: "severe",
       label: "严重讲错",
-      value: String(errors.filter((error) => error.status !== "closed" && (error.severity === "S3" || error.severity === "S4")).length),
+      value: String(counts.severe),
       unit: "条" as string | undefined,
       placeholder: false,
       hint: undefined as string | undefined,
       delta: null,
-      note: `待处理 ${errors.filter((error) => error.status === "open").length} 条` as string | null,
+      // No second number beneath it: every open error, of every grade, is a chip of the list below.
+      note: null as string | null,
       polarity: "down" as const,
-      tone: errors.some((error) => error.status !== "closed" && (error.severity === "S3" || error.severity === "S4")) ? "safety" as const : "default" as const,
+      tone: counts.severe > 0 ? "safety" as const : "default" as const,
       lead: false,
     },
     ...SAFETY_METRICS.flatMap(({ ids, polarity }) => {
@@ -147,27 +154,53 @@ function Accuracy({
         ))}
       </StatBand>
 
-      {/* Counted by answer, beside a rate counted by statement: the heading
-          says which, so “讲错 44 次” is not read against “准确率 68%” as a
-          share of the same thing (G17). */}
-      <ChartCard
-        title={correct.numerator != null && wrongOurs.numerator != null
-          ? `按回答计，讲错我方 ${wrongOurs.numerator.toLocaleString("zh-CN")} 次、讲对 ${correct.numerator.toLocaleString("zh-CN")} 次`
-          : "这一轮的回答里我方出现在哪些位置"}
-        state={composition.every((segment) => segment.value === 0) ? "empty" : "content"}
-        emptyText="这一轮还没有统计出回答的构成。"
-        footnote={[denominator, "事实准确率按每条陈述计算，和这里按回答计的次数不能互相换算"].filter(Boolean).join(" · ")}
-        height={120}
-      >
-        <ShareBar label="回答的构成" segments={composition} format={(value) => `${Math.round(value)} 次`} />
-      </ChartCard>
+      {/* The findings come straight after the numbers: they are what a reader came for, and the distributions are how to read them. */}
+      <ErrorList geoId={geoId} project={project} errors={errors} counts={counts} denominator={denominator} />
 
-      <BySeverity errors={errors} />
-      <ByType errors={errors} />
-      <ErrorList geoId={geoId} project={project} errors={errors} denominator={denominator} />
+      <Disclosure summary="按引擎和类型看分布">
+        <div className="flex flex-col gap-6 pt-1">
+          {/* Counted by answer, beside a rate counted by statement: the heading
+              says which, so “讲错 44 次” is not read against “准确率 68%” as a
+              share of the same thing (G17). */}
+          <ChartCard
+            title={correct.numerator != null && wrongOurs.numerator != null
+              ? `按回答计，讲错我方 ${wrongOurs.numerator.toLocaleString("zh-CN")} 次、讲对 ${correct.numerator.toLocaleString("zh-CN")} 次`
+              : "这一轮的回答里我方出现在哪些位置"}
+            state={composition.every((segment) => segment.value === 0) ? "empty" : "content"}
+            emptyText="这一轮还没有统计出回答的构成。"
+            footnote={[denominator, "事实准确率按每条陈述计算，和这里按回答计的次数不能互相换算"].filter(Boolean).join(" · ")}
+            height={120}
+          >
+            <ShareBar label="回答的构成" segments={composition} format={(value) => `${Math.round(value)} 次`} />
+          </ChartCard>
+          <BySeverity errors={errors} />
+          <ByType errors={errors} />
+        </div>
+      </Disclosure>
     </div>
   );
 }
+
+/**
+ * The project's errors by status, from the server's count over every row when it sent one (the list it carries is capped), else
+ * from the rows in hand. `working` is everything being handled: acted on, or waiting for the remeasure that confirms it.
+ */
+export function errorTotals(diagnosis: GeoDiagnosis, rows: readonly GeoErrorRow[]): { total: number; open: number; working: number; closed: number; severe: number } {
+  const counted: GeoErrorCounts | undefined = diagnosis.errorCounts;
+  if (counted && typeof counted.total === "number") {
+    return { total: counted.total, open: counted.open, working: counted.acting + counted.awaiting_remeasure, closed: counted.closed, severe: counted.severe };
+  }
+  return {
+    total: rows.length,
+    open: rows.filter((error) => error.status === "open").length,
+    working: rows.filter((error) => error.status === "acting" || error.status === "awaiting_remeasure").length,
+    closed: rows.filter((error) => error.status === "closed").length,
+    severe: rows.filter(isSevere).length,
+  };
+}
+
+/** A live error that would reach a patient (S3 or S4). */
+const isSevere = (error: GeoErrorRow) => error.status !== "closed" && (error.severity === "S3" || error.severity === "S4");
 
 /* ------------------------------------------------------- severity × engine */
 
@@ -248,49 +281,77 @@ function ByType({ errors }: { errors: GeoErrorRow[] }) {
 
 /* -------------------------------------------------------------- the list */
 
+type Show = "severe" | "open" | "acting" | "all";
+const SHOWS: readonly Show[] = ["severe", "open", "acting", "all"];
+
+const matches: Record<Show, (error: GeoErrorRow) => boolean> = {
+  severe: isSevere,
+  open: (error) => error.status === "open",
+  acting: (error) => error.status === "acting" || error.status === "awaiting_remeasure",
+  all: () => true,
+};
+
 function ErrorList({
   geoId,
   project,
   errors,
+  counts,
   denominator,
 }: {
   geoId: string;
   project: GeoProject;
   errors: GeoErrorRow[];
+  counts: ReturnType<typeof errorTotals>;
   denominator: string | null;
 }) {
-  const [status, setStatus] = useState<GeoErrorStatus | "all">("all");
-  const present = STATUS_ORDER.filter((key) => errors.some((error) => error.status === key));
-  const options: FilterOption<GeoErrorStatus | "all">[] = [
-    { value: "all", label: "全部", count: errors.length },
-    ...present.map((key) => ({
-      value: key,
-      label: GEO_ERROR_STATUS_WORDS[key],
-      count: errors.filter((error) => error.status === key).length,
-    })),
+  // The chip is in the address, so the answer page's way back returns to the list as it was left.
+  const [params, setParams] = useSearchParams();
+  const [shown, setShown] = useState(PAGE);
+  const sizes: Record<Show, number> = { severe: counts.severe, open: counts.open, acting: counts.working, all: counts.total };
+  const options: FilterOption<Show>[] = [
+    ...(["severe", "open", "acting"] as const).filter((key) => sizes[key] > 0).map((key) => ({ value: key, label: SHOW_LABELS[key], count: sizes[key] })),
+    { value: "all", label: "全部", count: sizes.all },
   ];
-  const shown = (status === "all" ? errors : errors.filter((error) => error.status === status))
-    .slice()
-    .sort((left, right) => {
-      const rank = (error: GeoErrorRow) => (isSeverityLevel(error.severity) ? Number(error.severity.slice(1)) : -1);
-      return rank(right) - rank(left);
-    });
-  if (errors.length === 0) return null;
+  const wanted = SHOWS.find((key) => key === params.get("show"));
+  const show: Show = wanted && options.some((option) => option.value === wanted) ? wanted : counts.severe > 0 ? "severe" : "all";
+  const rank = (error: GeoErrorRow) => (isSeverityLevel(error.severity) ? Number(error.severity.slice(1)) : -1);
+  // Live findings before closed ones, the gravest first; a stable sort keeps the server's recency within a grade.
+  const rows = errors.filter(matches[show]).slice().sort((left, right) => Number(left.status === "closed") - Number(right.status === "closed") || rank(right) - rank(left));
+  const visible = rows.slice(0, shown);
+  const unlisted = sizes[show] - rows.length;
+  const choose = (next: Show) => {
+    setShown(PAGE);
+    setParams((previous) => {
+      const copy = new URLSearchParams(previous);
+      copy.set("show", next);
+      return copy;
+    }, { replace: true });
+  };
+  if (counts.total === 0 && errors.length === 0) return null;
   return (
     <ChartCard
       title="讲错清单，按严重度排序"
-      meta={`${errors.length} 条`}
-      state={shown.length === 0 ? "empty" : "content"}
+      state={rows.length === 0 ? "empty" : "content"}
       emptyText="这一类里没有讲错。"
       footnote={denominator}
       height={160}
     >
-      <FilterChips label="处置状态" options={options} value={status} onChange={setStatus} className="mb-2" />
-      <div>
-        {shown.map((error) => (
+      <FilterChips label="处置状态" options={options} value={show} onChange={choose} className="mb-2" />
+      <div data-geo-error-list="">
+        {visible.map((error) => (
           <GeoErrorCard key={error.id} geoId={geoId} project={project} error={error} />
         ))}
       </div>
+      {rows.length > visible.length && (
+        <div className="pt-2">
+          <Button variant="text" size="sm" onClick={() => setShown((count) => count + PAGE)}>
+            {`显示更多 · 还有 ${rows.length - visible.length} 条`}
+          </Button>
+        </div>
+      )}
+      {unlisted > 0 && <p className="pt-2 text-caption text-text-3">{`这里列出了 ${rows.length} 条，还有 ${unlisted} 条没有列出。`}</p>}
     </ChartCard>
   );
 }
+
+const SHOW_LABELS: Record<Exclude<Show, "all">, string> = { severe: "严重", open: "待处理", acting: "处置中" };

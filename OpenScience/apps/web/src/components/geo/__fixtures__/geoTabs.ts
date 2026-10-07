@@ -8,6 +8,7 @@ import type {
   GeoCell,
   GeoDiagnosis,
   GeoDistribution,
+  GeoErrorRow,
   GeoEvidence,
   GeoJourney,
   GeoMonitoring,
@@ -218,6 +219,19 @@ export const diagnosisFilled: GeoDiagnosis = {
   noise: { band: 3, measuredAt: "2026-09-23" },
   more: [{ metricId: "M-02", name: "首位提及率", cell: cell(9, 28, 310) }],
 };
+
+/** The diagnosis with these error rows, and the counts the server would send for them (`count(*)` over exactly these). */
+export function diagnosisWith(errors: GeoErrorRow[], base: GeoDiagnosis = diagnosisFilled): GeoDiagnosis {
+  const count = (status: GeoErrorRow["status"]) => errors.filter((error) => error.status === status).length;
+  return {
+    ...base,
+    errors,
+    errorCounts: {
+      total: errors.length, open: count("open"), acting: count("acting"), awaiting_remeasure: count("awaiting_remeasure"), closed: count("closed"),
+      severe: errors.filter((error) => error.status !== "closed" && (error.severity === "S3" || error.severity === "S4")).length,
+    },
+  };
+}
 
 export const answerFilled: GeoAnswer = {
   question: { id: "q_1", text: "打了减重针一直恶心，要不要停药？", pool: "P2" },

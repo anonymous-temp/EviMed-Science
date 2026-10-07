@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { answerFilled, evidenceFilled, geoProject } from "@/components/geo/__fixtures__/geoTabs";
@@ -14,7 +14,7 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
 
 function Probe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname}</div>;
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 }
 
 function renderAnswer(snapshotId = "snap_deepseek") {
@@ -38,15 +38,40 @@ describe("one answer", () => {
   it("heads the page with the way back, the question, the date switcher and the screenshot", async () => {
     renderAnswer();
     expect(await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "返回诊断" })).toHaveAttribute("href", "/app/geo/geo_1/diagnosis");
+    // Opened from a link, there is no list to go back to: the way back is the tab that holds the finding.
+    expect(screen.getByRole("link", { name: "返回准确与安全" })).toHaveAttribute("href", "/app/geo/geo_1/accuracy");
     expect(screen.getByRole("link", { name: /截图/ })).toHaveAttribute("href", expect.stringContaining(`/geo/projects/geo_1/screenshots/${"a".repeat(64)}`));
     // The header's controls are the primitives' sizes: the way back is the
     // 36 px icon button, 截图 the 28 px text button beside the 28 px chip.
-    expect(screen.getByRole("link", { name: "返回诊断" })).toHaveClass("h-control", "w-9");
+    expect(screen.getByRole("link", { name: "返回准确与安全" })).toHaveClass("h-control", "w-9");
     expect(screen.getByRole("link", { name: /截图/ })).toHaveClass("h-sm");
     await userEvent.click(screen.getByRole("button", { name: /测量日期/ }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "9月22日" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_deepseek_old");
+  });
+
+  it("goes back to the list as the reader left it when they came from inside the app, even after switching engine or day", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/geo/geo_1/accuracy?show=open"]}>
+        <Routes>
+          <Route path="/app/geo/geo_1/accuracy" element={<><Link to="/app/geo/geo_1/answers/snap_deepseek">看回答</Link><Probe /></>} />
+          <Route path="/app/geo/:geoId/answers/:snapshotId" element={<><GeoAnswerPage /><Probe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole("link", { name: "看回答" }));
+    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    // Another engine's answer replaces this one in the history instead of piling on it.
+    await userEvent.click(within(screen.getByRole("navigation", { name: "AI 引擎" })).getByRole("link", { name: /元宝/ }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_yuanbao");
+    await userEvent.click(await screen.findByRole("button", { name: "返回" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/accuracy?show=open");
+  });
+
+  it("with no finding to read, the way back is the questions", async () => {
+    client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [], facts: { ...answerFilled.facts!, statements: [] } });
+    renderAnswer();
+    expect(await screen.findByRole("link", { name: "返回问题与回答" })).toHaveAttribute("href", "/app/geo/geo_1/questions");
   });
 
   it("is a measurement screen of the module: the browser tab says 「AI 回答监测」", async () => {
@@ -163,6 +188,82 @@ describe("one answer", () => {
     });
     renderAnswer();
     expect(await screen.findByText("只测提及：回答里提到了我们的产品。")).toBeInTheDocument();
+  });
+
+  it("opens on the sentence it is about: says whose answer it is, brings the wrong one to the middle, and can do it again", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    scroll.mockClear();
+    renderAnswer();
+    expect(await screen.findByText("DeepSeek 的原回答，标红处与说明书不一致。")).toBeInTheDocument();
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+    expect(scroll).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
+    expect(scroll.mock.contexts[0]).toBe(document.querySelector("[data-geo-wrong]"));
+    await userEvent.click(screen.getByRole("button", { name: "看第 1 处" }));
+    expect(scroll).toHaveBeenCalledTimes(2);
+    scroll.mockRestore();
+  });
+
+  it("says nothing about a mark when the answer has no wrong sentence", async () => {
+    client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [], facts: { ...answerFilled.facts!, statements: [] } });
+    renderAnswer();
+    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    expect(screen.queryByText(/标红处与说明书不一致/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "看第 1 处" })).not.toBeInTheDocument();
+  });
+
+  it("marks the platform's finding as its own, apart from the engine's words", async () => {
+    renderAnswer();
+    const correction = await waitFor(() => {
+      const found = document.querySelector("[data-geo-correction]") as HTMLElement | null;
+      if (!found) throw new Error("not yet");
+      return found;
+    });
+    expect(within(correction).getByText("核查")).toBeInTheDocument();
+  });
+
+  it("never prints in the answer a sentence the answer does not hold: the live case (an older quote of the same claim)", async () => {
+    // Kimi's answer ends 「…帮家人了解？」. The error row's quote is the first sentence this claim was seen as, in an older answer.
+    const stale = {
+      ...answerFilled.errors[0], id: "err_stale", statement: "禁忌/慎用：个人或家族有甲状腺髓样癌", claimId: "clm_1",
+      firstSnapshotId: "snap_old", snapshotId: "snap_deepseek", createdAt: "2026-09-25T00:00:00Z",
+    };
+    client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [stale] });
+    renderAnswer();
+    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    const article = document.querySelector("[data-geo-answer]") as HTMLElement;
+    // The answer's own wrong sentence is marked; the row about the same claim speaks for it and adds no second block or sentence.
+    await waitFor(() => expect(article.querySelectorAll("[data-geo-wrong]")).toHaveLength(1));
+    expect(article.querySelectorAll("[data-geo-correction]")).toHaveLength(1);
+    expect(within(article.querySelector("[data-geo-answer-note]")!.parentElement!).queryByText(/甲状腺髓样癌/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/更早的回答里也出现过/)).not.toBeInTheDocument();
+  });
+
+  it("lists a row about another claim, from an earlier answer, apart from the text — with the day and where it was said", async () => {
+    const earlier = {
+      ...answerFilled.errors[0], id: "err_old", statement: "孕妇可以放心使用", claimId: "clm_9", firstSnapshotId: "snap_old", snapshotId: "snap_old",
+      createdAt: "2026-09-25T00:00:00Z", status: "closed" as const,
+    };
+    client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [...answerFilled.errors, earlier] });
+    renderAnswer();
+    const summary = await screen.findByText("更早的回答里也出现过（1 条）");
+    const folded = summary.closest("details") as HTMLElement;
+    expect(folded).not.toHaveAttribute("open");
+    expect(folded).toHaveTextContent("“孕妇可以放心使用”");
+    expect(folded).toHaveTextContent("9月25日");
+    expect(within(folded).getByRole("link", { name: "看那次回答" })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_old");
+    // Not in the answer: it neither underlines nor corrects anything there.
+    const article = document.querySelector("[data-geo-answer]") as HTMLElement;
+    expect(article.querySelectorAll("[data-geo-wrong]")).toHaveLength(1);
+    expect(article.querySelectorAll("[data-geo-correction]")).toHaveLength(1);
+  });
+
+  it("is one correction for a claim two sources contradicted", async () => {
+    const second = { ...answerFilled.errors[0], id: "err_b", citedSource: { url: null, domain: "zhihu.com", attribute: "farm" as const } };
+    client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [...answerFilled.errors, second] });
+    renderAnswer();
+    await waitFor(() => expect(document.querySelectorAll("[data-geo-correction]")).toHaveLength(1));
+    expect(document.querySelectorAll("[data-geo-wrong]")).toHaveLength(1);
+    expect(screen.queryByText(/更早的回答里也出现过/)).not.toBeInTheDocument();
   });
 
   it("says an answer that is not there", async () => {

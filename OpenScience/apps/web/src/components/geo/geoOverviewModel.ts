@@ -7,7 +7,9 @@
  * here means the rules a reader relies on can be tested without a browser:
  *
  *  - a rate under thirty answers is “样本不足” and never a number;
- *  - a change inside the measured fluctuation band is “持平”;
+ *  - a change is read by one rule (`readingChange`) wherever it is stated —
+ *    headline, tile, chart title — and a change inside the measured fluctuation
+ *    band of a rate is “持平”;
  *  - a denominator is stated once for the band, not in every tile;
  *  - an engine that dropped out is named, and never counted as zero;
  *  - nothing is said that was not measured. Where the platform has no rival
@@ -46,10 +48,8 @@ export interface OverviewTile {
   unit?: string;
   /** Whether `value` is a word rather than a number. */
   placeholder: boolean;
-  /** The change against the previous reading, on the metric's own scale. */
+  /** The change against the previous reading, on the metric's own scale; 0 where it is “持平” (`readingChange`). */
   delta: number | null;
-  /** The metric's measured fluctuation band, where one applies to it. */
-  noise: number | null;
   polarity: DeltaPolarity;
   /** “较上次 · 目标 65”. */
   note: string | null;
@@ -77,11 +77,52 @@ export function tileValue(cell: GeoCell | null | undefined, unit: GeoUnit): { va
     : { value: word, placeholder: true };
 }
 
-/** “+5” between the last two stated readings, or null when there is only one. */
-export function readingDelta(trend: ReadonlyArray<number | null>): number | null {
-  const stated = trend.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  if (stated.length < 2) return null;
-  return Math.round((stated[stated.length - 1] - stated[stated.length - 2]) * 10) / 10;
+/** One reading of a series: a point's value and the sample under it. */
+export interface ReadingPoint {
+  date?: string;
+  value: number | null;
+  n?: number | null;
+}
+
+/** How a series moved between its last two stated readings. */
+export interface ReadingChange {
+  /** The change on the metric's own scale, to a tenth; null before there are two readings. */
+  delta: number | null;
+  /** Whether it is “持平”: it rounds to nothing, or lies inside the metric's measured band. */
+  flat: boolean;
+  /** The date of the reading the change is measured from, and of the latest one. */
+  from: string | null;
+  to: string | null;
+}
+
+/**
+ * The one reading of a change, for every place a page says one. Only stated readings count (a point under thirty answers is
+ * not one), the two compared are the last two of the **same series**, and a change that rounds to nothing, or lies inside the
+ * metric's measured fluctuation band, is flat. The band belongs to a rate: it was measured on the mention rate and is passed
+ * for that and for nothing else — the index has none, so a two-point change of it is a change.
+ * @param noise the metric's own band, or null where none was measured
+ */
+export function readingChange(points: ReadonlyArray<ReadingPoint> | null | undefined, { noise = null }: { noise?: number | null } = {}): ReadingChange {
+  const stated = (Array.isArray(points) ? points : []).filter((point) => point && statedValue(point) !== null);
+  const last = stated[stated.length - 1] ?? null;
+  const before = stated[stated.length - 2] ?? null;
+  if (!last || !before) return { delta: null, flat: false, from: null, to: last?.date ?? null };
+  const delta = Math.round(((last.value as number) - (before.value as number)) * 10) / 10;
+  const flat = Math.round(delta) === 0 || (typeof noise === "number" && Number.isFinite(noise) && Math.abs(delta) <= Math.abs(noise));
+  return { delta, flat, from: before.date ?? null, to: last.date ?? null };
+}
+
+/** What a `Delta` is handed: a flat change as 0, so the arrow and the words never disagree. */
+export function shownDelta(change: ReadingChange): number | null {
+  return change.delta === null ? null : change.flat ? 0 : change.delta;
+}
+
+/** “与上次持平” / “比上次低 2” (a rate's “个百分点”), and null before there are two readings. */
+export function changeWord(change: ReadingChange, unit: GeoUnit): string | null {
+  if (change.delta === null) return null;
+  if (change.flat) return "与上次持平";
+  const size = Math.abs(change.delta) >= 1 ? Math.round(Math.abs(change.delta)) : Math.round(Math.abs(change.delta) * 10) / 10;
+  return `比上次${change.delta > 0 ? "高" : "低"} ${size}${unit === "percent" ? " 个百分点" : ""}`;
 }
 
 /** The metric a catalogue id names, when the diagnosis measured one this page wants. */
@@ -95,8 +136,13 @@ function extraMetric(diagnosis: GeoDiagnosis | null, ids: readonly string[]): { 
   return null;
 }
 
-/** Open wrong statements about us that would reach a patient: the safety tile's number. */
+/**
+ * Live wrong statements about us that would reach a patient (S3/S4): the safety tile's number. The server's count is over every
+ * error of the project; a list is only what it carried.
+ */
 export function severeOpenErrors(diagnosis: GeoDiagnosis | null): number {
+  const counted = diagnosis?.errorCounts?.severe;
+  if (typeof counted === "number" && Number.isFinite(counted)) return counted;
   return (Array.isArray(diagnosis?.errors) ? diagnosis.errors : [])
     .filter((error) => error && error.status !== "closed" && (error.severity === "S3" || error.severity === "S4"))
     .length;
@@ -129,14 +175,15 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
     const metric = project.overview.metrics.find((item) => item.key === key) ?? null;
     const unit = GEO_METRIC_UNITS[key];
     const cell = metric?.cell ?? null;
-    const trend = metric?.trend.map((point) => point.value) ?? [];
+    // A point under the sample floor is not a reading: it is neither drawn nor compared.
+    const trend = metric?.trend.map(statedValue) ?? [];
+    // The band was measured on the mention rate and belongs to it alone.
+    const change = readingChange(metric?.trend, { noise: key === "mention" ? noise : null });
     tiles.push({
       key,
       label: GEO_METRIC_NAMES[key],
       ...tileValue(cell, unit),
-      delta: cell?.status === "ok" ? readingDelta(trend) : null,
-      // The band was measured on the index; it does not transfer to a rate.
-      noise: key === "gvi" ? noise : null,
+      delta: cell?.status === "ok" ? shownDelta(change) : null,
       polarity: "up",
       note: metric?.target != null ? `目标 ${formatGeoValue(metric.target, unit)}` : null,
       target: metric?.target ?? null,
@@ -156,7 +203,6 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
       label: share.name,
       ...tileValue(share.cell, share.unit),
       delta: null,
-      noise: null,
       polarity: "up",
       note: null,
       target: null,
@@ -178,7 +224,6 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
     unit: diagnosis ? "条严重讲错" : undefined,
     placeholder: !diagnosis,
     delta: null,
-    noise: null,
     polarity: "down",
     note: risk ? `${risk.name} ${formatGeoValue(risk.cell.value ?? 0, risk.unit)}` : null,
     target: null,
@@ -201,12 +246,7 @@ export function headlineSentence(project: GeoProject, diagnosis: GeoDiagnosis | 
   const gvi = project.overview.metrics.find((metric) => metric.key === "gvi") ?? null;
   const parts: string[] = [];
   if (gvi && gvi.cell.status === "ok" && gvi.cell.value !== null) {
-    const delta = readingDelta(gvi.trend.map((point) => point.value));
-    const band = typeof diagnosis?.noise?.band === "number" ? diagnosis.noise.band : null;
-    const flat = delta !== null && band !== null && Math.abs(delta) <= band;
-    const move = delta === null ? "这是第一次测量"
-      : flat || Math.round(delta) === 0 ? "与上次持平"
-        : `比上次${delta > 0 ? "高" : "低"} ${Math.abs(Math.round(delta))}`;
+    const move = changeWord(readingChange(gvi.trend), "index") ?? "这是第一次测量";
     const target = gvi.target != null ? `，目标 ${formatGeoValue(gvi.target, "index")}` : "";
     const where = standing(project, diagnosis);
     const rank = where.place !== null && where.count > 1 ? `，提及率在 ${where.count} 个同类药里排第 ${where.place}` : "";
@@ -323,6 +363,17 @@ export function railSteps(project: GeoProject, geoTabPathOf: (step: GeoStepKey) 
       to: geoTabPathOf(key),
     };
   });
+}
+
+/**
+ * The rail on a phone, in one line: how many steps are done and what the first one that cannot go on is waiting for —
+ * 「已完成 7 / 8 步 · 投放等媒介集市接通」.
+ */
+export function railSummary(steps: readonly RailStep[]): string {
+  const done = steps.filter((step) => step.state === "done").length;
+  const stopped = steps.find((step) => step.state === "waiting" || step.note === GEO_MARKET_OFF_NOTE) ?? null;
+  const head = `已完成 ${done} / ${steps.length} 步`;
+  return stopped ? `${head} · ${stopped.name}${stopped.note ?? "等你处理"}` : head;
 }
 
 /* --------------------------------------------------------------- next step */
@@ -525,7 +576,7 @@ export function rivalRanking(project: GeoProject, diagnosis: GeoDiagnosis | null
 /** A reading worth stating: under thirty answers a rate is “样本不足”, not a point. */
 export const MIN_SAMPLE = 30;
 
-export function statedValue(point: GeoSeriesPoint): number | null {
+export function statedValue<T extends Pick<ReadingPoint, "value" | "n">>(point: T): number | null {
   if (typeof point.value !== "number" || !Number.isFinite(point.value)) return null;
   if (typeof point.n === "number" && point.n < MIN_SAMPLE) return null;
   return point.value;
@@ -569,15 +620,18 @@ export function actionMarkers(
  * 1” and never a bare metric name: a reader who only reads headings should
  * still learn what happened.
  */
-export function trendConclusion(name: string, cell: GeoCell | null, delta: number | null, noise: number | null, unit: GeoUnit): string {
+export function trendConclusion(name: string, cell: GeoCell | null, change: ReadingChange | null, unit: GeoUnit): string {
   if (!cell || cell.status === "absent" || cell.status === "not_measurable") return `${name}这一轮还没有测到`;
   if (cell.status === "insufficient") return `${name}的有效回答还不够，先不下结论`;
   const value = formatGeoValue(cell.value ?? 0, unit);
-  if (delta === null) return `${name}基线 ${value}`;
-  const flat = (noise !== null && Math.abs(delta) <= noise) || Math.round(delta) === 0;
-  if (flat) return `${name} ${value}，与上次持平`;
-  const size = Math.abs(delta) >= 1 ? Math.round(Math.abs(delta)) : Math.round(Math.abs(delta) * 10) / 10;
-  return `${name} ${value}，比上次${delta > 0 ? "高" : "低"} ${size}${unit === "percent" ? " 个百分点" : ""}`;
+  const move = change ? changeWord(change, unit) : null;
+  return move ? `${name} ${value}，${move}` : `${name}基线 ${value}`;
+}
+
+/** “上次 9月25日 · 下次 10月12日”: the date a change is measured from, and the next measurement's. */
+export function chartDates(change: ReadingChange | null, next: string | null | undefined): string | undefined {
+  const parts = [change?.from ? `上次 ${monthDay(change.from)}` : null, next ? `下次 ${monthDay(next)}` : null].filter((part): part is string => !!part);
+  return parts.length ? parts.join(" · ") : undefined;
 }
 
 /** “元宝对信尔美提及最多” — the matrix's own conclusion, or why there is none. */

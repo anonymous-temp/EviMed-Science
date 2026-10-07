@@ -3,7 +3,7 @@ import { CHART_STROKES } from "@evimed/design-tokens";
 import { decalOption } from "./echartsBase";
 import { heatStep } from "./HeatGrid";
 import { chartOption, markerAlign, ruleLabelPlaces } from "./TrendChart";
-import { MAX_RIVALS, OWN_COLOR, RIVAL_COLORS, rivalColor, trendModel } from "./trendModel";
+import { MAX_RIVALS, OWN_COLOR, RIVAL_COLORS, rivalColor, trendAxis, trendModel } from "./trendModel";
 
 const labels = ["9/25", "10/2", "10/9"];
 
@@ -157,6 +157,60 @@ describe("a trend's labels and lines (E8)", () => {
     const axis = (option: unknown) => (option as { yAxis: { minInterval?: number } }).yAxis;
     expect(axis(chartOption(model, format, { integer: true })).minInterval).toBe(1);
     expect(axis(chartOption(model, format)).minInterval).toBeUndefined();
+  });
+});
+
+describe("a whole-number value axis", () => {
+  const format = (value: number) => `${Math.round(value)}`;
+  const model = (values: Array<number | null>, extra: Partial<Parameters<typeof trendModel>[0]> = {}) =>
+    trendModel({ labels: values.map((_, index) => `${index}`), own: { name: "x", values }, ...extra });
+  /** The labels the library would print: min, then every interval up to max. */
+  const labelsOf = (axis: { min: number; max: number; interval: number }) => {
+    const out: number[] = [];
+    for (let value = axis.min; value <= axis.max; value += axis.interval) out.push(value);
+    return out;
+  };
+
+  it("spans the readings and a target above them, so the target is inside the plot", () => {
+    const axis = trendAxis(model([46.4, 44.2], { target: 50 }), { bounds: [0, 100] })!;
+    expect(axis).toEqual({ min: 43, max: 51, interval: 2 });
+    expect(labelsOf(axis)).toEqual([43, 45, 47, 49, 51]);
+    expect(axis.max).toBeGreaterThan(50);
+  });
+
+  it("never prints two labels alike — every step is a whole number", () => {
+    for (const values of [[44, 45], [44.4, 44.6], [3, 9, 4, 80], [97, 99]]) {
+      const axis = trendAxis(model(values, { target: values[0] > 90 ? 100 : 50 }), { bounds: [0, 100] })!;
+      const printed = labelsOf(axis).map((value) => format(value));
+      expect(new Set(printed).size).toBe(printed.length);
+      expect(Number.isInteger(axis.interval)).toBe(true);
+    }
+  });
+
+  it("includes the rivals, the target and a single reading's baseline", () => {
+    expect(trendAxis(model([20, 22], { rivals: [{ name: "y", values: [60, 64] }] }), { bounds: [0, 100] })!.max).toBeGreaterThanOrEqual(64);
+    expect(trendAxis(model([20, 22], { target: 5 }), { bounds: [0, 100] })!.min).toBeLessThanOrEqual(5);
+    const one = trendAxis(model([44], { target: 65 }), { bounds: [0, 100] })!;
+    expect(one.min).toBeLessThanOrEqual(44);
+    expect(one.max).toBeGreaterThanOrEqual(65);
+  });
+
+  it("stays inside the scale's own bounds", () => {
+    const high = trendAxis(model([97, 99], { target: 100 }), { bounds: [0, 100] })!;
+    expect(high.max).toBe(100);
+    const low = trendAxis(model([0.4, 1.2]), { bounds: [0, 100] })!;
+    expect(low.min).toBe(0);
+    expect(trendAxis(model([null, null]), { bounds: [0, 100] })).toBeNull();
+  });
+
+  it("reaches the option as a window and not as the library's own scale", () => {
+    const axis = (option: unknown) => (option as { yAxis: Record<string, unknown> }).yAxis;
+    const input = model([46.4, 44.2, 45.6], { target: 50 });
+    const windowed = axis(chartOption(input, format, { integer: true, bounds: [0, 100] }));
+    expect(windowed).toMatchObject({ min: 43, max: 51, interval: 2 });
+    expect(windowed.scale).toBeUndefined();
+    // A chart that does not know its bounds keeps the library's scale and the integer step.
+    expect(axis(chartOption(input, format, { integer: true }))).toMatchObject({ scale: true, minInterval: 1 });
   });
 });
 
