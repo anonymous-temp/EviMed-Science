@@ -256,11 +256,14 @@ export function presentPopulationTab(bundle) {
       } : null;
     })(),
   } : { version: null, kind: null, versions: [], definition: null };
+  // The criteria a coverage check could not put to this data (no column, an event only a record can carry): not in the count, said by name.
+  const notEvaluated = new Map(list(object(object(current?.profile).coverage).notEvaluated).map(object).map((entry) => [String(entry.code), text(entry.why)]));
   const rows = criteria.map((/** @type {any} */ criterion) => {
     const entry = byCriterion(criterion);
     return {
       id: criterion.id,
       code: codes.get(criterion.id) ?? "",
+      notEvaluated: notEvaluated.get(codes.get(criterion.id) ?? "") ?? null,
       name: (/** @type {Record<string, string>} */ (VCR_CRITERION_TYPE_LABELS_ZH))[criterion.criterionType] ?? "其他",
       quote: text(criterion.sourceText),
       quoteSource: vcrLocatorText(criterion.sourceLocator, { draftPack: bundle.knowledge?.pack?.status === "ai-draft" }),
@@ -339,6 +342,8 @@ export function presentPopulationTab(bundle) {
   return {
     version: view.version,
     kind: view.kind,
+    // What the study called this population: 「按方案条件查覆盖」 for the one made from the protocol's own criteria.
+    name: current ? text(current.name) : null,
     versions: view.versions,
     definition: view.definition,
     criteria: rows,

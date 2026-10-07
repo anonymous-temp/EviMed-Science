@@ -231,6 +231,93 @@ test("a definition that states nothing is refused in place: the step reads done 
   }
 });
 
+test("a definition carries the study's own name and the one sentence it asks, held to their length; both are optional", async () => {
+  /** @type {any[]} */
+  const saved = [];
+  const { handler } = fixture({ store: { ...fixture().vcr.store, async saveDefinition(/** @type {any} */ input) { saved.push(input); return { id: "def_1", version: saved.length }; } } });
+  const write = async (/** @type {Record<string, any>} */ data) => { const res = response(); await handler(request("/internal/vcr/v1/write", { what: "definition", data }), res); return res.json().data; };
+  const pico = { population: "二线 NSCLC", intervention: "EV 单药" };
+  const named = await write({ pico, title: "二线肺癌 EV 的样本量", question: "单臂 II 期加外部对照行不行，还是必须做随机？" });
+  assert.equal(named.ok, true);
+  assert.deepEqual([saved[0].title, saved[0].question], ["二线肺癌 EV 的样本量", "单臂 II 期加外部对照行不行，还是必须做随机？"]);
+  assert.equal((await write({ pico })).ok, true, "a definition with neither is as before");
+  assert.deepEqual([saved[1].title, saved[1].question], ["", ""]);
+  const long = await write({ pico, title: "字".repeat(25) });
+  assert.equal(long.ok, false);
+  assert.equal(long.issues[0].field, "title");
+  assert.equal(saved.length, 2, "a title past 24 characters is refused in place and nothing is saved");
+  const sentence = await write({ pico, question: "问".repeat(201) });
+  assert.equal(sentence.issues[0].field, "question");
+  assert.equal((await write({ pico, title: 7 })).issues[0].field, "title");
+});
+
+test("「从方案出发查覆盖」: a real population written from the protocol takes the criteria the snapshot can answer as its rules, says which it could not, and the cohort is then asked for with no scenario of its own", async () => {
+  /** @type {any[]} */
+  const saved = [];
+  /** @type {any[]} */
+  const queued = [];
+  const criteria = [
+    { id: "c1", ordinal: 1, kind: "inclusion", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18 }, applicability: null },
+    { id: "c2", ordinal: 2, kind: "inclusion", requirement: { op: "compare", variable: "ecog", comparator: "lte", value: 1 }, applicability: null },
+    { id: "c3", ordinal: 3, kind: "exclusion", requirement: { op: "absent", variable: "brain_metastases" }, applicability: null },
+  ];
+  const store = { ...fixture().vcr.store,
+    async one() { return { 1: 1 }; },
+    async criteria() { return criteria; },
+    async savePopulation(/** @type {any} */ input) { saved.push(input); return { id: "pop_cov", version: 1 }; },
+    async populations() { return saved.length ? [{ id: "pop_cov", version: 1, kind: "real", name: "按方案条件查覆盖", snapshotId: "snp_1", definition: saved[0].definition }] : []; },
+  };
+  const jobs = { async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_cov", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_cov", state: "canceled" }, canceled: true }; } };
+  const dataPlaneSeam = { async runtimeProfile() { return { available: true, fieldMap: [
+    { column: "AGE", alias: "age", parameter: null, concept: "Age", unit: "years", identifier: false },
+    { column: "ECOGBL", alias: "ecog", parameter: null, concept: "ECOG", unit: null, identifier: false },
+    { column: "USUBJID", alias: null, parameter: null, concept: "Subject", unit: null, identifier: true }] }; } };
+  const { handler } = fixture({ store, jobs, dataPlaneSeam });
+  const write = async (/** @type {Record<string, any>} */ data) => { const res = response(); await handler(request("/internal/vcr/v1/write", { what: "population", data }), res); return res.json().data; };
+
+  const written = await write({ kind: "real", fromProtocol: true, snapshotId: "snp_1" });
+  assert.equal(written.ok, true, JSON.stringify(written));
+  assert.deepEqual(saved[0].definition, { rules: [
+    { name: "I1", rule: { op: "compare", column: "age", comparator: "gte", value: 18 }, unknownAs: "exclude" },
+    { name: "I2", rule: { op: "compare", column: "ecog", comparator: "lte", value: 1 }, unknownAs: "exclude" }] });
+  assert.equal(saved[0].name, "按方案条件查覆盖");
+  assert.deepEqual(saved[0].profile.coverage.notEvaluated, [{ code: "E1", why: "要看有没有这类事件或诊断的记录，受试者级的列判断不了" }], "kept with the population for the page");
+  assert.equal(saved[0].snapshotId, "snp_1");
+  assert.deepEqual(saved[0].allowedUses, []);
+  assert.deepEqual(written.results[0].coverage, { evaluated: ["I1", "I2"], notEvaluated: [{ code: "E1", why: "要看有没有这类事件或诊断的记录，受试者级的列判断不了" }] });
+
+  // the cohort is asked for with nothing but the population: its rules and its snapshot are its own
+  const start = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "build_cohort", subjectId: "pop_cov" }), start);
+  assert.equal(start.status, 200, start.body);
+  assert.deepEqual(queued[0].scenario, saved[0].definition);
+  assert.deepEqual(queued[0].inputs, [{ kind: "snapshot", id: "snp_1" }]);
+  assert.equal(queued[0].detail.subjectId, "pop_cov");
+  assert.equal(queued[0].detail.resultKind, "population");
+
+  // refusals, each by name and each writing nothing
+  const before = saved.length;
+  assert.equal((await write({ kind: "real", fromProtocol: true })).issues[0].field, "snapshotId");
+  assert.equal((await write({ kind: "scenario", fromProtocol: true, snapshotId: "snp_1" })).issues[0].field, "fromProtocol");
+  assert.equal((await write({ fromProtocol: true, snapshotId: "snp_1", definition: { rules: [] } })).issues[0].field, "fromProtocol");
+  assert.equal((await write({ fromProtocol: "yes", snapshotId: "snp_1" })).issues[0].field, "fromProtocol");
+  const noneAnswerable = fixture({ store: { ...store, async criteria() { return [criteria[2]]; } }, dataPlaneSeam });
+  const refused = response();
+  await noneAnswerable.handler(request("/internal/vcr/v1/write", { what: "population", data: { fromProtocol: true, snapshotId: "snp_1" } }), refused);
+  assert.match(refused.json().data.issues[0].message, /方案里没有一条条件能在这份数据上按列判断：E1（/);
+  const noProtocol = fixture({ store: { ...store, async criteria() { return []; } }, dataPlaneSeam });
+  const none = response();
+  await noProtocol.handler(request("/internal/vcr/v1/write", { what: "population", data: { fromProtocol: true, snapshotId: "snp_1" } }), none);
+  assert.match(none.json().data.issues[0].message, /还没有结构化的入排条件/);
+  assert.equal(saved.length, before, "nothing was saved by a refusal");
+  // a cohort with no scenario and no real population behind it says what to write
+  const lonely = fixture({ jobs });
+  const answer = response();
+  await lonely.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "build_cohort", subjectId: "pop_none" }), answer);
+  assert.equal(answer.status, 400);
+});
+
 test("AC-33 everything a run writes is labelled ai_set; nothing it writes is labelled reviewed", async () => {
   const { calls, handler } = fixture();
   await handler(request("/internal/vcr/v1/write", { what: "definition", data: { pico: { population: "二线 NSCLC" }, endpointType: "binary" } }), response());

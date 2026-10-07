@@ -73,6 +73,7 @@ import { VCR_TRIAL_RESTRICTED_FIELDS, deriveFromExit, followupFidelityFindings, 
 import { VCR_MATCHING_VOCABULARY_VERSION } from "./vcrMatching.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE } from "./vcrJobs.mjs";
 import { resolveJobSubject } from "./vcrSubjects.mjs";
+import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
@@ -674,7 +675,10 @@ async function checkedCriteria(deps, rows, issues, what) {
  */
 const WRITERS = {
   async definition(item, { store, study }) {
-    if (!item.only(["pico", "estimand", "endpointType", "intendedUse", "fieldSources"])) return null;
+    if (!item.only(["pico", "estimand", "endpointType", "intendedUse", "fieldSources", "title", "question"])) return null;
+    // The study's own name (at most 24 characters) and the one sentence it asks: what the study is called from here on.
+    const title = item.str("title", { max: 24 });
+    const question = item.str("question", { max: 200 });
     const pico = item.obj("pico") ?? {};
     const estimand = item.obj("estimand") ?? {};
     const endpointType = item.choice("endpointType", VCR_ENDPOINT_TYPES);
@@ -690,6 +694,7 @@ const WRITERS = {
     if (!item.ok) return null;
     const saved = await store.saveDefinition({
       studyId: study.id, userId: study.userId, pico, estimand, endpointType: endpointType ?? null, intendedUse, fieldSources, reviewState: "ai_set",
+      title: title ?? "", question: question ?? "",
     });
     return saved.id;
   },
@@ -937,8 +942,46 @@ const WRITERS = {
     return done.id;
   },
 
-  async population(item, { store, study, knowledge, caller }, extra) {
-    if (!item.only(["kind", "name", "definition", "snapshotId", "allowedUses", "fromLibrary"])) return null;
+  async population(item, { store, study, knowledge, caller, dataPlane, matchStore }, extra) {
+    if (!item.only(["kind", "name", "definition", "snapshotId", "allowedUses", "fromLibrary", "fromProtocol"])) return null;
+    // 「从方案出发查覆盖」: the rules are the protocol's own criteria, made into cohort rules on the columns of a frozen snapshot by the
+    // platform (`vcrCohortRulesFromCriteria`); the run names the snapshot and nothing else. What the snapshot cannot answer comes back
+    // criterion by criterion, with why — the engine's counts are what the page and the next read say about the rest.
+    if (item.row.fromProtocol != null) {
+      if (item.row.fromProtocol !== true) item.bad("fromProtocol", "fromProtocol 写 true：条件取自本研究的方案。");
+      if (item.row.definition !== undefined || item.row.fromLibrary !== undefined || (item.row.kind !== undefined && item.row.kind !== "real")) {
+        item.bad("fromProtocol", "fromProtocol 提供人群的入选规则：不要同时写 definition 或 fromLibrary，kind 只能是 real。");
+      }
+      const snapshotId = item.row.snapshotId == null ? "" : String(item.row.snapshotId);
+      if (!snapshotId) item.bad("snapshotId", "按方案查覆盖要说明在哪份冻结的数据快照上查：snapshotId 必填。");
+      else await item.owned("snapshotId", "snapshot", snapshotId);
+      const name = item.str("name", { max: 120 }) ?? VCR_COVERAGE_POPULATION_NAME;
+      if (!dataPlane?.runtimeProfile) item.bad("snapshotId", "数据平面未接入本部署：这一步暂不可用。", "vcr_write_refused");
+      if (!item.ok) return null;
+      const protocol = await store.latestProtocolVersion(study.id);
+      const criteria = protocol
+        ? (matchStore?.listCriteria ? await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }) : await store.criteria(protocol.id)) : [];
+      if (!criteria.length) {
+        item.bad("fromProtocol", "本研究还没有结构化的入排条件：先用 vcr_write what=protocol 写下方案的条件，再查覆盖。", "vcr_write_refused");
+        return null;
+      }
+      const profile = await dataPlane.runtimeProfile(study, { snapshotId });
+      const fieldMap = list(profile?.fieldMap).map(object).map((entry) => ({
+        column: entry.column, alias: entry.alias, parameter: entry.parameter, concept: entry.concept, unit: entry.unit, identifier: entry.identifier === true }));
+      const made = vcrCohortRulesFromCriteria({ criteria, fieldMap });
+      if (!made.rules.length) {
+        item.bad("fromProtocol", `方案里没有一条条件能在这份数据上按列判断：${made.skipped.slice(0, 6).map((entry) => `${entry.code}（${entry.why}）`).join("；")}。先确认数据的字段对应，或补充数据。`, "vcr_write_refused");
+        return null;
+      }
+      const saved = await store.savePopulation({
+        studyId: study.id, userId: study.userId, name, kind: "real", definition: { rules: made.rules }, snapshotId, allowedUses: [],
+        // What the snapshot could not answer is kept with the population: the tab says which criteria are not in the count, and why.
+        reviewState: "ai_set", profile: { coverage: { notEvaluated: made.skipped.map((entry) => ({ code: entry.code, why: entry.why })) } }, quality: {}, waterfall: [],
+      });
+      extra.results.push({ index: item.index, populationId: saved.id, coverage: { evaluated: made.rules.map((rule) => rule.name),
+        notEvaluated: made.skipped.map((entry) => ({ code: entry.code, why: entry.why })) } });
+      return saved.id;
+    }
     // A definition from the account's library: the rules, time zero and exit are the library's, the study's dataset names
     // the columns (renamed only where the pack makes it unambiguous), and the study is recorded as a use of that version.
     if (item.row.fromLibrary != null) {
@@ -1928,6 +1971,16 @@ async function startJob(vcr, study, request) {
   // input id into the scenario itself, so it is part of what makes the same request the same job.
   const derived = request.reconstructionResultId
     ? [{ resultId: request.reconstructionResultId, table: VCR_RECONSTRUCTION_REFERENCE.table, bindTo: VCR_RECONSTRUCTION_REFERENCE.bindTo }] : [];
+  // A cohort asked for with no scenario is the real population's own: its rules (from the protocol's criteria, or the ones the run wrote)
+  // on the snapshot it names — the one step 「从方案出发查覆盖」 is: write the population, then ask for the cohort.
+  if (request.kind === "build_cohort" && !Object.keys(scenario).length) {
+    const own = (await resolveJobSubject({ store: vcr.store, study, kind: request.kind, subjectId: request.subjectId, scenario })).row;
+    if (own.kind !== "real" || !Object.keys(object(own.definition)).length) {
+      throw gatewayError(400, "vcr_simulate_payload_invalid", "队列的入选规则写在人群对象里：先用 vcr_write what=population 写 kind real 的人群（带 definition，或 fromProtocol: true 和 snapshotId）。");
+    }
+    scenario = { ...object(own.definition) };
+    if (!inputs.length && own.snapshotId) inputs = [{ kind: "snapshot", id: String(own.snapshotId) }];
+  }
   const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
   // A computation of a research object names it: its result is filed under that object and replaces only that object's earlier
   // results. The id the run gave is checked against the study; with none, the one object the scenario fits is taken, and several

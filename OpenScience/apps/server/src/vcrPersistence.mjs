@@ -170,6 +170,11 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.study_definitions (
   UNIQUE (study_id, version)
 );
 
+-- What the study is called and the one sentence it asks (R10, 2026-10-07): the conversation's own words for the definition it wrote, so the
+-- study is named from what it is about rather than left 「新虚拟临研研究」. Both optional; empty on every definition written before.
+ALTER TABLE evimed_vcr.study_definitions ADD COLUMN IF NOT EXISTS title text NOT NULL DEFAULT '';
+ALTER TABLE evimed_vcr.study_definitions ADD COLUMN IF NOT EXISTS question text NOT NULL DEFAULT '';
+
 -- A protocol the study works from, and the versions it goes through. A
 -- revision never rewrites an assessment made against an earlier one (AC-05).
 CREATE TABLE IF NOT EXISTS evimed_vcr.protocol_versions (

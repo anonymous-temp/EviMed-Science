@@ -691,7 +691,10 @@ test("R10 a computation a conversation queues is filed under the design it was q
   const study = await makeStudy("conversation");
   const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
     study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
-  await write("definition", definition);
+  const defined = await write("definition", { ...definition, title: "二线肺癌 EV 的样本量", question: "单臂 II 期能不能用外部对照？" });
+  assert.equal(defined.ok, true);
+  const latest = await store.latestDefinition(study.id);
+  assert.deepEqual([latest.title, latest.question], ["二线肺癌 EV 的样本量", "单臂 II 期能不能用外部对照？"], "the conversation's own name and sentence are kept with the definition");
   await write("assumption", [{ key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
     { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" }]);
   const written = await write("trial_scenario", conversationDesigns);

@@ -1,6 +1,7 @@
 {
   "version": "人群 v2（方案 v1）",
   "kind": "真实队列",
+  "name": "合作方候选人 v2",
   "versions": [
     {
       "id": "pop_1",
@@ -37,6 +38,7 @@
     {
       "id": "crt_1",
       "code": "I1",
+      "notEvaluated": null,
       "name": "人口学",
       "quote": "年龄 ≥ 18 岁",
       "quoteSource": "第 12 页",
@@ -51,6 +53,7 @@
     {
       "id": "crt_2",
       "code": "I2",
+      "notEvaluated": null,
       "name": "体能状态",
       "quote": "ECOG 体能评分 0–1（近 4 周内）",
       "quoteSource": "第 12 页，3.1",
@@ -65,6 +68,7 @@
     {
       "id": "crt_3",
       "code": "I3",
+      "notEvaluated": null,
       "name": "既往治疗",
       "quote": "一线接受过含铂双药化疗，可联合 PD-1/PD-L1 抑制剂",
       "quoteSource": "第 12 页，3.1",
@@ -79,6 +83,7 @@
     {
       "id": "crt_4",
       "code": "E1",
+      "notEvaluated": null,
       "name": "合并症",
       "quote": "活动性脑转移",
       "quoteSource": "第 13 页，3.2",
@@ -93,6 +98,7 @@
     {
       "id": "crt_5",
       "code": "E2",
+      "notEvaluated": null,
       "name": "时间窗",
       "quote": "末次免疫治疗距今不足 28 天",
       "quoteSource": "第 13 页，3.2",
@@ -107,6 +113,7 @@
     {
       "id": "crt_6",
       "code": "E3",
+      "notEvaluated": null,
       "name": "妊娠",
       "quote": "妊娠或哺乳期",
       "quoteSource": "第 13 页，3.2",

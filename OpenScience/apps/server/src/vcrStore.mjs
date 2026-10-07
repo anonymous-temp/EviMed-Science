@@ -530,7 +530,9 @@ export class VcrStore extends VcrStoreBase {
    * The research question as an object. A new version every time; nothing
    * downstream is rewritten (AC-05).
    * @param {{ studyId: string, userId: string, pico?: Record<string, any>, estimand?: Record<string, any>,
-   *   endpointType?: string | null, intendedUse?: string, fieldSources?: Record<string, any>, reviewState?: string }} input
+   *   endpointType?: string | null, intendedUse?: string, fieldSources?: Record<string, any>, reviewState?: string,
+   *   title?: string, question?: string }} input `title` (the study's name) and `question` (the one sentence it asks) are the writer's
+   *   own words for the definition, empty when it gave none
    */
   async saveDefinition(input) {
     // The definition names the disease and the treatment: the study is tagged again from it.
@@ -540,12 +542,12 @@ export class VcrStore extends VcrStoreBase {
       const version = await this.nextVersion(client, "study_definitions", "study_id = $1", [input.studyId]);
       if (study) await client.query(`UPDATE ${VCR_SCHEMA}.studies SET entity_keys = $2::text[] WHERE id = $1`, [input.studyId, entityKeys]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.study_definitions
-        (id, study_id, user_id, version, pico, estimand, endpoint_type, intended_use, field_sources, review_state)
-        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9::jsonb, $10) RETURNING *`,
+        (id, study_id, user_id, version, pico, estimand, endpoint_type, intended_use, field_sources, review_state, title, question)
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9::jsonb, $10, $11, $12) RETURNING *`,
       [vcrId("definition"), input.studyId, String(input.userId), version, JSON.stringify(input.pico ?? {}),
         JSON.stringify(input.estimand ?? {}), input.endpointType ?? null,
         VCR_INTENDED_USES.includes(String(input.intendedUse)) ? String(input.intendedUse) : "exploratory",
-        JSON.stringify(input.fieldSources ?? {}), input.reviewState ?? "ai_set"])).rows[0];
+        JSON.stringify(input.fieldSources ?? {}), input.reviewState ?? "ai_set", String(input.title ?? "").trim(), String(input.question ?? "").trim()])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.definition.save",
         object: String(row.id), detail: { version } });
       return this.#definitionFromRow(row);
@@ -559,6 +561,7 @@ export class VcrStore extends VcrStoreBase {
       id: String(row.id), studyId: String(row.study_id), version: Number(row.version), pico: object(row.pico),
       estimand: object(row.estimand), endpointType: text(row.endpoint_type), intendedUse: String(row.intended_use ?? "exploratory"),
       fieldSources: object(row.field_sources), reviewState: String(row.review_state ?? "ai_set"), createdAt: iso(row.created_at),
+      title: String(row.title ?? ""), question: String(row.question ?? ""),
     };
   }
 

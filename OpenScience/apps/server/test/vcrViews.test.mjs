@@ -468,6 +468,12 @@ test("a cohort the engine built is read from its result: the waterfall, the thre
   assert.deepEqual(tab.blockers.map((blocker) => [blocker.code, blocker.text, blocker.quote]), [["I2", "无法判断 260", "EGFR 阳性"], ["I1", "排除 100", "确诊 NSCLC"], ["E1", "排除 30", "无活动性脑转移"]],
     "ranked by what each rule does alone — I2 would drop 410 on its own — not by what is left for it after the rules before it");
   assert.equal(tab.method, null, "a real cohort is not generated");
+  // criteria the check could not put to the data are not in the count, and the table says so beside them
+  const covered = presentPopulationTab({ ...bundle, populations: [{ ...bundle.populations[0], name: "按方案条件查覆盖",
+    profile: { coverage: { notEvaluated: [{ code: "E1", why: "要看有没有这类事件或诊断的记录，受试者级的列判断不了" }] } } }] });
+  assert.equal(covered.name, "按方案条件查覆盖");
+  assert.deepEqual(covered.criteria.map((criterion) => [criterion.code, criterion.notEvaluated]), [["I1", null], ["I2", null], ["E1", "要看有没有这类事件或诊断的记录，受试者级的列判断不了"]]);
+  assert.deepEqual(covered.profile, [], "a coverage cohort has no profile of its own rows");
   assert.deepEqual(tab.allowedUses, []);
 });
 
