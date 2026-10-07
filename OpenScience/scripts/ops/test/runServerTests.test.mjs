@@ -11,7 +11,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULT_TEST_TIMEOUT_MS, hangGuardFlags, partitionServerTests, runServerTests } from "../../test/runServerTests.mjs";
+import { DEFAULT_RUN_TIMEOUT_MS, DEFAULT_TEST_TIMEOUT_MS, hangGuardFlags, partitionServerTests, runServerTests, runTimeoutMs } from "../../test/runServerTests.mjs";
 
 const files = ["agentRuns.test.mjs", "pluginService.integration.test.mjs", "server.test.mjs", "sourceApp.integration.test.mjs", "helpers", "notATest.mjs"];
 
@@ -55,20 +55,35 @@ test("the serial run is one `--test-concurrency=1` invocation after the parallel
   assert.equal(runs.length, 1);
 });
 
-test("both runs cancel a test that never ends and let its file exit, with a bound an operator can change", () => {
-  /** @type {string[][]} */
+test("both runs cancel a test that never ends, never cut a file short, and bound the whole run", () => {
+  /** @type {{ args: string[], options: any }[]} */
   const runs = [];
-  const execute = (/** @type {string} */ _bin, /** @type {string[]} */ args) => { runs.push(args); return { status: 0 }; };
+  const execute = (/** @type {string} */ _bin, /** @type {string[]} */ args, /** @type {any} */ options) => { runs.push({ args, options }); return { status: 0 }; };
   runServerTests([], { execute: /** @type {any} */ (execute), env: { OPEN_SCIENCE_TEST_POSTGRES_URL: "postgresql://postgres@127.0.0.1/evimed_test_product" } });
   assert.equal(runs.length, 2);
-  for (const args of runs) {
+  for (const { args, options } of runs) {
     assert.ok(args.includes(`--test-timeout=${DEFAULT_TEST_TIMEOUT_MS}`), "a default bound per test");
-    assert.ok(args.includes("--test-force-exit"), "a file whose event loop stays busy still ends");
+    // 2026-10-07: beside --test-timeout it ended files part-way through and reported them green.
+    assert.ok(!args.includes("--test-force-exit"), "no file is cut short");
+    assert.equal(options.timeout, DEFAULT_RUN_TIMEOUT_MS, "a file that never exits stops the run, which fails");
+    assert.equal(options.killSignal, "SIGKILL");
   }
-  assert.deepEqual(hangGuardFlags({ OPEN_SCIENCE_TEST_TIMEOUT_MS: "45000" }), ["--test-timeout=45000", "--test-force-exit"]);
+  assert.deepEqual(hangGuardFlags({ OPEN_SCIENCE_TEST_TIMEOUT_MS: "45000" }), ["--test-timeout=45000"]);
+  assert.equal(runTimeoutMs({ OPEN_SCIENCE_TEST_RUN_TIMEOUT_MS: "600000" }), 600_000);
   for (const unusable of ["0", "-5", "soon", "1.5", ""]) {
-    assert.deepEqual(hangGuardFlags({ OPEN_SCIENCE_TEST_TIMEOUT_MS: unusable }), [`--test-timeout=${DEFAULT_TEST_TIMEOUT_MS}`, "--test-force-exit"], `"${unusable}" is not a bound`);
+    assert.deepEqual(hangGuardFlags({ OPEN_SCIENCE_TEST_TIMEOUT_MS: unusable }), [`--test-timeout=${DEFAULT_TEST_TIMEOUT_MS}`], `"${unusable}" is not a bound`);
+    assert.equal(runTimeoutMs({ OPEN_SCIENCE_TEST_RUN_TIMEOUT_MS: unusable }), DEFAULT_RUN_TIMEOUT_MS, `"${unusable}" is not a bound`);
   }
+});
+
+test("a run stopped by its bound fails", () => {
+  const execute = () => ({ status: null, signal: "SIGKILL" });
+  const errors = [];
+  const original = console.error;
+  console.error = (/** @type {any} */ line) => { errors.push(String(line)); };
+  try { assert.equal(runServerTests([], { execute: /** @type {any} */ (execute), env: {} }), 1); }
+  finally { console.error = original; }
+  assert.match(errors.join("\n"), /did not end within 45 minutes/);
 });
 
 test("a failing run is the exit status, whichever of the two it was", () => {
