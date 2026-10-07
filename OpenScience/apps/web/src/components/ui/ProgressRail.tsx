@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
+import { Disclosure } from "@/components/ui/Disclosure";
 
 /**
  * A program's steps as one rail in the page header, with what each step
@@ -18,6 +20,11 @@ import { cn } from "@/lib/cn";
  *
  * The rail is not a progress bar and there is never a second one: a percentage
  * on work an agent is doing is a number nobody can honour.
+ *
+ * On a phone eight steps in two columns are four rows of header before the
+ * page begins. Given a `summary` the rail folds there into one line — what is
+ * done and what is waited for — and the steps open under it; wider screens
+ * always see the steps.
  */
 
 export type RailState = "done" | "active" | "waiting" | "todo";
@@ -40,22 +47,43 @@ export interface RailStep {
   to?: string;
 }
 
+/** Whether the viewport is under the `sm` breakpoint (640 px); a test environment without a layout is never narrow. */
+function useNarrow(): boolean {
+  const query = "(max-width: 639px)";
+  const read = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches;
+  const [narrow, setNarrow] = useState(read);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia(query);
+    const update = () => setNarrow(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+  return narrow;
+}
+
 export function ProgressRail({
   label,
   steps,
+  summary,
   className,
 }: {
   /** The rail's accessible name. */
   label: string;
   steps: readonly RailStep[];
+  /** One line standing for the rail on a phone: 「已完成 7 / 8 步 · 投放等媒介集市接通」. */
+  summary?: string;
   className?: string;
 }) {
-  return (
+  const narrow = useNarrow();
+  const list = (
     <ol
       aria-label={label}
       className={cn(
         "grid grid-cols-2 gap-x-4 gap-y-4 rounded-card border border-border bg-surface px-4 py-3 sm:grid-cols-4 lg:grid-cols-8 lg:gap-x-0",
-        className,
+        summary && narrow && "border-0 px-0 py-0",
+        !(summary && narrow) && className,
       )}
     >
       {steps.map((step, index) => (
@@ -76,6 +104,12 @@ export function ProgressRail({
         </li>
       ))}
     </ol>
+  );
+  if (!summary || !narrow) return list;
+  return (
+    <div data-rail-folded="" className={cn("rounded-card border border-border bg-surface px-4 py-2", className)}>
+      <Disclosure summary={summary} summaryClassName="w-full text-text">{list}</Disclosure>
+    </div>
   );
 }
 

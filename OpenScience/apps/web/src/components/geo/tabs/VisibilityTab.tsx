@@ -18,15 +18,16 @@ import { GeoSparkline } from "../GeoSparkline";
 import { formatGeoValue, GeoCellText, geoCellWord } from "../GeoCellText";
 import {
   actionMarkers,
+  chartDates,
   engineTrendConclusion,
   denominatorLine,
   pointCell,
-  readingDelta,
+  readingChange,
   rivalRanking,
   statedValue,
   trendConclusion,
 } from "../geoOverviewModel";
-import { engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, type GeoUnit } from "../geoText";
+import { absentWord, engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, type GeoUnit } from "../geoText";
 import { metricName, metricUnit, roundKindWord } from "./geoTabText";
 import { CellLink, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 
@@ -62,8 +63,16 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
       {options.length > 1 && (
         <FilterChips label="指标" options={options} value={line ? line.key : options[0].value} onChange={setKey} />
       )}
-      <MetricTrend project={project} watch={watch} line={line} denominator={denominator} loading={monitoring.state.kind === "loading"} />
-      <ByEngine rows={watch?.byEngine} />
+      <MetricTrend
+        project={project}
+        watch={watch}
+        line={line}
+        denominator={denominator}
+        // The fluctuation band was measured on the mention rate and belongs to it alone.
+        noise={line?.key === "mention" && typeof diag?.noise?.band === "number" ? diag.noise.band : null}
+        loading={monitoring.state.kind === "loading"}
+      />
+      <ByEngine rows={watch?.byEngine} diagnosis={diag} />
       <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} />
       <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} />
       <MoreMetrics geoId={geoId} diagnosis={diag} />
@@ -78,12 +87,14 @@ function MetricTrend({
   watch,
   line,
   denominator,
+  noise,
   loading,
 }: {
   project: GeoProject;
   watch: GeoMonitoring | null;
   line: { key: string; points: GeoSeriesPoint[] } | null;
   denominator: string | null;
+  noise: number | null;
   loading: boolean;
 }) {
   const points = line?.points ?? [];
@@ -104,24 +115,25 @@ function MetricTrend({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [line, watch, target, project.name]);
   const latest = pointCell(points[points.length - 1]);
-  const delta = readingDelta(points.map(statedValue));
+  // The same rule as 总览 states the same change by.
+  const change = readingChange(points, { noise });
 
   return (
     <ChartCard
-      title={trendConclusion(name, points.length ? latest : null, delta, null, unit)}
+      title={trendConclusion(name, points.length ? latest : null, change, unit)}
       legend={(
         <>
           <LegendMark series="own" color={OWN_COLOR}>{project.product?.brandName || project.name}</LegendMark>
           {target !== null && <LegendMark series="target" shape="dash" color={TARGET_COLOR}>目标</LegendMark>}
         </>
       )}
-      meta={watch?.next?.date ? `下次 ${monthDay(watch.next.date)}` : undefined}
+      meta={chartDates(change, watch?.next?.date)}
       state={loading ? "loading" : points.length === 0 ? "empty" : "content"}
       emptyText="还没有开始持续监测，第一次复测后这里会画出趋势。"
       footnote={denominator}
       height={260}
     >
-      <TrendChart input={input} format={format} label={`${name}趋势`} height={260} />
+      <TrendChart input={input} format={format} label={`${name}趋势`} height={260} integer bounds={[0, 100]} />
     </ChartCard>
   );
 }
@@ -154,20 +166,40 @@ function latest(values: ReadonlyArray<number | null>): number | null {
 
 /* ----------------------------------------------------------- per engine */
 
-function ByEngine({ rows }: { rows: GeoMonitoring["byEngine"] | null | undefined }) {
+/**
+ * Each engine's latest reading and, beside it, how it has gone. An engine whose latest round has no stated reading draws no line:
+ * the earlier points of a series are history, and a lone dot of them under a 「—」 reads as today's. It says why instead — the
+ * round's own reason when the engine did not answer, else the last reading it has and when.
+ */
+function ByEngine({ rows, diagnosis }: { rows: GeoMonitoring["byEngine"] | null | undefined; diagnosis: GeoDiagnosis | null }) {
   const lines = (Array.isArray(rows) ? rows : []).filter((row) => row && row.engine && Array.isArray(row.points) && row.points.length > 0);
   if (lines.length === 0) return null;
+  // The latest round any engine was read in: a line that stops before it has no reading now.
+  const currentDate = lines.reduce((top, row) => {
+    const date = row.points[row.points.length - 1]?.date ?? "";
+    return date > top ? date : top;
+  }, "");
+  const absent = new Map((Array.isArray(diagnosis?.round?.absent) ? diagnosis.round.absent : [])
+    .filter((entry) => entry && entry.engine).map((entry) => [entry.engine, absentWord(entry.reason)]));
   return (
     <ChartCard title={engineTrendConclusion(lines)}>
       <ul className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-5">
         {lines.map((row) => {
           const unit: GeoUnit = row.points.some((point) => typeof point.k === "number") ? "percent" : "index";
           const last = row.points[row.points.length - 1];
+          const current = last.date === currentDate;
+          const reading = current && statedValue(last) !== null;
+          const earlier = [...row.points].reverse().find((point) => statedValue(point) !== null) ?? null;
+          const why = absent.has(row.engine)
+            ? (absent.get(row.engine) ? `本轮未测：${absent.get(row.engine)}` : "本轮未测")
+            : earlier && !reading ? `上次 ${formatGeoValue(statedValue(earlier) as number, unit)} · ${monthDay(earlier.date)}` : null;
           return (
             <li key={row.engine} data-geo-engine-trend={row.engine} className="flex min-w-0 flex-col gap-1">
               <span className="truncate text-compact text-text-2">{engineName(row.engine)}</span>
-              <GeoCellText cell={pointCell(last)} unit={unit} layout="stack" />
-              <GeoSparkline values={row.points.map(statedValue)} width={140} height={28} className="mt-1 w-full" />
+              <GeoCellText cell={current ? pointCell(last) : pointCell(undefined)} unit={unit} layout="stack" />
+              {reading
+                ? <GeoSparkline values={row.points.map(statedValue)} width={140} height={28} className="mt-1 w-full" />
+                : why && <span data-geo-engine-why="" className="text-caption text-text-3">{why}</span>}
             </li>
           );
         })}
@@ -252,6 +284,8 @@ function ByPool({ geoId, diagnosis, loading }: { geoId: string; diagnosis: GeoDi
 /* --------------------------------------------------------------- ranking */
 
 function Ranking({ ranking, loading }: { ranking: ReturnType<typeof rivalRanking>; loading: boolean }) {
+  // Nobody measured a rival: no empty card to say so.
+  if (ranking.length === 0 && !loading) return null;
   const top = ranking.reduce((max, row) => Math.max(max, row.value ?? 0), 0);
   const ours = ranking.find((row) => row.ours) ?? null;
   const place = ours ? ranking.indexOf(ours) + 1 : 0;

@@ -138,8 +138,12 @@ export interface GeoProjectSummary {
     /** 品牌提及率 over P2 + P3 only. */
     mention: GeoCell;
   };
-  /** `severity` is the grade of the error `text` names; the row sets the sentence in body text beside its badge. */
-  alert: { wrongOurs: number; safety: number; text: string | null; severity?: GeoSeverity | null };
+  /**
+   * What is open on the project: errors an engine still makes about us (`wrongOurs`), how many of those are S3/S4 (`severe`),
+   * articles stopped on a safety finding (`safety`), and the worst open grade (`severity`). The row says the counts in its own
+   * words; the engine's sentence is read on the project's pages.
+   */
+  alert: { wrongOurs: number; severe: number; safety: number; severity?: GeoSeverity | null };
   /** Engines the probe host can measure beyond the default five (e.g. `baidu`), when the server lists them. */
   availableEngines?: GeoEngine[];
   /** When the coverage window started, if the server says (for “10月1日 – 12月31日”). */
@@ -154,7 +158,8 @@ export interface GeoOverviewMetric {
   cell: GeoCell;
   /** The chosen tier's target on the metric's own scale, or null before there is one. */
   target: number | null;
-  trend: Array<{ date: string; value: number | null }>;
+  /** One point per full measurement; `n` is how many answers it rests on (a point under the sample floor is not a reading). */
+  trend: Array<{ date: string; value: number | null; n?: number | null }>;
 }
 /** Which tab a “本周” line jumps to, and what inside it. */
 export interface GeoWeekItem {
@@ -236,6 +241,11 @@ export interface GeoQuestion {
   platform: string | null;
   sourceUrl: string | null;
   isMeasured: boolean;
+  /**
+   * Where a measured question was last answered: the latest answer of each engine, in the project's engine order (the first is where
+   * a link lands). Empty before it was asked, and for a question that is not measured.
+   */
+  answers?: Array<{ engine: GeoEngine; snapshotId: string }>;
 }
 export interface GeoQuestionGroup {
   id: string;
@@ -270,11 +280,19 @@ export interface GeoErrorRow {
   citedSource: GeoCitedSource | null;
   action: GeoErrorAction | null;
   status: GeoErrorStatus;
+  /** The latest answer that repeats the claim. */
   snapshotId: string | null;
+  /**
+   * The answer the `statement` was first seen in — the one whose text holds it word for word. Later answers that repeat the claim
+   * in other words only move `snapshotId`.
+   */
+  firstSnapshotId?: string | null;
   /** Present on the answer page's rows: the claim's quote the statement contradicts. */
   evidenceQuote?: string | null;
   claimId?: string | null;
   questionId?: string | null;
+  /** When the error was first recorded. */
+  createdAt?: string | null;
 }
 export interface GeoRoundRef {
   id: string;
@@ -288,6 +306,15 @@ export interface GeoRoundRef {
  * and nothing that counts came back.
  */
 export type GeoAbsentReason = "login" | "paused" | "unavailable" | "no_answer";
+/** The project's errors counted over every row (`count(*)`), whatever the list below carries. `severe` is the live S3/S4 ones. */
+export interface GeoErrorCounts {
+  total: number;
+  open: number;
+  acting: number;
+  awaiting_remeasure: number;
+  closed: number;
+  severe: number;
+}
 export interface GeoDiagnosis {
   round: (GeoRoundRef & {
     surface: Record<string, unknown> | null;
@@ -305,6 +332,8 @@ export interface GeoDiagnosis {
   byPool: Array<{ pool: GeoPool; mention: GeoCell; topCompetitor: string | null; mainIssue: string | null }>;
   failureModes: { omitted: GeoCell; correct: GeoCell; wrongOurs: GeoCell; wrongCompetitor: GeoCell };
   errors: GeoErrorRow[];
+  /** True counts; the list above is capped (live errors first). Absent from a server older than the counts. */
+  errorCounts?: GeoErrorCounts;
   noise: { band: number; measuredAt: string | null } | null;
   /** Every other metric of the round; `rival` names the competitor a row is about (M-16, M-17). */
   more: Array<{ metricId: string; name: string; cell: GeoCell; variant?: string | null; rival?: string | null }>;
@@ -406,7 +435,8 @@ export interface GeoSources {
   linklessEngines?: GeoEngine[];
   sources: GeoSourceRow[];
   expectations: Array<{ engine: GeoEngine; retrieval: GeoCell; promise: string | null; layers: string[] }>;
-  battlefield: { groups: string[]; reason: string | null } | null;
+  /** `groups` is what the run wrote (a group's id or its name); `groupNames` is what a page prints — ids resolved, unknown ids dropped. */
+  battlefield: { groups: string[]; groupNames?: string[]; reason: string | null } | null;
   tiers: GeoTier[];
   chosenTier: GeoTierId | null;
 }
@@ -554,8 +584,8 @@ function readSummary(raw: GeoProjectSummary): GeoProjectSummary {
     },
     alert: {
       wrongOurs: finite(raw?.alert?.wrongOurs) ?? 0,
+      severe: finite(raw?.alert?.severe) ?? 0,
       safety: finite(raw?.alert?.safety) ?? 0,
-      text: typeof raw?.alert?.text === "string" && raw.alert.text ? raw.alert.text : null,
       severity: SEVERITIES.has(String(raw?.alert?.severity)) ? raw.alert.severity as GeoSeverity : null,
     },
   };
@@ -582,7 +612,7 @@ function readProject(raw: GeoProject): GeoProject {
         cell: readGeoCell(metric.cell),
         target: finite(metric.target),
         trend: Array.isArray(metric.trend)
-          ? metric.trend.filter((point) => point && typeof point.date === "string").map((point) => ({ date: point.date, value: finite(point.value) }))
+          ? metric.trend.filter((point) => point && typeof point.date === "string").map((point) => ({ date: point.date, value: finite(point.value), n: finite(point.n) }))
           : [],
       })),
       week: Array.isArray(overview.week) ? overview.week.filter((item) => item && typeof item.text === "string" && item.text) : [],

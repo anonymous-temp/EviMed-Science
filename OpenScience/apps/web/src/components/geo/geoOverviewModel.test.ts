@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GeoDiagnosis, GeoProject } from "@/lib/geoClient";
-import { cell, diagnosisFilled, geoProject } from "./__fixtures__/geoTabs";
+import { cell, diagnosisFilled, diagnosisWith, geoProject } from "./__fixtures__/geoTabs";
 import {
   denominatorLine,
   engineConclusion,
@@ -10,9 +10,11 @@ import {
   nextSteps,
   overviewTiles,
   railSteps,
-  readingDelta,
+  railSummary,
+  readingChange,
   rivalRanking,
   severeOpenErrors,
+  shownDelta,
   statedValue,
   trendConclusion,
 } from "./geoOverviewModel";
@@ -59,19 +61,43 @@ describe("the headline", () => {
         metrics: [{ key: "gvi", cell: { value: 61, numerator: null, denominator: 310, ciLow: null, ciHigh: null, status: "ok", dataType: "measured" }, target: 65, trend: [{ date: "a", value: 44 }, { date: "b", value: 61 }] }],
       },
     });
-    const severe = { ...diagnosisFilled, errors: [{ ...diagnosisFilled.errors[0], severity: "S3" as const, status: "open" as const }] };
+    const severe = diagnosisWith([{ ...diagnosisFilled.errors[0], severity: "S3" as const, status: "open" as const }]);
     expect(headlineSentence(moved, severe)).toBe("综合可见度 61，比上次高 17，目标 65；还有 1 条严重讲错待处理。");
   });
 
-  it("calls a change inside the fluctuation band 持平", () => {
+  it("states a two-point change of the index as a change: the measured band is a mention rate's, not the index's", () => {
     const wobble = project({
       overview: {
         ...geoProject().overview,
         metrics: [{ key: "gvi", cell: { value: 46, numerator: null, denominator: 310, ciLow: null, ciHigh: null, status: "ok", dataType: "measured" }, target: null, trend: [{ date: "a", value: 44 }, { date: "b", value: 46 }] }],
       },
     });
-    // The round measured a band of ±3, so two points is not a rise.
-    expect(headlineSentence(wobble, diagnosisFilled)).toContain("与上次持平");
+    // The round measured a band of ±3 on the mention rate; the index has none.
+    expect(headlineSentence(wobble, diagnosisFilled)).toContain("比上次高 2");
+    const still = project({
+      overview: {
+        ...geoProject().overview,
+        metrics: [{ key: "gvi", cell: { value: 44, numerator: null, denominator: 310, ciLow: null, ciHigh: null, status: "ok", dataType: "measured" }, target: null, trend: [{ date: "a", value: 44.3 }, { date: "b", value: 44 }] }],
+      },
+    });
+    expect(headlineSentence(still, diagnosisFilled)).toContain("与上次持平");
+  });
+
+  it("reads the same change in the headline, the tile and the chart's title, whatever the round measured (G02)", () => {
+    // 46.4 → 44: the sentence, the tile's arrow and the chart's heading all say 低 2.
+    const falling = project({
+      overview: {
+        ...geoProject().overview,
+        metrics: [{
+          key: "gvi", cell: { value: 44, numerator: null, denominator: 310, ciLow: null, ciHigh: null, status: "ok", dataType: "measured" }, target: 50,
+          trend: [{ date: "9月25日", value: 46.4, n: 310 }, { date: "10月12日", value: 44, n: 310 }],
+        }],
+      },
+    });
+    expect(headlineSentence(falling, null)).toContain("比上次低 2，目标 50");
+    expect(overviewTiles(falling, diagnosisFilled).find((tile) => tile.key === "gvi")?.delta).toBe(-2.4);
+    const change = readingChange(falling.overview.metrics[0].trend);
+    expect(trendConclusion("综合可见度指数", falling.overview.metrics[0].cell, change, "index")).toBe("综合可见度指数 44，比上次低 2");
   });
 
   it("says nothing was measured rather than inventing a zero", () => {
@@ -81,8 +107,17 @@ describe("the headline", () => {
 
   it("counts only the grades that would reach a patient", () => {
     expect(severeOpenErrors(diagnosisFilled)).toBe(0);
-    expect(severeOpenErrors({ ...diagnosisFilled, errors: [{ ...diagnosisFilled.errors[0], severity: "S4" }] })).toBe(1);
-    expect(severeOpenErrors({ ...diagnosisFilled, errors: [{ ...diagnosisFilled.errors[0], severity: "S3", status: "closed" }] })).toBe(0);
+    // Without the server's counts, the rows in hand are counted.
+    expect(severeOpenErrors({ ...diagnosisFilled, errorCounts: undefined, errors: [{ ...diagnosisFilled.errors[0], severity: "S4" }] })).toBe(1);
+    expect(severeOpenErrors({ ...diagnosisFilled, errorCounts: undefined, errors: [{ ...diagnosisFilled.errors[0], severity: "S3", status: "closed" }] })).toBe(0);
+    expect(severeOpenErrors(diagnosisWith([{ ...diagnosisFilled.errors[0], severity: "S4" }]))).toBe(1);
+    expect(severeOpenErrors(diagnosisWith([{ ...diagnosisFilled.errors[0], severity: "S3", status: "closed" }]))).toBe(0);
+  });
+
+  it("takes the server's count over every error when it has one, not the page of rows it carried", () => {
+    const counted = { ...diagnosisFilled, errorCounts: { total: 104, open: 97, acting: 3, awaiting_remeasure: 0, closed: 4, severe: 11 } };
+    expect(severeOpenErrors(counted)).toBe(11);
+    expect(headlineSentence(project(), counted)).toContain("还有 11 条严重讲错待处理");
   });
 });
 
@@ -101,10 +136,31 @@ describe("the tiles", () => {
     expect(thin?.value).not.toContain("6");
   });
 
-  it("apply the fluctuation band to the index alone", () => {
-    const tiles = overviewTiles(project(), diagnosisFilled);
-    expect(tiles.find((tile) => tile.key === "gvi")?.noise).toBe(3);
-    expect(tiles.find((tile) => tile.key === "mention")?.noise).toBeNull();
+  it("apply the fluctuation band to the mention rate alone", () => {
+    const rate = (key: "gvi" | "mention", value: number, before: number) => ({
+      key, cell: { value, numerator: 65, denominator: 310, ciLow: null, ciHigh: null, status: "ok" as const, dataType: "measured" as const }, target: null,
+      trend: [{ date: "a", value: before, n: 310 }, { date: "b", value, n: 310 }],
+    });
+    const wobbling = project({ overview: { ...geoProject().overview, metrics: [rate("gvi", 46, 44), rate("mention", 23, 21)] } });
+    const tiles = overviewTiles(wobbling, diagnosisFilled);
+    // Two points of the mention rate is inside the ±3 measured on it: flat. The same two points of the index is a change.
+    expect(tiles.find((tile) => tile.key === "mention")?.delta).toBe(0);
+    expect(tiles.find((tile) => tile.key === "gvi")?.delta).toBe(2);
+  });
+
+  it("neither compare nor draw a point under the sample floor", () => {
+    const thin = project({
+      overview: {
+        ...geoProject().overview,
+        metrics: [{
+          key: "citation", cell: { value: 6, numerator: 2, denominator: 24, ciLow: null, ciHigh: null, status: "ok" as const, dataType: "measured" as const }, target: null,
+          trend: [{ date: "a", value: 30, n: 120 }, { date: "b", value: 6, n: 24 }],
+        }],
+      },
+    });
+    const tile = overviewTiles(thin, null).find((entry) => entry.key === "citation");
+    expect(tile?.trend).toEqual([30, null]);
+    expect(tile?.delta).toBeNull();
   });
 
   it("keep the sample in the tooltip, never in the tile", () => {
@@ -263,10 +319,14 @@ describe("the rail and the next step", () => {
 describe("a chart's heading", () => {
   it("is the conclusion, never the metric's bare name", () => {
     const cell = { value: 61, numerator: null, denominator: 310, ciLow: null, ciHigh: null, status: "ok" as const, dataType: "measured" as const };
-    expect(trendConclusion("综合可见度", cell, 17, 3, "index")).toBe("综合可见度 61，比上次高 17");
-    expect(trendConclusion("综合可见度", cell, 2, 3, "index")).toBe("综合可见度 61，与上次持平");
-    expect(trendConclusion("综合可见度", cell, null, null, "index")).toBe("综合可见度基线 61");
-    expect(trendConclusion("综合可见度", null, null, null, "index")).toBe("综合可见度这一轮还没有测到");
+    const change = (delta: number | null, flat = false) => ({ delta, flat, from: "9月25日", to: "10月12日" });
+    expect(trendConclusion("综合可见度", cell, change(17), "index")).toBe("综合可见度 61，比上次高 17");
+    expect(trendConclusion("综合可见度", cell, change(1, true), "index")).toBe("综合可见度 61，与上次持平");
+    expect(trendConclusion("综合可见度", cell, change(null), "index")).toBe("综合可见度基线 61");
+    expect(trendConclusion("综合可见度", cell, null, "index")).toBe("综合可见度基线 61");
+    expect(trendConclusion("综合可见度", null, null, "index")).toBe("综合可见度这一轮还没有测到");
+    // A rate's change is in percentage points.
+    expect(trendConclusion("品牌提及率", { ...cell, value: 21 }, change(-4.4), "percent")).toBe("品牌提及率 21%，比上次低 4 个百分点");
   });
 });
 
@@ -277,7 +337,35 @@ describe("a reading", () => {
   });
 
   it("has no change to report before there are two of them", () => {
-    expect(readingDelta([44])).toBeNull();
-    expect(readingDelta([44, null, 61])).toBe(17);
+    expect(readingChange([{ date: "a", value: 44 }])).toEqual({ delta: null, flat: false, from: null, to: "a" });
+    expect(readingChange([])).toEqual({ delta: null, flat: false, from: null, to: null });
+    expect(readingChange([{ date: "a", value: 44 }, { date: "b", value: null }, { date: "c", value: 61 }])).toEqual({ delta: 17, flat: false, from: "a", to: "c" });
+  });
+
+  it("compares the last two stated readings of one series, and dates them", () => {
+    const change = readingChange([{ date: "a", value: 30, n: 310 }, { date: "b", value: 40, n: 12 }, { date: "c", value: 44, n: 310 }, { date: "d", value: 61, n: 5 }]);
+    expect(change).toEqual({ delta: 14, flat: false, from: "a", to: "c" });
+  });
+
+  it("calls a change that rounds to nothing, or lies inside the band, flat — and the tile is told so", () => {
+    expect(readingChange([{ date: "a", value: 44.3 }, { date: "b", value: 44 }]).flat).toBe(true);
+    const inside = readingChange([{ date: "a", value: 21 }, { date: "b", value: 23 }], { noise: 3 });
+    expect(inside).toMatchObject({ delta: 2, flat: true });
+    expect(shownDelta(inside)).toBe(0);
+    // Without a band the same two points are a change.
+    expect(readingChange([{ date: "a", value: 21 }, { date: "b", value: 23 }])).toMatchObject({ delta: 2, flat: false });
+    expect(shownDelta(readingChange([{ date: "a", value: 21 }]))).toBeNull();
+  });
+});
+
+describe("the rail on a phone", () => {
+  it("is one line: what is done and what the first stopped step waits for", () => {
+    const off = geoProject({ evidence: "done", journey: "done", questions: "done", diagnosis: "done", sources: "done", content: "done", monitoring: "done", distribution: "running" },
+      { budget: null, market: { configured: false } });
+    expect(railSummary(railSteps(off, () => "/x"))).toBe("已完成 7 / 8 步 · 投放等媒介集市接通");
+    const waiting = geoProject({ evidence: "done", sources: "done", distribution: "running" }, { budget: null });
+    expect(railSummary(railSteps(waiting, () => "/x"))).toBe("已完成 2 / 8 步 · 投放待你确认预算");
+    const clear = geoProject({ evidence: "done" });
+    expect(railSummary(railSteps(clear, () => "/x"))).toBe("已完成 1 / 8 步");
   });
 });

@@ -5,7 +5,7 @@ import type { EChartsCoreOption } from "echarts/core";
 import { CHART_STROKES } from "@evimed/design-tokens";
 import { useColorScheme } from "@/lib/colorScheme";
 import { canPaintChart, echarts, resolvedColor, useEChart } from "./echartsBase";
-import { BAND_COLOR, TARGET_COLOR, trendModel, type TrendInput, type TrendModel } from "./trendModel";
+import { BAND_COLOR, TARGET_COLOR, trendAxis, trendModel, type TrendInput, type TrendModel } from "./trendModel";
 
 // The line chart and the three things it needs, and nothing else in the
 // library: no bar, pie, map, graph, data zoom or toolbox reaches the bundle.
@@ -42,6 +42,7 @@ export function TrendChart({
   height = 240,
   label,
   integer = false,
+  bounds = null,
   unpainted,
 }: {
   input: TrendInput;
@@ -52,6 +53,11 @@ export function TrendChart({
   label: string;
   /** A count: the axis steps by whole numbers, so a small one never reads “0, 1, 1, 2”. */
   integer?: boolean;
+  /**
+   * The scale's own limits (`[0, 100]` for an index or a percent). Given, the value axis is a whole-number window over every line
+   * and rule the chart draws, target included, and never leaves the scale.
+   */
+  bounds?: readonly [number, number] | null;
   /** What the figure says where no canvas can be painted; its measurements by default. */
   unpainted?: string;
 }) {
@@ -63,9 +69,10 @@ export function TrendChart({
   // resolves the palette's custom properties against the live document, and a
   // theme flip changes every one of them.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const option = useMemo(() => (model.mode === "empty" ? null : chartOption(model, format, { integer })), [model, format, integer, scheme]);
+  const option = useMemo(() => (model.mode === "empty" ? null : chartOption(model, format, { integer, bounds })), [model, format, integer, bounds, scheme]);
   const host = useEChart(option);
-  const plot = model.mode === "baseline" ? Math.min(height, 176) : height;
+  // One or two readings are a short line: a tall frame around them is mostly air.
+  const plot = model.readings <= 2 ? Math.min(height, 176) : height;
   return (
     <figure
       data-chart="trend"
@@ -120,8 +127,9 @@ export function ruleLabelPlaces(model: TrendModel): { target: string; baseline: 
 export function chartOption(
   model: TrendModel,
   format: (value: number) => string,
-  { integer = false }: { integer?: boolean } = {},
+  { integer = false, bounds = null }: { integer?: boolean; bounds?: readonly [number, number] | null } = {},
 ): EChartsCoreOption {
+  const axis = bounds ? trendAxis(model, { bounds }) : null;
   const own = resolvedColor(model.own.color);
   const target = resolvedColor(TARGET_COLOR);
   const band = model.band;
@@ -180,7 +188,13 @@ export function chartOption(
     grid: { left: 8, right: 8, top: model.markers.length > 0 ? MARKER_BAND : 16, bottom: 8, containLabel: true },
     tooltip: { trigger: "axis", valueFormatter: (value: unknown) => (typeof value === "number" ? format(value) : "—") },
     xAxis: { type: "category", boundaryGap: false, data: model.labels },
-    yAxis: { type: "value", scale: true, ...(integer ? { minInterval: 1 } : {}), axisLabel: { formatter: (value: number) => format(value) } },
+    yAxis: {
+      type: "value",
+      // A window over everything drawn when the scale's bounds are known, else the library's own.
+      ...(axis ? { min: axis.min, max: axis.max, interval: axis.interval } : { scale: true }),
+      ...(integer && !axis ? { minInterval: 1 } : {}),
+      axisLabel: { formatter: (value: number) => format(value) },
+    },
     series: [
       // The fluctuation band: an invisible floor and a pale ribbon stacked on
       // it, so the band is drawn to size rather than guessed at.

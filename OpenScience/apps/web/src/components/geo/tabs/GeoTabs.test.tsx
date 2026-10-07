@@ -8,6 +8,7 @@ import {
   articlesFilled,
   cell,
   diagnosisFilled,
+  diagnosisWith,
   distributionFilled,
   evidenceFilled,
   geoProject,
@@ -22,6 +23,7 @@ import { DistributionTab } from "./DistributionTab";
 import { EffectSection } from "./EffectSection";
 import { EvidenceTab } from "./EvidenceTab";
 import { JourneyTab } from "./JourneyTab";
+import { OverviewTab } from "./OverviewTab";
 import { QuestionsTab } from "./QuestionsTab";
 import { SourcesTab } from "./SourcesTab";
 import { VisibilityTab } from "./VisibilityTab";
@@ -65,7 +67,12 @@ vi.mock("@/lib/artifactFile", async (importOriginal) => ({
 
 function Probe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname}</div>;
+  return (
+    <>
+      <div data-testid="location">{location.pathname}</div>
+      <div data-testid="search">{location.search}</div>
+    </>
+  );
 }
 
 function renderTab(tab: ReactElement) {
@@ -416,6 +423,107 @@ describe("投放", () => {
   });
 });
 
+/** A project whose index fell from 46.4 to 44 between two full measurements, the mention rate by two points (inside its ±3 band). */
+function fallingProject() {
+  const base = geoProject();
+  return geoProject({}, {
+    overview: {
+      ...base.overview,
+      metrics: [
+        { key: "gvi", cell: cell(44, null, 310), target: 50, trend: [{ date: "2026-09-25", value: 46.4, n: 310 }, { date: "2026-10-12", value: 44, n: 310 }] },
+        { key: "mention", cell: cell(23, 71, 310), target: 35, trend: [{ date: "2026-09-25", value: 21, n: 310 }, { date: "2026-10-12", value: 23, n: 310 }] },
+        { key: "accuracy", cell: cell(92, 285, 310), target: 98, trend: [] },
+        { key: "citation", cell: cell(6, 2, 24), target: 20, trend: [{ date: "2026-09-25", value: 30, n: 120 }, { date: "2026-10-12", value: 6, n: 24 }] },
+      ],
+    },
+  });
+}
+const fallingMonitoring = {
+  ...monitoringFilled,
+  series: [
+    { key: "gvi", points: [{ date: "2026-09-25", value: 46.4, n: 310, k: null }, { date: "2026-10-12", value: 44, n: 310, k: null }] },
+    { key: "mention", points: [{ date: "2026-09-25", value: 21, n: 310, k: 65 }, { date: "2026-10-12", value: 23, n: 310, k: 71 }] },
+  ],
+  next: { date: "2026-10-19", kind: "weekly" },
+};
+
+describe("总览", () => {
+  it("says one change in one word wherever it says it: the sentence, the tile, the chart's heading, and 可见度 (G02)", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    const overview = renderTab(<OverviewTab {...props(fallingProject())} />);
+    expect(await screen.findByText(/综合可见度 44，比上次低 2，目标 50/)).toBeInTheDocument();
+    const tile = screen.getByRole("region", { name: "综合可见度指数" });
+    expect(tile.querySelector("[data-delta='down']")).toHaveTextContent("2");
+    const title = await screen.findByRole("heading", { name: "综合可见度指数 44，比上次低 2" });
+    // The chart says which readings it compares and when the next is.
+    expect(title.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
+    // The mention rate moved two points inside its measured band of ±3: flat, on its tile.
+    expect(screen.getByRole("region", { name: "品牌提及率" }).querySelector("[data-delta='flat']")).not.toBeNull();
+    overview.unmount();
+
+    renderTab(<VisibilityTab {...props(fallingProject())} />);
+    const same = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
+    expect(same).toHaveTextContent("综合可见度指数 44，比上次低 2");
+    expect(same.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
+  });
+
+  it("applies the mention rate's band to the mention rate on 可见度 as well, and to nothing else", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    renderTab(<VisibilityTab {...props(fallingProject())} />);
+    await screen.findByRole("heading", { name: /综合可见度指数 44/ });
+    await userEvent.click(screen.getByRole("button", { name: "品牌提及率" }));
+    expect(await screen.findByRole("heading", { name: "品牌提及率 23%，与上次持平" })).toBeInTheDocument();
+  });
+
+  it("draws no line for a tile that reads 样本不足 — the words and a falling line would say two things", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    renderTab(<OverviewTab {...props(fallingProject())} />);
+    const citation = await screen.findByRole("region", { name: "引用命中率" });
+    expect(citation).toHaveTextContent("样本不足");
+    expect(citation.querySelector("[data-geo-sparkline]")).toBeNull();
+    expect(screen.getByRole("region", { name: "品牌提及率" }).querySelector("[data-geo-sparkline]")).not.toBeNull();
+  });
+
+  it("holds the sentence's line until the open errors are counted, so no 「还有 N 条」 pops in under a quiet page", async () => {
+    let release: (value: typeof diagnosisFilled) => void = () => undefined;
+    client.getGeoDiagnosis.mockReturnValue(new Promise((resolve) => { release = resolve; }));
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    renderTab(<OverviewTab {...props(fallingProject())} />);
+    expect(await screen.findByRole("status", { name: "正在读取" })).toBeInTheDocument();
+    expect(screen.queryByText(/综合可见度 44/)).not.toBeInTheDocument();
+    release(diagnosisWith([{ ...diagnosisFilled.errors[0], severity: "S3", status: "open" }]));
+    expect(await screen.findByText(/综合可见度 44，比上次低 2，目标 50.*；还有 1 条严重讲错待处理。/)).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "正在读取" })).not.toBeInTheDocument();
+  });
+
+  it("puts the findings and the next step before the trend, and links the whole list when it is longer than three", async () => {
+    const many = Array.from({ length: 5 }, (_, index) => ({ ...diagnosisFilled.errors[0], id: `err_${index}`, status: "open" as const, severity: "S2" as const }));
+    // 104 errors against a list of 5 rows: the title and the link say the true count.
+    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosisWith(many), errorCounts: { total: 104, open: 97, acting: 3, awaiting_remeasure: 0, closed: 4, severe: 11 } });
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    renderTab(<OverviewTab {...props(fallingProject())} />);
+    const list = await screen.findByRole("heading", { name: "100 条讲错还没处理" });
+    expect(within(list.parentElement!).getByRole("link", { name: "查看全部 100 条" })).toHaveAttribute("href", "/app/geo/geo_1/accuracy");
+    expect(list.parentElement!.parentElement!.querySelectorAll("[data-geo-error]")).toHaveLength(3);
+    const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
+    expect(list.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "下一步" }).compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("draws no empty card for a ranking nobody measured, and gives the trend its width", async () => {
+    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosisFilled, byPool: diagnosisFilled.byPool.map((row) => ({ ...row, topCompetitor: null })), more: [] });
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    renderTab(<OverviewTab {...props(fallingProject())} />);
+    const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
+    expect(screen.queryByRole("table", { name: "同类药提及率" })).not.toBeInTheDocument();
+    expect(screen.queryByText("这一轮还没有测到同类药的提及率。")).not.toBeInTheDocument();
+    expect(trend.closest("section")).toHaveClass("lg:col-span-3");
+  });
+});
+
 describe("准确与安全", () => {
   it("leads with the accuracy rate, grades every wrong statement and groups them by handling", async () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
@@ -446,6 +554,90 @@ describe("准确与安全", () => {
     expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
     await userEvent.click(screen.getAllByRole("button", { name: "写纠错稿" })[0]);
     await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function)));
+  });
+});
+
+/** Thirty findings of the live shape: the grave ones few, the minor ones many, one closed — and the server's true counts above the page it sent. */
+function manyErrors() {
+  const rows = Array.from({ length: 30 }, (_, index) => ({
+    ...diagnosisFilled.errors[0],
+    id: `err_${index}`,
+    statement: `第 ${index + 1} 句不对的话`,
+    severity: (index < 3 ? "S3" : index < 12 ? "S2" : "S1") as "S3" | "S2" | "S1",
+    status: (index === 29 ? "closed" : index < 5 ? "acting" : "open") as "closed" | "acting" | "open",
+    snapshotId: `snap_last_${index}`,
+    firstSnapshotId: `snap_first_${index}`,
+  }));
+  // 104 errors in the project, 30 of them in the page: severe = the live S3 ones.
+  return { ...diagnosisWith(rows), errorCounts: { total: 104, open: 97, acting: 3, awaiting_remeasure: 0, closed: 4, severe: 3 } };
+}
+
+describe("准确与安全：讲错清单", () => {
+  it("comes straight after the numbers, opens on the grave findings and counts them by the server's tally, not by the page it sent", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(manyErrors());
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    renderTab(<AccuracyTab {...props()} />);
+    const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
+    const group = within(list).getByRole("group", { name: "处置状态" });
+    expect(within(group).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["严重3", "待处理97", "处置中3", "全部104"]);
+    expect(within(group).getByRole("button", { name: /严重/ })).toHaveAttribute("aria-pressed", "true");
+    // Three grave ones, and nothing else, to start with.
+    expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(3);
+    // The tile says the same number, with no second count beneath it that reads as a share of the first.
+    const tile = screen.getByRole("region", { name: "严重讲错" });
+    expect(tile).toHaveTextContent("3");
+    expect(tile).not.toHaveTextContent("待处理");
+    // The list comes before the distributions, and those are folded.
+    const folded = screen.getByText("按引擎和类型看分布").closest("details") as HTMLElement;
+    expect(folded).not.toHaveAttribute("open");
+    expect(list.compareDocumentPosition(folded) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(folded).getByText(/按回答计，讲错我方/)).toBeInTheDocument();
+  });
+
+  it("shows twenty at a time, says how many more, and says how many the page cannot list", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(manyErrors());
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    renderTab(<AccuracyTab {...props()} />);
+    const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
+    await userEvent.click(within(list).getByRole("button", { name: /^全部/ }));
+    expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(20);
+    // The server counts 104 and sent 30: the other 74 are named, not hidden.
+    expect(list).toHaveTextContent("这里列出了 30 条，还有 74 条没有列出。");
+    await userEvent.click(within(list).getByRole("button", { name: "显示更多 · 还有 10 条" }));
+    expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(30);
+    expect(within(list).queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
+    // The gravest first, the closed one last.
+    const ids = [...list.querySelectorAll("[data-geo-error]")].map((card) => card.getAttribute("data-geo-error"));
+    expect(ids.slice(0, 3)).toEqual(["err_0", "err_1", "err_2"]);
+    expect(ids[ids.length - 1]).toBe("err_29");
+  });
+
+  it("keeps the chip in the address, so the way back from an answer returns to the list as it was left", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(manyErrors());
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    renderTab(<AccuracyTab {...props()} />);
+    const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
+    await userEvent.click(within(list).getByRole("button", { name: /^处置中/ }));
+    expect(screen.getByTestId("search")).toHaveTextContent("?show=acting");
+    expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(5);
+  });
+
+  it("opens an answer that holds the quoted sentence: the first one it was seen in", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(manyErrors());
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    renderTab(<AccuracyTab {...props()} />);
+    const card = (await screen.findAllByRole("link", { name: "看回答" }))[0];
+    expect(card).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_first_0");
+  });
+
+  it("starts on 全部 when nothing grave is open, and offers no chip for a status nothing is in", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    renderTab(<AccuracyTab {...props()} />);
+    const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
+    const group = within(list).getByRole("group", { name: "处置状态" });
+    expect(within(group).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["处置中1", "全部1"]);
+    expect(within(group).getByRole("button", { name: /^全部/ })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
@@ -534,6 +726,54 @@ describe("可见度", () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     renderTab(<VisibilityTab {...props()} />);
     expect(await screen.findByText("还没有开始持续监测，第一次复测后这里会画出趋势。")).toBeInTheDocument();
+  });
+});
+
+describe("可见度：每个引擎", () => {
+  const engines = {
+    ...monitoringFilled,
+    byEngine: [
+      { engine: "doubao", points: [{ date: "2026-09-22", value: 30, n: 62, k: null }, { date: "2026-10-13", value: 44, n: 62, k: null }] },
+      // The latest round has no stated reading: what is left is history, and is not drawn as if it were today's.
+      { engine: "deepseek", points: [{ date: "2026-09-22", value: 35, n: 62, k: null }, { date: "2026-10-13", value: null, n: 62, k: null }] },
+      { engine: "yuanbao", points: [{ date: "2026-09-22", value: 40, n: 62, k: null }, { date: "2026-10-13", value: null, n: 62, k: null }] },
+      // A round it was not read in at all.
+      { engine: "kimi", points: [{ date: "2026-09-22", value: 20, n: 62, k: null }] },
+    ],
+  };
+
+  it("draws a line only for an engine with a reading in the latest round, and says why for the rest", async () => {
+    client.getGeoMonitoring.mockResolvedValue(engines);
+    const round = { ...diagnosisFilled.round!, absent: [{ engine: "yuanbao", reason: "login" }] };
+    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosisFilled, round });
+    renderTab(<VisibilityTab {...props()} />);
+    const row = async (engine: string) => (await waitFor(() => {
+      const found = document.querySelector(`[data-geo-engine-trend='${engine}']`) as HTMLElement | null;
+      if (!found) throw new Error("not yet");
+      return found;
+    }));
+    expect((await row("doubao")).querySelector("[data-geo-sparkline]")).not.toBeNull();
+    const deepseek = await row("deepseek");
+    expect(deepseek.querySelector("[data-geo-sparkline]")).toBeNull();
+    expect(deepseek).toHaveTextContent("上次 35 · 9月22日");
+    // The round's own reason when the engine did not answer.
+    const yuanbao = await row("yuanbao");
+    expect(yuanbao.querySelector("[data-geo-sparkline]")).toBeNull();
+    expect(yuanbao).toHaveTextContent("本轮未测：探测账号需要重新登录");
+    // An engine the latest round never read is not "now": a dash and its last reading, never its old line.
+    const kimi = await row("kimi");
+    expect(kimi.querySelector("[data-geo-sparkline]")).toBeNull();
+    expect(kimi).toHaveTextContent("上次 20 · 9月22日");
+  });
+
+  it("draws no empty ranking card where no rival was measured", async () => {
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosisFilled, byPool: diagnosisFilled.byPool.map((row) => ({ ...row, topCompetitor: null })), more: [] });
+    renderTab(<VisibilityTab {...props()} />);
+    await screen.findByRole("heading", { name: /综合可见度指数 38，比上次高 9/ });
+    await screen.findByRole("table", { name: "按问句池的品牌提及率" });
+    expect(screen.queryByRole("table", { name: "同类药提及率" })).not.toBeInTheDocument();
+    expect(screen.queryByText("这一轮还没有测到同类药的提及率。")).not.toBeInTheDocument();
   });
 });
 

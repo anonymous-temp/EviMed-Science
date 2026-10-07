@@ -53,7 +53,7 @@ describe("循证 GEO home", () => {
     expect(masi.querySelector("[data-geo-sparkline] [data-geo-target]")).not.toBeNull();
     // What is still open is said in body text: red is the badge's, never a
     // whole sentence (F-G10).
-    const alert = within(masi).getByText("2 条讲错我方待处理");
+    const alert = within(masi).getByText("2 条讲错待处理");
     expect(alert).not.toHaveClass("text-danger");
     expect(masi.querySelector(".text-danger")).toBeNull();
     expect(masi.querySelector("[data-geo-subline]")).toHaveTextContent(/^10月1日～12月31日/);
@@ -71,16 +71,20 @@ describe("循证 GEO home", () => {
     expect(within(xinli).getAllByText("—")).toHaveLength(2);
   });
 
-  it("sets the server's sentence about the worst error in body text, beside its severity badge", async () => {
+  it("says the severe errors in its own words beside their badge — never an engine's sentence", async () => {
     client.listGeoProjects.mockResolvedValue([
-      { ...GEO_SUMMARIES[0], alert: { wrongOurs: 2, safety: 0, text: "Kimi：甲状腺结节患者禁用信尔美", severity: "S3" } },
+      { ...GEO_SUMMARIES[0], alert: { wrongOurs: 13, severe: 11, safety: 0, severity: "S3" } },
+      { ...GEO_SUMMARIES[1], alert: { wrongOurs: 3, severe: 0, safety: 0, severity: "S2" } },
+      { ...GEO_SUMMARIES[2], alert: { wrongOurs: 0, severe: 0, safety: 1, severity: null } },
     ]);
     renderHome();
     const list = await screen.findByRole("list", { name: "循证 GEO 项目" });
-    const sentence = within(list).getByText("Kimi：甲状腺结节患者禁用信尔美");
+    const sentence = within(list).getByText("11 条严重讲错待处理");
     expect(sentence).toHaveClass("text-text-2");
     expect(sentence).not.toHaveClass("text-danger");
-    expect(list.querySelector("[data-severity='S3']")).not.toBeNull();
+    expect(list.querySelectorAll("[data-severity]")).toHaveLength(1);
+    expect(within(list).getByText("3 条讲错待处理")).toBeInTheDocument();
+    expect(within(list).getByText("1 篇稿件的安全问题待确认")).toBeInTheDocument();
   });
 
   it("creates a project and lands in its conversation — no form", async () => {

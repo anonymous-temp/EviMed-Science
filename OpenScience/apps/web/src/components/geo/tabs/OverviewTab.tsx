@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Radar } from "lucide-react";
+import { Link } from "react-router";
 import { getGeoDiagnosis, getGeoMonitoring, type GeoDiagnosis, type GeoMonitoring, type GeoProject } from "@/lib/geoClient";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { ChartCard } from "@/components/ui/ChartCard";
@@ -19,10 +20,11 @@ import {
   denominatorLine,
   engineConclusion,
   engineMatrix,
+  chartDates,
   headlineSentence,
   nextSteps,
   overviewTiles,
-  readingDelta,
+  readingChange,
   rivalRanking,
   statedValue,
   trendConclusion,
@@ -31,7 +33,7 @@ import {
   type NextStep,
 } from "../geoOverviewModel";
 import { GEO_METRIC_NAMES, monthDay } from "../geoText";
-import { roundKindWord } from "./geoTabText";
+import { roundKindWord, tabPath } from "./geoTabText";
 import { useGeoLoad, type GeoLoadResult } from "./geoTabKit";
 
 /**
@@ -64,16 +66,27 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
     .sort((left, right) => (right.severity ?? "").localeCompare(left.severity ?? ""));
   const steps = nextSteps(project);
   const gvi = project.overview.metrics.find((metric) => metric.key === "gvi") ?? null;
+  // What is still wrong is counted over every error of the project; the cards are the worst few.
+  const live = diag?.errorCounts ? diag.errorCounts.total - diag.errorCounts.closed : errors.length;
+  // The index has no measured band of its own: its change is stated as a change.
+  const gviChange = readingChange(gvi?.trend);
   // The index takes two cells (fusion plan §4.8), so the band is one column
   // wider than it has tiles; past six the widest layout gets a seventh.
   const cells = tiles.length + 1;
+  const ranked = ranking.length > 0;
 
   return (
     <div data-geo-tab="overview" className="flex flex-col gap-4">
-      <p className="flex items-start gap-2 text-section font-semibold text-text">
-        <Radar size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-accent" />
-        <span className="min-w-0">{headlineSentence(project, diag)}</span>
-      </p>
+      {/* The sentence names the open errors, so it is written once they are counted: a 「没有待办」 that turns into
+          「还有 11 条严重讲错」 a moment later is worse than a held line. */}
+      {diagnosis.state.kind === "loading" ? (
+        <div role="status" aria-label="正在读取" className="flex h-7 items-center"><div className="h-7 w-2/3 animate-pulse rounded bg-surface-1" /></div>
+      ) : (
+        <p className="flex items-start gap-2 text-section font-semibold text-text">
+          <Radar size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-accent" />
+          <span className="min-w-0">{headlineSentence(project, diag)}</span>
+        </p>
+      )}
 
       <StatBand
         label="本轮指标"
@@ -93,7 +106,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
             tone={tile.tone}
             placeholder={tile.placeholder}
             loading={diagnosis.state.kind === "loading" && tile.key === "safety"}
-            delta={<Delta value={tile.delta} unit={tile.key === "gvi" ? "index" : "point"} noise={tile.noise} polarity={tile.polarity} />}
+            delta={<Delta value={tile.delta} unit={tile.key === "gvi" ? "index" : "point"} polarity={tile.polarity} />}
             note={tile.note}
             className={tile.lead ? "sm:col-span-2" : undefined}
             chart={tile.lead
@@ -108,7 +121,8 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
                   rivalLabel={tile.rival ?? undefined}
                 />
               )
-              : tile.trend.length > 0
+              // A tile that reads 「样本不足」 draws no line: the words and a falling line would say two things.
+              : !tile.placeholder && tile.trend.some((value) => value !== null)
                 ? <GeoSparkline values={tile.trend} target={tile.target} width={140} height={28} className="w-full" />
                 : undefined}
           />
@@ -116,32 +130,12 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
       </StatBand>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <TrendCard
-          project={project}
-          monitoring={monitoring}
-          watch={watch}
-          // The conclusion comes from the same reading the band above states:
-          // two sources for one number on one screen is how a dashboard ends
-          // up contradicting itself.
-          title={trendConclusion(
-            GEO_METRIC_NAMES.gvi,
-            gvi?.cell ?? null,
-            gvi ? readingDelta(gvi.trend.map((point) => point.value)) : null,
-            typeof diag?.noise?.band === "number" ? diag.noise.band : null,
-            "index",
-          )}
-          className="lg:col-span-2"
-        />
-        <RankCard ranking={ranking} loading={diagnosis.state.kind === "loading"} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ChartCard
-          title={errors.length > 0 ? `${errors.length} 条讲错还没处理` : "没有待处理的讲错"}
-          meta={errors.length > 3 ? `共 ${errors.length} 条` : undefined}
+          title={live > 0 ? `${live} 条讲错还没处理` : "没有待处理的讲错"}
+          meta={live > 3 ? <Link to={tabPath(geoId, "accuracy")} className="text-link hover:underline">{`查看全部 ${live} 条`}</Link> : undefined}
           state={diagnosis.state.kind === "loading" ? "loading"
             : diagnosis.state.kind === "error" ? "error"
-              : errors.length === 0 ? "empty" : "content"}
+              : live === 0 ? "empty" : "content"}
           emptyText="这一轮没有测到讲错我方的说法。"
           errorMessage={diagnosis.state.kind === "error" ? diagnosis.state.message : undefined}
           onRetry={diagnosis.reload}
@@ -159,6 +153,20 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
             {steps.map((step) => <NextRow key={step.key} step={step} />)}
           </ol>
         </ChartCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <TrendCard
+          project={project}
+          monitoring={monitoring}
+          watch={watch}
+          // The conclusion is read from the same series, by the same rule, as the sentence at the top and the tile's arrow.
+          title={trendConclusion(GEO_METRIC_NAMES.gvi, gvi?.cell ?? null, gviChange, "index")}
+          change={gviChange}
+          // Nothing is drawn for a ranking nobody measured: no empty card beside the trend.
+          className={ranked || diagnosis.state.kind === "loading" ? "lg:col-span-2" : "lg:col-span-3"}
+        />
+        {(ranked || diagnosis.state.kind === "loading") && <RankCard ranking={ranking} loading={diagnosis.state.kind === "loading"} />}
       </div>
 
       <ChartCard
@@ -214,6 +222,7 @@ function TrendCard({
   monitoring,
   watch,
   title,
+  change,
   className,
 }: {
   project: GeoProject;
@@ -221,6 +230,8 @@ function TrendCard({
   watch: GeoMonitoring | null;
   /** The conclusion, written from the same reading the band states. */
   title: string;
+  /** The change it states, for the date it is measured from. */
+  change: ReturnType<typeof readingChange>;
   className?: string;
 }) {
   const series = (Array.isArray(watch?.series) ? watch.series : []).find((line) => line?.key === "gvi")
@@ -244,7 +255,7 @@ function TrendCard({
   return (
     <ChartCard
       title={title}
-      meta={watch?.next?.date ? `下次 ${monthDay(watch.next.date)}` : undefined}
+      meta={chartDates(change, watch?.next?.date)}
       state={monitoring.state.kind === "loading" ? "loading"
         : monitoring.state.kind === "error" ? "error"
           : points.length === 0 ? "empty" : "content"}
@@ -254,7 +265,7 @@ function TrendCard({
       height={240}
       className={className}
     >
-      <TrendChart input={input} label={`${GEO_METRIC_NAMES.gvi}趋势`} />
+      <TrendChart input={input} label={`${GEO_METRIC_NAMES.gvi}趋势`} integer bounds={[0, 100]} />
     </ChartCard>
   );
 }

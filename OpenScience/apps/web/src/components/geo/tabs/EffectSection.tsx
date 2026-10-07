@@ -74,7 +74,7 @@ export function EffectSection({ project }: { project: GeoProject }) {
         height={220}
       >
         <div data-geo-arms="">
-          <TrendChart input={input} label="投放与对照" height={220} />
+          <TrendChart input={input} label="投放与对照" height={220} integer bounds={[0, 100]} />
           <p className="mt-2 text-ui text-text-2">
             净效应
             <span data-geo-net-effect={flat ? "flat" : cell.status} className="ml-2 tabular-nums text-text">

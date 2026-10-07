@@ -129,3 +129,40 @@ export function trendModel(input: TrendInput): TrendModel {
     lastIndex: stated.length > 0 ? stated[stated.length - 1] : null,
   };
 }
+
+/** The most labelled steps an integer axis carries before it widens its step. */
+const AXIS_STEPS = 5;
+
+/**
+ * The value axis of a chart whose readings are whole numbers: a window over our line, the rivals, the target and the baseline —
+ * padded so nothing sits on the frame — floored and ceiled to whole numbers and kept inside the scale's own bounds, with a whole
+ * `interval` so no two labels read alike (a fractional step printed through a rounding formatter gave “47, 46, 46, 45, 45, 44, 44”).
+ * A rule outside the readings' span (a target of 50 above a line at 44–46) is inside the window: the library never widens an axis
+ * for a rule on its own.
+ *
+ * Null where there is nothing to window.
+ */
+export function trendAxis(
+  model: TrendModel,
+  { bounds = null }: { bounds?: readonly [number, number] | null } = {},
+): { min: number; max: number; interval: number } | null {
+  const values = [
+    ...model.own.values,
+    ...model.rivals.flatMap((line) => line.values),
+    model.target,
+    model.baseline?.value ?? null,
+  ].filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (values.length === 0) return null;
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const pad = Math.max(1, (high - low) * 0.08);
+  let min = Math.floor(low - pad);
+  let max = Math.ceil(high + pad);
+  if (bounds) {
+    min = Math.max(bounds[0], min);
+    max = Math.min(bounds[1], max);
+  }
+  if (max <= min) max = min + 1;
+  const interval = Math.max(1, Math.ceil((max - min) / AXIS_STEPS));
+  return { min, max, interval };
+}

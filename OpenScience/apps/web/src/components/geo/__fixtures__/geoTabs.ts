@@ -8,6 +8,7 @@ import type {
   GeoCell,
   GeoDiagnosis,
   GeoDistribution,
+  GeoErrorRow,
   GeoEvidence,
   GeoJourney,
   GeoMonitoring,
@@ -134,7 +135,8 @@ export const questionsFilled: GeoQuestions = {
       isControl: false,
       signal: "collected",
       questions: [
-        { id: "q_1", text: "打了减重针一直恶心，要不要停药？", kind: "typical", platform: null, sourceUrl: null, isMeasured: true },
+        { id: "q_1", text: "打了减重针一直恶心，要不要停药？", kind: "typical", platform: null, sourceUrl: null, isMeasured: true,
+          answers: [{ engine: "doubao", snapshotId: "snap_doubao" }, { engine: "deepseek", snapshotId: "snap_deepseek" }] },
         { id: "q_2", text: "打完减肥针一直吐正常吗", kind: "real", platform: "小红书", sourceUrl: "https://www.xiaohongshu.com/explore/1", isMeasured: false },
         { id: "q_3", text: "恶心是不是说明剂量太大", kind: "real", platform: "知乎", sourceUrl: null, isMeasured: false },
       ],
@@ -150,7 +152,7 @@ export const questionsFilled: GeoQuestions = {
       isControl: true,
       signal: "no_signal",
       questions: [
-        { id: "q_4", text: "停药后体重会反弹吗？", kind: "typical", platform: null, sourceUrl: null, isMeasured: true },
+        { id: "q_4", text: "停药后体重会反弹吗？", kind: "typical", platform: null, sourceUrl: null, isMeasured: true, answers: [] },
       ],
     },
     {
@@ -210,11 +212,26 @@ export const diagnosisFilled: GeoDiagnosis = {
       action: "encyclopedia_fix",
       status: "acting",
       snapshotId: "snap_deepseek",
+      firstSnapshotId: "snap_deepseek",
     },
   ],
+  errorCounts: { total: 1, open: 0, acting: 1, awaiting_remeasure: 0, closed: 0, severe: 0 },
   noise: { band: 3, measuredAt: "2026-09-23" },
   more: [{ metricId: "M-02", name: "首位提及率", cell: cell(9, 28, 310) }],
 };
+
+/** The diagnosis with these error rows, and the counts the server would send for them (`count(*)` over exactly these). */
+export function diagnosisWith(errors: GeoErrorRow[], base: GeoDiagnosis = diagnosisFilled): GeoDiagnosis {
+  const count = (status: GeoErrorRow["status"]) => errors.filter((error) => error.status === status).length;
+  return {
+    ...base,
+    errors,
+    errorCounts: {
+      total: errors.length, open: count("open"), acting: count("acting"), awaiting_remeasure: count("awaiting_remeasure"), closed: count("closed"),
+      severe: errors.filter((error) => error.status !== "closed" && (error.severity === "S3" || error.severity === "S4")).length,
+    },
+  };
+}
 
 export const answerFilled: GeoAnswer = {
   question: { id: "q_1", text: "打了减重针一直恶心，要不要停药？", pool: "P2" },
@@ -264,7 +281,7 @@ export const sourcesFilled: GeoSources = {
     { engine: "deepseek", retrieval: cell(96, 60, 62), promise: "进入引用：锚点层 + 覆盖层", layers: ["anchor", "coverage"] },
     { engine: "baidu", retrieval: cell(null, null, null), promise: "只承诺讲对", layers: ["owned"] },
   ],
-  battlefield: { groups: ["恶心呕吐与胃肠反应"], reason: "证据最硬、竞品最弱。" },
+  battlefield: { groups: ["ggr_1"], groupNames: ["恶心呕吐与胃肠反应"], reason: "证据最硬、竞品最弱。" },
   tiers: [
     { tier: "1", targets: [{ metricId: "M-19", pool: null, baseline: 38, target: 48 }, { metricId: "M-01", pool: "P2", baseline: 21, target: 28 }], placements: 12, budgetCny: 3000 },
     { tier: "2", targets: [{ metricId: "M-19", pool: null, baseline: 38, target: 55 }, { metricId: "M-01", pool: "P2", baseline: 21, target: 35 }], placements: 24, budgetCny: 8000 },

@@ -709,6 +709,9 @@ function geoSettings(overrides) {
     geoTimeZone: timeZone,
     // Asks one project may make in a week (spec §5): the probe host is shared.
     geoWeeklyAskCap: integer("geoWeeklyAskCap", "OPEN_SCIENCE_GEO_WEEKLY_ASK_CAP", 1_500, 0, 1_000_000),
+    // Error rows 准确与安全 carries at most, live ones first; the counts above the list are taken over every row, so a project with
+    // more errors than this still reads true and the page says how many the list leaves out.
+    geoDiagnosisErrorLimit: integer("geoDiagnosisErrorLimit", "OPEN_SCIENCE_GEO_DIAGNOSIS_ERROR_LIMIT", 300, 20, 5_000),
     geoSocialUrl: origin("geoSocialUrl", "OPEN_SCIENCE_GEO_SOCIAL_URL"),
     geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 140_000, 5_000,
       MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS - 10_000),
