@@ -7,6 +7,7 @@ import { useProjectStore } from "@/lib/projects";
 import { PROJECT_EXPLAINER } from "@/lib/projectNames";
 import { RUNS_CHANGED_EVENT } from "@/lib/runPresentation";
 import { provideFrameSessionSearch } from "@/lib/runtimeUiBridge";
+import { hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
 import { ProjectBrowser } from "./ProjectBrowser";
 
 const PROJECTS = [
@@ -689,6 +690,37 @@ describe("ProjectBrowser — 虚拟临研 studies", () => {
     await waitFor(() => expect(heart.querySelector("svg.lucide-users-round")).not.toBeNull());
     expect(screen.getByRole("button", { name: "Paper 1" }).querySelector("svg.lucide-users-round")).toBeNull();
     expect(screen.getByRole("button", { name: "Paper 1" }).querySelector("svg.lucide-folder")).not.toBeNull();
+  });
+
+  // 「新建研究」 makes the study and its project before anything is said in it: until the first definition names it, it is a draft and
+  // not one of the account's projects, so the list leaves it out (and an hour with nothing said deletes it).
+  it("leaves a draft study's project out of the list, and keeps every other", async () => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [], draftProjectIds: ["p-heart"] });
+    render(
+      <MemoryRouter initialEntries={["/app/chat"]}>
+        <ProjectBrowser vcr />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: "Paper 1" });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "心衰" })).toBeNull());
+    expect(screen.getByRole("button", { name: "Paper 1" })).toBeInTheDocument();
+  });
+
+  it("keeps a draft's project when the module is not offered: the list only knows drafts from the module", async () => {
+    renderBrowser();
+    expect(await screen.findByRole("button", { name: "心衰" })).toBeInTheDocument();
+  });
+
+  it("leaves a project out at once when this browser has just made it as a draft, before the list has been read again", async () => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [], draftProjectIds: [] });
+    render(
+      <MemoryRouter initialEntries={["/app/chat"]}>
+        <ProjectBrowser vcr />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: "心衰" });
+    act(() => { hintVcrDraftProject("p-heart"); });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "心衰" })).toBeNull());
   });
 
   it("reads no study list when the module is not offered", async () => {
