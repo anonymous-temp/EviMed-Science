@@ -6262,7 +6262,8 @@ test("an API or gateway path no route serves is a 404 in JSON, never the page", 
   // not have, answered 200 text/html with index.html, signed in or not. A JSON
   // client got markup, and anything counting statuses saw a healthy call.
   await withStaticApp(async ({ base }) => {
-    for (const missing of ["/api/definitely-not-a-route", "/api/plugins", "/api", "/api/", "/internal/nothing/v1", "/internal"]) {
+    // With 循证进化 off, the knowledge plugin's manifest address is a missing route too, not a page it would parse as JSON.
+    for (const missing of ["/api/definitely-not-a-route", "/api/plugins", "/api", "/api/", "/internal/nothing/v1", "/internal", "/evolution/source-requests.json"]) {
       for (const method of ["GET", "HEAD"]) {
         const answer = await fetch(`${base}${missing}`, { method });
         assert.equal(answer.status, 404, `${method} ${missing}`);
@@ -6271,7 +6272,7 @@ test("an API or gateway path no route serves is a 404 in JSON, never the page", 
       }
     }
     // A page whose address merely starts with the same letters is still a page.
-    for (const page of ["/apiary", "/internals", "/app/api"]) {
+    for (const page of ["/apiary", "/internals", "/app/api", "/evolutionary"]) {
       const route = await fetch(`${base}${page}`);
       assert.equal(route.status, 200, page);
       assert.equal(await route.text(), "<div id=\"root\"></div>", page);

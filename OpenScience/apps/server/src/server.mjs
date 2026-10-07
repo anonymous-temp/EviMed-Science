@@ -6951,7 +6951,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // API or gateway path that nothing above served is a missing route:
         // answered with index.html (200, text/html) it handed a JSON client a
         // page of markup and read as healthy to anything counting statuses.
-        if (/^\/(?:api|internal)(?:\/|$)/.test(pathname)) throw new HttpError(404, "not_found", "Route not found.");
+        // `/evolution/` holds machine documents only (the knowledge plugin's source-request manifest, 2026-10-07): with
+        // 循证进化 off its page answer was parsed as JSON by the plugin and failed every day.
+        if (/^\/(?:api|internal|evolution)(?:\/|$)/.test(pathname)) throw new HttpError(404, "not_found", "Route not found.");
         await serveStatic(req, res, config, pathname);
         return;
       }

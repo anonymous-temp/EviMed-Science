@@ -752,7 +752,11 @@ class Crawler:
         if result.status != 200 or len(result.body) > 262144:
             return {"status": "deferred", "reason": "manifest_unavailable"}
         from .source_requests import admitted_requests
-        document = json.loads(result.body)
+        try:
+            document = json.loads(result.body)
+        except ValueError:
+            # A platform with 循证进化 off once answered this address with its web page (200, text/html).
+            return {"status": "deferred", "reason": "manifest_invalid"}
         if not isinstance(document, dict) or not isinstance(document.get("sources"), list):
             return {"status": "deferred", "reason": "manifest_invalid"}
         base = load_registry(self._settings.registry_path)
