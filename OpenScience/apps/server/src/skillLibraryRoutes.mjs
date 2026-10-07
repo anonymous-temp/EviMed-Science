@@ -41,8 +41,8 @@ export function createSkillLibraryRoutes({ store, service, maxJsonBytes, savePro
       if (!id && req.method === "GET") return reply(await service.list(user, { cursor: url.searchParams.get("cursor"), limit: 50 }));
       if (!id && req.method === "POST") return reply(await service.create(user, await body()), 201);
       // The platform's own skills, answered from the control plane's packages (no runtime, session or project): the list, one
-      // skill's words and full text, and a copy of it into the account's own skills. The skill's id is its package id
-      // (`core/stats-integrity`), so it arrives encoded as one path segment.
+      // skill's words and full text, and a copy of it into the account's own skills. The skill's id is `<origin>:<name>`
+      // (`core:stats-integrity`).
       if (id === "platform" && !action && req.method === "GET") return reply(await service.listPlatform(user));
       if (id === "platform" && action && !rawResource && req.method === "GET") return reply(await service.readPlatform(user, decode(action)));
       if (id === "platform" && action && rawResource === "copy" && req.method === "POST") return reply(await service.duplicatePlatform(user, decode(action), await body()), 201);

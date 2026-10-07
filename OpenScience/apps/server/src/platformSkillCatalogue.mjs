@@ -33,6 +33,9 @@ import { HttpError } from "./security.mjs";
  * sentence of its descriptions, and they can be read but never copied (the
  * pack is the owner's, not a template).
  *
+ * A skill's id here is `<origin>:<name>` (`curated:survival-analysis`), the shape every other product id has, so it is one
+ * path segment without an encoded slash a proxy might fold.
+ *
  * Reading is bounded and refuses links: the folders are the control plane's
  * own image, but a copy ends up in a researcher's account, so what is read is
  * held to the limits the native import path already enforces.
@@ -137,7 +140,7 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
       const directory = path.join(root, entry.name);
       try {
         const { meta } = splitSkillText(await fs.readFile(path.join(directory, "SKILL.md"), "utf8"));
-        rows.push({ id: `geo-private/${entry.name}`, name: entry.name, title: String(meta.name ?? entry.name), use: firstSentence(meta.description),
+        rows.push({ id: `geo-private:${entry.name}`, name: entry.name, title: String(meta.name ?? entry.name), use: firstSentence(meta.description),
           group: SKILL_DISPLAY_GEO_GROUP, source: "platform", canCopy: false, directory });
       } catch { /* a folder without a readable skill file is not a skill */ }
     }
@@ -155,7 +158,7 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
       if (!words) continue;
       const directory = path.join(rootDir, ROOTS[/** @type {keyof typeof ROOTS} */ (record.origin)], record.name);
       const readable = await present(directory);
-      listed.push({ id: record.id, name: record.name, title: words.title, use: words.use, group: words.group,
+      listed.push({ id: `${record.origin}:${record.name}`, name: record.name, title: words.title, use: words.use, group: words.group,
         source: record.origin === "community" ? "community" : "platform", canCopy: readable, directory: readable ? directory : null });
     }
     const order = new Map(Object.keys(display).map((name, index) => [name, index]));

@@ -45,12 +45,12 @@ test("the list is the fifty-seven shipped skills in Chinese, in their groups, an
 
 test("one skill reads as its words and its full text without the file's front matter", async () => {
   const catalogue = createPlatformSkillCatalogue({ rootDir: repoRoot });
-  const row = await catalogue.read("curated/survival-analysis");
+  const row = await catalogue.read("curated:survival-analysis");
   assert.equal(row.title, "生存分析");
   assert.equal(row.when, SKILL_DISPLAY["survival-analysis"].when);
   assert.ok(row.instructions && row.instructions.length > 200);
   assert.ok(!row.instructions.startsWith("---"), "the front matter is not the text");
-  await assert.rejects(catalogue.read("curated/no-such-skill"), { status: 404, code: "skill_platform_not_found" });
+  await assert.rejects(catalogue.read("curated:no-such-skill"), { status: 404, code: "skill_platform_not_found" });
 });
 
 test("a folder this image does not carry still lists, says no text and offers no copy — and never fails the list", async () => {
@@ -63,9 +63,9 @@ test("a folder this image does not carry still lists, says no text and offers no
   const absent = items.find((item) => item.name === "dsh-ppt");
   assert.equal(present.canCopy, true);
   assert.equal(absent.canCopy, false);
-  assert.equal((await catalogue.read("community/dsh-ppt")).instructions, null);
-  assert.equal((await catalogue.read("curated/survival-analysis")).instructions, "Body text.\n");
-  await assert.rejects(catalogue.snapshot("community/dsh-ppt"), { status: 409, code: "skill_platform_not_copyable" });
+  assert.equal((await catalogue.read("community:dsh-ppt")).instructions, null);
+  assert.equal((await catalogue.read("curated:survival-analysis")).instructions, "Body text.\n");
+  await assert.rejects(catalogue.snapshot("community:dsh-ppt"), { status: 409, code: "skill_platform_not_copyable" });
 });
 
 test("the method pack is listed under its own group where its folder is present, readable and never copyable", async () => {
@@ -74,9 +74,9 @@ test("the method pack is listed under its own group where its folder is present,
   const catalogue = createPlatformSkillCatalogue({ rootDir: root });
   const { items } = await catalogue.list();
   const geo = items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP);
-  assert.deepEqual(geo.map((item) => [item.id, item.title, item.use, item.canCopy]), [["geo-private/geo-demo", "geo-demo", "Audit a delivery package.", false]]);
-  assert.equal((await catalogue.read("geo-private/geo-demo")).instructions, "Pack text.\n");
-  await assert.rejects(catalogue.snapshot("geo-private/geo-demo"), { code: "skill_platform_not_copyable" });
+  assert.deepEqual(geo.map((item) => [item.id, item.title, item.use, item.canCopy]), [["geo-private:geo-demo", "geo-demo", "Audit a delivery package.", false]]);
+  assert.equal((await catalogue.read("geo-private:geo-demo")).instructions, "Pack text.\n");
+  await assert.rejects(catalogue.snapshot("geo-private:geo-demo"), { code: "skill_platform_not_copyable" });
   const without = await createPlatformSkillCatalogue({ rootDir: await tempRoot() }).list();
   assert.equal(without.items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP).length, 0, "no folder, no group");
 });
@@ -128,23 +128,23 @@ test("copying a platform skill makes the account's own skill with its origin rem
   await skill(root, "runtime/skills/curated-scientific/survival-analysis", "---\nname: survival-analysis\ndescription: x\n---\n\nBody text.\n", { "scripts/run.py": "print(1)\n" });
   const { service, calls } = copyFixture(root);
   const user = { id: "copier" };
-  const copied = await service.duplicatePlatform(user, "curated/survival-analysis", { title: "我的生存分析", idempotencyKey: "copy-1" });
+  const copied = await service.duplicatePlatform(user, "curated:survival-analysis", { title: "我的生存分析", idempotencyKey: "copy-1" });
   assert.equal(copied.payload.title, "我的生存分析");
   assert.equal(copied.payload.package.source.kind, "builtin-copy");
   assert.equal(copied.payload.package.source.package, "survival-analysis");
   assert.deepEqual(calls.map((call) => call[0]), ["upload", "import", "removeUpload"], "the raw upload does not outlive the copy");
-  const retried = await service.duplicatePlatform(user, "curated/survival-analysis", { title: "我的生存分析", idempotencyKey: "copy-1" });
+  const retried = await service.duplicatePlatform(user, "curated:survival-analysis", { title: "我的生存分析", idempotencyKey: "copy-1" });
   assert.equal(retried.id, copied.id, "the same request is the same copy");
-  await assert.rejects(service.duplicatePlatform(user, "curated/survival-analysis", { title: "另一个名字", idempotencyKey: "copy-1" }), { status: 409 });
-  await assert.rejects(service.duplicatePlatform(user, "community/dsh-ppt", { title: "x", idempotencyKey: "copy-2" }), { code: "skill_platform_not_copyable" });
-  await assert.rejects(service.duplicatePlatform(user, "curated/survival-analysis", { title: " ", idempotencyKey: "copy-3" }), { status: 400 });
+  await assert.rejects(service.duplicatePlatform(user, "curated:survival-analysis", { title: "另一个名字", idempotencyKey: "copy-1" }), { status: 409 });
+  await assert.rejects(service.duplicatePlatform(user, "community:dsh-ppt", { title: "x", idempotencyKey: "copy-2" }), { code: "skill_platform_not_copyable" });
+  await assert.rejects(service.duplicatePlatform(user, "curated:survival-analysis", { title: " ", idempotencyKey: "copy-3" }), { status: 400 });
 });
 
-test("the routes answer an account only, with the id as one encoded segment", async (t) => {
+test("the routes answer an account only, with the id as one segment", async (t) => {
   const user = { id: "reader" }, calls = [];
   const service = {
     listPlatform: async (actor) => { calls.push(["list", actor.id]); return { groups: [], items: [] }; },
-    readPlatform: async (actor, id) => { calls.push(["read", id]); if (id === "gone/none") throw new HttpError(404, "skill_platform_not_found", "no"); return { id }; },
+    readPlatform: async (actor, id) => { calls.push(["read", id]); if (id === "gone:none") throw new HttpError(404, "skill_platform_not_found", "no"); return { id }; },
     duplicatePlatform: async (actor, id, body) => { calls.push(["copy", id, body.title]); return { id: "skill:new" }; },
   };
   const store = {
@@ -157,10 +157,10 @@ test("the routes answer an account only, with the id as one encoded segment", as
   const base = `http://127.0.0.1:${server.address().port}`, headers = { authorization: "ok", "x-csrf-token": "csrf" };
   assert.equal((await fetch(`${base}/api/skills/platform`)).status, 401);
   assert.equal((await fetch(`${base}/api/skills/platform`, { headers })).status, 200);
-  const read = await fetch(`${base}/api/skills/platform/${encodeURIComponent("core/stats-integrity")}`, { headers });
-  assert.deepEqual((await read.json()).data, { id: "core/stats-integrity" });
-  assert.equal((await fetch(`${base}/api/skills/platform/${encodeURIComponent("gone/none")}`, { headers })).status, 404);
-  const copy = await fetch(`${base}/api/skills/platform/${encodeURIComponent("core/stats-integrity")}/copy`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ title: "副本", idempotencyKey: "k" }) });
+  const read = await fetch(`${base}/api/skills/platform/${"core:stats-integrity"}`, { headers });
+  assert.deepEqual((await read.json()).data, { id: "core:stats-integrity" });
+  assert.equal((await fetch(`${base}/api/skills/platform/${"gone:none"}`, { headers })).status, 404);
+  const copy = await fetch(`${base}/api/skills/platform/${"core:stats-integrity"}/copy`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ title: "副本", idempotencyKey: "k" }) });
   assert.equal(copy.status, 201);
-  assert.deepEqual(calls, [["list", "reader"], ["read", "core/stats-integrity"], ["read", "gone/none"], ["copy", "core/stats-integrity", "副本"]]);
+  assert.deepEqual(calls, [["list", "reader"], ["read", "core:stats-integrity"], ["read", "gone:none"], ["copy", "core:stats-integrity", "副本"]]);
 });
