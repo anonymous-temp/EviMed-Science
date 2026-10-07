@@ -64,7 +64,8 @@ const MANGLED = ['', '  ', '{not json', 'null', '{}', '"x"', '[{"id":1}]', '[1,2
 test('a malformed JSON setting never stops the platform while the module is off, and is ignored', () => {
   for (const raw of MANGLED) {
     for (const name of ['OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST', 'OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS']) {
-      const config = withEnvironment({ [name]: raw }, () => loadConfig({ localAutoConfig: false }));
+      // The module is on by default (2026-10-07); this is the deployment that switched it off.
+      const config = withEnvironment({ OPEN_SCIENCE_EVOLUTION_ENABLED: 'false', [name]: raw }, () => loadConfig({ localAutoConfig: false }));
       assert.equal(config.evolutionEnabled, false, `${name}=${JSON.stringify(raw)}`);
       assert.equal(config.evolutionRefusal, null);
       assert.ok(Array.isArray(config.evolutionDependencyAllowlist) || raw === '{}' || raw === 'null' || raw === '"x"' || raw === '[{"id":1}]', 'the parsed value is only read when the module is on');

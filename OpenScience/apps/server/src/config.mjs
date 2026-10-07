@@ -2652,8 +2652,10 @@ export function loadConfig(overrides = {}) {
     // under a budget it shares with the researcher cannot be tested at all.
     // Both remain settable; setting `OPEN_SCIENCE_LEARNING_ENABLED=false`
     // still turns the loop off.
-    // Literature-driven platform development has its own accounting and is opt-in.
-    evolutionEnabled: overrides.evolutionEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_ENABLED", false),
+    // Literature-driven platform development (循证进化) has its own accounting. On by default since
+    // 2026-10-07 (owner: 「循证进化默认打开」); it still needs PostgreSQL and the product ledger, and
+    // `OPEN_SCIENCE_EVOLUTION_ENABLED=false` turns it off.
+    evolutionEnabled: overrides.evolutionEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_ENABLED", true),
     evolutionEvaluationNetwork: overrides.evolutionEvaluationNetwork ?? process.env.OPEN_SCIENCE_EVOLUTION_EVALUATION_NETWORK ?? '',
     evolutionDailyBudgetCny: Number(overrides.evolutionDailyBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY ?? 50),
     evolutionRunBudgetCny: Number(overrides.evolutionRunBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY ?? 10),
