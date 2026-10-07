@@ -84,7 +84,7 @@ starterPrompts:
 
 display:
   title: "匹配与招募"
-  category: "临床研究"
+  category: "虚拟临床研究"
   description: "把入排条件结构化，逐条判定候选人并交回待补证据与筛选漏斗，联系患者前等人确认。"
   listed: false
   starterPrompts:
