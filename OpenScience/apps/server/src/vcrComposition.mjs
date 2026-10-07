@@ -1010,7 +1010,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     // Platform packs (flywheel F26): off, no platform row is read and the request is a 404 by its own code.
     platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
       people: (ids) => store.personNames(ids) } });
-  service.attach({ corrections, knowledge });
+  service.attach({ corrections, knowledge, engineProbe });
   // The public 「模拟研究」 column: the lead's publish and withdraw, and the reader the public pages package takes. Neither exists
   // while the switch is off, so nothing reads the table and the routes answer 404 by their own code.
   const publications = config.vcrPublicSimulationsEnabled ? createVcrPublications({ store, service, matchStore }) : null;

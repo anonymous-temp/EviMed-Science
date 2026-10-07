@@ -225,6 +225,28 @@ test("readiness is red only for this module's own invariants; a missing engine i
   assert.equal(ready.status, "ok");
   assert.deepEqual(ready.warnings, ["vcr_engine_not_composed", "vcr_data_plane_not_configured"]);
   assert.equal(ready.warning, "vcr_engine_not_composed");
+  assert.equal(ready.engineAvailable, false, "no engine composed: the page says the engine is not there");
+  // composed and not known to be down is available; composed and down is not
+  for (const [state, available] of /** @type {Array<[string | null, boolean]>} */ ([["answering", true], [null, true], ["not_answering", false]])) {
+    const reading = await vcrReadiness({ config: { vcrEnabled: true, vcrAudience: "all", vcrDataPlaneDir: "/plane" },
+      vcr: { service: { async ready() { return true; }, engineMismatch: null }, engine: { configured: () => true }, engineProbe: { snapshot: () => (state ? { state, checkedAt: null } : null) } }, database: {} });
+    assert.equal(reading.engineAvailable, available, String(state));
+  }
+});
+
+test("a study page says whether the engine is there, from the same reading readiness gives", () => {
+  const down = { state: "not_answering", checkedAt: null };
+  for (const [engine, probe, expected] of /** @type {Array<[any, any, { state: string, available: boolean }]>} */ ([
+    [null, null, { state: "missing", available: false }],
+    [{ configured: () => false }, null, { state: "missing", available: false }],
+    [{ configured: () => true }, null, { state: "wired", available: true }],
+    [{ configured: () => true }, { snapshot: () => ({ state: "answering" }) }, { state: "answering", available: true }],
+    [{ configured: () => true }, { snapshot: () => down }, { state: "not_answering", available: false }],
+  ])) {
+    const service = new VcrService({ store: /** @type {any} */ ({}), config: {}, engine });
+    service.attach({ engineProbe: probe });
+    assert.deepEqual(service.engineStatus(), expected);
+  }
 });
 
 test('legacy public prediction flags are not presented as a publication capability', async () => {

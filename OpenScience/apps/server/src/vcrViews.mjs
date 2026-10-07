@@ -624,6 +624,8 @@ export function presentStudy(bundle) {
     abilities: abilitiesOf(roles ?? []),
     // What the study's frozen data would let it claim above its own tier, for a lead who may move it (`#tierOffer`); one confirmation.
     tierOffer: bundle.tierOffer ?? null,
+    // Whether the engine that computes is there (`VcrService.engineStatus`): the page says so once, at its top, when it is not.
+    engine: bundle.engine ?? null,
     budget: budgetView(budget),
     jobs: jobs.slice(0, 12).map((/** @type {any} */ job) => jobView(job, now)),
     ceiling: useCeilingOf({ study, results, reviews, stale, current: bundle.currentNodes ?? null, dependsOn }),

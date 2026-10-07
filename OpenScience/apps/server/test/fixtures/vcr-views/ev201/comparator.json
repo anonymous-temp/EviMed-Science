@@ -23,13 +23,6 @@
       "selected": true
     },
     {
-      "route": "model_comparator",
-      "state": "scenario",
-      "reason": null,
-      "note": null,
-      "selected": false
-    },
-    {
       "route": "hybrid_control",
       "state": "design_only",
       "reason": null,

@@ -85,6 +85,10 @@
     "read_patient_level"
   ],
   "tierOffer": null,
+  "engine": {
+    "state": "missing",
+    "available": false
+  },
   "budget": {
     "limitSeconds": 7200,
     "usedSeconds": 222,

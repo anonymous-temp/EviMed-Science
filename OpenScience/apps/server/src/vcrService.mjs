@@ -420,7 +420,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -435,6 +435,20 @@ export class VcrService {
   }
 
   ready() { return this.store.ready(); }
+
+  /**
+   * What a page says about the statistics engine, from the one reading readiness reports (`vcrEngineProbe.mjs`): `missing` (no engine
+   * is composed here), `wired` (composed, nobody has asked it yet), `answering`, `not_answering`. `available` is false for the first and
+   * the last — the computations that need it wait or say so — and a study page puts one line at its top instead of letting the first
+   * failed job say it in small print.
+   * @returns {{ state: "missing" | "wired" | "answering" | "not_answering", available: boolean }}
+   */
+  engineStatus() {
+    const composed = Boolean(this.engine?.configured?.());
+    const reading = composed ? this.packages.engineProbe?.snapshot?.() ?? null : null;
+    const state = !composed ? "missing" : reading?.state === "answering" ? "answering" : reading?.state === "not_answering" ? "not_answering" : "wired";
+    return { state, available: composed && state !== "not_answering" };
+  }
 
   /** @param {{ id?: string }} user */
   allows(user) { return vcrAudienceAllows(this.config, user); }
@@ -824,6 +838,7 @@ export class VcrService {
     const currentNodes = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
     /** @type {Record<string, any>} */
     const bundle = {
+      engine: this.engineStatus(),
       now: this.now(), study, definition, results: reviewedResults, allResults: reviewedAll, stale, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current: currentNodes, exports }) })), jobs, budget, assumptions, members, exports, decisions,
       roles, scenarios, comparators: reviewedComparators, comparator: reviewedComparators[0] ?? null, populations: reviewedPopulations, patientSets, grid, forecasts, models,
       executions, protocol, seal: vcrSealState(study),
@@ -1426,6 +1441,8 @@ export async function vcrReadiness({ config, vcr, database }) {
   return {
     enabled: true, status: "ok", audience: config.vcrAudience,
     engine,
+    // The one word a page reads: the engine is composed and not known to be down.
+    engineAvailable: composed && engine !== "not_answering",
     ...(engine === "not_answering" && reading?.checkedAt ? { engineCheckedAt: reading.checkedAt } : {}),
     ...(warnings.length ? { warning: warnings[0], warnings } : {}),
   };
