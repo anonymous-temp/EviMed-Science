@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listSources, type SourceRecord } from "@/lib/sourceClient";
+import type { SourceRecord } from "@/lib/sourceClient";
+import { listAllSources } from "@/lib/sourceList";
 import { productErrorMessage } from "@/lib/productClient";
 import { Button } from "@/components/ui/Button";
 import { LoadError } from "@/components/cards/LoadError";
@@ -22,8 +23,8 @@ export function MaterialPicker({ projectId, taken, busy, onChoose, onCancel }: {
   const live = useRef(true);
   const load = useCallback(() => {
     setError(null);
-    listSources(projectId, { state: "ready" }).then(
-      page => { if (live.current) setSources(page.items); },
+    listAllSources(projectId, { state: "ready" }).then(
+      records => { if (live.current) setSources(records); },
       caught => { if (live.current) setError(`知识库暂不可用：${productErrorMessage(caught)}`); });
   }, [projectId]);
   useEffect(() => { live.current = true; load(); return () => { live.current = false; }; }, [load]);

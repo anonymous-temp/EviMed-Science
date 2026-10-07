@@ -9,7 +9,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { SkillRegistry } from '@deepseek-ai/dsh-skill'
 import { FileSystemSkillProvider } from '@deepseek-ai/dsh-skill-filesystem'
 import { createScope } from '@deepseek-ai/dsh-scope'
-import { createScopedSkillCatalogue } from '../src/scopedSkillCatalogue.mjs'
+import { createScopedSkillCatalogue, SCOPED_SKILL_ROOTS } from '../src/scopedSkillCatalogue.mjs'
 
 /** Real native registry/provider with public scope primitives; synthetic agent identity is a code control, not serving qualification.
  * @param {import('node:test').TestContext} t */
@@ -60,4 +60,20 @@ test('personal detail reads actual bounded resources/scripts without allowing by
   await fs.mkdir(path.join(f.builtin,'builtin-review','scripts'));await fs.writeFile(path.join(f.builtin,'builtin-review','scripts/check.py'),"raise RuntimeError('inert')\n");
   const listed=await api.list({sessionId:f.agent.id}),selected=listed.items.find(item=>item.name==='builtin-review');assert(selected);const request={sessionId:f.agent.id,key:selected.key};
   const detail=await api.read(request);assert.equal(detail.source,'personal');assert.equal(detail.canDuplicate,false);assert(detail.resources.some(item=>item.path==='资料/证据.csv'));assert.deepEqual(detail.scripts,[{path:'scripts/check.py',size:Buffer.byteLength("raise RuntimeError('inert')\n")}]);assert.equal(Object.hasOwn(detail,'entries'),false);await assert.rejects(api.snapshotBuiltin(request));
+});
+
+test('the private method pack is a known built-in root: its skills read with a real source, and are never copied',async t=>{
+  // The production roots name the pack's own `skills/` folder (the preset lists it one level below geo-private).
+  const pack=SCOPED_SKILL_ROOTS.find(item=>item.root.endsWith('/geo-private/skills'));
+  assert.ok(pack);assert.deepEqual({source:pack.source,duplicate:pack.duplicate},{source:'builtin',duplicate:false});
+  const f=await fixture(t),api=createScopedSkillCatalogue(f.ctx,{roots:[{root:f.builtin,source:pack.source,duplicate:pack.duplicate},{root:f.community,source:'community',duplicate:true}]});
+  const listed=await api.list({sessionId:f.agent.id}),selected=listed.items.find(item=>item.name==='builtin-review');assert(selected);
+  assert.equal(selected.source,'builtin');assert.equal(selected.canDuplicate,false);
+  const request={sessionId:f.agent.id,key:selected.key},detail=await api.read(request);
+  assert.equal(detail.source,'builtin');assert.equal(detail.canDuplicate,false);assert(detail.instructions.includes('resource'));
+  await assert.rejects(api.snapshotBuiltin(request));
+  // A root the catalogue does not know stays 'unknown' and its preview is refused: the failure this row exists to remove.
+  const unknown=createScopedSkillCatalogue(f.ctx,{roots:[{root:f.community,source:'community',duplicate:true}]});
+  const strange=(await unknown.list({sessionId:f.agent.id})).items.find(item=>item.name==='builtin-review');assert.ok(strange);assert.equal(strange.source,'unknown');
+  await assert.rejects(unknown.read({sessionId:f.agent.id,key:strange.key}));
 });

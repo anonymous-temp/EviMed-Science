@@ -43,7 +43,7 @@ import {
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
-import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode } from "./vcrStore.mjs";
+import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrStore.mjs";
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import {
@@ -219,8 +219,8 @@ export function vcrReferenceModelInputs(endpointType) {
 }
 
 /**
- * The three mathematical reference simulators the first catalogue ships
- * (plan §8.2). Scenario-tier by construction: they answer 「在这些假设下会
+ * The mathematical reference simulators the catalogue ships (plan §8.2): one per endpoint
+ * family, and since 2026-10-07 the trajectory model beside the continuous one. Scenario-tier by construction: they answer 「在这些假设下会
  * 怎样」 and carry no claim about any real population, which is why their
  * applicability says so in words rather than naming an indication.
  */
@@ -274,6 +274,26 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
     }),
     applicability: Object.freeze({ population: "不限，但只作情景推演", region: "不限", endpoints: Object.freeze(["time_to_event"]) }),
     validation: Object.freeze({ codeVerification: "对照 simsurv 的已知真值", seedReproducible: true }),
+    evidence: Object.freeze(["code_verification", "seed_reproducible"]),
+  }),
+  // The trajectory model (2026-10-07, plan 5.2): a linear mixed model of a continuous outcome over a visit schedule. Its inputs are
+  // listed by hand: the shared table above labels `truth.effect` as a difference of means, which is not what this model's effect is.
+  Object.freeze({
+    name: "reference-longitudinal", version: "1.0.0", tier: "scenario", risk: "none", endpointType: "continuous",
+    card: Object.freeze({
+      title: "连续终点纵向轨迹参考仿真器",
+      type: "mathematical_simulation",
+      provider: "EviMed 虚拟临研",
+      interface: "vcr-engine patients.longitudinal",
+      inputs: Object.freeze(["两组人数", "随访时间表", "基线水平与对照组的变化速度", "处理效应（每个时间单位变化速度的差）",
+        "个体间的差异（截距与斜率的标准差及相关）", "残差标准差", "每次随访前退出的概率", "协变量效应（取自已存人群）"]),
+      outputs: "按给定参数生成的每次随访的连续终点观测值、两组的平均轨迹和 95% 范围，以及同一个人在两种分组下的轨迹；输出的是情景推演，不是对任何真实人群或个体的预测。",
+      missingData: "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。退出的人退出后的随访记为缺失。",
+      knownLimits: Object.freeze(["线性轨迹，随机截距与随机斜率", "退出为完全随机缺失，不模拟与结局有关的退出", "不含任何真实人群的协变量结构", "不可用于个体层面的预测", "不承载疗效或安全性证据"]),
+      retirement: "当引擎的 patients.longitudinal 方法版本变更时退役并重新发布。",
+    }),
+    applicability: Object.freeze({ population: "不限，但只作情景推演", region: "不限", endpoints: Object.freeze(["continuous"]) }),
+    validation: Object.freeze({ codeVerification: "对照线性混合模型拟合（nlme）与解析均值和方差", seedReproducible: true }),
     evidence: Object.freeze(["code_verification", "seed_reproducible"]),
   }),
 ]);
@@ -341,6 +361,24 @@ export const VCR_ACTION_STEPS = Object.freeze({
 export function vcrRequestedSteps(action) {
   const step = /** @type {Record<string, string>} */ (VCR_ACTION_STEPS)[String(action ?? "")];
   return step ? Object.freeze([step]) : VCR_STEPS;
+}
+
+/**
+ * Where the generated records of the study's current population can be downloaded from, or `null` where there are none to offer: a
+ * cohort of real patients never leaves the data plane, and a population that has not been computed has no table. The path is the
+ * records route's (`GET …/records/:result.csv`); whether the file may leave is that route's own judgement, said by name when it
+ * does not (a button that is offered is a button that answers).
+ * @param {Record<string, any>} bundle
+ * @returns {{ path: string, rows: number | null } | null}
+ */
+export function populationDownload(bundle) {
+  const current = bundle.populations?.[0] ?? null;
+  if (!current || current.kind === "real" || !current.resultId) return null;
+  const result = list(bundle.allResults).find((row) => row.id === current.resultId) ?? null;
+  const kept = list(result?.tables).some((table) => String(object(table).location ?? "").startsWith("derived/"));
+  if (!kept) return null;
+  const generated = Number(object(result?.counts).generatedRecords);
+  return { path: `records/${encodeURIComponent(String(current.resultId))}.csv`, rows: Number.isFinite(generated) ? generated : null };
 }
 
 /** The four counts, read apart, never folded (plan §3.5). @param {Record<string, any>} counts */
@@ -461,20 +499,6 @@ export class VcrService {
     };
   }
 
-  /**
-   * What a page says about the statistics engine, from the one reading readiness reports (`vcrEngineProbe.mjs`): `missing` (no engine
-   * is composed here), `wired` (composed, nobody has asked it yet), `answering`, `not_answering`. `available` is false for the first and
-   * the last — the computations that need it wait or say so — and a study page puts one line at its top instead of letting the first
-   * failed job say it in small print.
-   * @returns {{ state: "missing" | "wired" | "answering" | "not_answering", available: boolean }}
-   */
-  engineStatus() {
-    const composed = Boolean(this.engine?.configured?.());
-    const reading = composed ? this.packages.engineProbe?.snapshot?.() ?? null : null;
-    const state = !composed ? "missing" : reading?.state === "answering" ? "answering" : reading?.state === "not_answering" ? "not_answering" : "wired";
-    return { state, available: composed && state !== "not_answering" };
-  }
-
   /** @param {{ id?: string }} user */
   allows(user) { return vcrAudienceAllows(this.config, user); }
 
@@ -536,6 +560,8 @@ export class VcrService {
     }
     const reviews = presentReviewNotes(groups.map((group) => ({ study: group.study, reviews: group.reviews })), now);
     if (reviews.length) home.reviews = reviews;
+    // The projects of the account's drafts: they are not on the list, and the sidebar leaves them out of its project list.
+    home.draftProjectIds = (await this.store.draftStudies(String(user.id))).map((study) => study.projectId);
     return home;
   }
 
@@ -565,17 +591,27 @@ export class VcrService {
   /**
    * `POST /api/vcr/studies`: the control-plane project, its study row, and a
    * conversation bound to `vcr-protocol` — the first step of the seven.
+   *
+   * **A study nobody has described is a draft.** 「新建研究」 sends neither a name
+   * nor a question, so the study is made as `draft` called 「未命名研究」: the
+   * conversation needs a project and a runtime before the first word can be
+   * typed, but the study is not on the list, not in the sidebar and not walked by
+   * the orchestrator until its first definition names it (`saveDefinition`), and
+   * an hour with no message in it deletes it (`vcrDrafts.mjs`). A caller that does
+   * say what the study is — a name, or a question to name it from — gets an
+   * active study at once.
    * @param {{ id: string }} user
    * @param {{ name?: string, question?: string, dataTier?: string, intendedUse?: string, action?: string }} input already validated by the route
    * @param {{ createResearcherProject: (user: any, name: string) => Promise<{ id: string, name: string }>,
    *   bindSession: (user: any, projectId: string, capabilityId: string) => Promise<{ sessionId: string, bound: boolean }> }} hooks
    */
   async createStudy(user, input, hooks) {
-    const name = String(input.name || VCR_DEFAULT_STUDY_NAME);
+    const given = String(input.name ?? "").trim() || vcrStudyNameFrom({ question: input.question });
+    const name = given || VCR_DEFAULT_STUDY_NAME;
     const control = await hooks.createResearcherProject(user, name);
     const study = await this.store.createStudy({
       userId: String(user.id), projectId: control.id, name, question: String(input.question ?? ""),
-      dataTier: input.dataTier, intendedUse: input.intendedUse,
+      dataTier: input.dataTier, intendedUse: input.intendedUse, status: given ? "active" : "draft",
     });
     // What the study is asked for at birth. One of the home page's four action
     // cards asks for that one step, and whatever it needs upstream comes as a
@@ -587,11 +623,26 @@ export class VcrService {
     }
     const session = await hooks.bindSession(user, control.id, VCR_STEP_CAPABILITIES.definition)
       .catch(() => ({ sessionId: "", bound: false }));
+    // The conversation the study was opened with is the one its 「对话」 opens, whatever background runs follow.
+    if (session.sessionId) await this.store.setConversationSession(study.id, session.sessionId);
     this.counters.studiesCreated += 1;
     return {
-      id: study.id, projectId: control.id, name: study.name, requested: [...vcrRequestedSteps(input.action)],
+      id: study.id, projectId: control.id, name: study.name, status: study.status, requested: [...vcrRequestedSteps(input.action)],
       sessionId: session.sessionId || null, bound: session.bound === true,
     };
+  }
+
+  /**
+   * Whether the computation engine is there to be asked: `missing` (not composed
+   * here), `wired` (composed, nobody has asked it yet), `answering`, or
+   * `not_answering` (asked, and did not answer). The study page says so in one
+   * line at its top instead of letting a job fail to find out.
+   * @returns {"missing" | "wired" | "answering" | "not_answering"}
+   */
+  engineState() {
+    if (!this.engine?.configured?.()) return "missing";
+    const reading = this.packages.engineProbe?.snapshot?.() ?? null;
+    return reading?.state === "answering" ? "answering" : reading?.state === "not_answering" ? "not_answering" : "wired";
   }
 
   /**
@@ -643,7 +694,7 @@ export class VcrService {
     const needs = vcrTierNeedsSupport(tier);
     throw failure(409, "vcr_tier_unsupported",
       `研究里已冻结的数据还达不到「${labels[needs] ?? needs}」：${support.tier === "T0" ? "还没有可用的患者级数据" : `现有数据只到「${labels[support.tier] ?? support.tier}」`}。`
-      + `先在「数据与证据」里接入并冻结数据，再升档位。`);
+      + `先在「定义与证据」里接入并冻结数据，再升档位。`);
   }
 
   /** `PATCH /api/vcr/studies/:id`. @param {{ id: string }} user @param {string} id @param {Record<string, any>} patch */
@@ -678,7 +729,8 @@ export class VcrService {
    */
   async studyView(user, id) {
     const study = await this.requireStudy(user, id);
-    return presentStudy(await this.#bundle(study, user));
+    // `conversationSessionId` is the route's to resolve into `sessionId`; `engine` is what the page's one line at the top says.
+    return { ...presentStudy(await this.#bundle(study, user)), conversationSessionId: study.conversationSessionId ?? null, engine: this.engineState() };
   }
 
   /**
@@ -793,7 +845,7 @@ export class VcrService {
     const bundle = await this.#bundle(study, user, tab, asked);
     switch (tab) {
       case "overview": return presentStudy(bundle);
-      case "population": return presentPopulationTab(bundle);
+      case "population": return { ...presentPopulationTab(bundle), download: populationDownload(bundle) };
       case "patients": return presentPatientsTab(bundle);
       case "comparator": return presentComparatorTab(bundle);
       case "trial": return presentTrialTab(bundle);
@@ -863,7 +915,6 @@ export class VcrService {
     const currentNodes = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
     /** @type {Record<string, any>} */
     const bundle = {
-      engine: this.engineStatus(),
       now: this.now(), study, definition, results: reviewedResults, allResults: reviewedAll, stale, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current: currentNodes, exports }) })), jobs, budget, assumptions, members, exports, decisions,
       roles, scenarios, comparators: reviewedComparators, comparator: reviewedComparators[0] ?? null, populations: reviewedPopulations, patientSets, grid, forecasts, models,
       executions, protocol, seal: vcrSealState(study),

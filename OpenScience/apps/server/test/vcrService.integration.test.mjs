@@ -214,7 +214,8 @@ test("the model library answers from the seeded catalogue, and a study may take 
   await seedVcrCatalogue({ store });
   const library = await service.modelLibrary({ id: study.userId });
   assert.ok(library.methods.length >= 20, "every engine method is in the catalogue");
-  assert.equal(library.models.filter((model) => model.tier === "scenario").length, 3);
+  assert.equal(library.models.filter((model) => model.tier === "scenario").length, 4, "the three reference simulators and the trajectory model");
+  assert.ok(library.models.some((model) => model.name === "连续终点纵向轨迹参考仿真器" && model.tier === "scenario"), "the trajectory model is in the library");
   const reference = library.models.find((model) => model.name === "事件时间终点参考仿真器");
   assert.deepEqual(reference.missingEvidence, []);
   assert.equal(reference.twinLabel, "基线条件化预测", "the label a model has earned, never 数字孪生 by default");

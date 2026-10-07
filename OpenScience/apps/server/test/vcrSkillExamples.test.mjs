@@ -153,8 +153,8 @@ test("every vcr_write example in a skill passes the real write path's own checks
     }
   }
   assert.ok(checked >= 12, `the walk found the write examples (${checked})`);
-  assert.deepEqual(analysisObjects.sort(), ["comparator", "design_grid", "model_assessment", "patient_set", "population", "trial_scenario", "trial_scenario"],
-    "the six ordinary analysis objects retain population, patient, comparator, both trial designs and the grid, and the model's assessment record is written beside them");
+  assert.deepEqual(analysisObjects.sort(), ["comparator", "design_grid", "model_assessment", "patient_set", "patient_set", "population", "trial_scenario", "trial_scenario"],
+    "the ordinary analysis objects retain population, both patient-set shapes (one outcome, one trajectory), comparator, both trial designs and the grid, and the model's assessment record is written beside them");
 });
 
 test("the analysis skill's curve example uses a recorded receipt and passes the real write path", async (t) => {
@@ -220,6 +220,19 @@ test("the analysis skill's example scenario is a job the domain accepts, and its
     protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, scenario: JSON.parse(analytic[0].text), inputs: [], seed: 1, cpuSecondsLimit: 60,
   });
   assert.deepEqual(issues, [], "the skill's own analytic scenario is refused by the engine's schema");
+});
+
+test("the longitudinal patient set the analysis skill shows is a scenario the engine's schema accepts", () => {
+  const blocks = taggedBlocks(read("capabilities/vcr-analysis/SKILL.md")).filter((block) => block.tag === "vcr:object:patient_set").map((block) => JSON.parse(block.text));
+  const longitudinal = blocks.find((block) => Array.isArray(block.scenario?.visits));
+  assert.ok(longitudinal, "the skill shows a trajectory example");
+  const method = VCR_JOB_METHODS.generate_patients_longitudinal;
+  assert.equal(method, "patients.longitudinal");
+  const issues = validateEngineJob({
+    jobId: "job_example", studyId: "std_example", kind: "generate_patients_longitudinal", method, methodVersion: VCR_ENGINE_METHODS[method].version,
+    protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, scenario: longitudinal.scenario, inputs: [], seed: 1, cpuSecondsLimit: 60,
+  });
+  assert.deepEqual(issues, [], "the skill's own trajectory scenario is refused by the engine's schema");
 });
 
 test("the population and the patient set the analysis skill shows are one study: the arms add up to the population", () => {

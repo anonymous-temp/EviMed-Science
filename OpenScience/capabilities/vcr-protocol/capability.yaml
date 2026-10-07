@@ -21,7 +21,7 @@
 # the kernel's own tool list by `display.listed: false` — `visibility: internal`
 # would make that binding answer 403. It is entered only from 「虚拟临研」.
 id: vcr-protocol
-version: 1.1.0
+version: 1.2.0
 title: Virtual Clinical Research Protocol
 category: Study Design
 description: The analyst of a virtual clinical research study's own conversation — does the step the researcher asks

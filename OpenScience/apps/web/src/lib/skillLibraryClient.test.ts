@@ -1,18 +1,17 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { duplicateEffectiveSkill, effectiveSkill, effectiveSkills, previewPersonalSkillRepository } from "./skillLibraryClient";
+import { copyPlatformSkill, listPlatformSkills, previewPersonalSkillRepository, readPlatformSkill } from "./skillLibraryClient";
 const request = vi.hoisted(() => vi.fn());
 const authenticatedFetch = vi.hoisted(() => vi.fn());
 vi.mock("./apiClient", async original => ({ ...(await original<object>()), fetchWithWebAuth: authenticatedFetch }));
 vi.mock("./productClient", async original => ({ ...(await original<object>()), productRequest: request }));
 beforeEach(() => { authenticatedFetch.mockReset(); request.mockReset(); request.mockResolvedValue({}); });
-it("encodes actual project/session/opaque key and immutable generation without a caller path", async () => {
-  await effectiveSkills("project/a", "session:one"); expect(request).toHaveBeenLastCalledWith("/projects/project%2Fa/skills/effective?sessionId=session%3Aone");
-  await effectiveSkill("project/a", "opaque:key", "session:one", "generation:a"); expect(request).toHaveBeenLastCalledWith("/projects/project%2Fa/skills/effective/opaque%3Akey?sessionId=session%3Aone&expectedRuntimeGeneration=generation%3Aa");
+it("the platform's skills are read without a project or session, and an id is one encoded segment", async () => {
+  await listPlatformSkills(); expect(request).toHaveBeenLastCalledWith("/skills/platform");
+  await readPlatformSkill("curated:survival-analysis"); expect(request).toHaveBeenLastCalledWith("/skills/platform/curated%3Asurvival-analysis");
 });
-it("duplicate requests carry only the agreed identity intent and preserve the retry key", async () => {
-  const input = { sessionId: "session", key: "opaque", title: "My source check", idempotencyKey: "same-key", expectedRuntimeGeneration: "actual-generation", ownerId: "must-not-forward", path: "/must-not-forward" };
-  await duplicateEffectiveSkill("project", input);
-  expect(request).toHaveBeenCalledWith("/projects/project/skills/duplicate", "POST", { sessionId: "session", key: "opaque", title: "My source check", idempotencyKey: "same-key", expectedRuntimeGeneration: "actual-generation" });
+it("a copy request carries only the title and the retry key", async () => {
+  await copyPlatformSkill("core:stats-integrity", { title: "我的核查", idempotencyKey: "same-key", ownerId: "must-not-forward", path: "/must-not-forward" } as never);
+  expect(request).toHaveBeenCalledWith("/skills/platform/core%3Astats-integrity/copy", "POST", { title: "我的核查", idempotencyKey: "same-key" });
 });
 it("repository preview cannot forward user URLs, credentials or plugin-install authority", async () => {
   await previewPersonalSkillRepository({ repository: "example/skills", commit: "a".repeat(40), subdirectory: "skills/check", url: "https://must-not-forward.invalid", token: "must-not-forward" } as never);

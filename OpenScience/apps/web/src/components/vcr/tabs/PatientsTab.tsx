@@ -4,7 +4,6 @@ import { cn } from "@/lib/cn";
 import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { Tag } from "@/components/ui/Tag";
-import { VcrCountsBand } from "../VcrCounts";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrTornadoChart } from "../VcrDiagrams";
 import { SourceTag } from "../VcrMarks";
@@ -56,16 +55,6 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
 
   return (
     <div className="flex flex-col gap-6">
-      {data.sets && data.sets.length > 0 && (
-        <VcrToolbar>
-          {data.sets.map((set) => (
-            <Tag key={set.id} className={cn(set.stale && "text-text-3")}>{set.stale ? `${set.label}（已过期）` : set.label}</Tag>
-          ))}
-        </VcrToolbar>
-      )}
-      {data.model && <ModelChipRow model={data.model} twin={twin} />}
-      <VcrModelAssessments studyId={studyId} assessments={data.assessments} canEdit={study.abilities.includes("manage_study")} onSaved={reload} />
-
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
         : data.partial && <PartialResultNote done={data.partial.done} missing={data.partial.missing} />}
@@ -148,9 +137,19 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
             />
           )}
 
-          <VcrCountsBand counts={data.counts} />
         </div>
       </Stale>
+
+      {/* The result is above; what it was made with — the model, the sets it was made for and the model's assessment — follows it. */}
+      {data.sets && data.sets.length > 0 && (
+        <VcrToolbar>
+          {data.sets.map((set) => (
+            <Tag key={set.id} className={cn(set.stale && "text-text-3")}>{set.stale ? `${set.label}（已过期）` : set.label}</Tag>
+          ))}
+        </VcrToolbar>
+      )}
+      {data.model && <ModelChipRow model={data.model} twin={twin} />}
+      <VcrModelAssessments studyId={studyId} assessments={data.assessments} canEdit={study.abilities.includes("manage_study")} onSaved={reload} />
     </div>
   );
 }
@@ -216,7 +215,6 @@ function ModelChipRow({ model, twin }: { model: VcrModelCard; twin: PatientsData
       <span className="flex items-center gap-2 text-ui font-medium text-text">
         <Tag tone="accent">{modelTierLabel(model.tier)}</Tag>
         {model.name}
-        {model.version && <span className="text-text-3">{model.version}</span>}
       </span>
       {twin && (
         <span data-vcr-twin="">

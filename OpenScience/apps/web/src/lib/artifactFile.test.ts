@@ -40,4 +40,23 @@ describe("artifactFile", () => {
     expect(clicked[0].download).toBe("result.csv");
     expect(document.body.contains(clicked[0])).toBe(false);
   });
+
+  it("reads, previews and downloads a file of another project when the caller names it, and leaves every other call as it was", async () => {
+    apiMocks.invokeCommand.mockResolvedValue("ok");
+    apiMocks.webFileDownloadUrl.mockReturnValue("https://science.example/api/files/download/a.pdf?root=base&projectId=paper2");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const { readArtifact, previewUrl, probeLargeFile, downloadArtifact } = await import("./artifactFile");
+
+    await readArtifact("knowledge-base/a.pdf", "base");
+    expect(apiMocks.invokeCommand).toHaveBeenLastCalledWith("read_artifact", { path: "knowledge-base/a.pdf", root: "base" });
+    await readArtifact("knowledge-base/a.pdf", "base", "paper2");
+    expect(apiMocks.invokeCommand).toHaveBeenLastCalledWith("read_artifact", { path: "knowledge-base/a.pdf", root: "base" }, { projectId: "paper2" });
+    await previewUrl("knowledge-base/a.pdf", "base", "paper2");
+    expect(apiMocks.invokeCommand).toHaveBeenLastCalledWith("preview_url", { path: "knowledge-base/a.pdf", root: "base" }, { projectId: "paper2" });
+    apiMocks.invokeCommand.mockResolvedValue("{}");
+    await probeLargeFile("knowledge-base/a.pdf", "base", "paper2");
+    expect(apiMocks.invokeCommand).toHaveBeenLastCalledWith("probe_large_file", { path: "knowledge-base/a.pdf", root: "base" }, { projectId: "paper2" });
+    await downloadArtifact("knowledge-base/a.pdf", "base", "a.pdf", "paper2");
+    expect(apiMocks.webFileDownloadUrl).toHaveBeenLastCalledWith("knowledge-base/a.pdf", "base", "paper2");
+  });
 });

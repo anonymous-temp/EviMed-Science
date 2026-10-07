@@ -26,7 +26,7 @@ export function recipientsOf(text: string): string[] {
 
 /**
  * 「分享给平台里的人」, inside 分享与导入 (evidence-flywheel F17, 2026-10-05): hand the capsule to named accounts of this platform in
- * one step, make a link only signed-in accounts can open, and take the approved methods out in the open Agent Skills format. What
+ * one step, make a link only signed-in accounts can open, and take the approved methods out as a folder each, in the open Agent Skills format. What
  * travels between people is text only. Nothing here lists accounts: a name is typed in full, and the answer to a delivery is how many
  * arrived, the same whatever kept the others from arriving.
  */
@@ -132,9 +132,9 @@ export function CapsuleSharePanel({ capsuleId }: { capsuleId: string | null }) {
       <Button variant="secondary" disabled={busy || !capsuleId} onClick={() => void perform(async () => {
         if (!capsuleId) return;
         await downloadMethodPack(capsuleId);
-        if (mounted.current) setNotice("已下载。每个做法一个文件夹，带署名和来源，只含文字，可以放进支持 Agent Skills 的其他工具。");
-      })}>导出为 Agent Skills</Button>
-      <p className="text-caption text-text-3">已学到的做法按开放的 Agent Skills 格式导出；脚本不会随它分享。</p>
+        if (mounted.current) setNotice("已下载。每个做法一个文件夹，带署名和来源，只含文字，可以放进其他支持技能的工具。");
+      })}>导出做法</Button>
+      <p className="text-caption text-text-3">已学到的做法按通用的技能格式导出；脚本不会随它分享。</p>
     </div>
   </section>;
 }

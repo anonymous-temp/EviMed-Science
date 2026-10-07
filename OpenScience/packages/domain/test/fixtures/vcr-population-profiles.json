@@ -1,0 +1,337 @@
+{
+  "_note": "Recorded from the engine (vcr-engine R/population.R, vcr_population_profile) on 2026-10-07: the diagnostics.profile of three real runs (a scenario population, a literature population, an empirical synthetic one whose small levels were withheld). Regenerate by running the three jobs; the domain test holds each to validatePopulationProfile and holds the shape.",
+  "scenario": [
+    {
+      "variable": "age",
+      "label": "年龄",
+      "kind": "continuous",
+      "declared": {
+        "family": "normal",
+        "params": {
+          "mean": 63,
+          "sd": 9
+        },
+        "constraints": [
+          {
+            "kind": "bounds",
+            "min": 18,
+            "max": 95
+          },
+          {
+            "kind": "rule",
+            "name": "adult",
+            "rule": {
+              "op": "compare",
+              "column": "age",
+              "comparator": "gte",
+              "value": 18
+            }
+          }
+        ]
+      },
+      "n": 1000,
+      "missing": 0,
+      "mean": 63.01,
+      "sd": 8.935,
+      "median": 63.05,
+      "q1": 56.97,
+      "q3": 68.57,
+      "min": 35.92,
+      "max": 91.06,
+      "histogram": {
+        "breaks": [35.92, 43.79, 51.67, 59.55, 67.43, 75.31, 83.18, 91.06],
+        "counts": [
+          11,
+          96,
+          233,
+          358,
+          220,
+          68,
+          14
+        ]
+      }
+    },
+    {
+      "variable": "female",
+      "label": "女性",
+      "kind": "binary",
+      "declared": {
+        "family": "bernoulli",
+        "params": {
+          "prob": 0.45
+        },
+        "constraints": []
+      },
+      "n": 1000,
+      "missing": 0,
+      "levels": [
+        {
+          "level": "0",
+          "n": 559,
+          "p": 0.559
+        },
+        {
+          "level": "1",
+          "n": 441,
+          "p": 0.441
+        }
+      ]
+    },
+    {
+      "variable": "stage",
+      "label": null,
+      "kind": "categorical",
+      "declared": {
+        "family": "categorical",
+        "params": {
+          "probs": [0.5, 0.3, 0.2]
+        },
+        "constraints": []
+      },
+      "n": 1000,
+      "missing": 0,
+      "levels": [
+        {
+          "level": "1",
+          "n": 494,
+          "p": 0.494
+        },
+        {
+          "level": "2",
+          "n": 324,
+          "p": 0.324
+        },
+        {
+          "level": "3",
+          "n": 182,
+          "p": 0.182
+        }
+      ]
+    },
+    {
+      "variable": "bmi",
+      "label": null,
+      "kind": "continuous",
+      "declared": {
+        "family": "lognormal",
+        "params": {
+          "meanlog": 3.3,
+          "sdlog": 0.15
+        },
+        "constraints": []
+      },
+      "n": 1000,
+      "missing": 94,
+      "mean": 27.23,
+      "sd": 4.158,
+      "median": 26.84,
+      "q1": 24.26,
+      "q3": 29.88,
+      "min": 17.45,
+      "max": 40.88,
+      "histogram": {
+        "breaks": [17.45, 20.8, 24.15, 27.49, 30.84, 34.19, 37.53, 40.88],
+        "counts": [
+          40,
+          180,
+          280,
+          225,
+          128,
+          44,
+          9
+        ]
+      }
+    }
+  ],
+  "literature": [
+    {
+      "variable": "age",
+      "label": "年龄",
+      "kind": "continuous",
+      "declared": {
+        "family": "normal",
+        "params": {
+          "mean": 61,
+          "sd": 9
+        },
+        "constraints": [
+          {
+            "kind": "bounds",
+            "min": 30
+          }
+        ]
+      },
+      "n": 800,
+      "missing": 0,
+      "mean": 60.94,
+      "sd": 8.741,
+      "median": 60.87,
+      "q1": 55.18,
+      "q3": 66.99,
+      "min": 34.23,
+      "max": 86.69,
+      "histogram": {
+        "breaks": [34.23, 41.72, 49.22, 56.71, 64.2, 71.7, 79.19, 86.69],
+        "counts": [
+          8,
+          66,
+          170,
+          272,
+          197,
+          75,
+          12
+        ]
+      }
+    },
+    {
+      "variable": "male",
+      "label": null,
+      "kind": "binary",
+      "declared": {
+        "family": "bernoulli",
+        "params": {
+          "prob": 0.6
+        },
+        "constraints": []
+      },
+      "n": 800,
+      "missing": 0,
+      "levels": [
+        {
+          "level": "0",
+          "n": 335,
+          "p": 0.4188
+        },
+        {
+          "level": "1",
+          "n": 465,
+          "p": 0.5812
+        }
+      ]
+    },
+    {
+      "variable": "ecog",
+      "label": null,
+      "kind": "categorical",
+      "declared": {
+        "family": "categorical",
+        "params": {
+          "probs": [0.5, 0.3, 0.2],
+          "levels": ["low", "mid", "high"]
+        },
+        "constraints": []
+      },
+      "n": 800,
+      "missing": 0,
+      "levels": [
+        {
+          "level": "low",
+          "n": 394,
+          "p": 0.4925
+        },
+        {
+          "level": "mid",
+          "n": 235,
+          "p": 0.2938
+        },
+        {
+          "level": "high",
+          "n": 171,
+          "p": 0.2138
+        }
+      ]
+    }
+  ],
+  "empirical": [
+    {
+      "variable": "age",
+      "label": null,
+      "kind": "continuous",
+      "declared": null,
+      "n": 320,
+      "missing": 0,
+      "mean": 59.75,
+      "sd": 9.599,
+      "median": 60.36,
+      "q1": 53.24,
+      "q3": 66.4,
+      "min": 30.24,
+      "max": 87.71,
+      "histogram": {
+        "breaks": [30.24, 38.45, 46.66, 54.87, 63.08, 71.29, 79.5, 87.71],
+        "counts": [
+          null,
+          28,
+          60,
+          108,
+          88,
+          25,
+          null
+        ]
+      },
+      "suppressed": [
+        "histogram"
+      ]
+    },
+    {
+      "variable": "sex",
+      "label": null,
+      "kind": "binary",
+      "declared": null,
+      "n": 320,
+      "missing": 0,
+      "levels": [
+        {
+          "level": "0",
+          "n": 174,
+          "p": 0.5438
+        },
+        {
+          "level": "1",
+          "n": 146,
+          "p": 0.4562
+        }
+      ]
+    },
+    {
+      "variable": "grp",
+      "label": null,
+      "kind": "categorical",
+      "declared": null,
+      "n": 320,
+      "missing": 0,
+      "levels": [
+        {
+          "level": "a",
+          "n": 148,
+          "p": 0.4625
+        },
+        {
+          "level": "b",
+          "n": 109,
+          "p": 0.3406
+        },
+        {
+          "level": "c",
+          "n": 49,
+          "p": 0.1531
+        },
+        {
+          "level": "d",
+          "n": null,
+          "p": null,
+          "suppressed": true
+        },
+        {
+          "level": "other",
+          "n": null,
+          "p": null,
+          "suppressed": true
+        }
+      ],
+      "suppressed": [
+        "levels"
+      ]
+    }
+  ]
+}

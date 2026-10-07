@@ -326,3 +326,35 @@ test("the engine probe is bounded, reads five scalars and never echoes an upstre
   await lazy.refresh();
   assert.equal(asked, 6);
 });
+
+test("engine readiness is one yes or no each: only a positive answer is a yes, and the VCR engine is read from its own probe", async () => {
+  const { service } = build({ health: { "meta:8024": "down", "mr:8026": "degraded" } });
+  const rows = await service.engineReadiness(alice);
+  const byId = Object.fromEntries(rows.map((row) => [row.id, row.available]));
+  assert.deepEqual(Object.keys(byId).sort(), ["bibliometric_analysis", "drug_safety_analysis", "mendelian_randomization", "meta_analysis", "peer_review", "research_topic_selection", "vcr"]);
+  assert.equal(byId.meta_analysis, false, "an engine that did not answer is not available");
+  assert.equal(byId.mendelian_randomization, false, "an engine that answered that it is not ready is not available");
+  assert.equal(byId.bibliometric_analysis, true);
+  assert.equal(byId.peer_review, true);
+  assert.equal(byId.vcr, false, "the module is off here, so its engine is not on offer");
+  assert.ok(rows.every((row) => typeof row.available === "boolean"), "never a third word");
+
+  const on = build({ cfg: config({ vcrEnabled: true, vcrAudience: "all" }), vcrEngine: () => ({ state: "answering", code: null, checkedAt: null }) });
+  assert.equal((await on.service.engineReadiness(alice)).find((row) => row.id === "vcr")?.available, true);
+  const silent = build({ cfg: config({ vcrEnabled: true, vcrAudience: "all" }), vcrEngine: () => ({ state: "not_answering", code: "x", checkedAt: null }) });
+  assert.equal((await silent.service.engineReadiness(alice)).find((row) => row.id === "vcr")?.available, false);
+});
+
+test("an engine reading that has not been made yet is asked for before the page says anything", async () => {
+  let asked = 0;
+  const { service } = build({ cfg: config({ vcrEnabled: true, vcrAudience: "all" }), vcrEngine: () => ({ state: "unknown", code: null, checkedAt: null }) });
+  service.vcrEngineRefresh = async () => { asked += 1; return { state: "answering", code: null, checkedAt: "2026-10-07T00:00:00.000Z" }; };
+  assert.equal((await service.engineReadiness(alice)).find((row) => row.id === "vcr")?.available, true);
+  assert.equal(asked, 1);
+});
+
+test("a deployment that composes no engine adapter reports every specialist engine as not available", async () => {
+  const { service } = build({ cfg: config({ evimedAdapterUrls: {} }) });
+  const rows = await service.engineReadiness(alice);
+  assert.deepEqual(rows.filter((row) => row.id !== "vcr").map((row) => row.available), [false, false, false, false, false, false]);
+});

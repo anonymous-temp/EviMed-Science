@@ -104,11 +104,20 @@ export type OwnCapsuleEntry = CapsuleEntry & { projectId?: string | null };
 export interface MyCapsule {
   capsule: CapsuleRecord | null;
   capsules: { id: string; title: string; projectId: string | null; revision: number }[];
+  /** The notes in force. */
   entries: OwnCapsuleEntry[];
+  /** The notes the researcher forgot: 已忘记的内容 lists them, each with 恢复. */
+  forgotten: OwnCapsuleEntry[];
 }
 
 export function fetchMyCapsule() {
   return productRequest<MyCapsule>("/capsules/mine");
+}
+
+/** 恢复 on a forgotten note: back in force, as the researcher's own word again. */
+export function restoreCapsuleEntry(capsuleId: string, entry: Pick<CapsuleEntry, "id" | "revision">) {
+  return productRequest<CapsuleEntry>(`/capsules/${encodeURIComponent(capsuleId)}/entries/${encodeURIComponent(entry.id)}`, "PATCH",
+    { expectedRevision: entry.revision, status: "approved" });
 }
 
 /** The account capsule, made on first use; where an entry written on the capsule page goes. */
@@ -150,6 +159,28 @@ export interface MemoryGrowth {
 export function fetchMemoryGrowth(timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
   const query = new URLSearchParams(timeZone ? { timeZone } : {});
   return productRequest<MemoryGrowth>(`/memory/growth?${query.toString()}`);
+}
+
+/**
+ * 「哪天学会了什么」, under the growth line: one entry per day, newest first — when the capsule began to remember, and each
+ * method or handbook that was learned or improved. Read from the records that say it, never from a log of its own.
+ */
+export interface MemoryLearnedItem {
+  kind: "start" | "learned" | "improved";
+  what: "method" | "handbook" | null;
+  /** The method's or handbook's id, to open its drawer; null for the beginning. */
+  id: string | null;
+  title: string;
+}
+
+export interface MemoryLearned {
+  days: Array<{ /** YYYY-MM-DD in the researcher's zone. */ day: string; items: MemoryLearnedItem[] }>;
+  timeZone: string;
+}
+
+export function fetchMemoryLearned(timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  const query = new URLSearchParams(timeZone ? { timeZone } : {});
+  return productRequest<MemoryLearned>(`/memory/learned?${query.toString()}`);
 }
 
 /** A pack someone shared, as the received shelf shows it. */

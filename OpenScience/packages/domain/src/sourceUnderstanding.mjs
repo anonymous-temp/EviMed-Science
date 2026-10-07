@@ -2,16 +2,20 @@
  * Semantic interpretation belongs to the capability; this module checks shape,
  * source identity and exact character bonds only. Offsets are UTF-16 code units. */
 import { distillationCompleteness } from './analysis.mjs'
+import { sourceDocTypesOfSchema } from './sourceVocabulary.mjs'
 
 export const SOURCE_UNDERSTANDING_VERSION = 1
 export const SOURCE_UNDERSTANDING_MAX_CHARS = 16 * 1024 * 1024
 export const SOURCE_UNDERSTANDING_FILE = 'source-understanding.json'
 export const SOURCE_UNDERSTANDING_INPUT_FILE = 'source-understanding-input.json'
 
+// Which types read with which slots is the vocabulary's (`sourceVocabulary.mjs`):
+// the paper slots belong to a paper or a preprint and to nothing else, so a
+// document that is anything but one is never asked for a study design.
 const schemas = Object.freeze([
-  { id: 'procedure', docTypes: ['research-protocol', 'grant-proposal'], slots: ['purpose', 'applicability', 'inputs', 'steps', 'checks', 'pitfalls'] },
-  { id: 'paper', docTypes: ['published-paper', 'preprint-manuscript', 'review-guideline'], slots: ['doi', 'design', 'population', 'interventionExposure', 'outcomes', 'effectEstimates', 'limitations'] },
-  { id: 'notes', docTypes: ['note-memo', 'message-export'], slots: ['topic', 'decisions', 'actions', 'openQuestions'] },
+  { id: 'procedure', docTypes: sourceDocTypesOfSchema('procedure'), slots: ['purpose', 'applicability', 'inputs', 'steps', 'checks', 'pitfalls'] },
+  { id: 'paper', docTypes: sourceDocTypesOfSchema('paper'), slots: ['doi', 'design', 'population', 'interventionExposure', 'outcomes', 'effectEstimates', 'limitations'] },
+  { id: 'notes', docTypes: sourceDocTypesOfSchema('notes'), slots: ['topic', 'decisions', 'actions', 'openQuestions'] },
   { id: 'general', docTypes: [], slots: ['purpose', 'keyInformation', 'limitations'] },
 ].map(schema => Object.freeze({ ...schema, slots: Object.freeze(schema.slots), docTypes: Object.freeze(schema.docTypes) })))
 export const SOURCE_UNDERSTANDING_SCHEMAS = schemas

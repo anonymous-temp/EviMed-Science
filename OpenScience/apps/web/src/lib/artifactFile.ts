@@ -18,10 +18,14 @@ export interface ArtifactFile {
   size: number;
 }
 
-/** Read a root-relative file. Returns null when no desktop or hosted backend is configured. */
-export async function readArtifact(path: string, root?: FileRoot): Promise<ArtifactFile | null> {
+/**
+ * Read a root-relative file. Returns null when no desktop or hosted backend is configured.
+ * `projectId` names the project whose files `path` is relative to, when it is not the tab's own
+ * (the knowledge base page previewing a document of another project).
+ */
+export async function readArtifact(path: string, root?: FileRoot, projectId?: string): Promise<ArtifactFile | null> {
   if (!hasWebApi) return null;
-  return invokeCommand<ArtifactFile>("read_artifact", { path, root });
+  return projectId ? invokeCommand<ArtifactFile>("read_artifact", { path, root }, { projectId }) : invokeCommand<ArtifactFile>("read_artifact", { path, root });
 }
 
 /** Whether each claim of a clinical evidence matrix quotes the preserved source
@@ -33,9 +37,9 @@ export async function readClaimVerification(matrixPath: string, root?: FileRoot)
 
 /** URL a workspace file is previewable at. Desktop uses the local file server;
  *  hosted Web uses the authenticated server preview endpoint. */
-export async function previewUrl(path: string, root?: FileRoot): Promise<string | null> {
+export async function previewUrl(path: string, root?: FileRoot, projectId?: string): Promise<string | null> {
   if (!hasWebApi) return null;
-  return invokeCommand<string>("preview_url", { path, root });
+  return projectId ? invokeCommand<string>("preview_url", { path, root }, { projectId }) : invokeCommand<string>("preview_url", { path, root });
 }
 
 /** Open a root-relative file in the OS default application (desktop only). */
@@ -45,12 +49,12 @@ export async function openArtifactExternally(path: string, root?: FileRoot): Pro
 }
 
 /** Download a root-relative hosted file through the authenticated Web API. */
-export async function downloadArtifact(path: string, root?: FileRoot, filename?: string): Promise<void> {
+export async function downloadArtifact(path: string, root?: FileRoot, filename?: string, projectId?: string): Promise<void> {
   if (!hasWebApi) {
     await openArtifactExternally(path, root);
     return;
   }
-  downloadUrl(webFileDownloadUrl(path, root), filename || filenameFromPath(path));
+  downloadUrl(projectId ? webFileDownloadUrl(path, root, projectId) : webFileDownloadUrl(path, root), filename || filenameFromPath(path));
 }
 
 /** Download the immutable text captured in a historical tool event instead of
@@ -84,9 +88,9 @@ function downloadUrl(url: string, filename: string): void {
  *  large-file probe and returns its compact memory pointer (schema / shape /
  *  sample / key numbers). Returns null when no desktop or hosted backend is
  *  configured; throws the probe's error message on failure. */
-export async function probeLargeFile(path: string, root?: FileRoot): Promise<LargeFilePointer | null> {
+export async function probeLargeFile(path: string, root?: FileRoot, projectId?: string): Promise<LargeFilePointer | null> {
   if (!hasWebApi) return null;
-  const json = await invokeCommand<string>("probe_large_file", { path, root });
+  const json = projectId ? await invokeCommand<string>("probe_large_file", { path, root }, { projectId }) : await invokeCommand<string>("probe_large_file", { path, root });
   return JSON.parse(json) as LargeFilePointer;
 }
 

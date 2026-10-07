@@ -1094,6 +1094,23 @@ const sourceIntakeErrorCodes = Object.freeze([
   'source_parser_response_invalid',
   'source_parser_response_too_large',
   'source_changed',
+  // 「添加网页链接」 and 「新建笔记」 (`knowledgeBaseEntries.mjs`): the answers to one pasted address or one note. The page
+  // reader's own codes (`web_read_*`) are written for a run that tries another source; a person who pasted a link is
+  // told which of these it was.
+  'source_link_invalid',
+  'source_link_private',
+  'source_link_blocked',
+  'source_link_login_required',
+  'source_link_not_found',
+  'source_link_unreadable',
+  'source_link_too_large',
+  'source_link_unavailable',
+  'source_link_busy',
+  'source_link_unreachable',
+  'source_link_failed',
+  'source_link_required',
+  'source_note_invalid',
+  'source_note_required',
   // 连接网盘 (`openListClient.mjs`): OpenList's own refusals, named so the
   // browse toast says what happened rather than a bare 502. No storage covers
   // the account's namespace; the deployment's credential was not accepted.
@@ -1162,6 +1179,9 @@ const capsuleTransferErrorCodes = Object.freeze([
   // method, not 「内容已发生变化」 — what a bare 409 used to be read as.
   'method_no_earlier_version',
   'method_revision_unavailable',
+  // The same two for a capability handbook (`HandbookLibrary`): one that is gone, and a version that is.
+  'handbook_unavailable',
+  'handbook_revision_unavailable',
 ])
 
 /**
@@ -1200,6 +1220,11 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_records_not_synthetic',
   'vcr_records_quality_missing',
   'vcr_records_unavailable',
+  'vcr_card_edit_refused',
+  'vcr_card_edit_empty',
+  'vcr_card_edit_unchanged',
+  'vcr_card_not_found',
+  'vcr_card_not_current',
   'vcr_tab_not_found',
   'vcr_job_kind_invalid',
   'vcr_job_scenario_invalid',
@@ -1448,6 +1473,7 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_payload_invalid',
   'geo_project_not_found',
   'geo_brand_name_invalid',
+  'geo_project_name_invalid',
   'geo_engines_invalid',
   'geo_coverage_invalid',
   'geo_tier_invalid',
@@ -1651,6 +1677,9 @@ export const CAPSULE_SHARE_ERROR_CODES = Object.freeze([
 export const EXTENSION_ERROR_CODES = Object.freeze([
   'extension_contract_invalid', 'extension_proof_untrusted',
   'extension_proof_stale', 'extension_proof_incomplete', 'extension_access_denied', 'extension_storage_capacity',
+  // The platform's own skills (platformSkillCatalogue.mjs): one that is not in the list, one whose folder this image does not
+  // carry or the platform keeps from being copied, and one whose files could not be read whole.
+  'skill_platform_not_found', 'skill_platform_not_copyable', 'skill_platform_unreadable',
 ])
 
 export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown']);
@@ -1765,6 +1794,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   extension_proof_incomplete: '扩展的兼容核验尚未完成，已有科研任务仍可继续。',
   extension_access_denied: '你没有执行这个扩展操作的权限，请检查项目和连接授权。',
   extension_storage_capacity: '技能存储空间暂时不足，请整理技能文件后重试。',
+  skill_platform_not_found: '平台技能列表里没有这个技能，请刷新后重试。',
+  skill_platform_not_copyable: '这个技能暂时不能复制为我的技能，可以在对话里直接使用它。',
+  skill_platform_unreadable: '这个技能的文件暂时读不全，请稍后重试。',
   vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
   vcr_backup_unhealthy: '恢复备份尚未通过检查。',
   vcr_subject_table_unreadable: '这份受试者数据表现在读不出来；这次匹配只用病历文档和已有事实，其余步骤照常。',
@@ -1812,9 +1844,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_path_invalid: '这个地址不是虚拟临研的页面；从研究列表重新进入。',
   vcr_payload_invalid: '提交的内容格式不对，没有保存；刷新页面后重新填写。',
   vcr_study_not_found: '找不到这个研究，或它不属于你的账号；从研究列表重新进入。',
-  vcr_name_invalid: '研究名要写 1 到 80 个字。',
+  vcr_name_invalid: '研究名要写 1 到 40 个字。',
   vcr_tier_invalid: '数据档位只能选 T0 到 T3 之一。',
-  vcr_tier_unsupported: '研究里已冻结的数据还支持不了这个档位；先在「数据与证据」里接入并冻结数据，再升档位。',
+  vcr_tier_unsupported: '研究里已冻结的数据还支持不了这个档位；先在「定义与证据」里接入并冻结数据，再升档位。',
   vcr_intended_use_invalid: '预期用途只能选：探索、研究设计支持、指定研究分析、申报准备。',
   vcr_status_invalid: '研究状态只能是进行中、已暂停或已归档。',
   vcr_step_invalid: '没有这一步；研究的步骤是定义、证据、人群、患者、对照、试验、匹配。',
@@ -1825,6 +1857,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_records_not_synthetic: '这是真实患者的记录，不能下载：真实患者的行不离开数据平面。',
   vcr_records_quality_missing: '这份经验合成的记录还没有质量报告和泄露检查，不能下载：先生成质量报告。',
   vcr_records_unavailable: '本部署没有接入数据平面，生成的记录暂时不能下载。',
+  vcr_card_edit_refused: '这样改不成立，没有保存；按提示改正后再试。',
+  vcr_card_edit_empty: '没有要改的设定。',
+  vcr_card_edit_unchanged: '设定没有变化，没有生成新版本。',
+  vcr_card_not_found: '没有找到要修改的内容；刷新页面后再试。',
+  vcr_card_not_current: '这项内容已经有更新的版本；刷新页面后在新版本上修改。',
   vcr_tab_not_found: '研究页没有这个页签。',
   vcr_job_kind_invalid: '没有这种计算；请在页面上给出的计算类型里选。',
   vcr_job_scenario_invalid: '这项计算的参数不符合引擎的要求，没有排队；按提示的字段修改后再提交。',
@@ -2316,6 +2353,20 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_parser_response_invalid: '文档解析服务返回的结果无法使用，稍后再重新分析。',
   source_parser_response_too_large: '这份文件解析出的正文超过了可保存的上限，拆分后再上传即可。',
   source_changed: '文件在登记之后被改动过；刷新知识库后再分析。',
+  source_link_invalid: '这不是一个可以读取的网址。请粘贴以 http 或 https 开头的完整地址。',
+  source_link_private: '这个地址指向内网或不对外公开的主机，不能读取。',
+  source_link_blocked: '这个网站的 robots.txt 不允许读取这个页面，没有添加。可以把页面另存为文件后上传。',
+  source_link_login_required: '这个页面需要登录才能查看，EviMed 不会替你登录网站。可以把页面另存为文件后上传。',
+  source_link_not_found: '网站说这个页面不存在，请检查网址。',
+  source_link_unreadable: '读不出这个页面的正文：它可能完全由脚本绘制，或不是网页、PDF、Word 这类文档。可以把内容另存为文件后上传。',
+  source_link_too_large: '这个页面太大，没有读取。',
+  source_link_unavailable: '这个部署没有开启网页读取，暂时不能添加网页链接。',
+  source_link_busy: '同时读取的网页太多了，稍后再试。',
+  source_link_unreachable: '这个网页暂时打不开，稍后再试。',
+  source_link_failed: '这个网页这次没有读取成功，稍后再试。',
+  source_link_required: '这份资料不是保存下来的网页，没有可以重新读取的网址。',
+  source_note_invalid: '笔记需要一个不超过 120 个字的标题，正文必须是文字。',
+  source_note_required: '这份资料不是笔记，不能在这里编辑。',
   openlist_storage_missing: '这个账户还没有接入网盘，无法从网盘导入。可以先直接上传文件。',
   openlist_credential_rejected: '网盘服务没有接受这个部署的凭据，暂时无法浏览网盘。请联系管理员。',
   library_unavailable: '个人资料库暂时不可用，稍后再试。',
@@ -2363,6 +2414,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_community_not_found: '这个官方专区不存在，或还没有发布。',
   method_no_earlier_version: '这个做法没有更早的版本。',
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
+  handbook_unavailable: '这条经验已不存在，刷新后再试。',
+  handbook_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
   // ——— Tool-boundary codes that have no family and would otherwise be bare ———
   tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',

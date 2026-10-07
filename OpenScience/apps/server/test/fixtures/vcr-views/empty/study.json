@@ -3,6 +3,7 @@
   "projectId": "prj_empty",
   "name": "GLP-1 周制剂 III 期：样本量与脱落情景",
   "question": null,
+  "definition": null,
   "tier": "T0",
   "intendedUse": "exploratory",
   "status": "active",
@@ -85,10 +86,6 @@
     "read_patient_level"
   ],
   "tierOffer": null,
-  "engine": {
-    "state": "missing",
-    "available": false
-  },
   "budget": {
     "limitSeconds": 7200,
     "usedSeconds": 0,
@@ -110,8 +107,11 @@
     "designs": [],
     "attention": [],
     "changes": [],
+    "reviews": [],
     "deliverables": []
   },
   "updatedAt": "今天 09:18",
-  "createdAt": "2026-09-27T01:14:00.000Z"
+  "createdAt": "2026-09-27T01:14:00.000Z",
+  "conversationSessionId": null,
+  "engine": "missing"
 }

@@ -345,6 +345,14 @@ vcr_replicate_floor <- function(is_null, target_mcse = NULL, p = NULL, alpha = 0
   if (!.vcrp_named(truth)) return(FALSE)
   kind <- .vcrp_get(.vcrp_get(scenario,"design"),"kind") %||% ""
   if(!.vcrp_chr(kind))kind<-""
+  # a single-arm trial of a mean or a survival time: its null is its effect over the benchmark (0, or a hazard ratio of 1) whatever a label says;
+  # the response-rate comparison is the binary single-arm and Simon designs'
+  type0 <- .vcrp_get(.vcrp_get(scenario, "endpoint"), "type")
+  if (identical(kind, "single_arm") && .vcrp_chr(type0) && type0 %in% c("continuous", "time_to_event")) {
+    if (identical(type0, "continuous")) return(.vcrp_num(truth[["effect"]]) && abs(truth[["effect"]]) < 1e-12)
+    hr0 <- truth[["hazardRatio"]]
+    return(.vcrp_num(hr0) && hr0 > 0 && abs(log(hr0)) < 1e-12)
+  }
   if (kind %in% c("single_arm","simon_two_stage")) {
     return(.vcrp_num(truth$responseRate) && .vcrp_num(truth$nullRate) && abs(truth$responseRate-truth$nullRate)<1e-12)
   }
@@ -764,9 +772,12 @@ vcr_pattern_match <- function(pattern, x) {
     if (!is.null(method) && !(method %in% allowed)) bad("analysis.method","The analysis must match the endpoint.")
     return(invisible(NULL))
   }
-  if (!identical(endpoint,"binary")) bad("endpoint.type","This single-arm implementation requires a binary endpoint.")
-  expected<-c(single_arm="exact_binomial",single_arm_external="stratified_risk_difference",simon_two_stage="simon_boundary")
-  if (!is.null(method) && !identical(method,unname(expected[kind]))) bad("analysis.method","The analysis must match the declared single-arm design.")
+  # the analyses a single-arm design runs, by endpoint (VCR_SINGLE_ARM_ANALYSIS_METHODS in the domain)
+  analyses<-list(single_arm=list(binary="exact_binomial",continuous=c("one_sample_t","one_sample_z"),time_to_event="one_sample_logrank"),
+    single_arm_external=list(binary="stratified_risk_difference"),simon_two_stage=list(binary="simon_boundary"))
+  allowed<-if(.vcrp_chr(endpoint))analyses[[kind]][[endpoint]] else NULL
+  if (is.null(allowed)) bad("endpoint.type",if(identical(kind,"single_arm"))"A single-arm design is simulated for a binary, continuous or time-to-event endpoint." else "This single-arm implementation requires a binary endpoint.")
+  else if (!is.null(method) && !(method %in% allowed)) bad("analysis.method","The analysis must match the declared single-arm design.")
   sided<-an$sided %||% 1
   if(!.vcrp_num(sided))sided<-1
   if(sided==1 && .vcrp_num(an$alpha) && an$alpha>=.5)bad("analysis.alpha","A one-sided analysis uses alpha below one half.")
@@ -977,14 +988,24 @@ vcr_validate_job <- function(job) {
 }
 
 .vcrp_legacy_design_version <- function(job,spec) {
-  if(is.null(spec$legacyVersion)||!identical(job$methodVersion,spec$legacyVersion))return(FALSE)
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")
   if(!.vcrp_chr(base))base<-""
   designs<-.vcrp_get(sc,"designs")
   kinds<-if(identical(job$method,"design.grid") && is.list(designs))
     vapply(designs,function(d){k<-.vcrp_get(d,"kind") %||% base;if(.vcrp_chr(k))k else ""},character(1)) else base
-  if(!length(kinds))return(TRUE) # malformed/missing design is refused by its scenario issue
-  all(!(kinds %in% unlist(vcr_domain()$trialDesigns)) | kinds %in% unlist(spec$legacyDesigns))
+  if(!is.null(spec$legacyVersion) && identical(job$methodVersion,spec$legacyVersion)) {
+    if(!length(kinds))return(TRUE) # malformed/missing design is refused by its scenario issue
+    return(all(!(kinds %in% unlist(vcr_domain()$trialDesigns)) | kinds %in% unlist(spec$legacyDesigns)))
+  }
+  # a later release is recorded by design and endpoint (`legacyReleases`): a job at that version asks for nothing it did not do
+  for(release in spec$legacyReleases) {
+    if(!identical(job$methodVersion,release$version))next
+    if(!length(kinds))return(TRUE)
+    endpoint<-.vcrp_get(.vcrp_get(sc,"endpoint"),"type")
+    if(!.vcrp_chr(endpoint))endpoint<-""
+    return(all(vapply(kinds,function(k)!(k %in% unlist(vcr_domain()$trialDesigns)) || endpoint %in% unlist(release$support[[k]]),logical(1))))
+  }
+  FALSE
 }
 
 #' Validate a result. Mirrors `validateEngineResult`. The engine runs this on

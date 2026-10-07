@@ -11,7 +11,7 @@ import {
   vcrDominatedScenarios, vcrPatientScenarioKeys, vcrReadiness, vcrReferenceModelInputs, vcrRouteOptions, VCR_UNSUPPORTED_COMPARATOR_ROUTES,
 } from "../src/vcrService.mjs";
 import {
-  VCR_COUNT_KEYS, VCR_ENDPOINT_TYPES, VCR_ENGINE_METHODS, VCR_ROUTE_MIN_TIER, VCR_TABS, intendedUseCeiling, missingModelEvidence, validateScenario,
+  VCR_COUNT_KEYS, VCR_ENDPOINT_TYPES, VCR_ENGINE_METHODS, VCR_ROUTE_MIN_TIER, VCR_SCENARIO_SCHEMAS, VCR_TABS, intendedUseCeiling, missingModelEvidence, validateScenario,
 } from "@evimed/domain";
 
 test("AC-01 the module is invisible unless it is on and open to this account", () => {
@@ -98,7 +98,7 @@ test("AC-34 the intended use a result may claim follows from the tiers of the mo
     ["input_traceable", "sensitivity_analysis", "external_validation", "model_locked", "model_analysis_plan"]);
 });
 
-test("the first catalogue seeds every engine method and the three reference simulators, idempotently", async () => {
+test("the first catalogue seeds every engine method, the three reference simulators and the trajectory model, idempotently", async () => {
   /** @type {any[]} */
   const methods = [];
   /** @type {any[]} */
@@ -110,14 +110,15 @@ test("the first catalogue seeds every engine method and the three reference simu
   };
   const seeded = await seedVcrCatalogue({ store });
   assert.equal(seeded.methods, Object.keys(VCR_ENGINE_METHODS).length);
-  assert.equal(seeded.models, 3);
+  assert.equal(seeded.models, VCR_REFERENCE_MODELS.length);
+  assert.deepEqual(VCR_REFERENCE_MODELS.map((model) => model.name), ["reference-continuous", "reference-binary", "reference-time-to-event", "reference-longitudinal"]);
   assert.equal(seeded.engineMismatch, null, "no engine, nothing to compare against");
   // The methods are the domain's list, at the versions the domain pins.
   assert.deepEqual(methods.map((method) => method.method).sort(), Object.keys(VCR_ENGINE_METHODS).sort());
   for (const method of methods) assert.equal(method.version, VCR_ENGINE_METHODS[method.method].version);
   assert.ok(methods.every(method => !Object.hasOwn(method, 'numericTests') && !Object.hasOwn(method, 'assumptions')),
     'A catalogue restart must not erase trusted release evidence.');
-  // The three simulators are scenario-tier by construction: they answer 「under
+  // The simulators are scenario-tier by construction: they answer 「under
   // these assumptions」 and carry no claim about any real population.
   assert.deepEqual(models.map((model) => model.name), VCR_REFERENCE_MODELS.map((model) => model.name));
   for (const model of models) {
@@ -155,10 +156,12 @@ function generatorReads(endpointType, key) {
 }
 
 test("a reference simulator's card lists exactly the inputs its endpoint's schema reads: no follow-up or dropout for an endpoint that has none", () => {
-  assert.deepEqual(VCR_REFERENCE_MODELS.map((model) => model.endpointType).sort(), [...VCR_ENDPOINT_TYPES].sort(), "one simulator per endpoint family");
+  // one simulator per endpoint family; the trajectory model is a fourth, read through its own schema (the next test)
+  const perEndpoint = VCR_REFERENCE_MODELS.filter((model) => model.name !== "reference-longitudinal");
+  assert.deepEqual(perEndpoint.map((model) => model.endpointType).sort(), [...VCR_ENDPOINT_TYPES].sort(), "one simulator per endpoint family");
   const tabled = VCR_REFERENCE_INPUTS.flatMap((input) => input.keys);
   assert.equal(new Set(tabled).size, tabled.length, "a key belongs to one row");
-  for (const model of VCR_REFERENCE_MODELS) {
+  for (const model of perEndpoint) {
     const endpoint = model.endpointType;
     assert.equal(model.card.interface, `vcr-engine patients.${endpoint}`, "the card is read through its own method's schema");
     // The oracle is the validator a job is refused by, not the helper that built the card.
@@ -177,16 +180,51 @@ test("a reference simulator's card lists exactly the inputs its endpoint's schem
     }
   }
   for (const key of tabled) {
-    assert.ok(VCR_REFERENCE_MODELS.some((model) => generatorReads(model.endpointType, key)), `${key} is in the table and no generator reads it`);
+    assert.ok(perEndpoint.some((model) => generatorReads(model.endpointType, key)), `${key} is in the table and no generator reads it`);
   }
   // What the pilot's run was refused for: `accrual` on a binary set, offered by the binary card.
   const followUp = /脱落|入组|随访/;
-  const card = (/** @type {string} */ endpoint) => VCR_REFERENCE_MODELS.find((model) => model.endpointType === endpoint)?.card.inputs ?? [];
+  const card = (/** @type {string} */ endpoint) => perEndpoint.find((model) => model.endpointType === endpoint)?.card.inputs ?? [];
   assert.equal(card("binary").some((label) => followUp.test(label)), false);
   assert.equal(card("continuous").some((label) => followUp.test(label)), false);
   assert.equal(card("time_to_event").filter((label) => followUp.test(label)).length, 3);
   assert.equal(generatorReads("binary", "accrual.dropoutAnnual"), false, "the validator refuses what the old card offered");
   assert.equal(generatorReads("time_to_event", "accrual.dropoutAnnual"), true);
+});
+
+/** What each row of the trajectory model's card says, and the keys of the `patients.longitudinal` schema it stands for. */
+const LONGITUDINAL_INPUTS = /** @type {const} */ ([
+  ["两组人数", ["design.nTreat", "design.nControl"]],
+  ["随访时间表", ["visits"]],
+  ["基线水平与对照组的变化速度", ["truth.intercept", "truth.slope"]],
+  ["处理效应（每个时间单位变化速度的差）", ["truth.effect"]],
+  ["个体间的差异（截距与斜率的标准差及相关）", ["truth.randomEffects"]],
+  ["残差标准差", ["truth.sd"]],
+  ["每次随访前退出的概率", ["dropoutPerVisit"]],
+  ["协变量效应（取自已存人群）", ["truth.covariateEffects"]],
+]);
+
+test("the trajectory model's card lists exactly the inputs its own schema reads, and says what it is not", () => {
+  const model = VCR_REFERENCE_MODELS.find((entry) => entry.name === "reference-longitudinal");
+  assert.ok(model, "the catalogue has the trajectory model");
+  assert.equal(model.tier, "scenario");
+  assert.equal(model.risk, "none");
+  assert.equal(model.card.interface, "vcr-engine patients.longitudinal", "the card is read through its own method's schema");
+  assert.deepEqual([...model.applicability.endpoints], ["continuous"]);
+  assert.deepEqual([...model.card.inputs], LONGITUDINAL_INPUTS.map(([label]) => label));
+  // Every key the schema reads (two levels deep, as the card table does) is on some row, and every row names a key the validator reads.
+  const schema = /** @type {Record<string, any>} */ (VCR_SCENARIO_SCHEMAS)["patients.longitudinal"];
+  const read = /** @type {string[]} */ ([]);
+  for (const [top, field] of Object.entries(/** @type {Record<string, any>} */ (schema.fields))) {
+    if (top === "endpoint") continue;
+    if (field.t === "object") for (const key of Object.keys(field.fields)) read.push(`${top}.${key}`);
+    else read.push(top);
+  }
+  const named = LONGITUDINAL_INPUTS.flatMap(([, keys]) => keys);
+  for (const key of read) assert.ok(named.includes(key), `the schema reads ${key} and no card row names it`);
+  for (const key of named) assert.ok(read.includes(key), `a card row names ${key}, which the schema does not read`);
+  assert.ok(model.card.knownLimits.some((/** @type {string} */ limit) => /不可用于个体层面的预测/.test(limit)), "it is not an individual prediction");
+  assert.ok(model.card.knownLimits.some((/** @type {string} */ limit) => /完全随机缺失/.test(limit)), "it says its dropout is random");
 });
 
 test("a catalogue the engine does not match is a notice, never a block", async () => {
@@ -231,21 +269,6 @@ test("readiness is red only for this module's own invariants; a missing engine i
     const reading = await vcrReadiness({ config: { vcrEnabled: true, vcrAudience: "all", vcrDataPlaneDir: "/plane" },
       vcr: { service: { async ready() { return true; }, engineMismatch: null }, engine: { configured: () => true }, engineProbe: { snapshot: () => (state ? { state, checkedAt: null } : null) } }, database: {} });
     assert.equal(reading.engineAvailable, available, String(state));
-  }
-});
-
-test("a study page says whether the engine is there, from the same reading readiness gives", () => {
-  const down = { state: "not_answering", checkedAt: null };
-  for (const [engine, probe, expected] of /** @type {Array<[any, any, { state: string, available: boolean }]>} */ ([
-    [null, null, { state: "missing", available: false }],
-    [{ configured: () => false }, null, { state: "missing", available: false }],
-    [{ configured: () => true }, null, { state: "wired", available: true }],
-    [{ configured: () => true }, { snapshot: () => ({ state: "answering" }) }, { state: "answering", available: true }],
-    [{ configured: () => true }, { snapshot: () => down }, { state: "not_answering", available: false }],
-  ])) {
-    const service = new VcrService({ store: /** @type {any} */ ({}), config: {}, engine });
-    service.attach({ engineProbe: probe });
-    assert.deepEqual(service.engineStatus(), expected);
   }
 });
 
@@ -325,7 +348,7 @@ test("a rise in tier needs data that supports it; T3 needs the data that qualifi
     assert.equal(updated.status, 409, `${from}→${to} on ${supports} data`);
     assert.equal(updated.code, "vcr_tier_unsupported");
     assert.ok(updated.message.includes(reached), updated.message);
-    assert.match(updated.message, /数据与证据/);
+    assert.match(updated.message, /定义与证据/);
     assert.deepEqual(updates, [], "nothing was written");
   }
   // Supported: the move is made, as before.

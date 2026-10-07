@@ -1019,6 +1019,22 @@ export {
   sourceFormatRoute,
   sourcePageForOffset,
 } from './src/sourceDocuments.mjs'
+// sourceVocabulary — what a document in the knowledge base is: its types with their Chinese names, the chip each is counted under, the understanding schema it is read with, where it came from, and the format-only first guess
+export {
+  SOURCE_DOC_TYPES,
+  SOURCE_FOLDERS,
+  SOURCE_KINDS,
+  SOURCE_ORIGINS,
+  sourceDocTypeIsDeep,
+  sourceDocTypeLabel,
+  sourceDocTypeShort,
+  sourceDocTypesOfSchema,
+  sourceFirstPassType,
+  sourceKindLabel,
+  sourceKindOf,
+  sourceOriginLabel,
+  sourceOriginOf,
+} from './src/sourceVocabulary.mjs'
 // sourceMaterials — 26 exports: what a parsed document's tables, figures and spreadsheets say about themselves (cell addresses, closed-format values, captions, footnotes, continuations), derived from the parser's text and never guessed
 export {
   SOURCE_CONTINUATION_BASES,
@@ -1293,7 +1309,7 @@ export { shareNoticeHref } from './src/shareNotice.mjs';
 
 export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence } from "./src/agendaSchedule.mjs";
 
-// vcrVocabulary — 128 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
+// vcrVocabulary — 132 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and
 // the study's seven steps and tabs)
 export {
@@ -1422,6 +1438,10 @@ export {
   VCR_STEP_STATUS_LABELS_ZH,
   VCR_STUDY_STATUSES,
   VCR_STUDY_STATUS_LABELS_ZH,
+  VCR_USER_STUDY_STATUSES,
+  VCR_DRAFT_STUDY_NAME,
+  VCR_LEGACY_DEFAULT_STUDY_NAME,
+  VCR_STUDY_NAME_FROM_QUESTION_MAX,
   VCR_SUPPORT_CEILING,
   VCR_SYNTHETIC_USES,
   VCR_SYNTHETIC_USE_LABELS_ZH,
@@ -1499,6 +1519,15 @@ export {
   VCR_CELL_IDENTITY_KEYS,
   suppressForModel,
 } from './src/vcrSuppression.mjs'
+
+// vcrPopulationProfile — 4 exports: the profile block of a generated population (scenario, literature,
+// empirical synthetic) the 人群 tab draws, and its validator
+export {
+  VCR_PROFILE_CONTINUOUS_FIELDS,
+  VCR_PROFILE_HISTOGRAM_BINS,
+  VCR_PROFILE_KINDS,
+  validatePopulationProfile,
+} from './src/vcrPopulationProfile.mjs'
 
 // vcrRules — 16 exports: the two closed rule grammars 「虚拟临研」 uses instead of code: row rules over table
 // columns (three-valued, Kleene) and eligibility requirements over dated facts,

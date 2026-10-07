@@ -6457,7 +6457,7 @@
       ]
     },
     {
-      "name": "a single-arm design simulated as a two-arm trial",
+      "name": "an external-control single-arm design simulated as a two-arm trial",
       "job": {
         "jobId": "job_1",
         "studyId": "std_1",
@@ -6469,7 +6469,7 @@
         "cpuSecondsLimit": 600,
         "scenario": {
           "design": {
-            "kind": "single_arm",
+            "kind": "single_arm_external",
             "nTreat": 150,
             "nControl": 150
           },

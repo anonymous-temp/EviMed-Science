@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,46 @@ beforeEach(() => {
   topics.listTopicRequests.mockResolvedValue({ items: [], seconded: [], remainingToday: 5 });
 });
 describe("evidence zone directory", () => {
-  it("honors following directory scope from its address", async () => { client.listEvidenceZones.mockResolvedValue({ items: [], nextCursor: null }); render(<MemoryRouter initialEntries={["/app/frontier/zones?scope=following"]}><EvidenceZonesPage /></MemoryRouter>); await screen.findByText("暂无证据专区"); expect(client.listEvidenceZones).toHaveBeenCalledWith("", null, "following"); expect(screen.getByRole("button", { name: "我关注的" })).toHaveAttribute("aria-pressed", "true"); });
+  it("is headed by the way back to 前沿动态, then one row: the three scopes as tabs and the search box at its right", async () => {
+    client.listEvidenceZones.mockResolvedValue({ items: [zone], nextCursor: null });
+    mount();
+    await screen.findByRole("link", { name: "急诊医学" });
+    expect(screen.getByRole("heading", { level: 1, name: "证据专区" })).toBeInTheDocument();
+    const back = within(screen.getByRole("navigation", { name: "返回" })).getByRole("link", { name: "前沿动态" });
+    expect(back).toHaveAttribute("href", "/app/frontier");
+    // No navigation row of the feed's own views, and no pill row for the scope.
+    expect(screen.queryByRole("navigation", { name: "前沿动态" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "专区范围" })).not.toBeInTheDocument();
+    const tabs = screen.getByRole("tablist", { name: "专区范围" });
+    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["全部专区", "我创建的", "我关注的"]);
+    expect(within(tabs).getByRole("tab", { name: "全部专区" })).toHaveAttribute("aria-selected", "true");
+    expect(tabs.parentElement).toContainElement(screen.getByRole("searchbox", { name: "搜索" }));
+  });
+  it("switches scope through the tabs, keeps it in the address and reads the other list", async () => {
+    client.listEvidenceZones.mockResolvedValue({ items: [], nextCursor: null });
+    mount();
+    await screen.findByText("暂无证据专区");
+    await userEvent.click(screen.getByRole("tab", { name: "我创建的" }));
+    await waitFor(() => expect(client.listEvidenceZones).toHaveBeenLastCalledWith("", null, "owned"));
+    expect(screen.getByRole("tab", { name: "我创建的" })).toHaveAttribute("aria-selected", "true");
+  });
+  it("searches as the reader types, without a button, and not in the middle of a composition", async () => {
+    client.listEvidenceZones.mockResolvedValue({ items: [], nextCursor: null });
+    mount();
+    await screen.findByText("暂无证据专区");
+    expect(screen.queryByRole("button", { name: "搜索" })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "房颤");
+    await waitFor(() => expect(client.listEvidenceZones).toHaveBeenLastCalledWith("房颤", null, undefined));
+  });
+  it("offers only the reader's own zones while one is chosen for a feed item", async () => {
+    client.listEvidenceZones.mockResolvedValue({ items: [zone], nextCursor: null });
+    render(<MemoryRouter initialEntries={["/app/frontier/zones?fromItem=item-1"]}><EvidenceZonesPage /></MemoryRouter>);
+    await screen.findByRole("link", { name: "急诊医学" });
+    expect(screen.getByText("选择证据专区")).toBeInTheDocument();
+    expect(within(screen.getByRole("tablist", { name: "专区范围" })).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["我创建的"]);
+    expect(client.listEvidenceZones).toHaveBeenCalledWith("", null, "owned");
+  });
+  it("honors following directory scope from its address", async () => { client.listEvidenceZones.mockResolvedValue({ items: [], nextCursor: null }); render(<MemoryRouter initialEntries={["/app/frontier/zones?scope=following"]}><EvidenceZonesPage /></MemoryRouter>); await screen.findByText("暂无证据专区"); expect(client.listEvidenceZones).toHaveBeenCalledWith("", null, "following"); expect(screen.getByRole("tab", { name: "我关注的" })).toHaveAttribute("aria-selected", "true"); });
   it("groups the zones in three plain sections by kind, an older zone without a kind among the users' and an empty kind not drawn", async () => {
     client.listEvidenceZones.mockResolvedValue({ items: [
       { ...zone, id: "u1", title: "我的专区", kind: "user" },
@@ -44,7 +83,7 @@ describe("evidence zone directory", () => {
     client.listEvidenceZones.mockResolvedValueOnce({ items: [], nextCursor: null }).mockResolvedValueOnce({ items: [zone], nextCursor: "next" }).mockResolvedValueOnce({ items: [{ ...zone, id: "two", title: "急诊药学" }], nextCursor: null });
     client.followEvidenceZone.mockResolvedValue({ ...zone, following: true }); mount();
     expect(await screen.findByText("暂无证据专区")).toBeInTheDocument();
-    await userEvent.type(screen.getByRole("textbox", { name: "搜索证据专区" }), "急诊"); await userEvent.click(screen.getByRole("button", { name: "搜索" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "急诊{Enter}");
     await userEvent.click(await screen.findByRole("button", { name: "关注" })); expect(await screen.findByRole("button", { name: "取消关注" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "加载更多" })); expect(await screen.findByRole("link", { name: "急诊药学" })).toBeInTheDocument();
     expect(client.listEvidenceZones).toHaveBeenLastCalledWith("急诊", "next", undefined);

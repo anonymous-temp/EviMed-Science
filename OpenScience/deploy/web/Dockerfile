@@ -81,6 +81,7 @@ COPY --from=build /app/runtime/skills/external/ai4s-skills ./runtime/skills/exte
 COPY --from=build /app/runtime/skills/curated-scientific ./runtime/skills/curated-scientific
 COPY --from=build /app/runtime/skills/office ./runtime/skills/office
 COPY --from=build /app/runtime/skills/evimed ./runtime/skills/evimed
+COPY --from=build /app/runtime/skills/community ./runtime/skills/community
 COPY --from=build /app/runtime/mcp/evimed-research ./runtime/mcp/evimed-research
 COPY --from=build /app/examples/climate-trends ./examples/climate-trends
 COPY --from=build /app/scripts/ops ./scripts/ops

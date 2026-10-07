@@ -242,13 +242,18 @@ export const VCR_STEP_EMPTY: Readonly<Record<VcrStepKey, string>> = Object.freez
   matching: "还没有匹配评估：逐条判定每个人是否符合入排条件，并给出补证建议。",
 });
 
-/** What a step waits for, when it was asked for but its input is not ready. */
-export const VCR_STEP_WAITING: Readonly<Record<VcrStepKey, string>> = Object.freeze({
-  definition: "研究定义正在排队。",
-  evidence: "研究定义写好后开始找证据。",
-  population: "研究定义写好后开始构建人群。",
-  patients: "人群版本定下来后开始生成虚拟患者。",
-  comparator: "研究定义写好后开始设计对照。",
-  trial: "研究定义写好后开始模拟试验。",
-  matching: "研究定义写好后开始匹配。",
+/** What a tab says when the study has no definition yet: the programme is not waiting for anything, the study is waiting to be described. */
+export const VCR_NO_DEFINITION = "先在对话里说一句要研究什么";
+
+/** What a step says when it was asked for and the programme has not started it yet. */
+export const VCR_STEP_QUEUED = "已安排，开始后这里会显示进度。";
+
+/** What 「让 AI 做下一步」 asks for, by step: the verb phrase the button says (the step's own name reads as a noun). */
+export const VCR_NEXT_STEP_WORDS: Readonly<Partial<Record<VcrStepKey, string>>> = Object.freeze({
+  evidence: "找证据、整理假设卡",
+  population: "构建人群",
+  patients: "生成虚拟患者",
+  comparator: "设计对照",
+  trial: "模拟试验方案",
+  matching: "匹配患者",
 });

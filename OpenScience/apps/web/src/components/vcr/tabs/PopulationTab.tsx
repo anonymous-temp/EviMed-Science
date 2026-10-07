@@ -1,11 +1,20 @@
-import { getVcrPopulation, type VcrPopulationTab as PopulationData, type VcrQualityReport, type VcrStudy } from "@/lib/vcrClient";
+import { useState } from "react";
+import { Download, RefreshCw } from "lucide-react";
+import {
+  downloadVcrRecords, editVcrCard, getVcrPopulation,
+  type VcrGeneratedRow, type VcrPopulationTab as PopulationData, type VcrQualityReport, type VcrStudy,
+} from "@/lib/vcrClient";
+import { webErrorMessage } from "@/lib/apiClient";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Tag } from "@/components/ui/Tag";
-import { VcrCountsBand } from "../VcrCounts";
 import { VcrAttritionChart, VcrFunnelBar, VcrSmdDot } from "../VcrDiagrams";
+import { VcrMiniHistogram } from "../VcrMiniHistogram";
 import { ReviewChip, SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
+import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { VcrDefinitionsSection } from "../VcrKnowledge";
 import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
@@ -30,6 +39,7 @@ import { countText, numberText } from "../vcrText";
  */
 export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: string; study: VcrStudy; onStudyChanged?: () => void }) {
   const { state, reload } = useVcrLoad(`${studyId}:population`, () => getVcrPopulation(studyId));
+  const [editing, setEditing] = useState<"population" | "criteria" | null>(null);
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   const data = state.data;
@@ -42,15 +52,25 @@ export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: str
       : <VcrStepPending studyId={studyId} study={study} step="population" />;
   }
 
+  // A generated population (scenario, literature, empirical synthetic) is read as a table of its variables; a real cohort as the
+  // rules that selected it and what each did to the count.
+  const generated = Boolean(data.method);
+  const mayWrite = study.abilities.includes("write");
+  const changed = () => { reload(); onStudyChanged?.(); };
+
   return (
     <div className="flex flex-col gap-6">
-      <VcrToolbar summary={data.version}>
-        {data.versions.map((version) => (
-          <Tag key={version.id} className={cn(version.stale && "text-text-3")}>
-            {version.stale ? `${version.label}（已过期）` : version.label}
-          </Tag>
-        ))}
-      </VcrToolbar>
+      {generated
+        ? <GeneratedHeader studyId={studyId} data={data} mayWrite={mayWrite} onEdit={() => setEditing("population")} onChanged={changed} />
+        : (
+          <VcrToolbar summary={data.version}>
+            {data.versions.map((version) => (
+              <Tag key={version.id} className={cn(version.stale && "text-text-3")}>
+                {version.stale ? `${version.label}（已过期）` : version.label}
+              </Tag>
+            ))}
+          </VcrToolbar>
+        )}
 
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
@@ -58,10 +78,13 @@ export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: str
 
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">
-          {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
+          {generated && <GeneratedProfile data={data} />}
 
+          {!generated && data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
+
+          {!generated && (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)_minmax(0,22rem)]">
-            <DefinitionCard data={data} />
+            <DefinitionCard data={data} onEdit={mayWrite && data.criteria.length > 0 ? () => setEditing("criteria") : null} />
 
             <Card title="逐条筛选">
               <VcrAttritionChart steps={data.attrition} />
@@ -101,8 +124,9 @@ export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: str
               )}
             </div>
           </div>
+          )}
 
-          {data.blockers.length > 0 && (
+          {!generated && data.blockers.length > 0 && (
             <VcrSection title="最卡人的三条">
               <ul className="flex flex-col gap-2">
                 {data.blockers.map((blocker) => (
@@ -124,7 +148,6 @@ export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: str
             </div>
           )}
 
-          <VcrCountsBand counts={data.counts} />
         </div>
       </Stale>
 
@@ -135,12 +158,143 @@ export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: str
         canRun={study.abilities.includes("run")}
         onChanged={() => { reload(); onStudyChanged?.(); }}
       />
+
+      {editing && (
+        <VcrSettingsDrawer
+          studyId={studyId}
+          kind={editing}
+          title={editing === "population" ? "改人群设定" : "改入排条件的数值"}
+          onClose={() => setEditing(null)}
+          onSaved={changed}
+        />
+      )}
     </div>
   );
 }
 
+/**
+ * The generated population's header: what it is — 「人群 v1 · 情景人群 · 1,000 条生成记录」 —, what it may be used for, and the three
+ * things done with it: download the records, generate it again, change its numbers. A population is a result, and the result comes
+ * first: the title says what there is, the buttons say what can be done with it.
+ */
+function GeneratedHeader({ studyId, data, mayWrite, onEdit, onChanged }: {
+  studyId: string;
+  data: PopulationData;
+  mayWrite: boolean;
+  onEdit: () => void;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<"download" | "regenerate" | null>(null);
+  const records = data.counts?.generatedRecords ?? null;
+  const title = [data.version?.replace(/（.*）$/, ""), data.kind, records !== null ? `${numberText(records, 0)} 条生成记录` : null].filter(Boolean).join(" · ");
+  const uses = data.allowedUses.map((use) => use.label);
+
+  const download = () => {
+    if (busy || !data.download) return;
+    setBusy("download");
+    void downloadVcrRecords(studyId, data.download.path)
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "记录暂时无法下载，请稍后重试。" })))
+      .finally(() => setBusy(null));
+  };
+  const regenerate = () => {
+    if (busy) return;
+    setBusy("regenerate");
+    void editVcrCard(studyId, { kind: "population", regenerate: true })
+      .then(() => { toast.success("已重新生成，结果算好后会显示在这里。"); onChanged(); })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法重新生成，请稍后重试。" })))
+      .finally(() => setBusy(null));
+  };
+
+  return (
+    <div data-vcr-population-header="" className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <h2 className="min-w-0 text-section font-semibold text-text">{title}</h2>
+      {uses.length > 0 && <Tag>{`仅用于${uses.join("、")}`}</Tag>}
+      <span className="flex-1" />
+      {data.download && (
+        <Button variant="secondary" loading={busy === "download"} disabled={busy !== null} onClick={download}>
+          <Download size={16} aria-hidden="true" />下载记录（CSV）
+        </Button>
+      )}
+      {mayWrite && (
+        <>
+          <Button variant="text" onClick={onEdit} disabled={busy !== null}>改设定</Button>
+          <Button variant="secondary" loading={busy === "regenerate"} disabled={busy !== null} onClick={regenerate}>
+            <RefreshCw size={16} aria-hidden="true" />重新生成
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What came out, variable by variable, set beside what the study set for it — and, at its side, how it was made and what it may be
+ * used for. A generated table with no profile (it was generated before the engine described its own tables) says so in one sentence
+ * and offers 「重新生成」; it never shows half a table.
+ */
+function GeneratedProfile({ data }: { data: PopulationData }) {
+  const how = [
+    `${data.method}。`,
+    ...data.constraints.map((constraint) => `约束“${constraint.label}”${constraint.violations === 0 ? "没有记录违反" : `有 ${numberText(constraint.violations, 0)} 条记录违反`}。`),
+  ].join("");
+  const uses = data.allowedUses.map((use) => use.label);
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+      {data.generated.length > 0
+        ? (
+          <Card>
+            <table data-vcr-generated="" className="w-full border-collapse text-ui">
+              <caption className="sr-only">每个变量设定的分布和生成的结果</caption>
+              <thead>
+                <tr className="border-b border-border text-caption text-text-3">
+                  <th scope="col" className="py-2 pr-3 text-left font-normal">变量</th>
+                  <th scope="col" className="px-3 py-2 text-left font-normal">设定的分布</th>
+                  <th scope="col" className="px-3 py-2 text-right font-normal">生成结果</th>
+                  <th scope="col" className="py-2 pl-3 text-right font-normal">分布</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.generated.map((row) => <GeneratedRow key={row.key} row={row} />)}
+              </tbody>
+            </table>
+          </Card>
+        )
+        : (
+          <Card>
+            <p data-vcr-profile-missing="" className="py-4 text-ui text-text-2">
+              {data.profileNote ?? "这个人群还没有画像：重新生成一次，就能看到每个变量的分布。"}
+            </p>
+          </Card>
+        )}
+      <div className="flex flex-col gap-4">
+        <Card title="怎么生成的"><p className="text-ui text-text-2">{how}</p></Card>
+        <Card title="能用来做什么">
+          <p className="text-ui text-text-2">
+            {uses.length > 0 ? `可用于${uses.join("、")}。` : ""}它不是真实患者，不能当作外部对照或疗效证据。
+          </p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/** One variable: what was set (a distribution, or nothing for a table made from real data), what came out, and its shape. */
+function GeneratedRow({ row }: { row: VcrGeneratedRow }) {
+  return (
+    <tr data-vcr-variable={row.key} className="border-b border-faint align-middle">
+      <th scope="row" className="py-2.5 pr-3 text-left font-normal text-text">{row.label}</th>
+      <td className="px-3 py-2.5 text-text-2">{row.declared ?? <span className="text-text-3">按真实数据合成，没有设定的分布</span>}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-text">
+        {row.result ?? "—"}
+        {row.missing && <span className="block text-caption text-text-3">{row.missing}</span>}
+      </td>
+      <td className="py-2.5 pl-3 text-right">{row.histogram ? <VcrMiniHistogram counts={row.histogram.counts} /> : null}</td>
+    </tr>
+  );
+}
+
 /** The definition: time zero, the evidence window, the exit, and every rule with its three counts. */
-function DefinitionCard({ data }: { data: PopulationData }) {
+function DefinitionCard({ data, onEdit }: { data: PopulationData; onEdit: (() => void) | null }) {
   const facts = data.definition
     ? [
       ...(data.definition.timeZero ? [{ label: "时间零点", value: data.definition.timeZero }] : []),
@@ -149,7 +303,14 @@ function DefinitionCard({ data }: { data: PopulationData }) {
     ]
     : [];
   return (
-    <Card title="定义">
+    <Card
+      header={(
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-section font-semibold text-text">定义</h2>
+          {onEdit && <Button size="sm" variant="text" onClick={onEdit}>改数值</Button>}
+        </div>
+      )}
+    >
       {facts.length > 0 && <VcrFacts rows={facts} />}
       {data.criteria.length > 0 && (
         <>

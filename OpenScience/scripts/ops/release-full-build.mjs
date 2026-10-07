@@ -157,7 +157,9 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // 2026-10-07: three added lines — 循证进化's module loops read evals/frontier-editing,
 // evals/autopilot-next-action and evals/geo-judge-cards cases.json at run time and the
 // image did not carry them (deploy.test.mjs now derives every literal evals/ read).
-export const WEB_DOCKERFILE_SHA256 = "sha256:5e7e3c2f8f0d8b992526a0ef3872fa1ca93a530c8a8dba341e808925b736780a";
+// 2026-10-07 (R10): one added line — the 插件与技能 page reads the community skills' text
+// (dsh-ppt, deep-structural-analysis) from the control plane's own copy, as it does the others.
+export const WEB_DOCKERFILE_SHA256 = "sha256:50bdeaedd01d5349014df30c584a93c2c7d0d61cb07d3d12b802f2b1ef9fbf4c";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

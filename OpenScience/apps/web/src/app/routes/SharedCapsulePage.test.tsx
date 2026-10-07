@@ -40,7 +40,7 @@ describe("收到的分享", () => {
     page(`/app/memory/shared/${"T".repeat(32)}`);
     expect(await screen.findByText("来自李主任 · 2 条做法")).toBeInTheDocument();
     expect(screen.getByText("这个链接还能用 3 次。")).toBeInTheDocument();
-    expect(screen.getByText("会剔除 1 条没有通过自动检查的内容。")).toBeInTheDocument();
+    expect(screen.getByText("不会带上 1 条没有通过自动检查的内容。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "不需要" })).not.toBeInTheDocument();
     expect(share.openShareLink).toHaveBeenCalledWith("T".repeat(32));
   });

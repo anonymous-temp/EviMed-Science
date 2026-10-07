@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { EVIDENCE_PRODUCER_KIND_LABELS_ZH, EVIDENCE_PRODUCER_RELATION_LABELS_ZH, EVIDENCE_ZONE_KIND_LABELS_ZH } from "@evimed/domain";
 import { EmptyState } from "@/components/cards/EmptyState";
-import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
+import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
@@ -38,8 +38,7 @@ function EvidenceAuthorContent({ authorId }: { authorId: string }) {
     return () => { active = false; };
   }, [authorId, attempt]);
   return (
-    <PageShell title="前沿动态">
-      <FrontierNavigation active="zones" />
+    <PageShell title="证据专区" back={<FrontierBack />}>
       {loading ? (
         <FrontierSkeleton />
       ) : error ? (

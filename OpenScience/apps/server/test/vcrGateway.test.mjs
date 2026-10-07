@@ -59,6 +59,8 @@ const runtimeManager = { assertActiveModelGatewayToken: (/** @type {string} */ t
 function fixture(overrides = {}) {
   /** @type {any[]} */
   const calls = [];
+  /** The definitions the store was asked to save, whole. @type {any[]} */
+  const definitions = [];
   // What a run reads of a result passes the real service's boundary; a double that answered raw would hide the seam.
   const boundary = new VcrService({ store: /** @type {any} */ ({}), config: {} });
   const service = {
@@ -73,7 +75,7 @@ function fixture(overrides = {}) {
     async studyByControlProject(userId, projectId) {
       return userId === "u1" && projectId === "prj_1" ? study : null;
     },
-    async saveDefinition(input) { calls.push(["definition", input.reviewState]); return { id: "def_1", version: 1 }; },
+    async saveDefinition(input) { calls.push(["definition", input.reviewState]); definitions.push(input); return { id: "def_1", version: 1 }; },
     async saveAssumption(input) { calls.push(["assumption", input.key, input.reviewState]); return { id: "asm_1", version: 2 }; },
     async saveTrialScenario(input) { calls.push(["scenario", input.design]); return { id: "scn_1", version: 1 }; },
     async saveComparatorDesign(input) { calls.push(["comparator", input.route, input.conclusion]); return { id: "cmp_1", version: 1 }; },
@@ -112,7 +114,7 @@ function fixture(overrides = {}) {
     async cancel() { return { job: { id: "job_1", state: "canceled" }, canceled: true }; },
   };
   const vcr = { service, store, jobs, orchestrator: null, ...overrides };
-  return { calls, vcr, handler: createVcrGatewayHandler(config, runtimeManager, { vcr }) };
+  return { calls, definitions, vcr, handler: createVcrGatewayHandler(config, runtimeManager, { vcr }) };
 }
 
 test("the gateway's address is derived from the model gateway's, and is empty when the module is off", () => {
@@ -231,7 +233,20 @@ test("a definition that states nothing is refused in place: the step reads done 
   }
 });
 
-test("a definition carries the study's own name and the one sentence it asks, held to their length; both are optional", async () => {
+test("a definition carries the study's name and question to the store, which is what names a draft study", async () => {
+  const { definitions, handler } = fixture();
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "definition", data: { title: "二线 NSCLC 单臂", question: "单臂 II 期加外部对照行不行？", pico: { population: "二线 NSCLC" } } }), res);
+  assert.equal(res.json().data.ids.length, 1);
+  assert.equal(definitions.at(-1).title, "二线 NSCLC 单臂");
+  assert.equal(definitions.at(-1).question, "单臂 II 期加外部对照行不行？");
+  // Neither is required: a definition without them leaves the naming to the store's fallback.
+  await handler(request("/internal/vcr/v1/write", { what: "definition", data: { pico: { population: "二线 NSCLC" } } }), response());
+  assert.equal(definitions.at(-1).title, null);
+  assert.equal(definitions.at(-1).question, null);
+});
+
+test("a definition's name and question are held to their length and to being text; a definition with neither is as before", async () => {
   /** @type {any[]} */
   const saved = [];
   const { handler } = fixture({ store: { ...fixture().vcr.store, async saveDefinition(/** @type {any} */ input) { saved.push(input); return { id: "def_1", version: saved.length }; } } });
@@ -241,12 +256,12 @@ test("a definition carries the study's own name and the one sentence it asks, he
   assert.equal(named.ok, true);
   assert.deepEqual([saved[0].title, saved[0].question], ["二线肺癌 EV 的样本量", "单臂 II 期加外部对照行不行，还是必须做随机？"]);
   assert.equal((await write({ pico })).ok, true, "a definition with neither is as before");
-  assert.deepEqual([saved[1].title, saved[1].question], ["", ""]);
-  const long = await write({ pico, title: "字".repeat(25) });
+  assert.deepEqual([saved[1].title, saved[1].question], [null, null]);
+  const long = await write({ pico, title: "字".repeat(61) });
   assert.equal(long.ok, false);
   assert.equal(long.issues[0].field, "title");
-  assert.equal(saved.length, 2, "a title past 24 characters is refused in place and nothing is saved");
-  const sentence = await write({ pico, question: "问".repeat(201) });
+  assert.equal(saved.length, 2, "a title past its length is refused in place and nothing is saved");
+  const sentence = await write({ pico, question: "问".repeat(2001) });
   assert.equal(sentence.issues[0].field, "question");
   assert.equal((await write({ pico, title: 7 })).issues[0].field, "title");
 });

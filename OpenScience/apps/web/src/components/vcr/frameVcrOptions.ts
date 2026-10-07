@@ -7,10 +7,10 @@
  *
  * The new-study composer (plan §9.3) has no form. It has the module's chip,
  * three optional controls — 起点 (自动 / 队列 / 患者 / 对照 / 试验), 预期用途
- * (默认「探索」) and 数据 — and a row of single-task starters. Everything the
+ * (默认“探索”) and 数据 — and a row of six starting points. Everything the
  * reader does not say, the platform sets and labels 「AI 设定」. 数据 is not a
  * control here: attaching data is the composer's own 「+」, and the study's
- * sources are read and registered on 数据与证据.
+ * sources are read and registered on 定义与证据.
  */
 import { VCR_ACTIONS, VCR_INTENDED_USES, VCR_INTENDED_USE_LABELS_ZH } from "@evimed/domain";
 import type { VcrAction, VcrIntendedUse, VcrStepKey, VcrStudy } from "@/lib/vcrClient";
@@ -43,16 +43,17 @@ export const VCR_START_OPTIONS: ReadonlyArray<{ id: VcrStart; label: string }> =
 ]);
 
 /**
- * The six single tasks (plan §9.3): a short name on the pill, and the sentence
- * it puts in the composer — never sent. Each ends where the reader continues.
+ * The six starting points of a new study (plan §9.3, R10 mockup v02): a short name on the pill, and the sentence it puts in the
+ * composer — never sent. Each ends where the reader continues. They only fill the box: pressing one is not a request, and the
+ * study stays a draft until the researcher has said what it is about.
  */
 export const VCR_STARTERS: ReadonlyArray<{ label: string; draft: string }> = Object.freeze([
   { label: "估算样本量", draft: "帮我估算这项研究的样本量和成功把握，研究是：" },
+  { label: "生成合成人群", draft: "帮我按这项研究的人群生成一批合成人群，研究是：" },
   { label: "外部对照可行性", draft: "帮我判断这项单臂研究能不能用外部对照，还是必须做随机，研究是：" },
-  { label: "找先例和参数", draft: "帮我找同类试验的先例，整理出对照组的中位生存期、入组速度和脱落率，研究是：" },
-  { label: "生成合成数据", draft: "帮我按这项研究的人群生成一批合成数据，研究是：" },
+  { label: "模拟试验方案", draft: "帮我模拟几个试验方案：比较样本量、功效、成功把握、周期和成本，研究是：" },
+  { label: "找先例与参数", draft: "帮我找同类试验的先例，整理出对照组的中位生存期、入组速度和脱落率，研究是：" },
   { label: "匹配患者", draft: "帮我用这项研究的入排条件匹配可能合适的患者，研究是：" },
-  { label: "完整研究", draft: "帮我把这项研究从定义、证据、人群、对照到试验方案完整做一遍，研究是：" },
 ]);
 
 /** The one step each action asks for (`VCR_ACTION_STEPS` on the server). */

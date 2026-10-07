@@ -1,0 +1,69 @@
+{
+  "description": "What each tool of the research tool set (the evimed MCP server, MCP_TOOL_BASE_NAMES) does, in one sentence a researcher can read, and the group the plugins page lists it under. The key is the tool's base name. researchToolDisplay.mjs reads this and a test holds it equal to the published tool list, so a tool added without a sentence fails there.",
+  "groups": ["文献与指南检索", "试验登记", "药品与安全", "基因与分子", "计算与分析", "网页与资料", "循证传播", "虚拟临研", "公共数据", "其他"],
+  "tools": {
+    "literature_search": { "group": "文献与指南检索", "use": "按关键词、检索式或关系在 PubMed 等文献库里查论文。" },
+    "reference_list": { "group": "文献与指南检索", "use": "查一篇论文引用了哪些文献，或被哪些论文引用。" },
+    "guideline_search": { "group": "文献与指南检索", "use": "检索临床指南。" },
+    "patent_search": { "group": "文献与指南检索", "use": "检索专利记录，了解一个研究方向的专利布局。" },
+    "open_access_full_text": { "group": "文献与指南检索", "use": "按 PMCID、PMID 或 DOI 取开放获取的全文，并保存下来。" },
+    "identifier_resolve": { "group": "文献与指南检索", "use": "在 PMID、PMCID 和 DOI 之间互相对照，并说明哪些对不上。" },
+    "search_papers": { "group": "文献与指南检索", "use": "在 Crossref 里检索学术文献记录。" },
+    "search_biomedical_records": { "group": "文献与指南检索", "use": "检索 PubMed、临床试验和 ClinVar 的记录。" },
+    "evidence_deduplicate": { "group": "文献与指南检索", "use": "按 DOI、PMID、网址和标题去掉重复的证据，并标出可能出自同一试验的多篇报告。" },
+    "term_normalize": { "group": "文献与指南检索", "use": "把医学术语规范成标准词，可选查出对应的概念编号。" },
+    "locate_quote": { "group": "文献与指南检索", "use": "核对一段引文是否出现在已保存的来源里。" },
+
+    "clinical_trial_search": { "group": "试验登记", "use": "检索临床试验登记库。" },
+    "clinical_trial_snapshot": { "group": "试验登记", "use": "完整读取并保存一条 ClinicalTrials.gov 记录，列出它与上次读取相比的变化。" },
+    "trial_registry_record": { "group": "试验登记", "use": "取一条试验登记记录的结构化字段：设计、分组、入组、终点和已发布的结果。" },
+
+    "drug_label_search": { "group": "药品与安全", "use": "查药品说明书，国内和美国的都可查，可引用到具体章节。" },
+    "dailymed_label": { "group": "药品与安全", "use": "查美国 FDA 药品说明书的各个版本，并比较不同版本在章节上的变化。" },
+    "pharmacy_reference_search": { "group": "药品与安全", "use": "检索药学参考资料，作为决策参考，需再对照最新的官方来源。" },
+    "drug_term_normalize": { "group": "药品与安全", "use": "把药名规范成标准名称，给出同义名和 ATC 编码。" },
+    "adr_case_query": { "group": "药品与安全", "use": "查询药品不良反应病例。" },
+    "adr_signal_analysis": { "group": "药品与安全", "use": "做不良反应信号分析，并给出可追溯的来源。" },
+    "drug_safety_analysis": { "group": "药品与安全", "use": "运行药物警戒分析：信号检测、证据检索和报告，统计量由程序计算。" },
+    "offlabel_evidence_packet": { "group": "药品与安全", "use": "整理超说明书用药的证据，分说明书维度和证据类型逐项评估，不替人做用药决定。" },
+    "comprehensive_drug_evaluation": { "group": "药品与安全", "use": "汇集药品综合评价的证据，逐个维度评估，不自动给出推荐。" },
+    "drug_selection_evaluation": { "group": "药品与安全", "use": "汇集候选药品的证据，做可追溯的药品遴选评估；量表和权重不可比时不排序。" },
+
+    "gene_expression_series": { "group": "基因与分子", "use": "取 NCBI GEO 数据集的表达矩阵和平台注释，保存并核对样本身份。" },
+    "gene_expression_differential": { "group": "基因与分子", "use": "对已保存的 GEO 数据集做两组之间的差异表达计算，由平台引擎完成。" },
+
+    "meta_analysis": { "group": "计算与分析", "use": "运行系统评价与 Meta 分析，产出可审计的稿件和统计结果。" },
+    "mendelian_randomization": { "group": "计算与分析", "use": "运行孟德尔随机化分析。" },
+    "bibliometric_analysis": { "group": "计算与分析", "use": "运行文献计量分析：记录、网络、图表和研究前沿报告。" },
+    "research_topic_selection": { "group": "计算与分析", "use": "检索证据、梳理空白，提出可检验的研究方向。" },
+    "peer_review": { "group": "计算与分析", "use": "按多套规范对工作区里的稿件做同行评议。" },
+    "research_calculate": { "group": "计算与分析", "use": "用经过验证的确定性引擎计算汇总数据，例如随机效应合并。" },
+    "dataset_semantics": { "group": "计算与分析", "use": "记住并检查数据表的含义，同一数据集下次分析时沿用同一解释，数据行不会离开工作区。" },
+
+    "web_read": { "group": "网页与资料", "use": "读取一个公开网页或在线文档，保存成可引用的快照。" },
+    "web_search": { "group": "网页与资料", "use": "在开放网页上检索，适合基金公告、会议日程、学会页面等文献库里没有的内容。" },
+    "kb_search": { "group": "网页与资料", "use": "在你的知识库里检索段落，并给出文件和页码。" },
+    "frontier_search": { "group": "网页与资料", "use": "检索前沿动态里近期的医学进展和证据卡。" },
+    "data_source_catalog": { "group": "网页与资料", "use": "查询平台审核过的数据源目录，包括凭据要求和许可。" },
+    "biomedical_source_search": { "group": "网页与资料", "use": "查询一个经过审核的公共生物医学数据源。" },
+
+    "geo_visibility_probe": { "group": "循证传播", "use": "像患者一样向主流 AI 助手提问并记录回答，用来测量产品的可见度。" },
+    "geo_read": { "group": "循证传播", "use": "读取当前循证传播项目的数据：产品、问题、测量结果、稿件和证据卡。" },
+    "geo_write": { "group": "循证传播", "use": "写入当前循证传播项目的产品信息、策略、稿件和步骤状态。" },
+    "social_posts_search": { "group": "循证传播", "use": "收集真实用户在中文社交平台上怎样描述健康问题。" },
+
+    "vcr_read": { "group": "虚拟临研", "use": "读取当前虚拟临研研究的定义、入排条件、证据、人群、方案和已保存的结果。" },
+    "vcr_write": { "group": "虚拟临研", "use": "写入当前虚拟临研研究的定义、入排条件、假设和各类设计。" },
+    "vcr_simulate": { "group": "虚拟临研", "use": "把计算交给虚拟临研的统计引擎，并查看进度；所有数字都由引擎算出。" },
+    "curve_digitize": { "group": "虚拟临研", "use": "把已发表的 Kaplan–Meier 曲线图读成曲线点，用于重建生存曲线。" },
+    "evidence_pool": { "group": "虚拟临研", "use": "把研究里已核实的参数提取值合并成一个假设分布。" },
+
+    "get_fred_series": { "group": "公共数据", "use": "取一条 FRED 公开经济时间序列。" },
+    "get_space_weather_alerts": { "group": "公共数据", "use": "取美国 NOAA 的当前空间天气警报。" },
+    "get_weather": { "group": "公共数据", "use": "取 Open-Meteo 的当前和预报天气。" },
+    "get_usgs_water_data": { "group": "公共数据", "use": "取美国地质调查局某个站点近期的水文观测。" },
+    "search_materials": { "group": "公共数据", "use": "按编号或化学式取 Materials Project 的材料数据。" },
+
+    "health": { "group": "其他", "use": "检查这套研究工具本身是否就绪。" }
+  }
+}

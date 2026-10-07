@@ -23,8 +23,8 @@ export const inject = ['sessions', 'conversation', 'connection', 'workspaces', '
  *   shell → frame  navigate · resume · theme · run-state · evidence · kb-result · reply-check ·
  *                  capability · geo · vcr · search
  *   frame → shell  booted · ready · connecting · error · ack · session ·
- *                  shell-navigate · shell-shortcut · open-artifact · kb-query ·
- *                  bind-capability · geo-options · vcr-options · search-result
+ *                  shell-navigate · shell-shortcut · open-artifact · save-to-knowledge-base ·
+ *                  kb-query · bind-capability · geo-options · vcr-options · search-result
  *
  * `session` carries the lineage the shell needs to keep its ledger and its URL
  * honest: `forkedFrom` when the researcher branched a finished turn into a new
@@ -502,14 +502,32 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
    * The shell validates again: it cannot trust this side any more than this
    * side trusts it.
    */
+  /**
+   * A delivered file as the shell is told of it: the run it came from and a path that climbs nowhere. The shell's reader
+   * and its copy into the knowledge base both name a file this way, and neither may name anything else.
+   * @param {any} fields
+   */
+  const deliveredFile = (fields) => {
+    if (!validId(fields.runId) || typeof fields.path !== 'string' || !fields.path || fields.path.length > 1024
+      || fields.path.startsWith('/') || fields.path.includes('\\')
+      || fields.path.split('/').some((/** @type {string} */ part) => part === '..' || part === '.')) return null;
+    return { runId: /** @type {string} */ (fields.runId), path: /** @type {string} */ (fields.path) };
+  };
   const OUTBOUND = {
     /** @param {any} fields */
     'open-artifact'(fields) {
-      if (!validId(fields.runId) || typeof fields.path !== 'string' || !fields.path || fields.path.length > 1024
-        || fields.path.startsWith('/') || fields.path.includes('\\')
-        || fields.path.split('/').some((/** @type {string} */ part) => part === '..' || part === '.')) return null;
+      const file = deliveredFile(fields);
+      if (!file) return null;
       const anchor = typeof fields.anchor === 'string' && /^[A-Za-z0-9_.:=-]{1,120}$/.test(fields.anchor) ? fields.anchor : undefined;
-      return { runId: fields.runId, path: fields.path, ...(anchor ? { anchor } : {}) };
+      return { ...file, ...(anchor ? { anchor } : {}) };
+    },
+    /**
+     * 「存入知识库」 on a delivered file's card: which file of which run. The shell copies it into the project's own
+     * knowledge base through the control plane's guarded read; the destination is never named from here.
+     * @param {any} fields
+     */
+    'save-to-knowledge-base'(fields) {
+      return deliveredFile(fields);
     },
     /** @param {any} fields */
     'kb-query'(fields) {
@@ -559,7 +577,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   };
   const detachHub = hub?.attach((/** @type {string} */ type, /** @type {any} */ fields) => {
     if (!Object.hasOwn(OUTBOUND, type)) return;
-    const payload = OUTBOUND[/** @type {'open-artifact' | 'kb-query' | 'bind-capability' | 'geo-options' | 'vcr-options'} */ (type)](fields ?? {});
+    const payload = OUTBOUND[/** @type {'open-artifact' | 'save-to-knowledge-base' | 'kb-query' | 'bind-capability' | 'geo-options' | 'vcr-options'} */ (type)](fields ?? {});
     if (payload) post(type, payload);
   });
 

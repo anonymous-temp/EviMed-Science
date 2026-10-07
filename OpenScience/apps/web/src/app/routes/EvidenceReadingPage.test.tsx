@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +25,15 @@ beforeEach(() => {
 });
 
 describe("reading an evidence card", () => {
+  it("is headed by the way back to 前沿动态, with no row of the feed's views above the card", async () => {
+    mount();
+    await screen.findByTestId("evidence-card-header");
+    expect(within(screen.getByRole("navigation", { name: "返回" })).getByRole("link", { name: "前沿动态" })).toHaveAttribute("href", "/app/frontier");
+    expect(screen.queryByRole("navigation", { name: "前沿动态" })).toBeNull();
+    expect(screen.getByRole("link", { name: /^返回/ })).toBeInTheDocument();
+  });
+
+
   it("opens with who made it and the labels, then the two views, the claims with their marks, and the disclosure", async () => {
     mount();
     const header = await screen.findByTestId("evidence-card-header");

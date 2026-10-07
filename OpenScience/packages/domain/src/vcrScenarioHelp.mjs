@@ -265,12 +265,12 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     timeZero: { column: 'index_date' }, exit: { column: 'last_followup' } } }],
   'population.scenario': [{ label: 'three variables from stated distributions', scenario: {
     population: { variables: [
-      { name: 'age', family: 'normal', mean: 60, sd: 10, min: 18, max: 90 },
+      { name: 'age', label: '年龄', family: 'normal', mean: 60, sd: 10, min: 18, max: 90 },
       { name: 'female', family: 'bernoulli', prob: 0.4 },
       { name: 'stage', family: 'categorical', probs: [0.5, 0.3, 0.2] }] },
     n: 500 } }],
   'population.literature': [{ label: 'a published baseline table', scenario: {
-    baselineTable: [{ variable: 'age', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }, { variable: 'ecog', proportions: [0.4, 0.5, 0.1], levels: ['0', '1', '2'] }], n: 400 } }],
+    baselineTable: [{ variable: 'age', label: '年龄', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }, { variable: 'ecog', proportions: [0.4, 0.5, 0.1], levels: ['0', '1', '2'] }], n: 400 } }],
   'population.synthpop': [{ label: 'a synthetic copy of the study table', scenario: { holdoutShare: 0.2, m: 5, constraints: [{ name: 'age', rule: { op: 'between', column: 'age', low: 18, high: 100 } }] } }],
   'population.quality': [{ label: 'a synthetic table against its training table', scenario: { trainingInputId: 'snp_1:subject', syntheticInputId: 'pop_synth@1' } }],
   'patients.continuous': [{ label: 'a continuous endpoint', scenario: {
@@ -280,6 +280,10 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
   'patients.time_to_event': [{ label: 'a time-to-event endpoint with uniform accrual', scenario: {
     design: { nTreat: 100, nControl: 100 }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 12 },
     accrual: { duration: 12, followup: 12, dropoutAnnual: 0.1 } } }],
+  'patients.longitudinal': [{ label: 'a continuous trajectory over five visits, random intercept and slope, 10% leaving per visit', scenario: {
+    design: { nTreat: 150, nControl: 150 }, endpoint: { type: 'continuous' }, visits: [0, 3, 6, 9, 12],
+    truth: { intercept: 50, slope: -0.4, effect: -0.2, sd: 3, randomEffects: { sdIntercept: 6, sdSlope: 0.3, correlation: -0.2 } },
+    dropoutPerVisit: 0.1 } }],
   'evidence.pool': [{ label: 'three published log hazard ratios', scenario: {
     studies: [{ studyId: 'NCT001', estimate: -0.35, se: 0.12 }, { studyId: 'NCT002', estimate: -0.2, se: 0.15 }], method: 'random_effects_reml', scale: 'log' } }],
   'evidence.reconstruct_km': [{ label: 'one digitized arm and its risk table', scenario: {
@@ -308,13 +312,25 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
       performance: ['power', 'bias'], targetMcse: 0.005 } },
     { label: 'two-arm binary: no accrual', scenario: {
       design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.5 }, analysis: { method: 'logistic' } } },
+    { label: 'single arm, continuous: 40 patients against a historical mean of 50, one-sample t', scenario: {
+      design: { kind: 'single_arm', n: 40 }, endpoint: { type: 'continuous' }, truth: { benchmark: 50, effect: 5, sd: 12 },
+      analysis: { method: 'one_sample_t', alternative: 'greater', sided: 1, alpha: 0.025 }, performance: ['power', 'bias'] } },
+    { label: 'single arm, time to event: 60 patients against a benchmark median of 12, one-sample log-rank', scenario: {
+      design: { kind: 'single_arm', n: 60 }, endpoint: { type: 'time_to_event' }, truth: { controlMedian: 12, hazardRatio: 0.65 },
+      accrual: { kind: 'uniform', duration: 12, followup: 12, dropoutAnnual: 0.05 },
+      analysis: { method: 'one_sample_logrank', alternative: 'less', sided: 1, alpha: 0.025 }, performance: ['power', 'bias'] } },
   ],
   'design.grid': [{ label: 'two sample sizes against three true effects, binary', scenario: {
     design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.45 },
     designs: [{ nTreat: 80, nControl: 80 }, { nTreat: 120, nControl: 120 }], truths: [{ treatmentRate: 0.3 }, { treatmentRate: 0.45 }, { treatmentRate: 0.6 }],
     performance: ['power'] } }],
-  'design.assurance': [{ label: 'assurance for a time-to-event design with a prior on the log hazard ratio', scenario: {
-    design: { allocation: 0.5, events: 300 }, endpoint: { type: 'time_to_event' }, designPrior: { mean: -0.3, sd: 0.15 }, analysis: { alpha: 0.025, sided: 1 } } }],
+  'design.assurance': [
+    { label: 'assurance for a time-to-event design with a prior on the log hazard ratio', scenario: {
+      design: { allocation: 0.5, events: 300 }, endpoint: { type: 'time_to_event' }, designPrior: { mean: -0.3, sd: 0.15 }, analysis: { alpha: 0.025, sided: 1 } } },
+    { label: 'assurance of a group-sequential design: three looks, O\'Brien-Fleming spending, 300 events at the end', scenario: {
+      design: { kind: 'group_sequential', allocation: 0.5, events: 300, informationRates: [0.4, 0.7, 1], spending: 'obrien_fleming' }, endpoint: { type: 'time_to_event' },
+      designPrior: { mean: -0.3, sd: 0.15 }, analysis: { alpha: 0.025, sided: 1 } } },
+  ],
   'design.procova': [{ label: 'PROCOVA on a continuous endpoint', scenario: {
     endpoint: { type: 'continuous' }, design: { allocation: 0.5 }, truth: { effect: 0.5, sd: 1 }, analysis: { alpha: 0.025, power: 0.9, sided: 2 }, prognostic: { rho: 0.6 } } }],
   'accrual.poisson_gamma': [{ label: 'two sites, a target and a horizon', scenario: {
@@ -360,7 +376,8 @@ function designNotes(method) {
   const notes = [`design.kind × endpoint.type this method implements: ${Object.entries(support).map(([design, endpoints]) => `${design} (${endpoints.join('|')})`).join('; ')}. Any other pairing is refused (design_not_supported).`]
   if (method === 'design.simulate' || method === 'design.grid') {
     notes.push(`analysis.method for a two-arm design follows the endpoint: ${Object.entries(VCR_TWO_ARM_ANALYSIS_METHODS).map(([endpoint, methods]) => `${endpoint} ${methods.join('|')}`).join('; ')}.`)
-    notes.push(`A single-arm design runs one analysis: ${Object.entries(VCR_SINGLE_ARM_ANALYSIS_METHODS).map(([design, analysis]) => `${design} ${analysis}`).join('; ')}; the endpoint must be binary.`)
+    notes.push(`A single-arm design runs the analysis of its endpoint: ${Object.entries(VCR_SINGLE_ARM_ANALYSIS_METHODS).map(([design, byEndpoint]) => `${design} ${Object.entries(byEndpoint).map(([endpoint, analyses]) => `${endpoint} ${analyses.join('|')}`).join(', ')}`).join('; ')}.`)
+    notes.push('A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial\'s hazard over the benchmark\'s) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark\'s) and greater is harm.')
   }
   return notes
 }

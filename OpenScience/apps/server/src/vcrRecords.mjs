@@ -57,6 +57,7 @@ const METHOD_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
     .map(([method, kind]) => [method, POPULATION_METHOD_WORDS[kind]])),
   "patients.continuous": "按研究设定的虚拟患者仿真器生成（连续终点）",
   "patients.binary": "按研究设定的虚拟患者仿真器生成（二分类终点）",
+  "patients.longitudinal": "按研究设定的虚拟患者仿真器生成（纵向轨迹，混合效应模型）",
   "patients.time_to_event": "按研究设定的虚拟患者仿真器生成（事件时间终点）",
 }));
 

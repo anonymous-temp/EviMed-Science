@@ -91,6 +91,42 @@
         "authoredAt": "2026-09-07",
         "authoredAtSource": "first-commit"
       }
+    },
+    {
+      "id": "policy-document",
+      "docType": "policy-document",
+      "depth": "structured",
+      "fixtureOnly": true,
+      "sourceText": "医院药事管理制度（节选）\n第一条 处方点评：药学部每月抽查门诊处方，抽查数量不少于该月处方总数的 1%。\n第二条 抗菌药物分级管理：按非限制使用、限制使用、特殊使用三级管理，特殊使用级须经高级职称医师提出并由会诊专家审批。\n第三条 超说明书用药：须经药事管理与药物治疗学委员会备案后方可使用。\n本制度自发布之日起施行。\n",
+      "brief": "Understand this hospital rule document. It is not a research paper: read it with the general slots, say in the first sentence of the summary what the document is about, and keep every duty and threshold exactly as written.",
+      "expectations": [
+        "The document is read with the general slots (purpose, key information, limitations); no study design, population, effect estimate or DOI is asked for or invented.",
+        "The first sentence of the summary says on its own what the rules govern.",
+        "Each duty and its threshold (1% of prescriptions, three antibiotic tiers, committee filing) is a claim with an exact anchor.",
+        "A slot the document has nothing for stays unknown with a short reason; no row says what a template expected."
+      ],
+      "generated": {
+        "authoredAt": "2026-10-07",
+        "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "drug-label",
+      "docType": "drug-label",
+      "depth": "structured",
+      "fixtureOnly": true,
+      "sourceText": "阿莫西林胶囊说明书（节选）\n【适应症】敏感菌所致的上呼吸道感染、泌尿生殖道感染、皮肤软组织感染。\n【用法用量】成人一次 0.5 g，每 6 至 8 小时一次，一日剂量不超过 4 g；儿童按体重每日 20 至 40 mg/kg，分 3 次口服。\n【禁忌】对青霉素类药物过敏者禁用。\n【注意事项】用药期间如出现严重皮肤不良反应应立即停药。\n",
+      "brief": "Understand this drug label. It is a label, not a paper: summarise what it is and what it says, keep each dose and contraindication exactly as written, and do not claim evidence the label does not state.",
+      "expectations": [
+        "The label is read with the general slots; no research-design slot is filled or shown as unknown.",
+        "The first sentence of the summary names the drug and what the label covers.",
+        "Adult and child doses, the daily ceiling and the contraindication are separate claims with exact anchors and units.",
+        "Nothing in the output reads as a clinical recommendation beyond the label's own words."
+      ],
+      "generated": {
+        "authoredAt": "2026-10-07",
+        "authoredAtSource": "first-commit"
+      }
     }
   ],
   "capability": "source-understanding",

@@ -418,6 +418,8 @@ export interface WebPluginConfiguration {
   enabled: boolean;
   /** Whatever the plugin's own schema declares; empty for a plugin with no settings. */
   settings: Record<string, number>;
+  /** When this configuration was saved; present on a history row. */
+  recordedAt?: string | null;
 }
 
 export interface WebPluginState {
@@ -1175,12 +1177,13 @@ async function parseApiResponse<T>(res: Response): Promise<T> {
 async function invokeWebCommand<T>(
   command: string,
   args?: Record<string, unknown>,
+  projectId: string = getWebProjectId(),
 ): Promise<T> {
   const res = await fetchWithWebAuth(commandUrl(command), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Open-Science-Project": getWebProjectId(),
+      "X-Open-Science-Project": projectId,
     },
     body: JSON.stringify(args ?? {}),
   });
@@ -1190,9 +1193,11 @@ async function invokeWebCommand<T>(
 export async function invokeCommand<T>(
   command: string,
   args?: Record<string, unknown>,
+  /** `projectId`: the project the command runs in, when it is not the tab's (the knowledge base page reading another project's file). */
+  options?: { projectId?: string },
 ): Promise<T> {
   if (hasWebApi) {
-    return invokeWebCommand<T>(command, args);
+    return invokeWebCommand<T>(command, args, options?.projectId);
   }
   throw new BackendUnavailableError(command);
 }
@@ -2117,11 +2122,11 @@ export async function exportWebAccount(): Promise<Blob> {
   return res.blob();
 }
 
-export function webFileDownloadUrl(path: string, root?: WebFileRoot): string {
+export function webFileDownloadUrl(path: string, root?: WebFileRoot, projectId?: string): string {
   if (!hasWebApi) throw new BackendUnavailableError("files.download");
   const params = new URLSearchParams({
     root: root === "base" ? "base" : "workspace",
-    projectId: getWebProjectId(),
+    projectId: projectId ?? getWebProjectId(),
   });
   return apiUrl(`/files/download/${encodeURIComponent(path.replace(/\\/g, "/"))}?${params.toString()}`);
 }

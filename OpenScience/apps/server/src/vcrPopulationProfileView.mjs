@@ -11,10 +11,13 @@
  *   The view keeps those as they are and says 「小样本已隐藏」 where a number would be; it never fills one in.
  * - **No model, no regex.** Every phrase is a fixed Chinese frame around the entry's own numbers and the closed list of families and
  *   parameters the scenario schema names; a family or parameter this file does not know is said by its own name, never dropped.
- * - **A profile that cannot be read is no profile.** The tab then says there is none (and offers 「重新生成」); it never shows half.
+ * - **A profile that cannot be read is no profile.** One that fails the domain's `validatePopulationProfile` (the contract the engine
+ *   writes to) is dropped as a whole: the tab then says there is none (and offers 「重新生成」); it never shows half.
  *
  * @module vcrPopulationProfileView
  */
+
+import { validatePopulationProfile } from "@evimed/domain";
 
 /** @param {unknown} value @returns {Record<string, any>} */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -151,6 +154,8 @@ function entryView(raw, index) {
  */
 export function generatedProfileRows(profile) {
   if (!Array.isArray(profile) || !profile.length) return null;
+  // The contract of the block is the domain's (the engine writes it, the page reads it): a profile that fails it is no profile.
+  if (validatePopulationProfile(profile).length) return null;
   const rows = profile.map(entryView).filter((row) => row !== null);
   return rows.length === profile.length ? /** @type {Array<Record<string, any>>} */ (rows) : null;
 }

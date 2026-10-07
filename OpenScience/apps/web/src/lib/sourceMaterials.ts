@@ -25,25 +25,3 @@ export interface SourceMaterialsLedger {
   supplements: { referenced: number; linked: number };
   reasons: string[];
 }
-
-/**
- * What a researcher is told about a document's tables and numbers, in one
- * sentence: how many were found and where each stands. Nothing when there is
- * nothing to say — no tables, a format with none, a document read before the
- * extraction — because a ledger of zeros on every prose paper would be noise.
- */
-export function sourceMaterialsText(ledger: SourceMaterialsLedger | null | undefined): string | null {
-  if (!ledger) return null;
-  if (ledger.status === "failed") return "表格与数值：这份资料的表格结构没有提取成功，原文与理解不受影响。";
-  if (ledger.status === "unavailable") return null;
-  const { values, tables } = ledger;
-  if (tables.total === 0 && values.total === 0) return null;
-  const stands = [
-    `已定位 ${values.located}`,
-    values.ambiguous > 0 ? `页码待定 ${values.ambiguous}` : null,
-    values.unlocated > 0 ? `页码未知 ${values.unlocated}` : null,
-    values.unextracted + values.failed > 0 ? `未能提取 ${values.unextracted + values.failed}` : null,
-  ].filter((part): part is string => part !== null);
-  const scanned = ledger.origin === "ocr" ? "来自扫描件，数值是文字识别的结果，准确度未知。" : "";
-  return `表格与数值：${tables.structured} 张表、${values.total} 个数值，${stands.join("，")}。${scanned}`;
-}

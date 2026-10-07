@@ -455,20 +455,131 @@ export async function memoryGrowth({ researchMemory, learning = null, capsules =
 }
 
 /**
- * `GET /api/memory/timeline?before=&limit=&timeZone=` and
- * `GET /api/memory/growth?timeZone=`.
+ * 「哪天学会了什么」: the growth page's list under its line — one day at a time,
+ * what the platform learned for the researcher and when, newest first.
  *
- * @param {{ config: any, researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, capsules?: any,
+ * Hidden knowledge: like the line above it, this writes nothing and keeps no
+ * log of its own. Every row is read from the record that already says it: a
+ * method or a handbook has the day it was first written, and each later body it
+ * held is a saved revision with its own day (`history`); the day the capsule
+ * began to remember is the first day `growthDays` counts a memory. Only what is
+ * in force is listed — a method or handbook the researcher stopped is under
+ * 已忘记的内容, not in the story of what was learned — and the facts the
+ * researcher said or the platform noted are not itemised: the line counts them,
+ * and a day with forty of them is not forty rows.
+ *
+ * A source that cannot be read leaves its rows out and the read still answers
+ * (principle 19): the list is a label on the growth, never a reason the page
+ * does not open.
+ */
+
+/** How many rows one read returns at most, newest first. */
+export const MEMORY_LEARNED_ITEMS = 200;
+/** How many methods and handbooks have their earlier bodies read: each is one history read. */
+export const MEMORY_LEARNED_HISTORIES = 100;
+
+/**
+ * @param {{ researchMemory: any, learning?: any, handbooks?: any }} sources
+ * @param {{ id: string }} user
+ * @param {{ timeZone?: string | null }} [options]
+ * @returns {Promise<{ days: Array<{ day: string, items: Array<{ kind: "start" | "learned" | "improved", what: "method" | "handbook" | null, id: string | null, title: string }> }>, timeZone: string }>}
+ */
+export async function memoryLearned({ researchMemory, learning = null, handbooks = null }, user, { timeZone = null } = {}) {
+  const zone = timeZoneOrDefault(timeZone);
+  const format = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
+  const day = (/** @type {unknown} */ value) => {
+    const at = instant(value);
+    return at ? dayOf(at, format) : null;
+  };
+  /** @type {Array<{ day: string, kind: "start" | "learned" | "improved", what: "method" | "handbook" | null, id: string | null, title: string }>} */
+  const rows = [];
+  const add = (/** @type {string | null} */ at, /** @type {"start" | "learned" | "improved"} */ kind, /** @type {"method" | "handbook" | null} */ what,
+    /** @type {string | null} */ id, /** @type {string} */ title) => {
+    if (at && (kind === "start" || title)) rows.push({ day: at, kind, what, id, title });
+  };
+  /** One method's or handbook's days: when it was first written, then when each later body was. */
+  const lifeOf = async (/** @type {() => Promise<any[]>} */ history, /** @type {string | null} */ began, /** @type {"method" | "handbook"} */ what,
+    /** @type {string} */ id, /** @type {string} */ title, /** @type {boolean} */ maybeAmended) => {
+    add(began, "learned", what, id, title);
+    if (!maybeAmended) return;
+    try {
+      const versions = [...(await history())].sort((left, right) => String(left.at).localeCompare(String(right.at)));
+      for (const version of versions.slice(1)) add(day(version.at), "improved", what, id, excerpt(version.title ?? title, 80));
+    } catch { /* the story keeps the day it began */ }
+  };
+
+  try {
+    const first = (await researchMemory.growthDays(user.id, { timeZone: zone })).filter((/** @type {any} */ row) => row.added > 0).map((/** @type {any} */ row) => row.day).sort()[0];
+    add(first ?? null, "start", null, null, "");
+  } catch { /* no first day: the list starts at what was learned */ }
+
+  let histories = 0;
+  if (learning?.documents) {
+    try {
+      const methods = await everyDocument(learning.documents, user.id, "method", {
+        filter: { recordType: LEARNED_METHOD_RECORD_TYPE, status: "approved" },
+        fields: { display: true, frontmatter: true, bodyVersion: true },
+      });
+      for (const method of methods) {
+        const payload = method.payload ?? {};
+        const title = excerpt(cleanMethodDisplay(payload.display)?.title ?? payload.frontmatter?.name ?? "", 80);
+        const amended = Number(payload.bodyVersion) > 1 && histories < MEMORY_LEARNED_HISTORIES;
+        if (amended) histories += 1;
+        await lifeOf(() => learning.history(user.id, method.id), day(method.createdAt), "method", String(method.id), title, amended);
+      }
+    } catch { /* the methods' days are left out */ }
+  }
+  if (handbooks) {
+    try {
+      /** @type {any[]} */
+      const held = [];
+      /** @type {string | null} */
+      let cursor = null;
+      do {
+        const page = await handbooks.list(user.id, { status: "active", limit: 100, cursor });
+        held.push(...(page.items ?? []));
+        cursor = page.nextCursor ?? null;
+      } while (cursor && held.length < MEMORY_GROWTH_DOCUMENTS);
+      for (const handbook of held) {
+        const payload = handbook.payload ?? {};
+        const title = excerpt(cleanMethodDisplay(payload.display)?.title ?? payload.frontmatter?.name ?? "", 80);
+        const amended = Number(payload.version) > 1 && histories < MEMORY_LEARNED_HISTORIES;
+        if (amended) histories += 1;
+        await lifeOf(() => handbooks.history(user.id, handbook.id), day(payload.createdAt) ?? day(handbook.createdAt), "handbook", String(handbook.id), title, amended);
+      }
+    } catch { /* the handbooks' days are left out */ }
+  }
+
+  const kindRank = { start: 0, learned: 1, improved: 2 };
+  rows.sort((left, right) => right.day.localeCompare(left.day) || kindRank[left.kind] - kindRank[right.kind] || left.title.localeCompare(right.title, "zh"));
+  /** @type {Map<string, any[]>} */
+  const byDay = new Map();
+  for (const row of rows.slice(0, MEMORY_LEARNED_ITEMS)) {
+    const { day: at, ...item } = row;
+    byDay.set(at, [...(byDay.get(at) ?? []), item]);
+  }
+  return { days: [...byDay.entries()].map(([at, items]) => ({ day: at, items })), timeZone: zone };
+}
+
+/**
+ * `GET /api/memory/timeline?before=&limit=&timeZone=`,
+ * `GET /api/memory/growth?timeZone=` and `GET /api/memory/learned?timeZone=`.
+ *
+ * @param {{ config: any, researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, capsules?: any, handbooks?: any,
  *   context: (req: any, res: any) => Promise<any> }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
-export function createMemoryTimelineRoutes({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, capsules = null, context }) {
+export function createMemoryTimelineRoutes({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, capsules = null, handbooks = null, context }) {
   return async function memoryTimelineRoutes(req, res) {
     const url = new URL(req.url ?? "/", "http://evimed.local");
-    if (url.pathname !== "/api/memory/timeline" && url.pathname !== "/api/memory/growth") return false;
+    if (url.pathname !== "/api/memory/timeline" && url.pathname !== "/api/memory/growth" && url.pathname !== "/api/memory/learned") return false;
     if (req.method !== "GET") throw new HttpError(405, "method_not_allowed", "The timeline is read-only.");
     if (!researchMemory?.configured) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
     const ctx = await context(req, res);
+    if (url.pathname === "/api/memory/learned") {
+      sendJson(res, 200, { data: await memoryLearned({ researchMemory, learning, handbooks }, ctx.user, { timeZone: url.searchParams.get("timeZone") }) });
+      return true;
+    }
     if (url.pathname === "/api/memory/growth") {
       sendJson(res, 200, { data: await memoryGrowth({ researchMemory, learning, capsules }, ctx.user, {
         timeZone: url.searchParams.get("timeZone"),

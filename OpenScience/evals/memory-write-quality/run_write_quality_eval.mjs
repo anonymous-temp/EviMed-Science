@@ -46,6 +46,7 @@ export const REQUIRED_CLASSES = Object.freeze([
   "default-project-follow-up",
   "near-duplicates",
   "platform-brief-as-user-words",
+  "pending-state-and-inventory",
 ]);
 
 /** @returns {Promise<any[]>} */

@@ -625,7 +625,7 @@ export interface GeoProducer {
   title?: string;
 }
 
-export function patchGeoProject(geoId: string, input: { coverageDays?: number; engines?: string[]; tier?: GeoTierId; status?: GeoProjectStatus; producer?: GeoProducer | null }) {
+export function patchGeoProject(geoId: string, input: { coverageDays?: number; engines?: string[]; tier?: GeoTierId; status?: GeoProjectStatus; producer?: GeoProducer | null; name?: string }) {
   return productRequest<unknown>(project(geoId), "PATCH", input);
 }
 

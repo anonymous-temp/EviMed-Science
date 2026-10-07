@@ -64,6 +64,9 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
         const set = id === EMPTY_STUDY_ID ? "empty" : "ev201";
         if (!section) return fixture(`${set}/study.json`);
         if (section === "export") return fixture("ev201/export.json");
+        // The programme's background conversations and the page's editable cards answer in their own shapes (no presented page).
+        if (section === "runs") return { runs: [] };
+        if (section === "cards") return { kind: query.get("kind"), objectId: query.get("object") ?? "pop_1", title: "", settings: [] };
         // The ledger route answers the store's own rows (`referralOf` in `vcrMatchStore.mjs`), not a presented page:
         // one per person the referral counts of `matching-referral.json` add up to.
         if (section === "referrals") return referralsAnswer();

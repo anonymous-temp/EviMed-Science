@@ -477,9 +477,6 @@
       "status": "done",
       "current": true,
       "by": null,
-      "configuredModel": null,
-      "configurationRevision": null,
-      "inputDigest": null,
       "at": "2026-09-27T01:07:00.000Z",
       "note": "审查意见供参考，不代表实证验证。",
       "findings": []

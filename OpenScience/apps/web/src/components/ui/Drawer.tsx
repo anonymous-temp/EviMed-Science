@@ -49,6 +49,10 @@ export function Drawer({
     if (closeRef.current) closeRef.current.focus();
     else focusableIn(panelRef.current)[0]?.focus();
     const onKey = (event: KeyboardEvent) => {
+      // A dialog opened from inside the drawer (a confirmation, an edit form) is a modal layer of its
+      // own: while it is up Tab and Escape are its, not this panel's, or one Escape would close both.
+      const layer = event.target instanceof Element ? event.target.closest('[aria-modal="true"]') : null;
+      if (layer && layer !== panelRef.current) return;
       if (event.key === "Escape") {
         event.stopPropagation();
         close.current();

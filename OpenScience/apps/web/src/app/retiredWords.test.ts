@@ -110,7 +110,7 @@ describe("the words the product retired", () => {
   it("walks the shell's sources", () => {
     expect(files.length).toBeGreaterThan(150);
     const walked = files.map(relative);
-    for (const expected of ["src/app/routes/MemoryHubPage.tsx", "src/components/capsule/MemoryRecordRow.tsx", "src/lib/memoryGroups.ts"]) {
+    for (const expected of ["src/app/routes/MemoryHubPage.tsx", "src/components/memory/FactDrawer.tsx", "src/lib/memoryGroups.ts"]) {
       expect(walked).toContain(expected);
     }
     expect(texts.filter(({ text }) => CJK.test(text)).length).toBeGreaterThan(50);

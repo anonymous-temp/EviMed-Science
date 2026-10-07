@@ -485,6 +485,215 @@ vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NU
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 # ---------------------------------------------------------------------------
+# The profile of a generated population (2026-10-07)
+#
+# Hidden knowledge:
+#
+# - **The population page can only draw what the result carries**, and a
+#   scenario or literature population used to carry two counts and a constraint
+#   table: the 人群 tab was empty although the engine had just generated a
+#   thousand records. So the engine describes its own table, deterministically
+#   and from the table alone, in `diagnostics.profile` -- one entry per
+#   variable: what the scenario declared for it, how many rows and missing
+#   values there are, the summary (continuous) or the levels (binary and
+#   categorical), and a seven-bin histogram. Nothing here is estimated: it is
+#   what the generated rows say, next to what was asked for, which is exactly
+#   how a reader sees whether the generator did what the definition said.
+# - **Numbers are rounded here, once, to four significant digits**, so every
+#   page that draws a profile shows the same figures and no page rounds a
+#   count; counts are integers and never rounded.
+# - **An empirical synthetic table is made from real people, so the profile
+#   of it keeps the small-cell rule.** A level with fewer than `minCellSize`
+#   rows is not shown with its count (the cells below the floor are absorbed
+#   by `vcr_suppress_cells`, the same helper the real-data profile uses, so a
+#   hidden cell cannot be recovered from the others and the total); a
+#   histogram bin is a cell too; the extremes of a variable are single records
+#   and are not shown for a table too small to hide them. Scenario and
+#   literature populations are drawn from stated parameters, no row of them is
+#   a person, and nothing in them is suppressed.
+# - **The declared block is the caller's, read back.** `declared` repeats the
+#   family, the parameters and the constraints the scenario or the baseline
+#   table stated for that variable (empirical synthesis states none: `null`),
+#   so the page can put "stated" beside "generated" without reading the job.
+# ---------------------------------------------------------------------------
+
+VCR_PROFILE_BINS <- 7L
+
+#' A bookkeeping column of a generated table that is not a variable of the
+#' population: the parameter-draw index, the synthetic copy number and the
+#' reason a value is missing.
+.vcr_profile_skips <- function(name) name %in% c("parameterDraw", "copy") || endsWith(name, "__missing_reason")
+
+#' Four significant digits.
+.vcr_sig <- function(x) signif(x, 4L)
+
+#' The columns a row rule names, whatever its depth.
+.vcr_rule_columns <- function(rule) {
+  if (!is.list(rule)) return(character(0))
+  here <- if (is.character(rule[["column"]]) && length(rule[["column"]]) == 1L) rule[["column"]] else character(0)
+  kids <- c(if (is.list(rule[["operands"]])) rule[["operands"]] else list(), if (is.list(rule[["operand"]])) list(rule[["operand"]]) else list())
+  unique(c(here, unlist(lapply(kids, .vcr_rule_columns), use.names = FALSE)))
+}
+
+#' What a scenario population declared, per variable, and the labels it gave.
+#' Read with `[[`: a key a caller wrote is never matched by its prefix.
+.vcr_declared_scenario <- function(spec) {
+  declared <- list(); labels <- list()
+  cons <- spec[["constraints"]]
+  for (v in spec[["variables"]]) {
+    nm <- as.character(v[["name"]]); fam <- as.character(v[["family"]])
+    params <- list()
+    for (k in names(.VCR_FAMILY_PARAMS[[fam]])) { val <- vcr_scalar(v[[k]], NULL); if (!is.null(val)) params[[k]] <- val }
+    if (identical(fam, "gamma")) { val <- vcr_scalar(v[["mean"]], NULL); if (!is.null(val)) params[["mean"]] <- val }
+    if (identical(fam, "categorical")) params[["probs"]] <- vcr_num(v[["probs"]])
+    constraints <- list()
+    if (!identical(fam, "uniform")) {
+      lo <- if (.vcr_bound(v[["min"]])) as.numeric(v[["min"]]) else NULL
+      hi <- if (.vcr_bound(v[["max"]])) as.numeric(v[["max"]]) else NULL
+      if (!is.null(lo) || !is.null(hi)) constraints[[length(constraints) + 1L]] <- c(list(kind = "bounds"), if (!is.null(lo)) list(min = lo), if (!is.null(hi)) list(max = hi))
+    }
+    for (r in cons) {
+      if (nm %in% .vcr_rule_columns(r[["rule"]])) constraints[[length(constraints) + 1L]] <- list(kind = "rule", name = as.character(r[["name"]]), rule = r[["rule"]])
+    }
+    sd_ <- v[["paramSd"]]
+    declared[[nm]] <- c(list(family = fam, params = params, constraints = constraints),
+                        if (is.list(sd_) && length(sd_)) list(paramSd = lapply(sd_, vcr_scalar)))
+    if (is.character(v[["label"]]) && length(v[["label"]]) == 1L && nzchar(v[["label"]])) labels[[nm]] <- v[["label"]]
+  }
+  list(declared = declared, labels = labels)
+}
+
+#' What a baseline table declared, per variable (a literature population), the
+#' labels it gave and the order of a categorical row's levels.
+.vcr_declared_literature <- function(table) {
+  declared <- list(); labels <- list(); orders <- list()
+  for (row in .vcr_baseline_rows(table)) {
+    nm <- as.character(row[["variable"]] %||% "")
+    if (!nzchar(nm)) next
+    props <- vcr_num(row[["proportions"]]); prop <- vcr_scalar(row[["proportion"]], NULL)
+    lo <- if (.vcr_bound(row[["min"]])) as.numeric(row[["min"]]) else NULL
+    hi <- if (.vcr_bound(row[["max"]])) as.numeric(row[["max"]]) else NULL
+    if (length(props)) {
+      lv <- if (length(row[["levels"]])) vcr_chr(row[["levels"]]) else NULL
+      declared[[nm]] <- list(family = "categorical", params = c(list(probs = props), if (!is.null(lv)) list(levels = lv)), constraints = list())
+      if (!is.null(lv)) orders[[nm]] <- lv
+    } else if (!is.null(prop)) {
+      declared[[nm]] <- list(family = "bernoulli", params = list(prob = prop), constraints = list())
+    } else {
+      fam <- as.character(row[["distribution"]] %||% "normal")
+      bounds <- if (!is.null(lo) || !is.null(hi)) list(c(list(kind = "bounds"), if (!is.null(lo)) list(min = lo), if (!is.null(hi)) list(max = hi))) else list()
+      declared[[nm]] <- list(family = fam, params = list(mean = vcr_scalar(row[["mean"]], NULL), sd = vcr_scalar(row[["sd"]], NULL)), constraints = bounds)
+    }
+    if (is.character(row[["label"]]) && length(row[["label"]]) == 1L && nzchar(row[["label"]])) labels[[nm]] <- row[["label"]]
+  }
+  list(declared = declared, labels = labels, orders = orders)
+}
+
+#' continuous, binary or categorical: what the scenario declared when it
+#' declared, otherwise what the values are (a text or logical column, a column
+#' of at most two values, or a whole-number column of at most five values --
+#' synthpop's own rule for turning a number into a factor).
+.vcr_profile_kind <- function(x, declared) {
+  fam <- declared[["family"]]
+  if (!is.null(fam)) return(switch(fam, bernoulli = "binary", categorical = "categorical", "continuous"))
+  d <- unique(x[!is.na(x)])
+  if (is.factor(x) || is.character(x) || is.logical(x)) return(if (length(d) <= 2L) "binary" else "categorical")
+  if (is.numeric(x) && length(d)) {
+    if (length(d) <= 2L && all(d %in% c(0, 1))) return("binary")
+    if (length(d) <= 5L && all(d == round(d))) return("categorical")
+  }
+  "continuous"
+}
+
+#' Seven equal bins from the smallest to the largest value, left-closed and the
+#' last closed on the right. A variable with one value gets bins around it.
+.vcr_profile_histogram <- function(xs, bins = VCR_PROFILE_BINS) {
+  lo <- min(xs); hi <- max(xs)
+  if (!(hi > lo)) { lo <- lo - 0.5; hi <- hi + 0.5 }
+  breaks <- seq(lo, hi, length.out = bins + 1L)
+  w <- (hi - lo) / bins
+  counts <- tabulate(pmin(pmax(floor((xs - lo) / w) + 1L, 1L), bins), nbins = bins)
+  # Four significant digits, but never so few that two breaks are the same number.
+  shown <- NULL
+  for (digits in 4:12) { shown <- signif(breaks, digits); if (all(diff(shown) > 0)) break }
+  list(breaks = shown, counts = as.integer(counts))
+}
+
+.vcr_profile_variable <- function(x, name, label, declared, order, empirical, min_cell) {
+  n <- length(x); miss <- sum(is.na(x)); obs <- n - miss
+  kind <- .vcr_profile_kind(x, declared)
+  suppressed <- character(0)
+  # as vcr_profile_table: with `n` shown, a hidden count of missing values and a hidden count of observed ones are one disclosure
+  miss_hidden <- empirical && ((miss >= 1L && miss < min_cell) || (obs >= 1L && obs < min_cell))
+  if (miss_hidden) suppressed <- c(suppressed, "missing")
+  out <- list(variable = name, label = if (is.character(label) && length(label) == 1L && nzchar(label)) label else NULL,
+              kind = kind, declared = declared, n = n, missing = if (miss_hidden) NULL else miss)
+  xs <- x[!is.na(x)]
+  if (identical(kind, "continuous")) {
+    xs <- as.numeric(xs)
+    if (length(xs)) {
+      q <- stats::quantile(xs, c(0.25, 0.5, 0.75), names = FALSE)
+      few <- empirical && length(xs) < 20L * min_cell
+      if (few) suppressed <- c(suppressed, "min", "max")
+      hist <- .vcr_profile_histogram(xs)
+      if (empirical) {
+        names(hist$counts) <- seq_along(hist$counts)
+        kept <- vcr_suppress_cells(stats::setNames(as.numeric(hist$counts), seq_along(hist$counts)), min_cell)
+        shown <- vapply(kept$cells %||% list(), function(cell) if (is.null(cell[["merged"]])) as.character(cell[["level"]]) else NA_character_, character(1))
+        positive <- hist$counts > 0
+        hide <- positive & !(as.character(seq_along(hist$counts)) %in% shown)
+        if (any(hide)) suppressed <- c(suppressed, "histogram")
+        counts <- as.list(as.integer(hist$counts)); for (i in which(hide)) counts[i] <- list(NULL)
+      } else counts <- as.list(hist$counts)
+      out <- c(out, list(mean = .vcr_sig(mean(xs)), sd = if (length(xs) > 1L) .vcr_sig(stats::sd(xs)) else NULL,
+                         median = .vcr_sig(q[2]), q1 = .vcr_sig(q[1]), q3 = .vcr_sig(q[3]),
+                         min = if (few) NULL else .vcr_sig(min(xs)), max = if (few) NULL else .vcr_sig(max(xs)),
+                         histogram = list(breaks = hist$breaks, counts = counts)))
+    } else out <- c(out, list(mean = NULL, sd = NULL, median = NULL, q1 = NULL, q3 = NULL, min = NULL, max = NULL, histogram = NULL))
+  } else {
+    chr <- as.character(xs)
+    present <- table(chr)
+    # the levels in their natural order: a stated order, then the values' own (numbers by value, text alphabetically)
+    levels <- if (length(order)) order
+              else if (identical(declared[["family"]], "bernoulli")) c("0", "1")
+              else if (identical(declared[["family"]], "categorical") && is.numeric(x)) as.character(seq_along(declared[["params"]][["probs"]]))
+              else if (is.numeric(x)) as.character(sort(unique(xs))) else sort(unique(chr))
+    levels <- unique(c(levels, setdiff(names(present), levels)))
+    counts <- vapply(levels, function(l) if (l %in% names(present)) as.numeric(present[[l]]) else 0, numeric(1))
+    hide <- rep(FALSE, length(levels)); withheld <- NULL
+    if (empirical) {
+      kept <- vcr_suppress_cells(stats::setNames(counts, levels), min_cell)
+      if (!is.null(kept[["withheld"]])) { hide[] <- TRUE; withheld <- kept[["withheld"]] }
+      else {
+        shown <- vapply(kept$cells, function(cell) if (is.null(cell[["merged"]])) as.character(cell[["level"]]) else NA_character_, character(1))
+        hide <- counts > 0 & !(levels %in% shown)
+      }
+      if (any(hide)) suppressed <- c(suppressed, "levels")
+    }
+    cells <- if (!is.null(withheld)) list() else lapply(seq_along(levels), function(i) {
+      if (hide[i]) list(level = levels[i], n = NULL, p = NULL, suppressed = TRUE)
+      else list(level = levels[i], n = as.integer(counts[i]), p = if (obs > 0L) .vcr_sig(unname(counts[i]) / obs) else NULL)
+    })
+    out <- c(out, list(levels = cells), if (!is.null(withheld)) list(withheld = withheld))
+  }
+  if (length(suppressed)) out$suppressed <- as.list(suppressed)
+  out
+}
+
+#' The profile of a generated population table: one entry per variable.
+#'
+#' @param df the generated table (bookkeeping columns are left out)
+#' @param declared what the scenario or the baseline table stated, by variable
+#' @param labels the display label a variable was given, by variable
+#' @param order the stated order of a categorical variable's levels, by variable
+#' @param empirical TRUE for a table synthesised from real people's rows
+vcr_population_profile <- function(df, declared = list(), labels = list(), order = list(), empirical = FALSE,
+                                   min_cell = vcr_limit("minCellSize", 10)) {
+  keep <- names(df)[!vapply(names(df), .vcr_profile_skips, logical(1))]
+  lapply(keep, function(nm) .vcr_profile_variable(df[[nm]], nm, labels[[nm]], declared[[nm]], order[[nm]], empirical, min_cell))
+}
+
+# ---------------------------------------------------------------------------
 # The mechanistic model-package interface (plan 8.2; attachment C2 section 2.3).
 # V1 hosts no mechanistic model -- it fixes the shape one must arrive in, so
 # that adding PBPK later is a package rather than a second code path.

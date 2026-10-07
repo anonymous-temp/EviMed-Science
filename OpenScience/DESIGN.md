@@ -108,10 +108,13 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   32/40 metric rungs belong to data pages. Banning every expressive device is what made 循证 GEO
   look cheap, and un-banning them without a budget is how a product gets loud. **One list page
   carries one chart:** 记忆胶囊's growth line (2026-09-28, `CapsuleGrowth`) — the owner's timeline
-  of how the capsule grew, which the list cannot show. It is a single brand line whose heading is
-  the sentence it proves, with at most three moments; it has no tile, legend or metric rung, and it
-  is not drawn until the history spans two weeks. No peer's memory page has a chart, so a second
-  chart there, or a first on another list page, needs the same argument.
+  of how the capsule grew, which the list cannot show. Since 2026-10-07 it lives in the 成长 tab, the
+  fourth of the page's four tabs (关于你 · 项目 · 做法 · 成长), above the list of what was learned each
+  day, and no longer at the top of the page: every tab but that one is a list and nothing else. It is
+  a single brand line whose heading is the sentence it proves, with at most three moments; it has no
+  tile, legend or metric rung, and it is not drawn until the history spans two weeks. No peer's
+  memory page has a chart, so a second chart there, or a first on another list page, needs the same
+  argument.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
@@ -318,7 +321,7 @@ bordered pill or bordered `<button>` outside it:
 | Component | What it is |
 |---|---|
 | `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle |
-| `Tabs` | a page's views: underlined tabs over a hairline |
+| `Tabs` | a page's views: underlined tabs over a hairline; `trailing` puts the open view's controls (filters, a search box) at the row's right on the same hairline, dropping under the tabs below 640 px |
 | `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 13 px (no border; selected sits on grey), the rest in “更多 ▾” |
 | `Tag` | the metadata label: 22 px, 12 px text, 6 px corner, grey, no border; `safety` red |
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |

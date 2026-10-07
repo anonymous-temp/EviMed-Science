@@ -282,7 +282,7 @@ export function createVcrNotifier({ notifications, store, config = {}, now = () 
     newEvidence(study, { batchKey, cards, afterFreeze = false, refreshing = false }) {
       const named = cards.slice(0, 3).map((card) => clip(card, 20)).join("、");
       const tail = afterFreeze ? "分析计划已经冻结：新版本会放在冻结的版本旁边，计划本身不动。"
-        : refreshing ? "AI 会读入新证据并生成新版本；旧版本保留。" : "旧版本保留；数据与证据页上能看到是哪些新证据。";
+        : refreshing ? "AI 会读入新证据并生成新版本；旧版本保留。" : "旧版本保留；定义与证据页上能看到是哪些新证据。";
       return send(study, "new_evidence", {
         title: `${vcrStudyName(study)}：${named}有了新证据`,
         body: tail, severity: "info", source: source(String(study.id), "data"),

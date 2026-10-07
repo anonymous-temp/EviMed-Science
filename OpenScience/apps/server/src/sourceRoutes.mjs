@@ -13,8 +13,11 @@ async function bodyOf(req, limit, allowed) {
 }
 
 /** Account-authenticated source inventory and user corrections.
- * @param {{store:any,service:any,openList?:any,maxJsonBytes:number}} dependencies */
-export function createSourceRoutes({ store, service, openList = null, maxJsonBytes }) {
+ * `knowledge` is what puts a web page or a note into a project's knowledge base (`knowledgeBaseEntries.mjs`): the
+ * composition builds it where it holds the project's write path and the public-web reader, and without it those
+ * routes answer that source intake is unavailable.
+ * @param {{store:any,service:any,openList?:any,knowledge?:any,maxJsonBytes:number}} dependencies */
+export function createSourceRoutes({ store, service, openList = null, knowledge = null, maxJsonBytes }) {
   // The composition builds one OpenList connector for the browser's namespace and
   // shares this SourceService instance with the ingestion worker. Handing the
   // connector to the service here is what lets the leased folder sync page the
@@ -23,6 +26,13 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
   // A queued job carries worker-only identity (the account generation it was cut
   // against). The browser needs to know a sync is scheduled, not what it holds.
   const folderReply = ({ folder, job, ...rest }) => ({ folder, ...rest, scheduled: Boolean(job) });
+  // A page or a note that was added: the document, whether it was already there, and — for a refresh or a save —
+  // whether its content changed. The queued job is the worker's, not the browser's.
+  const entryReply = ({ job: _job, ...rest }) => rest;
+  const requireKnowledge = () => {
+    if (!knowledge) throw new HttpError(503, "source_state_unavailable", "Adding a page or a note needs the knowledge base's storage.");
+    return knowledge;
+  };
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -104,19 +114,39 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
       await store.requireProject(user, typeof input.projectId === "string" ? input.projectId : "");
       return reply(await service.decideDuplicate(user.id, input), 201);
     }
+    if (url.pathname === "/api/sources/links" && method === "POST") {
+      const input = await bodyOf(req, maxJsonBytes, ["projectId", "url"]);
+      const owned = await store.requireProject(user, typeof input.projectId === "string" ? input.projectId : "");
+      return reply(entryReply(await requireKnowledge().addLink({ user, project: owned, url: input.url })), 201);
+    }
+    if (url.pathname === "/api/sources/notes" && method === "POST") {
+      const input = await bodyOf(req, maxJsonBytes, ["projectId", "title", "body"]);
+      const owned = await store.requireProject(user, typeof input.projectId === "string" ? input.projectId : "");
+      return reply(entryReply(await requireKnowledge().addNote({ user, project: owned, title: input.title, body: input.body })), 201);
+    }
     let parts;
     try { parts = url.pathname.slice("/api/sources".length).split("/").filter(Boolean).map(decodeURIComponent); }
     catch { throw new HttpError(400, "source_path_invalid", "Invalid source path."); }
 
     if (parts.length === 0 && method === "GET") {
+      // `scope=shared`: the documents the account made available to every project, which belong to no one project.
+      const scope = url.searchParams.get("scope");
+      if (scope != null && scope !== "shared") throw new HttpError(400, "source_payload_invalid", "source scope is invalid.");
+      const shared = scope === "shared";
       const projectId = url.searchParams.get("projectId");
-      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
-      await store.requireProject(user, projectId);
+      if (!shared) {
+        if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+        await store.requireProject(user, projectId);
+      }
       return reply(await service.list(user.id, {
-        projectId,
+        projectId: shared ? null : projectId,
+        shared,
         status: url.searchParams.get("status"),
         // What the page says about a document (`SOURCE_STATES`), when asked by that.
         ...(url.searchParams.has("state") ? { state: url.searchParams.get("state") } : {}),
+        // The chip a document is counted under, and a search over what it is called and what it says.
+        kind: url.searchParams.get("kind"),
+        q: url.searchParams.get("q"),
         familyId: url.searchParams.get("familyId"),
         limit: Number(url.searchParams.get("limit") ?? 50),
         cursor: url.searchParams.get("cursor"),
@@ -140,6 +170,17 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
     if (action === "materials" && method === "GET") {
       if (parts.length === 2) return reply(await service.getMaterials(user.id, sourceId));
       if (parts.length === 3) return reply(await service.getMaterialTable(user.id, sourceId, parts[2]));
+    }
+    if (action === "note" && parts.length === 2 && (method === "GET" || method === "PUT")) {
+      const owned = await store.requireProject(user, source.projectId);
+      if (method === "GET") return reply(await requireKnowledge().readNote({ project: owned, source }));
+      const input = await bodyOf(req, maxJsonBytes, ["title", "body"]);
+      return reply(entryReply(await requireKnowledge().saveNote({ user, project: owned, source, title: input.title, body: input.body })));
+    }
+    if (action === "refetch" && parts.length === 2 && method === "POST") {
+      await bodyOf(req, maxJsonBytes, []);
+      const owned = await store.requireProject(user, source.projectId);
+      return reply(entryReply(await requireKnowledge().refetchLink({ user, project: owned, source })));
     }
     if (parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
     if (parts.length === 1 && method === "GET") return reply(source);

@@ -123,3 +123,41 @@ test("the list carries the loop's own counts for the account, and a method's his
   assert.equal(degraded.status, 200);
   assert.equal(degraded.body.data.summary, undefined);
 });
+
+test("「从哪里学到的」 lists the conversations that taught a method, newest lesson first, and nothing for a run that cannot be found", async () => {
+  /** @type {string[][]} */
+  const resolved = [];
+  const routes = createLearningRoutes({
+    store: { async ensureSessionUser() { return { user: { id: "u1" } }; }, async assertCsrf() {} },
+    maxJsonBytes: 10_000,
+    service: {
+      // The run of the current body, then the one each earlier body was learnt from.
+      async sourceRuns() { return [{ projectId: "meta", runId: "run_2" }, { projectId: "meta", runId: "run_1" }, { projectId: "gone", runId: "run_0" }]; },
+    },
+    resolveRun: async (userId, projectId, runId) => {
+      resolved.push([userId, projectId, runId]);
+      if (projectId === "gone") return null;
+      return { id: runId, sessionId: `ses_${runId}`, question: `问题 ${runId}`, finishedAt: "2026-09-22T08:00:00.000Z" };
+    },
+  });
+  const found = await get(routes, `/api/methods/${encodeURIComponent("method:learned:x")}/sources`);
+  assert.equal(found.status, 200);
+  assert.deepEqual(found.body.data.items.map((/** @type {any} */ item) => [item.projectId, item.sessionId, item.title]),
+    [["meta", "ses_run_2", "问题 run_2"], ["meta", "ses_run_1", "问题 run_1"]]);
+  assert.deepEqual(resolved.map(([user]) => user), ["u1", "u1", "u1"], "read within the signed-in account");
+
+  // A deployment that cannot resolve a run still opens the drawer.
+  const without = createLearningRoutes({
+    store: { async ensureSessionUser() { return { user: { id: "u1" } }; }, async assertCsrf() {} },
+    maxJsonBytes: 10_000,
+    service: { async sourceRuns() { return [{ projectId: "meta", runId: "run_2" }]; } },
+  });
+  assert.deepEqual((await get(without, "/api/methods/m/sources")).body.data.items, []);
+  const broken = createLearningRoutes({
+    store: { async ensureSessionUser() { return { user: { id: "u1" } }; }, async assertCsrf() {} },
+    maxJsonBytes: 10_000,
+    service: { async sourceRuns() { return [{ projectId: "meta", runId: "run_2" }]; } },
+    resolveRun: async () => { throw new Error("project store down"); },
+  });
+  assert.deepEqual((await get(broken, "/api/methods/m/sources")).body.data.items, [], "a source that cannot be read is a link not shown");
+});

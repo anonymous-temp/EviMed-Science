@@ -207,6 +207,17 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByText(/选一项工具/)).not.toBeInTheDocument();
   });
 
+  // 2026-10-07 plan §6: the page is the grid. The capability map is the evolution engine's own model (a task family by a capability,
+  // nearly all of it 「尚未验证」) and the evolution panel is an operator's; neither belongs under a researcher's page, and with
+  // them gone there is no tab strip and no tab named like the page.
+  it("is one grid: no tab strip, no capability map and no evolution panel under it", async () => {
+    renderPage();
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    for (const gone of ["能力地图", "进化工具", "循证进化", "尚未验证", "待明确"]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
+  });
+
   it("groups the tools in the product's order, each card one sentence and how long it usually takes", async () => {
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });

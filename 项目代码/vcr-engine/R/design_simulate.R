@@ -105,10 +105,13 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
     vcr_abort("endpoint_not_supported", "scenario.endpoint.type", "The endpoint is continuous, binary or time_to_event.")
   }
   if (kind %in% c("single_arm","single_arm_external","simon_two_stage")) {
-    if (!identical(endpoint,"binary")) vcr_abort("design_not_supported","scenario.endpoint.type","This single-arm implementation requires a binary endpoint.")
-    expected<-c(single_arm="exact_binomial",single_arm_external="stratified_risk_difference",simon_two_stage="simon_boundary")
-    method<-scenario$analysis$method %||% unname(expected[kind])
-    if (!identical(method,unname(expected[kind]))) vcr_abort("scenario_value_invalid","scenario.analysis.method","The analysis must match the declared single-arm design.")
+    # the analyses a single-arm design runs, by endpoint (VCR_SINGLE_ARM_METHODS, the domain's table): the external-control and
+    # Simon designs are binary-endpoint designs, the plain single-arm design also has a continuous and a time-to-event analysis
+    allowed <- VCR_SINGLE_ARM_METHODS[[kind]][[endpoint]]
+    if (is.null(allowed)) vcr_abort("design_not_supported","scenario.endpoint.type",
+      if (identical(kind, "single_arm")) "A single-arm design is simulated for a binary, continuous or time-to-event endpoint." else "This single-arm implementation requires a binary endpoint.")
+    method<-scenario[["analysis"]][["method"]] %||% allowed[1]
+    if (!(method %in% allowed)) vcr_abort("scenario_value_invalid","scenario.analysis.method","The analysis must match the declared single-arm design.")
     issues<-vcr_validate_scenario("design.simulate",scenario)
     if(length(issues))vcr_abort(issues[[1]]$code,issues[[1]]$field,issues[[1]]$detail)
     return(method)
@@ -227,6 +230,7 @@ vcr_scenario_runner <- function(scenario) {
   analysis <- scenario$analysis %||% list()
   alpha <- vcr_scalar(analysis$alpha, 0.025)
   sided <- vcr_check_sided(analysis$sided)
+  if (identical(design$kind, "single_arm") && !identical(endpoint, "binary")) return(.vcr_single_arm_runner(scenario, alpha, sided))
   if (design$kind %in% c("single_arm","simon_two_stage")) return(.vcr_single_binary_runner(scenario,alpha,sided))
   if (identical(design$kind,"single_arm_external")) return(.vcr_external_binary_runner(scenario,alpha,sided))
   n1 <- .vcr_need(design$nTreat, "scenario.design.nTreat", "A simulated design states its treatment-arm size.")
@@ -587,7 +591,7 @@ vcr_analytic_check <- function(scenario, measures) {
   sided <- vcr_check_sided(scenario$analysis$sided)
   is_null <- vcr_is_null_scenario(scenario)
   analytic <- NULL
-  if (design$kind %in% c("single_arm","simon_two_stage")) {
+  if (design$kind %in% c("single_arm","simon_two_stage") && identical(endpoint, "binary")) {
     p<-vcr_scalar(truth$responseRate);p0<-vcr_scalar(truth$nullRate)
     name<-if(is_null)"type_one_error" else "power"
     refs<-if(identical(design$kind,"single_arm")){
@@ -647,6 +651,8 @@ vcr_analytic_check <- function(scenario, measures) {
                        expectedEvents = exact$expectedEvents)
     }
   }
+  # a single-arm trial of a mean or of a survival time against its benchmark: the exact t / z power, or the one-sample log-rank approximation
+  if (is.null(analytic) && identical(design$kind, "single_arm") && !identical(endpoint, "binary")) analytic <- vcr_single_arm_analytic(scenario)
   if (is.null(analytic)) return(NULL)
   sim <- Filter(function(m) identical(m$name, analytic$name), measures)
   if (!length(sim)) return(analytic)
@@ -654,7 +660,8 @@ vcr_analytic_check <- function(scenario, measures) {
   mcse <- sim[[1]]$mcse
   # An exact closed form is held to the simulation's own error; an approximation is
   # held to that error plus the bias it is documented to carry, and the result says so.
-  bias <- if (identical(analytic$basis, "asymptotic_logrank_score")) VCR_LOGRANK_APPROXIMATION_BIAS else 0
+  bias <- if (identical(analytic$basis, "asymptotic_logrank_score")) VCR_LOGRANK_APPROXIMATION_BIAS
+          else if (isTRUE(analytic$basis %in% c("first_order_one_sample_logrank", "asymptotic_one_sample_logrank"))) VCR_ONE_SAMPLE_LOGRANK_APPROXIMATION_BIAS else 0
   tolerance <- 3 * mcse + bias
   c(analytic, list(simulated = sim[[1]]$value, difference = d, mcse = mcse,
                    differenceInMcse = if (mcse > 0) d / mcse else NA_real_,

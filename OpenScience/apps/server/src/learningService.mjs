@@ -848,25 +848,54 @@ export class LearningService {
   async history(userId, methodId) {
     const current = await this.getMethod(userId, methodId);
     const saved = (await this.#savedRevisions(userId, methodId)).sort((left, right) => left.revision - right.revision);
-    /** @type {{version: number, revision: number, contentDigest: string, at: string | null, title: string | null, current: boolean}[]} */
+    /** @type {any[]} */
     const versions = [];
     let previous = "";
     for (const entry of saved) {
       const digest = String(entry.payload?.contentDigest ?? "");
       if (!digest || digest === previous) continue;
       previous = digest;
+      const steps = methodStepsOf(entry.payload);
       versions.push({
         version: versions.length + 1,
         revision: entry.revision,
         contentDigest: digest,
         at: entry.recordedAt ?? entry.payload?.bodyUpdatedAt ?? entry.payload?.updatedAt ?? entry.payload?.createdAt ?? null,
         title: cleanMethodDisplay(entry.payload?.display)?.title ?? null,
+        // What a researcher reads to see what an earlier version said: its sentence, when it applied and its steps in their language.
+        summary: cleanMethodDisplay(entry.payload?.display)?.summary ?? null,
+        whenToUse: methodScopeOf(entry.payload)?.applicability ?? String(entry.payload?.frontmatter?.whenToUse ?? ""),
+        steps,
+        // The model's own text only when there is no rendering of the body.
+        ...(steps ? {} : { body: String(entry.payload?.body ?? "") }),
         current: false,
       });
     }
     const last = versions.at(-1);
     if (last && last.contentDigest === current.payload.contentDigest) last.current = true;
     return versions.reverse();
+  }
+
+  /**
+   * The runs that taught a method, newest first: the one its current body was
+   * learnt from, then the ones each earlier body was (an amendment overwrites
+   * `provenance.runId`, so the saved revisions are where the older lessons
+   * are). Only names — `learningSources.mjs` turns them into conversations.
+   * @param {string} userId @param {string} methodId
+   * @returns {Promise<{ projectId: string, runId: string }[]>}
+   */
+  async sourceRuns(userId, methodId) {
+    const current = await this.getMethod(userId, methodId);
+    const saved = await this.#savedRevisions(userId, methodId);
+    /** @type {{ projectId: string, runId: string }[]} */
+    const runs = [];
+    for (const payload of [current.payload, ...saved.map((entry) => entry.payload)]) {
+      const runId = payload?.provenance?.runId;
+      const projectId = payload?.provenance?.sourceProjectId;
+      if (typeof runId === "string" && runId && typeof projectId === "string" && projectId
+        && !runs.some((item) => item.runId === runId && item.projectId === projectId)) runs.push({ projectId, runId });
+    }
+    return runs;
   }
 
   /**

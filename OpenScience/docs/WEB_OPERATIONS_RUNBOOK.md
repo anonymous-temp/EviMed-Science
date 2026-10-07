@@ -787,6 +787,23 @@ owned successful preparation job; the base runtime image a generation was
 prepared against; and the live probe after apply, which rolls back. A missing
 `extensions-deployment.json` is nothing configured.
 
+The extension centre's discovery list (插件与技能 → 插件 → 「可以添加」) is exactly
+that file's `catalogue`, so a deployment that never wrote one lists nothing and the
+page draws no discovery group at all. To offer a package that has been reviewed
+(for an isolated tool: measured by the acceptance run, which is where its
+descriptor, artifact and surface rows come from), run, from the web image or the
+checkout, `node scripts/ops/extension-catalogue.mjs list`, `add <reviewed-package.json>`
+or `remove <id>` (`--data-dir` defaults to `OPEN_SCIENCE_DATA_DIR`). `add` merges
+the package into `<dataDir>/.openscience/extensions-deployment.json`, then reads the
+result back through the platform's own loader and writes the file only if the loader
+accepts it; an id already listed is refused until it is removed. It never reviews or
+downloads a package and never writes a qualification record. The loader refuses a
+file a package could have written, so after each write the command prints the two
+commands that finish the job: `sudo chown root:<the control plane's group> <file>`
+and `sudo chmod 0440 <file>`. The file is read once at start-up, so restart the web
+service after changing it. `--restamp` re-measures the file's `policy` label (use
+it after the reviewed package was assessed against the code that is deployed now).
+
 A production release manifest that disagrees with the deployment configuration
 (or a controller started without one) no longer refuses a runtime launch either.
 It fails readiness (`release`, or `runtime` for the controller's own manifest);
@@ -911,6 +928,17 @@ means the index is down, and deleted data's copies outlive their rows until it i
 back (recall never serves them). Deleting or archiving one memory record and
 deleting a source never called the index: they queue one record job in their own
 transaction, which the worker retries.
+
+### The knowledge base's document types after R10
+
+Until R10 the first pass called every PDF or Word file a published paper, every table 「队列数据」 and read a file named `review` or
+`方案` as a peer review or a protocol; the page shows what the type says. Bring the stored types onto the one list with
+`node scripts/ops/reclassify-sources.mjs` (a report; `--apply` writes, `--user <id>` and `--limit <n>` bound it, `--no-judge` takes
+the format's type without asking). For each document whose type nobody decided — not set by the researcher, not named by the
+judge — it asks J7 on the stored text (a fraction of a cent) or, when that cannot settle, gives the type its format says. It never
+re-runs an understanding, never reads a file again and never changes a depth, a status or a word of content; a document the
+researcher or the judge already typed is left alone, and a second run reports nothing to do. Run it once after the release and read the
+report's `format` count: those documents were not named by the judge, and a 「重新读取」 on one reads it under its new type.
 
 ### Specialist job slots on a small host
 

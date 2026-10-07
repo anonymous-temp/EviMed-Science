@@ -331,6 +331,25 @@ test("a digest separates headlines from leads and records user decisions", async
   assert.equal(decision.payload.decisions[0].claimId, "claim-two");
 });
 
+test("a day that found nothing is recorded as a digest but sends no notice; a lead alone is enough to send one", async () => {
+  // 2026-10-07 review: 「0 条重点发现，0 条待验证线索」 arrived every morning.
+  const { service, notifications } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const quiet = await service.createDigest("user-one", active.id, { date: "2026-09-06", episodeIds: ["episode-one"], costCny: 1, claims: [] });
+  assert.equal((await service.getDigest("user-one", quiet.id)).payload.date, "2026-09-06", "the quiet day is still written down");
+  assert.deepEqual(quiet.payload.headlines, []);
+  assert.deepEqual(quiet.payload.leads, []);
+  assert.equal(notifications.created.length, 0, "a digest with no finding and no lead is not announced");
+  const lead = await service.createDigest("user-one", active.id, {
+    date: "2026-09-07", episodeIds: ["episode-two"], costCny: 1,
+    claims: [{ id: "claim-lead", statement: "Unverified lead", type: "synthesized", tier: "unverified", what_would_change: "New trial" }],
+  });
+  assert.equal(notifications.created.length, 1);
+  assert.equal(notifications.created[0].input.source.id, lead.id);
+  assert.match(notifications.created[0].input.body, /^0 条重点发现，1 条待验证线索/);
+});
+
 test("a verdict can be withdrawn: the direction's score nets it out and the candidate memory it created is retired", async () => {
   // 2026-09-16 review, U17.
   const { service, capsules } = fixture();
@@ -520,8 +539,11 @@ test("completion resumes after digest notification fails without duplicating the
   const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
   const scheduled = await service.schedule("user-one", active.id, { date: "2026-09-06" });
   await service.markEpisodeDispatched("user-one", scheduled.episode.id, { runId: "run-recover", sessionId: "session-recover" });
+  // One lead, so there is something to announce: a day that found nothing sends no notice (see the test above).
   const input = { projectId: "project-one", runId: "run-recover", status: "succeeded", deltaSchemaVersion: 1,
-    artifacts: ["report.md"], costCny: 2, claims: [] };
+    artifacts: ["report.md"], costCny: 2, claims: [{
+      id: "claim-recover", statement: "心衰再入院下降", type: "direct", tier: "unverified",
+      sources: ["doi:10.1000/example-recover"], provenance: { episodeId: scheduled.episode.id, artifact: "report.md" } }] };
   await assert.rejects(() => service.completeRun("user-one", input), /inbox offline/);
   assert.equal((await service.getEpisode("user-one", scheduled.episode.id)).payload.status, "verifying");
   const digest = await service.completeRun("user-one", input);

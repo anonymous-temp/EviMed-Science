@@ -61,6 +61,7 @@ export const VCR_SUBJECT_TABS = Object.freeze(/** @type {Record<string, string>}
 export const VCR_KEPT_TABLES = Object.freeze(/** @type {Record<string, readonly string[]>} */ ({
   generate_population: ["population"], literature_population: ["population"], synthesize_population: ["synthetic-population"],
   generate_patients: ["virtual-patients"], generate_patients_continuous: ["virtual-patients"], generate_patients_binary: ["virtual-patients"],
+  generate_patients_longitudinal: ["virtual-patients"],
 }));
 
 /** The population `kind` each population job computes: a job for another kind is not about this population. */

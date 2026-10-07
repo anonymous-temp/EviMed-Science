@@ -18,7 +18,7 @@ import { ZoneSubscription } from "@/components/capsule/ZoneSubscription";
 import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
 import { DEFAULT_PUBLIC_BASE_PATH } from "@/lib/evidenceUpkeepClient";
 import { PageShell } from "@/components/layout/PageShell";
-import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
+import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -135,8 +135,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
     }
   };
   return (
-    <PageShell title="前沿动态">
-      <FrontierNavigation active="zones" />
+    <PageShell title="证据专区" back={<FrontierBack />}>
       <Link
         to="/app/frontier/zones"
         className="mt-4 inline-block text-caption text-accent"

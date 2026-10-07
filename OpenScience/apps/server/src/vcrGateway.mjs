@@ -676,9 +676,9 @@ async function checkedCriteria(deps, rows, issues, what) {
 const WRITERS = {
   async definition(item, { store, study }) {
     if (!item.only(["pico", "estimand", "endpointType", "intendedUse", "fieldSources", "title", "question"])) return null;
-    // The study's own name (at most 24 characters) and the one sentence it asks: what the study is called from here on.
-    const title = item.str("title", { max: 24 });
-    const question = item.str("question", { max: 200 });
+    // The study's name and its question in one sentence: the first definition names a draft study from them (`VcrStore.saveDefinition`).
+    const title = item.str("title", { max: 60 });
+    const question = item.str("question", { max: 2000 });
     const pico = item.obj("pico") ?? {};
     const estimand = item.obj("estimand") ?? {};
     const endpointType = item.choice("endpointType", VCR_ENDPOINT_TYPES);
@@ -694,7 +694,7 @@ const WRITERS = {
     if (!item.ok) return null;
     const saved = await store.saveDefinition({
       studyId: study.id, userId: study.userId, pico, estimand, endpointType: endpointType ?? null, intendedUse, fieldSources, reviewState: "ai_set",
-      title: title ?? "", question: question ?? "",
+      title: title ?? null, question: question ?? null,
     });
     return saved.id;
   },
@@ -2004,7 +2004,7 @@ async function startJob(vcr, study, request) {
     detail,
   }).catch(error => {
     if (error?.status === 400 && ['generate_population', 'literature_population', 'synthesize_population',
-      'generate_patients', 'generate_patients_continuous', 'generate_patients_binary'].includes(request.kind)) {
+      'generate_patients', 'generate_patients_continuous', 'generate_patients_binary', 'generate_patients_longitudinal'].includes(request.kind)) {
       const refusal = gatewayError(400, 'vcr_simulate_payload_invalid', String(error.message));
       refusal.issues = fieldFindings(error.issues);
       refusal.alternatives = [

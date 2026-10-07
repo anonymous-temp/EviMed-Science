@@ -5,10 +5,9 @@
  *
  * Pure functions only, so each is tested once here and the components stay
  * about layout. Nothing here explains how the feed works (plan 2026-09-23
- * §4): the one explanation the page keeps is 「热度怎么算」, folded, because
- * a number on screen needs a way to find out what it counts — and its words
- * are `@evimed/domain`'s `FRONTIER_HEAT_METHOD_ZH`, stated from the numbers
- * the control plane computes heat with.
+ * §4); the 「热度怎么算」 fold was the one explanation left and went on
+ * 2026-10-07 — a heat is shown as a number, and the domain keeps its method
+ * (`FRONTIER_HEAT_METHOD_ZH`) for the operator's documents.
  */
 import type {
   FrontierDaily,

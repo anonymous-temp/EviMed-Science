@@ -254,7 +254,7 @@ describe("the @ menu's knowledge-base answer", () => {
     expect(mocks.listSources).toHaveBeenCalledTimes(1);
     // Readable, not understood: a document can be named once its text is read,
     // while its understanding still runs (2026-09-24).
-    expect(mocks.listSources).toHaveBeenCalledWith("default", { state: "ready" });
+    expect(mocks.listSources).toHaveBeenCalledWith("default", expect.objectContaining({ state: "ready" }));
   });
 });
 

@@ -129,6 +129,17 @@ function brandName(value) {
   return name;
 }
 
+/**
+ * A rename of the project: the same one line of 1 to 40 characters a brand is held to, which is also what an ordinary project's
+ * display name may be (the project is renamed, never the brand it measures).
+ * @param {unknown} value
+ */
+function projectName(value) {
+  const name = (() => { try { return brandName(value); } catch { return null; } })();
+  if (!name) throw new HttpError(400, "geo_project_name_invalid", `name is one line of 1 to ${BRAND_NAME_MAX} characters.`);
+  return name;
+}
+
 /** @param {unknown} value @param {string} field */
 function money(value, field) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > BUDGET_MAX_CNY) {
@@ -141,6 +152,7 @@ function money(value, field) {
  * @param {{ store: any, service: any, config: Record<string, any>, maxJsonBytes: number,
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown>,
  *   projects?: { create: (user: any, name: string) => Promise<{ id: string, name: string }>,
+ *     rename?: (ownerId: string, projectId: string, name: string) => Promise<unknown>,
  *     bindSession: (user: any, projectId: string) => Promise<{ sessionId: string, bound: boolean }>,
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null> } | null,
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ sessionId: string, runId?: string | null }> } | null,
@@ -271,7 +283,7 @@ export function createGeoRoutes(dependencies) {
         return reply({ ...view, sessionId });
       }
       if (method === "PATCH") {
-        const body = await bodyOf(req, maxJsonBytes, ["coverageDays", "engines", "tier", "status", "producer"]);
+        const body = await bodyOf(req, maxJsonBytes, ["coverageDays", "engines", "tier", "status", "producer", "name"]);
         /** @type {Record<string, any>} */
         const patch = {};
         if (body.coverageDays !== undefined) patch.coverageDays = coverageDays(body.coverageDays);
@@ -282,7 +294,13 @@ export function createGeoRoutes(dependencies) {
           patch.status = body.status;
         }
         if (body.producer !== undefined) patch.producer = producerSettings(body.producer);
-        return reply(await service.updateProject(user, id, patch));
+        if (body.name !== undefined) {
+          patch.name = projectName(body.name);
+          if (!dependencies.projects?.rename) throw UNAVAILABLE();
+        }
+        const updated = await service.updateProject(user, id, patch, { renameControlProject: dependencies.projects?.rename });
+        if (patch.name !== undefined) await audit("geo.project.rename", "completed", { userId: user.id, code: id });
+        return reply(updated);
       }
       if (method === "DELETE") {
         await bodyOf(req, maxJsonBytes, []);

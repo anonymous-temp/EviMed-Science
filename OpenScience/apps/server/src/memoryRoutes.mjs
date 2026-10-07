@@ -45,6 +45,7 @@ import {
  *   researchMemory: any,
  *   memorySubstrate?: any,
  *   memoryIndexWorker?: { drainWithdrawals?: () => Promise<any> } | null,
+ *   resetProduct?: ((userId: string) => Promise<{ methods: number, handbooks: number, entries: number }>) | null,
  *   feedbackEvents: any,
  *   store: any,
  *   context: (req: any, res: any) => Promise<any>,
@@ -55,7 +56,7 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, researchMemory, memorySubstrate = null, memoryIndexWorker = null, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+  config, researchMemory, memorySubstrate = null, memoryIndexWorker = null, resetProduct = null, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
 
@@ -119,8 +120,11 @@ export function createMemoryRoutes({
       return true;
     }
 
-    // Everything the account remembers, deleted. The switches are left as they
-    // are: a reset is a clean slate, not a change of mind about learning.
+    // Everything the account remembers, deleted: the memories, the methods and
+    // handbooks the platform learned, and the notes of its own capsules — each
+    // kind the memory page shows, which is what the confirmation says
+    // (`resetLearnedMemory`). The switches are left as they are: a reset is a
+    // clean slate, not a change of mind about learning.
     if (pathname === "/api/memory/reset" && req.method === "POST") {
       const ctx = await context(req, res);
       const body = assertObject(await readJson(req, config.maxJsonBytes), "memory reset");
@@ -132,7 +136,9 @@ export function createMemoryRoutes({
       // same class as project deletion). The rows go and the subtrees' withdrawal is
       // owed to the index in the same transaction (`MemoryIndexWithdrawals`); it is
       // asked for now, unawaited, and again by the index worker until it answers.
-      const removed = await researchMemory.purgeUserMemory(ctx.user.id);
+      const purged = await researchMemory.purgeUserMemory(ctx.user.id);
+      // A reset that fails halfway answers with the failure and is run again: both halves are idempotent.
+      const removed = { ...purged, ...(resetProduct ? await resetProduct(ctx.user.id) : {}) };
       if (memorySubstrate?.active && !researchMemory.withdrawals) void memorySubstrate.forgetUser(ctx.user.id).catch(() => false);
       void memoryIndexWorker?.drainWithdrawals?.();
       await audit(ctx, "memory.reset", "completed", removed);

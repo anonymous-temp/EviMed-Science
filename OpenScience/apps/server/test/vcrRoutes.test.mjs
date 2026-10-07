@@ -407,6 +407,9 @@ test("the study lead holds review_any: it countersigns every kind, which no othe
 const REQUESTS = {
   "GET /studies/:id": ["GET", "/api/vcr/studies/std_1", undefined],
   "GET /studies/:id/:tab": ["GET", "/api/vcr/studies/std_1/overview", undefined],
+  "GET /studies/:id/runs": ["GET", "/api/vcr/studies/std_1/runs", undefined],
+  "GET /studies/:id/cards": ["GET", "/api/vcr/studies/std_1/cards?kind=population", undefined],
+  "POST /studies/:id/cards": ["POST", "/api/vcr/studies/std_1/cards", { kind: "population", set: { n: 2000 } }],
   "PATCH /studies/:id name,question,action": ["PATCH", "/api/vcr/studies/std_1", { name: "改名" }],
   "PATCH /studies/:id dataTier,intendedUse,status": ["PATCH", "/api/vcr/studies/std_1", { status: "paused" }],
   "DELETE /studies/:id": ["DELETE", "/api/vcr/studies/std_1", undefined],
@@ -473,6 +476,8 @@ function composedHooks() {
     // The generated records as a file: a header and a table to stream, and the audit line (`vcrRecords.mjs` has its own tests).
     records: { csv: async () => ({ filename: "synthetic-population", header: "# 合成数据，不是真实患者。\n", file: RECORDS_FILE, bytes: 4, method: "population.scenario", qualityFile: null }),
       quality: async () => ({ filename: "synthetic-population.quality.json", body: "{}\n" }), audit: async () => {} },
+    // The page's own edits of the numbers a study rests on: what the form is built from, and the next version.
+    cards: { read: async () => ({ kind: "population", objectId: "pop_1", title: "人群设定", settings: [] }), apply: async () => ({ kind: "population", id: "pop_2", version: 2, changed: 1 }) },
     // The public 「模拟研究」 column: the lead's publish and withdraw.
     predictions: { file: async () => ({ filed: true, existing: false }) },
     publications: { forStudy: async () => [], publish: async () => ({ id: "sim_1", exportKind: "simulation_report", existing: false }), withdraw: async () => ({ id: "sim_1" }) },

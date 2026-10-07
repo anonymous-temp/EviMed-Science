@@ -150,9 +150,13 @@ or a traceback.
 
 ## 5. Methods
 
-The methods of the domain's `VCR_ENGINE_METHODS`, all at `1.0.0` (the first release's 24
-and, appended after them, the comparator-effect methods of section 11 and the
-robustness methods below), one job kind each, keyed exactly as that registry. The
+The methods of the domain's `VCR_ENGINE_METHODS`, at `1.0.0` (the first release's 24
+and, appended after them, the comparator-effect methods of section 11, the
+robustness methods below and the trajectory generator `patients.longitudinal`), except
+`design.analytic` (1.1.0), `design.assurance` (1.1.0: group sequential) and
+`design.simulate` / `design.grid` (1.2.0: single-arm means and survival times; a
+job recorded at an earlier version stays valid for what that version could run:
+`legacyVersion` by design, `legacyReleases` by design and endpoint), one job kind each, keyed exactly as that registry. The
 engine refuses to start if the lists differ
 (`vcr_engine_self_check`, N00b). `R/domain-snapshot.json` is generated from
 the live domain by `tests/helpers/emit-domain-snapshot.mjs` (never edit by
@@ -164,11 +168,12 @@ that snapshot and validates every job against them before a handler runs.
 |---|---|---|
 | `profile.snapshot` | column summaries, cells below the minimum cell size suppressed | — |
 | `cohort.build` | named row rules (`rule` grammar, §2 of the contract): kept / excluded / indeterminate per rule, criterion impact, time zero, exit, member table, the rules' hash; with `compare` ({ rules, covariates }) a second version of the definition on the same table: both sizes, the overlap and each covariate's standardized difference (`vcr_smd`, pooled denominator; a difference of proportions for a 0/1 covariate), a covariate it cannot compare named with its reason | a truth table (C2-01..07); base-R arithmetic (N37) |
-| `population.scenario` | declared marginals + Gaussian copula + row-rule constraints (violating rows are redrawn) + missingness, `paramSd` for parameter uncertainty | closed-form moments |
-| `population.literature` | a published baseline table (mean/sd with optional bounds, proportion, categorical proportions, lognormal) as a population; an assumed correlation comes with its sensitivity | moment recovery (N28a) |
-| `population.synthpop` | sequential CART, `m` in 5–50 copies, rare levels merged, holdout (the copies are not pooled into an estimate: no combining rule ships until a job needs one) | synthpop |
+| `population.scenario` | declared marginals + Gaussian copula + row-rule constraints (violating rows are redrawn) + missingness, `paramSd` for parameter uncertainty; `diagnostics.profile` describes the generated table beside what was declared (section 12) | closed-form moments; the profile recomputed from the CSV (N45a) |
+| `population.literature` | a published baseline table (mean/sd with optional bounds, proportion, categorical proportions, lognormal) as a population; an assumed correlation comes with its sensitivity; `diagnostics.profile` as above | moment recovery (N28a, N45b) |
+| `population.synthpop` | sequential CART, `m` in 5–50 copies, rare levels merged, holdout (the copies are not pooled into an estimate: no combining rule ships until a job needs one); `diagnostics.profile` of the first copy with the small-cell rule | synthpop; the small-cell rule (N45c) |
 | `population.quality` | the fixed fidelity / utility / disclosure suite; the disclosure axis is size-matched | a memorizer, a shuffle (C2-15..18) |
 | `patients.continuous` `.binary` `.time_to_event` | the reference simulators; for a stored population, arms by a fixed uniform and `truth.covariateEffects` (centred at the population mean) | regression on the output (N28c), common random numbers (E10c) |
+| `patients.longitudinal` | a continuous trajectory: the linear mixed model `y_ij = (b0 + u0_i) + (b1 + u1_i) t_j + delta z_i t_j + beta' x_i + e_ij` (random intercept and slope with SDs and a correlation, the treatment effect changes the slope, MCAR monotone dropout per visit, one row of uniforms per person so the same seed is the same person under another scenario); a long table, the arms' mean trajectories with the band that holds 95% of the patients, three example individuals shown under both arms | `nlme::lme` fitted to the output and the closed-form mean and SD at every visit (N46a), common random numbers and retention (N46b, N46c) |
 | `evidence.pool` | DL / REML / HKSJ + prediction interval; k = 1 is `single_study` | metafor |
 | `evidence.reconstruct_km` | Guyot reconstruction + quality control | round trip (N16) |
 | `comparator.entropy_balance` | ATT weights, balance, ESS, whole-pipeline stratified bootstrap; dispatches on the endpoint (weighted mean, binary, or weighted KM + RMST(τ)) | WeightIt, cobalt |
@@ -182,9 +187,9 @@ that snapshot and validates every job against them before a handler runs.
 | `comparator.evalue` | E-values on every scale | EValue |
 | `comparator.map_prior` | MAP by quadrature, robustify, prior ESS (ELIR), conflict against the MAP alone, hybrid operating characteristics | RBesT, an independent joint grid |
 | `design.analytic` | Schoenfeld, Lan-DeMets boundaries (`sided` honoured), n, exact single-arm binomial rejection/power, Simon two-stage over the whole grid | rpact, gsDesign, `stats::binom.test`, published Simon designs |
-| `design.simulate` | the ADEMP runner: fixed two-arm, calendar-time group sequential, exact binary single-arm, frozen Simon, explicitly synthetic stratified binary external controls | `design.analytic`, independent binomial/joint-table enumeration, beta-binomial moments, independent `survdiff` (N04c) |
+| `design.simulate` | the ADEMP runner: fixed two-arm, calendar-time group sequential, exact binary single-arm, frozen Simon, explicitly synthetic stratified binary external controls; single-arm trials of a mean (one-sample t or z against a fixed benchmark) and of a survival time (one-sample log-rank against a benchmark distribution), section 12 | `design.analytic`, independent binomial/joint-table enumeration, beta-binomial moments, independent `survdiff` (N04c), `stats::power.t.test` (N48a), an independent plain-R simulation (N48c) |
 | `design.grid` | designs × truths, one immutable run per cell, a long-format table | — |
-| `design.assurance` | power averaged over a design prior (normal on effect, on log HR, on the risk difference) | numerical integration, a Monte-Carlo z-test |
+| `design.assurance` | power averaged over a design prior (normal on effect, on log HR, on the risk difference); for a group-sequential design the probability of crossing a boundary at any look, with the share at each look and a simulated check carrying its Monte-Carlo error (section 12) | numerical integration, a Monte-Carlo z-test; rpact's group-sequential power integrated over the prior (N47) |
 | `design.procova` | prognostic-adjustment sample size, three paths | the closed form, EMA 2022 |
 | `accrual.poisson_gamma` | per-site Poisson-Gamma accrual, staggered starts, screen failure, event target | closed form vs simulation, metafor-style REML for the pool (N27) |
 | `matching.evaluate` | Kleene three-valued eligibility; a criterion that does not apply cannot exclude | the truth table (N29) |
@@ -341,7 +346,9 @@ R/evidence_pool.R    DL / REML / HKSJ pooling and prediction intervals
 R/map_prior.R        MAP by quadrature, robustify, prior ESS, conflict, hybrid operating characteristics
 R/design_analytic.R  Lan-DeMets boundaries, Schoenfeld, asymptotic log-rank power, Simon
 R/design_simulate.R  the ADEMP runner: batches, checkpoints, cancel, budget, MCSE; the design grid
-R/assurance.R        power averaged over a design prior
+R/assurance.R        power averaged over a design prior; the assurance of a group-sequential design
+R/longitudinal.R     the linear mixed model's generator and the summaries the patients page draws
+R/single_arm.R       single-arm trials of a mean and of a survival time against a benchmark
 R/procova.R          prognostic-adjustment sample size
 R/accrual.R          Poisson-Gamma accrual, event target, online update, back-test
 R/negative_control.R, R/tipping_point.R, R/prognostic_adjustment.R   the three robustness methods (sourced after the core list)
@@ -352,7 +359,7 @@ service/app.py           FastAPI: queue of one, process group, rlimits, cancel, 
 service/run_job.R        one job, one process (A1's)
 service/parquet_bridge.py  Parquet -> CSV, converts only
 tests/numeric/           the numeric acceptance cases (one file per family)
-tests/helpers/           harness, canonical fixtures, the schema-additions overlay, the robustness methods' handler jobs
+tests/helpers/           harness, canonical fixtures, the schema-additions overlay, the robustness methods' and the 2026-10-07 extensions' handler jobs
 tests/fixtures/          third-party data a case is held to (EmpiricalCalibration's sccs example, with its license)
 tests/service/           the service tests (fake engine, no R)
 tests/package-lock.crosscheck.json   the cross-check library (96 packages) of the test image
@@ -377,7 +384,7 @@ name is data and never code (N30), single-arm references (N31)), `C2-01-C2-18`
 robustness methods: negative controls, tipping point, prognostic adjustment), `N40`
 (their protocol parity and breaking battery), `N41` (reference cases for
 `profile.snapshot` and `population.synthpop`), `N42` (two versions of a cohort
-definition compared on one table), `N43-N44` (a design is sized for an effect: `design.analytic` refuses a null effect by name in every family, and `design.simulate` on the same null scenarios reports the type I error), `E01-E10` (the engine itself: accrual, cancel and
+definition compared on one table), `N43-N44` (a design is sized for an effect: `design.analytic` refuses a null effect by name in every family, and `design.simulate` on the same null scenarios reports the type I error), `N45` (the profile of a generated population), `N46` (longitudinal virtual patients), `N47` (the assurance of a group-sequential design), `N48` (single-arm means and survival times), `N49` (the extensions' protocol parity, breaking battery and published examples), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries
@@ -456,10 +463,10 @@ limitations ([FDA external-control guidance](https://www.fda.gov/regulatory-info
 
 Single-arm null floors derive from responseRate minus nullRate, or target ATT,
 not from a flag that changes no generating law. A contradictory `truth.null` is
-refused. All generated records remain synthetic; realPatients is zero. Continuous
-and survival single-arm variants are explicitly unsupported. Prior supported
+refused. All generated records remain synthetic; realPatients is zero. The
+single-arm trial of a mean or a survival time is section 12. Prior supported
 two-arm/group-sequential (and analytical Simon) jobs may replay version 1.0.0;
-new variants require 1.1.0. N31 records numerical evidence; local unpinned R runs
+new variants require 1.1.0 (and the single-arm means and survival times 1.2.0). N31 records numerical evidence; local unpinned R runs
 are exploratory, and release validation runs the locked R 4.3.3 library in CI.
 
 ## 11. Comparator-effect methods
@@ -620,3 +627,55 @@ a dispatched method has no reference case that ran, and `scripts/vcr/check-metho
 says the same in seconds at the top of the CI job. A method added to the engine has
 to bring a case.
 
+## 12. The 2026-10-07 extensions
+
+**The profile of a generated population.** `population.scenario`, `population.literature` and
+`population.synthpop` return `diagnostics.profile`: one entry per variable of the generated table,
+computed from the table alone. `{ variable, label, kind: continuous|binary|categorical, declared,
+n, missing, … }` with, for a continuous variable, `mean sd median q1 q3 min max` and a seven-bin
+`histogram { breaks, counts }`, and for a binary or categorical one `levels: [{ level, n, p }]`.
+`declared` repeats the family, parameters and constraints the scenario or baseline table stated
+(`null` for empirical synthesis); a population variable and a baseline row may carry a display
+`label`. Numbers are rounded to four significant digits in R. An empirical synthetic table is made
+from real people, so it keeps the small-cell rule through the same helper as the real-data profile
+(`vcr_suppress_cells`): a level below the floor is `{ level, n: null, p: null, suppressed: true }`,
+hidden together with the next-smallest cell, the extremes of a table too small to hide a record and
+a histogram bin below the floor are withheld, and the entry's `suppressed` list says what. The
+contract is `validatePopulationProfile` in the domain; N45 asks it of what R wrote.
+
+**`patients.longitudinal`** (job kind `generate_patients_longitudinal`, 1.0.0). Scenario: `design`
+(`nTreat`, optional `nControl`), `endpoint: continuous`, `visits` (2–50 increasing times),
+`truth` (`effect` = delta, required; `intercept`, `slope`, residual `sd`, `randomEffects`
+`{ sdIntercept, sdSlope, correlation }`, `covariateEffects` from a stored population) and
+`dropoutPerVisit`. The treatment effect changes the slope, so the arms start alike. Person i is one
+row of uniforms drawn by row, whatever the scenario says: random effects, a residual and a dropout
+draw per visit; so the same seed under two scenarios is the same person twice (common random
+numbers), and adding people changes nobody before them. Dropout is MCAR, monotone, never before the
+first visit; the values a person would have had after leaving are generated and withheld from the
+table. The result carries the long table (`virtual-patients`), the arms' mean trajectories with the
+band that holds 95% of the patients, up to twelve individual lines per arm, the model-implied mean and
+SD per arm and visit (`expected`), and three example individuals (the 10th, 50th and 90th percentile of
+the latent slope) each drawn under both arms.
+
+**Assurance of a group-sequential design** (`design.assurance` 1.1.0, `design.kind:
+group_sequential`, time-to-event only). The power of the whole sequential procedure at an effect,
+by one pass over the looks of the same Lan-DeMets recursion `design.analytic` uses (rpact agrees
+stage by stage to 1e-8), integrated over the design prior by Gauss-Hermite; `byLook` says how much of the
+assurance is an early stop. The measure `assurance_simulated` is the same number by simulation (an effect
+drawn from the prior, then the trial's B-value path against the boundaries) with its Monte-Carlo
+error; `diagnostics.crossCheck` reports the difference in errors. The boundary search uses 1201 grid
+nodes (`VCR_ASSURANCE_BOUNDARY_NODES`: the default 4001 takes seconds per look); N47b holds the
+boundaries to `design.analytic`'s to 1e-8.
+
+**Single-arm means and survival times** (`design.simulate` / `design.grid` 1.2.0, `design.kind:
+single_arm`). The benchmark is fixed, only the trial's n patients are random. A mean: `truth.benchmark`
+(default 0), `truth.effect` (true mean minus benchmark, 0 for the null), `truth.sd`; analysis
+`one_sample_t`, or `one_sample_z` with the SD it takes as known in `analysis.sd`. A survival time:
+`truth.hazardRatio` (the trial's hazard over the benchmark's, 1 for the null) and the benchmark
+`truth.controlMedian` or `truth.controlDistribution`, the usual `accrual`; analysis
+`one_sample_logrank` (Breslow: `(E - O) / sqrt(E)`, effect `log(O / E)`, Poisson standard error).
+`analysis.alternative` describes the parameter: for a survival time `less` is a benefit. Power, type I
+error, bias, coverage and the rest carry their Monte-Carlo errors; the analytic check is the exact
+non-central t (or the normal closed form for z) and, for the log-rank, a first-order normal
+approximation held to a documented tolerance (`VCR_ONE_SAMPLE_LOGRANK_APPROXIMATION_BIAS`). The
+external-control and Simon designs stay binary.

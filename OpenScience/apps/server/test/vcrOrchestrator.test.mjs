@@ -643,6 +643,21 @@ test("each comparator route becomes the jobs the engine runs for it; a route the
   assert.equal(hybrid.stages[0].jobKind, "map_prior");
 });
 
+test("a patient set that states a visit schedule runs the trajectory model, and no outcome card is laid over its effect", () => {
+  assert.equal(vcrJobKindFor("patient_set", { scenario: { endpoint: { type: "continuous" }, visits: [0, 3, 6] } }), "generate_patients_longitudinal");
+  assert.equal(vcrJobKindFor("patient_set", { scenario: { endpoint: { type: "continuous" }, visits: "0, 3, 6" } }), "generate_patients_continuous", "only a list of times is a schedule");
+  assert.equal(vcrJobKindFor("patient_set", { scenario: { endpoint: { type: "continuous" } } }), "generate_patients_continuous");
+  const row = { id: "pts_9", version: 1, scenario: { design: { nTreat: 50, nControl: 50 }, endpoint: { type: "continuous" }, visits: [0, 3, 6], truth: { effect: -0.2, sd: 3 } } };
+  const built = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row }, context));
+  assert.equal(built.ok, true, JSON.stringify(built));
+  assert.equal(built.stages[0].jobKind, "generate_patients_longitudinal");
+  assert.deepEqual(built.stages[0].scenario.visits, [0, 3, 6]);
+  assert.equal(built.stages[0].scenario.truth.effect, -0.2, "the stated effect is the model's change per time unit, whatever an outcome card holds");
+  assert.deepEqual(built.stages[0].bound, [], "no assumption card was bound into the trajectory model");
+  // the engine's own validator takes what the stage froze
+  assert.deepEqual(validateScenario("patients.longitudinal", built.stages[0].scenario), []);
+});
+
 test("populations, patient sets and grids are built as their own schemas, and a patient set waits for the population it stands on", () => {
   const population = /** @type {any} */ (vcrBuildStages({ kind: "population", row: { id: "pop_1", version: 1, kind: "scenario", definition: { n: 100, population: {
     variables: [{ name: "age", family: "normal", mean: 63, sd: 9 }] } } } }, context));
@@ -807,7 +822,9 @@ test("every example in the skill is a shape the platform accepts: the objects bu
   const blocks = [...skill.matchAll(/```json vcr:(\S+)\n([\s\S]*?)```/g)].map((match) => ({ kind: match[1], body: JSON.parse(match[2]) }));
   assert.ok(blocks.length >= 7, `the skill teaches supported designs by example (${blocks.length} blocks)`);
   const t2 = { ...context, study: { ...seedStudy, dataTier: "T2" },
-    populations: [{ id: "pop_example", resultId: "res_example" }] };
+    populations: [{ id: "pop_example", resultId: "res_example" }],
+    // the skill's trajectory example names the longitudinal reference model, which the platform seeds beside the time-to-event one
+    models: [...context.models, { id: "mdl_longitudinal", name: "reference-longitudinal", version: "1.0.0", endpointType: "continuous", applicability: { endpoints: ["continuous"] }, card: {} }] };
   const kinds = new Set();
   for (const { kind, body } of blocks) {
     kinds.add(kind);

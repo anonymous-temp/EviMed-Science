@@ -228,6 +228,7 @@ export const MEASURE_META = Object.freeze({
   coverage: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.coverage, unit: "%", percent: true },
   assurance: { label: "成功把握", unit: "%", percent: true },
   power_at_prior_mean: { label: "先验均值处的功效", unit: "%", percent: true },
+  assurance_simulated: { label: "成功把握（仿真复核）", unit: "%", percent: true },
   bias: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.bias },
   empirical_se: { label: "经验标准误" },
   mse: { label: "均方误差" },
@@ -624,7 +625,7 @@ export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
   "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "patients.continuous": "虚拟患者（连续终点）",
-  "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "evidence.pool": "证据合并",
+  "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并",
   "evidence.reconstruct_km": "生存曲线重建（Guyot）", "comparator.entropy_balance": "熵平衡加权", "comparator.propensity_weight": "倾向评分加权",
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.map_prior": "MAP 先验",
   "comparator.weighted_cox": "加权 Cox 风险比", "comparator.maic_time_to_event": "事件时间终点的匹配调整间接比较",
@@ -663,9 +664,10 @@ export function presentVcrReview(review) {
     : review.current === false ? '研究已有更新' : !ai ? '已复核' : findings.length ? '有修订建议' : '未发现明确问题';
   return { id: review.id ?? review.platformReviewId ?? `legacy:${review.kind}:${review.createdAt}:${(review.nodes ?? []).join(",")}`, reviewerKind: ai ? 'ai' : 'human', role: review.kind,
     label: `${ai ? 'AI' : '人工'}${review.kind === 'clinical' ? '临床' : review.kind === 'statistical' ? '统计' : '数据'}复核`,
-    state, status, current: review.current !== false, by: ai ? provenance.model ?? null : review.reviewerName ?? null,
-    configuredModel: ai ? provenance.configuration?.model ?? null : null, configurationRevision: ai ? provenance.configuration?.revision ?? null : null,
-    inputDigest: provenance.inputDigest ?? null, at: provenance.finishedAt ?? review.createdAt ?? null,
+    // An AI review is attributed by its label (「AI 统计复核」), never by the model that wrote it: a model name, a configuration
+    // revision and an input digest are the platform's own record, and a reader of the page has no use for any of them.
+    state, status, current: review.current !== false, by: ai ? null : review.reviewerName ?? null,
+    at: provenance.finishedAt ?? review.createdAt ?? null,
     note: status === 'failed' ? '审查暂未完成；已完成的研究与导出仍可使用。' : '审查意见供参考，不代表实证验证。',
     findings: findings.map(finding => ({ id: finding.id, kind: finding.kind, location: finding.location, evidence: finding.evidence,
       message: finding.message, fix: finding.fix, response: finding.response ?? null })) };

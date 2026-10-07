@@ -71,45 +71,21 @@ export function memoryExcerpt(text: string, max = 400): string {
   return readable.length > max ? `${readable.slice(0, max)}…` : readable;
 }
 
-/** The researcher's own word, as opposed to the platform's observation. */
-export const STATED_BASES: ReadonlySet<string> = new Set(["stated", "confirmed", "edited"]);
-
 /**
- * Whether a memory is EviMed's inference rather than something the researcher
- * said, confirmed or corrected (principle 18). It is the one annotation a
- * memory row keeps — a small grey 「推断」 after the sentence (2026-09-23 plan
- * §5.6). The origin pill (「你说的」「EviMed 推断」), the counted strength
- * (「你说过 3 次」「在 4 次研究中观察到」) and the usage line (「用过 7 次」)
- * were the back office's account of a memory and are gone with their helpers.
- *
- * A record from a control plane older than `provenance` is read by its origin;
- * a record whose text carries a machine envelope is never the researcher's
- * word, whatever it was filed as.
+ * Where a memory came from, in the words the drawer says it in — the one place
+ * the page tells the researcher whose words a memory is (principle 18; it was a
+ * grey 「推断」 on every row until 2026-10-07, which said nothing on a page where
+ * most rows are learned). What they said, confirmed or changed is theirs;
+ * everything else is what EviMed learned from their conversations.
  */
-export function isInference(record: {
+export function memoryOrigin(record: {
   provenance?: WebMemoryProvenance;
   origin?: string;
   summary?: string;
   value?: string;
-}): boolean {
+}): string {
+  if (looksInjected(record.summary || record.value || "")) return "从对话中学到";
   const basis = record.provenance?.basis
-    ?? (record.origin === "explicit" || record.origin === "manual" ? "stated" : "inferred");
-  return !STATED_BASES.has(basis) || looksInjected(record.summary || record.value || "");
-}
-
-/** The memory kinds, in the researcher's words. */
-export const MEMORY_KIND_LABELS: Record<string, string> = {
-  profile: "画像",
-  preference: "偏好",
-  behavior: "工作习惯",
-  correction: "你做过的纠正",
-  project_fact: "项目事实",
-  analysis: "分析口径",
-  decision: "已定的决策",
-  follow_up: "待跟进",
-  run_summary: "做过的研究",
-};
-
-export function memoryKindLabel(kind: string): string {
-  return MEMORY_KIND_LABELS[kind] ?? "记忆";
+    ?? (record.origin === "explicit" ? "stated" : record.origin === "manual" ? "edited" : "inferred");
+  return basis === "stated" ? "你说的" : basis === "confirmed" ? "你确认的" : basis === "edited" ? "你改过的" : "从对话中学到";
 }

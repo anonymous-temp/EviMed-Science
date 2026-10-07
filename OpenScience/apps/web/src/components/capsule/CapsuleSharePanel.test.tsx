@@ -83,8 +83,8 @@ describe("分享给平台里的人", () => {
   it("exports the method pack and says it holds text only", async () => {
     client.downloadMethodPack.mockResolvedValue(undefined);
     render(<CapsuleSharePanel capsuleId="cap-1" />);
-    expect(screen.getByText("已学到的做法按开放的 Agent Skills 格式导出；脚本不会随它分享。")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "导出为 Agent Skills" }));
+    expect(screen.getByText("已学到的做法按通用的技能格式导出；脚本不会随它分享。")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "导出做法" }));
     await waitFor(() => expect(client.downloadMethodPack).toHaveBeenCalledWith("cap-1"));
     expect(await screen.findByText(/只含文字/)).toBeInTheDocument();
   });
@@ -92,7 +92,7 @@ describe("分享给平台里的人", () => {
   it("does nothing without a capsule", () => {
     render(<CapsuleSharePanel capsuleId={null} />);
     expect(screen.getByRole("button", { name: "创建分享链接" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "导出为 Agent Skills" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "导出做法" })).toBeDisabled();
     expect(client.listSentDeliveries).not.toHaveBeenCalled();
   });
 });

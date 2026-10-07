@@ -10,7 +10,7 @@ import { Readable } from "node:stream";
 import test from "node:test";
 import { ALL_ERROR_CODES, GEO_ROUTE_ERROR_CODES } from "@evimed/domain";
 import { createGeoRoutes, geoRoutePattern } from "../src/geoRoutes.mjs";
-import { geoAudienceAllows, geoMetricFamilies, geoReadiness } from "../src/geoService.mjs";
+import { GeoService, geoAudienceAllows, geoMetricFamilies, geoReadiness } from "../src/geoService.mjs";
 import { readFile } from "node:fs/promises";
 
 /** @param {string} method @param {string} url @param {unknown} [body] */
@@ -251,4 +251,55 @@ test("metric families: the evidence chain's cards and the judge's checks are cou
   assert.deepEqual(byName.get("open_science_geo_checks_total")?.series.map((series) => [series.labels?.check, series.value]), [["offLabel", 3], ["omittedSafety", 1], ["linkMissing", 2]]);
   assert.equal(byName.has("open_science_geo_cards_total") && geoMetricFamilies(true, { tables: null, service: {}, social: null, worker: null }).some((family) => family.name === "open_science_geo_checks_total"), false,
     "no checks recorded, no family");
+});
+
+test("a rename is one line of 1 to 40 characters, needs its hook, and is the project's name — not the brand's", async () => {
+  const patched = /** @type {any[]} */ ([]), audited = /** @type {any[]} */ ([]);
+  const store = { async ensureSessionUser() { return { user: { id: "editor" } }; }, async assertCsrf() {} };
+  const service = {
+    allows: () => true, isOperator: () => false,
+    async updateProject(/** @type {any} */ _user, /** @type {string} */ id, /** @type {any} */ patch, /** @type {any} */ hooks) {
+      patched.push([id, patch, typeof hooks?.renameControlProject]);
+      return { id };
+    },
+  };
+  const audit = async (/** @type {string} */ event, /** @type {string} */ status, /** @type {any} */ details) => { audited.push([event, status, details]); };
+  const renamed = /** @type {any[]} */ ([]);
+  const routes = createGeoRoutes({ store, service, config, maxJsonBytes: 65_536, audit, projects: { create: async () => ({ id: "p", name: "p" }), bindSession: async () => ({ sessionId: "s", bound: true }), rename: async (...args) => { renamed.push(args); } } });
+  for (const bad of ["", "   ", 7, null, "x".repeat(41)]) {
+    await assert.rejects(routes(request("PATCH", "/api/geo/projects/geo_mine", { name: bad }), response()), { status: 400, code: "geo_project_name_invalid" });
+  }
+  assert.deepEqual(patched, [], "a refused name reaches no service");
+  const res = response();
+  await routes(request("PATCH", "/api/geo/projects/geo_mine", { name: "  波立维\n项目 " }), res);
+  assert.deepEqual(patched, [["geo_mine", { name: "波立维 项目" }, "function"]]);
+  assert.deepEqual(audited, [["geo.project.rename", "completed", { userId: "editor", code: "geo_mine" }]]);
+  // Without the project hook a rename is a named 503 and nothing is patched.
+  const bare = createGeoRoutes({ store, service, config, maxJsonBytes: 65_536 });
+  await assert.rejects(bare(request("PATCH", "/api/geo/projects/geo_mine", { name: "新名字" }), response()), { status: 503, code: "geo_unavailable" });
+  assert.equal(patched.length, 1);
+  assert.deepEqual(renamed, [], "the route hands the hook over; the service is what calls it");
+});
+
+test("the service renames the owner's project for an editor, after the GEO row is patched, and a viewer cannot", async () => {
+  const calls = /** @type {any[]} */ ([]);
+  const project = { id: "geo_mine", userId: "owner", projectId: "ctl_1" };
+  const store = {
+    async getProjectAccess(/** @type {string} */ userId, /** @type {string} */ id) {
+      if (id !== "geo_mine") return null;
+      return { project, roles: userId === "owner" ? ["owner"] : userId === "editor" ? ["editor"] : ["viewer"] };
+    },
+    async updateProject(/** @type {string} */ ownerId, /** @type {string} */ id, /** @type {any} */ patch) { calls.push(["row", ownerId, id, patch]); return { id, tier: "base" }; },
+  };
+  const geo = new GeoService({ store: /** @type {any} */ (store), config, social: null, cards: null });
+  const rename = async (/** @type {string} */ ownerId, /** @type {string} */ projectId, /** @type {string} */ name) => { calls.push(["rename", ownerId, projectId, name]); };
+  const out = await geo.updateProject({ id: "editor" }, "geo_mine", { name: "新名字", tier: "base" }, { renameControlProject: rename });
+  assert.deepEqual(calls, [["row", "owner", "geo_mine", { tier: "base" }], ["rename", "owner", "ctl_1", "新名字"]]);
+  assert.equal(out.name, "新名字");
+  calls.length = 0;
+  await geo.updateProject({ id: "owner" }, "geo_mine", { tier: "base" }, { renameControlProject: rename });
+  assert.deepEqual(calls.map((call) => call[0]), ["row"], "no name, no rename");
+  await assert.rejects(geo.updateProject({ id: "reader" }, "geo_mine", { name: "x" }, { renameControlProject: rename }), { status: 403 });
+  await assert.rejects(geo.updateProject({ id: "owner" }, "geo_mine", { name: "x" }), { status: 503, code: "geo_unavailable" });
+  assert.equal(calls.length, 1, "a refusal wrote nothing more");
 });

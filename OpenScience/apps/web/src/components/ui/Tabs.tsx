@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
@@ -17,7 +17,24 @@ export interface TabItem<V extends string = string> {
   label: string;
   /** A count after the label, when the view's size is the point (「未读 2」). */
   count?: number;
+  /** A status dot before the label, when each view is a stage with a state (a study's tabs). */
+  dot?: TabDot;
 }
+
+/**
+ * The state a tab's dot says, three ways — shape, colour and words (spec: every status is said three times): `done` a filled blue
+ * circle, `active` a blue ring (work under way), `attention` an amber diamond (stale, or not finished), `todo` a small grey dot.
+ */
+export type TabDot = "done" | "active" | "attention" | "todo";
+
+const DOT_WORDS: Record<TabDot, string> = { done: "已完成", active: "进行中", attention: "需要留意", todo: "未开始" };
+
+const DOT_CLASSES: Record<TabDot, string> = {
+  done: "h-2 w-2 rounded-full bg-accent",
+  active: "h-2 w-2 rounded-full bg-surface ring-2 ring-accent",
+  attention: "h-2 w-2 rotate-45 bg-warn",
+  todo: "h-1.5 w-1.5 rounded-full bg-surface-2 ring-1 ring-border-control",
+};
 
 export function Tabs<V extends string>({
   label,
@@ -25,6 +42,7 @@ export function Tabs<V extends string>({
   value,
   onChange,
   panelId,
+  trailing,
   className,
 }: {
   /** The tab list's accessible name. */
@@ -33,6 +51,8 @@ export function Tabs<V extends string>({
   value: V;
   onChange: (value: V) => void;
   panelId?: string;
+  /** Controls at the row's end; they sit on the same hairline as the tabs. */
+  trailing?: ReactNode;
   className?: string;
 }) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -48,8 +68,17 @@ export function Tabs<V extends string>({
     onChange(items[next].value);
     refs.current[next]?.focus();
   };
-  return (
-    <div role="tablist" aria-label={label} className={cn("flex min-w-0 items-end gap-6 overflow-x-auto border-b border-border", className)}>
+  const list = (
+    <div
+      role="tablist"
+      aria-label={label}
+      className={cn(
+        "flex min-w-0 items-end gap-6 overflow-x-auto border-b border-border",
+        // With controls beside it the hairline belongs to the row, from `sm` up.
+        trailing && "sm:flex-1 sm:border-b-0",
+        !trailing && className,
+      )}
+    >
       {items.map((item, index) => {
         const selected = item.value === value;
         return (
@@ -71,11 +100,21 @@ export function Tabs<V extends string>({
               selected ? "border-text text-text" : "border-transparent text-text-3 hover:text-text",
             )}
           >
+            {item.dot && <span aria-hidden="true" data-tab-dot={item.dot} data-forced-colors="preserve" className={cn("mr-0.5 inline-block shrink-0", DOT_CLASSES[item.dot])} />}
             {item.label}
             {item.count !== undefined && <span className="tabular-nums text-text-3">{item.count}</span>}
+            {/* The state in words, after the name: a screen reader hears 「试验 进行中」, and the dot's shape and colour are not the only way to know. */}
+            {item.dot && <span className="sr-only">{DOT_WORDS[item.dot]}</span>}
           </button>
         );
       })}
+    </div>
+  );
+  if (!trailing) return list;
+  return (
+    <div className={cn("flex flex-col sm:flex-row sm:items-end sm:gap-4 sm:border-b sm:border-border", className)}>
+      {list}
+      <div className="flex shrink-0 flex-wrap items-center gap-1 py-1.5 sm:pb-1.5 sm:pt-0">{trailing}</div>
     </div>
   );
 }

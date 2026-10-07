@@ -17,8 +17,9 @@ import { renderHook } from "@testing-library/react";
 import { kernelThemeTokens } from "@evimed/design-tokens/kernel";
 import { errorCodeMessage, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), connectors: vi.fn(), saveConnector: vi.fn(), dispatch: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
-vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
+const mocks = vi.hoisted(() => ({ saveToKnowledgeBase: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), connectors: vi.fn(), saveConnector: vi.fn(), dispatch: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources, saveToKnowledgeBase: mocks.saveToKnowledgeBase }));
+vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
 // The run's event stream, held by the test: the frame's run view follows it.
 vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
 // Only the four frame calls and the profile are stubbed. Everything else is the
@@ -1084,6 +1085,32 @@ describe("the run behind the task, in the frame", () => {
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/runs/run-1/files/deliverables/evidence/clinical-evidence-report.md"));
     expect(screen.getByText("run file reader")).toBeInTheDocument();
   });
+
+  // 2026-10-07 plan §2.3: the frame's file card names a run's file; the shell has it copied into this project's knowledge base and says what happened.
+  it("has the control plane copy the file the frame names, and says so — and copies nothing the frame could spell as an escape", async () => {
+    mocks.saveToKnowledgeBase.mockReset();
+    mocks.toastSuccess.mockReset();
+    mocks.toastError.mockReset();
+    mocks.saveToKnowledgeBase.mockResolvedValue({ path: "knowledge-base/chat/report-1a2b3c4d.md", duplicate: false, sourceId: "src_a" });
+    const { frame } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.save-to-knowledge-base", seq: 3, runId: "run-1", path: "../../etc/passwd" });
+    emit(frame, { type: "evimed.runtime-ui.save-to-knowledge-base", seq: 4, runId: "run-1", path: "/etc/passwd" });
+    emit(frame, { type: "evimed.runtime-ui.save-to-knowledge-base", seq: 5, runId: "run 1", path: "deliverables/a.md" });
+    emit(frame, { type: "evimed.runtime-ui.save-to-knowledge-base", seq: 6, runId: "run-1", path: "a\\b.md" });
+    expect(mocks.saveToKnowledgeBase).not.toHaveBeenCalled();
+    emit(frame, { type: "evimed.runtime-ui.save-to-knowledge-base", seq: 7, runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md", destination: "somewhere" });
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("已存入知识库，正在读取"));
+    expect(mocks.saveToKnowledgeBase).toHaveBeenCalledTimes(1);
+    // Only the path reaches the control plane: the frame's own idea of a destination is never read.
+    expect(mocks.saveToKnowledgeBase).toHaveBeenCalledWith("deliverables/evidence/clinical-evidence-report.md");
+    // The same file again is not a second document, and a refusal says why.
+    mocks.saveToKnowledgeBase.mockResolvedValueOnce({ path: "knowledge-base/chat/report-1a2b3c4d.md", duplicate: true, sourceId: "src_a" });
+    emit(frame, { type: "evimed.runtime-ui.save-to-knowledge-base", seq: 8, runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md" });
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("这份文件已经在知识库里"));
+    mocks.saveToKnowledgeBase.mockRejectedValueOnce(new WebApiError("x", { status: 415, code: "source_format_unsupported" }));
+    emit(frame, { type: "evimed.runtime-ui.save-to-knowledge-base", seq: 9, runId: "run-1", path: "deliverables/data.sav" });
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("没能存入知识库：")));
+  });
 });
 
 describe("opening a task", () => {
@@ -1609,7 +1636,7 @@ describe("虚拟临研 in the conversation", () => {
     return { view, frame, post, vcrPosts };
   }
 
-  it("tells the chip where the study starts, what it is for, and the six single-task starters", async () => {
+  it("tells the chip where the study starts, what it is for, and the six starting points of a new study", async () => {
     const { view, vcrPosts } = await openVcrConversation("vcr-analysis");
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
     const [options] = vcrPosts();
@@ -1617,7 +1644,7 @@ describe("虚拟临研 in the conversation", () => {
     expect(options.startOptions.map((choice: { label: string }) => choice.label)).toEqual(["自动", "队列", "患者", "对照", "试验"]);
     expect(options.useOptions.map((choice: { label: string }) => choice.label)).toEqual(["探索", "研究设计支持", "指定研究分析", "申报准备"]);
     expect(options.starters.map((starter: { label: string }) => starter.label))
-      .toEqual(["估算样本量", "外部对照可行性", "找先例和参数", "生成合成数据", "匹配患者", "完整研究"]);
+      .toEqual(["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"]);
     view.unmount();
   });
 

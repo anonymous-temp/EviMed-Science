@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
 import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
-import { useVcrProjectIds } from "@/components/vcr/useVcrProjectIds";
+import { useVcrProjects } from "@/components/vcr/useVcrProjectIds";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 /** Conversation rows a group shows before 「展开其余 N 条对话」 — the kernel's own
@@ -32,14 +32,18 @@ const SEARCH_RESULTS_MAX = 20;
 /** Which project groups are open, by project id, kept across reloads. */
 const EXPANDED_KEY = "ai4s.sidebar.projectGroups";
 
+/** Which of the two module groups at the end of the list are open, kept across reloads like the project groups. */
+const MODULE_GROUPS_KEY = "ai4s.sidebar.moduleGroups";
+type ModuleName = "geo" | "vcr";
+
 const ADDRESSABLE_SESSION = /^[A-Za-z0-9_-]{1,160}$/;
 
 type ExpandedMap = Record<string, boolean>;
 
-function readExpanded(): ExpandedMap {
+function readExpanded(key = EXPANDED_KEY): ExpandedMap {
   if (typeof window === "undefined") return {};
   try {
-    const value: unknown = JSON.parse(window.localStorage.getItem(EXPANDED_KEY) ?? "{}");
+    const value: unknown = JSON.parse(window.localStorage.getItem(key) ?? "{}");
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
     return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"));
   } catch {
@@ -47,10 +51,10 @@ function readExpanded(): ExpandedMap {
   }
 }
 
-function writeExpanded(map: ExpandedMap): void {
+function writeExpanded(map: ExpandedMap, key = EXPANDED_KEY): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(EXPANDED_KEY, JSON.stringify(map));
+    window.localStorage.setItem(key, JSON.stringify(map));
   } catch {
     // A full or refused storage only costs the groups' state after a reload.
   }
@@ -112,15 +116,16 @@ type Destination = () => { to: string; state?: unknown };
  * (`useProjectRuns`); which groups are open survives a reload.
  */
 export function ProjectBrowser({ geo = false, vcr = false }: {
-  /** Whether 「循证传播」 is offered: its projects then carry the radar icon. */
+  /** Whether 「循证传播」 is offered: its projects then sit in their own group at the end, with the radar icon. */
   geo?: boolean;
-  /** Whether 「虚拟临研」 is offered: its studies then carry the people icon. */
+  /** Whether 「虚拟临研」 is offered: its studies then sit in their own group at the end, with the people icon. */
   vcr?: boolean;
 } = {}) {
   const { projects, currentId, switching, loading, error, load, select, create, rename } = useProjectStore();
   const projectsKey = projects.map((project) => project.id).join("\u0000");
   const geoProjectIds = useGeoProjectIds(geo, projectsKey);
-  const vcrProjectIds = useVcrProjectIds(vcr, projectsKey);
+  // A draft study (「新建研究」 before the first thing is said in it) is not one of the account's projects yet: it is left out of the list.
+  const { studies: vcrProjectIds, drafts: vcrDraftIds } = useVcrProjects(vcr, projectsKey);
   const navigate = useNavigate();
   const location = useLocation();
   const headingId = useId();
@@ -130,7 +135,8 @@ export function ProjectBrowser({ geo = false, vcr = false }: {
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const newNameRef = useRef<HTMLInputElement>(null);
 
-  const [expanded, setExpanded] = useState<ExpandedMap>(readExpanded);
+  const [expanded, setExpanded] = useState<ExpandedMap>(() => readExpanded());
+  const [moduleOpen, setModuleOpen] = useState<ExpandedMap>(() => readExpanded(MODULE_GROUPS_KEY));
   const [showAll, setShowAll] = useState<ReadonlySet<string>>(() => new Set());
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -153,6 +159,17 @@ export function ProjectBrowser({ geo = false, vcr = false }: {
     [projects, currentId],
   );
   const known = useMemo(() => (projects.length > 0 ? new Set(projects.map((project) => project.id)) : null), [projects]);
+  // Under 「项目」 only the researcher's own projects; the module's objects (GEO projects, studies) are each one project underneath, but
+  // they are not the researcher's to tell apart from the ones they made, so they gather in two groups at the end. A study that is still
+  // a draft is not listed at all.
+  const shown = useMemo(() => listed.filter((project) => !vcrDraftIds.has(project.id)), [listed, vcrDraftIds]);
+  const ordinary = useMemo(() => shown.filter((project) => !geoProjectIds.has(project.id) && !vcrProjectIds.has(project.id)), [shown, geoProjectIds, vcrProjectIds]);
+  const moduleProjects: Record<ModuleName, WebProject[]> = useMemo(() => ({
+    geo: shown.filter((project) => geoProjectIds.has(project.id)),
+    vcr: shown.filter((project) => vcrProjectIds.has(project.id) && !geoProjectIds.has(project.id)),
+  }), [shown, geoProjectIds, vcrProjectIds]);
+  // A group is open when the reader opened it — or, until they say otherwise, when it holds the project they are in.
+  const isModuleOpen = (name: ModuleName) => moduleOpen[name] ?? moduleProjects[name].some((project) => project.id === currentId);
   const isExpanded = useCallback((projectId: string) => expanded[projectId] ?? projectId === currentId, [expanded, currentId]);
   // The current project is always read, open or not, as the one list before
   // this was: a task started in it must light its header even when folded.
@@ -179,6 +196,9 @@ export function ProjectBrowser({ geo = false, vcr = false }: {
   useEffect(() => {
     writeExpanded(expanded);
   }, [expanded]);
+  useEffect(() => {
+    writeExpanded(moduleOpen, MODULE_GROUPS_KEY);
+  }, [moduleOpen]);
 
   // Said once, politely, for a screen reader: a switch moves every page, and
   // nothing on the page itself says which project it is now.
@@ -346,6 +366,31 @@ export function ProjectBrowser({ geo = false, vcr = false }: {
     go(project.id, () => ({ to }));
   };
 
+  const renderProject = (project: WebProject) => (
+    <ProjectGroup
+      key={project.id}
+      project={project}
+      geo={geoProjectIds.has(project.id)}
+      vcr={vcrProjectIds.has(project.id)}
+      current={project.id === currentId}
+      standIn={projects.length === 0}
+      expanded={isExpanded(project.id)}
+      showAll={showAll.has(project.id)}
+      runs={byProject[project.id]}
+      switching={switching === project.id}
+      failure={failures[project.id] ?? null}
+      isOpen={(run) => project.id === currentId && isOpenTask(run, location.pathname)}
+      onToggle={() => toggle(project.id)}
+      onShowAll={() => toggleShowAll(project.id)}
+      onNewTask={() => startTask(project.id)}
+      onRename={async (name) => { await rename(project.id, name); }}
+      renameFailure={(reason) => projectErrorMessage(reason, projects.length, "项目名没有改成功，请稍后重试。")}
+      onOpenTask={(run, row) => openTask(project.id, run, row)}
+      onRetry={() => read(project.id)}
+      onWarm={() => warm(project.id)}
+    />
+  );
+
   return (
     <section
       ref={rootRef}
@@ -490,29 +535,18 @@ export function ProjectBrowser({ geo = false, vcr = false }: {
             )}
             {(projects.length > 0 || error) && (
               <ul className="flex flex-col gap-1">
-                {listed.map((project) => (
-                  <ProjectGroup
-                    key={project.id}
-                    project={project}
-                    geo={geoProjectIds.has(project.id)}
-                    vcr={vcrProjectIds.has(project.id)}
-                    current={project.id === currentId}
-                    standIn={projects.length === 0}
-                    expanded={isExpanded(project.id)}
-                    showAll={showAll.has(project.id)}
-                    runs={byProject[project.id]}
-                    switching={switching === project.id}
-                    failure={failures[project.id] ?? null}
-                    isOpen={(run) => project.id === currentId && isOpenTask(run, location.pathname)}
-                    onToggle={() => toggle(project.id)}
-                    onShowAll={() => toggleShowAll(project.id)}
-                    onNewTask={() => startTask(project.id)}
-                    onRename={async (name) => { await rename(project.id, name); }}
-                    renameFailure={(reason) => projectErrorMessage(reason, projects.length, "项目名没有改成功，请稍后重试。")}
-                    onOpenTask={(run, row) => openTask(project.id, run, row)}
-                    onRetry={() => read(project.id)}
-                    onWarm={() => warm(project.id)}
-                  />
+                {ordinary.map(renderProject)}
+                {(["geo", "vcr"] as const).map((name) => moduleProjects[name].length > 0 && (
+                  <ModuleGroup
+                    key={name}
+                    label={name === "geo" ? "循证传播" : "虚拟临研"}
+                    icon={name === "geo" ? Radar : UsersRound}
+                    count={moduleProjects[name].length}
+                    open={isModuleOpen(name)}
+                    onToggle={() => setModuleOpen((map) => ({ ...map, [name]: !isModuleOpen(name) }))}
+                  >
+                    {moduleProjects[name].map(renderProject)}
+                  </ModuleGroup>
                 ))}
               </ul>
             )}
@@ -521,6 +555,39 @@ export function ProjectBrowser({ geo = false, vcr = false }: {
       </div>
       <span className="sr-only" aria-live="polite">{announcement}</span>
     </section>
+  );
+}
+
+/**
+ * One of the two groups at the end of the project list — 「循证传播」 and 「虚拟临研」 — holding the projects those modules made, as
+ * a header with a count that opens into the same rows an ordinary project has. Closed until the reader opens it (or they are in one
+ * of its projects), and remembered, as the project groups are.
+ */
+function ModuleGroup({ label, icon: Icon, count, open, onToggle, children }: {
+  label: string;
+  icon: typeof Radar;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  const listId = useId();
+  return (
+    <li>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onClick={onToggle}
+        className={navItemClasses({ className: "gap-1.5 pl-1" })}
+      >
+        <ChevronRight size={16} className={cn("shrink-0 text-muted transition-transform duration-fast", open && "rotate-90")} aria-hidden="true" />
+        <Icon size={16} className="shrink-0 text-muted" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="shrink-0 text-meta tabular-nums text-text-3">{count}</span>
+      </button>
+      {open && <ul id={listId} aria-label={label} className="mt-0.5 flex flex-col gap-1 pl-3">{children}</ul>}
+    </li>
   );
 }
 

@@ -111,6 +111,24 @@ describe("Tabs", () => {
     await userEvent.keyboard("{End}");
     expect(screen.getByRole("tab", { name: "日报" })).toHaveAttribute("aria-selected", "true");
   });
+
+  it("puts the controls of the open view in the same row, outside the tab list, under one hairline", () => {
+    render(
+      <Tabs
+        label="视图"
+        value="a"
+        onChange={() => {}}
+        items={[{ value: "a", label: "甲" }, { value: "b", label: "乙" }]}
+        trailing={<button type="button">全部栏目</button>}
+      />,
+    );
+    const list = screen.getByRole("tablist", { name: "视图" });
+    // The controls are not tabs and not inside the tab list; both sit in one row.
+    expect(list).not.toContainElement(screen.getByRole("button", { name: "全部栏目" }));
+    expect(list.parentElement).toContainElement(screen.getByRole("button", { name: "全部栏目" }));
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(list.parentElement).toHaveClass("sm:border-b");
+  });
 });
 
 describe("ListRow", () => {
@@ -192,6 +210,29 @@ describe("Menu", () => {
     await userEvent.keyboard("{Enter}");
     expect(onDelete).toHaveBeenCalledOnce();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+});
+
+describe("Menu headings", () => {
+  it("labels a group without being an item: no focus, no selection, and the arrow keys step over it", async () => {
+    const onPick = vi.fn();
+    render(<Menu label="选择范围" items={[
+      { heading: "我的项目" }, { label: "我的研究", checked: true, onSelect: vi.fn() },
+      "separator",
+      { heading: "虚拟临研" }, { label: "新研究", checked: false, onSelect: onPick },
+    ]} />);
+    await userEvent.click(screen.getByRole("button", { name: "选择范围" }));
+    expect(await screen.findByText("我的项目")).toBeInTheDocument();
+    expect(screen.getByText("虚拟临研")).not.toHaveAttribute("role", "menuitemradio");
+    expect(screen.getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual(["我的研究", "新研究"]);
+    await vi.waitFor(() => expect(screen.getByRole("menuitemradio", { name: "我的研究" })).toHaveFocus());
+    await userEvent.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitemradio", { name: "新研究" })).toHaveFocus();
+    await userEvent.click(screen.getByText("虚拟临研"));
+    expect(onPick).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "新研究" }));
+    expect(onPick).toHaveBeenCalledOnce();
   });
 });
 

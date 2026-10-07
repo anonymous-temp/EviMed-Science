@@ -1,12 +1,14 @@
 // Alertmanager's receiving end (2026-09-28). Until then its only receiver was
 // a public path nginx answered `return 204`, and every alert was dropped.
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
+import { ALERT_NOTICES, UNKNOWN_ALERT_TITLE, alertNoticeText } from "../src/alertNotices.mjs";
 import { ALERT_RECEIVER_PATH, createAlertReceiver } from "../src/alertReceiver.mjs";
 import { sendError } from "../src/security.mjs";
 import { createWebApiApp } from "../src/server.mjs";
@@ -66,10 +68,10 @@ test("each alert reaches every operator's inbox as one item per incident, its re
   const [notice] = inbox.created;
   assert.equal(notice.noticeType, "notify");
   assert.equal(notice.severity, "attention");
-  assert.equal(notice.title, "告警：EvimedFrontierSourcesUnhealthy");
-  assert.match(notice.body, /启用源健康率低于 95%/);
-  assert.match(notice.body, /开始：2026-09-27T08:00:00.000Z/);
-  assert.match(notice.body, /service=evimed-knowledge-plugin/);
+  // A rule this deployment has no row for: 「系统告警」 and the rule's own summary, never its program name.
+  assert.equal(notice.title, UNKNOWN_ALERT_TITLE);
+  assert.equal(notice.body, "启用源健康率低于 95%");
+  assert.doesNotMatch(`${notice.title}${notice.body}`, /EvimedFrontierSourcesUnhealthy|service=|开始：|级别：/);
   assert.deepEqual(notice.source, { type: "system", id: "ops-alert-a1b2c3d4e5f60718" });
 
   // Alertmanager re-sends a firing alert every repeat interval: the same keys,
@@ -83,9 +85,9 @@ test("each alert reaches every operator's inbox as one item per incident, its re
   const resolved = { ...firing, status: "resolved", endsAt: "2026-09-28T01:30:00.000Z" };
   await post(alertmanagerBody([resolved]));
   const recovery = inbox.created[4];
-  assert.equal(recovery.title, "已恢复：EvimedFrontierSourcesUnhealthy");
+  assert.equal(recovery.title, `已恢复：${UNKNOWN_ALERT_TITLE}`);
   assert.equal(recovery.severity, "info");
-  assert.match(recovery.body, /结束：2026-09-28T01:30:00.000Z/);
+  assert.match(recovery.body, /已经解除/);
   assert.equal(recovery.groupKey, notice.groupKey, "the resolution folds into the firing item");
   assert.notEqual(recovery.idempotencyKey, notice.idempotencyKey);
 
@@ -96,6 +98,48 @@ test("each alert reaches every operator's inbox as one item per incident, its re
   const families = Object.fromEntries(receiver.metricFamilies().map((family) => [family.name, family]));
   const delivered = families.open_science_ops_alerts_total.series.find((row) => row.labels.status === "firing" && row.labels.outcome === "delivered");
   assert.equal(delivered.value, 6);
+});
+
+const CJK = /[\u3400-\u9fff]/;
+const RULES_FILE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "deploy/web/monitoring/open-science.rules.json");
+
+test("every alert rule has a Chinese title and one sentence, and the table holds no row for a rule that is gone", async () => {
+  const rules = JSON.parse(await readFile(RULES_FILE, "utf8"));
+  const names = rules.groups.flatMap((group) => group.rules.map((rule) => rule.alert));
+  assert.ok(names.length >= 40, `only ${names.length} rules were read; the scan is wrong, not the table`);
+  assert.deepEqual(names.filter((name) => !Object.hasOwn(ALERT_NOTICES, name)), [], "a rule with no row would reach the inbox as 「系统告警」 with an English summary");
+  assert.deepEqual(Object.keys(ALERT_NOTICES).filter((name) => !names.includes(name)), [], "a row for a rule that no longer exists");
+  for (const [name, row] of Object.entries(ALERT_NOTICES)) {
+    assert.match(row.title, CJK, `${name}'s title is Chinese`);
+    assert.match(row.sentence, CJK, `${name}'s sentence is Chinese`);
+    assert.ok(!row.title.includes(name), `${name}'s title is not the rule's name`);
+    assert.ok(row.title.length <= 20, `${name}'s title is a title (${row.title.length} characters)`);
+    assert.ok(!/[\r\n]/.test(row.sentence), `${name} is one sentence on one line`);
+  }
+});
+
+test("a known alert reaches the inbox as its Chinese title and sentence, and a resolution keeps the title", async (t) => {
+  const inbox = recordingInbox();
+  const { post } = await serve(t, { config: { alertReceiverToken: TOKEN, operatorUsers: ["ops"] }, notificationService: inbox });
+  const urgent = { ...firing, labels: { alertname: "GeoUrgentFindingsOpen", severity: "warning" },
+    annotations: { summary: "循证传播有 2 条 S3/S4 级「讲错我方」尚未关闭" }, fingerprint: "00112233445566aa" };
+  await post(alertmanagerBody([urgent]));
+  await post(alertmanagerBody([{ ...urgent, status: "resolved", endsAt: "2026-09-28T01:30:00.000Z" }]));
+  const [open, closed] = inbox.created;
+  assert.equal(open.title, ALERT_NOTICES.GeoUrgentFindingsOpen.title);
+  assert.equal(open.body, ALERT_NOTICES.GeoUrgentFindingsOpen.sentence);
+  assert.equal(closed.title, `已恢复：${ALERT_NOTICES.GeoUrgentFindingsOpen.title}`);
+  assert.equal(closed.groupKey, open.groupKey, "still one item per incident");
+  for (const item of inbox.created) assert.doesNotMatch(`${item.title}${item.body}`, /GeoUrgentFindingsOpen|severity|warning|=/);
+});
+
+test("a sentence takes the alert's own label, and says 某个 when the alert did not carry it", () => {
+  const base = { alertname: "ModelProviderBalanceExhausted", summary: "", description: "" };
+  assert.match(alertNoticeText({ ...base, labels: { provider: "deepseek" } }).sentence, /^deepseek 以余额不足/);
+  assert.match(alertNoticeText({ ...base, labels: {} }).sentence, /^某个 以余额不足/);
+  const unknown = alertNoticeText({ alertname: "SomethingNew", summary: "", description: "", labels: {} });
+  assert.deepEqual(unknown, { title: UNKNOWN_ALERT_TITLE, sentence: "SomethingNew" }, "a notice is never empty");
+  assert.equal(alertNoticeText({ alertname: "toString", summary: "s", description: "", labels: {} }).title, UNKNOWN_ALERT_TITLE, "a name from Object.prototype is not a row");
 });
 
 test("a probe alert is recorded, never written to anyone's inbox", async (t) => {

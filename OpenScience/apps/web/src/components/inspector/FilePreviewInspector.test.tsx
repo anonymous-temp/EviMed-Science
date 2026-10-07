@@ -202,6 +202,32 @@ describe("FilePreviewInspector — a knowledge-base document", () => {
   });
 });
 
+describe("FilePreviewInspector — embedded in a pane that has its own header", () => {
+  it("is the preview alone: no title bar, no history, no file actions, and its lead is the pane's to show", async () => {
+    const pdf: FilePreviewInspectorT = { variant: "file", path: "knowledge-base/指南.pdf", filename: "指南.pdf", artifact: "report", root: "base", projectId: "paper-1" };
+    const { container } = render(<FilePreviewInspector embedded data={pdf} lead={<p>摘要：不在这里显示。</p>} onClose={() => {}} />);
+    expect(container.querySelector("header")).toBeNull();
+    expect(screen.queryByRole("button", { name: "关闭预览" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "版本记录" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下载文件" })).not.toBeInTheDocument();
+    expect(screen.queryByText("摘要：不在这里显示。")).not.toBeInTheDocument();
+  });
+
+  it("reads the file in the project it belongs to, and opens a PDF on the page asked for", async () => {
+    const { previewUrl } = await import("@/lib/artifactFile");
+    vi.mocked(previewUrl).mockResolvedValue("https://science.example/api/files/preview/a.pdf?root=base&projectId=paper-1");
+    const pdf: FilePreviewInspectorT = { variant: "file", path: "knowledge-base/a.pdf", filename: "a.pdf", artifact: "report", root: "base", projectId: "paper-1" };
+    const { rerender } = render(<FilePreviewInspector embedded data={pdf} page={5} onClose={() => {}} />);
+    const frame = await screen.findByTitle("PDF 预览");
+    expect(previewUrl).toHaveBeenCalledWith("knowledge-base/a.pdf", "base", "paper-1");
+    expect(frame).toHaveAttribute("src", "https://science.example/api/files/preview/a.pdf?root=base&projectId=paper-1#page=5");
+    rerender(<FilePreviewInspector embedded data={pdf} page={9} onClose={() => {}} />);
+    expect(await screen.findByTitle("PDF 预览")).toHaveAttribute("src", expect.stringMatching(/#page=9$/));
+    rerender(<FilePreviewInspector embedded data={pdf} onClose={() => {}} />);
+    expect((await screen.findByTitle("PDF 预览")).getAttribute("src")).not.toContain("#page");
+  });
+});
+
 describe("PreviewError", () => {
   it("shows a helpful card with Open-externally for a too-large file", async () => {
     const onOpen = vi.fn();

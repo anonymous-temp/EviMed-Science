@@ -54,6 +54,8 @@ import { SkillLibraryArtifacts } from "./skillLibraryArtifacts.mjs";
 import { createSkillLibraryRoutes } from "./skillLibraryRoutes.mjs";
 import { SkillSupply } from "./skillSupplyService.mjs";
 import { NativeSkillCatalogue } from "./nativeSkillCatalogue.mjs";
+import { createPlatformSkillCatalogue } from "./platformSkillCatalogue.mjs";
+import { moduleState } from "./deploymentComposition.mjs";
 import { PersonalSkillRepositoryImport } from "./personalSkillRepositoryImport.mjs";
 import { PersonalSkillTransfer } from "./personalSkillTransfer.mjs";
 import { createPersonalSkillTransferRoutes } from "./personalSkillTransferRoutes.mjs";
@@ -113,7 +115,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, VCR_CAPABILITIES, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -139,7 +141,10 @@ import { NotificationService, runFinishedInboxItem, runFinishedReachesInbox } fr
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { withdrawProjectDerivedMemory } from "./derivedMemory.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
+import { HandbookLibrary } from "./handbookLibrary.mjs";
+import { createHandbookRoutes } from "./handbookRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
+import { resetLearnedMemory } from "./memoryReset.mjs";
 import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
 import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
@@ -190,6 +195,7 @@ import { EvidenceZoneSubscriptions, createEvidenceLinkStates, subscriptionsForAu
 import { reownOperatorImportedZones } from "./evidenceReown.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
+import { createKnowledgeBaseEntries } from "./knowledgeBaseEntries.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
 // Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
 import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
@@ -324,6 +330,7 @@ import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
+import { createVcrDraftSweeper } from "./vcrDrafts.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
 import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
@@ -1083,7 +1090,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config });
+  // The engines' readiness is read at request time: the availability service is composed further down.
+  const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config, engines: user => availability.service.engineReadiness(user) });
   const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
     if (!vcr) return null;
     const study = await vcr.store.studyByControlProject(user.id, projectId, client);
@@ -1147,6 +1155,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const skillSupply = new SkillSupply({ config });
   const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
     artifacts: skillArtifacts, supply: skillSupply,
+    // The skills the platform ships, listed and read from the control plane's own packages — no runtime needed.
+    platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir, packAllowed: user => moduleState(config, user, "geo") === "on" }),
     projectAccess: async (user, project) => {
       const current = await store.requireProject(user, project.id);
       if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
@@ -1342,6 +1352,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     trialTtlMs: config.learningTrialTtlMs,
     // Whether the loop is turning for this account, beside its list (§13).
     summary: productDatabase && config.learningEnabled ? (userId) => learningSummary(productDatabase, userId) : null,
+    // 「从哪里学到的」: a lesson's run, live or kept when its project was deleted (`agentRuns` is composed further down; asked per request).
+    resolveRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
+  });
+  // The capability handbooks the platform learned for the account, to read, stop and go back from — the other half of 做法.
+  const handbookLibrary = learningService ? new HandbookLibrary({ learning: learningService }) : null;
+  const handbookRoutes = createHandbookRoutes({
+    store, library: handbookLibrary, maxJsonBytes: config.maxJsonBytes,
+    resolveRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
   });
   // Terminal-hook writes still in flight.
   //
@@ -1534,6 +1552,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }) });
   const memoryRoutes = createMemoryRoutes({
     config, researchMemory, memorySubstrate, memoryIndexWorker, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+    // 「重置记忆」 clears what the page shows: the methods, handbooks and capsule notes live in the product ledger.
+    resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
   /** The accounts an integration key of `ownerId` made for the people behind
@@ -1565,7 +1585,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const openListConnector = openListClient
     ? new OpenListSourceConnector(openListClient, { tenantRoot: config.openListTenantRoot,
       probeTimeoutMs: config.openListProbeTimeoutMs, probeCacheMs: config.openListProbeCacheMs }) : null;
-  const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, maxJsonBytes: config.maxJsonBytes });
+  // 「添加网页链接」 and 「新建笔记」: a page or a note becomes a file in the project's knowledge base and is registered the way an
+  // upload is (`writeProjectUpload`); the page is read by the public-web reader every run's `web_read` uses. Both are reached
+  // through closures: the write path and the reader are built further down this function.
+  const knowledgeEntries = sourceService ? createKnowledgeBaseEntries({
+    sources: sourceService,
+    write: ({ user, project, rel, buffer, meta, register }) => writeProjectUpload({ config, user, project }, { root: "base", rel, buffer, meta, register }),
+    readWeb: (url, options) => webReader.read(url, options),
+    readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
+    readTimeoutMs: config.webReadTimeoutMs,
+  }) : null;
+  const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, knowledge: knowledgeEntries, maxJsonBytes: config.maxJsonBytes });
   // One admission for every way a file reaches `knowledge-base/`: the upload
   // route and the upload command both refuse a format the knowledge base
   // cannot read before a byte is written, and both register what they wrote.
@@ -1578,7 +1608,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     /** @param {string} rel */
     admit: (rel) => assertKnowledgeBaseFormat(rel),
     /** @param {any} ctx @param {string} rel @param {Buffer} buffer */
-    register: async (ctx, rel, buffer) => {
+    register: async (ctx, rel, buffer, meta = null) => {
       if (!sourceService) return null;
       const registered = await sourceService.register(ctx.user.id, {
         projectId: ctx.project.id,
@@ -1588,6 +1618,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         mtime: new Date().toISOString(),
         mimeType: mimeFor(rel),
         sha256: createHash("sha256").update(buffer).digest("hex"),
+        // What a saved page or a note says about itself beyond its bytes (`knowledgeBaseEntries.mjs`).
+        ...(meta?.title ? { title: meta.title } : {}),
+        ...(meta?.link ? { link: meta.link } : {}),
       });
       await audit(ctx, "source.register", "completed", { target: registered.source.id, duplicate: registered.duplicate });
       return registered;
@@ -1601,9 +1634,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * write, the mirror into a running runtime, the audit line, and the source
    * registration that parses and indexes it. Returns the registration, or null
    * outside `knowledge-base/`.
-   * @param {{ config: any, user: any, project: any }} ctx @param {{ root: string, rel: string, buffer: Buffer }} file
+   * `meta` is the title and link a registered page or note carries; `register: false` keeps the bytes in the knowledge base's
+   * folder without making them a source (the original HTML beside a page's text snapshot).
+   * @param {{ config: any, user: any, project: any }} ctx @param {{ root: string, rel: string, buffer: Buffer, meta?: Record<string, any>, register?: boolean }} file
    */
-  const writeProjectUpload = async (ctx, { root, rel, buffer }) => {
+  const writeProjectUpload = async (ctx, { root, rel, buffer, meta = undefined, register = true }) => {
     if (buffer.length > config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
     const base = root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir;
     const full = resolveScopedPath(base, rel);
@@ -1616,7 +1651,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // rt: a running remote runtime sees the upload now (plan §3.1 #4).
     await runtimeManager.mirrorWorkspaceUpload(ctx.project, full, buffer);
     await audit(ctx, "file.upload", "completed", { target: root === "base" ? `${root}:${rel}` : rel, bytes: buffer.length });
-    return knowledge ? knowledgeBaseUploads.register(ctx, rel, buffer) : null;
+    return knowledge && register ? knowledgeBaseUploads.register(ctx, rel, buffer, meta) : null;
   };
   const sourceProject = async (job) => {
     const user = await store.userById(job.userId);
@@ -2120,6 +2155,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const project = await store.requireProject(user, projectId);
         return (await researchSessions.list(project))[0]?.sessionId ?? null;
       },
+      // A rename is the project owner's: an editor of the GEO project asks, and the name is written as its owner.
+      rename: async (ownerId, projectId, name) => {
+        const owner = await store.userById(ownerId);
+        if (!owner) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
+        await store.renameProject(owner, projectId, name);
+      },
     },
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
@@ -2392,6 +2433,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     resolveProject: project => resultProvenance.scope(project.userId, project.id),
     onFailure: failure => securityAudit(config, "result.capture", "failed", failure) });
   const observeResult = (project, runId, observed) => resultCaptureQueue.observe(project, runId, observed);
+  /**
+   * A study's project and the study with it, in the one transaction a project's deletion already is (a failed 「新建研究」 and the
+   * draft sweep both end here).
+   * @param {any} user @param {string} projectId
+   */
+  const removeStudyProject = (user, projectId) => store.deleteProject(user, projectId, {
+    beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
+  });
   const vcrRoutes = createVcrRoutes({
     // The platform's store answers the session and the CSRF check; every
     // question about a study goes to the module's own (review CS-1).
@@ -2402,9 +2451,34 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A study whose row (or first conversation) could not be made takes the
       // project the same request made with it, and the study row if one got as
       // far as existing, in the one transaction a project deletion is.
-      remove: (user, projectId) => store.deleteProject(user, projectId, {
-        beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
-      }),
+      remove: (user, projectId) => removeStudyProject(user, projectId),
+      // The project carries the study's name, so a rename of the study is the project's too (the sidebar lists projects). A project
+      // the researcher renamed on its own is left alone: only a name equal to the study's previous one follows it.
+      rename: async (ownerId, projectId, name, previousName) => {
+        // The project is the owner's, whoever renamed the study.
+        const owner = await store.userById(ownerId);
+        if (!owner) return;
+        const current = (await store.listProjects(owner)).find((project) => project.id === projectId);
+        if (current && current.name === previousName) await store.renameProject(owner, projectId, [...String(name)].slice(0, 40).join(""));
+      },
+      // The conversation a study made before it recorded its own was opened with: the oldest one bound to its first capability, which
+      // is made at creation and before any programme step runs in the project.
+      conversationSessionId: async (user, projectId) => {
+        const project = await store.requireProject(user, projectId);
+        const sessions = await researchSessions.list(project);
+        const oldest = (/** @type {any[]} */ rows) => [...rows].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))[0]?.sessionId ?? null;
+        return oldest(sessions.filter((entry) => entry.agentId === VCR_STEP_CAPABILITIES.definition)) ?? oldest(sessions);
+      },
+      // What the programme did in the background: the project's automated runs, each with the conversation it ran in.
+      backgroundRuns: async (userId, projectId, conversationSessionId) => {
+        const owner = await store.userById(userId);
+        if (!owner) return [];
+        const runs = await agentRuns.list(await store.requireProject(owner, projectId));
+        return runs
+          .filter((run) => run.automated === true && run.sessionId && run.sessionId !== conversationSessionId)
+          .sort((a, b) => String(b.startedAt ?? b.createdAt ?? "").localeCompare(String(a.startedAt ?? a.createdAt ?? "")))
+          .map((run) => ({ sessionId: run.sessionId, capabilityId: run.effectiveAgentId ?? null, status: run.status, startedAt: run.startedAt ?? run.createdAt ?? null }));
+      },
       // The study's first conversation, bound to a 虚拟临研 capability before
       // the study has a step to run: the binding is what puts the module's
       // chip on the composer and what makes the router honour the choice.
@@ -2580,6 +2654,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService, skillSupply,
     methodValidation: () => loadMethodValidation({ file: config.vcrMethodValidationFile, engine: vcr?.engine }),
     vcrEngine: () => vcr?.engineProbe?.snapshot() ?? null,
+    vcrEngineRefresh: () => vcr?.engineProbe?.refresh?.() ?? Promise.resolve(null),
     mutation: maintenanceMutation,
     canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
     fetchImpl: overrides.availabilityFetch ?? globalThis.fetch,
@@ -4290,7 +4365,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The timeline and the capsule page's growth line, derived when read from
   // the records, the ledger, the methods and the researcher's own capsules.
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
-    capsules: capsuleService, context });
+    capsules: capsuleService, handbooks: handbookLibrary, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns, lineage: resultLineage,
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
@@ -4591,13 +4666,50 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     vcr.orchestrator = orchestrator;
     vcr.exporter = { requestExport: (user, study, kind) => orchestrator.requestExport(user, study, kind) };
     vcr.service.attach({ jobs: vcr.jobs, seal: vcr.seal });
+    // A study nobody described (「新建研究」 made it before the first word) is deleted with its project an hour after it was made,
+    // unless somebody spoke in it: the run ledger holds every message a person sent, so a project with any run is kept.
+    vcr.drafts = createVcrDraftSweeper({
+      store: vcr.store, ttlMs: Number(config.vcrDraftTtlMinutes) > 0 ? Number(config.vcrDraftTtlMinutes) * 60_000 : undefined,
+      spokenIn: async (study) => {
+        const owner = await store.userById(study.userId);
+        if (!owner) return false;
+        return (await agentRuns.list(await store.requireProject(owner, study.projectId))).length > 0;
+      },
+      remove: async (study) => {
+        const owner = await store.userById(study.userId);
+        if (!owner) {
+          // The account is gone: its rows go with it (`deleteVcrUserRows`); a stray draft has nothing else to wait for.
+          await vcr.store.transaction((client) => deleteVcrProjectRows(client, study.userId, study.projectId));
+          return;
+        }
+        // What the project holds beyond its rows goes first, as a project's deletion does it: the conversation's runtime (a draft was
+        // opened in one, and it would hold the workspace the deletion removes) and the memory the project may have written. A project
+        // with work in it, or one that is already gone, is told apart by the code the store answers with.
+        const project = await store.requireProject(owner, study.projectId).catch((error) => {
+          if (error?.code === "project_not_found") return null;
+          throw error;
+        });
+        if (project) {
+          if (await taskManager.hasActiveProject(project)) throw Object.assign(new Error("project_busy"), { code: "project_busy" });
+          await runtimeManager.stop(project, { by: "platform" });
+          if (researchMemory.configured) await researchMemory.deleteProjectMemory(owner.id, project.id);
+        }
+        await removeStudyProject(owner, study.projectId).catch(async (error) => {
+          // A project that is already gone leaves its draft behind: the row is the only thing left to remove.
+          if (error?.code !== "project_not_found") throw error;
+          await vcr.store.transaction((client) => deleteVcrProjectRows(client, study.userId, study.projectId));
+        });
+      },
+      report: (code) => process.stderr.write(`vcr drafts: ${code}\n`),
+      audit: vcrAudit,
+    });
     vcr.worker = new VcrWorker({
       pollMs: config.vcrPollMs ?? 5_000, leaseMs: config.vcrLeaseMs ?? 900_000,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
       // `matching` is the deferral recheck loop: a washout that ends is re-judged on
       // its own day, not when someone next opens the study.
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge }),
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge, drafts: vcr.drafts }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.
@@ -5384,6 +5496,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
+      if (await handbookRoutes(req, res)) return;
       if (evolution && await evolution.routes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;

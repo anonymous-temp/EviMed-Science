@@ -221,6 +221,8 @@ export interface FilePreviewInspector {
   content?: string;
   /** Folder tree `path` resolves in (default "workspace"). */
   root?: FileRoot;
+  /** The project `path` is relative to, when it is not the tab's own (a document of another project in the knowledge base). */
+  projectId?: string;
 }
 
 export interface ArtifactVersion {

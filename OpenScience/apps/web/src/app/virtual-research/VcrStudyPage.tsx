@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState, type ComponentType } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
-import { VCR_EXPORT_KIND_LABELS_ZH } from "@evimed/domain";
-import { MessageSquare, MoreHorizontal, UsersRound } from "lucide-react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { ChevronLeft, MessageSquare, MoreHorizontal, UsersRound } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
-  cancelVcrJob,
   deleteVcrStudy,
   exportVcrStudy,
   getVcrStudy,
@@ -13,26 +11,27 @@ import {
   patchVcrStudy,
   useVcrFeature,
   type VcrExportKind,
-  type VcrJob,
   type VcrStudy,
   type VcrTabKey,
 } from "@/lib/vcrClient";
+import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
-import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
-import { ProgressRail, type RailState, type RailStep } from "@/components/ui/ProgressRail";
 import { Tabs } from "@/components/ui/Tabs";
 import { StudyTags } from "@/components/vcr/VcrMarks";
 import { VcrOffPage, VcrStudySkeleton } from "@/components/vcr/VcrStates";
-import { cpuTimeText, jobsAwaitingBudget, VcrBudgetDialog } from "@/components/vcr/VcrBudgetDialog";
+import { VcrBudgetDialog } from "@/components/vcr/VcrBudgetDialog";
+import { VcrJobLine } from "@/components/vcr/VcrJobLine";
 import { VcrMembersDialog } from "@/components/vcr/VcrMembersDialog";
 import { VcrPackageReader } from "@/components/vcr/VcrPackageReader";
+import { VcrBackgroundRunsDrawer, VcrChangeLogDrawer } from "@/components/vcr/VcrStudyDrawers";
+import { VcrExportDialog, VcrRenameDialog } from "@/components/vcr/VcrStudyDialogs";
 import { VcrTierOffer } from "@/components/vcr/VcrTierOffer";
 import { useOpenVcrConversation } from "@/components/vcr/useOpenVcrConversation";
 import { useVcrRun } from "@/components/vcr/useVcrRun";
@@ -44,9 +43,7 @@ import { ComparatorTab } from "@/components/vcr/tabs/ComparatorTab";
 import { TrialTab } from "@/components/vcr/tabs/TrialTab";
 import { MatchingTab } from "@/components/vcr/tabs/MatchingTab";
 import { DataTab } from "@/components/vcr/tabs/DataTab";
-import { jobStateLabel, jobWaitLabel, numberText, stepLabel, stepStatusLabel } from "@/components/vcr/vcrText";
-import { stepAllowanceWait } from "@/lib/allowanceWait";
-import { resolveVcrTab, VCR_HOME_PATH, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath } from "@/components/vcr/vcrTabs";
+import { resolveVcrTab, tabDot, VCR_HOME_PATH, VCR_TAB_ITEMS, vcrTabPath } from "@/components/vcr/vcrTabs";
 
 /** `onStudyChanged`: a tab that changes what the header shows (the data tab's intake moves the tier offer) asks the page to read the study again. */
 type TabComponent = ComponentType<{ studyId: string; study: VcrStudy; onStudyChanged?: () => void }>;
@@ -69,31 +66,28 @@ type Loaded =
   | { kind: "error"; id: string; message: string }
   | { kind: "ready"; id: string; study: VcrStudy };
 
-/** The job states the 「运行」 strip shows: what is going on now, and what did not finish. */
-const LIVE_JOB_STATES: ReadonlySet<VcrJob["state"]> = new Set(["queued", "running", "awaiting_budget", "failed"]);
+/** What the engine's absence says, once, at the top: the page used to learn it from a job that failed. */
+export const VCR_ENGINE_LINE = "计算引擎暂不可用，计算类步骤会在引擎恢复后继续";
 
 /**
  * One study, on the wide column a data page needs.
  *
- * The header is the study, its data tier, what its results may be used for,
- * and the seven steps as one rail — with what each step produced. Then seven
- * tabs, which are the questions a reader arrives with rather than the order
- * the platform works in.
+ * The header is the study's name and its data tier, the way into its conversation and a menu — and then **one row of tabs, each
+ * with a dot that says how far its stage has come** (总览 · 定义与证据 · 人群 · 虚拟患者 · 对照 · 试验 · 匹配与招募). A step rail used
+ * to sit above the tabs and repeat five of their seven names as a second navigation; the rail is gone and the state is the dot. A
+ * computation under way is one line under the row, and only while there is one.
  *
- * **There is no second composer here** (2026-09-20 ruling, plan §9.5). 「对话」
- * in the header is the one way into the study's conversation, and every empty
- * tab offers 「让 AI 做」, which starts that step there. What can be edited on
- * the page itself is the structured cards — an assumption, a criterion, a
- * decision — and each edit makes a new version, which is what marks the
- * results downstream of it stale.
+ * **There is no second composer here** (2026-09-20 ruling, plan §9.5). 「对话」 in the header is the one way into the study's
+ * conversation — the one it was opened with, never the newest background run's — and every empty tab sends the reader there or
+ * offers 「让 AI 做」, which starts that step in it. What can be edited on the page itself is the structured cards — an assumption,
+ * the population's and a design's numbers, a criterion's threshold, a decision — and each edit makes a new version, which is what
+ * marks the results downstream of it stale.
  *
  * Hidden knowledge:
- *  - **An answer belongs to the id it was asked for.** Moving from one study
- *    to another shows the skeleton, never the previous study's header under
- *    the new address.
- *  - **Each tab is behind its own boundary** (contract §5): a tab that cannot
- *    read its payload shows an error card inside the tab, and the header, the
- *    rail and the other six tabs stay.
+ *  - **An answer belongs to the id it was asked for.** Moving from one study to another shows the skeleton, never the previous
+ *    study's header under the new address.
+ *  - **Each tab is behind its own boundary** (contract §5): a tab that cannot read its payload shows an error card inside the tab,
+ *    and the header and the other six tabs stay.
  */
 export function VcrStudyPage() {
   const { studyId = "", tab: tabParam } = useParams();
@@ -150,28 +144,31 @@ export function VcrStudyPage() {
   return <StudyView key={studyId} studyId={studyId} study={shown.study} tab={tab} reload={reload} />;
 }
 
+/** Which of the page's panels is open over it. */
+type Panel = "rename" | "export" | "members" | "budget" | "changes" | "runs" | "delete" | null;
+
 function StudyView({ studyId, study, tab, reload }: { studyId: string; study: VcrStudy; tab: VcrTabKey; reload: () => void }) {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const openConversation = useOpenVcrConversation();
   const { run, busy: running } = useVcrRun(study);
   const [opening, setOpening] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [panel, setPanel] = useState<Panel>(null);
   const [deleting, setDeleting] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
-  const [budgetOpen, setBudgetOpen] = useState(false);
-  const [membersOpen, setMembersOpen] = useState(false);
   const packageId = params.get("package");
   const Tab = TABS[tab];
   // What this reader may do here, from the roles the server says they hold:
-  // the menu offers only the actions that will not be refused (the routes check
-  // for themselves, per operation — this is presentation).
+  // the menu offers only the actions that will not be refused (the routes
+  // check for themselves, per operation — this is presentation).
   const can = (ability: string) => study.abilities.includes(ability);
+  const engineLine = study.engine === "missing" || study.engine === "not_answering";
 
-  const exportAs = (kind: VcrExportKind, failure: string) => {
+  const exportAs = (kind: VcrExportKind) => {
     // A deferred export stays on the page with its sentence; the overview's
     // deliverables are re-read so the queued package is listed.
-    void run(() => exportVcrStudy(studyId, kind), failure, reload);
+    setPanel(null);
+    void run(() => exportVcrStudy(studyId, kind), "文档暂时无法导出，请稍后重试。", reload);
   };
 
   const paused = study.status === "paused";
@@ -184,24 +181,17 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
       .finally(() => setChangingStatus(false));
   };
   const menu: MenuEntry[] = [
-    ...(can("export") ? [
-      { label: "导出研究包", disabled: running, onSelect: () => exportAs("study_package", "研究包暂时无法导出，请稍后重试。") },
-      { label: "导出 CDE 沟通交流资料包", disabled: running, onSelect: () => exportAs("cde_communication_pack", "资料包暂时无法导出，请稍后重试。") },
-      { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.simulation_report}`, disabled: running, onSelect: () => exportAs("simulation_report", "模拟报告暂时无法导出，请稍后重试。") },
-      { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.validation_pack}`, disabled: running, onSelect: () => exportAs("validation_pack", "系统验证文档包暂时无法导出，请稍后重试。") },
-      { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.model_analysis_plan}`, disabled: running, onSelect: () => exportAs("model_analysis_plan", "模型分析计划暂时无法导出，请稍后重试。") },
-      { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.model_analysis_report}`, disabled: running, onSelect: () => exportAs("model_analysis_report", "模型分析报告暂时无法导出，请稍后重试。") },
-    ] : []),
+    ...(can("write") ? [{ label: "重命名", onSelect: () => setPanel("rename") }] : []),
+    ...(can("export") ? [{ label: "导出…", disabled: running, onSelect: () => setPanel("export") }] : []),
+    ...(can("manage_members") ? [{ label: "成员与角色", onSelect: () => setPanel("members") }] : []),
     // The compute budget, the study's status and its deletion are the lead's
     // (`manage_study`): the second human stop is confirmed by the person who
     // signs the study off, not by whoever queued the compute.
-    ...(can("manage_study") ? [{ label: "设定计算预算", onSelect: () => setBudgetOpen(true) }] : []),
-    ...(can("manage_members") ? [{ label: "成员与角色", onSelect: () => setMembersOpen(true) }] : []),
-    ...(can("manage_study") ? [
-      { label: paused ? "继续" : "暂停", disabled: changingStatus, onSelect: setStatus },
-      "separator" as const,
-      { label: "删除", destructive: true, onSelect: () => setConfirmDelete(true) },
-    ] : []),
+    ...(can("manage_study") ? [{ label: "计算预算", onSelect: () => setPanel("budget") }] : []),
+    ...(can("manage_study") ? [{ label: paused ? "继续" : "暂停", disabled: changingStatus, onSelect: setStatus }] : []),
+    { label: "变更记录", onSelect: () => setPanel("changes") },
+    { label: "AI 运行", onSelect: () => setPanel("runs") },
+    ...(can("manage_study") ? ["separator" as const, { label: "删除", destructive: true, onSelect: () => setPanel("delete") }] : []),
   ];
 
   const remove = () => {
@@ -215,7 +205,7 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
       .catch((error: unknown) => {
         toast.error(webErrorMessage(error, { fallback: "研究无法删除，请稍后重试。" }));
         setDeleting(false);
-        setConfirmDelete(false);
+        setPanel(null);
       });
   };
 
@@ -227,30 +217,38 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
       .finally(() => setOpening(false));
   };
 
+  const renamed = () => {
+    setPanel(null);
+    reload();
+    // The sidebar lists projects, and the project carries the study's name.
+    void useProjectStore.getState().load();
+  };
+
   return (
     <PageShell
       title={study.name}
       width="wide"
-      meta={<StudyTags tier={study.tier} intendedUse={study.intendedUse} ceiling={study.ceiling} />}
+      back={(
+        <Link to={VCR_HOME_PATH} className={buttonClasses({ variant: "text", size: "sm", className: "-ml-2.5" })}>
+          <ChevronLeft size={16} aria-hidden="true" />虚拟临研
+        </Link>
+      )}
+      meta={<StudyTags tier={study.tier} ceiling={study.ceiling} />}
       actions={(
         <>
           <Button variant="secondary" loading={opening} onClick={openStudyConversation}>
             <MessageSquare size={16} aria-hidden="true" />
             对话
           </Button>
-          {menu.length > 0 && (
-            <Menu label="更多操作" items={menu}>
-              <IconButton icon={MoreHorizontal} label="更多操作" className="data-[state=open]:bg-surface-2 data-[state=open]:text-text" />
-            </Menu>
-          )}
+          <Menu label="更多操作" items={menu}>
+            <IconButton icon={MoreHorizontal} label="更多操作" className="data-[state=open]:bg-surface-2 data-[state=open]:text-text" />
+          </Menu>
         </>
       )}
     >
+      {engineLine && <p data-vcr-engine={study.engine} role="status" className="mb-4 rounded bg-warn-soft px-3 py-2 text-ui text-warn-strong">{VCR_ENGINE_LINE}</p>}
+
       {study.tierOffer && can("manage_study") && <VcrTierOffer studyId={studyId} offer={study.tierOffer} onMoved={reload} />}
-
-      <ProgressRail label="七步进度" steps={railSteps(study, studyId)} className="mb-6" />
-
-      <JobStrip studyId={studyId} study={study} onBudget={() => setBudgetOpen(true)} onChanged={reload} />
 
       {packageId ? (
         <VcrPackageReader
@@ -262,12 +260,12 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
         <>
           <Tabs
             label="研究视图"
-            items={VCR_TAB_ITEMS.map((item) => ({ value: item.key, label: item.label }))}
+            items={VCR_TAB_ITEMS.map((item) => ({ value: item.key, label: item.label, dot: tabDot(study, item.key) }))}
             value={tab}
             onChange={(next) => navigate(vcrTabPath(studyId, next))}
             panelId="vcr-tab-panel"
-            className="gap-4 overflow-x-auto sm:gap-6 [&>button]:shrink-0"
           />
+          <VcrJobLine studyId={studyId} study={study} onBudget={() => setPanel("budget")} onChanged={reload} />
           <div id="vcr-tab-panel" role="tabpanel" aria-labelledby={`vcr-tab-panel-tab-${tab}`} className="pt-6">
             <VcrTabBoundary key={tab}>
               <Tab studyId={studyId} study={study} onStudyChanged={reload} />
@@ -276,133 +274,32 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
         </>
       )}
 
-      {membersOpen && <VcrMembersDialog studyId={studyId} onClose={() => setMembersOpen(false)} />}
+      {panel === "rename" && <VcrRenameDialog studyId={studyId} name={study.name} onClose={() => setPanel(null)} onRenamed={renamed} />}
+      {panel === "export" && <VcrExportDialog busy={running} onClose={() => setPanel(null)} onExport={exportAs} />}
+      {panel === "members" && <VcrMembersDialog studyId={studyId} onClose={() => setPanel(null)} />}
+      {panel === "changes" && <VcrChangeLogDrawer study={study} onClose={() => setPanel(null)} />}
+      {panel === "runs" && <VcrBackgroundRunsDrawer studyId={studyId} study={study} onClose={() => setPanel(null)} />}
 
-      {budgetOpen && (
+      {panel === "budget" && (
         <VcrBudgetDialog
           studyId={studyId}
           budget={study.budget}
           jobs={study.jobs}
-          onClose={() => setBudgetOpen(false)}
-          onSaved={() => { setBudgetOpen(false); reload(); }}
+          onClose={() => setPanel(null)}
+          onSaved={() => { setPanel(null); reload(); }}
         />
       )}
 
-      {confirmDelete && (
+      {panel === "delete" && (
         <ConfirmDialog
           title={`删除“${study.name}”？`}
           body="研究会从虚拟临研移除；项目里的对话和文件仍在。"
           confirmLabel="删除"
           busy={deleting}
           onConfirm={remove}
-          onCancel={() => setConfirmDelete(false)}
+          onCancel={() => setPanel(null)}
         />
       )}
     </PageShell>
   );
-}
-
-/**
- * 「运行」: the computations queued, running, waiting on a budget confirmation
- * or not finished (plan §3.6 — the run state is one of the three, and is said
- * apart from the conclusion and the review).
- *
- * The line above the jobs is the second human stop made visible: a job past
- * the budget waits for the lead, and the page says so where the lead is
- * looking rather than only in the header's menu.
- */
-function JobStrip({ studyId, study, onBudget, onChanged }: {
-  studyId: string;
-  study: VcrStudy;
-  onBudget: () => void;
-  onChanged: () => void;
-}) {
-  const [canceling, setCanceling] = useState<string | null>(null);
-  const jobs = study.jobs.filter((job) => LIVE_JOB_STATES.has(job.state));
-  const waiting = jobsAwaitingBudget(study.jobs);
-  const awaiting = study.budget?.awaitingBudget ?? 0;
-  if (jobs.length === 0 && awaiting <= 0) return null;
-  const mayCancel = study.abilities.includes("run");
-
-  const cancel = (job: VcrJob) => {
-    if (canceling !== null) return;
-    setCanceling(job.id);
-    void cancelVcrJob(studyId, job.id)
-      .then(() => { toast.success("已取消。"); onChanged(); })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这项计算暂时无法取消，请稍后重试。" })))
-      .finally(() => setCanceling(null));
-  };
-
-  return (
-    <section data-vcr-jobs="" aria-labelledby="vcr-jobs-title" className="mb-6 rounded-card border border-border bg-surface px-4 py-3">
-      <h2 id="vcr-jobs-title" className="text-caption text-text-3">运行</h2>
-      {awaiting > 0 && (
-        <p data-vcr-budget-wait="" className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-ui text-warn-strong">
-          <span className="min-w-0 flex-1">
-            {`有 ${numberText(awaiting, 0)} 项计算等待预算确认${waiting.seconds > 0 ? ` · 需 ${cpuTimeText(waiting.seconds)} CPU 时间` : ""}`}
-          </span>
-          {/* Confirming is the lead's; anyone else sees the line and not a button that would be refused. */}
-          {study.abilities.includes("manage_study") && <Button size="sm" onClick={onBudget}>确认预算</Button>}
-        </p>
-      )}
-      {jobs.length > 0 && (
-        <ul className="mt-1 divide-y divide-faint">
-          {jobs.map((job) => (
-            <li key={job.id} data-vcr-job={job.id} data-vcr-job-state={job.state} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-              <span className="min-w-0 flex-1 truncate text-ui text-text">{job.label}</span>
-              {job.progress && job.progress.total > 0 && (
-                <span className="text-caption tabular-nums text-text-3">{`${numberText(job.progress.done, 0)} / ${numberText(job.progress.total, 0)}`}</span>
-              )}
-              <span className={cn("text-caption", job.state === "failed" ? "text-danger-strong" : job.state === "awaiting_budget" ? "text-warn-strong" : "text-text-3")}>
-                {jobStateLabel(job.state)}
-              </span>
-              {job.state === "failed" && job.error?.message && (
-                <span className="w-full text-caption text-text-2">{job.error.message}</span>
-              )}
-              {/* One honest line, nothing to press: the engine is not answering and the job goes on by itself when it is back. */}
-              {job.waitingOn && (job.state === "running" || job.state === "queued") && (
-                <span data-vcr-job-wait={job.waitingOn} role="status" className="w-full text-caption text-text-2">{jobWaitLabel(job.waitingOn)}</span>
-              )}
-              {job.cancelable && mayCancel && (
-                <Button size="sm" variant="text" loading={canceling === job.id} disabled={canceling !== null} onClick={() => cancel(job)}>
-                  取消
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-/** The rail's state for one step. `waiting` is the accent halo: it needs the reader. */
-function railStateOf(status: string | undefined): RailState {
-  switch (status) {
-    case "done": case "minimal": return "done";
-    case "running": case "queued": return "active";
-    case "stale": case "failed": return "waiting";
-    default: return "todo";
-  }
-}
-
-/**
- * The seven steps as the header's rail, each linking to the tab that holds its
- * result. The note under a step is what it produced — 「12 张假设卡」「人群 v3」
- * — and, failing that, the state's own word; a step with no note at all reads
- * as an empty column.
- */
-export function railSteps(study: VcrStudy, studyId: string): RailStep[] {
-  return VCR_RAIL_STEPS.map(({ key }) => {
-    const step = study.steps[key];
-    // A step the allowance would not start needs the reader, like one that did not finish: the accent halo, and its own note.
-    const state = stepAllowanceWait(step) ? "waiting" : railStateOf(step?.status);
-    return {
-      key,
-      name: stepLabel(key),
-      note: step?.note ?? (step?.status && step.status !== "none" ? stepStatusLabel(step.status) : "未开始"),
-      state,
-      to: vcrTabPath(studyId, VCR_STEP_TABS[key]),
-    };
-  });
 }
