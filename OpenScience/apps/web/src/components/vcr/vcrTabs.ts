@@ -64,8 +64,9 @@ export function stepsOfTab(tab: VcrTabKey): readonly VcrStepKey[] {
 
 /**
  * The dot a tab wears: how far the steps it holds have come. A step that did not finish, a result gone stale and a start the
- * allowance refused all need the reader (`attention`); one under way is `active`; a tab whose every step is done is `done`; one
- * with some done and the rest not started is still `active` — the study is not finished there — and one with nothing is `todo`.
+ * allowance refused all need the reader (`attention`); one under way is `active`, and only that; a tab whose every step is done is
+ * `done`; one with some done and the rest not started is `partial` (「部分完成」 — it used to read 「进行中」 beside a done definition
+ * with nothing running, which the 2026-10-07 audit took for a state the page contradicted) and one with nothing is `todo`.
  */
 export function tabDot(study: Pick<VcrStudy, "steps">, tab: VcrTabKey): TabDot | undefined {
   const steps = stepsOfTab(tab);
@@ -75,7 +76,7 @@ export function tabDot(study: Pick<VcrStudy, "steps">, tab: VcrTabKey): TabDot |
   if (records.some((record) => record?.status === "running" || record?.status === "queued")) return "active";
   const done = records.filter((record) => record?.status === "done" || record?.status === "minimal").length;
   if (done === steps.length) return "done";
-  return done > 0 ? "active" : "todo";
+  return done > 0 ? "partial" : "todo";
 }
 
 /**

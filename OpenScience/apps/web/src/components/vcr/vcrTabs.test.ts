@@ -54,8 +54,9 @@ describe("a tab's dot", () => {
     expect(tabDot(study, "matching")).toBe("todo");
   });
 
-  it("is active for a tab with some of its steps done and the rest not started: the study is not finished there", () => {
-    expect(tabDot({ steps: steps({ definition: "done" }) }, "data")).toBe("active");
+  it("is partial, not active, for a tab with some of its steps done and the rest not started: nothing is running there", () => {
+    expect(tabDot({ steps: steps({ definition: "done" }) }, "data")).toBe("partial");
+    expect(tabDot({ steps: steps({ definition: "done", evidence: "running" }) }, "data")).toBe("active");
   });
 
   it("needs the reader when a step did not finish, a result went stale or the allowance refused the start", () => {
