@@ -43,22 +43,23 @@ export function VcrCountsBand({ counts: given, className }: { counts: VcrCounts 
       data-vcr-counts=""
       className={cn("rounded-card border border-border bg-surface", className)}
     >
-      <div className="flex flex-wrap items-start gap-x-8 gap-y-4 px-4 py-3">
+      {/* Below `sm` the scope and the note sit above and below the grid instead of beside it: beside it they left the four labels ~190 px. */}
+      <div className="flex flex-col gap-x-8 gap-y-4 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-start">
         {counts.scope && <p className="shrink-0 py-1 text-ui font-medium text-text">{counts.scope}</p>}
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4 lg:grid-cols-5">
+        <div className="grid w-full min-w-0 grid-cols-2 gap-x-6 gap-y-4 sm:w-auto sm:flex-1 sm:grid-cols-4 lg:grid-cols-5">
           {keys.map((key) => {
             const value = counts[key];
             const exact = typeof value === "number" && Number.isFinite(value);
             const body = (
               <div className="min-w-0">
-                <p className="truncate text-caption text-text-3">{countLabel(key)}</p>
+                <p className="break-words text-caption text-text-3">{countLabel(key)}</p>
                 <p
                   data-vcr-count={key}
                   className={cn("mt-0.5 text-heading font-semibold tabular-nums", exact ? "text-text" : "text-text-3")}
                 >
                   {exact ? countText(value) : NO_VALUE}
                 </p>
-                {counts.notes?.[key] && <p className="mt-0.5 truncate text-caption text-text-3">{counts.notes[key]}</p>}
+                {counts.notes?.[key] && <p className="mt-0.5 break-words text-caption text-text-3">{counts.notes[key]}</p>}
               </div>
             );
             // The rounded 「约 648 万」 is what a reader can hold; the exact
@@ -68,7 +69,7 @@ export function VcrCountsBand({ counts: given, className }: { counts: VcrCounts 
               : <div key={key}>{body}</div>;
           })}
         </div>
-        {counts.note && <p className="shrink-0 self-center text-caption text-text-3">{counts.note}</p>}
+        {counts.note && <p className="text-caption text-text-3 sm:shrink-0 sm:self-center">{counts.note}</p>}
       </div>
     </section>
   );
