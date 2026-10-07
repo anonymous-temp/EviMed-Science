@@ -94,7 +94,6 @@ test('actual JudgeService and durable ledger bill J13 to the real project and re
   const { createJudgeService } = await import('../src/judgeService.mjs');
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('quota','Quota','development')");
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES('quota','p1','Attribution',1048576)");
-  const target = (await database.query('SELECT id FROM evimed_frontier.evidence_topic_requests ORDER BY id LIMIT 1')).rows[0].id;
   let spentQuota = false;
   const judge = createJudgeService({ calibrationMode: true, database, usageLedger: new UsageLedger(database),
     config: { typesafeApiKey: 'test-only-key', reviewJevModel: 'jev-1.13.0', reviewJevApiBase: 'https://jev.test/v1', requireDurableUsageLedger: true },
@@ -105,6 +104,11 @@ test('actual JudgeService and durable ledger bill J13 to the real project and re
       assert.equal(locks.rows.length, 0);
       if (body.questions.relation && !spentQuota) {
         spentQuota = true;
+        // The day's one request goes to a topic other than the pair being judged: one voted on the request the judge
+        // then calls the same would count as already held, and the refusal this test is about would not happen.
+        // (Picking the first request by id made that a coin toss on random ids; CI lost it on 2026-10-07.)
+        const judged = [body.state.left, body.state.right].filter((value) => typeof value === 'string');
+        const target = (await database.query('SELECT id FROM evimed_frontier.evidence_topic_requests WHERE NOT (title = ANY($1::text[])) ORDER BY id LIMIT 1', [judged])).rows[0].id;
         await database.query('INSERT INTO evimed_frontier.evidence_topic_request_votes(request_id,user_id) VALUES($1,$2)', [target,'quota']);
       }
       const answers = Object.fromEntries(Object.entries(body.questions).map(([id, question]) => {
