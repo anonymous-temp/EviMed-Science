@@ -31,6 +31,9 @@ import table from './skill-display-zh.json' with { type: 'json' }
 /** The groups a skill is listed under, in the order the page lists them. */
 export const SKILL_DISPLAY_GROUPS = Object.freeze([...table.groups])
 
+/** The group the proprietary 「循证传播」 method pack is listed under, where its folder is present. One of {@link SKILL_DISPLAY_GROUPS}. */
+export const SKILL_DISPLAY_GEO_GROUP = String(table.geoGroup)
+
 /** Every shipped skill's words by skill name, in the order each group lists them. @type {Readonly<Record<string, Readonly<SkillDisplay>>>} */
 export const SKILL_DISPLAY = Object.freeze(Object.fromEntries(
   Object.entries(/** @type {Record<string, SkillDisplay>} */ (table.skills)).map(([name, row]) => [name, Object.freeze({ ...row })]),

@@ -6,7 +6,7 @@ import test from 'node:test'
 
 import { MCP_TOOL_BASE_NAMES } from '../index.mjs'
 import { RESEARCH_TOOL_DISPLAY, RESEARCH_TOOL_GROUPS, researchToolGroups } from '../src/researchToolDisplay.mjs'
-import { SKILL_DISPLAY, SKILL_DISPLAY_GROUPS, skillDisplay } from '../src/skillDisplay.mjs'
+import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS, skillDisplay } from '../src/skillDisplay.mjs'
 import { SKILL_PACKAGES } from '../src/skillPackages.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -32,6 +32,11 @@ test('every model-visible shipped skill has a Chinese name, a use, a trigger and
     }
     assert.ok(!/\bSKILL\.md\b|\.mjs\b|\.py\b/.test(`${row.title}${row.use}${row.when}`), `${name} names a file`)
   }
+})
+
+test('the method pack\'s group is a listed group no shipped skill belongs to (the pack is not in the table)', () => {
+  assert.ok(SKILL_DISPLAY_GROUPS.includes(SKILL_DISPLAY_GEO_GROUP))
+  assert.ok(Object.values(SKILL_DISPLAY).every((row) => row.group !== SKILL_DISPLAY_GEO_GROUP))
 })
 
 test('the display names are unique within the skills a researcher sees, so two rows are never the same word', () => {

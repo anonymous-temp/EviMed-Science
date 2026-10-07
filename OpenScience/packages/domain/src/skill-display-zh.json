@@ -1,6 +1,7 @@
 {
   "description": "How the skills the runtime image ships are shown to a researcher: a Chinese name, the one line a list row carries, the sentence that says when the skill is used, and the group it is listed under. Keyed by the skill's own name (the folder name in its root). The order of the keys is the order a group lists them in, so the first four of a group are the ones a researcher is most likely to want. skillDisplay.mjs reads this and a test holds it equal to the shipped skill set.",
   "groups": ["科研分析", "写作与核查", "办公文档", "社区", "循证传播"],
+  "geoGroup": "循证传播",
   "skills": {
     "open-domain-answer": {
       "group": "科研分析",
