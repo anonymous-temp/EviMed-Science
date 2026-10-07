@@ -38,10 +38,11 @@ import {
   VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
-  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, vcrAssessmentIssues, vcrAssessmentRows,
+  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_SYNTHETIC_USE_LABELS_ZH, vcrAssessmentIssues, vcrAssessmentRows,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
+import { POPULATION_METHOD_WORDS, PROFILE_MISSING_SENTENCE, constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns,
   presentModelCard, resultNode, scenarioName, valueString,
@@ -142,10 +143,12 @@ export function criterionCodes(criteria) {
 /** @param {Record<string, any>} entry @param {number} index */
 function waterfallEntry(entry, index) {
   const row = object(entry);
+  // The engine's own steps name the rule they applied (`rule`); a rule written from a criterion is named by its code (「I1」, 「E2」).
+  const rule = text(row.rule);
   return {
-    key: text(row.key) ?? text(row.criterionId) ?? text(row.code) ?? `step_${index}`,
-    label: text(row.label) ?? text(row.step) ?? text(row.name) ?? `第 ${index + 1} 步`,
-    code: text(row.code),
+    key: text(row.key) ?? text(row.criterionId) ?? text(row.code) ?? rule ?? `step_${index}`,
+    label: text(row.label) ?? text(row.step) ?? text(row.name) ?? rule ?? `第 ${index + 1} 步`,
+    code: text(row.code) ?? (rule && /^[IE]\d+$/.test(rule) ? rule : null),
     criterionId: text(row.criterionId),
     ordinal: numeric(row.ordinal),
     remaining: numeric(row.remaining ?? row.kept ?? row.n),
@@ -224,7 +227,13 @@ export function presentPopulationTab(bundle) {
   const result = current ? resultById(bundle, current.resultId) : null;
   const marks = current ? [markFor(stale, vcrObjectNode("population", current)), result ? markFor(stale, resultNode(result)) : null] : [];
   const codes = criterionCodes(criteria);
-  const steps = current ? list(current.waterfall).map(waterfallEntry) : [];
+  // What the engine wrote beside the table is what the tab reads: the population row carries what was written when the object was, and
+  // nothing copies a finished job's waterfall, counts or quality back onto it.
+  const diagnostics = object(result?.diagnostics);
+  const rowOrResult = (/** @type {unknown} */ held, /** @type {unknown} */ computed) => (Array.isArray(held) ? held.length : Object.keys(object(held)).length) ? held : computed;
+  const waterfall = current ? rowOrResult(current.waterfall, diagnostics.waterfall) : [];
+  const heldCounts = current ? rowOrResult(current.counts, result?.counts) : {};
+  const steps = current ? list(waterfall).map(waterfallEntry) : [];
   const byCriterion = (/** @type {any} */ criterion) => steps.find((entry) => entry.criterionId === criterion.id || entry.code === codes.get(criterion.id)
     || (entry.ordinal !== null && entry.ordinal === Number(criterion.ordinal)));
   const kindSource = current ? ({ real: "observed", literature: "aggregate", scenario: "assumed", empirical_synthetic: "synthetic" }[/** @type {"real"} */ (current.kind)] ?? "assumed") : "assumed";
@@ -264,16 +273,25 @@ export function presentPopulationTab(bundle) {
       changed: null,
     };
   });
-  const outcomeCounts = object(current?.counts);
+  const outcomeCounts = object(heldCounts);
+  // A cohort the engine built says it in measures: everyone who met every rule, everyone who met or could not be judged on each, and
+  // how many were looked at.
+  const cohortMeasure = (/** @type {string} */ name) => numeric(object(list(result?.measures).find((entry) => object(entry).name === name)).value);
+  const strict = cohortMeasure("cohort_size_strict");
+  const lenient = cohortMeasure("cohort_size_lenient");
+  const looked = numeric(diagnostics.startingRows);
   const outcome = current && (numeric(outcomeCounts.eligible ?? outcomeCounts.kept) !== null
     || numeric(outcomeCounts.insufficient ?? outcomeCounts.indeterminate) !== null || numeric(outcomeCounts.ineligible ?? outcomeCounts.excluded) !== null)
     ? {
       eligible: numeric(outcomeCounts.eligible ?? outcomeCounts.kept),
       insufficient: numeric(outcomeCounts.insufficient ?? outcomeCounts.indeterminate),
       ineligible: numeric(outcomeCounts.ineligible ?? outcomeCounts.excluded),
-    } : null;
+    } : (strict !== null && lenient !== null && looked !== null ? { eligible: strict, insufficient: lenient - strict, ineligible: looked - lenient } : null);
   const profile = object(current?.profile);
-  const profileView = profileRows(profile).map((entry, index) => {
+  // A generated population is described variable by variable by the engine (`diagnostics.profile`); a real cohort is compared with the
+  // published one, row by row.
+  const generated = current && current.kind !== "real" ? generatedProfileRows(diagnostics.profile) : null;
+  const profileView = generated ?? profileRows(profile).map((entry, index) => {
     const row = object(entry);
     const smd = finite(row.smd ?? row.smdAdjusted);
     return {
@@ -286,13 +304,20 @@ export function presentPopulationTab(bundle) {
       note: text(row.note),
     };
   });
+  // What limits a cohort is what each rule would do on its own, not what is left for it after the rules before it: the engine states
+  // both, and the independent count is the one that ranks.
+  const impact = new Map(list(diagnostics.criterionImpact).map(object).map((entry) => [String(entry.rule), entry]));
+  const alone = (/** @type {Record<string, any>} */ row) => {
+    const own = impact.get(row.code);
+    return own ? { excluded: numeric(own.failsAlone) ?? 0, unknown: numeric(own.indeterminateAlone) ?? 0 } : { excluded: row.excluded ?? 0, unknown: row.unknown ?? 0 };
+  };
   const blockers = rows
-    .map((row) => ({ row, hit: (row.excluded ?? 0) + (row.unknown ?? 0) }))
+    .map((full) => { const row = { ...full, ...alone(full) }; return { row, hit: row.excluded + row.unknown }; })
     .filter((entry) => entry.hit > 0)
     .sort((a, b) => b.hit - a.hit)
     .slice(0, 3)
     .map(({ row }) => ({
-      code: row.code, label: row.name,
+      code: row.code, label: row.name, quote: row.quote,
       text: (row.unknown ?? 0) >= (row.excluded ?? 0) ? `无法判断 ${row.unknown}` : `排除 ${row.excluded}`,
       tone: (row.unknown ?? 0) >= (row.excluded ?? 0) ? "attention" : "neutral",
     }));
@@ -323,10 +348,20 @@ export function presentPopulationTab(bundle) {
     })),
     outcome,
     profile: profileView,
-    profileNote: profileView.length ? "标准化差异 |SMD| 超过 0.1 的特征已标出，它只说明两个人群不同，不说明谁对。" : null,
+    // `generated`: one row per variable, set beside what came out of it; `comparison`: ours against the published cohort.
+    profileKind: generated ? "generated" : profileView.length ? "comparison" : null,
+    profileNote: generated ? null : profileView.length ? "标准化差异 |SMD| 超过 0.1 的特征已标出，它只说明两个人群不同，不说明谁对。"
+      // A generated population whose result has no profile was generated before the engine wrote one: one sentence, and the way to get it.
+      : current && current.kind !== "real" && result ? PROFILE_MISSING_SENTENCE : null,
+    profileMissing: Boolean(current && current.kind !== "real" && result && !generated),
+    // How it was made and what it may be used for: the two things a reader needs before using a synthetic table.
+    method: current ? (POPULATION_METHOD_WORDS[String(current.kind)] ?? null) : null,
+    allowedUses: current && current.kind !== "real"
+      ? list(current.allowedUses).map(String).map((use) => ({ key: use, label: (/** @type {Record<string, string>} */ (VCR_SYNTHETIC_USE_LABELS_ZH))[use] ?? use })) : [],
+    constraints: current && current.kind !== "real" ? constraintRows(diagnostics.constraintViolations) : [],
     unknownReasons: [...reasons.values()].map((reason) => ({ key: reason.key, label: reason.label, detail: reason.detail, count: reason.count })),
     blockers,
-    quality: current ? qualityReportView(current.quality) : null,
+    quality: current ? qualityReportView(Object.keys(object(current.quality)).length ? current.quality : diagnostics.quality) : null,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier }) : null,
     conclusion: result?.conclusion ?? null,
     headline: outcome && total !== null && outcome.eligible !== null && outcome.insufficient !== null

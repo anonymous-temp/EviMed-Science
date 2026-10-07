@@ -380,6 +380,97 @@ test("a registered prediction is shown as the numbers it predicted, never as the
   assert.doesNotMatch(shown, /res_|scn_|9f9f|hash|resultId|scenarioId/, "no result id, no scenario id, no hash");
 });
 
+/** The profile blocks the engine writes beside a generated table (R10 / package ENG): a scenario population, and an empirical one with small cells withheld. */
+const scenarioProfile = [
+  { variable: "age", label: "年龄", kind: "continuous", declared: { family: "normal", params: { mean: 63, sd: 9 }, constraints: [{ kind: "bounds", min: 18, max: 95 }, { kind: "rule", name: "adult", rule: {} }] },
+    n: 1000, missing: 0, mean: 63.01, sd: 8.935, median: 63.05, q1: 56.97, q3: 68.57, min: 35.92, max: 91.06,
+    histogram: { breaks: [35.92, 43.79, 51.67, 59.55, 67.43, 75.31, 83.18, 91.06], counts: [11, 96, 233, 358, 220, 68, 14] } },
+  { variable: "female", label: "女性", kind: "binary", declared: { family: "bernoulli", params: { prob: 0.45 }, constraints: [] }, n: 1000, missing: 0,
+    levels: [{ level: "0", n: 559, p: 0.559 }, { level: "1", n: 441, p: 0.441 }] },
+  { variable: "stage", label: null, kind: "categorical", declared: { family: "categorical", params: { probs: [0.5, 0.3, 0.2] }, constraints: [] }, n: 1000, missing: 0,
+    levels: [{ level: "1", n: 494, p: 0.494 }, { level: "2", n: 324, p: 0.324 }, { level: "3", n: 182, p: 0.182 }] },
+  { variable: "bmi", label: null, kind: "continuous", declared: { family: "lognormal", params: { meanlog: 3.3, sdlog: 0.15 }, constraints: [] }, n: 1000, missing: 94,
+    mean: 27.23, sd: 4.158, median: 26.84, q1: 24.26, q3: 29.88, min: 17.45, max: 40.88, histogram: { breaks: [17.45, 20.8, 24.15, 27.49, 30.84, 34.19, 37.53, 40.88], counts: [40, 180, 280, 225, 120, 45, 16] } },
+];
+const empiricalProfile = [
+  { variable: "age", label: null, kind: "continuous", declared: null, n: 320, missing: 0, mean: 59.75, sd: 9.599, median: 60.36, q1: 53.24, q3: 66.4, min: 30.24, max: 87.71,
+    histogram: { breaks: [30.24, 38.45, 46.66, 54.87, 63.08, 71.29, 79.5, 87.71], counts: [null, 28, 60, 108, 88, 25, null] }, suppressed: ["histogram"] },
+  { variable: "grp", label: null, kind: "categorical", declared: null, n: 320, missing: 0, suppressed: ["levels"],
+    levels: [{ level: "a", n: 148, p: 0.4625 }, { level: "b", n: 109, p: 0.3406 }, { level: "c", n: 49, p: 0.1531 }, { level: "d", n: null, p: null, suppressed: true }, { level: "other", n: null, p: null, suppressed: true }] },
+];
+const populationBundle = (/** @type {Record<string, any>} */ population, /** @type {Record<string, any> | null} */ resultRow) => ({ ...emptyBundle(),
+  populations: [{ id: "pop_1", version: 1, kind: "scenario", name: "情景人群", counts: {}, waterfall: [], profile: {}, quality: {}, allowedUses: ["design", "feasibility"], resultId: "res_pop", reviewState: "ai_set", ...population }],
+  results: resultRow ? [resultRow] : [], allResults: resultRow ? [resultRow] : [] });
+const populationResult = (/** @type {Record<string, any>} */ diagnostics) => ({ id: "res_pop", version: 1, kind: "population", conclusion: "estimable", reviewState: "ai_set", executionId: null,
+  counts: { realPatients: 0, generatedRecords: 1000 }, measures: [], diagnostics });
+
+test("a generated population's tab says what the study set and what came out, variable by variable, from the profile the engine wrote", () => {
+  const tab = presentPopulationTab(populationBundle({}, populationResult({ profile: scenarioProfile, constraintViolations: [{ name: "adult", violations: 0 }, { name: "bounded", violations: 3 }] })));
+  assert.equal(tab.profileKind, "generated");
+  assert.equal(tab.profileNote, null);
+  assert.equal(tab.profileMissing, false);
+  assert.equal(tab.method, "按设定的分布和相关性抽样");
+  assert.deepEqual(tab.allowedUses, [{ key: "design", label: "设计" }, { key: "feasibility", label: "可行性" }]);
+  assert.deepEqual(tab.constraints, [{ label: "adult", violations: 0 }, { label: "bounded", violations: 3 }]);
+  const [age, female, stage, bmi] = tab.profile;
+  assert.equal(age.label, "年龄");
+  assert.equal(age.declaredText, "正态分布，均数 63、标准差 9；限定在 18–95；满足「adult」");
+  assert.equal(age.generatedText, "均数 63.01，标准差 8.935，中位 63.05（四分位 56.97–68.57），范围 35.92–91.06");
+  assert.deepEqual(age.histogram.counts, [11, 96, 233, 358, 220, 68, 14], "the engine's seven bins, passed through");
+  assert.equal(age.histogram.breaks.length, 8);
+  assert.equal(female.declaredText, "二分类，取 1 的概率 45%");
+  assert.equal(female.generatedText, "女性 44.1%");
+  assert.deepEqual(female.levels.map((level) => [level.label, level.percent]), [["否", 55.9], ["是", 44.1]]);
+  assert.equal(stage.label, "stage", "a variable with no label is called by its name");
+  assert.equal(stage.declaredText, "多分类，各水平的概率 0.5、0.3、0.2");
+  assert.equal(stage.generatedText, "1 49.4%，2 32.4%，3 18.2%");
+  assert.equal(bmi.declaredText, "对数正态分布，对数均值 3.3、对数标准差 0.15");
+  assert.equal(bmi.missingText, "缺失 94 条（9.4%）");
+  assert.equal(tab.counts.generatedRecords, 1000);
+});
+
+test("a generated population's small cells stay withheld on the page, and one without a profile offers to be generated again — it computes nothing in the control plane", () => {
+  const empirical = presentPopulationTab(populationBundle({ kind: "empirical_synthetic", allowedUses: ["design"] }, populationResult({ profile: empiricalProfile })));
+  assert.equal(empirical.method, "按真实数据经验合成");
+  const [age, group] = empirical.profile;
+  assert.equal(age.declaredText, null, "an empirical table declares nothing");
+  assert.deepEqual(age.histogram.counts, [null, 28, 60, 108, 88, 25, null], "a hidden bin is still hidden");
+  assert.deepEqual(group.levels.filter((level) => level.suppressed).map((level) => [level.level, level.n, level.percent]), [["d", null, null], ["other", null, null]]);
+  assert.match(group.generatedText, /a 46.3%，b 34.1%，c 15.3%，其余小样本已隐藏/);
+  // a result from before the engine wrote a profile (the owner's population): one sentence, no rows, nothing worked out here
+  const before = presentPopulationTab(populationBundle({}, populationResult({ valueSource: "synthetic" })));
+  assert.deepEqual(before.profile, []);
+  assert.equal(before.profileMissing, true);
+  assert.match(String(before.profileNote), /点“重新生成”/);
+  assert.equal(before.profileKind, null);
+  // a population that has not been computed has nothing to apologise for
+  const waiting = presentPopulationTab(populationBundle({ resultId: null }, null));
+  assert.equal(waiting.profileMissing, false);
+  assert.equal(waiting.profileNote, null);
+  // a profile with an entry the page cannot read is no profile
+  const broken = presentPopulationTab(populationBundle({}, populationResult({ profile: [scenarioProfile[0], { variable: "x", kind: "made_up" }] })));
+  assert.equal(broken.profileMissing, true);
+});
+
+test("a cohort the engine built is read from its result: the waterfall, the three outcomes and the rules that limit it on their own", () => {
+  const steps = [{ rule: "I1", kept: 900, excluded: 100, indeterminate: 0 }, { rule: "I2", kept: 600, excluded: 100, indeterminate: 200 }, { rule: "E1", kept: 580, excluded: 20, indeterminate: 0 }];
+  const impact = [{ rule: "I1", failsAlone: 100, indeterminateAlone: 0 }, { rule: "I2", failsAlone: 150, indeterminateAlone: 260 }, { rule: "E1", failsAlone: 30, indeterminateAlone: 5 }];
+  const row = { ...populationResult({ waterfall: steps, criterionImpact: impact, startingRows: 1000 }),
+    measures: [{ name: "cohort_size", value: 580 }, { name: "cohort_size_strict", value: 580 }, { name: "cohort_size_lenient", value: 790 }] };
+  const bundle = { ...populationBundle({ kind: "real", allowedUses: [] }, row), criteria: [
+    { id: "c1", ordinal: 1, kind: "inclusion", criterionType: "diagnosis", sourceText: "确诊 NSCLC", sourceLocator: {}, reviewState: "ai_set" },
+    { id: "c2", ordinal: 2, kind: "inclusion", criterionType: "biomarker", sourceText: "EGFR 阳性", sourceLocator: {}, reviewState: "ai_set" },
+    { id: "c3", ordinal: 3, kind: "exclusion", criterionType: "comorbidity", sourceText: "无活动性脑转移", sourceLocator: {}, reviewState: "ai_set" }] };
+  const tab = presentPopulationTab(bundle);
+  assert.deepEqual(tab.attrition.map((step) => [step.code, step.remaining, step.unknown, step.removed]), [["I1", 900, 0, 100], ["I2", 600, 200, 100], ["E1", 580, 0, 20]]);
+  assert.deepEqual(tab.outcome, { eligible: 580, insufficient: 210, ineligible: 210 });
+  assert.deepEqual(tab.criteria.map((criterion) => [criterion.code, criterion.kept, criterion.excluded, criterion.unknown]), [["I1", 900, 100, 0], ["I2", 600, 100, 200], ["E1", 580, 20, 0]]);
+  assert.deepEqual(tab.blockers.map((blocker) => [blocker.code, blocker.text, blocker.quote]), [["I2", "无法判断 260", "EGFR 阳性"], ["I1", "排除 100", "确诊 NSCLC"], ["E1", "排除 30", "无活动性脑转移"]],
+    "ranked by what each rule does alone — I2 would drop 410 on its own — not by what is left for it after the rules before it");
+  assert.equal(tab.method, null, "a real cohort is not generated");
+  assert.deepEqual(tab.allowedUses, []);
+});
+
 test("the sentence about the designs names a range and never a winner", () => {
   const { designs } = presentDesigns(designsBundle());
   const sentence = designsSentence(designs);

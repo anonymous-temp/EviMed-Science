@@ -267,7 +267,12 @@
       "note": null
     }
   ],
+  "profileKind": "comparison",
   "profileNote": "标准化差异 |SMD| 超过 0.1 的特征已标出，它只说明两个人群不同，不说明谁对。",
+  "profileMissing": false,
+  "method": null,
+  "allowedUses": [],
+  "constraints": [],
   "unknownReasons": [
     {
       "key": "stale_evidence",
@@ -286,18 +291,21 @@
     {
       "code": "I3",
       "label": "既往治疗",
+      "quote": "一线接受过含铂双药化疗，可联合 PD-1/PD-L1 抑制剂",
       "text": "排除 611",
       "tone": "neutral"
     },
     {
       "code": "E1",
       "label": "合并症",
+      "quote": "活动性脑转移",
       "text": "无法判断 402",
       "tone": "attention"
     },
     {
       "code": "I2",
       "label": "体能状态",
+      "quote": "ECOG 体能评分 0–1（近 4 周内）",
       "text": "无法判断 188",
       "tone": "attention"
     }
