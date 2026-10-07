@@ -294,7 +294,10 @@ test("the project page, its tabs and its actions answer in the spec's shapes fro
   const patched = (await call("PATCH", `/api/geo/projects/${id}`, { body: { coverageDays: 180, engines: ["deepseek"], status: "paused" } })).payload.data;
   assert.deepEqual([patched.coverageDays, patched.engines, patched.status], [180, ["deepseek"], "paused"]);
   refused(await call("PATCH", `/api/geo/projects/${id}`, { body: { status: "gone" } }), 400, "geo_status_invalid");
-  refused(await call("PATCH", `/api/geo/projects/${id}`, { body: { name: "x" } }), 400, "geo_payload_invalid");
+  // A field the route does not know is refused; `name` is known since 2026-10-07 (a rename), and where no composition gives the
+  // hook that renames the owner's project (this one does not) it says so rather than change half of a name.
+  refused(await call("PATCH", `/api/geo/projects/${id}`, { body: { title: "x" } }), 400, "geo_payload_invalid");
+  refused(await call("PATCH", `/api/geo/projects/${id}`, { body: { name: "x" } }), 503, "geo_unavailable");
   void questions;
 });
 
