@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { MIN_PASSWORD_LENGTH } from "@evimed/domain";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { EviMedMark } from "@/components/brand/EviMedMark";
 import {
@@ -15,6 +15,7 @@ import {
   type WebAuthMethods,
 } from "@/lib/apiClient";
 import { Button, buttonClasses } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { PageTitle } from "@/components/layout/PageTitle";
 
@@ -27,6 +28,8 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
+  // The password is shown only while the person asks for it, and only until they leave the page.
+  const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -124,10 +127,20 @@ function signInMessage(error: unknown): string {
             <Input
               id="login-password"
               label="密码"
-              type="password"
+              type={revealed ? "text" : "password"}
               autoComplete={registering ? "new-password" : "current-password"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              // One name for the button and a pressed state, not a name that flips under the reader: 「显示密码」, pressed while it is shown.
+              trailing={(
+                <IconButton
+                  icon={revealed ? EyeOff : Eye}
+                  label="显示密码"
+                  size="sm"
+                  aria-pressed={revealed}
+                  onClick={() => setRevealed((value) => !value)}
+                />
+              )}
             />
             <Button type="submit" size="lg" loading={submitting} className="w-full">
               {registering ? "注册并进入" : "登录"}

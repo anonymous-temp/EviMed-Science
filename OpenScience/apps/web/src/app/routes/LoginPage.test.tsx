@@ -58,6 +58,36 @@ describe("LoginPage", () => {
     mocks.registerWeb.mockResolvedValue(undefined);
   });
 
+  // Audit B01: a six-character minimum typed blind on a phone. The field's own button shows it, and hides it again.
+  it("shows the password only when asked, keeps what was typed, and hides it again", async () => {
+    renderLogin();
+    const password = await screen.findByLabelText("密码");
+    await userEvent.type(password, "secret");
+    expect(password).toHaveAttribute("type", "password");
+    const reveal = screen.getByRole("button", { name: "显示密码" });
+    expect(reveal).toHaveAttribute("aria-pressed", "false");
+    // It is a button inside the field, not a second way to submit the form.
+    expect(reveal).toHaveAttribute("type", "button");
+    await userEvent.click(reveal);
+    expect(password).toHaveAttribute("type", "text");
+    expect(password).toHaveValue("secret");
+    expect(screen.getByRole("button", { name: "显示密码" })).toHaveAttribute("aria-pressed", "true");
+    expect(mocks.loginWeb).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "显示密码" }));
+    expect(password).toHaveAttribute("type", "password");
+    expect(password).toHaveValue("secret");
+  });
+
+  it("has the same button on the registration form", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: true });
+    renderLogin();
+    await userEvent.click(await screen.findByRole("button", { name: "还没有账号？注册一个" }));
+    await userEvent.type(screen.getByLabelText("密码"), "secret");
+    await userEvent.click(screen.getByRole("button", { name: "显示密码" }));
+    expect(screen.getByLabelText("密码")).toHaveAttribute("type", "text");
+    expect(screen.getByLabelText("密码")).toHaveAttribute("autocomplete", "new-password");
+  });
+
   it("opens as a Chinese username/password login and enters the workbench", async () => {
     renderLogin();
 
@@ -71,16 +101,19 @@ describe("LoginPage", () => {
 
   // 2026-09-23 plan §5.10, mockup m12: the brand once, two labelled fields and
   // one button. No eyebrow, no sentence about the workspace, no disclaimer,
-  // no icon or placeholder inside a field.
+  // no icon or placeholder inside a field — the one icon in a field is the
+  // password's own 「显示密码」 button, a control and not a decoration.
   it("shows the brand once, the fields by their labels alone, and nothing else", async () => {
     const { container } = renderLogin();
     const account = await screen.findByLabelText("账号");
     expect(screen.getAllByText("EviMed")).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1, name: "登录" })).toBeInTheDocument();
-    for (const field of [account, screen.getByLabelText("密码")]) {
-      expect(field).not.toHaveAttribute("placeholder");
-      expect(field.parentElement?.querySelector("svg")).toBeNull();
-    }
+    const password = screen.getByLabelText("密码");
+    for (const field of [account, password]) expect(field).not.toHaveAttribute("placeholder");
+    expect(account.parentElement?.querySelector("svg")).toBeNull();
+    const icons = [...(password.parentElement?.querySelectorAll("svg") ?? [])];
+    expect(icons).toHaveLength(1);
+    expect(icons[0].closest("button")).toHaveAccessibleName("显示密码");
     expect(container.textContent).not.toMatch(/循证医学科研智能体|个人知识库|科研工作空间|不替代临床诊疗/);
     // The form's primary button is the one 44 px control.
     expect(screen.getByRole("button", { name: "登录" })).toHaveClass("h-form-primary");

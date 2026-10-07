@@ -54,6 +54,8 @@ export function Drawer({
       const layer = event.target instanceof Element ? event.target.closest('[aria-modal="true"]') : null;
       if (layer && layer !== panelRef.current) return;
       if (event.key === "Escape") {
+        // Handled: another listener on the document (the sidebar's, below `lg`) must not close its own layer with the same press.
+        event.preventDefault();
         event.stopPropagation();
         close.current();
       } else {

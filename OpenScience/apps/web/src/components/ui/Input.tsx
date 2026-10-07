@@ -80,25 +80,38 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: ReactNode;
   /** Error message shown under the control; also switches to error styling. */
   error?: ReactNode;
+  /**
+   * A control inside the field's right edge — the password field's 「显示密码」.
+   * One `IconButton` `size="sm"` (28 in a 36 field); the text stops before it.
+   */
+  trailing?: ReactNode;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, error, id, className, ...rest },
+  { label, error, id, className, trailing, ...rest },
   ref,
 ) {
   const autoId = useId();
   const inputId = id ?? autoId;
   const hasError = error != null;
+  const control = (
+    <input
+      ref={ref}
+      id={inputId}
+      aria-invalid={hasError || undefined}
+      aria-errormessage={hasError ? `${inputId}-error` : undefined}
+      className={inputClasses({ error: hasError, className: cn(trailing != null && "pr-11", className) })}
+      {...rest}
+    />
+  );
   return (
     <FieldShell id={inputId} label={label} error={error}>
-      <input
-        ref={ref}
-        id={inputId}
-        aria-invalid={hasError || undefined}
-        aria-errormessage={hasError ? `${inputId}-error` : undefined}
-        className={inputClasses({ error: hasError, className })}
-        {...rest}
-      />
+      {trailing == null ? control : (
+        <div className="relative">
+          {control}
+          <div className="absolute inset-y-0 right-1 flex items-center">{trailing}</div>
+        </div>
+      )}
     </FieldShell>
   );
 });
