@@ -178,7 +178,8 @@ export function MemoryHubPage() {
     methods: loading ? undefined : practices.methods.length + practices.handbooks.length,
     growth: undefined,
   };
-  const tabs: TabItem<MemoryTab>[] = (Object.keys(TAB_NAMES) as MemoryTab[]).map((value) => ({ value, label: TAB_NAMES[value], count: counts[value] }));
+  // A tab with nothing in it carries no number: 「做法 0」 is a statistic about an empty list, which its empty state already says.
+  const tabs: TabItem<MemoryTab>[] = (Object.keys(TAB_NAMES) as MemoryTab[]).map((value) => ({ value, label: TAB_NAMES[value], count: counts[value] || undefined }));
 
   const opened: FactItem | PracticeItem | null = openKey
     ? [...facts, ...everyPractice.methods, ...everyPractice.handbooks].find((item) => item.key === openKey) ?? null
@@ -264,7 +265,10 @@ export function MemoryHubPage() {
       {/* One row: the tabs, and the search box at its end; on a phone the box takes its own line. */}
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-border">
         <Tabs label="记忆" items={tabs} value={tab} onChange={setTab} className="min-w-0 flex-1 border-b-0" />
-        {tab !== "growth" && <SearchInput label="搜索记忆" value={query} onChange={(event) => setQuery(event.target.value)} className="mb-1.5 w-full sm:w-60" />}
+        {tab !== "growth"
+          ? <SearchInput label="搜索记忆" value={query} onChange={(event) => setQuery(event.target.value)} className="mb-1.5 w-full sm:w-60" />
+          // 成长 has nothing to search, and the row keeps its height so the rule under the tabs does not jump between tabs.
+          : <div aria-hidden="true" className="mb-1.5 h-control" />}
       </div>
       {unread.length > 0 && <LoadError className="mt-4" message="没有读到全部记忆。" onRetry={reload} />}
       {searchFailed && <LoadError className="mt-4" message="搜索没有完成。" onRetry={() => setSearchAttempt((value) => value + 1)} />}

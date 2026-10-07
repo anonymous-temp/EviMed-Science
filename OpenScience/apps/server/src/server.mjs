@@ -109,7 +109,7 @@ import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
 import { createOwnedHandbookSelector, createOwnedResearchContext, remainingHandbookPromptBytes } from "./ownedResearchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { methodObservationSessionsForRun, recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
-import { LearningMetrics, learningLedgerCounts, learningMetricFamilies } from "./learningMetrics.mjs";
+import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
@@ -1343,8 +1343,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     store, service: learningService, maxJsonBytes: config.maxJsonBytes,
     evaluationUsers: config.learningEvaluationUsers,
     trialTtlMs: config.learningTrialTtlMs,
-    // The loop's own counts beside the list are not wired: the memory page that read them no longer shows a count (2026-10-07), and a
-    // query nothing reads is a cost on every first page. The route still carries them for a consumer that asks (`summary`).
+    // Whether the loop is turning for this account, beside its list (§13).
+    summary: productDatabase && config.learningEnabled ? (userId) => learningSummary(productDatabase, userId) : null,
     // 「从哪里学到的」: a lesson's run, live or kept when its project was deleted (`agentRuns` is composed further down; asked per request).
     resolveRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
   });

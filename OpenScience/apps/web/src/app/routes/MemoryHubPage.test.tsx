@@ -560,6 +560,16 @@ describe("记忆胶囊", () => {
     expect(await screen.findByRole("dialog", { name: "分享与导入" })).toBeInTheDocument();
   });
 
+  it("carries no number on a tab with nothing in it", async () => {
+    fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
+    fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
+    listAllMethods.mockResolvedValue([]);
+    listAllHandbooks.mockResolvedValue([]);
+    open();
+    await screen.findByText("还没有关于你的记忆");
+    expect(within(screen.getByRole("tablist", { name: "记忆" })).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你", "项目", "做法", "成长"]);
+  });
+
   it("says what will appear on a tab that is empty, and nothing is a 「还没有记忆」 for a tab that could not be read", async () => {
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
