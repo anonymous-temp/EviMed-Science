@@ -272,7 +272,11 @@ describe("人群定义库 on the module home", () => {
   it("says so when the library is empty, and says the module is off rather than empty when it is", async () => {
     installVcrServer(network.productRequest, { "GET /vcr/definitions": { definitions: [] } });
     const { unmount } = draw(<VcrDefinitionsPanel />);
-    expect(await screen.findByText("定义库里还没有定义")).toBeInTheDocument();
+    expect(await screen.findByText("还没有人群定义")).toBeInTheDocument();
+    // It says where a definition comes from and why none exists yet, and offers no button of its own.
+    expect(screen.getByText(/点“存入定义库”/)).toBeInTheDocument();
+    expect(screen.getByText(/公开资料（T0）的研究用的是生成人群，不能存入/)).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
     unmount();
     installVcrServer(network.productRequest, { "GET /vcr/definitions": () => { throw Object.assign(new Error("off"), { status: 404, code: "vcr_not_enabled" }); } });
     draw(<VcrDefinitionsPanel />);

@@ -31,6 +31,16 @@ export function twinLabelOf(model: Pick<VcrModelCard, "twin" | "twinLabel">): st
   return model.twin ? (VCR_TWIN_LABELS_ZH as Record<string, string>)[model.twin] ?? null : null;
 }
 
+/** What 「参考用例通过」 does and does not say — once above the method table, not in every row. */
+const REFERENCE_CASE_SENTENCE = "“参考用例通过”只说明算法在参考数据上算对了，不说明它适合你的研究。";
+
+/** The one sentence over the method table: the assumptions nobody has itemised yet (when none is), and what a passed reference case means. */
+function methodsNote(methods: ReadonlyArray<{ assumptions?: unknown[] | null }>): string {
+  return methods.some((method) => method.assumptions?.length)
+    ? REFERENCE_CASE_SENTENCE
+    : `方法的适用假设还没有逐项整理。${REFERENCE_CASE_SENTENCE}`;
+}
+
 const VALIDATION_WORD = { passed: "通过", partial: "部分", none: "无" } as const;
 
 /**
@@ -131,6 +141,7 @@ export function VcrModelsPanel() {
 
         {(filter === "all" || filter === "methods") && data.methods.length > 0 && (
           <VcrSection title="方法包" meta={`${data.methods.length}`}>
+            <p data-vcr-methods-note="" className="mb-3 text-ui text-text-2">{methodsNote(data.methods)}</p>
             <DataTable
               label="方法包"
               minWidth="min-w-[36rem]"
@@ -146,10 +157,11 @@ export function VcrModelsPanel() {
                       {row.validation?.ciUrl && <a className="text-link hover:underline" href={row.validation.ciUrl} target="_blank" rel="noreferrer">查看验证来源</a>}</div>
                     : <span className="text-text-3">当前版本尚无已核对的参考用例</span>,
                 },
-                { key: "assumptions", header: "适用假设", cell: (row) => row.assumptions?.length
+                // Not drawn while no method has one (said once above the table); drawn when some do, and a row without says 未整理.
+                { key: "assumptions", header: "适用假设", isEmpty: (row) => !row.assumptions?.length, cell: (row) => row.assumptions?.length
                   ? <details><summary className="cursor-pointer text-link">查看假设及来源</summary><ul className="mt-2 flex flex-col gap-2">
                     {row.assumptions.map((item, index) => <li key={index}><p>{item.text}</p><p className="text-text-3">{item.source}</p></li>)}
-                  </ul></details> : <span className="text-text-3">尚未提供已核对的假设说明</span> },
+                  </ul></details> : <span className="text-text-3">未整理</span> },
                 { key: "usedIn", header: "用在", isEmpty: (row) => !row.usedIn, cell: (row) => row.usedIn ?? "—" },
               ]}
               rows={data.methods}
@@ -204,7 +216,6 @@ function ModelDetail({ model }: { model: VcrModelCard }) {
           ...text(model.family).map((value) => ({ label: "类型", value })),
           ...text(model.version).map((value) => ({ label: "版本", value })),
           ...text(model.provider).map((value) => ({ label: "提供方", value })),
-          ...text(model.interface).map((value) => ({ label: "执行接口", value })),
           ...text(model.shapeLabel).map((value) => ({ label: "调用接口", value })),
           ...(model.events && model.events.length > 0 ? [{ label: "读取的事件", value: model.events.join("、") }] : []),
           ...text(model.horizon).map((value) => ({ label: "最长推演时间", value })),

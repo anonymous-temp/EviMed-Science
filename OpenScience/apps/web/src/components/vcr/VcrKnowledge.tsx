@@ -492,7 +492,15 @@ export function VcrDefinitionsPanel() {
   if (state.kind === "error" && state.off) return <p className="py-12 text-center text-ui text-text-3">{VCR_OFF_SENTENCE}</p>;
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
-  if (state.data.length === 0) return <EmptyState title="定义库里还没有定义" />;
+  if (state.data.length === 0) {
+    // No button: the library is filled from a study (「存入定义库」 on its 人群 page, for a real cohort with rules), and a button here would have nothing to save.
+    return (
+      <EmptyState
+        title="还没有人群定义"
+        description="人群定义来自研究：在一项用你自己的数据筛出真实队列的研究里，打开“人群”页，点“存入定义库”。之后别的研究可以直接使用它，也可以比较它的不同版本。公开资料（T0）的研究用的是生成人群，不能存入。"
+      />
+    );
+  }
   return (
     <ul data-vcr-library="" className="divide-y divide-border">
       {state.data.map((entry) => <LibraryRow key={entry.id} entry={entry} />)}

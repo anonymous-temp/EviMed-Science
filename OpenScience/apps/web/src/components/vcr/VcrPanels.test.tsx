@@ -98,7 +98,10 @@ describe("模型与方法", () => {
     expect(facts.getByText("含中国人群的研究")).toBeInTheDocument();
     expect(facts.getByText("适用人群")).toBeInTheDocument();
     expect(facts.getByText("提供方")).toBeInTheDocument();
-    expect(facts.getByText("vcr-engine patients.time_to_event")).toBeInTheDocument();
+    // 「执行接口」 was the engine's own route (`vcr-engine patients.time_to_event`): the reader is told the call shape and nothing of the engine.
+    expect(facts.queryByText("执行接口")).toBeNull();
+    expect(facts.queryByText(/vcr-engine/)).toBeNull();
+    expect(facts.getByText("调用接口")).toBeInTheDocument();
     expect(facts.getByText("拟合预测")).toBeInTheDocument();
     expect(facts.getByText("中位 PFS、形状参数")).toBeInTheDocument();
     expect(facts.getByText("缺项不插补。")).toBeInTheDocument();
@@ -109,6 +112,32 @@ describe("模型与方法", () => {
     expect(facts.getByText("还缺的证据")).toBeInTheDocument();
     expect(facts.getByText("敏感性分析")).toBeInTheDocument();
     expect(facts.getByRole("link", { name: "EV-201 二线 NSCLC：单臂 II 期还是随机" })).toHaveAttribute("href", "/app/virtual-research/std_1");
+  });
+
+  it("says once over the method table what a passed reference case does not mean, and what has not been itemised — and draws no 适用假设 column while no method has one", async () => {
+    draw(<VcrModelsPanel />);
+    await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
+    const note = document.querySelector("[data-vcr-methods-note]") as HTMLElement;
+    expect(note).toHaveTextContent("方法的适用假设还没有逐项整理。“参考用例通过”只说明算法在参考数据上算对了，不说明它适合你的研究。");
+    expect(screen.queryByRole("columnheader", { name: "适用假设" })).toBeNull();
+    expect(screen.queryByText("尚未提供已核对的假设说明")).toBeNull();
+    // The method column says the endpoints in words, never the endpoint ids.
+    const table = screen.getByRole("table", { name: "方法包" });
+    expect(table.textContent).not.toMatch(/time_to_event|continuous|binary/);
+    expect(within(table).getAllByText(/事件时间|二分类|连续/).length).toBeGreaterThan(0);
+  });
+
+  it("draws the 适用假设 column once some method has assumptions, and a row without says 未整理", async () => {
+    const payload = fixture("ev201/models.json");
+    payload.methods[0].assumptions = [{ text: "事件在随访内独立发生", source: "方法说明" }];
+    server = installVcrServer(network.productRequest, { "GET /vcr/models": payload });
+    draw(<VcrModelsPanel />);
+    await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
+    expect(screen.getByRole("columnheader", { name: "适用假设" })).toBeInTheDocument();
+    expect(document.querySelector("[data-vcr-methods-note]")).toHaveTextContent("“参考用例通过”只说明算法在参考数据上算对了，不说明它适合你的研究。");
+    expect(document.querySelector("[data-vcr-methods-note]")).not.toHaveTextContent("还没有逐项整理");
+    const withNone = document.querySelector(`[data-vcr-method='${payload.methods[1].id}']`) as HTMLElement;
+    expect(withNone).toHaveTextContent("未整理");
   });
 
   it("opens another model's card, and lists the method packages by their own rows", async () => {
@@ -225,6 +254,58 @@ describe("试验先例", () => {
     expect(within(opened).getByText("人群（标准化）").nextElementSibling).toHaveTextContent("非小细胞肺癌");
     expect(opened.querySelector("[data-vcr-eligibility-text]")).toHaveTextContent("组织学或细胞学确诊的晚期 NSCLC；一线含铂化疗后进展。");
     expect(within(opened).getByRole("link", { name: /打开登记记录/ })).toHaveAttribute("href", "https://example.org/CTR20990001");
+  });
+
+  it("says a trial's design in words — 「3 期 · 随机 · 开放」 — and never as the registry's enumerations", async () => {
+    draw(<VcrPrecedentsPanel />);
+    const row = await waitFor(() => {
+      const found = document.querySelector("[data-vcr-precedent='CTR20990001']");
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(row).toHaveTextContent("3 期 · 随机 · 开放");
+    expect(document.body.textContent).not.toMatch(/PHASE\d|RANDOMIZED|QUADRUPLE/);
+  });
+
+  it("puts the search and the precedents first and the registries' coverage one click under them, summed up in a phrase that counts", async () => {
+    const payload = fixture("ev201/precedents.json");
+    payload.registryCoverage = [
+      { key: "ctgov", label: "ClinicalTrials.gov", configured: true, coverage: "structured", availability: "available", reason: null, lastCheckedAt: null },
+      { key: "ctis", label: "EU CTIS", configured: true, coverage: "structured", availability: "not_queried", reason: null, lastCheckedAt: null },
+      { key: "chictr", label: "ChiCTR", configured: false, coverage: "list_only", availability: "unavailable", reason: "registry_not_configured", lastCheckedAt: null },
+      { key: "ictrp", label: "WHO ICTRP", configured: false, coverage: "unsupported", availability: "unavailable", reason: "registry_terms_forbid_commercial_use", lastCheckedAt: null },
+    ];
+    installVcrServer(network.productRequest, { "GET /vcr/precedents": payload });
+    const { container } = draw(<VcrPrecedentsPanel />);
+    const table = await screen.findByRole("table", { name: "试验先例" });
+    const summary = await screen.findByText("注册源覆盖");
+    const details = summary.closest("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(within(details).getByText("2 个来源可查，2 个仅列表或未接入")).toBeInTheDocument();
+    // Order: the search, the table, then the coverage.
+    const order = [screen.getByLabelText("搜索先例"), table, details];
+    for (let index = 1; index < order.length; index += 1) {
+      expect(order[index - 1].compareDocumentPosition(order[index]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    // The commercial-use limit is one click away, and is not read as 「没有记录」.
+    await userEvent.click(summary);
+    expect(details.open).toBe(true);
+    expect(within(details).getByText(/使用条款禁止商业使用/)).toBeInTheDocument();
+    // The Disclosure names the block once: the coverage's own heading is not repeated inside it.
+    expect(container.querySelectorAll("h3")).toHaveLength(0);
+  });
+
+  it("draws no coverage block where the server sent none", async () => {
+    draw(<VcrPrecedentsPanel />);
+    await screen.findByRole("table", { name: "试验先例" });
+    expect(screen.queryByText("注册源覆盖")).toBeNull();
+  });
+
+  it("makes the table's scroller a named region a keyboard can reach", async () => {
+    draw(<VcrPrecedentsPanel />);
+    const region = await screen.findByRole("region", { name: "试验先例" });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region.querySelector("table")).not.toBeNull();
   });
 
   it("never links a source that is not an http(s) address", async () => {

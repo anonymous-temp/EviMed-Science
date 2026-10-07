@@ -84,7 +84,7 @@ export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: strin
             </dl>
           )}
 
-          <VcrReviews reviews={deliverable.document?.reviews} />
+          <VcrReviews reviews={deliverable.document?.reviews} studyId={studyId} />
 
           {sections.map((section) => (
             <section key={section.id} id={`vcr-package-${section.id}`} className="mt-8 scroll-mt-6">
