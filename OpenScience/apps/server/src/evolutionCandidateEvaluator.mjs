@@ -1,5 +1,6 @@
+import { createEvolutionConfirmationLedger } from './evolutionConfirmationLedger.mjs';
 import { mkdir, readFile, realpath } from "node:fs/promises";
-import {canonicalJson} from "@evimed/domain";
+import {canonicalJson, MCP_TOOL_BASE_NAMES, MCP_TOOL_NAMES} from "@evimed/domain";
 import {writeFileExclusiveNoFollow} from "./security.mjs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -38,6 +39,7 @@ export const specificValue = value => Number.isFinite(value) && !(Number.isInteg
 export function createEvolutionCandidateEvaluator({ config, controller, fetchImpl = fetch, auditCandidateExposure = null, curateReferences = null, evaluateWorkflowSmoke = null, withReviewLock = null }) {
   const dataDir = config.evaluationDataDir || path.join(config.dataDir, "evaluation-control");
   const directory = path.join(dataDir, "paper-gold", "candidate-cases");
+  const confirmationLedger = createEvolutionConfirmationLedger(config);
   const reviewToken = Symbol("sudden-perfect-held-out-review");
   const callCandidate = async (candidate, input, signal, evidence = [], caseId = null, replicate = null) => {
     let outputDigest=null,executed=null;
@@ -173,6 +175,8 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
     return { aliases: [...new Set(policy.aliases)], titles: [...new Set(policy.titles)] };
   };
   return {
+    freezeCandidate: confirmationLedger.freezeCandidate,
+    recordFeedback: confirmationLedger.recordFeedback,
     async developmentContract(card) {
       const methodId = card.methodId ?? card.id;
       const filename = methodId === "cohort-state-transition" || card.methodFamily === "cohort-state-transition" ? "development-contract.json" : `${methodId}-development.json`;
@@ -197,23 +201,23 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
         ? curateReferences(card, options) : prepared;
     },
     /** Return no expected numbers or hidden inputs to a development run. @param {any} candidate @param {any} [options] @param {symbol} [token] */
-    evaluate: async function evaluateCandidate(candidate, { card = {}, signal = undefined } = {}, token = undefined) {
+    evaluate: async function evaluateCandidate(candidate, { card = {}, signal = undefined, purpose = "development" } = {}, token = undefined) {
       const startedAt=new Date().toISOString(),executionEvidence=[],runIds=new Set();
       const evaluatorCodeHash = createHash("sha256").update(canonicalJson(await Promise.all(["./evolutionCandidateEvaluator.mjs", "./candidateSuddenPerfectReview.mjs", "../../../evals/paper-gold/evaluator.mjs", "../../../evals/paper-gold/behavioural.mjs", "../../../evals/paper-gold/tolerance.mjs", "../../../evals/paper-gold/simulation.mjs"].map(file => readFile(new URL(file, import.meta.url), "utf8"))))).digest("hex");
-      let frozenSourceDigest = null;
+      let frozenSourceDigest = null, caseSelection = null;
       const finish=async result=>{
         const receipt={schemaVersion:1,candidateId:candidate.id??null,methodId:card.methodId??card.id??candidate.methodId??candidate.id,sourceArtifactDigest:`sha256:${createHash("sha256").update(canonicalJson(candidate.files??{})).digest("hex")}`,evaluatorHash:result.evaluatorHash??null,startedAt,measuredAt:new Date().toISOString(),runIds:[...runIds],developmentRunIds:candidate.lineage?.developmentRuns??[],ok:result.ok===true,status:result.status,resourceCode:result.resourceCode??null,assessments:(result.assessments??[]).map(item=>({caseId:item.caseId,kind:item.kind??null,replicate:item.replicate??null,passed:item.passed===true,reason:item.reason??(item.passed?"within_reference_tolerance":"outside_reference_tolerance")})),executionEvidence};
         Object.assign(receipt, { evaluatorCodeHash, frozenSourceDigest, executionContractDigest: createHash("sha256").update(canonicalJson({ entrypoint: candidate.entrypoint ?? null, dependencies: candidate.dependencies ?? [], toolKind: card.toolKind ?? candidate.toolKind ?? "calculation", executionTools: candidate.executionTools ?? [] })).digest("hex"), exposureTier: result.exposureTier ?? "unknown", purpose: token === reviewToken ? "sudden-perfect-held-out-review" : "candidate-validation",
           // Counts and closed codes only: which derived input failed, and by how much, stays in this process.
           behaviour: result.behaviour ? { status: result.behaviour.status, referenceImplementation: result.behaviour.referenceImplementation, relationChecks: result.behaviour.relationChecks, relationFailures: result.behaviour.relationFailures, freshCases: result.behaviour.freshCases, freshFailures: result.behaviour.freshFailures, casesWithoutChecks: result.behaviour.casesWithoutChecks } : null,
-          heldOut: result.heldOut ?? null, notices: result.notices ?? [] });
+          caseGroups: caseSelection?.groups ?? [], candidateFreeze: caseSelection?.frozen ?? null, confirmationBatchHash: caseSelection?.batchHash ?? null, firstAttempt: purpose === "confirmation", heldOut: result.heldOut ?? null, notices: result.notices ?? [] });
         const identity=createHash("sha256").update(canonicalJson(receipt)).digest("hex");
         await mkdir(dataDir,{recursive:true,mode:0o700});
         await writeFileExclusiveNoFollow(dataDir,path.join(dataDir,"paper-gold","candidate-evaluations",identity+".json"),canonicalJson(receipt)+"\n",{mode:0o444}).catch(error=>{if(error.code!=="EEXIST")throw error;});
-        const completed = { ...result, evaluationReceiptHash: identity };
+        const completed = { ...result, evaluationReceiptHash: identity, caseGroups: caseSelection?.groups ?? [], candidateFreeze: caseSelection?.frozen ?? null, confirmatory: caseSelection?.confirmatory ?? false };
         if (token === reviewToken || result.ok !== true) return completed;
         const review = await reviewSuddenPerfect({ dataDir, currentReceiptHash: identity, signal, withReviewLock,
-          replay: () => evaluateCandidate(candidate, { card, signal }, reviewToken) });
+          replay: () => evaluateCandidate(candidate, { card, signal, purpose: "audit" }, reviewToken) });
         // A review that could not be done is not a review that passed: the candidate waits for held-out material.
         if (review.triggered && review.passed !== true) return { ...completed, ok: false, verificationLevel: "V0",
           status: review.status === "repair" ? "repair" : "waiting_resource", resourceCode: review.status === "not-performed" ? "sudden_perfect_review_not_performed" : "sudden_perfect_review_not_passed", suddenPerfectReview: review };
@@ -235,13 +239,18 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
       if (definition.methodId !== methodId || definition.frozen !== true) throw new Error("Hidden evaluator definition must be frozen and method-bound.");
       frozenSourceDigest = (definition.cases ?? []).every(row => /^[a-f0-9]{64}$/.test(row.sourceHash ?? ""))
         ? createHash("sha256").update(canonicalJson((definition.cases ?? []).map(row => ({ id: row.id, sourceHash: row.sourceHash })).sort((a, b) => String(a.id).localeCompare(String(b.id))))).digest("hex") : null;
+      const frozenDefinition=definition;
+      const frozen = await confirmationLedger.freezeCandidate(candidate, { card });
+      caseSelection = await confirmationLedger.assemble(definition, frozen, { purpose: token === reviewToken ? 'audit' : purpose, minimumCases: token===reviewToken?1:definition.noPublishedExamples===true?1:2, requireTemporal:token!==reviewToken&&definition.noPublishedExamples!==true&&(card.toolKind??candidate.toolKind??'calculation')!=='workflow' });
+      if (caseSelection.confirmatory && token!==reviewToken && caseSelection.cases.length < (definition.noPublishedExamples===true?1:2)) return finish({ ok: false, verificationLevel: 'V0', status: 'waiting_resource', resourceCode: 'fresh_confirmation_cases_incomplete', failedCaseIds: [], assessments: [] });
+      definition = { ...definition, cases: caseSelection.cases };
       const scriptFreeWorkflow = (card.toolKind ?? candidate.toolKind) === "workflow" && !Object.keys(candidate.files ?? {}).some(name => /\.py$/i.test(name));
       if (scriptFreeWorkflow && !evaluateWorkflowSmoke) return finish({ ok: false, smokePassed: false, verificationLevel: "V0", status: "waiting_resource", resourceCode: "workflow_smoke_executor_unavailable", failedCaseIds: [], assessments: [] });
-      const evaluatorHash = createHash("sha256").update(JSON.stringify(definition)).digest("hex");
+      const evaluatorHash = createHash("sha256").update(JSON.stringify(frozenDefinition)).digest("hex");
       const publicationIds = [...new Set((definition.cases ?? []).filter(row => row.kind === "published").map(row => row.publicationId).filter(id => /^10\.\d{4,9}\//.test(id)))];
       const screens = await screenRetractions(publicationIds, fetchImpl);
       if (screens.some(row => !row.admissible)) return finish({ ok: false, verificationLevel: "V0", status: "waiting_resource", resourceCode: "published_reference_screen_failed", failedCaseIds: [], assessments: [], evaluatorHash });
-      const policy = await exclusionPolicyFor(definition, methodId);
+      const policy = await exclusionPolicyFor(frozenDefinition, methodId);
       const exposure = auditCandidateExposure ? await auditCandidateExposure(candidate, { policy, signal }) : { tier: "unknown" };
       const assessments = [];
       const published = new Set();
@@ -252,7 +261,7 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
       for (const testCase of definition.cases ?? []) {
         // A reserved case is held out of every ordinary evaluation, so no repair round ever learns whether
         // the candidate passes it; the sudden-perfect review is the only reader, and reads nothing else.
-        if (reviewing ? testCase.reserve !== true : testCase.reserve === true) continue;
+        // Case selection is sealed by the first-use ledger before any execution.
         if (testCase.hidden !== true || testCase.independentQa?.passed !== true || !testCase.sourceHash || (testCase.kind === "published" && (!testCase.publicationId || !testCase.numeric))) {
           assessments.push({ caseId: testCase.id, passed: false, reason: "reference_not_admitted" }); failedCaseIds.add(testCase.id); continue;
         }
@@ -270,7 +279,7 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
           continue;
         }
         let passed = true;
-        for (let replicate = 0; replicate < (scriptFreeWorkflow ? 1 : 2); replicate++) {
+        for (let replicate = 0; replicate < (["release-replay", "development"].includes(purpose) && !scriptFreeWorkflow ? 2 : 1); replicate++) {
           let valid = false;
           let reason = "outside_reference_tolerance";
           try {
@@ -279,7 +288,7 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
               if (testCase.kind !== "workflow-smoke") throw new Error("Script-free workflows require independent workflow smoke cases.");
               const receipt = await evaluateWorkflowSmoke({ candidate: structuredClone(candidate), input: structuredClone(testCase.input), caseId: testCase.id, methodId, replicate, signal });
               if (!receipt?.runId || receipt.executed !== true) workflowResourcePending = true;
-              if (receipt?.independent !== true || receipt.executed !== true || typeof receipt.runId !== "string" || !receipt.runId || !Array.isArray(candidate.executionTools) || !candidate.executionTools.length || !Array.isArray(receipt.toolsCalled) || !candidate.executionTools.every(tool => receipt.toolsCalled.includes(tool))) throw new Error("Workflow has no independently observed execution receipt.");
+              if (receipt?.independent !== true || receipt.executed !== true || typeof receipt.runId !== "string" || !receipt.runId || !Array.isArray(candidate.executionTools) || !candidate.executionTools.length || !Array.isArray(receipt.toolsCalled) || !candidate.executionTools.every(tool => [...MCP_TOOL_BASE_NAMES,...MCP_TOOL_NAMES].includes(tool) && receipt.toolsCalled.includes(tool))) throw new Error("Workflow has no independently observed execution receipt.");
               runIds.add(receipt.runId);executionEvidence.push({caseId:testCase.id,replicate,executed:true,ok:true,outputDigest:`sha256:${createHash("sha256").update(canonicalJson(receipt.output)).digest("hex")}`});
               actual = receipt.output;
             } else actual = await callCandidate(candidate, testCase.input, signal, executionEvidence, testCase.id, replicate);
@@ -308,11 +317,11 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
       // behavioural checks run on inputs derived here and now, seeded by the frozen definition (which the
       // builder never sees), this candidate's bytes and the purpose, so no two candidates and no two
       // purposes meet the same derived inputs.
-      const admittedPublished = (definition.cases ?? []).filter(row => row.kind === "published" && row.hidden === true && row.independentQa?.passed === true && row.sourceHash && row.publicationId && row.numeric && row.input && typeof row.input === "object");
-      const behaviourCases = reviewing ? admittedPublished : admittedPublished.filter(row => row.reserve !== true);
+      const admittedPublished = (frozenDefinition.cases ?? []).filter(row => row.kind === "published" && row.hidden === true && row.independentQa?.passed === true && row.sourceHash && row.publicationId && row.numeric && row.input && typeof row.input === "object");
+      const behaviourCases = reviewing ? admittedPublished : admittedPublished.filter(row=>caseSelection.cases.some(selected=>selected.id===row.id));
       let behaviour = null, notices = [];
       if (!scriptFreeWorkflow && behaviourCases.length && !failedCaseIds.size && (reviewing || published.size > 0)) {
-        const seed = createHash("sha256").update(canonicalJson([evaluatorHash, candidate.files ?? {}, reviewing ? "sudden-perfect-review" : "candidate-validation"])).digest("hex");
+        const seed = createHash("sha256").update(canonicalJson([evaluatorHash, candidate.files ?? {}, reviewing ? `sudden-perfect-review:${startedAt}` : "candidate-validation"])).digest("hex");
         const plan = behaviourPlan({ methodId, methodFamily: card.methodFamily ?? candidate.methodFamily ?? null, definition });
         try { behaviour = await behaviouralChecks({ candidate, cases: behaviourCases, plan, seed, signal, evidence: executionEvidence, purpose: "behavioural", known: new Set((definition.cases ?? []).filter(row => row.input).map(row => canonicalJson(row.input))) }); }
         catch (error) { signal?.throwIfAborted(); behaviour = { status: "unavailable", reason: "behavioural_execution_unavailable", referenceImplementation: plan.reference?.implementationId ?? null, relationChecks: 0, relationFailures: 0, freshCases: 0, freshFailures: 0, casesWithoutChecks: behaviourCases.length, cases: [] }; }

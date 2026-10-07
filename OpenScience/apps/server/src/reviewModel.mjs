@@ -1,3 +1,4 @@
+import { evolutionUsageContext } from './evolutionUsage.mjs';
 /**
  * The reviewer's metered model call, using DashScope or an explicit DeepSeek deployment.
  * DeepSeek uses JSON mode plus the supplied schema in the system prompt;
@@ -108,6 +109,7 @@ export function reviewModelApiKey(config) {
  * @returns {Promise<{ value: any, model: string, usage: { cacheHitTokens: number, cacheMissTokens: number, completionTokens: number, reasoningTokens: number }, cost: number, requestId: string | null, reasoningChars: number, modelReported: boolean }>}
  */
 export async function callReviewModel({ config, usageLedger = null, fetchImpl = fetch }, call) {
+  if (evolutionUsageContext()) call={...call,purpose:'evolution',limits:{daily:config.evolutionDailyBudgetCny,weekly:0}};
   const deepseek = config.reviewProvider === "deepseek";
   if (deepseek && !supportedDeepSeekModels.has(config.reviewModel)) {
     throw new ReviewModelError("review_model_unconfigured", "The requested reviewer model is not supported.");

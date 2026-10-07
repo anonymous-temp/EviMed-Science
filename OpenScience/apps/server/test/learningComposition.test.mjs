@@ -352,7 +352,7 @@ test("what later became of a result has its producers: a correction and a recalc
   // producers reach it, and a lesson from the correction can only narrow the method that was read if it is told which.
   assert.match(serverSource, /from "\.\/methodFeedback\.mjs"/);
   assert.match(serverSource, /const methodFeedback = learningService && config\.learningEnabled \? new MethodFeedbackService\(\{/);
-  assert.match(serverSource, /new ResultReplayService\(\{[\s\S]*?compared: input => methodFeedback\?\.fromReplay\(input\)/);
+  assert.match(serverSource, /new ResultReplayService\(\{[\s\S]*?compared: async input => \{\s*await methodFeedback\?\.fromReplay\(input\)/);
   assert.match(serverSource, /new ResultCorrectionService\(\{[\s\S]*?methods: \(\) => methodFeedback/);
   assert.match(serverSource, /usedMethods: methodFeedback \? \(project, run\) => methodFeedback\.usedForLesson\(project, run\) : null/);
   // The researcher's own switch and a capsule trial apply to it as to every other lesson.

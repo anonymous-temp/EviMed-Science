@@ -131,9 +131,12 @@ test("workflow smoke admission comes from executed hidden checks rather than can
     let value = 1;
     const evaluator = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, controller: { execVerify: async () => ({ ok: true, joined: true, output: JSON.stringify({ value }) }) } });
     assert.equal((await evaluator.prepareCases({ methodId: "workflow" })).workflowSmokeReady, true);
-    assert.equal((await evaluator.evaluate(candidate, { card: { methodId: "workflow", toolKind: "workflow" } })).smokePassed, true);
+    const development=await evaluator.evaluate(candidate,{card:{methodId:'workflow',toolKind:'workflow'},purpose:'development'});
+    assert.equal(development.smokePassed,true);assert.equal(development.confirmatory,false);
+    const confirmation=await evaluator.evaluate(candidate,{card:{methodId:'workflow',toolKind:'workflow'},purpose:'confirmation'});
+    assert.equal(confirmation.ok,false);assert.equal(confirmation.resourceCode,'fresh_confirmation_cases_incomplete');
     value = 2;
-    const failed = await evaluator.evaluate({ ...candidate, smokePassed: true }, { card: { methodId: "workflow", toolKind: "workflow" } });
+    const failed = await evaluator.evaluate({ ...candidate, smokePassed: true }, { card: { methodId: "workflow", toolKind: "workflow" },purpose:"development" });
     assert.equal(failed.smokePassed, false);
     assert.equal(failed.ok, false);
   } finally { await rm(dataDir, { recursive: true, force: true }); }

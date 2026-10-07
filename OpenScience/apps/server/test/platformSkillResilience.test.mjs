@@ -1,3 +1,4 @@
+import {publishConfirmed} from './helpers/confirmedEvolutionPublication.mjs';
 // An optional extension failing never withholds unrelated research (review of 「循证进化」,
 // 2026-10-05, S1). One bad file under <data>/.openscience/platform-skills/ used to fail every
 // tenant's runtime start and every dispatch on a live runtime: an `active.json` that does not parse,
@@ -26,7 +27,7 @@ async function withSupply(run) {
 test('an active.json that does not parse falls back to the last verified generation, or to none, and says so', async () => {
   await withSupply(async ({ dataDir, supply, reports }) => {
     const activeFile = path.join(dataDir, '.openscience', 'platform-skills', 'active.json');
-    await supply.publish(skill('one'), options);
+    await publishConfirmed(supply,skill('one'), options);
     assert.equal(await supply.prepareForRuntime({ capabilityId: 'other' }), null, 'a scope with no tools has none');
     const good = await supply.prepareForRuntime({ capabilityId: 'statistics' });
     assert.equal(good.pins.length, 1);
@@ -46,7 +47,7 @@ test('an active.json that does not parse falls back to the last verified generat
 
 test('a generation altered after it was written is moved aside and rebuilt, not a permanent failure', async () => {
   await withSupply(async ({ config, supply, reports }) => {
-    const first = await supply.publish(skill('one'), options);
+    const first = await publishConfirmed(supply,skill('one'), options);
     const generation = await supply.prepareForRuntime({ capabilityId: 'statistics' });
     const file = path.join(platformSkillGenerationRoot(config, generation.reference), 'skills', first.nativeName, 'SKILL.md');
     await fs.chmod(file, 0o644); await fs.writeFile(file, 'changed after the fact'); await fs.chmod(file, 0o444);
@@ -63,7 +64,7 @@ test('a generation altered after it was written is moved aside and rebuilt, not 
 
 test('two first starts that both build the same generation both succeed', async () => {
   await withSupply(async ({ supply }) => {
-    await supply.publish(skill('one'), options);
+    await publishConfirmed(supply,skill('one'), options);
     // Every start after a publish rebuilds the all-tools search generation; hold both renames until both have staged.
     const original = fs.rename;
     let arrived = 0; const waiters = [];

@@ -1,3 +1,4 @@
+import {publishConfirmed} from './helpers/confirmedEvolutionPublication.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -15,8 +16,8 @@ test('republishing a certified historical instruction template preserves its imm
       .replace("from '@evimed/domain'",`from '${new URL('../../../packages/domain/index.mjs',import.meta.url).href}'`);
     const legacy=await import(`data:text/javascript;base64,${Buffer.from(legacySource).toString('base64')}`);
     const config={dataDir,evolutionEnabled:true},candidate={id:'legacy-binding',publicationKind:'isolated-tool',entrypoint:'scripts/tool.py:calculate',files:{'SKILL.md':'---\nname: legacy-binding\ndescription: Legacy binding fixture.\n---\n\nUse calculate(specification).','scripts/tool.py':'def calculate(specification):\n return specification\n'}},options={card:{toolKind:'calculation'},evaluation:{ok:true,verificationLevel:'V2'}};
-    const oldSupply=legacy.createPlatformSkillSupply(config),original=await oldSupply.publish(candidate,options),oldGeneration=await oldSupply.prepareForRuntime({id:'project'});
-    const current=createPlatformSkillSupply(config),repeated=await current.publish(candidate,options),newGeneration=await current.prepareForRuntime({id:'project'});
+    const oldSupply=legacy.createPlatformSkillSupply(config),original=await publishConfirmed(oldSupply,candidate,options),oldGeneration=await oldSupply.prepareForRuntime({id:'project'});
+    const current=createPlatformSkillSupply(config),repeated=await publishConfirmed(current,candidate,options),newGeneration=await current.prepareForRuntime({id:'project'});
     assert.equal(repeated.digest,original.digest);assert.equal(repeated.revision,original.revision);
     assert.deepEqual(newGeneration.pins,oldGeneration.pins);
   }finally{await rm(dataDir,{recursive:true,force:true});}
@@ -28,8 +29,8 @@ test('actual Python binding reports parameter names and received keys without va
   const source = "def calculate(specification):\n if specification.get('explode'): raise ValueError('private-implementation-detail')\n return {'result': specification['n']}\n";
   try {
     const candidate = { id: 'binding-fixture', publicationKind: 'isolated-tool', entrypoint: 'scripts/tool.py:calculate', files: { 'SKILL.md': '---\nname: binding-fixture\ndescription: Public binding fixture.\n---\n\nUse calculate(specification).', 'scripts/tool.py': source } };
-    const publication = await supply.publish(candidate, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' } });
-    const repeated = await supply.publish(candidate, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' } });
+    const publication = await publishConfirmed(supply,candidate, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' } });
+    const repeated = await publishConfirmed(supply,candidate, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' } });
     assert.equal(repeated.digest, publication.digest);
     assert.equal(repeated.revision, publication.revision);
     const generation = await supply.prepareForRuntime({ id: 'project' });

@@ -33,7 +33,7 @@ def test_the_committed_registry_is_a_fresh_deterministic_build():
 
 def test_every_row_validates(document):
     rows = load_registry(REGISTRY, {})
-    assert len(rows) == len(document["sources"]) == 721
+    assert len(rows) == len(document["sources"]) == 722
     assert sum(r.enabled for r in rows) >= 256
 
 

@@ -1,3 +1,4 @@
+import {publishConfirmed} from './helpers/confirmedEvolutionPublication.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -13,10 +14,10 @@ test('publisher and public package validator agree on missing docs, malformed fr
  const failures=[{...valid,files:{'scripts/calculate.py':valid.files['scripts/calculate.py']}},{...valid,files:{...valid.files,'SKILL.md':'---\nname: present\n---\nText'}},{...valid,entrypoint:'outside.py:calculate'}];
  for(const candidate of failures){
   const result=validatePlatformSkillPackage(candidate);assert.equal(result.ok,false);
-  await assert.rejects(supply.publish(candidate,{card:{toolKind:'calculation'},evaluation:{ok:true,verificationLevel:'V2'}}),error=>error.code==='extension_contract_invalid'&&error.message.includes(result.issues[0].field));
+  await assert.rejects(publishConfirmed(supply,candidate,{card:{toolKind:'calculation'},evaluation:{ok:true,verificationLevel:'V2'}}),error=>error.code==='extension_contract_invalid'&&error.message.includes(result.issues[0].field));
  }
  assert.equal(validatePlatformSkillPackage(valid).ok,true);
- assert.equal((await supply.publish(valid,{card:{toolKind:'calculation'},evaluation:{ok:true,verificationLevel:'V2'}})).id,'package');
+ assert.equal((await publishConfirmed(supply,valid,{card:{toolKind:'calculation'},evaluation:{ok:true,verificationLevel:'V2'}})).id,'package');
 });
 test('single candidate public package defect produces precise repair feedback before hidden evaluation',async()=>{
  let evaluations=0;const failures=[];

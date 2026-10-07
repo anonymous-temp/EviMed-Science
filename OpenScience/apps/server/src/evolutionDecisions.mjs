@@ -1,3 +1,4 @@
+import { renderEvolutionProgress } from './evolutionProgress.mjs';
 import { EVOLUTION_EXECUTABLE_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass } from '@evimed/domain';
 import { evolutionKey } from './evolutionService.mjs';
 import { HttpError } from './security.mjs';
@@ -227,6 +228,7 @@ export class EvolutionDecisions {
         achievements: (await this.service.tools()).filter(row => inWindow(row.payload.createdAt) && ['active', 'alias'].includes(row.payload.status)).slice(0, 100)
           .map(row => ({ id: row.id, name: clip(row.payload.name ?? row.payload.description ?? row.id, 100), level: row.payload.validationLevel ?? 'V0' })),
         evaluationSummaries: evaluations.map(evolutionEvaluationDigest).slice(0, 20),
+        progress: await this.service.callbacks.evolutionProgress?.(day) ?? null,
       });
     }
     const snapshot = saved.payload;
@@ -266,6 +268,7 @@ export function renderEvolutionDigest(snapshot, limit = EVOLUTION_NOTICE_LIMITS.
   const assessmentLines = bounded(summaries.flatMap((/** @type {any} */ summary) => summary.lines), 12);
   const healthLines = engineNames.map(([capabilityId, name]) => `${name}体检：${summaries.some((/** @type {any} */ summary) => summary.capabilityIds.includes(capabilityId)) ? '当日实际评测见上方分项' : '当日未运行，分数未知'}`);
   const sections = [
+    renderEvolutionProgress(snapshot.progress),
     `待你裁决\n${(snapshot.decisions ?? []).map((/** @type {any} */ row) => row.title).join('\n') || '暂无'}`,
     `已自主处理\n${bounded(autonomousLines, 10).join('\n') || '暂无'}\n${autonomous.slice(0, 3).map((/** @type {any} */ row) => `${row.title}：${row.selected}`).join('\n') || '暂无'}`,
     `资源等待\n${bounded(waitLines, 8).join('\n') || '暂无新增'}`,

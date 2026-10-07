@@ -1,0 +1,441 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-06T12:46:25.043290+00:00",
+  "plan": "docs/superpowers/plans/2026-10-06-research-evolution-2.md",
+  "branch": "codex/research-evolution-2-20261006",
+  "baseCommit": "f394c3b33542687922dbaa2e2fe2876c0a593d55",
+  "implementationStatus": "implemented-on-feature-branch",
+  "wholeScientificPlanAccepted": false,
+  "productionDeployed": false,
+  "implementationCoverage": [
+    {
+      "sections": [
+        "3.2",
+        "4.5",
+        "10",
+        "14 stage 0"
+      ],
+      "implementation": "Fresh source-family confirmation, four task pools, bounded one-component proposals, noise/cost/floor selection and independent replay of repair failures.",
+      "files": [
+        "OpenScience/packages/domain/src/evolutionSelection.mjs",
+        "OpenScience/apps/server/src/evolutionConfirmationLedger.mjs",
+        "OpenScience/apps/server/src/evolutionTaskPool.mjs",
+        "OpenScience/apps/server/src/evolutionRepairReproduction.mjs",
+        "OpenScience/apps/server/src/evolutionCandidateEvaluator.mjs"
+      ]
+    },
+    {
+      "sections": [
+        "4.2",
+        "4.4",
+        "7.3",
+        "7.5"
+      ],
+      "implementation": "Leased heavy/light work, budgeted missions, daily allocation and per-module guarantees, durable first answers, dependency-scoped waits and search-only pause.",
+      "files": [
+        "OpenScience/apps/server/src/evolutionWorker.mjs",
+        "OpenScience/apps/server/src/evolutionMissions.mjs",
+        "OpenScience/apps/server/src/evolutionUsage.mjs",
+        "OpenScience/apps/server/src/usageLedger.mjs"
+      ]
+    },
+    {
+      "sections": [
+        "4.3",
+        "5.4",
+        "5.5",
+        "6.1",
+        "6.2",
+        "6.3",
+        "6.6"
+      ],
+      "implementation": "Derived capability map, closed tenant signal aggregation, eight opportunity sources, real resource acquisition, confirmed success and compatible-tool growth.",
+      "files": [
+        "OpenScience/apps/server/src/evolutionCapabilityMap.mjs",
+        "OpenScience/apps/server/src/evolutionSignals.mjs",
+        "OpenScience/apps/server/src/evolutionGrowth.mjs",
+        "OpenScience/apps/server/src/evolutionResourceAcquisition.mjs"
+      ]
+    },
+    {
+      "sections": [
+        "5.1",
+        "5.2",
+        "5.3"
+      ],
+      "implementation": "Public source chronology and model-release evidence, source aliases and exposure, independently anchored published outcomes and result comparisons.",
+      "files": [
+        "OpenScience/apps/server/src/evolutionPublicProvenance.mjs",
+        "OpenScience/apps/server/src/publishedResultExtraction.mjs",
+        "OpenScience/apps/server/src/recalculationComparison.mjs"
+      ]
+    },
+    {
+      "sections": [
+        "6.4",
+        "6.5",
+        "7.4"
+      ],
+      "implementation": "Verified deterministic task templates and curriculum, immutable archives, lineage, target-module transfer and held-out third-module checks, contribution-based pruning and unique coverage retention.",
+      "files": [
+        "OpenScience/apps/server/src/evolutionTransfer.mjs",
+        "OpenScience/apps/server/src/evolutionMissions.mjs",
+        "OpenScience/apps/server/src/evolutionService.mjs"
+      ]
+    },
+    {
+      "sections": [
+        "8",
+        "14 stage 4",
+        "14 stage 5"
+      ],
+      "implementation": "Versioned research policy, independent prefix replay, component ranking, stable half-allocation, actual calendar spending and outcomes, monthly adoption/rollback, quarterly paired audits.",
+      "files": [
+        "OpenScience/apps/server/src/evolutionPolicy.mjs",
+        "OpenScience/apps/server/src/evolutionMonthlyObservations.mjs",
+        "OpenScience/apps/server/src/evolutionPairedAudit.mjs",
+        "OpenScience/apps/server/src/evolutionLoops.mjs"
+      ]
+    },
+    {
+      "sections": [
+        "8.3"
+      ],
+      "implementation": "AI discovery source, pull-only source manifest with plugin-owned host admission, preserved mechanism hypotheses and archive-aware duplicate screening.",
+      "files": [
+        "OpenScience/apps/server/src/evolutionSelfResearch.mjs",
+        "OpenScience/apps/server/src/evolutionSourceRequests.mjs",
+        "OpenScience/apps/server/src/frontierEvolution.mjs",
+        "项目代码/knowledge-plugin/knowledge_plugin/source_requests.py",
+        "项目代码/knowledge-plugin/knowledge_plugin/scheduler.py"
+      ]
+    },
+    {
+      "sections": [
+        "9.1",
+        "9.2",
+        "9.3",
+        "9.4",
+        "9.10"
+      ],
+      "implementation": "Production tool, frontier, GEO and proactive-research paths read bounded policy or published artifacts; module-owned measurements and independent calibrated source judgments; frontier exposure and GEO interference identities.",
+      "files": [
+        "OpenScience/apps/server/src/moduleEvolutionPolicies.mjs",
+        "OpenScience/apps/server/src/moduleEvolutionEvaluators.mjs",
+        "OpenScience/apps/server/src/moduleEvolutionPreparation.mjs",
+        "OpenScience/apps/server/src/moduleEvolutionCalibration.mjs",
+        "OpenScience/apps/server/src/geoMeasureStore.mjs",
+        "OpenScience/apps/server/src/frontierPersistence.mjs"
+      ]
+    },
+    {
+      "sections": [
+        "9.5",
+        "9.6",
+        "9.7",
+        "9.8",
+        "9.9",
+        "12"
+      ],
+      "implementation": "Source/evidence/memory deterministic evaluation, fixed memory snapshots, real native runtime sessions and checked-in baselines; code changes use the existing isolated builder and reviewable PR path. VCR remains interface-only.",
+      "files": [
+        "OpenScience/apps/server/src/moduleEvolutionOfflineEvaluators.mjs",
+        "OpenScience/apps/server/src/moduleEvolutionNativeProbe.mjs",
+        "OpenScience/apps/server/src/moduleEvolutionEngineValidation.mjs",
+        "OpenScience/apps/server/src/evolutionEngineReview.mjs"
+      ]
+    },
+    {
+      "sections": [
+        "11",
+        "3.2 V4"
+      ],
+      "implementation": "Incremental useful/harmful handbook entries, exact method/result/replay attribution, trusted positive evidence, observational harm conclusions and review cards without automatically retiring a lineage.",
+      "files": [
+        "OpenScience/apps/server/src/handbookUtility.mjs",
+        "OpenScience/apps/server/src/learningPlatformHandbooks.mjs",
+        "OpenScience/apps/server/src/evolutionPositiveEvidence.mjs",
+        "OpenScience/apps/server/src/evolutionMaintenance.mjs",
+        "OpenScience/apps/server/src/evolutionFeedback.mjs"
+      ]
+    },
+    {
+      "sections": [
+        "7.3",
+        "13",
+        "15"
+      ],
+      "implementation": "Existing capabilities-page map and inbox reports; exact activated archives back visible progress, with unknown costs and privacy-suppressed counts kept unknown.",
+      "files": [
+        "OpenScience/apps/web/src/components/evolution/CapabilityMap.tsx",
+        "OpenScience/apps/server/src/evolutionProgress.mjs",
+        "OpenScience/apps/server/src/evolutionDecisions.mjs",
+        "OpenScience/apps/server/src/evolutionRoutes.mjs"
+      ]
+    }
+  ],
+  "validation": [
+    {
+      "name": "all-evolution-with-postgres",
+      "command": "OPEN_SCIENCE_TEST_POSTGRES_URL=<scratch database> node --test --test-concurrency=1 test/evolution*.test.mjs test/moduleEvolution*.test.mjs test/recalculationComparison.test.mjs",
+      "status": "passed",
+      "counts": {
+        "tests": 415,
+        "pass": 415,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "f29da777f718e751b6a2c63bbfed7c606622e7467646de1793a3bacfa7796e02",
+      "localLog": "/tmp/evolve2-complete-affected-db.log"
+    },
+    {
+      "name": "domain",
+      "command": "pnpm --filter @evimed/domain test",
+      "status": "passed",
+      "counts": {
+        "tests": 970,
+        "pass": 970,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "logSha256": "bf5b41a11730c0984531b44e9a4c57898573417fe06132a6618253e16eb93607",
+      "localLog": "/tmp/evolve2-domain-final.log"
+    },
+    {
+      "name": "web",
+      "command": "pnpm test",
+      "status": "passed",
+      "counts": {
+        "files": 245,
+        "tests": 2462,
+        "pass": 2462,
+        "fail": 0
+      },
+      "logSha256": "bc7c66c08f8d5b7095cacf41d38c4d39925c87d1fabe905d17f989e19a705873",
+      "localLog": "/tmp/evolve2-web-tests.log"
+    },
+    {
+      "name": "mcp",
+      "command": "pnpm test:mcp",
+      "status": "passed",
+      "counts": {
+        "research": 923,
+        "memory": 9,
+        "pass": 932,
+        "fail": 0
+      },
+      "logSha256": "6a16e306543b739075145830cbf883d02404a30577133ba582078df62765f7a7",
+      "localLog": "/tmp/evolve2-mcp-tests.log"
+    },
+    {
+      "name": "knowledge-plugin-pure",
+      "command": "python -m pytest -m \"not db and not live\" -q",
+      "status": "passed",
+      "counts": {
+        "pass": 1156,
+        "fail": 0,
+        "deselected": 56
+      },
+      "logSha256": "f70f3583b5fecdc8f76d5388db53af31da7be49d6c4c3d4c0eb469915a5183ed",
+      "localLog": "/tmp/evolve2-plugin-full.log"
+    },
+    {
+      "name": "knowledge-plugin-postgres",
+      "command": "KNOWLEDGE_PLUGIN_TEST_DATABASE_URL=<scratch server without database name> python -m pytest -m db -q",
+      "status": "passed",
+      "counts": {
+        "pass": 56,
+        "fail": 0,
+        "skipped": 0,
+        "deselected": 1156
+      },
+      "logSha256": "0fec58c2d0db386ec561563e2ee34d66d8397e52dad65abced5013fd0a78ae63",
+      "localLog": "/tmp/evolve2-plugin-db-final2.log"
+    },
+    {
+      "name": "web-build",
+      "command": "pnpm build:web",
+      "status": "passed",
+      "counts": {},
+      "logSha256": "41c5962e2baba12869ad79e9c09ee9f0b5b668ee91b55f7a03a77aaa20e2980a",
+      "localLog": "/tmp/evolve2-web-build.log"
+    },
+    {
+      "name": "web-typecheck",
+      "command": "pnpm typecheck",
+      "status": "passed",
+      "counts": {},
+      "logSha256": "8c3301c195cf8db134a962d294d3818e7cbd9f45204d7e45fe1304107d8a6ecf",
+      "localLog": "/tmp/evolve2-web-types.log"
+    },
+    {
+      "name": "domain-typecheck",
+      "command": "pnpm typecheck:domain",
+      "status": "passed",
+      "counts": {},
+      "logSha256": "07265e30d6fcb5322995cc22c18f100b4bf33741a895755b3300ca5ad71a7115",
+      "localLog": "/tmp/evolve2-domain-types2.log"
+    },
+    {
+      "name": "server-typecheck",
+      "command": "pnpm typecheck:server",
+      "status": "passed",
+      "counts": {},
+      "logSha256": "8f7945eb4816d53a3048d74edb78e9b560b7da1992993a6cea4be311d349c882",
+      "localLog": "/tmp/evolve2-server-types-commit.log"
+    },
+    {
+      "name": "workspace-lint",
+      "command": "pnpm lint",
+      "status": "passed",
+      "counts": {},
+      "logSha256": "004370275640a9e3a1c6f5fcc6d53e2e3c09d3c89e823b8be8bbe63971b5750b",
+      "localLog": "/tmp/evolve2-lint-final.log"
+    },
+    {
+      "name": "final-server-lint",
+      "command": "pnpm lint:server; focused lint after final publication fixes",
+      "status": "passed",
+      "counts": {},
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "localLog": "/tmp/evolve2-publication-lint.log"
+    },
+    {
+      "name": "hosted-compliance",
+      "command": "pnpm audit:hosted-compliance",
+      "status": "passed",
+      "counts": {},
+      "logSha256": "1e29d6d4f6c38548424187b56840fb7b4ec695203ccfb714e3012bf27b490d0b",
+      "localLog": "/tmp/evolve2-compliance.log"
+    },
+    {
+      "name": "saas-alignment",
+      "command": "pnpm audit:saas-alignment",
+      "status": "passed",
+      "counts": {},
+      "logSha256": "35695f6772ed0e3bcd2e22329325fe064b31fa3d0ebaaaf698309dd71f43c7cc",
+      "localLog": "/tmp/evolve2-alignment.log"
+    },
+    {
+      "name": "source-credential-audit",
+      "command": "pnpm audit:source-secrets",
+      "status": "passed",
+      "logSha256": "c82023e26ee5c27bd6c91ba90f84cfa9cd63264461ea3733ce5ce05b4cb54c4c",
+      "localLog": "/tmp/evolve2-secrets-final.log"
+    },
+    {
+      "name": "staged-credential-audit",
+      "status": "passed",
+      "files": 164,
+      "findings": [],
+      "scope": "Every staged file including evaluation artifacts, plan and research notes."
+    },
+    {
+      "name": "patch-whitespace",
+      "command": "git diff --cached --check",
+      "status": "passed"
+    },
+    {
+      "name": "ops-script-syntax",
+      "command": "node --check scripts/ops/evolution-2-acceptance.mjs; node --check scripts/ops/evolution-scorer-audit-preflight.mjs",
+      "status": "passed"
+    }
+  ],
+  "regressionClosure": {
+    "initialFullServer": {
+      "tests": 8179,
+      "pass": 6430,
+      "fail": 31,
+      "skipped": 1718,
+      "localLog": "/tmp/evolve2-server-tests.log"
+    },
+    "resolution": "Every initially failing file was rerun after fixes. The resulting remaining native transcript failure was fixed and passed in the final complete 415-test evolution suite with real PostgreSQL and zero skips.",
+    "affectedFileRerun": {
+      "tests": 554,
+      "pass": 501,
+      "fail": 1,
+      "skipped": 52,
+      "localLog": "/tmp/evolve2-final-regressions.log"
+    },
+    "remainingFailureResolvedBy": "/tmp/evolve2-complete-affected-db.log",
+    "fullServerSuiteRerunAfterFinalChanges": false,
+    "initialFailuresIncluded": [
+      "transient composition imports during concurrent edits",
+      "stale confirmation and catalogue fixtures",
+      "session reader contract",
+      "GEO schema boundary allowlist",
+      "learning hook composition",
+      "release-manifest transient digest race",
+      "missing ignored external skill fixture",
+      "native sealed transcript fixture"
+    ],
+    "knownBaselineWarnings": [
+      "Existing web LoginPage autofocus lint warning",
+      "Existing large web bundle chunk warnings"
+    ]
+  },
+  "liveAcceptance": {
+    "artifact": "OpenScience/evals/acceptance/2026-10-06-evolution-2-live.json",
+    "sha256": "62959000aba9ef897d21790f66d5b3e2daf13cef99e1d1be66ad37d98224dcf0",
+    "scorerUnitsActuallyReviewed": 1,
+    "scorerAuditScope": "operator-targeted historical independent audit; original scores unchanged",
+    "nativeRuntime": "DSH 0.1.7-rc.2; two real turns in one session, both passed; generation-fenced teardown",
+    "moduleRuns": [
+      "frontier: two development cases",
+      "geo: one development case"
+    ],
+    "newCandidateActivated": false,
+    "totalMeasuredSettledCostCny": 0.37398516,
+    "failedDebugAttemptsIncludedInCost": 4,
+    "remoteTemporaryResourcesRemoved": true
+  },
+  "pendingScientificAcceptance": [
+    "Actual post-freeze public confirmation cohorts at the required per-module size; old corpus and generated checks are not substituted for new scientific evidence.",
+    "The plan's live growth-chain and cross-module transfer/pruning outcomes, including denominator preservation promoted in two modules and nonregression in a third.",
+    "A policy proposal supported by independent prior-quarter history, followed by an actual calendar month of interleaved missions and a data-based adoption or rollback decision.",
+    "Prospective published outcomes, monthly longitudinal progress and quarterly unseen audit rotation after team merge and ordinary deployment."
+  ],
+  "handoff": {
+    "merge": "Team-owned normal review and merge; feature branch only.",
+    "runtimeDefaults": "Existing subsystem switches preserved; only light concurrency (2) and search pause (false) are new platform configuration keys.",
+    "dataMigration": "Idempotent additive schema changes; per-mission usage columns nullable for historical calls.",
+    "rawTenantDataInPlatformLearning": false
+  },
+  "ciRegressionClosure": {
+    "recordedAt": "2026-10-06T13:29:49.782070+00:00",
+    "initialRun": "https://github.com/anonymous-temp/EviMed-Science/actions/runs/37466494268",
+    "initialCommit": "dbc070cab0b1d0e6e38a2e46d7c93dfe38f17015",
+    "initialOutcome": "failed: seven assertions in the durable-product-state step; all other executed jobs passed",
+    "serverApiSuiteOnInitialCommit": "passed in the remote Test Hosted Web API step",
+    "fixes": [
+      "Keep usage-only schema deployments compatible; attributed missions still refuse without a product ledger or matching budget.",
+      "Only record personalized frontier exposures for enabled pages; disabled pages create no snapshot.",
+      "Keep fundamental GEO non-measurable reasons before the unknown-engine-version guard.",
+      "Assert the new frontier exposure tables and nullable autopilot policy attribution in integration fixtures.",
+      "Make the lease contention test deterministically overlap after acquisition instead of relying on simultaneous starts."
+    ],
+    "focusedValidation": {
+      "realPostgres": {
+        "tests": 52,
+        "pass": 50,
+        "fail": 0,
+        "skipped": 2,
+        "skipReason": "The focused module database uses PostgreSQL without pgvector; the full product-state rerun uses the installed pgvector image."
+      },
+      "geoUnitTests": {
+        "tests": 29,
+        "pass": 29,
+        "fail": 0
+      },
+      "additionalAssertions": "Disabled personalization stores no exposure snapshot; GEO preserves no_follow_up and too_few_control_groups; a trusted mission with no product ledger inserts no reservation.",
+      "serverLint": "passed",
+      "serverTypecheck": "passed"
+    },
+    "fullProductStateAtRecording": "running in a new isolated pgvector-backed database; final remote CI evidence is available on the feature branch",
+    "initialFailureLogSha256": "02a1b70a8981119a9563ea88f65a2d6c76d44d7a60a6126423f8850a3cfb437f"
+  }
+}

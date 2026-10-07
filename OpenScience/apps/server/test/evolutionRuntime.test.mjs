@@ -1,3 +1,4 @@
+import {publishConfirmed} from './helpers/confirmedEvolutionPublication.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -21,15 +22,15 @@ test('immutable skill generations preserve exact old revisions and detect change
   const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'evolution-supply-'));
   try{
     const config={dataDir,evolutionEnabled:true},supply=createPlatformSkillSupply(config),candidate={id:'example',publicationKind:'skill',files:{'SKILL.md':'---\nname: example\ndescription: Sample workflow.\n---\n\nVersion one.'}},opts={card:{toolKind:'workflow'},evaluation:{ok:true,verificationLevel:'V0',smokePassed:true}};
-    const first=await supply.publish(candidate,opts),pinned=await supply.prepareForRuntime({id:'project',capabilityId:'statistics'});
-    candidate.files['SKILL.md']+='\nVersion two.';const second=await supply.publish(candidate,opts);
+    const first=await publishConfirmed(supply,candidate,opts),pinned=await supply.prepareForRuntime({id:'project',capabilityId:'statistics'});
+    candidate.files['SKILL.md']+='\nVersion two.';const second=await publishConfirmed(supply,candidate,opts);
     assert.equal(first.revision,1);assert.equal(second.revision,2);assert.notEqual(first.generationHash,second.generationHash);
     assert.equal((await verifyPlatformSkillGeneration(config,pinned.reference)).pins[0].revision,1);
     const target=path.join(platformSkillGenerationRoot(config,pinned.reference),'skills',first.nativeName,'SKILL.md');await fs.chmod(target,0o644);await fs.writeFile(target,'changed');await fs.chmod(target,0o444);
     await assert.rejects(()=>verifyPlatformSkillGeneration(config,pinned.reference));
     await supply.retire('example');assert.equal(await supply.prepareForRuntime({id:'project',capabilityId:'statistics'}),null);
-    candidate.files['SKILL.md']+='\nVersion three.';assert.equal((await supply.publish(candidate,opts)).revision,3);
-    await assert.rejects(()=>supply.publish({...candidate,capabilityIds:['another-scope']},opts));
+    candidate.files['SKILL.md']+='\nVersion three.';assert.equal((await publishConfirmed(supply,candidate,opts)).revision,3);
+    await assert.rejects(()=>publishConfirmed(supply,{...candidate,capabilityIds:['another-scope']},opts));
   }finally{await fs.rm(dataDir,{recursive:true,force:true});}
 });
 test('builder never promotes self tests and returns evaluator IDs without hidden answers',async()=>{
@@ -40,7 +41,7 @@ test('builder never promotes self tests and returns evaluator IDs without hidden
 });
 test('builder preserves faithful impossibility and stages engine review without publishing',async()=>{
   let failure,published=false;
-  const dependencies={verification:{},evaluator:{},publisher:{publish:async()=>{published=true;}},recordFailure:async value=>{failure=value;}};
+  const dependencies={verification:{verify:async()=>({ok:true})},evaluator:{},publisher:{publish:async()=>{published=true;}},recordFailure:async value=>{failure=value;}};
   const impossible=createEvolutionBuilder({...dependencies,dispatch:async()=>({status:'impossible',reason:'Specification is incomplete.'})});
   assert.equal((await impossible.build({id:'card'})).status,'impossible');assert.equal(failure.reason,'Specification is incomplete.');
   const review=createEvolutionBuilder({...dependencies,dispatch:async()=>({publicationKind:'engine-pr',files:{}}),writeEnginePrInput:async value=>({cardId:value.card.id})});assert.equal((await review.build({id:'card'})).status,'review');assert.equal(published,false);
@@ -76,7 +77,7 @@ test('isolated publication executes its exact retained revision after discovery 
   const controller=createEvolutionVerificationController(config),supply=createPlatformSkillSupply(config);
   try{
     const candidate={id:'double',publicationKind:'isolated-tool',entrypoint:'scripts/double.py:calculate',files:{'SKILL.md':'---\nname: double\ndescription: Double a public numerical input.\n---\n\nUse the isolated calculation.','scripts/double.py':"def calculate(value):\n return {'result':value*2}\n"}};
-    const published=await supply.publish(candidate,{card:{toolKind:'calculation'},evaluation:{ok:true,verificationLevel:'V2'}}),generation=await supply.prepareForRuntime({id:'project',capabilityId:'statistics'});
+    const published=await publishConfirmed(supply,candidate,{card:{toolKind:'calculation'},evaluation:{ok:true,verificationLevel:'V2'}}),generation=await supply.prepareForRuntime({id:'project',capabilityId:'statistics'});
     await supply.retire('double');assert.equal(await supply.prepareForRuntime({id:'project',capabilityId:'statistics'}),null);
     const request={toolId:'double',digest:published.digest,args:{value:7}},execute=(body,options)=>controller.execute(body,options);
     assert.deepEqual(await supply.executeIsolated({id:'project'},request,execute,{pins:generation.pins}),{result:14});
@@ -89,12 +90,12 @@ test('isolated publication executes its exact retained revision after discovery 
 test('staged immutable publication stays invisible until catalogue validation activates its exact revision',async()=>{
   const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'ev-staging-')),supply=createPlatformSkillSupply({dataDir,evolutionEnabled:true});
   try{
-    const candidate={id:'staged',publicationKind:'skill',files:{'SKILL.md':'---\nname: staged\ndescription: A staged workflow.\n---\n\nInstructions.'}},publication=await supply.publish(candidate,{card:{toolKind:'workflow'},evaluation:{ok:true,verificationLevel:'V0',smokePassed:true},activate:false});
+    const candidate={id:'staged',publicationKind:'skill',files:{'SKILL.md':'---\nname: staged\ndescription: A staged workflow.\n---\n\nInstructions.'}},publication=await publishConfirmed(supply,candidate,{card:{toolKind:'workflow'},evaluation:{ok:true,verificationLevel:'V0',smokePassed:true},activate:false});
     assert.equal(await supply.prepareForRuntime({id:'project'}),null);
     await assert.rejects(()=>supply.activate({...publication,digest:'sha256:'+'f'.repeat(64)}));
     const restarted=createPlatformSkillSupply({dataDir,evolutionEnabled:true});
     assert.equal(await restarted.prepareForRuntime({id:'project'}),null);
-    const replay=await restarted.publish(candidate,{card:{toolKind:'workflow'},evaluation:{ok:true,verificationLevel:'V0',smokePassed:true},activate:false});assert.equal(replay.revision,publication.revision);
+    const replay=await publishConfirmed(restarted,candidate,{card:{toolKind:'workflow'},evaluation:{ok:true,verificationLevel:'V0',smokePassed:true},activate:false});assert.equal(replay.revision,publication.revision);
     await restarted.activate(publication);assert.equal((await restarted.prepareForRuntime({id:'project',capabilityId:'statistics'})).pins[0].digest,publication.digest);
   }finally{await fs.rm(dataDir,{recursive:true,force:true});}
 });
@@ -102,7 +103,7 @@ test('staged immutable publication stays invisible until catalogue validation ac
 test('isolated tool instructions invoke the immutable gateway client outside the workspace',async()=>{
   const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'isolated-instruction-'));try{
     const supply=createPlatformSkillSupply({dataDir,evolutionEnabled:true});
-    const publication=await supply.publish({id:'callable',publicationKind:'isolated-tool',entrypoint:'scripts/callable.py:callable',capabilityIds:['statistical-analysis'],files:{'SKILL.md':'---\nname: callable\ndescription: A validated callable.\n---\n\nUse JSON input.','scripts/callable.py':'def callable(specification):\n return specification\n','scripts/callable.tool.json':'{}','tests/test_callable.py':'def test_callable():\n assert 1 == 2\n'}},{evaluation:{ok:true,verificationLevel:'V1'}});
+    const publication=await publishConfirmed(supply,{id:'callable',publicationKind:'isolated-tool',entrypoint:'scripts/callable.py:callable',capabilityIds:['statistical-analysis'],files:{'SKILL.md':'---\nname: callable\ndescription: A validated callable.\n---\n\nUse JSON input.','scripts/callable.py':'def callable(specification):\n return specification\n','scripts/callable.tool.json':'{}','tests/test_callable.py':'def test_callable():\n assert 1 == 2\n'}},{evaluation:{ok:true,verificationLevel:'V1'}});
     const generation=await supply.prepareForRuntime({capabilityId:'statistical-analysis'});
     const mounted=path.join(platformSkillGenerationRoot({dataDir},generation.reference),'skills',publication.nativeName);
     assert.ok((await fs.readFile(path.join(mounted,'SKILL.md'),'utf8')).includes(`python3 "$EVIMED_PLATFORM_SKILLS_DIR/${publication.nativeName}/scripts/invoke_isolated.py"`));
@@ -121,12 +122,12 @@ test('script-bearing candidates cannot select native skill execution and frozen 
     const supply=createPlatformSkillSupply({dataDir,evolutionEnabled:true});
     const candidate={id:'frozen',publicationKind:'skill',toolKind:'workflow',entrypoint:'scripts/frozen.py:frozen',files:{'SKILL.md':'---\nname: frozen\ndescription: Frozen callable.\n---\n','scripts/frozen.py':'def frozen(specification):\n return specification\n'}};
     const options={card:{toolKind:'workflow'},evaluation:{ok:true,verificationLevel:'V1'}};
-    await assert.rejects(()=>supply.publish(candidate,options));
+    await assert.rejects(()=>publishConfirmed(supply,candidate,options));
     for(const suffix of ['R','sh','js','PY']){
       const unsupported={...candidate,files:{'SKILL.md':candidate.files['SKILL.md'],['scripts/implementation.'+suffix]:'executable candidate'}};
-      await assert.rejects(()=>supply.publish(unsupported,options));
+      await assert.rejects(()=>publishConfirmed(supply,unsupported,options));
     }
-    candidate.publicationKind='isolated-tool';const publication=await supply.publish(candidate,options),generation=await supply.prepareForRuntime({capabilityId:'statistics'});
+    candidate.publicationKind='isolated-tool';const publication=await publishConfirmed(supply,candidate,options),generation=await supply.prepareForRuntime({capabilityId:'statistics'});
     let calls=0;const execute=async()=>{calls++;return{ok:true,output:'{}'};},request={toolId:candidate.id,digest:publication.digest,args:{specification:{}}};
     await supply.executeIsolated({},request,execute,{pins:generation.pins});assert.equal(calls,1);
     const mismatched=structuredClone(generation.pins);mismatched[0].entrypoint='scripts/frozen.py:other';
@@ -143,7 +144,7 @@ test('verified plain Markdown publication preserves source bytes and exposes onl
   try {
     const config = { dataDir, evolutionEnabled: true }, supply = createPlatformSkillSupply(config);
     const candidate = { id: 'verified-cohort', title: 'Cohort calculation', publicationKind: 'isolated-tool', entrypoint: 'scripts/cohort.py:calculate', files: { 'SKILL.md': '# Cohort calculation\n\nUse the published method.', 'scripts/cohort.py': 'def calculate(specification):\n return {"cost": 1}\n', 'tests/test_cohort.py': 'from scripts.cohort import calculate\nassert calculate({})["cost"] == 1\n' } };
-    const publication = await supply.publish(candidate, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' }, activate: false });
+    const publication = await publishConfirmed(supply,candidate, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' }, activate: false });
     assert.deepEqual((await supply.candidateForEvaluation(publication)).files, candidate.files);
     assert.equal(await supply.prepareForRuntime({ id: 'project' }), null);
     await supply.activate(publication);
@@ -153,6 +154,6 @@ test('verified plain Markdown publication preserves source bytes and exposes onl
     const skill = await fs.readFile(path.join(root, 'skills', pin.nativeName, 'SKILL.md'), 'utf8');
     assert.ok(skill.startsWith(`---\nname: ${pin.nativeName}\n`));
     assert.ok(skill.includes(candidate.files['SKILL.md']));
-    await assert.rejects(supply.publish({ ...candidate, id: 'malformed', files: { ...candidate.files, 'SKILL.md': '---\nname: broken\n---\nBody' } }, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' } }), error => error.code === 'extension_contract_invalid');
+    await assert.rejects(publishConfirmed(supply,{ ...candidate, id: 'malformed', files: { ...candidate.files, 'SKILL.md': '---\nname: broken\n---\nBody' } }, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' } }), error => error.code === 'extension_contract_invalid');
   } finally { await fs.rm(dataDir, { recursive: true, force: true }); }
 });

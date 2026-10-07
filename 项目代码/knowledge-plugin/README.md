@@ -64,6 +64,7 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_EDGE_PROXY_URL` / `KNOWLEDGE_PLUGIN_EDGE_PROXY_CREDENTIALS_FILE` | unset | the `relay` exit: the Tokyo TLS forward proxy (`https://<node>`) and its `user:password` file; unset = relay sources wait |
 | `KNOWLEDGE_PLUGIN_BROWSER_CDP_URL` / `KNOWLEDGE_PLUGIN_BROWSER_TIMEOUT_S` | unset / `60` | the `browser` exit: `http://frontier-browser:9222` (resolved to an IP: Chromium refuses a non-IP Host); unset = browser sources wait |
 | `EVIMED_EVIDENCE_FEED_URL` | unset | the platform's own evidence feed (`https://<platform>/evidence/feed.json`), read as the source `evimed-evidence` (`platform_produced`, contract 1.3.0); unset = the source loads disabled (`feed_url_unset`) and nothing is polled |
+| `EVIMED_SOURCE_REQUESTS_URL` | unset | optional public HTTPS JSON source wish list, pulled daily through protected fetching; only supported AI discovery readers on plugin-approved scholarly hosts are admitted, existing exclusions preserved |
 | `KNOWLEDGE_PLUGIN_CRAWL` | `1` | `0` serves the stored stream without crawling |
 | `KNOWLEDGE_PLUGIN_PORT` / `KNOWLEDGE_PLUGIN_HOST` | `8080` / `0.0.0.0` | listen address |
 | `KNOWLEDGE_PLUGIN_REGISTRY` | `registry/sources.json` | the runtime registry file (watched; re-synced on change) |

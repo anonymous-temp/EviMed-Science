@@ -16,6 +16,7 @@ import { numericScore } from "../../../evals/paper-gold/evaluator.mjs";
 import { freezeCycle, digest } from "../../../evals/paper-gold/evaluator.mjs";
 import { importExistingEngineReceipt } from "./existingEngineCalibration.mjs";
 import { deriveBenchmarkDefinition } from "../../../evals/paper-gold/benchmarks.mjs";
+import { comparisonFromVerifiedUnit } from "./recalculationComparison.mjs";
 import { verifyPaperGoldCode, bindPaperGoldReview, bindPaperGoldStageAssessment } from "./paperGoldVerification.mjs";
 
 /** Fresh isolated namespace only after a checkpointed administrative attempt. */
@@ -295,6 +296,7 @@ export function createPaperGoldEvaluator({ config, usageLedger, store, agentRuns
           });
           return attach(await preservePaperGoldAssessment({directory:receiptDir,binding,result}));
         },
+        comparison: comparisonFromVerifiedUnit,
         async verifyCode({unit,gold}) { return verifyPaperGoldCode({controller,unit,gold,signal}); },
         async review({ evidence, actual, reference, unit, gold, verification: priorVerification }) {
           if (config.reviewProvider === "deepseek") throw new Error("Paper-gold disagreement requires a different model family.");

@@ -442,11 +442,11 @@ const runs = (pattern, digest = DIGEST_A, { invoked = true } = {}) => {
 test("the harm test reads the runs in order and stops at a boundary", () => {
   // Three rejections in a row cross the harm boundary; two cannot decide alone.
   assert.equal(methodHarmTest(runs("rr")).state, "watching");
-  assert.deepEqual({ ...methodHarmTest(runs("rrr")), llr: undefined }, { state: "harm", runs: 3, bad: 3, llr: undefined });
+  assert.deepEqual({ ...methodHarmTest(runs("rrr")), llr: undefined }, { state: "harm", reason: "upper-boundary", runs: 3, bad: 3, llr: undefined });
   // Two early rejections, then work that holds up: not harm.
   assert.equal(methodHarmTest(runs("rra")).state, "watching");
   // Four accepted runs are enough to call it clear, and later runs are not read.
-  assert.deepEqual({ ...methodHarmTest(runs("aaaarrrr")), llr: undefined }, { state: "clear", runs: 4, bad: 0, llr: undefined });
+  assert.deepEqual({ ...methodHarmTest(runs("aaaarrrr")), llr: undefined }, { state: "clear", reason: "lower-boundary", runs: 4, bad: 0, llr: undefined });
   // A background-rate mix that never crosses is clear at the cap.
   const mixed = "aaaaaaaaar".repeat(5);
   const capped = methodHarmTest(runs(mixed), { minRuns: 3 });
@@ -481,7 +481,7 @@ test("the harm test reads only the runs that used the method, never the ones tha
   // that had a research method in their directory and never opened it.
   const carried = runs("rrrrrr", DIGEST_A, { invoked: false });
   assert.equal(carried.counts.loaded, 6, "every one of them was mounted");
-  assert.deepEqual({ ...methodHarmTest(carried), llr: undefined }, { state: "watching", runs: 0, bad: 0, llr: undefined },
+  assert.deepEqual({ ...methodHarmTest(carried), llr: undefined }, { state: "watching", reason: "accumulating", runs: 0, bad: 0, llr: undefined },
     "a run that never read the method is no evidence about it");
   assert.notEqual(retirementProposal(method({ status: "approved", learning: carried }), { nowMs: NOW }).code, "harm");
 

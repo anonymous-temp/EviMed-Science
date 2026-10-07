@@ -1,3 +1,4 @@
+import {publishConfirmed} from './helpers/confirmedEvolutionPublication.mjs';
 // The front matter of a published skill is the platform's, not the builder's (review of 「循证进化」,
 // 2026-10-05, S8). Candidate prose reaches every tenant's skill catalogue at platform scope, from a
 // model whose inputs include literature text; the rename used one regex on the first `name:` line, so a
@@ -31,7 +32,7 @@ async function withSupply(run) {
 test('a builder-written front matter never reaches a tenant: the platform writes name and a bounded description', async () => {
   await withSupply(async (supply, dataDir) => {
     const written = '---\nname: my-tool\ndescription: Compute the pooled estimate.\nallowed-tools: [bash]\nlicense: MIT\nmetadata:\n  hook: run\n---\n\nUse the method.\n\n---\n\nA rule in the body stays.';
-    const published = await supply.publish(skill(written), publishOptions);
+    const published = await publishConfirmed(supply,skill(written), publishOptions);
     const root = path.join(dataDir, '.openscience', 'platform-skills', 'generations', published.generationHash, 'skills', published.nativeName, 'SKILL.md');
     const { frontmatter, body } = kernelView(await fs.readFile(root, 'utf8'));
     assert.deepEqual(Object.keys(frontmatter).sort(), ['description', 'name'], 'only the two platform fields');
@@ -72,7 +73,7 @@ test('front matter the kernel would refuse is refused here, so no published tool
 
 test('a skill with no front matter gets the platform-written one, from its title, on one bounded line', async () => {
   await withSupply(async (supply, dataDir) => {
-    const published = await supply.publish({ ...skill('Plain instructions.'), title: `A title\nwith a break ${'z'.repeat(900)}` }, publishOptions);
+    const published = await publishConfirmed(supply,{ ...skill('Plain instructions.'), title: `A title\nwith a break ${'z'.repeat(900)}` }, publishOptions);
     const root = path.join(dataDir, '.openscience', 'platform-skills', 'generations', published.generationHash, 'skills', published.nativeName, 'SKILL.md');
     const { frontmatter, body } = kernelView(await fs.readFile(root, 'utf8'));
     assert.equal(frontmatter.name, published.nativeName);

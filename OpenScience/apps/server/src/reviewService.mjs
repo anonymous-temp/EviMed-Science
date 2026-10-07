@@ -290,13 +290,14 @@ export class ReviewService {
    *   config: Record<string, any>, database: any, jobs?: any, usageLedger?: any, runtimeManager?: any, store: any,
    *   agentRegistry?: Promise<any> | any, attributeRun?: (input: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
    *   notifications?: any, imService?: any, webReader?: any, fetchImpl?: typeof fetch, referenceResolver?: any,
-   *   report?: (code: string, detail?: string) => void, now?: () => Date, retryDelayMs?: number,
+   *   report?: (code: string, detail?: string) => void, now?: () => Date, retryDelayMs?: number, evolutionSignals?:any,
    * }} deps
    */
   constructor({ config, database, jobs = null, usageLedger = null, runtimeManager = null, store, agentRegistry = null, attributeRun = async () => null,
     notifications = null, imService = null, webReader = null, fetchImpl = globalThis.fetch, referenceResolver = null, report = () => {}, now = () => new Date(),
-    retryDelayMs = EDITOR_RETRY_DELAY_MS }) {
+    retryDelayMs = EDITOR_RETRY_DELAY_MS, evolutionSignals = null }) {
     this.config = config;
+    this.evolutionSignals = evolutionSignals;
     this.retryDelayMs = retryDelayMs;
     this.database = database;
     this.jobs = jobs ?? (database ? new ProductJobs(database) : null);
@@ -482,6 +483,7 @@ export class ReviewService {
       const kind = findings.rows.find((/** @type {any} */ row) => row.id === answer.id)?.kind ?? "unknown";
       const key = `${kind}:${answer.response}`;
       this.counts.responses[key] = (this.counts.responses[key] ?? 0) + 1;
+      try{await this.evolutionSignals?.record({userId:identity.userId,projectId:identity.projectId,eventId:`review:${reviewId}:${answer.id}:${answer.response}`,moduleId:"evidence",kind:answer.response==="fixed"?"review-accepted":"review-rejected",capability:"unknown",operation:"edit",dataShape:"text",version:reviewId});}catch{/* the writer's response remains recorded */}
     }
     return { recorded: accepted.length, refused };
   }

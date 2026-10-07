@@ -1,3 +1,4 @@
+import { evolutionUsageContext } from './evolutionUsage.mjs';
 import { reasoningFields } from "./modelReasoningPolicy.mjs";
 // The production model is certified end to end, not merely configured: the
 // release gate exercises the whole tool chain against it and signs a receipt
@@ -1308,6 +1309,7 @@ const CONTROL_PLANE_NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREA
  * @returns {Promise<any>} the provider's parsed JSON response
  */
 export async function callModelForControlPlane({ config, usageLedger, fetchImpl = fetch }, call) {
+  if (evolutionUsageContext()) call={...call,purpose:'evolution',limits:{daily:config.evolutionDailyBudgetCny,weekly:0,run:call.limits?.run??0}};
   const at = call.at ?? new Date();
   const body = { ...call.body, stream: false };
   if (!supportedDeepSeekModels.has(String(body.model ?? ""))) {

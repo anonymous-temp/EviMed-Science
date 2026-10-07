@@ -458,9 +458,9 @@ function continuationBindingKey(value) {
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
 export class AutopilotService {
-  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,entityVocabulary?:{tag:(input:{texts:string[]})=>Promise<string[]|null>,frontierItemsMatching?:(query:any)=>Promise<any[]>}|null,programme?:{owns:(userId:string,projectId:string)=>boolean,assertAdmitted:(userId:string,agenda:any,options?:{episodeId?:string|null})=>Promise<void>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
+  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,evolutionSignals?:any,entityVocabulary?:{tag:(input:{texts:string[]})=>Promise<string[]|null>,frontierItemsMatching?:(query:any)=>Promise<any[]>}|null,programme?:{owns:(userId:string,projectId:string)=>boolean,assertAdmitted:(userId:string,agenda:any,options?:{episodeId?:string|null})=>Promise<void>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
   constructor({ documents, jobs, usage = null, accountCaps = () => ({}), notifications = null, capsules = null, planner = null,
-    evolution = null, entityVocabulary = null, programme = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
+    evolution = null, evolutionSignals = null, entityVocabulary = null, programme = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
     if (!documents || !jobs) throw new TypeError("AutopilotService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
@@ -472,6 +472,7 @@ export class AutopilotService {
     /** The one model decision before each episode; without it the date rotation chooses (`chooseNextAction`). */
     this.planner = planner;
     this.evolution = evolution;
+    this.evolutionSignals = evolutionSignals;
     /** The shared entity vocabulary (`entityVocabulary.mjs`): an agenda is tagged with it, and without it carries no keys. */
     this.entityVocabulary = entityVocabulary;
     /**
@@ -1257,6 +1258,7 @@ export class AutopilotService {
     }
     if (!subject) throw new HttpError(409, "autopilot_verification_conflict", "The research episode changed repeatedly while recording a verification.");
     if (digestId) await this.applyVerificationToDigest(userId, digestId, subject);
+    if(subject.verification?.reproductionMatched===true && subject.verification?.isolationEnforced===true){try{await this.evolutionSignals?.record({userId,projectId:(await this.getEpisode(userId,episodeId)).projectId,eventId:`verified-discovery:${verificationId}`,moduleId:"autopilot",kind:"workflow-success",capability:"unknown",operation:"plan",dataShape:"none",version:verificationId});}catch{/* verified outcome remains authoritative */}}
     return { claim: subject, repeated };
   }
 
@@ -1994,8 +1996,10 @@ export class AutopilotService {
    */
   async chooseNextAction(userId, agenda, { episodeId, date, trigger, note = null, progress, eligible, reduced, manual, envelopeCny = Infinity }) {
     const base = { eligibleTypes: eligible, priority: reduced ? "reduced" : "normal", decidedAt: this.now().toISOString() };
-    const rotation = (/** @type {string} */ fallbackReason) => ({ ...base, source: "date-rotation", action: "run",
-      taskType: rotationTaskType(eligible, date), fallbackReason });
+    const rotation = async (/** @type {string} */ fallbackReason) => {
+      try { await this.evolutionSignals?.record({userId,projectId:agenda.projectId,eventId:`planner:${episodeId}`,moduleId:"autopilot",kind:"planner-fallback",operation:"plan",dataShape:"none",capability:"unknown",version:"date-rotation"}); } catch { /* feedback cannot stop research */ }
+      return {...base,source:"date-rotation",action:"run",taskType:rotationTaskType(eligible,date),fallbackReason,policyRevisionId:null};
+    };
     if (!this.planner) return rotation("autopilot_planner_unavailable");
     const since = Date.parse(agenda.payload.lastStartedAt);
     const completedSinceStart = (agenda.payload.outcomes ?? []).some((/** @type {any} */ outcome) => outcome.status === "succeeded"
@@ -2017,9 +2021,9 @@ export class AutopilotService {
         ...(this.programme?.owns(userId, agenda.projectId) ? { purpose: "evidence" } : {}),
       });
       return decision.action === "stop"
-        ? { ...base, source: "model", model: decision.model, action: "stop", stopKind: decision.stopKind, reason: decision.reason,
+        ? { ...base, source: "model", model: decision.model, policyRevisionId: decision.policyRevisionId ?? null, action: "stop", stopKind: decision.stopKind, reason: decision.reason,
           ...(decision.resourceNeed ? { resourceNeed: decision.resourceNeed } : {}) }
-        : { ...base, source: "model", model: decision.model, action: "run", taskType: decision.taskType, focus: decision.focus, reason: decision.reason };
+        : { ...base, source: "model", model: decision.model, policyRevisionId: decision.policyRevisionId ?? null, action: "run", taskType: decision.taskType, focus: decision.focus, reason: decision.reason };
     } catch (error) {
       // A decision that cannot be had never holds the research back; the code is
       // an identifier of ours, never the provider's words.
@@ -2182,9 +2186,16 @@ export class AutopilotService {
       const folded = foldOutcome(agenda.payload, { episodeId, taskType, status: /** @type {any} */ (status), gatedClaims,
         daysSinceDigestOpened: await this.daysWithoutReading(userId, agenda), userRejected: userRejected(agenda), at: this.now().toISOString() });
       try {
-        return await this.documents.put(userId, "agenda", agenda.id, {
+        const saved=await this.documents.put(userId, "agenda", agenda.id, {
           ...agenda.payload, ...folded, updatedAt: this.now().toISOString(),
         }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+        try {await this.evolutionSignals?.record({userId,projectId:agenda.projectId,eventId:`outcome:${episodeId}`,moduleId:"autopilot",kind:"programme-outcome",capability:"unknown",operation:"plan",dataShape:"none",version:saved.revision});}catch{/* feedback cannot undo the outcome */}
+        if(status==='succeeded' && agenda.payload.lastEvolutionWake){
+          const completedEpisode=await this.documents.get(userId,'episode',episodeId);
+          try {await this.evolution?.recordResumedResearchCompleted?.({userId,projectId:agenda.projectId,agendaId,
+            runId:completedEpisode?.payload?.runId,status});}catch{/* evolution observation never changes research delivery */}
+        }
+        return saved;
       } catch (error) {
         if (!isConflict(error)) throw error;
       }

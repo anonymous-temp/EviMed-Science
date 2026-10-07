@@ -51,11 +51,12 @@ function requireDatasetId(datasetId) {
 }
 
 export class DataSemanticsService {
-  /** @param {{ documents: any, now?: () => string, onChanged?: ((event:any)=>Promise<void>)|null }} dependencies */
-  constructor({ documents, now = () => new Date().toISOString(), onChanged = null }) {
+  /** @param {{ documents: any, now?: () => string, onChanged?: ((event:any)=>Promise<void>)|null,evolutionSignals?:any }} dependencies */
+  constructor({ documents, now = () => new Date().toISOString(), onChanged = null, evolutionSignals = null }) {
     this.documents = documents;
     this.now = now;
     this.onChanged = onChanged;
+    this.evolutionSignals = evolutionSignals;
   }
 
   /** The datasets a project has, newest first, in the short form a list shows.
@@ -134,6 +135,11 @@ export class DataSemanticsService {
         // The record is saved. What a consumer of the change does with it is the consumer's business: its failure is
         // not the write's, and an error of its own that looks like a lost race must not make this one write again.
         try { await this.onChanged?.({ userId, projectId, datasetId, revision: saved.revision, asset: fitted.asset }); } catch { /* the consumer's failure is its own */ }
+        const outcomes=/** @type {any} */ (outcome.answer)?.outcomes??[];
+        const codes=Array.isArray(outcomes)?outcomes:Object.values(outcomes);
+        for(const kind of [...(codes.some(item=>item?.outcome==="kept_stronger")?["semantics-contested"]:[]),...(codes.some(item=>item?.outcome==="corrected" || (row && !telemetry && ["applied","upgraded"].includes(item?.outcome)))?["semantics-correction"]:[]),...(telemetry&&fitted.asset.lastCheck?.clean?.length?["availability"]:[])]){
+          try{await this.evolutionSignals?.record({userId,projectId,eventId:`semantics:${id}:${saved.revision}:${kind}`,moduleId:"sources",kind,capability:"dataset-research-scoping",operation:"transform",dataShape:"table",version:saved.revision});}catch{/* semantic write remains authoritative */}
+        }
         return { ...outcome, asset: fitted.asset, revision: saved.revision, trimmed: fitted.trimmed };
       } catch (error) {
         if (error instanceof HttpError && error.code === "product_revision_conflict" && attempt < WRITE_ATTEMPTS) continue;

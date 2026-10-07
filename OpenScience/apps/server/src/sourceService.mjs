@@ -482,8 +482,8 @@ export class SourceService {
    * one is labelled, `ResultImpactService.reconcileReplacement`). It records and never decides: whatever it does or fails
    * to do leaves the registration exactly as it is.
    * @param {any} documents @param {any} jobs
-   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,report?:(code:string)=>void}} options */
-  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, report = () => {} } = {}) {
+   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any}} options */
+  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, report = () => {}, evolutionSignals = null } = {}) {
     if (!documents || !jobs) throw new TypeError("SourceService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
@@ -491,6 +491,7 @@ export class SourceService {
     this.now = now;
     this.afterReplace = afterReplace;
     this.report = report;
+    this.evolutionSignals = evolutionSignals;
     /** @type {Map<string,any>} */
     this.connectors = new Map();
   }
@@ -982,7 +983,8 @@ export class SourceService {
   /** Units, structured knowledge, method drafts and current pointer are one
    * account/project/generation/lease-checked publication transaction. */
   async publishUnderstanding(job, parsed, completed = null, artifactPath = null) {
-    return this.withSourceLease(job, async (source, client) => {
+    let hasOmission=false;
+    const published=await this.withSourceLease(job, async (source, client) => {
       const generation = source.payload.generation;
       const isSkip = source.payload.depth === "skip";
       const input = isSkip ? null : (await this.loadCapture(job.userId, source, client))?.input;
@@ -1028,6 +1030,7 @@ export class SourceService {
       const parserCoverage = isSkip ? null : source.payload.analysis.parserCoverage;
       const coverage = parserCoverage ? { ...parserCoverage, omissionRate: omission.omissionRate } : null;
       const status = coverage?.failed > 0 ? "needs_attention" : "complete";
+      hasOmission=Number(omission.omissionRate??0)>0 || Number(coverage?.failed??0)>0;
       // The audit verdict belongs to the understanding contract; carry through
       // whatever it declared instead of restating a fixed "not run" here.
       const payload = { ...source.payload, status, currentUnderstandingId: output ? id : null, coverage,
@@ -1040,6 +1043,8 @@ export class SourceService {
       const updated = await this.documents.put(job.userId, "source", source.id, payload, { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
       return { sourceId: source.id, sourceRevision: updated.revision, status, understandingId: output ? id : null };
     }, false, true);
+    if(published?.sourceRevision){try{await this.evolutionSignals?.record({userId:job.userId,projectId:job.projectId,eventId:`source:${published.sourceId}:${published.sourceRevision}`,moduleId:"sources",kind:hasOmission?"source-omission":"availability",capability:"source-understanding",operation:"extract",dataShape:"text",version:published.sourceRevision});}catch{/* publication remains complete */}}
+    return published;
   }
 
   async getUnderstanding(userId, sourceId) {

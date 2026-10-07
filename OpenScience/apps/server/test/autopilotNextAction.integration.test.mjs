@@ -64,7 +64,7 @@ test("the chosen action and its reason are persisted on the episode, read back u
   const stored = await service.getEpisode(owner, scheduled.episode.id);
   assert.equal(stored.payload.taskType, "evidence-update");
   assert.deepEqual(stored.payload.selection, { eligibleTypes: ["literature-sentinel", "evidence-update"], priority: "normal",
-    decidedAt: stored.payload.selection.decidedAt, source: "model", model: "deepseek-flash", action: "run", taskType: "evidence-update",
+    decidedAt: stored.payload.selection.decidedAt, source: "model", model: "deepseek-flash", policyRevisionId: null, action: "run", taskType: "evidence-update",
     focus: "核对尚未复核的结论", reason: "上次的结论还没有独立复核" });
   assert.match(stored.payload.prompt, /Planned focus for this episode/);
   assert.equal(planner.calls.length, 1);

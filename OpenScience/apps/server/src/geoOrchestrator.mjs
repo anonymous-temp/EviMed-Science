@@ -1,3 +1,4 @@
+import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
@@ -507,13 +508,14 @@ export class GeoOrchestrator {
    *   enqueueRound?: ((spec: { geoProjectId: string, kind: string, questionIds?: string[], engines?: string[], repeat?: number,
    *     ref?: Record<string, any> }) => Promise<any>) | null,
    *   noteCitation?: ((input: { orderId: string, engine: string }) => Promise<any>) | null,
-   *   now?: () => Date, report?: (code: string) => void }} dependencies
+   *   policies?: any, now?: () => Date, report?: (code: string) => void }} dependencies
    *   `enqueueRound` is the measurement package's, bound to its deps; absent,
    *   diagnosis and the schedules wait and `status()` says measurement is not wired.
    */
   constructor({ store, config = {}, notifier = null, dispatchRun = null, runStatus = null, latestSessionId = null, enqueueRound = null,
-    noteCitation = null, now = () => new Date(), report = () => {} }) {
+    noteCitation = null, policies = createModuleEvolutionPolicies(), now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The GEO orchestrator needs the GEO store.");
+    this.policies = policies;
     this.store = store;
     this.config = config;
     this.notifier = notifier;
@@ -1343,9 +1345,12 @@ export class GeoOrchestrator {
       if (!["running"].includes(current.steps[step]?.status)) current = await this.#step(current, step, { status: "queued" });
     }
     try {
+      const policy = await this.policies.resolve("geo", { supplements: [] });
+      const supplements = policy.policy.supplements.filter((item) => item.capabilityId === spec.capabilityId).map((item) => item.text);
+      const brief = supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policy.revisionId}):\n${supplements.join("\n")}` : spec.brief;
       const out = await /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: project.userId, projectId: project.projectId, geoProjectId: project.id, capabilityId: spec.capabilityId,
-        dispatchId: String(mark.dispatch_id), reason: spec.reason, brief: spec.brief,
+        dispatchId: String(mark.dispatch_id), reason: spec.reason, brief,
       });
       const running = await this.#update(project.id, spec.key, { state: "running", runId: String(out.runId), sessionId: out.sessionId ?? null,
         attempts: Number(mark.attempts ?? 0) + 1 }, ["claimed"]);

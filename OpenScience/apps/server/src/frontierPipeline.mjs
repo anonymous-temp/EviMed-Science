@@ -1,3 +1,4 @@
+import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 /**
  * The frontier feed's processing pipeline (「前沿动态」 处理管线, plan §10.3).
  *
@@ -521,7 +522,7 @@ function orderedFlags(flags) {
 export class FrontierPipeline {
   /**
    * @param {{ database: any, editor: any, plugin: any, embedder?: any, glossary?: any, config?: Record<string, any>,
-   *           sourceChanges?: any, now?: () => Date, workerId?: string }} options
+   *           sourceChanges?: any, policies?: any, evolution?: any, now?: () => Date, workerId?: string }} options
    *   `editor` a `FrontierEditor` (its `owner` is the operator's internal
    *   project, and the budget is read for it); `plugin` offers `text(entryId)`
    *   (`KnowledgePluginClient`); `embedder` a `KbEmbedder` or null; `glossary`
@@ -530,7 +531,7 @@ export class FrontierPipeline {
    *   (`sourceChanges.mjs`), which each retraction, correction, concern or
    *   withdrawal notice is also written to (absent: nothing is).
    */
-  constructor({ database, editor, plugin, embedder = null, glossary = null, config = {}, sourceChanges = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
+  constructor({ database, editor, plugin, evolution = null, policies = createModuleEvolutionPolicies(), embedder = null, glossary = null, config = {}, sourceChanges = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
     if (!database) throw new TypeError("The frontier pipeline needs a database.");
     if (typeof editor?.screen !== "function" || typeof editor?.edit !== "function") throw new TypeError("The frontier pipeline needs an editor.");
     if (typeof plugin?.text !== "function") throw new TypeError("The frontier pipeline needs the plugin client.");
@@ -545,6 +546,8 @@ export class FrontierPipeline {
     this.glossaryStore = glossary instanceof FrontierGlossary ? { current: async () => glossary }
       : glossary && typeof glossary.current === "function" ? glossary : new FrontierGlossaryStore({ database });
     this.leaseMs = Math.max(MINUTE, Number(this.config.frontierLeaseMs) || 10 * MINUTE);
+    this.evolution = evolution;
+    this.policies = policies;
     this.threshold = frontierSelectThreshold(this.config);
     this.budgetCny = Number.isFinite(Number(this.config.frontierDailyBudgetCny)) ? Number(this.config.frontierDailyBudgetCny) : 10;
     this.offpeak = this.config.frontierOffpeak !== false;
@@ -628,6 +631,9 @@ export class FrontierPipeline {
    * @returns {Promise<FrontierBatchSummary>}
    */
   async processBatch() {
+    const policy = await this.policies.resolve("frontier", { selectionThreshold: frontierSelectThreshold(this.config) });
+    this.threshold = policy.policy.selectionThreshold;
+    this.policyRevisionId = policy.revisionId;
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
       waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0 };
@@ -704,6 +710,11 @@ export class FrontierPipeline {
           continue;
         }
         const source = sources.get(entry.source_id);
+        if (entry.source_id === "arxiv-agent-self-improvement" || entry.facts?.discovery_only === true) {
+          await this.#finishEntry(entry, "dropped", "evolution-discovery-only");
+          summary.dropped += 1;
+          continue;
+        }
         if (newest.get(entry.plugin_entry_id) !== entry) {
           // An older revision that already feeds an item is superseded (and
           // released) by the newest one's revision step below.
@@ -1112,6 +1123,8 @@ export class FrontierPipeline {
         if (!keep) {
           await this.#finishEntry(entry, "screened-out", verdict.medical ? "not-news" : "not-medical");
           summary.screenedOut += 1;
+          try { await this.evolution?.observe?.({ moduleId: "frontier", kind: "screened-out", eventId: `frontier-entry:${entry.id}:${entry.revision}`,
+            codes: [verdict.medical ? "not-news" : "not-medical"], policyRevisionId: this.policyRevisionId }); } catch { /* Observation does not affect publication. */ }
           continue;
         }
         const created = await this.#createItem(entry, source, verdict, context);
@@ -1610,6 +1623,9 @@ export class FrontierPipeline {
         await bumpFrontierVersion(client);
       }
     });
+    try { await this.evolution?.observe?.({ moduleId: "frontier", kind: "edit-verification", eventId: `frontier-edit:${item.id}:${result.modelInputSha256}:${result.editorVersion}`,
+      codes: [result.verification], policyRevisionId: result.editorVersion,
+      counts: { failed: Number(result.verification === "title-only"), numbersChecked: result.numbers?.checked ?? 0, numberFailures: result.numbers?.missing?.length ?? 0, unitMismatches: result.numbers?.unitMismatches?.length ?? 0 } }); } catch { /* Observation does not affect publication. */ }
   }
 
   /** The words search finds an item by. @param {any} item */

@@ -2247,3 +2247,11 @@ test("a run scope carries the account's day and week and the run's own limit, ne
     "no account cap is a figure no run reaches, so the agenda's ¥3 cannot become the gateway's daily limit");
   assert.throws(() => service.runScope(agenda, 0), { code: "autopilot_payload_invalid" }, "a run with nothing to spend is not a run with no limit");
 });
+
+test('planner fallback emits one closed signal and cannot stop scheduling when signal storage fails',async()=>{
+ const f=fixture();let signal;
+ f.service.evolutionSignals={record:async value=>{signal=value;throw new Error('signal unavailable');}};
+ const decision=await f.service.chooseNextAction('u',{projectId:'p',payload:{}},{episodeId:'e',date:'2026-10-06',trigger:'scheduled',progress:[],eligible:['literature'],reduced:false,manual:false});
+ assert.equal(decision.source,'date-rotation');assert.equal(signal.kind,'planner-fallback');assert.equal(signal.operation,'plan');
+ assert.equal(decision.policyRevisionId,null);
+});

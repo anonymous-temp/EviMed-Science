@@ -8,6 +8,8 @@ export async function completeEvolutionRuntime({ config, evolution, project, run
   await evaluationIsolation.recordCitations(run.id, { artifacts: run.artifacts, reply: run.reply ?? run.summary ?? '' });
   try { await runtimeManager.captureRunEgressProof({ project, runId: run.id, phase: 'end' }); }
   catch { /* Unsupported or failed probes leave exposure unknown and cannot prevent cleanup. */ }
-  independentProductWork(() => runtimeManager.endBoundedRuntime(project, run.dispatchId)).catch(() => {});
+  if (!(/^eval-paper-runtime-/.test(project.id) && /^runtime-probe-/.test(run.dispatchId ?? "") && run.effectiveRouteReason === "platform-evolution")) {
+    independentProductWork(() => runtimeManager.endBoundedRuntime(project, run.dispatchId)).catch(() => {});
+  }
   return true;
 }

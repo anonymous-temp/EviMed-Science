@@ -56,6 +56,7 @@ const SOURCE_ROUND_KINDS = new Set(["baseline", "weekly", "single_step"]);
  * @property {import("./geoMeasureStore.mjs").GeoMeasureStore} store
  * @property {() => Date} [now]
  * @property {number} [maxRounds]   rounds per tick (default 3)
+ * @property {any} [evolution]
  * @property {(round: { id: string, geoProjectId: string, kind: string }) => unknown} [onRoundMeasured]
  */
 
@@ -180,6 +181,10 @@ export async function measureRound(deps, roundId) {
   const perEngine = computeGeoMetrics(/** @type {any[]} */ (balance.deduped), { ...options, scopes: ["engine", "pool_engine"] });
   const across = computeGeoMetrics(/** @type {any[]} */ (balance.rows), { ...options, scopes: ["project", "pool", "group", "arm"] });
   const cells = [...across.cells, ...perEngine.cells];
+  const communication = deps.evolution?.communication;
+  if (communication && kept.some((row) => row.statements?.some((statement) => statement.verdict === "wrong"))) {
+    try { await communication.offer({ sourceEventId: `geo-round:${round.id}`, userId: project.userId, projectId: project.projectId, entityKeys: project.entityKeys ?? [] }); } catch { /* Module intake must not affect measurement. */ }
+  }
   await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: cells });
   await store.noteRoundBalance(roundId, { questions: balance.questions, kept: balance.kept, dropped: balance.dropped.length,
     droppedQuestionIds: balance.dropped.slice(0, 50), engines: balance.engines });
@@ -225,7 +230,7 @@ export function sameEngines(measured, engines) {
  * compared; when the baseline window holds none, the row says `engines_differ`
  * — 引擎不同，不可比 — instead of a number.
  * @param {import("./geoMeasureStore.mjs").GeoMeasureStore} store
- * @param {{ project: { id: string }, round: { setVersion: number | null, sampleDate: string | null }, controlGroups: number, engines: readonly string[] }} input
+ * @param {{ project: { id: string }, round: { setVersion: number | null, sampleDate: string | null, surface?: any }, controlGroups: number, engines: readonly string[] }} input
  */
 export async function netEffectRows(store, { project, round, controlGroups, engines }) {
   const baselineDate = await store.baselineDate(project.id, round.setVersion);
@@ -257,6 +262,11 @@ export async function netEffectRows(store, { project, round, controlGroups, engi
         continue;
       }
       const effect = netEffect(comparable.pilot, comparable.control, { noise, baselineDate, controlGroupCount: controlGroups });
+      // Assistant names do not establish stable model versions.
+      if (effect.status === "computed" && round.surface?.intervention?.engines?.some((engine) => engine.observedVersion === "unknown")) {
+        rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "engine_version_unknown" });
+        continue;
+      }
       rows.push(effect.status === "computed"
         ? { ...where, value: effect.value ?? null, numerator: effect.pilotChange ?? null, denominator: effect.controlChange ?? null, status: "ok",
           reason: effect.verdict ?? null }

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { getWebProjectId } from "@/lib/apiClient";
 import {
+  reportFrontierExposure,
   fetchFrontierForYou,
   fetchFrontierHotBoard,
   fetchFrontierStatus,
@@ -181,6 +182,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   /* ---------------------------------------------------------------- list */
 
   const [listing, setListing] = useState<Listing | null>(null);
+
+
   const [listError, setListError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [fresh, setFresh] = useState<{ count: number; listing: Listing } | null>(null);
@@ -235,7 +238,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         });
         restore.current = undefined;
       } else pages.current = 1;
-      show({ key, items: restored.items, nextCursor: restored.nextCursor, version: restored.version, loadedAt: Date.now() });
+      show({ key, exposure: restored.exposure, items: restored.items, nextCursor: restored.nextCursor, version: restored.version, loadedAt: Date.now() });
     } catch (error) {
       if (current !== generation.current) return;
       if (frontierAbsence(error) === "off") { onOff(); return; }
@@ -270,14 +273,14 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       if (page.restarted) {
         pages.current = 1;
         // The list changed under the cursor: page one again, in place.
-        show({ key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now() });
+        show({ key, exposure: page.exposure, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now() });
         scrollToListTop();
         return;
       }
       pages.current += 1;
       patchListing((list) => {
         const known = new Set(list.items.map((item) => item.id));
-        return { ...list, items: [...list.items, ...page.items.filter((item) => !known.has(item.id))], nextCursor: page.nextCursor };
+        return { ...list, exposures: [...(list.exposures ?? (list.exposure ? [list.exposure] : [])), ...(page.exposure ? [page.exposure] : [])], items: [...list.items, ...page.items.filter((item) => !known.has(item.id))], nextCursor: page.nextCursor };
       });
     } catch (error) {
       if (current === generation.current) toast.error(frontierErrorMessage(error));
@@ -310,6 +313,29 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
 
   const [forYou, setForYou] = useState<ForYouState>({ kind: "loading" });
   const [forYouAttempt, setForYouAttempt] = useState(0);
+  useEffect(() => {
+    const exposures = view === "foryou" && forYou.kind === "ready"
+      ? [forYou.forYou?.exposure].filter((value) => value !== undefined)
+      : listing?.exposures ?? (listing?.exposure ? [listing.exposure] : []);
+    if (!exposures.length || typeof IntersectionObserver === "undefined") return;
+    const sent = new Set<string>();
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting).flatMap((entry) => {
+        const id = (entry.target as HTMLElement).dataset.frontierItem;
+        const exposure = exposures.find((snapshot) => id && snapshot.candidateIds.includes(id));
+        const position = id && exposure
+          ? Array.from(pageRoot.current?.querySelectorAll("[data-frontier-item]") ?? []).indexOf(entry.target) : -1;
+        if (!id || position < 0 || sent.has(id)) return [];
+        sent.add(id);
+        return [{ id, position, token: exposure!.token }];
+      });
+      for (const token of new Set(visible.map((item) => item.token))) {
+        void reportFrontierExposure(token, visible.filter((item) => item.token === token).map(({id,position}) => ({id,position}))).catch(() => {});
+      }
+    }, { threshold: 0.5 });
+    pageRoot.current?.querySelectorAll("[data-frontier-item]").forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [listing, view, forYou]);
   useEffect(() => {
     if (!ready || view !== "foryou") return;
     let active = true;

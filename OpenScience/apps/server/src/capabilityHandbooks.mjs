@@ -1,6 +1,7 @@
 /** Owner-specific lessons are workspace context, never a replacement for shipped capability policy. */
 import { createHash } from "node:crypto";
-import { renderMethodSkill } from "@evimed/domain";
+import { renderMethodSkill, scientificOutcomes } from "@evimed/domain";
+import { handbookUtility, rankHandbookEntries } from "./handbookUtility.mjs";
 import { CAPABILITY_HANDBOOK_RECORD_TYPE } from "./handbookConsolidation.mjs";
 import { assertProjectCapacity, resolveScopedPath, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
@@ -25,6 +26,7 @@ export async function prepareCapabilityHandbooks({ learning, registry, project, 
   const bound = Math.max(0, Math.min(MAX_HANDBOOK_PROMPT_BYTES, maxPromptBytes));
   let bytes = Buffer.byteLength(INTRO) + 1;
   const selected = [];
+  const validated=[];
   for (const document of page.items) {
     const payload = document.payload;
     try {
@@ -34,11 +36,20 @@ export async function prepareCapabilityHandbooks({ learning, registry, project, 
       result.omitted += 1;
       continue;
     }
+    const outcomes=scientificOutcomes(payload.scientific,payload.contentDigest);
+    const usefulCount=outcomes.filter(entry=>entry.polarity==="supports").length;
+    const harmfulCount=outcomes.filter(entry=>entry.polarity==="against").length;
+    validated.push({id:document.id,document,usefulCount,harmfulCount,applicability:1,freshness:0.2/(1+Math.max(0,(Date.now()-(Date.parse(payload.appliedAt??payload.createdAt??"")||Date.now()))/86400000))});
+  }
+  const preferred=rankHandbookEntries(validated,6);
+  const ordered=[...preferred,...rankHandbookEntries(validated,validated.length).filter(entry=>!preferred.includes(entry))];
+  for(const entry of ordered){
+    const document=entry.document,payload=document.payload;
     const key = createHash("sha256").update(JSON.stringify([document.id, payload.contentDigest])).digest("hex");
     const directory = `.evimed-handbooks/${key}`;
     const files = Object.entries(payload.files ?? {}).map(([name, content]) => ({ path: `${directory}/${name}`, content: String(content) }));
     const item = { id: document.id, ownerId: project.userId, capabilityId, contentDigest: payload.contentDigest,
-      version: payload.version, path: `${directory}/SKILL.md`, files: files.map((file) => file.path),
+      version: payload.version, utility:handbookUtility(entry), path: `${directory}/SKILL.md`, files: files.map((file) => file.path),
       body: payload.body.length > 1600 ? `${payload.body.slice(0, 1600)}\n[Excerpt; read the complete file.]` : payload.body };
     const size = Buffer.byteLength(render(item)) + 1;
     if (selected.length >= 6 || bytes + size > bound) { result.omitted += 1; continue; }

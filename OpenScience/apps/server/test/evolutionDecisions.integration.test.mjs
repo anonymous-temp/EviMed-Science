@@ -181,5 +181,5 @@ test("whatever a snapshot holds, the text of a digest fits the inbox and says wh
   const body = renderEvolutionDigest(snapshot);
   assert.ok(body.length <= 8000);
   assert.match(body, /日报过长，另有 \d+ 行未显示/);
-  assert.match(renderEvolutionDigest({ decisions: [], autonomous: [], resources: [], achievements: [], evaluationSummaries: [] }), /^待你裁决\n暂无/);
+  assert.match(renderEvolutionDigest({ decisions: [], autonomous: [], resources: [], achievements: [], evaluationSummaries: [] }), /^今天平台进步了什么\n尚无已确认的新进展。[\s\S]*待你裁决\n暂无/);
 });

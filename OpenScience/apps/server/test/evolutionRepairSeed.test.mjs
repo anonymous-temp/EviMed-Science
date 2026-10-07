@@ -1,3 +1,4 @@
+import {publishConfirmed} from './helpers/confirmedEvolutionPublication.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evolutionRepairSeed } from '../src/evolutionRepairSeed.mjs';
@@ -36,7 +37,7 @@ test('certified parent seeds real isolated public boundary execution with unchan
   const config = { dataDir, evolutionEnabled: true, runtimeContainerBin: 'docker', runtimeContainerImage: image }, supply = createPlatformSkillSupply(config), controller = createEvolutionVerificationController(config);
   try {
     const files = { 'SKILL.md': '# Public boundary method', 'scripts/calculate.py': 'def calculate(value):\n if value < 0: raise ValueError("Negative value unsupported")\n return {"result":value*2}\n' };
-    const publication = await supply.publish({ id: 'parent', publicationKind: 'isolated-tool', entrypoint: 'scripts/calculate.py:calculate', files }, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' }, activate: false });
+    const publication = await publishConfirmed(supply,{ id: 'parent', publicationKind: 'isolated-tool', entrypoint: 'scripts/calculate.py:calculate', files }, { card: { toolKind: 'calculation' }, evaluation: { ok: true, verificationLevel: 'V2' }, activate: false });
     const seed = await evolutionRepairSeed({ service: { get: async () => ({ id: 'parent', payload: { artifactDigest: publication.digest, revision: publication.revision } }) }, supply, isolation: { filter: async (_identity, _kind, value) => value } }, { repairOf: { toolId: 'parent', artifactDigest: publication.digest }, parentToolIds: ['parent'] }, { userId: 'owner', projectId: 'repair' });
     assert.deepEqual(seed.files, files);
     const validator = createEvolutionDevelopmentValidation({ controller: { execVerify: (body, options) => controller.execute(body, options) } });

@@ -177,18 +177,26 @@ test("the cursor moves past what was read, a replay of the log changes nothing, 
   const mine = await resultCard(userZone, "Mine", [claim("Stroke was less frequent on the drug.", "Among 100 adults on the drug, 7 had a stroke")]);
   await append(mine, userZone, { category: "withdrawal", trigger: "challenge", refs: { claimId: "CLM-001" } });
   const feedback = feedbackDouble();
-  // The second tick starts while the first holds the lease, in the middle of its read: two ticks merely started together could
-  // run one after the other (the first released before the second asked), which is no overlap and made this test flaky on CI.
-  let leaveFirst = () => {};
-  const held = new Promise((resolve) => { leaveFirst = resolve; });
-  let enteredFirst = () => {};
-  const inside = new Promise((resolve) => { enteredFirst = resolve; });
-  const subject = consumer({ methodFeedback: feedback, resolveProject: async (userId, projectId) => { enteredFirst(); await held; return { userId, id: projectId }; } });
+  const entered = Promise.withResolvers(), release = Promise.withResolvers();
+  const subject = consumer({ methodFeedback: feedback, resolveProject: async (userId, projectId) => {
+    entered.resolve();
+    await release.promise;
+    return { userId, id: projectId };
+  } });
+  // Pause after acquisition: two ticks merely started together can legitimately run one after the other (the first released
+  // before the second asked), which is no overlap and made this test flaky on CI. The race keeps a first tick that never
+  // reaches the pause from hanging the test: the contender's answer then fails the assertion instead.
   const first = subject.tick();
-  await Promise.race([inside, first]);
-  const second = await consumer({ methodFeedback: feedback, resolveProject: async () => null }).tick();
-  leaveFirst();
-  assert.deepEqual([(await first).leased, second.leased], [true, false], "one holds the lease");
+  let contender;
+  try {
+    await Promise.race([entered.promise, first]);
+    contender = await consumer({ methodFeedback: feedback, resolveProject: async () => null }).tick();
+    assert.equal(contender.leased, false, "the contender cannot acquire a lease still held by the first tick");
+  } finally {
+    release.resolve();
+  }
+  const both = [await first, contender];
+  assert.deepEqual(both.map((result) => result.leased).sort(), [false, true], "one holds the lease");
   assert.deepEqual(await subject.tick(), { read: 0, leased: true }, "nothing new after the cursor");
   // The log read again from the start: the incident is not written twice and the observation is asked for again only to find it already there.
   await resetCursor();

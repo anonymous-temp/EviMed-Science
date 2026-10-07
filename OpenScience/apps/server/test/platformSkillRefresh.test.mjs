@@ -1,3 +1,4 @@
+import {publishConfirmed} from './helpers/confirmedEvolutionPublication.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -22,7 +23,7 @@ test('idle run boundary adopts exact desired mount, preserves active pins and st
     return{kind:'dsh',url:'http://localhost:12345',workspaceDir:project.workspaceDir,project,platformSkillGeneration:generation,startedAt:new Date().toISOString(),close:async()=>{events.push('stop');}};
   };
   t.after(async()=>{await manager.closeAll();await fs.rm(root,{recursive:true,force:true});});
-  const publish=async(id,capability)=>supply.publish({id,publicationKind:'skill',capabilityIds:[capability],files:{'SKILL.md':`---\nname: ${id}\ndescription: Workflow ${id}.\n---\n\nUse the method.`}},{card:{toolKind:'workflow'},evaluation:{ok:true,verificationLevel:'V0',smokePassed:true}});
+  const publish=async(id,capability)=>publishConfirmed(supply,{id,publicationKind:'skill',capabilityIds:[capability],files:{'SKILL.md':`---\nname: ${id}\ndescription: Workflow ${id}.\n---\n\nUse the method.`}},{card:{toolKind:'workflow'},evaluation:{ok:true,verificationLevel:'V0',smokePassed:true}});
   await publish('one','statistics');await manager.setPlatformSkillScope(project,'statistics');await manager.startAdmitted(project);
   const old=manager.runtimes.get(manager.key(project)),oldPins=structuredClone(old.platformSkillGeneration.pins);
   await publish('two','statistics');busy=true;
@@ -41,9 +42,9 @@ test('trusted release replay reads staged and retained exact revisions without a
     const supply=createPlatformSkillSupply({dataDir,evolutionEnabled:true});
     const candidate={id:'replay',track:'M',capabilityIds:['statistics'],publicationKind:'skill',files:{'SKILL.md':'---\nname: replay\ndescription: Replay workflow.\n---\n\nFirst.'}};
     const options={activate:false,card:{toolKind:'workflow'},evaluation:{ok:true,verificationLevel:'V0',smokePassed:true}};
-    const first=await supply.publish(candidate,options),snapshot=await supply.candidateForEvaluation(first);
+    const first=await publishConfirmed(supply,candidate,options),snapshot=await supply.candidateForEvaluation(first);
     assert.deepEqual(snapshot.files,candidate.files);assert.equal(snapshot.track,'M');assert.equal(await supply.prepareForRuntime({capabilityId:'statistics'}),null);
-    candidate.files['SKILL.md']+='\nSecond.';await supply.publish(candidate,options);assert.deepEqual((await supply.candidateForEvaluation(first)).files,snapshot.files);
+    candidate.files['SKILL.md']+='\nSecond.';await publishConfirmed(supply,candidate,options);assert.deepEqual((await supply.candidateForEvaluation(first)).files,snapshot.files);
     await assert.rejects(()=>supply.candidateForEvaluation({...first,revision:2}));
     snapshot.files['SKILL.md']='caller mutation';assert.notEqual((await supply.candidateForEvaluation(first)).files['SKILL.md'],'caller mutation');
   }finally{await fs.rm(dataDir,{recursive:true,force:true});}

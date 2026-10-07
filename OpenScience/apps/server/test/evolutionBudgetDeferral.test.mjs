@@ -6,7 +6,7 @@ async function execute(error) {
  const recorded=[],waits=[];const checkpoint={completedSourceHash:'original',finishedStages:['extraction']};
  const job={id:'job',userId:'operator',kind:'evolution-evaluate',payload:{checkpoint},leaseToken:'lease',attempts:3,maxAttempts:10};
  const service={jobs:{claim:async()=>job,renew:async()=>true,fail:async(...args)=>{recorded.push(args);return{status:args[4].retry?'queued':'failed'};}}};
- const worker=new EvolutionWorker({service,config:{evolutionEnabled:true,evolutionMaxJobAttempts:3},callbacks:{evaluate:async payload=>{assert.deepEqual(payload.checkpoint,checkpoint);throw error;}}});
+ const worker=new EvolutionWorker({lane:"heavy",service,config:{evolutionEnabled:true,evolutionMaxJobAttempts:3},callbacks:{evaluate:async payload=>{assert.deepEqual(payload.checkpoint,checkpoint);throw error;}}});
  worker.housekeeping=async()=>{};worker.resourceWait=async(...args)=>{waits.push(args);};
  const result=await worker.tick({kinds:['evolution-evaluate']});
  return{result,recorded,waits,checkpoint};

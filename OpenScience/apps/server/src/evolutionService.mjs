@@ -7,6 +7,11 @@ import { MODULE_LEAD_SOURCES, moduleLeadPayload } from './evolutionLeadSources.m
 
 /** @param {any} value */
 export function evolutionKey(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 32); }
+/** Archives and serving tools share a ledger, so their record identities must be distinct. @param {any} candidate */
+export function evolutionToolArchiveId(candidate) {
+  const hash = createHash('sha256').update(canonicalJson(candidate)).digest('hex');
+  return `evolution-tool-archive-${evolutionKey([candidate.id, hash])}`;
+}
 /** The record id of a lead: its content, so the same lead from anywhere is one. @param {any} payload */
 export function evolutionLeadId(payload) { return `evolution-lead-${evolutionKey(payload)}`; }
 /** Public paper identities only; candidate URLs and private provenance never cross this projection. @param {any} papers */
@@ -31,13 +36,18 @@ export class EvolutionService {
   constructor({ documents, jobs, ownerId = null, ensureOwner = null, config = {}, now = () => new Date(), callbacks = {}, notifications = null }) {
     this.documents = documents; this.jobs = jobs; this.ownerId = ownerId; this.ensureOwner = ensureOwner; this.config = config; this.now = now; this.callbacks = callbacks; this.notifications = notifications;
   }
-  /** Serialize module-wide invariants across API processes. @param {string} key @param {()=>Promise<any>} operation */
-  async withLock(key, operation) {
+  /** Serialize invariants on the owned transaction client. External lifecycle steps explicitly preserve their recovery journal on failure.
+   * @param {string} key @param {()=>Promise<any>} operation @param {{preserveProgress?:boolean}} [options] */
+  async withLock(key, operation, {preserveProgress=false}={}) {
     if (!this.documents.database) return operation();
-    return this.documents.database.transaction(async (/** @type {any} */ client) => {
+    let failure;
+    const result=await this.documents.database.transaction(async (/** @type {any} */ client) => {
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`evimed-evolution:${key}`]);
-      return operation();
+      const work=async()=>{try{return await operation();}catch(error){if(!preserveProgress)throw error;failure=error;return null;}};
+      return this.documents.database.withTransactionClient ? this.documents.database.withTransactionClient(client,work) : work();
     });
+    if(failure)throw failure;
+    return result;
   }
   async owner() { return this.ownerId ?? (this.ownerId = await this.ensureOwner?.()); }
   /** @param {string} type @param {string|null} userId @param {Record<string, any>} [filter] payload fields the records must carry, to read a part of a large kind */
@@ -75,30 +85,57 @@ export class EvolutionService {
     const payload = MODULE_LEAD_SOURCES.includes(input.source) ? moduleLeadPayload(input) : privateSource ? { track: input.track, source: input.source, gapCode: input.gapCode, code: EVOLUTION_GAP_CODES.includes(input.code) ? input.code : input.gapCode }
       : { track: input.track, source: input.source, gapCode: input.gapCode, method: input.method, papers: input.papers ?? [], features: input.features ?? {}, origin: input.origin ?? 'literature' };
     const id = evolutionLeadId(payload);
-    const prior = await this.get(id);
-    if (prior) { if (prior.payload.status === 'queued') await this.enqueue('scout', { leadId: id }, id); return prior; }
-    const saved = await this.save('lead', id, { ...payload, createdAt: this.now().toISOString(), status: 'queued' });
-    await this.enqueue('scout', { leadId: id }, id);
-    return saved;
+    const result=await this.withLock(`lead:${id}`, async () => {
+      const eventId = input.sourceEventId ?? input.eventId ?? evolutionKey([payload, input.evidenceVersion ?? null]);
+      const occurrenceId = `evolution-lead-occurrence-${evolutionKey([id, input.userId ?? 'platform', eventId])}`;
+      const occurrenceOwner = input.userId ?? await this.owner();
+      const seen = await this.get(occurrenceId, occurrenceOwner);
+      const prior = await this.get(id);
+      if (seen && prior) return prior;
+      if (!seen) await this.save('lead-occurrence', occurrenceId, { leadId: id, eventId, projectId: input.projectId ?? EVOLUTION_PROJECT_ID,
+        at: this.now().toISOString(), scope: input.userId ? 'owner' : 'platform' }, null, occurrenceOwner);
+      let distinctAccounts = prior?.payload.distinctAccounts ?? 0;
+      if (input.userId && this.documents.database) {
+        const aggregate = await this.documents.database.query("SELECT count(DISTINCT user_id)::integer AS accounts FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-lead-occurrence' AND payload->>'scope'='owner' AND payload->>'leadId'=$1", [id]);
+        distinctAccounts = Number(aggregate.rows[0]?.accounts ?? 0);
+      } else if (input.userId) {
+        // The in-memory test store may supply a metadata-only count reader.
+        distinctAccounts = await this.callbacks.leadAccountCount?.(id) ?? Math.max(distinctAccounts, 1);
+      }
+      const occurrences = Number(prior?.payload.occurrences ?? 0) + Number(!seen);
+      const queueKey = `${id}:${occurrences}`;
+      const ready = !input.userId || distinctAccounts >= 5;
+      const saved = await this.save('lead', id, { ...payload, createdAt: prior?.payload.createdAt ?? this.now().toISOString(),
+        firstSeenAt: prior?.payload.firstSeenAt ?? this.now().toISOString(), lastSeenAt: this.now().toISOString(),
+        occurrences, distinctAccounts, queueKey, status: ready ? 'queued' : 'accumulating' }, prior);
+      return saved;
+    });
+    if(result.payload.status==='queued'&&!this.config.evolutionSearchPaused)await this.enqueue('scout',{leadId:id,leadVersion:result.payload.occurrences},result.payload.queueKey??id);
+    return result;
   }
+
   /** @param {any} event */
   async ingestEvent(event) {
     if (!event.id || !event.type) throw new HttpError(400, 'evolution_event_invalid', 'An event needs its identity and type.');
     // Tenant payloads stay in tenant-owned event records; the shared lead is separately reduced to closed codes.
     const id = `evolution-event-${evolutionKey([event.id, event.type, event.userId ?? null])}`;
     const owner = event.userId ?? await this.owner();
-    const prior = await this.get(id, owner);
-    if (prior) { if (prior.payload.status === 'queued') await this.enqueue('event', { eventId: id, eventOwnerId: owner }, id); return prior; }
-    const saved = await this.save('event', id, { ...event, createdAt: this.now().toISOString(), status: 'queued' }, null, owner);
-    await this.enqueue('event', { eventId: id, eventOwnerId: owner }, id);
+    const saved=await this.withLock(`event:${owner}:${id}`,async()=>{
+      const prior=await this.get(id,owner);
+      return prior??this.save('event',id,{...event,createdAt:this.now().toISOString(),status:'queued'},null,owner);
+    });
+    if(saved.payload.status==='queued')await this.enqueue('event',{eventId:id,eventOwnerId:owner},id);
     return saved;
   }
   /** Recover a persisted lead/event whose enqueue was interrupted, without reading tenant prose. */
   async reconcileQueued() {
     if (!this.documents.database) return { recovered: 0 };
     const owner = await this.owner();
-    const missing = await this.documents.database.query("SELECT id,user_id,payload->>'recordType' AS record_type FROM evimed_product.documents d WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'status'='queued' AND payload->>'recordType'=ANY($1::text[]) AND NOT EXISTS(SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=$2 AND j.idempotency_key='evolution:'||d.id) ORDER BY created_at,id LIMIT 100", [['evolution-lead','evolution-event'], owner]);
-    for (const row of missing.rows) await this.enqueue(row.record_type === 'evolution-lead' ? 'scout' : 'event', row.record_type === 'evolution-lead' ? { leadId: row.id } : { eventId: row.id, eventOwnerId: row.user_id }, row.id);
+    const missing = await this.documents.database.query("SELECT id,user_id,payload->>'recordType' AS record_type,coalesce(payload->>'queueKey',id) AS queue_key FROM evimed_product.documents d WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'status'='queued' AND payload->>'recordType'=ANY($1::text[]) AND NOT EXISTS(SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=$2 AND j.idempotency_key='evolution:'||coalesce(d.payload->>'queueKey',d.id)) ORDER BY created_at,id LIMIT 100", [['evolution-lead','evolution-event'], owner]);
+    for (const row of missing.rows) {
+      if (row.record_type === 'evolution-lead' && this.config.evolutionSearchPaused) continue;
+      await this.enqueue(row.record_type === 'evolution-lead' ? 'scout' : 'event', row.record_type === 'evolution-lead' ? { leadId: row.id } : { eventId: row.id, eventOwnerId: row.user_id }, row.queue_key ?? row.id);
+    }
     return { recovered: missing.rows.length };
   }
   /** @param {any} input */

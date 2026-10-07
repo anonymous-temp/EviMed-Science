@@ -1,3 +1,6 @@
+import { FRONTIER_EDITOR_VERSION } from "./frontierEditor.mjs";
+import { issueFrontierExposure } from "./frontierEvolution.mjs";
+import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
 import { createHash } from "node:crypto";
 import {
@@ -399,7 +402,7 @@ const LEG_FROM = `evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id
 
 export class FrontierService {
   /**
-   * @param {{ database: any, config: Record<string, any>, vocabulary: FrontierVocabulary, ingest?: any, embedder?: any,
+   * @param {{ database: any, config: Record<string, any>, vocabulary: FrontierVocabulary, policies?: any, ingest?: any, embedder?: any,
    *   budget?: (() => Promise<{ spentCny: number, budgetCny: number, state: string }>) | null, now?: () => Date,
    *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, profiles?: any, actions?: any }} options
    *   The second wave's readers, each optional (a route without its module
@@ -408,9 +411,10 @@ export class FrontierService {
    *   `FrontierDaily` (issues), `profiles` a `FrontierProfiles` (与你相关),
    *   `actions` a `FrontierActions` (存入知识库, 中文摘要).
    */
-  constructor({ database, config, vocabulary, ingest = null, embedder = null, budget = null, now = () => new Date(),
+  constructor({ database, config, vocabulary, policies = createModuleEvolutionPolicies(), ingest = null, embedder = null, budget = null, now = () => new Date(),
     dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, profiles = null, actions = null }) {
     if (!database || !config || !vocabulary) throw new TypeError("The frontier service needs the product database, the config and the vocabulary.");
+    this.policies = policies;
     this.database = database;
     this.config = config;
     this.vocabulary = vocabulary;
@@ -803,7 +807,9 @@ export class FrontierService {
     const items = page.items
       .map((entry) => ({ ...entry.item, state: marks.get(entry.rowId) ?? { starred: false, hidden: false, read: false } }))
       .filter((item) => query.starred || !item.state.hidden);
-    return { status: 200, etag, body: { items, nextCursor: page.next, version: String(versions.content), mode: page.mode } };
+    const policy = await this.policies.resolve("frontier", {});
+    const exposure = await issueFrontierExposure(this.database, user.id, { surface: "feed", policyRevisionId: policy.revisionId.startsWith("default:") ? `${FRONTIER_EDITOR_VERSION}:threshold:${frontierSelectThreshold(this.config)}` : policy.revisionId, candidateIds: items.map((item) => String(item.id)) });
+    return { status: 200, etag, body: { items, nextCursor: page.next, version: String(versions.content), mode: page.mode, exposure } };
   }
 
   /**
@@ -1215,7 +1221,11 @@ export class FrontierService {
    */
   async forYou(user) {
     if (!this.profiles) return { state: "off", basis: null, items: [] };
-    return this.profiles.forYou(user, (/** @type {{ id: string }} */ reader, /** @type {string[]} */ publicIds) => this.hydrate(reader, { publicIds }));
+    const result = await this.profiles.forYou(user, (/** @type {{ id: string }} */ reader, /** @type {string[]} */ publicIds) => this.hydrate(reader, { publicIds }));
+    if (result.state === "off") return result;
+    const policy = await this.policies.resolve("frontier", {});
+    const exposure = await issueFrontierExposure(this.database, user.id, {surface: "for-you", policyRevisionId: policy.revisionId.startsWith("default:") ? `${FRONTIER_EDITOR_VERSION}:threshold:${frontierSelectThreshold(this.config)}` : policy.revisionId, candidateIds: result.items.map((entry) => String(entry.item.id))});
+    return {...result, exposure};
   }
 
   /**

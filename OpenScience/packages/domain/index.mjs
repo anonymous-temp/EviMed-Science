@@ -1998,3 +1998,13 @@ export {
 } from './src/evidenceCard.mjs'
 
 /** @typedef {import('./src/evidenceCard.mjs').EvidenceCalculationReceipt} EvidenceCalculationReceipt */
+
+export {
+  EVOLUTION_SELECTION_OUTCOMES,
+  evolutionMechanismLimit,
+  evolutionNoiseBand,
+  evolutionProposalIssues,
+  selectEvolutionCandidate,
+  selectEvolutionParent,
+  evolutionPruningCandidates,
+} from './src/evolutionSelection.mjs';

@@ -1,6 +1,6 @@
 import { HttpError, readJson, sendJson } from './security.mjs';
 /** @param {any} dependencies */
-export function createEvolutionRoutes({ store, service, decisions, worker, config = {}, isOperator, registerEvaluationPolicy, evaluationAudit, adoptOpportunity, evidenceRegistration, maxJsonBytes = 262144 }) {
+export function createEvolutionRoutes({ store, service, decisions, worker, config = {}, isOperator, registerEvaluationPolicy, evaluationAudit, adoptOpportunity, evidenceRegistration, capabilityMap = null, maxJsonBytes = 262144 }) {
   /** @param {any} req @param {any} res */
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://evimed.local');
@@ -23,6 +23,10 @@ export function createEvolutionRoutes({ store, service, decisions, worker, confi
       if (!opportunity || opportunity.payload.projectId !== input.projectId) throw new HttpError(404, 'evolution_opportunity_missing', 'Opportunity not found.');
       sendJson(res, 200, { data: await service.withLock(`adopt:${user.id}:${opportunity.id}`, () => adoptOpportunity(user, input)) }); return true;
     }
+    if (req.method === 'GET' && url.pathname === '/api/evolution/capability-map') {
+      const map = capabilityMap ? await capabilityMap() : null;
+      sendJson(res,200,{data:map ? {cells:map.cells.map(cell=>({id:cell.id,capabilityId:cell.capabilityId,version:cell.version,taskFamily:cell.taskFamily,status:cell.status,dependencies:cell.dependencies,demand:cell.demand,newThisMonth:cell.newThisMonth===true})),counts:map.counts,derivedAt:map.derivedAt} : null}); return true;
+    }
     if (!await isOperator(user)) throw new HttpError(403, 'evolution_operator_required', 'Evolution is available to operators only.');
     if (!service || config.evolutionEnabled !== true) throw new HttpError(404, 'evolution_disabled', 'Evolution is disabled.');
     let parts;
@@ -32,6 +36,9 @@ export function createEvolutionRoutes({ store, service, decisions, worker, confi
     if (req.method === 'GET' && (!parts.length || parts[0] === 'status')) return reply(worker?.status() ?? { enabled: true });
     if (req.method === 'GET' && parts[0] === 'tools') return reply(await service.availableTools({}));
     if (req.method === 'POST' && parts[0] === 'tools' && parts.length === 3 && parts[2] === 'provenance') return reply(await evidenceRegistration.registerToolProvenance(user, { ...await readJson(req, maxJsonBytes), toolId: parts[1] }));
+    if (req.method === 'GET' && parts[0] === 'missions') return reply(await service.list('mission'));
+    if (req.method === 'GET' && parts[0] === 'verdicts') return reply(await service.list('candidate-verdict'));
+    if (req.method === 'GET' && parts[0] === 'policies') return reply(await service.list('policy'));
     if (req.method === 'GET' && parts[0] === 'dossiers') return reply(await service.dossiers());
     if (req.method === 'GET' && parts[0] === 'opportunities') return reply(await service.opportunities(user.id));
     if (req.method === 'GET' && parts[0] === 'decisions' && parts.length === 2) return reply(await service.get(parts[1]));
