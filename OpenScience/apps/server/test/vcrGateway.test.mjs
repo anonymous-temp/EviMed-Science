@@ -51,6 +51,8 @@ const runtimeManager = { assertActiveModelGatewayToken: (/** @type {string} */ t
 function fixture(overrides = {}) {
   /** @type {any[]} */
   const calls = [];
+  /** The definitions the store was asked to save, whole. @type {any[]} */
+  const definitions = [];
   // What a run reads of a result passes the real service's boundary; a double that answered raw would hide the seam.
   const boundary = new VcrService({ store: /** @type {any} */ ({}), config: {} });
   const service = {
@@ -65,7 +67,7 @@ function fixture(overrides = {}) {
     async studyByControlProject(userId, projectId) {
       return userId === "u1" && projectId === "prj_1" ? study : null;
     },
-    async saveDefinition(input) { calls.push(["definition", input.reviewState]); return { id: "def_1", version: 1 }; },
+    async saveDefinition(input) { calls.push(["definition", input.reviewState]); definitions.push(input); return { id: "def_1", version: 1 }; },
     async saveAssumption(input) { calls.push(["assumption", input.key, input.reviewState]); return { id: "asm_1", version: 2 }; },
     async saveTrialScenario(input) { calls.push(["scenario", input.design]); return { id: "scn_1", version: 1 }; },
     async saveComparatorDesign(input) { calls.push(["comparator", input.route, input.conclusion]); return { id: "cmp_1", version: 1 }; },
@@ -99,7 +101,7 @@ function fixture(overrides = {}) {
     async cancel() { return { job: { id: "job_1", state: "canceled" }, canceled: true }; },
   };
   const vcr = { service, store, jobs, orchestrator: null, ...overrides };
-  return { calls, vcr, handler: createVcrGatewayHandler(config, runtimeManager, { vcr }) };
+  return { calls, definitions, vcr, handler: createVcrGatewayHandler(config, runtimeManager, { vcr }) };
 }
 
 test("the gateway's address is derived from the model gateway's, and is empty when the module is off", () => {
@@ -216,6 +218,19 @@ test("a definition that states nothing is refused in place: the step reads done 
   for (const stated of [{ pico: { population: "二线 NSCLC" } }, { pico: { intervention: "EV 单药" } }, { estimand: { summary: "风险比" } }, { endpointType: "binary", pico: { outcome: "PFS" } }]) {
     assert.equal((await write(stated)).ids.length, 1, JSON.stringify(stated));
   }
+});
+
+test("a definition carries the study's name and question to the store, which is what names a draft study", async () => {
+  const { definitions, handler } = fixture();
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "definition", data: { title: "二线 NSCLC 单臂", question: "单臂 II 期加外部对照行不行？", pico: { population: "二线 NSCLC" } } }), res);
+  assert.equal(res.json().data.ids.length, 1);
+  assert.equal(definitions.at(-1).title, "二线 NSCLC 单臂");
+  assert.equal(definitions.at(-1).question, "单臂 II 期加外部对照行不行？");
+  // Neither is required: a definition without them leaves the naming to the store's fallback.
+  await handler(request("/internal/vcr/v1/write", { what: "definition", data: { pico: { population: "二线 NSCLC" } } }), response());
+  assert.equal(definitions.at(-1).title, null);
+  assert.equal(definitions.at(-1).question, null);
 });
 
 test("AC-33 everything a run writes is labelled ai_set; nothing it writes is labelled reviewed", async () => {
