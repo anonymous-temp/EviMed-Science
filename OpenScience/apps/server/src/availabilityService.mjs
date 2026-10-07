@@ -96,6 +96,7 @@ export class AvailabilityService {
    *   store?: import("./availabilityStore.mjs").AvailabilityStore | null,
    *   engineProbe?: import("./availabilityEngineProbe.mjs").EngineHealthProbe | null,
    *   vcrEngine?: (() => import("./vcrEngineProbe.mjs").VcrEngineReading | null) | null,
+   *   vcrEngineRefresh?: (() => Promise<import("./vcrEngineProbe.mjs").VcrEngineReading | null>) | null,
    *   connectorStatus?: ((userId: string) => Promise<any[]>) | null,
    *   methodValidation?: (() => Promise<{ status: string, reason?: string } | null>) | null,
    *   extensionViews?: ((user: any) => Promise<any[]>) | null,
@@ -103,7 +104,7 @@ export class AvailabilityService {
    *   now?: () => Date,
    * }} dependencies
    */
-  constructor({ config, registry, store = null, engineProbe = null, vcrEngine = null, connectorStatus = null, methodValidation = null, extensionViews = null, skillSupply = null, now = () => new Date() }) {
+  constructor({ config, registry, store = null, engineProbe = null, vcrEngine = null, vcrEngineRefresh = null, connectorStatus = null, methodValidation = null, extensionViews = null, skillSupply = null, now = () => new Date() }) {
     this.config = config;
     this.registry = registry;
     this.store = store;
@@ -111,6 +112,7 @@ export class AvailabilityService {
     // The statistics engine of 「虚拟临研」, read from the module's own probe (`vcrEngineProbe.mjs`) — the reading the
     // job a page shows and readiness read too, so the three cannot say different things about the same engine.
     this.vcrEngine = vcrEngine;
+    this.vcrEngineRefresh = vcrEngineRefresh;
     this.connectorStatus = connectorStatus;
     this.methodValidation = methodValidation;
     this.extensionViews = extensionViews;
@@ -339,6 +341,27 @@ export class AvailabilityService {
         reasons, operations, collector, runtime,
       });
     });
+  }
+
+  /**
+   * Whether each calculation engine can take work now, one yes or no each, for the plugins page: the six specialist
+   * engines from their own health (asked afresh, at most once per probe lifetime) and 「虚拟临研」's statistics engine from
+   * its module's probe. Only a positive answer is a yes: an engine the deployment does not compose, one that said it is not
+   * ready and one that did not answer are all "not available" — the page has no third word for them, and the label
+   * ladder above keeps the reasons for the places that can say why.
+   * @param {{ id?: string } | null} user @returns {Promise<{ id: string, available: boolean }[]>}
+   */
+  async engineReadiness(user) {
+    const subject = user ?? { id: "deployment" };
+    const declined = declinedTools(this.config, subject);
+    const health = this.engineProbe ? await this.engineProbe.refresh().catch(() => new Map()) : new Map();
+    const rows = Object.keys(ENGINE_TOOL_ADAPTER_KEYS).map((tool) => ({ id: tool, available: !declined.has(tool) && health.get(tool)?.state === "ready" }));
+    /** @type {import("./vcrEngineProbe.mjs").VcrEngineReading | null} */
+    let reading = null;
+    try { reading = this.vcrEngine?.() ?? null; } catch { reading = null; }
+    if (reading?.state === "unknown" && this.vcrEngineRefresh) { try { reading = await this.vcrEngineRefresh() ?? reading; } catch { /* still unknown, so not available */ } }
+    rows.push({ id: "vcr", available: moduleState(this.config, subject, "vcr") === "on" && reading?.state === "answering" });
+    return rows;
   }
 
   /**

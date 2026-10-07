@@ -1084,7 +1084,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config });
+  // The engines' readiness is read at request time: the availability service is composed further down.
+  const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config, engines: user => availability.service.engineReadiness(user) });
   const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
     if (!vcr) return null;
     const study = await vcr.store.studyByControlProject(user.id, projectId, client);
@@ -2581,6 +2582,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService, skillSupply,
     methodValidation: () => loadMethodValidation({ file: config.vcrMethodValidationFile, engine: vcr?.engine }),
     vcrEngine: () => vcr?.engineProbe?.snapshot() ?? null,
+    vcrEngineRefresh: () => vcr?.engineProbe?.refresh?.() ?? Promise.resolve(null),
     mutation: maintenanceMutation,
     canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
     fetchImpl: overrides.availabilityFetch ?? globalThis.fetch,
