@@ -2,6 +2,7 @@ import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { Drawer } from "./Drawer";
 
 function Harness({ onClose = vi.fn() }: { onClose?: () => void }) {
@@ -54,6 +55,34 @@ describe("Drawer", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it("leaves Tab and Escape to a dialog opened from inside it, and stays open when that dialog is dismissed", async () => {
+    const onClose = vi.fn();
+    function WithConfirm() {
+      const [asking, setAsking] = useState(false);
+      return (
+        <Drawer title="任务" onClose={onClose}>
+          <button type="button" onClick={() => setAsking(true)}>删除任务</button>
+          {asking && <ConfirmDialog title="删除任务？" body="删除后停止后续计划。" confirmLabel="删除" onCancel={() => setAsking(false)} onConfirm={() => setAsking(false)} />}
+        </Drawer>
+      );
+    }
+    render(<WithConfirm />);
+    await userEvent.click(screen.getByRole("button", { name: "删除任务" }));
+    const confirm = screen.getByRole("alertdialog");
+    // Tab cycles inside the confirmation; the drawer does not pull focus back out of it.
+    await userEvent.tab();
+    expect(confirm).toContainElement(document.activeElement as HTMLElement);
+    await userEvent.tab();
+    expect(confirm).toContainElement(document.activeElement as HTMLElement);
+    // One Escape closes the confirmation and only that.
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "任务" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("closes on a click on the backdrop, not on the panel", async () => {
