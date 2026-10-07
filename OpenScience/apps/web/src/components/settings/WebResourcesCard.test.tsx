@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebResourcesCard } from "./WebResourcesCard";
 
@@ -34,7 +34,7 @@ describe("WebResourcesCard", () => {
 
     render(<WebResourcesCard />);
 
-    expect(await screen.findByText("运行资源")).toBeInTheDocument();
+    expect(await screen.findByText("运行状况")).toBeInTheDocument();
     expect(await screen.findByText("256 KB / 1 MB")).toBeInTheDocument();
     expect(screen.getByText("已用 25%")).toBeInTheDocument();
     expect(screen.getByText("2 个进行中")).toBeInTheDocument();
@@ -44,6 +44,32 @@ describe("WebResourcesCard", () => {
     expect(screen.getByRole("button", { name: "重启研究运行时" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "停止研究运行时" })).not.toBeDisabled();
     await waitFor(() => expect(mocks.fetchWebMetrics).toHaveBeenCalledTimes(1));
+  });
+
+  it("calls a runtime 失联 only when tasks are waiting on it — and says how many", async () => {
+    mocks.fetchWebMetrics.mockResolvedValue(metricsFixture({ running: false, stale: true, queued: 2, running_tasks: 1 }));
+    render(<WebResourcesCard />);
+    const tile = (await screen.findByText("失联")).closest("div.rounded-input") as HTMLElement;
+    expect(within(tile).getByText("有 3 个任务在等它")).toBeInTheDocument();
+    // It is the one tile in the warn tone.
+    expect(tile).toHaveClass("border-warn");
+    expect(screen.queryByText(/已停止/)).not.toBeInTheDocument();
+  });
+
+  it("reads a runtime that exited with nothing waiting as stopped, and says it starts again by itself", async () => {
+    mocks.fetchWebMetrics.mockResolvedValue(metricsFixture({ running: false, stale: true, queued: 0, running_tasks: 0 }));
+    render(<WebResourcesCard />);
+    const tile = (await screen.findByText("已停止")).closest("div.rounded-input") as HTMLElement;
+    expect(within(tile).getByText("意外退出，下次打开任务会自动启动")).toBeInTheDocument();
+    expect(tile).not.toHaveClass("border-warn");
+    expect(screen.queryByText("失联")).not.toBeInTheDocument();
+  });
+
+  it("reads a runtime that is simply not up as stopped, started when it is used", async () => {
+    mocks.fetchWebMetrics.mockResolvedValue(metricsFixture({ running: false }));
+    render(<WebResourcesCard />);
+    expect(await screen.findByText("用到时自动启动")).toBeInTheDocument();
+    expect(screen.queryByText("失联")).not.toBeInTheDocument();
   });
 
   it("starts a stopped hosted runtime and refreshes what it reports", async () => {
@@ -92,7 +118,7 @@ describe("WebResourcesCard", () => {
   });
 });
 
-function metricsFixture({ running }: { running: boolean }) {
+function metricsFixture({ running, stale = false, queued = 1, running_tasks = 1 }: { running: boolean; stale?: boolean; queued?: number; running_tasks?: number }) {
   return {
     createdAt: "2026-01-01T12:00:00.000Z",
     server: {
@@ -117,8 +143,8 @@ function metricsFixture({ running }: { running: boolean }) {
       active: 1,
       queued: 1,
       byStatus: {
-        queued: 1,
-        running: 1,
+        queued,
+        running: running_tasks,
         canceling: 0,
         succeeded: 1,
         failed: 0,
@@ -135,6 +161,7 @@ function metricsFixture({ running }: { running: boolean }) {
       sandboxMode: running ? "mock" : null,
       networkMode: null,
       containerName: null,
+      ...(stale ? { stale: true } : {}),
     },
   };
 }

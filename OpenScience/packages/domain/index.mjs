@@ -193,6 +193,8 @@ export {
   terminalEvidenceSourceErrorCodes,
   turnEndErrorCode,
 } from './src/errorCodes.mjs'
+// readinessCodes — what the deployment's configuration check (`/api/ready`) says, in an operator's words
+export { READINESS_ERROR_CODES, READINESS_ERROR_MESSAGES_ZH } from './src/readinessCodes.mjs'
 
 // constants — 24 exports
 export {

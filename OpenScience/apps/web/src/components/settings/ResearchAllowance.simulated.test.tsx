@@ -20,8 +20,8 @@ const simulated: WebResearchAllowance = {
   lowThreshold: SIMULATED_LOW_CREDITS,
   month: { since: "2026-10-01T00:00:00.000Z", paid: 4, pending: 2 },
   commerce: {
-    rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: SIMULATED_WALLET_PAGES.membership,
-    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: SIMULATED_WALLET_PAGES.refunds,
+    rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: null,
+    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: null,
   },
 };
 /** The same account's answer from a wallet that is real: the same numbers, and no word of simulation. */
@@ -85,11 +85,15 @@ describe("科研额度 on a deployment whose wallet is simulated", () => {
     await statementRows();
   });
 
-  it("marks every amount of the allowance", async () => {
+  // Eleven tags on one screen read as a warning, not as a label. The group says it once; its amounts are covered by it.
+  it("marks the allowance once, in the header of the group that holds its amounts, and not on each row", async () => {
     open(simulated);
+    const group = screen.getByRole("heading", { name: "科研额度" }).closest("section") as HTMLElement;
+    expect(within(group).getAllByText(SIMULATED_WALLET_LABEL)).toHaveLength(1);
+    expect(within(group.querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
     for (const [label, amount] of [["可用科研额度", "¥200.00"], ["本月研究消费", "¥4.00"], ["本月待结算", "¥2.00"]] as const) {
       expect(within(row(label)).getByText(amount)).toBeInTheDocument();
-      expect(within(row(label)).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+      expect(within(row(label)).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     }
     await statementRows();
   });
@@ -99,8 +103,8 @@ describe("科研额度 on a deployment whose wallet is simulated", () => {
   it("shows no line, no mark and no prompt where the wallet is not simulated", async () => {
     const first = open(simulated);
     await statementRows();
-    // Three amounts, the commerce group and three statement rows.
-    expect(marks()).toHaveLength(7);
+    // One for the allowance, one for the commerce group and one for the statement list — and none on their rows.
+    expect(marks()).toHaveLength(3);
     first.unmount();
 
     mocks.statements.mockResolvedValue({ simulated: false, items: [{ ...charge, simulated: false }], nextCursor: null });
@@ -177,12 +181,15 @@ describe("the low-allowance prompt", () => {
   });
 });
 
-describe("充值与会员 on a deployment whose wallet is simulated", () => {
-  it("links each destination the server gave as a page of this app, followed in place", async () => {
+describe("充值与订单 on a deployment whose wallet is simulated", () => {
+  // A simulated wallet takes a top-up and lists its orders; there is no plan to open and no money to return, so there is no row for it.
+  it("links the two destinations the server gave as pages of this app, followed in place, and names the group for them", async () => {
     open(simulated);
-    expect(screen.getByRole("heading", { name: "充值与会员" })).toBeInTheDocument();
-    for (const [name, to] of [["查看充值", SIMULATED_WALLET_PAGES.recharge], ["查看会员", SIMULATED_WALLET_PAGES.membership],
-      ["查看订单", SIMULATED_WALLET_PAGES.orders], ["查看退款", SIMULATED_WALLET_PAGES.refunds]] as const) {
+    expect(screen.getByRole("heading", { name: "充值与订单" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "充值与会员" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /^查看/ }).map((link) => link.textContent)).toEqual(["查看充值", "查看订单"]);
+    for (const gone of ["会员", "退款"]) expect(screen.queryAllByText(gone)).toEqual([]);
+    for (const [name, to] of [["查看充值", SIMULATED_WALLET_PAGES.recharge], ["查看订单", SIMULATED_WALLET_PAGES.orders]] as const) {
       const link = screen.getByRole("link", { name });
       expect(link).toHaveAttribute("href", to);
       // The router's link, not a document of its own: nothing sends it elsewhere.
@@ -205,10 +212,19 @@ describe("充值与会员 on a deployment whose wallet is simulated", () => {
   it("draws no placeholder row, and no group, when the server gave no destination", async () => {
     open({ ...simulated, commerce: { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null } });
     expect(within(row("可用科研额度")).getByText("¥200.00")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "充值与会员" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^充值与/ })).not.toBeInTheDocument();
     expect(screen.queryAllByText(/尚未开放/)).toEqual([]);
     expect(screen.queryByRole("link", { name: /^查看/ })).not.toBeInTheDocument();
     for (const gone of ["充值", "会员", "订单", "退款"]) expect(screen.queryAllByText(gone)).toEqual([]);
+    await statementRows();
+  });
+
+  it("keeps the real hosted handoffs of a deployment that is not simulated: 会员 and 退款 are rows there, and the group says so", async () => {
+    open({ ...real, commerce: { rechargeUrl: "https://account.example/recharge", membershipUrl: "https://account.example/membership",
+      ordersUrl: "https://account.example/orders", refundsUrl: "https://account.example/refunds" } });
+    expect(screen.getByRole("heading", { name: "充值与会员" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /^查看/ }).map((link) => link.textContent)).toEqual(["查看充值", "查看会员", "查看订单", "查看退款"]);
+    expect(marks()).toEqual([]);
     await statementRows();
   });
 
@@ -243,8 +259,10 @@ describe("the statement list", () => {
     expect(within(rows[2]).getByText("已入账")).toBeInTheDocument();
     expect(within(rows[2]).queryByRole("link")).not.toBeInTheDocument();
 
-    // Every row of a simulated list carries the mark.
-    for (const each of rows) expect(within(each).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    // The list says 「模拟」 once, in its header; its rows do not say it again.
+    const list = screen.getByRole("region", { name: "研究消费明细" });
+    expect(within(list.querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    for (const each of rows) expect(within(each).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
   });
 
   it("never opens a run from credits going in, whatever the row carries", async () => {
@@ -275,11 +293,12 @@ describe("the statement list", () => {
     expect(within(rows[1]).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     first.unmount();
 
-    // A list that says nothing either: the rows are this allowance's.
+    // A list that says nothing either: the rows are this allowance's, and a list of them says 「模拟」 once in its header.
     mocks.statements.mockResolvedValue({ items: [silentCharge], nextCursor: null });
     const second = open(simulated);
     rows = await statementRows();
-    expect(within(rows[0]).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    expect(within(rows[0]).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "研究消费明细" }).querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
     second.unmount();
 
     // …and where nothing says so — an older control plane — it is a charge of a real wallet.

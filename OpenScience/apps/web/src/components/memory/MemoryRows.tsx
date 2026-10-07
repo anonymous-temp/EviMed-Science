@@ -42,5 +42,6 @@ export function MemoryListRow({ title, summary, end, onOpen, highlighted = false
 
 /** A group's small header over its own list: 「所有研究都会用」, 「偏好」. The groups are spaced by their container. */
 export function GroupHeader({ children }: { children: ReactNode }) {
-  return <h3 className="px-2 pb-1 text-caption text-text-3">{children}</h3>;
+  // Under the page's title directly: the tabs are not headings, so a group's header is the next level down from it.
+  return <h2 className="px-2 pb-1 text-caption text-text-3">{children}</h2>;
 }

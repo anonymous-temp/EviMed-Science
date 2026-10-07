@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
+import { Share2 } from "lucide-react";
+import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Input } from "@/components/ui/Input";
 import {
@@ -21,6 +23,21 @@ const CLOSED_TEXT: Record<string, string> = {
   declined: "你已经拒收了这份分享。",
 };
 
+/** Where a share that cannot be opened leads back to. */
+const MEMORY_PATH = "/app/memory";
+
+/**
+ * What the server's refusal of a share is. The ambiguous 404 must not reveal whether a share exists, so its words are the three things it
+ * can be; every other refusal (expired, used up, taken back) names itself and is said as it is.
+ */
+const NOT_FOUND_TEXT = "链接可能已失效、已被撤回，或不是发给这个账号的。";
+
+/** A read that failed for a reason trying again may mend: the network, the service, a ceiling. A refusal of the share itself is not one. */
+function retryable(caught: unknown): boolean {
+  const status = (caught as { status?: unknown } | null)?.status;
+  return typeof status !== "number" || status >= 500 || status === 429;
+}
+
 /**
  * 「收到的分享」: where a share link (`/app/memory/shared/<token>`) and a delivery from the inbox (`/app/memory/delivered/<id>`)
  * land (evidence-flywheel F17, 2026-10-05). The pack is read on the recipient's behalf — no file to hold — and is the same flow a
@@ -32,7 +49,7 @@ export function SharedCapsulePage() {
   const { token, deliveryId } = useParams();
   const navigate = useNavigate();
   const [shared, setShared] = useState<SharedPreview | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ message: string; retry: boolean; unknown: boolean } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [title, setTitle] = useState("收到的分享");
   const [imported, setImported] = useState<CapsuleRecord | null>(null);
@@ -49,7 +66,11 @@ export function SharedCapsulePage() {
       if (!active) return;
       setShared(value);
       if (value.preview?.card?.title) setTitle(value.preview.card.title);
-    }).catch((caught) => { if (active) setFailed(productErrorMessage(caught)); });
+    }).catch((caught) => {
+      if (!active) return;
+      const code = (caught as { code?: unknown } | null)?.code;
+      setFailed({ message: productErrorMessage(caught), retry: retryable(caught), unknown: code === "capsule_share_not_found" });
+    });
     return () => { active = false; };
   }, [token, deliveryId, attempt]);
 
@@ -67,9 +88,23 @@ export function SharedCapsulePage() {
 
   return (
     <PageShell title="收到的分享">
-      {failed && <LoadError message={failed} onRetry={() => setAttempt((value) => value + 1)} />}
+      {failed?.retry && <LoadError message={failed.message} onRetry={() => setAttempt((value) => value + 1)} />}
+      {failed && !failed.retry && (
+        // Trying again cannot change a refusal of the share itself: the way out is back to the page it was reached from.
+        <EmptyState
+          icon={Share2}
+          title="这个分享不能打开"
+          description={failed.unknown ? NOT_FOUND_TEXT : failed.message}
+          action={<Link to={MEMORY_PATH} className={buttonClasses({ variant: "secondary" })}>回到记忆胶囊</Link>}
+        />
+      )}
       {!failed && shared === null && <RunsSkeleton filter={false} />}
-      {closed && <p role="status" className="max-w-measure text-ui text-text">{closed}</p>}
+      {closed && (
+        <div className="space-y-3">
+          <p role="status" className="max-w-measure text-ui text-text">{closed}</p>
+          <Link to={MEMORY_PATH} className={buttonClasses({ variant: "secondary" })}>回到记忆胶囊</Link>
+        </div>
+      )}
       {preview && (
         <div className="max-w-measure space-y-4">
           <div className="space-y-1">

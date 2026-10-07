@@ -97,6 +97,15 @@ const REMINDER_BATCHES_PER_SWEEP = 5;
 const REMINDER_RETRY_MS = 3_600_000;
 /** The line a run with no named capability is billed under. */
 const DEFAULT_LINE = "深度研究";
+/**
+ * Why a run that was not charged is not on the researcher's statement at all: it produced nothing to bill, or it was the
+ * platform's own work (a smoke test, a background job run inside the account). Neither is research the researcher asked for,
+ * and the statement names a run by its subject — so an operator's English test prompt read as the researcher's own
+ * 「深度研究 · Create a deployment smoke-test artifact.」 (2026-10-07 audit). The other reasons stay: they answer
+ * 「为什么这次没收费」 for a run the researcher did start. A run that was charged, or that the platform absorbed a cost of,
+ * is a line whatever its reason says.
+ */
+const UNLISTED_NOT_CHARGED_REASONS = Object.freeze(["no_usage", "platform_work"]);
 
 /** @param {unknown} value */
 const finite = (value) => {
@@ -832,6 +841,9 @@ export class EvimedCreditsService {
           JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at
           ${deduct}
         WHERE t.user_id=$1 AND t.wallet=$5
+          AND NOT (coalesce(t.evidence->>'notChargedReason','') = ANY($6::text[])
+            AND coalesce(t.evidence->>'takenCredits',t.evidence->>'chargedCny','0') ~ '^0*([.]0*)?$'
+            AND coalesce(t.evidence->>'absorbedCredits','0') ~ '^0*([.]0*)?$')
         UNION ALL
         SELECT s.run_id,s.user_id,s.memo,jsonb_build_object(
           'actualCny',s.cost_cny::text,'billableCny',(s.credits/s.credits_per_cny)::numeric(20,8)::text,
@@ -843,7 +855,7 @@ export class EvimedCreditsService {
           AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)${credits}
       ) t
       WHERE t.user_id=$1 AND ($2::timestamptz IS NULL OR (t.created_at,t.sort_key)<($2::timestamptz,$3::text))
-      ORDER BY t.created_at DESC,t.sort_key DESC LIMIT $4`, [productId(userId,'user'),position?.[0] ?? null,position?.[1] ?? null,bound+1,this.walletKind]);
+      ORDER BY t.created_at DESC,t.sort_key DESC LIMIT $4`, [productId(userId,'user'),position?.[0] ?? null,position?.[1] ?? null,bound+1,this.walletKind,UNLISTED_NOT_CHARGED_REASONS]);
     const rows = result.rows.slice(0,bound);
     const items = rows.map((/** @type {any} */ row) => this.#statementItem(row));
     const last = rows.at(-1);

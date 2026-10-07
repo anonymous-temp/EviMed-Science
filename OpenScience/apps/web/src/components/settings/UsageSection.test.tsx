@@ -246,9 +246,11 @@ describe("科研额度 on a deployment that bills research", () => {
     mocks.allowance.mockResolvedValue({ ...allowance, commerce: { ...allowance.commerce, rechargeUrl: "https://account.example/recharge", ordersUrl: "javascript:alert(1)" } });
     open(); expect(await screen.findByRole("link", { name: "查看充值" })).toHaveAttribute("href", "https://account.example/recharge");
     expect(screen.getByRole("link", { name: "查看充值" })).toHaveAttribute("rel", "noreferrer");
-    expect(screen.getByRole("heading", { name: "充值与会员" })).toBeInTheDocument();
+    // No membership or refund destination in it: it is 充值与订单, whichever of the two it has.
+    expect(screen.getByRole("heading", { name: "充值与订单" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "充值与会员" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /^查看/ })).toHaveLength(1);
-    expect(screen.getByText("充值")).toBeInTheDocument();
+    expect(screen.getAllByText("充值")).toHaveLength(1);
     // The destination that is not a page, and the two the deployment did not name, have no row at all.
     for (const gone of ["订单", "会员", "退款", "尚未开放"]) expect(screen.queryAllByText(gone)).toEqual([]);
   });

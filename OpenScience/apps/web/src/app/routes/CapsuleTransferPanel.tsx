@@ -243,6 +243,7 @@ export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecor
         if (!file.name.endsWith(".evimedcap") || file.size > 2 * 1024 * 1024) { setError("请选择不超过 2 MiB 的胶囊文件。"); return; }
         void perform(async () => { const content = await file.text(); if (mounted.current) setArchive(content); });
       }} /></label>
+      <p className="text-caption text-text-3">别人分享给你的记忆胶囊，不超过 2 MiB。预览不会改变你的记忆。</p>
       {/* A file made for this account opens without a password. */}
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-48 flex-1">

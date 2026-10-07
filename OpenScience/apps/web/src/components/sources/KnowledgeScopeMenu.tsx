@@ -5,6 +5,7 @@ import { useVcrProjects } from "@/components/vcr/useVcrProjectIds";
 import { Button } from "@/components/ui/Button";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { useGeoFeature } from "@/lib/geoClient";
+import { labelOf, useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import type { SourceScope } from "@/lib/sourceClient";
 import { useVcrFeature } from "@/lib/vcrClient";
@@ -23,6 +24,8 @@ export const SHARED_SCOPE_NAME = "所有项目共享";
  */
 export function KnowledgeScopeMenu({ scope, onChange }: { scope: SourceScope; onChange: (scope: SourceScope) => void }) {
   const projects = useProjectStore((state) => state.projects);
+  // Two projects of one name are told apart here as everywhere a project is chosen (`projectLabels`).
+  const labels = useProjectLabels();
   const projectsKey = projects.map((project) => project.id).join("\u0000");
   const geoOn = useGeoFeature() === "on";
   const vcrOn = useVcrFeature() === "on";
@@ -36,7 +39,7 @@ export function KnowledgeScopeMenu({ scope, onChange }: { scope: SourceScope; on
     const chosen = scope.kind === "project" ? scope.projectId : null;
     const group = (heading: string, list: typeof projects): MenuEntry[] => list.length === 0 ? [] : [
       { heading },
-      ...list.map((project) => ({ label: project.name, checked: project.id === chosen, onSelect: () => onChange({ kind: "project", projectId: project.id }) })),
+      ...list.map((project) => ({ label: labelOf(labels, project), checked: project.id === chosen, onSelect: () => onChange({ kind: "project", projectId: project.id }) })),
     ];
     return [
       ...group("我的项目", own),
@@ -45,8 +48,9 @@ export function KnowledgeScopeMenu({ scope, onChange }: { scope: SourceScope; on
       "separator" as const,
       { label: SHARED_SCOPE_NAME, checked: scope.kind === "shared", onSelect: () => onChange({ kind: "shared" }) },
     ] satisfies MenuEntry[];
-  }, [projects, geoIds, vcrIds, vcrDrafts, scope, onChange]);
-  const name = scope.kind === "shared" ? SHARED_SCOPE_NAME : projects.find((project) => project.id === scope.projectId)?.name ?? "当前项目";
+  }, [projects, labels, geoIds, vcrIds, vcrDrafts, scope, onChange]);
+  const chosenProject = scope.kind === "project" ? projects.find((project) => project.id === scope.projectId) : undefined;
+  const name = scope.kind === "shared" ? SHARED_SCOPE_NAME : chosenProject ? labelOf(labels, chosenProject) : "当前项目";
   const Icon = scope.kind === "shared" ? Library : vcrIds.has(scope.projectId) ? UsersRound : geoIds.has(scope.projectId) ? Radar : FolderOpen;
   return (
     <Menu label="选择范围" align="start" items={entries} className="max-h-96 overflow-y-auto">

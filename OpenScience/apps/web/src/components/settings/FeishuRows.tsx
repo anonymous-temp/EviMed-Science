@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router";
 import { ExternalLink } from "lucide-react";
 import { encode } from "uqr";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -16,7 +15,7 @@ import {
   type FeishuRegistration,
   type ImStatus,
 } from "@/lib/imClient";
-import { Button, buttonClasses } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Menu } from "@/components/ui/Menu";
 import { PanelRow } from "@/components/ui/Panel";
@@ -28,17 +27,19 @@ import { toast } from "@/lib/toast";
 const REGISTRATION_POLL_MS = 2_000;
 
 /**
- * The IM module's status, read by whichever of the two Feishu rows is on
- * screen: binding lives under 账户, the push switch under 通知 (2026-09-23
- * plan §5.9). The page is a view of the server's state, never a second copy
- * of it: the QR code renders the link the SDK built, and every state and
- * sentence of a failure comes from the control plane.
+ * The IM module's status, read once by 通知: the Feishu row draws it, and the
+ * three notice rows end their sentence 「，并推送到飞书」 when the push is on.
+ * The page is a view of the server's state, never a second copy of it: the QR
+ * code renders the link the SDK built, and every state and sentence of a
+ * failure comes from the control plane. `enabled` false reads nothing — a
+ * deployment without the IM module has no Feishu to ask about.
  */
-function useImStatus() {
+export function useImStatus(enabled = true) {
   const [status, setStatus] = useState<ImStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const mounted = useRef(true);
   const load = useCallback(async () => {
+    if (!enabled) return null;
     try {
       const next = await fetchImStatus();
       if (!mounted.current) return null;
@@ -49,7 +50,7 @@ function useImStatus() {
       if (mounted.current) setLoadError(webErrorMessage(error, { fallback: "无法读取飞书连接状态，请稍后重试。" }));
       return null;
     }
-  }, []);
+  }, [enabled]);
   useEffect(() => {
     mounted.current = true;
     void load();
@@ -58,6 +59,9 @@ function useImStatus() {
   const binding = status?.feishu && status.feishu.bound ? status.feishu : null;
   return { status, binding, loadError, load, mounted };
 }
+
+/** What `useImStatus` answers: the status, the binding when there is one, and the way to read it again. */
+export type ImState = ReturnType<typeof useImStatus>;
 
 const CONNECTION_LABELS: Record<string, string> = {
   connecting: "正在连接",
@@ -75,18 +79,21 @@ function bindingState(binding: FeishuBinding): { text: string; healthy: boolean 
 }
 
 /**
- * 「飞书」 under 账户: scan once, and the researcher has a bot of their own in
- * their own Feishu — questions sent to it run like questions asked here, and
+ * 「飞书」 under 通知, the one place Feishu is dealt with (it was bound under
+ * 账户 and switched under 通知, so a bot was bound in one tab and its push
+ * turned on in another): scan once, and the researcher has a bot of their own
+ * in their own Feishu — questions sent to it run like questions asked here, and
  * results and notices arrive there (plan §3.6). 绑定 opens the QR code under
- * the row; a bound bot says its state, and its 「⋯」 holds where each chat's
- * questions go and 解除绑定.
+ * the row; a bound bot says its state beside the switch for pushing notices to
+ * it, and its 「⋯」 holds where each chat's questions go and 解除绑定.
  */
-export function FeishuAccountRow() {
-  const { status, binding, loadError, load, mounted } = useImStatus();
+export function FeishuRow({ im }: { im: ImState }) {
+  const { status, binding, loadError, load, mounted } = im;
   const [registration, setRegistration] = useState<FeishuRegistration | null>(null);
   const [busy, setBusy] = useState<"start" | "cancel" | "unbind" | null>(null);
   const [confirmUnbind, setConfirmUnbind] = useState(false);
   const [showChats, setShowChats] = useState(false);
+  const [pushing, setPushing] = useState(false);
 
   useEffect(() => {
     if (status?.registration && ACTIVE_REGISTRATION_STATES.has(status.registration.state)) setRegistration(status.registration);
@@ -132,6 +139,18 @@ export function FeishuAccountRow() {
       toast.error(webErrorMessage(error));
     } finally {
       setBusy(null);
+    }
+  };
+  const push = async (on: boolean) => {
+    setPushing(true);
+    try {
+      await setFeishuNotifications(on);
+      toast.success(on ? "通知会推送到飞书" : "已停止推送到飞书");
+      await load();
+    } catch (error) {
+      toast.error(webErrorMessage(error));
+    } finally {
+      if (mounted.current) setPushing(false);
     }
   };
   const unbind = async () => {
@@ -180,6 +199,7 @@ export function FeishuAccountRow() {
         control={(
           <>
             <span className={state.healthy ? undefined : "text-warn-strong"}>{state.text}</span>
+            <Switch label="推送到飞书" checked={binding.notifications} disabled={busy !== null || pushing} onChange={(on) => void push(on)} />
             <Menu
               label="飞书的更多操作"
               items={[
@@ -246,49 +266,8 @@ export function FeishuAccountRow() {
       label="飞书"
       description={ended?.error
         ? <span role="alert" className="text-error">{ended.error.message}</span>
-        : "研究完成和每日前沿推送到飞书"}
+        : "绑定后，研究完成和每日前沿也会推送到飞书"}
       control={<Button variant="secondary" onClick={() => void start()} loading={busy === "start"}>{ended ? "重新绑定" : "绑定"}</Button>}
-    />
-  );
-}
-
-/**
- * 「飞书」 under 通知: whether notices are pushed to the bound bot. A switch, as
- * every on/off in the product is now; an account that has not bound Feishu is
- * sent to 账户 to do it.
- */
-export function FeishuPushRow() {
-  const { status, binding, loadError, load } = useImStatus();
-  const [busy, setBusy] = useState(false);
-
-  const toggle = async (on: boolean) => {
-    setBusy(true);
-    try {
-      await setFeishuNotifications(on);
-      toast.success(on ? "通知会推送到飞书" : "已停止推送到飞书");
-      await load();
-    } catch (error) {
-      toast.error(webErrorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (loadError) {
-    return (
-      <PanelRow
-        label="飞书"
-        description={<span role="alert" className="text-error">{loadError}</span>}
-        control={<Button variant="text" onClick={() => void load()}>重试</Button>}
-      />
-    );
-  }
-  return (
-    <PanelRow
-      label="飞书"
-      control={!status ? undefined : binding
-        ? <Switch label="推送到飞书" checked={binding.notifications} disabled={busy} onChange={(on) => void toggle(on)} />
-        : <Link to="/app/account" className={buttonClasses({ variant: "secondary" })}>绑定</Link>}
     />
   );
 }

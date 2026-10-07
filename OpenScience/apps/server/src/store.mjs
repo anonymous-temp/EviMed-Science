@@ -992,6 +992,21 @@ function databaseResearchSession(row) {
   });
 }
 
+/**
+ * A project as the list says it. `createdAt` is the day the project was made —
+ * the one thing that tells two projects of the same name apart (2026-10-07
+ * audit, 设置 · 项目); it is absent where the store has no such day.
+ * @param {{ id: string, name: string, archived_at: Date | string | null, created_at?: Date | string | null }} row
+ */
+function projectSummary(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    archivedAt: row.archived_at == null ? null : new Date(row.archived_at).toISOString(),
+    ...(row.created_at == null ? {} : { createdAt: new Date(row.created_at).toISOString() }),
+  };
+}
+
 function databaseConflict(error, code, message) {
   if (error?.code === "23505") return new HttpError(409, code, message);
   return error;
@@ -1389,12 +1404,10 @@ export class PostgresStore extends InMemoryStore {
   async listProjects(user) {
     await this.ensureDefaultProject(user);
     const result = await this.database.query(
-      `SELECT id, name, archived_at FROM ${CONTROL_PLANE_SCHEMA}.projects WHERE user_id = $1 ORDER BY name, id`,
+      `SELECT id, name, archived_at, created_at FROM ${CONTROL_PLANE_SCHEMA}.projects WHERE user_id = $1 ORDER BY name, id`,
       [user.id],
     );
-    return result.rows.map((row) => ({
-      id: row.id, name: row.name, archivedAt: row.archived_at == null ? null : new Date(row.archived_at).toISOString(),
-    }));
+    return result.rows.map((row) => projectSummary(row));
   }
 
   /** @param {any} user @param {string} projectId @param {string} rawName */
@@ -1404,14 +1417,13 @@ export class PostgresStore extends InMemoryStore {
     if (id === "default") await this.ensureDefaultProject(user);
     const result = await this.database.query(
       `UPDATE ${CONTROL_PLANE_SCHEMA}.projects SET name = $3, updated_at = now()
-        WHERE user_id = $1 AND id = $2 RETURNING id, name, archived_at`,
+        WHERE user_id = $1 AND id = $2 RETURNING id, name, archived_at, created_at`,
       [user.id, id, name],
     );
     if (result.rowCount !== 1) throw new HttpError(404, "project_not_found", "Project not found.");
     const cached = this.projects.get(`${user.id}:${id}`);
     if (cached) cached.name = name;
-    const row = result.rows[0];
-    return { id: row.id, name: row.name, archivedAt: row.archived_at == null ? null : new Date(row.archived_at).toISOString() };
+    return projectSummary(result.rows[0]);
   }
 
   /** @param {any} user @param {string} projectId @param {boolean} archived */
@@ -1421,15 +1433,14 @@ export class PostgresStore extends InMemoryStore {
     const result = await this.database.query(
       `UPDATE ${CONTROL_PLANE_SCHEMA}.projects
           SET archived_at = CASE WHEN $3::boolean THEN coalesce(archived_at, now()) ELSE NULL END, updated_at = now()
-        WHERE user_id = $1 AND id = $2 RETURNING id, name, archived_at`,
+        WHERE user_id = $1 AND id = $2 RETURNING id, name, archived_at, created_at`,
       [user.id, id, archived === true],
     );
     if (result.rowCount !== 1) throw new HttpError(404, "project_not_found", "Project not found.");
-    const row = result.rows[0];
-    const archivedAt = row.archived_at == null ? null : new Date(row.archived_at).toISOString();
+    const summary = projectSummary(result.rows[0]);
     const cached = this.projects.get(`${user.id}:${id}`);
-    if (cached) cached.archivedAt = archivedAt;
-    return { id: row.id, name: row.name, archivedAt };
+    if (cached) cached.archivedAt = summary.archivedAt;
+    return summary;
   }
 
   async listStoredProjects() {
@@ -1462,21 +1473,24 @@ export class PostgresStore extends InMemoryStore {
   async createProject(user, rawId, name = rawId) {
     const id = safeId(rawId, "project id");
     const displayName = typeof name === "string" && name.trim() ? name.trim() : id;
+    /** @type {{ created_at?: Date | string } | undefined} */
+    let created;
     try {
       await this.database.transaction(async (client) => {
         const result = await client.query(
           `INSERT INTO ${CONTROL_PLANE_SCHEMA}.projects(user_id, id, name, quota_bytes)
            VALUES ($1, $2, $3, $4)
-           RETURNING id, name, active_workspace, quota_bytes, archived_at,
+           RETURNING id, name, active_workspace, quota_bytes, archived_at, created_at,
              (SELECT created_at::text FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id=$1) AS account_created_at`,
           [user.id, id, displayName, this.config.maxProjectBytes],
         );
         await this.projectFromRow(user, result.rows[0]);
+        created = result.rows[0];
       });
     } catch (error) {
       throw databaseConflict(error, "project_exists", "Project already exists.");
     }
-    return { id, name: displayName, archivedAt: null };
+    return projectSummary({ id, name: displayName, archived_at: null, created_at: created?.created_at });
   }
 
   async defaultProject(user) {

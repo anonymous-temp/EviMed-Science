@@ -162,6 +162,8 @@ it("previews an uploaded encrypted capsule, with what its check leaves out, befo
   // The extension is for the file picker, and nowhere a reader can see it.
   expect(picker).toHaveAttribute("accept",".evimedcap");
   expect(container.textContent).not.toMatch(/\.evimedcap|口令|解密/);
+  // What a file is, before one is chosen: whose it is, how big, and that looking changes nothing.
+  expect(screen.getByText("别人分享给你的记忆胶囊，不超过 2 MiB。预览不会改变你的记忆。")).toBeInTheDocument();
   const file=new File(['{"encrypted":true}'],"methods.evimedcap",{type:"application/json"});Object.defineProperty(file,"text",{value:async()=>'{"encrypted":true}'});
   await userEvent.upload(picker,file);
   await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");

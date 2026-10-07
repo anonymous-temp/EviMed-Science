@@ -23,8 +23,8 @@ const lots: WebResearchAllowance = {
   nextExpiry: { amount: "3.20000000", at: "2026-10-31T16:00:00.000Z" }, low: false, lowThreshold: 20, membership: null,
   month: { since: "2026-09-30T16:00:00.000Z", paid: 4.5, pending: 0 },
   commerce: {
-    rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: SIMULATED_WALLET_PAGES.membership,
-    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: SIMULATED_WALLET_PAGES.refunds,
+    rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: null,
+    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: null,
   },
 };
 
@@ -70,14 +70,15 @@ beforeEach(() => {
 });
 
 describe("the allowance header on the platform's wallet", () => {
-  it("shows 可用 with the 充值, 赠送 and 冻结 it is made of, each marked 模拟", async () => {
+  it("shows 可用 with the 充值, 赠送 and 冻结 it is made of, and says 模拟 once — in the group's header, not on each row", async () => {
     open(lots);
     expect(within(panelRow("可用科研额度")).getByText("¥7.80")).toBeInTheDocument();
     expect(within(header()).getByText("充值 ＋ 赠送 − 冻结")).toBeInTheDocument();
-    for (const [label, amount] of [["充值", "¥6.10"], ["赠送", "¥3.20"], ["冻结", "¥1.50"]] as const) {
+    for (const [label, amount] of [["可用科研额度", "¥7.80"], ["充值", "¥6.10"], ["赠送", "¥3.20"], ["冻结", "¥1.50"]] as const) {
       expect(within(panelRow(label)).getByText(amount), label).toBeInTheDocument();
-      expect(within(panelRow(label)).getByText(SIMULATED_WALLET_LABEL), label).toBeInTheDocument();
+      expect(within(panelRow(label)).queryByText(SIMULATED_WALLET_LABEL), label).not.toBeInTheDocument();
     }
+    expect(within(header()).getAllByText(SIMULATED_WALLET_LABEL)).toHaveLength(1);
     await rows();
   });
 
@@ -121,7 +122,8 @@ describe("the statement's lines", () => {
     expect(within(item).getByText("¥6.42")).toBeInTheDocument();
     expect(item).toHaveTextContent("赠送 ¥1.20 ＋ 充值 ¥5.22");
     expect(item).toHaveTextContent("余额 ¥7.80");
-    expect(within(item).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    // The list says 「模拟」 once, in its header; a line of a list that is all simulated does not say it again.
+    expect(within(item).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
   });
 
   it("a part that paid nothing is not listed, and a charge under a cent is not drawn as free", async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArchiveRestore, Download, Pencil, Plus } from "lucide-react";
 import {
@@ -13,7 +13,11 @@ import {
   type WebProject,
 } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { PROJECT_NAME_MAX, projectErrorMessage, projectMetaLine, projectNameProblem } from "@/lib/projectNames";
+import { PROJECT_NAME_MAX, labelOf, projectErrorMessage, projectLabels, projectMetaLine, projectNameProblem } from "@/lib/projectNames";
+import { useGeoFeature } from "@/lib/geoClient";
+import { useVcrFeature } from "@/lib/vcrClient";
+import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
+import { useVcrProjects } from "@/components/vcr/useVcrProjectIds";
 import { announceRunsChanged, relativeTime, runMoment, runTitle } from "@/lib/runPresentation";
 import { chatPath } from "@/lib/runLocation";
 import { groupConversations, type Conversation } from "@/lib/conversations";
@@ -42,6 +46,26 @@ const DELETE_ERRORS = {
 /** A row inside a settings group: the group's own padding, no row corners. */
 const PANEL_ROW = "rounded-none px-4";
 
+/** Where a project belongs: the researcher's own, a 虚拟临床研究 study, or a 循证 GEO project (each of those is an ordinary project underneath). */
+type ProjectKind = "own" | "vcr" | "geo";
+
+/** The groups in the order the sidebar lists them; the researcher's own need no heading. */
+const GROUPS: ReadonlyArray<{ kind: ProjectKind; heading: string | null }> = [
+  { kind: "own", heading: "我的项目" },
+  { kind: "vcr", heading: "虚拟临床研究" },
+  { kind: "geo", heading: "循证 GEO" },
+];
+
+/**
+ * What deleting a module's project takes with it, said before it does: the
+ * server removes the module's own rows in the same transaction (`deleteGeoProjectRows`,
+ * `deleteVcrProjectRows`), which a researcher who made it in the module may not know.
+ */
+const MODULE_DELETE_WARNING: Record<Exclude<ProjectKind, "own">, string> = {
+  geo: "这是循证 GEO 项目，删除会一并删除它的测量和稿件。",
+  vcr: "这是虚拟临床研究项目，删除会一并删除这项研究。",
+};
+
 /**
  * 「项目」 in 设置 (2026-09-23 plan §5.9): the projects as rows — 重命名 and
  * 导出 on hover, 删除 in the row's 「⋯」 — and the conversations of this
@@ -68,6 +92,16 @@ export function ProjectsSection() {
   const [creating, setCreating] = useState(false);
   const renameRef = useRef<HTMLInputElement>(null);
   const createRef = useRef<HTMLInputElement>(null);
+
+  // Which module a project belongs to, from the readers the sidebar groups by, so the two cannot disagree; a list that cannot be read costs the groups, never the projects.
+  const geoOn = useGeoFeature() === "on";
+  const vcrOn = useVcrFeature() === "on";
+  const projectsKey = projects.map((project) => project.id).join("\u0000");
+  const geoIds = useGeoProjectIds(geoOn, projectsKey);
+  const { studies: vcrStudies, drafts: vcrDrafts } = useVcrProjects(vcrOn, projectsKey);
+  const kindOf = (id: string): ProjectKind => (geoIds.has(id) ? "geo" : vcrStudies.has(id) || vcrDrafts.has(id) ? "vcr" : "own");
+  // Two projects of one name are told apart by the day they were made, here as in every picker (`projectLabels`).
+  const labels = useMemo(() => projectLabels(projects), [projects]);
 
   useEffect(() => { if (renamingId) renameRef.current?.focus(); }, [renamingId]);
   useEffect(() => { if (createOpen) createRef.current?.focus(); }, [createOpen]);
@@ -103,7 +137,7 @@ export function ProjectsSection() {
       setCreateOpen(false);
       // A project made here is the one the researcher is about to work in.
       await useProjectStore.getState().select(project.id).then(() => setCurrentId(project.id), (error) => {
-        toast.error(`没能切换到“${project.name}”：${webErrorMessage(error)}`);
+        toast.error(`没能切换到“${labelOf(labels, project)}”：${webErrorMessage(error)}`);
       });
     } catch (error) {
       setCreateError(projectErrorMessage(error, projects.length, "项目没有建成，请稍后重试。"));
@@ -134,9 +168,9 @@ export function ProjectsSection() {
     try {
       const blob = await exportWebProject(project.id);
       downloadBlob(blob, `evimed-project-${project.id.replace(/[^a-zA-Z0-9_-]/g, "_")}.tar.gz`);
-      toast.success(`已导出“${project.name}”`);
+      toast.success(`已导出“${labelOf(labels, project)}”`);
     } catch (error) {
-      toast.error(`没能导出“${project.name}”：${webErrorMessage(error)}`);
+      toast.error(`没能导出“${labelOf(labels, project)}”：${webErrorMessage(error)}`);
     } finally {
       setBusyProjectId(null);
     }
@@ -162,15 +196,69 @@ export function ProjectsSection() {
         }
       }
       refreshSidebar();
-      toast.success(`已删除“${project.name}”`);
+      toast.success(`已删除“${labelOf(labels, project)}”`);
     } catch (error) {
-      toast.error(`没能删除“${project.name}”：${webErrorMessage(error, { codes: DELETE_ERRORS })}`);
+      toast.error(`没能删除“${labelOf(labels, project)}”：${webErrorMessage(error, { codes: DELETE_ERRORS })}`);
     } finally {
       setBusyProjectId(null);
     }
   };
 
   const disabled = loading || creating || busyProjectId != null;
+
+  const renderProject = (project: WebProject) => {
+    const label = labelOf(labels, project);
+    return renamingId === project.id ? (
+      <li key={project.id} className="px-4 py-3">
+        <form onSubmit={(event) => { event.preventDefault(); void submitRename(project); }}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              ref={renameRef}
+              aria-label={`“${label}”的新名字`}
+              value={renameDraft}
+              maxLength={PROJECT_NAME_MAX}
+              className="w-72"
+              disabled={busyProjectId === project.id}
+              onChange={(event) => setRenameDraft(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Escape") { setRenamingId(null); setRenameError(null); } }}
+            />
+            <Button type="submit" loading={busyProjectId === project.id}>保存</Button>
+            <Button variant="text" disabled={busyProjectId === project.id} onClick={() => { setRenamingId(null); setRenameError(null); }}>取消</Button>
+          </div>
+          {renameError && <p role="alert" className="mt-2 text-caption text-error">{renameError}</p>}
+        </form>
+      </li>
+    ) : (
+      <ListRow
+        key={project.id}
+        className={PANEL_ROW}
+        title={label}
+        meta={projectMetaLine(project) || undefined}
+        trailing={project.id === currentId ? <Tag>当前</Tag> : undefined}
+        actions={(
+          <>
+            {/* A rename starts from the stored name, never from the label that told it from its namesake. */}
+            <IconButton icon={Pencil} label={`重命名“${label}”`} size="sm" disabled={disabled}
+              onClick={() => { setRenamingId(project.id); setRenameDraft(project.name); setRenameError(null); }} />
+            <IconButton icon={Download} label={`导出“${label}”`} size="sm" disabled={disabled}
+              onClick={() => void exportProject(project)} />
+          </>
+        )}
+        menu={project.id === DEFAULT_PROJECT_ID ? undefined : (
+          <Menu
+            label={`“${label}”的更多操作`}
+            items={[{ label: "删除", destructive: true, disabled, onSelect: () => setPendingDelete(project) }]}
+          />
+        )}
+      />
+    );
+  };
+
+  const groups = GROUPS
+    .map(({ kind, heading }) => ({ kind, heading, members: projects.filter((project) => kindOf(project.id) === kind) }))
+    .filter(({ members }) => members.length > 0);
+  const showHeadings = groups.length > 1;
+  const pendingKind = pendingDelete ? kindOf(pendingDelete.id) : "own";
 
   return (
     <div className="space-y-8">
@@ -212,61 +300,23 @@ export function ProjectsSection() {
           />
         )}
         {projects.length === 0 && loading && <PanelRow label={<span className="text-text-3">正在读取</span>} />}
-        {projects.length > 0 && (
-          <List label="项目列表" divided>
-            {projects.map((project) => renamingId === project.id ? (
-              <li key={project.id} className="px-4 py-3">
-                <form onSubmit={(event) => { event.preventDefault(); void submitRename(project); }}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      ref={renameRef}
-                      aria-label={`“${project.name}”的新名字`}
-                      value={renameDraft}
-                      maxLength={PROJECT_NAME_MAX}
-                      className="w-72"
-                      disabled={busyProjectId === project.id}
-                      onChange={(event) => setRenameDraft(event.target.value)}
-                      onKeyDown={(event) => { if (event.key === "Escape") { setRenamingId(null); setRenameError(null); } }}
-                    />
-                    <Button type="submit" loading={busyProjectId === project.id}>保存</Button>
-                    <Button variant="text" disabled={busyProjectId === project.id} onClick={() => { setRenamingId(null); setRenameError(null); }}>取消</Button>
-                  </div>
-                  {renameError && <p role="alert" className="mt-2 text-caption text-error">{renameError}</p>}
-                </form>
-              </li>
-            ) : (
-              <ListRow
-                key={project.id}
-                className={PANEL_ROW}
-                title={project.name}
-                meta={projectMetaLine(project) || undefined}
-                trailing={project.id === currentId ? <Tag>当前</Tag> : undefined}
-                actions={(
-                  <>
-                    <IconButton icon={Pencil} label={`重命名“${project.name}”`} size="sm" disabled={disabled}
-                      onClick={() => { setRenamingId(project.id); setRenameDraft(project.name); setRenameError(null); }} />
-                    <IconButton icon={Download} label={`导出“${project.name}”`} size="sm" disabled={disabled}
-                      onClick={() => void exportProject(project)} />
-                  </>
-                )}
-                menu={project.id === DEFAULT_PROJECT_ID ? undefined : (
-                  <Menu
-                    label={`“${project.name}”的更多操作`}
-                    items={[{ label: "删除", destructive: true, disabled, onSelect: () => setPendingDelete(project) }]}
-                  />
-                )}
-              />
-            ))}
-          </List>
-        )}
+        {projects.length > 0 && groups.map(({ kind, heading, members }) => (
+          <Fragment key={kind}>
+            {/* Headings only when a module's projects are there to be told from the researcher's own, as the sidebar does. */}
+            {showHeadings && <h3 className="px-4 pb-1 pt-3 text-caption text-text-3">{heading}</h3>}
+            <List label={showHeadings ? `${heading}的项目` : "项目列表"} divided>
+              {members.map(renderProject)}
+            </List>
+          </Fragment>
+        ))}
       </Panel>
 
       <ArchivedConversations />
 
       {pendingDelete && createPortal(
         <ConfirmDialog
-          title={`删除项目“${pendingDelete.name}”？`}
-          body="这个项目的文件、对话与研究环境都会删除，无法恢复；需要留底的话，先导出。"
+          title={`删除项目“${labelOf(labels, pendingDelete)}”？`}
+          body={`${pendingKind === "own" ? "" : MODULE_DELETE_WARNING[pendingKind]}这个项目的文件、对话与研究环境都会删除，无法恢复；需要留底的话，先导出。`}
           confirmLabel="删除项目"
           onConfirm={() => void confirmDeleteProject()}
           onCancel={() => setPendingDelete(null)}

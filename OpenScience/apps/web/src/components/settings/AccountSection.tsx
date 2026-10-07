@@ -6,7 +6,6 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Panel, PanelRow } from "@/components/ui/Panel";
-import { FeishuAccountRow } from "./FeishuRows";
 import { PasswordRow } from "./PasswordRow";
 
 interface WebAccount {
@@ -16,8 +15,7 @@ interface WebAccount {
 
 /**
  * 「账户」 in 设置 (2026-09-23 plan §5.9, mockup m11): one group — 用户名,
- * 密码 (changed in place), 飞书 where the deployment runs the IM module, and
- * 退出登录 — and a second for the account's data: export, and 删除账户 as a
+ * 密码 (changed in place) and 退出登录 — and a second for the account's data: export, and 删除账户 as a
  * destructive text action that asks for the account's id before it acts.
  *
  * What went: the 「你的账号」 card and its sentence about how accounts are
@@ -26,7 +24,7 @@ interface WebAccount {
  * the deletion acts on), a refresh button, and a card inside a card inside a
  * card around the confirmation.
  */
-export function AccountSection({ imEnabled }: { imEnabled: boolean }) {
+export function AccountSection() {
   const navigate = useNavigate();
   const [account, setAccount] = useState<WebAccount | null>(null);
   const [busy, setBusy] = useState<"export" | "logout" | "delete" | null>(null);
@@ -95,7 +93,6 @@ export function AccountSection({ imEnabled }: { imEnabled: boolean }) {
       <Panel title="账户">
         <PanelRow label="用户名" control={account ? account.name || account.id : undefined} />
         <PasswordRow />
-        {imEnabled && <FeishuAccountRow />}
         <PanelRow
           label="退出登录"
           control={(

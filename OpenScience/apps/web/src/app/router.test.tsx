@@ -189,7 +189,7 @@ describe("the simulated wallet's addresses", () => {
   // serves them as commerce links, so a page it names must be a page here.
   it("opens every page the domain names on the one wallet route, by the page's own name", () => {
     const pages = Object.entries(SIMULATED_WALLET_PAGES);
-    expect(pages.map(([name]) => name).sort()).toEqual(["membership", "orders", "recharge", "refunds"]);
+    expect(pages.map(([name]) => name).sort()).toEqual(["orders", "recharge"]);
     for (const [name, path] of pages) {
       const found = leaf(path);
       expect(found.route?.path, path).toBe("account/simulated/:page");

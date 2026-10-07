@@ -48,27 +48,33 @@ function trustedOrigins(value) {
 }
 
 /**
- * The commerce of a deployment whose wallet is simulated (2026-10-04): the four
+ * The commerce of a deployment whose wallet is simulated (2026-10-04): the
  * destinations are pages of this platform (`SIMULATED_WALLET_PAGES`), not anyone's
  * checkout, so there is no origin to trust and nothing to configure — and the
  * configured commerce settings are not consulted, because a real checkout beside
  * a simulated wallet is exactly the mix-up the simulation must make impossible.
- * Every feature reports `simulated`, which is never `configured`: a release check
- * that requires a real handoff is not satisfied by a page that moves no money.
+ * What a simulated wallet does is take a top-up and list its orders, so those two
+ * report `simulated`, which is never `configured`: a release check that requires a
+ * real handoff is not satisfied by a page that moves no money. Membership and
+ * refunds have nothing behind them here (2026-10-07: their pages were a sentence
+ * saying so), so they have no link and report `disabled` — the real hosted
+ * handoffs of a deployment that is not simulated are untouched.
  */
+const SIMULATED_ACTIONS = Object.freeze(["recharge", "orders"]);
+
 function createSimulatedCommerce() {
   const links = Object.freeze({
     rechargeUrl: SIMULATED_WALLET_PAGES.recharge,
-    membershipUrl: SIMULATED_WALLET_PAGES.membership,
+    membershipUrl: null,
     ordersUrl: SIMULATED_WALLET_PAGES.orders,
-    refundsUrl: SIMULATED_WALLET_PAGES.refunds,
+    refundsUrl: null,
   });
   return Object.freeze({
     links() { return links; },
     status() {
       return { enabled: true, currency: "CNY", creditsPerCny: 1, walletAuthority: "simulated", simulated: true,
         mode: "simulated", features: Object.fromEntries(RESEARCH_COMMERCE_ACTIONS.map((action) =>
-          [action, { status: "simulated", method: "simulated", verified: false }])),
+          [action, { status: SIMULATED_ACTIONS.includes(action) ? "simulated" : "disabled", method: "simulated", verified: false }])),
         upstreamContracts: { checkout: "simulated", membershipEntitlements: "simulated",
           orderStatus: "simulated", refunds: "simulated", holds: "simulated", monetaryPrecision: "simulated" } };
     },

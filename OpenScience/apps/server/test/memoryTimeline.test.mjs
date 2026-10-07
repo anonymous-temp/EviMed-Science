@@ -257,22 +257,21 @@ function growthSources({ failMethods = false } = {}) {
   return { researchMemory, learning, capsules, zones, now: () => new Date("2026-09-28T04:00:00Z") };
 }
 
-test("each point is what the page listed at the end of its week, a moment is a method learned or a capsule received", async () => {
+test("each point is what the fact tabs listed at the end of its week, a moment is a method learned or a capsule received", async () => {
   const sources = growthSources();
   const growth = await memoryGrowth(sources, user, { timeZone: "Asia/Shanghai" });
   assert.equal(growth.unit, "week");
-  assert.equal(growth.first, "2026-09-08", "the retired method was the first row");
+  assert.equal(growth.first, "2026-09-10", "the first memory, not the first method learned");
   assert.equal(growth.fromStart, true);
   assert.deepEqual(growth.points, [
     { start: "2026-08-31", known: 0 },
-    // 3 memories and the method learned on 09-08.
-    { start: "2026-09-07", known: 4 },
-    // + the GRADE method, − the method stood down on 09-20; the replaced fact
-    // is carried by its replacement; a note came and went.
-    { start: "2026-09-14", known: 4 },
+    // 3 memories. The two learned methods are not memories: they are 做法, a list of their own.
+    { start: "2026-09-07", known: 3 },
+    // The replaced fact is carried by its replacement; a note came and went.
+    { start: "2026-09-14", known: 3 },
     // − two forgotten memories, + 150 notes.
-    { start: "2026-09-21", known: 152 },
-    { start: "2026-09-28", known: 152 },
+    { start: "2026-09-21", known: 151 },
+    { start: "2026-09-28", known: 151 },
   ]);
   assert.deepEqual(growth.moments, [
     { day: "2026-09-08", kind: "method", title: "screen-in-batches" },
@@ -323,7 +322,7 @@ test("the growth route answers its own path, read-only", async (t) => {
   const growth = await (await fetch(`${base}/api/memory/growth?timeZone=UTC`)).json();
   assert.equal(growth.data.unit, "week");
   assert.equal(growth.data.timeZone, "UTC");
-  assert.equal(growth.data.points.at(-1).known, 152);
+  assert.equal(growth.data.points.at(-1).known, 151);
   assert.equal((await fetch(`${base}/api/memory/growth`, { method: "DELETE" })).status, 405);
   assert.equal((await fetch(`${base}/api/memory/growth?timeZone=Mars%2FOlympus`)).status, 400);
 });

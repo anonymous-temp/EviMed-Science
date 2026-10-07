@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { webErrorMessage, type WebProject } from "@/lib/apiClient";
+import { formatClock, formatDay } from "@/lib/format";
+import { useProjectStore } from "@/lib/projects";
 import { relativeTime } from "@/lib/runPresentation";
 
 /**
@@ -47,4 +50,60 @@ export function projectErrorMessage(error: unknown, projectCount: number, fallba
 export function projectMetaLine(project: WebProject, now = Date.now()): string {
   const last = project.lastActivityAt ? Date.parse(project.lastActivityAt) : Number.NaN;
   return Number.isFinite(last) ? `最近活动 ${relativeTime(last, now)}` : "";
+}
+
+/** What a project needs to be told apart from another of its name. */
+export type LabelledProject = Pick<WebProject, "id" | "name" | "createdAt">;
+
+/**
+ * The names a list of projects is read by, in every place a project is chosen
+ * or named — the sidebar, the settings list, the knowledge-base scope menu, the
+ * memory project dropdown, and the dialogs that delete or rename one.
+ *
+ * Two projects can carry one name (a re-run, a second window, two products of
+ * one brand), and a list of “波立维” and “波立维” tells the reader nothing. A
+ * name that is alone stays as it is. A name that occurs more than once gets the
+ * day the project was made — “波立维 · 9月29日”; two made the same day also get
+ * the time — “波立维 · 9月29日 14:02”; and a project the store has no day for
+ * (or two made in the same minute) gets its place in the list — “波立维 · 第 2 个”,
+ * counted in the order they were made, then by id, so the number does not move
+ * when the list is read in another order.
+ *
+ * It is a label and nothing else: the stored name is never changed, a rename
+ * starts from the stored name, and the key here is the project's id.
+ */
+export function projectLabels(projects: readonly LabelledProject[]): Map<string, string> {
+  const byName = new Map<string, LabelledProject[]>();
+  for (const project of projects) byName.set(project.name, [...(byName.get(project.name) ?? []), project]);
+  const labels = new Map<string, string>();
+  for (const [name, group] of byName) {
+    if (group.length === 1) {
+      labels.set(group[0].id, name);
+      continue;
+    }
+    const ordered = [...group].sort((left, right) => (left.createdAt ?? "").localeCompare(right.createdAt ?? "") || left.id.localeCompare(right.id));
+    const day = (project: LabelledProject) => formatDay(project.createdAt);
+    const sameDay = (project: LabelledProject) => day(project) !== "" && ordered.filter((other) => day(other) === day(project)).length > 1;
+    const withTime = (project: LabelledProject) => `${day(project)} ${formatClock(project.createdAt)}`;
+    const sameTime = (project: LabelledProject) => ordered.filter((other) => sameDay(other) && withTime(other) === withTime(project)).length > 1;
+    ordered.forEach((project, index) => {
+      const ordinal = `${name} · 第 ${index + 1} 个`;
+      if (day(project) === "") labels.set(project.id, ordinal);
+      else if (!sameDay(project)) labels.set(project.id, `${name} · ${day(project)}`);
+      else if (!sameTime(project)) labels.set(project.id, `${name} · ${withTime(project)}`);
+      else labels.set(project.id, ordinal);
+    });
+  }
+  return labels;
+}
+
+/** The label of one project among `projects`: its name, told apart from a namesake when it has one. */
+export function labelOf(labels: ReadonlyMap<string, string>, project: Pick<WebProject, "id" | "name">): string {
+  return labels.get(project.id) ?? project.name;
+}
+
+/** The account's projects as the shared store holds them, labelled (`projectLabels`). */
+export function useProjectLabels(): Map<string, string> {
+  const projects = useProjectStore((state) => state.projects);
+  return useMemo(() => projectLabels(projects), [projects]);
 }

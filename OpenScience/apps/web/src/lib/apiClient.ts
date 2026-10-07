@@ -411,6 +411,8 @@ export interface WebProject {
   runCount?: number;
   /** The latest run's start in this project, or null for none yet. */
   lastActivityAt?: string | null;
+  /** When the project was made, when the control plane keeps it: what tells two projects of one name apart. */
+  createdAt?: string | null;
 }
 
 export interface WebPluginConfiguration {

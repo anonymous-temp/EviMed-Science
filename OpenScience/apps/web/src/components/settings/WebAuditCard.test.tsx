@@ -48,12 +48,29 @@ describe("WebAuditCard", () => {
     render(<WebAuditCard />);
 
     expect(await screen.findByText("操作审计")).toBeInTheDocument();
-    expect(screen.getByText("file.upload")).toBeInTheDocument();
+    // The ledger's dotted names and English status words are the log's; the row says it in Chinese and keeps them in the tooltip.
+    expect(screen.getByText("上传文件")).toBeInTheDocument();
+    expect(screen.getByText("运行命令")).toBeInTheDocument();
+    expect(screen.getByText("已完成")).toBeInTheDocument();
+    expect(screen.getByText("失败")).toBeInTheDocument();
+    for (const raw of ["file.upload", "command.write_workspace_file", "completed", "failed"]) {
+      for (const place of screen.getAllByText(raw)) expect(place.getAttribute("role")).toBe("tooltip");
+    }
     expect(screen.getByText("inputs/data.csv")).toBeInTheDocument();
     expect(screen.getByText("2 KB")).toBeInTheDocument();
-    expect(screen.getByText("command.write_workspace_file")).toBeInTheDocument();
     expect(screen.queryByText("internal path detail")).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.listWebAuditLog).toHaveBeenCalledWith(20));
+  });
+
+  it("reads a status the ledger has no word for as 未登记的状态, and an action it does not know as 其他操作", async () => {
+    mocks.listWebAuditLog.mockResolvedValue([
+      { createdAt: "2026-01-01T12:00:00.000Z", userId: "alice", projectId: "paper1", action: "something.new", command: null, status: "started", target: null, bytes: null, error: null },
+      { createdAt: "2026-01-01T12:01:00.000Z", userId: "alice", projectId: "paper1", action: "file.upload", command: null, status: "daydreaming", target: null, bytes: null, error: null },
+    ]);
+    render(<WebAuditCard />);
+    expect(await screen.findByText("其他操作")).toBeInTheDocument();
+    expect(screen.getByText("已开始")).toBeInTheDocument();
+    expect(screen.getByText("未登记的状态")).toBeInTheDocument();
   });
 
   it("shows an empty state", async () => {

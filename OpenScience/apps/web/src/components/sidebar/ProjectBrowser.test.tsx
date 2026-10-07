@@ -146,6 +146,21 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     expect(within(section).getByRole("heading", { name: "项目" })).not.toHaveAttribute("title");
   });
 
+  it("tells two projects of one name apart by the day they were made, and renames from the stored name", async () => {
+    const year = new Date().getFullYear();
+    mocks.projects = [
+      { id: "default", name: "我的研究" },
+      { id: "g1", name: "波立维", createdAt: new Date(year, 8, 29, 9, 0).toISOString() },
+      { id: "g2", name: "波立维", createdAt: new Date(year, 9, 1, 9, 0).toISOString() },
+    ] as typeof mocks.projects;
+    renderBrowser();
+    expect(await screen.findByRole("button", { name: "波立维 · 9月29日" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "波立维 · 10月1日" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "波立维" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "重命名项目“波立维 · 10月1日”" }));
+    expect(screen.getByLabelText("新的项目名")).toHaveValue("波立维");
+  });
+
   it("opens another project's group and reads its tasks under that project", async () => {
     mocks.runs.paper1 = [run({ id: "p1-a", question: "论文一的任务" })];
     renderBrowser();

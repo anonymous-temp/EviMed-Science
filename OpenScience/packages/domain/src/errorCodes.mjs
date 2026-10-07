@@ -1,4 +1,5 @@
 import { EVOLUTION_ERROR_MESSAGES } from './evolution.mjs';
+import { READINESS_ERROR_MESSAGES_ZH } from './readinessCodes.mjs';
 import { AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY } from './agenda.mjs';
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
@@ -1738,6 +1739,7 @@ export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_inval
 
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...Object.keys(EVOLUTION_ERROR_MESSAGES),
+  ...Object.keys(READINESS_ERROR_MESSAGES_ZH),
   ...EXTENSION_ERROR_CODES,
   ...MANAGED_BROWSER_ERROR_CODES,
   ...Object.keys(DOCUMENT_EXPORT_ERROR_MESSAGES),
@@ -1822,6 +1824,8 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
   ...EVOLUTION_ERROR_MESSAGES,
+  // What the deployment's configuration check says (`/api/ready`): the operator console reads these.
+  ...READINESS_ERROR_MESSAGES_ZH,
   // The evidence card's own refusals (`evidenceCard.mjs`): who may write where, a simulated value, a producer a card
   // must name. Each touches the one write it names.
   ...EVIDENCE_CARD_ERROR_MESSAGES_ZH,
@@ -2821,6 +2825,8 @@ export function errorCodeOutcome(code) {
   if (/^runtime_/.test(text)) return 'stopped'
   if (text === 'superseded_by_dispatch') return 'stopped'
   if (SOCKET_TOOL_ERROR_CODES.includes(text)) return 'gated'
+  // The deployment's own configuration, as `/api/ready` reports it: it describes the platform, never a run.
+  if (Object.hasOwn(READINESS_ERROR_MESSAGES_ZH, text)) return 'upstream'
   return 'unknown'
 }
 

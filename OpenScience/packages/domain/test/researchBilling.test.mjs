@@ -56,7 +56,8 @@ test('the simulated wallet vocabulary is closed, whole-credit and labelled', () 
     assert.ok(Number.isSafeInteger(entry.credits) && entry.credits > 0, 'a package is a whole number of credits');
     assert.equal(entry.id, `topup-${entry.credits}`);
   }
-  assert.deepEqual(Object.keys(SIMULATED_WALLET_PAGES), ['recharge', 'membership', 'orders', 'refunds']);
+  // What a simulated wallet does is take a top-up and list the orders. Membership and refunds had nothing behind them.
+  assert.deepEqual(Object.keys(SIMULATED_WALLET_PAGES), ['recharge', 'orders']);
   for (const path of Object.values(SIMULATED_WALLET_PAGES)) assert.match(path, /^\/app\/account\/simulated\/[a-z]+$/);
   assert.ok(Object.isFrozen(SIMULATED_TOPUP_PACKAGES) && Object.isFrozen(SIMULATED_TOPUP_PACKAGES[0]) && Object.isFrozen(SIMULATED_WALLET_PAGES));
 });

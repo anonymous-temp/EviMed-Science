@@ -19,7 +19,13 @@ type SwitchState = { kind: "loading" } | { kind: "ready"; enabled: boolean } | {
  * `features.frontier`, read by the section and passed in): a switch for a
  * module the reader cannot see would be a setting for nothing.
  */
-export function FrontierDigestRow({ feature, switchKey = "frontier", label = "前沿日报" }: { feature: FrontierFeature; switchKey?: FrontierNotificationSwitch; label?: string }) {
+export function FrontierDigestRow({ feature, switchKey = "frontier", label = "前沿日报", description }: {
+  feature: FrontierFeature;
+  switchKey?: FrontierNotificationSwitch;
+  label?: string;
+  /** Where this notice is delivered, in a line under its name; a read that failed says so here instead. */
+  description?: string;
+}) {
   const [state, setState] = useState<SwitchState>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -54,7 +60,7 @@ export function FrontierDigestRow({ feature, switchKey = "frontier", label = "�
   return (
     <PanelRow
       label={label}
-      description={state.kind === "error" ? <span role="alert">{state.message}</span> : undefined}
+      description={state.kind === "error" ? <span role="alert">{state.message}</span> : description}
       control={state.kind === "error"
         ? <Button variant="text" onClick={() => setAttempt((value) => value + 1)}>重试</Button>
         : <Switch label={label} checked={state.kind === "ready" && state.enabled} disabled={state.kind !== "ready" || busy} onChange={() => void toggle()} />}

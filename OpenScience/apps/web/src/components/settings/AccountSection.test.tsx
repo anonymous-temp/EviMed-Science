@@ -25,13 +25,12 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   changeWebPassword: mocks.changeWebPassword,
 }));
 vi.mock("@/lib/toast", () => ({ toast: { error: mocks.toastError, success: mocks.toastSuccess } }));
-vi.mock("./FeishuRows", () => ({ FeishuAccountRow: () => <div>飞书绑定行</div> }));
 
-function open({ imEnabled = false } = {}) {
+function open() {
   return render(
     <MemoryRouter initialEntries={["/app/account"]}>
       <Routes>
-        <Route path="/app/account" element={<AccountSection imEnabled={imEnabled} />} />
+        <Route path="/app/account" element={<AccountSection />} />
         <Route path="/login" element={<p>登录页</p>} />
       </Routes>
     </MemoryRouter>,
@@ -66,13 +65,8 @@ describe("账户", () => {
     expect(within(group).getByRole("button", { name: "退出" })).toBeInTheDocument();
     expect(screen.queryByText("alice")).not.toBeInTheDocument();
     for (const gone of [/每个账号的数据彼此独立/, /数据独立/, /刷新账户/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
-    expect(screen.queryByText("飞书绑定行")).not.toBeInTheDocument();
-  });
-
-  it("puts Feishu in the account group where the deployment runs the IM module", async () => {
-    open({ imEnabled: true });
-    const group = (await screen.findByRole("heading", { name: "账户" })).closest("section")!;
-    expect(within(group).getByText("飞书绑定行")).toBeInTheDocument();
+    // Feishu is bound under 通知, in the one row that also switches its push.
+    expect(screen.queryByText("飞书")).not.toBeInTheDocument();
   });
 
   it("changes the password in place under its row", async () => {

@@ -26,13 +26,16 @@ const BACK_OFFICE = /用过|次数|已核对|置信|%|token|候选|蒸馏|采纳
 
 describe("the capsule's growth line", () => {
   it("says when EviMed began, how much it holds now and what it learned — one sentence, the chart's heading", () => {
-    const view = growthView(growth())!;
-    expect(view.title).toBe("9月8日开始记住你，现在有 24 条记忆，学会 1 种做法");
+    // The ways of working are counted where they are listed (做法) and handed in; the methods on the line are moments, not the count.
+    const view = growthView(growth(), undefined, { practices: 6 })!;
+    expect(view.title).toBe("9月8日开始记住你，现在有 24 条记忆，学会 6 种做法");
     expect(view.title).not.toMatch(BACK_OFFICE);
     expect(view.input.own).toEqual({ name: "记忆", values: [0, 4, 9, 23, 24] });
     expect(view.input.labels).toEqual(["8月31日", "9月7日", "9月14日", "9月21日", "9月28日"]);
-    // Nothing learned, nothing claimed.
-    expect(growthView(growth({ moments: [] }))!.title).toBe("9月8日开始记住你，现在有 24 条记忆");
+    // Nothing learned, or a list that could not be read, nothing claimed: a number the page does not show is not said.
+    expect(growthView(growth({ moments: [] }), undefined, { practices: 0 })!.title).toBe("9月8日开始记住你，现在有 24 条记忆");
+    expect(growthView(growth())!.title).toBe("9月8日开始记住你，现在有 24 条记忆");
+    expect(growthView(growth(), undefined, { practices: null })!.title).toBe("9月8日开始记住你，现在有 24 条记忆");
   });
 
   it("over a longer history says how far it moved in the months shown", () => {

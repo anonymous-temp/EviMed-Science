@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, Receipt, Wallet } from "lucide-react";
 import { SIMULATED_TOPUP_PACKAGES, SIMULATED_WALLET_PAGES } from "@evimed/domain";
@@ -20,12 +20,10 @@ import { NotFound } from "./NotFound";
 
 type WalletPageName = keyof typeof SIMULATED_WALLET_PAGES;
 
-/** What each of the four pages is called. Which pages there are, and where, is the domain's (`SIMULATED_WALLET_PAGES`). */
+/** What each page is called. Which pages there are, and where, is the domain's (`SIMULATED_WALLET_PAGES`). */
 const TITLES: Record<WalletPageName, string> = {
   recharge: "模拟充值",
-  membership: "模拟会员",
   orders: "模拟订单",
-  refunds: "模拟退款",
 };
 
 /** The allowance section of 设置: where these pages are reached from, and where they lead back. */
@@ -38,16 +36,18 @@ function walletPageNamed(segment: string | undefined): WalletPageName | null {
 }
 
 /**
- * The simulated wallet's commerce pages (2026-10-04): 模拟充值, 模拟会员, 模拟订单
- * and 模拟退款, at `/app/account/simulated/:page`.
+ * The simulated wallet's commerce pages (2026-10-04): 模拟充值 and 模拟订单, at
+ * `/app/account/simulated/:page`.
  *
  * A deployment may bill research from a simulated wallet, so its owner can look
- * at the whole allowance experience before a real wallet exists. The four
- * commerce destinations of such a deployment are these pages of the platform
- * itself rather than anyone's checkout: a top-up here adds simulated credits,
- * membership and refunds are a sentence saying they are a demonstration, and
- * no page moves money. So each opens with the line that says so, and every
- * amount carries the mark.
+ * at the allowance experience before a real wallet exists. The commerce
+ * destinations of such a deployment are these pages of the platform itself
+ * rather than anyone's checkout: a top-up here adds simulated credits and the
+ * orders page lists them. No page moves money, so each opens with the line that
+ * says so, and every amount carries the mark. There were four pages until
+ * 2026-10-07; 模拟会员 and 模拟退款 were a sentence saying they were a
+ * demonstration, with no plan to open and no money to return, and went (their
+ * addresses answer 404).
  *
  * A deployment whose wallet is not simulated has none of this: an address that
  * reaches here says so in one sentence, with the way back to 设置, and offers no
@@ -109,16 +109,9 @@ function WalletPage({ page }: { page: WalletPageName }) {
           />
         )}
         {page === "orders" && <Orders />}
-        {page === "membership" && <Demonstration>这里的会员只是演示：没有可以开通的套餐，也不会发放任何会员权益。</Demonstration>}
-        {page === "refunds" && <Demonstration>这里的退款只是演示：不会退回任何额度，也没有资金流动。</Demonstration>}
       </div>
     </PageShell>
   );
-}
-
-/** A page that exists to say what it is not: one short paragraph. */
-function Demonstration({ children }: { children: ReactNode }) {
-  return <p className="max-w-measure text-ui text-text-2">{children}</p>;
 }
 
 /**
@@ -189,6 +182,8 @@ function Recharge({ allowance, toppedUp, onToppedUp }: {
             </Button>
           ))}
         </div>
+        {/* Both halves are true: a pressed amount is booked at once, and a purchased lot never expires (gifts do). */}
+        <p className="mt-2 text-caption text-text-3">点选金额后，模拟额度立即入账；充值额度不会过期。</p>
       </section>
       {failure && <LoadError message={failure.message} onRetry={() => topUp(failure.packageId)} />}
     </>

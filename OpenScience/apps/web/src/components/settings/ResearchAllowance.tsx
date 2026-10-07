@@ -37,9 +37,10 @@ const COMMERCE = [["rechargeUrl", "充值"], ["membershipUrl", "会员"], ["orde
  * already says the allowance cannot be read.
  *
  * Where the wallet is simulated (`allowanceSimulated`) the section opens with
- * the line that says so, every amount carries the mark, and a low or used-up
- * allowance is prompted (`SimulatedAllowance`). A wallet that is not simulated
- * shows none of it.
+ * the line that says so, every group of amounts carries the mark once — in its
+ * header, not on each of its rows: eleven tags on one screen made the page read
+ * as a warning (2026-10-07 audit) — and a low or used-up allowance is prompted
+ * (`SimulatedAllowance`). A wallet that is not simulated shows none of it.
  */
 export function ResearchAllowance({ allowance }: { allowance: WebResearchAllowance }) {
   const operator = useOperator();
@@ -54,26 +55,35 @@ export function ResearchAllowance({ allowance }: { allowance: WebResearchAllowan
       <SimulatedDataLine />
       <SimulatedAllowanceNotice allowance={allowance} />
     </div>}
-    <Panel title="科研额度">
+    <Panel title="科研额度" action={simulated && (allowance.status === "ready" || month) ? <SimulatedMark /> : undefined}>
       {allowance.status !== "ready" ? <PanelRow label={{ disabled: "科研额度尚未启用", unavailable: "科研额度暂不可用", unlinked: "尚未关联科研额度账户", ready: "" }[allowance.status]} /> : <>
-        <PanelRow label="可用科研额度" description={allowance.balances ? "充值 ＋ 赠送 − 冻结" : undefined} control={<AllowanceAmount value={allowance.available} simulated={simulated} className="text-title font-semibold" />} />
+        <PanelRow label="可用科研额度" description={allowance.balances ? "充值 ＋ 赠送 − 冻结" : undefined} control={<AllowanceAmount value={allowance.available} simulated={simulated} mark={false} className="text-title font-semibold" />} />
         {/* The platform's wallet says what it holds in each kind, and which of the gift ends next. EviMed's says one number, and a hold only if it reports one. */}
         {allowance.balances && <>
-          <PanelRow label="充值" description="不会过期" control={<AllowanceAmount value={allowance.balances.purchased} simulated={simulated} />} />
-          <PanelRow label="赠送" description={allowance.nextExpiry ? `其中 ${allowanceText(allowance.nextExpiry.amount)} 将于 ${expiryWords(allowance.nextExpiry.at)}到期` : undefined} control={<AllowanceAmount value={allowance.balances.gifted} simulated={simulated} />} />
+          <PanelRow label="充值" description="不会过期" control={<AllowanceAmount value={allowance.balances.purchased} simulated={simulated} mark={false} />} />
+          <PanelRow label="赠送" description={allowance.nextExpiry ? `其中 ${allowanceText(allowance.nextExpiry.amount)} 将于 ${expiryWords(allowance.nextExpiry.at)}到期` : undefined} control={<AllowanceAmount value={allowance.balances.gifted} simulated={simulated} mark={false} />} />
         </>}
-        {allowance.held !== null && (allowance.balances || Number(allowance.held) > 0) && <PanelRow label={allowance.balances ? "冻结" : "占用额度"} description={allowance.balances ? "正在进行的研究暂时占用，结束后按实际用量结算" : undefined} control={<AllowanceAmount value={allowance.held} simulated={simulated} />} />}
+        {allowance.held !== null && (allowance.balances || Number(allowance.held) > 0) && <PanelRow label={allowance.balances ? "冻结" : "占用额度"} description={allowance.balances ? "正在进行的研究暂时占用，结束后按实际用量结算" : undefined} control={<AllowanceAmount value={allowance.held} simulated={simulated} mark={false} />} />}
       </>}
-      {month && <PanelRow label="本月研究消费" control={<AllowanceAmount value={month.paid} simulated={simulated} rounding="nearest" />} />}
-      {month && month.pending > 0 && <PanelRow label="本月待结算" control={<AllowanceAmount value={month.pending} simulated={simulated} rounding="nearest" />} />}
+      {month && <PanelRow label="本月研究消费" control={<AllowanceAmount value={month.paid} simulated={simulated} mark={false} rounding="nearest" />} />}
+      {month && month.pending > 0 && <PanelRow label="本月待结算" control={<AllowanceAmount value={month.pending} simulated={simulated} mark={false} rounding="nearest" />} />}
     </Panel>
-    {(allowance.membership || commerce.length > 0) && <Panel title="充值与会员" action={simulated ? <SimulatedMark /> : undefined}>
+    {(allowance.membership || commerce.length > 0) && <Panel title={commerceTitle(allowance, commerce.map(({ key }) => key))} action={simulated ? <SimulatedMark /> : undefined}>
       {allowance.membership && <PanelRow label={allowance.membership.name} description={allowance.membership.expiresAt ? `有效期至 ${formatDateTime(allowance.membership.expiresAt, { year: 'numeric', month: 'long', day: 'numeric' })}` : undefined} control={membershipLabels[allowance.membership.status] || "状态暂不可用"} />}
       {commerce.map(({ key, label, href }) => <PanelRow key={key} label={label} control={<CommerceLink href={href} className={buttonClasses({ variant: 'text' })}>查看{label}</CommerceLink>} />)}
     </Panel>}
     {month && <StatementList simulated={simulated} />}
     {operator && <PlatformCost />}
   </div>;
+}
+
+/**
+ * The commerce group's name: 「充值与会员」 where a membership, or a membership or refund destination, is in it; otherwise
+ * 「充值与订单」. A simulated wallet has the recharge and order pages and nothing else (`SIMULATED_WALLET_PAGES`); a deployment's
+ * hosted handoffs may have any of the four.
+ */
+function commerceTitle(allowance: WebResearchAllowance, keys: readonly (typeof COMMERCE)[number][0][]): string {
+  return allowance.membership || keys.includes("membershipUrl") || keys.includes("refundsUrl") ? "充值与会员" : "充值与订单";
 }
 
 function StatementList({ simulated }: { simulated: boolean }) {
@@ -88,11 +98,19 @@ function StatementList({ simulated }: { simulated: boolean }) {
     }, (caught) => setError(webErrorMessage(caught))).finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
+  // A row says for itself whether its wallet is simulated. One that does not is read by what the list says, and then by the allowance these are the statements of.
+  const marked = (item: WebResearchStatement) => (item.simulated ?? page?.simulated ?? simulated) === true;
+  const rows = page?.items ?? [];
+  // The list says 「模拟」 once, in its header, when every line is; a list that mixes real lines with simulated ones marks the simulated ones itself.
+  const allSimulated = rows.length > 0 && rows.every(marked);
+  const mixed = rows.some(marked) && !allSimulated;
   return <section aria-label="研究消费明细">
-    <h2 className="mb-2 text-ui font-semibold">研究消费明细</h2>
+    <div className="mb-2 flex items-center gap-2">
+      <h2 className="text-ui font-semibold">研究消费明细</h2>
+      {allSimulated && <SimulatedMark />}
+    </div>
     {page === null && !error ? <RunsSkeleton filter={false} /> : page?.items.length === 0 ? <EmptyState icon={Gauge} title="还没有研究消费记录" /> : page && <List label="研究消费记录" divided>
-      {/* A row says for itself whether its wallet is simulated. One that does not is read by what the list says, and then by the allowance these are the statements of. */}
-      {page.items.map((item) => <StatementRow key={item.id} item={item} simulated={(item.simulated ?? page.simulated ?? simulated) === true} />)}
+      {page.items.map((item) => <StatementRow key={item.id} item={item} simulated={marked(item)} marked={mixed} />)}
     </List>}
     {error && <LoadError message={error} onRetry={() => load(page?.nextCursor ?? undefined)} />}
     {page?.nextCursor && !error && <div className="mt-3"><Button variant="secondary" loading={loading} onClick={() => load(page.nextCursor ?? undefined)}>加载更多</Button></div>}
@@ -110,11 +128,11 @@ function StatementList({ simulated }: { simulated: boolean }) {
  * carried. 「明细」 opens, in place, what the charge is made of: how many model
  * calls, the tokens by kind, the price list and the amount to 8 decimals. Credits
  * going in are drawn with a plus sign and 「已入账」, and open nothing: no research
- * produced them. A row of a simulated wallet carries the mark beside its amount,
- * whichever it is; the status and amount keep one column width, so the marks line
- * up down the list.
+ * produced them. A list of a simulated wallet says 「模拟」 once in its header; a row
+ * carries the mark beside its amount only in a list that mixes simulated lines with
+ * real ones. The status and amount keep one column width either way.
  */
-function StatementRow({ item, simulated }: { item: WebResearchStatement; simulated: boolean }) {
+function StatementRow({ item, simulated, marked }: { item: WebResearchStatement; simulated: boolean; /** Whether this row carries the mark itself: only in a list that mixes simulated lines with real ones. */ marked: boolean }) {
   const [open, setOpen] = useState(false);
   const kind = item.kind ?? "charge";
   const date = item.at ? formatDateTime(item.at, { month: 'long', day: 'numeric' }) : '';
@@ -140,7 +158,7 @@ function StatementRow({ item, simulated }: { item: WebResearchStatement; simulat
     expanded={detailable ? open : undefined}
     actions={detailable ? <Button variant="text" size="sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "收起明细" : "查看明细"}</Button> : undefined}
     trailing={<>
-      {simulated && <SimulatedMark />}
+      {simulated && marked && <SimulatedMark />}
       <div className="min-w-20 text-right text-ui"><span className="block text-text-2">{label}</span>{amount && <span className="tabular-nums">{sign}{amount}</span>}</div>
     </>} />;
 }

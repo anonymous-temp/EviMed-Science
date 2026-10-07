@@ -5,6 +5,7 @@ import type { WebHandbook } from "@/lib/handbooksClient";
 import { entryGroup, recordGroup, recordProjectId, selfSection, type MemoryGroup, type SelfSection } from "@/lib/memoryGroups";
 import type { OwnCapsuleEntry } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
+import { projectLabels, type LabelledProject } from "@/lib/projectNames";
 import { methodTitle, type WebMethod } from "@/lib/methodsClient";
 
 /**
@@ -120,15 +121,17 @@ export const OTHER_PROJECT = "__other";
  * look at.
  */
 export function projectChoices(
-  projects: readonly { id: string; name: string }[],
+  projects: readonly LabelledProject[],
   { vcr, geo }: { vcr: ReadonlySet<string>; geo: ReadonlySet<string> },
   facts: readonly FactItem[],
 ): ProjectChoice[] {
   const known = new Set(projects.map((project) => project.id));
+  // Two projects of one name read differently in this dropdown, as in every other (`projectLabels`).
+  const labels = projectLabels(projects);
   const kindOf = (id: string): ProjectKind => (vcr.has(id) ? "vcr" : geo.has(id) ? "geo" : "own");
   const order: ProjectKind[] = ["own", "vcr", "geo"];
   const listed = projects
-    .map((project): ProjectChoice => ({ id: project.id, name: project.name, kind: kindOf(project.id) }))
+    .map((project): ProjectChoice => ({ id: project.id, name: labels.get(project.id) ?? project.name, kind: kindOf(project.id) }))
     .sort((left, right) => order.indexOf(left.kind) - order.indexOf(right.kind));
   const orphans = facts.some((fact) => fact.group === "project" && (fact.projectId === null || !known.has(fact.projectId)));
   return orphans ? [...listed, { id: OTHER_PROJECT, name: "其他", kind: "own" }] : listed;

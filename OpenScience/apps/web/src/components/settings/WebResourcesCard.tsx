@@ -3,7 +3,7 @@ import { Play, RefreshCw, RotateCw, Square } from "lucide-react";
 import { webErrorMessage, fetchWebMetrics, restartWebRuntime, startWebRuntime, stopWebRuntime, type WebMetrics } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
-import { formatClock, humanSize } from "@/lib/format";
+import { formatClock, formatRelativeTime, humanSize } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { iconButtonClasses } from "@/components/ui/IconButton";
 import { buttonClasses } from "@/components/ui/Button";
@@ -84,7 +84,7 @@ export function WebResourcesCard() {
     <section className="mt-5 rounded-card border border-border bg-surface">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-body text-text">运行资源</h2>
+          <h2 className="text-body text-text">运行状况</h2>
           <p className="mt-0.5 text-caption text-muted">
             {metrics ? `${metrics.project.name} · ${formatClock(metrics.createdAt)}` : "当前项目与服务端进程"}
           </p>
@@ -103,11 +103,7 @@ export function WebResourcesCard() {
       <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="存储" value={max ? `${humanSize(used)} / ${humanSize(max)}` : humanSize(used)} detail={pct == null ? "无配额" : `已用 ${pct}%`} />
         <Metric label="任务" value={`${runningTasks} 个进行中`} detail={`共 ${metrics?.tasks.total ?? 0} 条`} />
-        <Metric
-          label="运行时"
-          value={metrics?.runtime.running ? "运行中" : metrics?.runtime.stale ? "失联" : "已停止"}
-          detail={runtimeDetail(metrics)}
-        />
+        <Metric label="运行时" {...runtimeMetric(metrics, runningTasks)} />
         <Metric label="服务端内存" value={humanSize(metrics?.server.memory.rssBytes ?? 0)} detail={metrics ? `pid ${metrics.server.pid}` : "未加载"} />
       </div>
       <div className="flex flex-wrap gap-2 border-t border-border px-5 py-3">
@@ -167,21 +163,28 @@ export function WebResourcesCard() {
 // The small secondary button (spec §17.1): there are no outline buttons.
 const runtimeButtonCls = buttonClasses({ variant: "secondary", size: "sm" });
 
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
+function Metric({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: "warn" }) {
   return (
-    <div className="rounded-input border border-border bg-bg px-3 py-2.5">
+    <div className={cn("rounded-input border bg-bg px-3 py-2.5", tone === "warn" ? "border-warn" : "border-border")}>
       <div className="text-caption text-muted">{label}</div>
-      <div className="mt-1 truncate text-ui font-medium text-text">{value}</div>
+      <div className={cn("mt-1 truncate text-ui font-medium", tone === "warn" ? "text-warn-strong" : "text-text")}>{value}</div>
       <div className="mt-0.5 truncate text-caption text-muted">{detail}</div>
     </div>
   );
 }
 
-function runtimeDetail(metrics: WebMetrics | null) {
-  if (!metrics) return "未加载";
+/**
+ * What the runtime tile says, decided from two facts and nothing else: whether it is up, and whether anything is waiting on it.
+ *
+ * `stale` means the state file still said running or starting and the process is not there now. For a runtime that is started
+ * when it is used (and reaped when idle, and replaced by a release switch) that is the normal state of a quiet project, so it
+ * is an alarm only when work waits on it — 「失联」 is a claim that someone is affected, and it is made only then.
+ */
+function runtimeMetric(metrics: WebMetrics | null, waiting: number): { value: string; detail: string; tone?: "warn" } {
+  if (!metrics) return { value: "已停止", detail: "未加载" };
   const runtime = metrics.runtime;
-  if (runtime.stale) return runtime.lastEvent ? `最近 ${runtime.lastEvent}` : "未连接";
-  return runtime.kind ?? runtime.sandboxMode ?? "未启动";
+  if (runtime.running) return { value: "运行中", detail: runtime.startedAt ? `启动于 ${formatRelativeTime(runtime.startedAt)}` : "" };
+  if (runtime.stale && waiting > 0) return { value: "失联", detail: `有 ${waiting} 个任务在等它`, tone: "warn" };
+  if (runtime.stale) return { value: "已停止", detail: "意外退出，下次打开任务会自动启动" };
+  return { value: "已停止", detail: "用到时自动启动" };
 }
-
-
