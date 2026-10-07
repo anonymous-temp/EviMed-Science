@@ -65,7 +65,7 @@ test('personal detail reads actual bounded resources/scripts without allowing by
 test('the private method pack is a known built-in root: its skills read with a real source, and are never copied',async t=>{
   // The production roots name the pack's own `skills/` folder (the preset lists it one level below geo-private).
   const pack=SCOPED_SKILL_ROOTS.find(item=>item.root.endsWith('/geo-private/skills'));
-  assert.deepEqual(pack&&{source:pack.source,duplicate:pack.duplicate},{source:'builtin',duplicate:false});
+  assert.ok(pack);assert.deepEqual({source:pack.source,duplicate:pack.duplicate},{source:'builtin',duplicate:false});
   const f=await fixture(t),api=createScopedSkillCatalogue(f.ctx,{roots:[{root:f.builtin,source:pack.source,duplicate:pack.duplicate},{root:f.community,source:'community',duplicate:true}]});
   const listed=await api.list({sessionId:f.agent.id}),selected=listed.items.find(item=>item.name==='builtin-review');assert(selected);
   assert.equal(selected.source,'builtin');assert.equal(selected.canDuplicate,false);
@@ -74,6 +74,6 @@ test('the private method pack is a known built-in root: its skills read with a r
   await assert.rejects(api.snapshotBuiltin(request));
   // A root the catalogue does not know stays 'unknown' and its preview is refused: the failure this row exists to remove.
   const unknown=createScopedSkillCatalogue(f.ctx,{roots:[{root:f.community,source:'community',duplicate:true}]});
-  const strange=(await unknown.list({sessionId:f.agent.id})).items.find(item=>item.name==='builtin-review');assert.equal(strange.source,'unknown');
+  const strange=(await unknown.list({sessionId:f.agent.id})).items.find(item=>item.name==='builtin-review');assert.ok(strange);assert.equal(strange.source,'unknown');
   await assert.rejects(unknown.read({sessionId:f.agent.id,key:strange.key}));
 });

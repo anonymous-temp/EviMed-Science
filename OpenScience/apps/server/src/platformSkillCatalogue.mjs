@@ -135,16 +135,16 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
     /** @type {import("node:fs").Dirent[]} */
     let folders = [];
     try { folders = (await fs.readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory()); } catch { return []; }
-    const rows = [];
+    const found = [];
     for (const entry of folders.sort((left, right) => left.name.localeCompare(right.name))) {
       const directory = path.join(root, entry.name);
       try {
         const { meta } = splitSkillText(await fs.readFile(path.join(directory, "SKILL.md"), "utf8"));
-        rows.push({ id: `geo-private:${entry.name}`, name: entry.name, title: String(meta.name ?? entry.name), use: firstSentence(meta.description),
+        found.push({ id: `geo-private:${entry.name}`, name: entry.name, title: String(meta.name ?? entry.name), use: firstSentence(meta.description),
           group: SKILL_DISPLAY_GEO_GROUP, source: "platform", canCopy: false, directory });
       } catch { /* a folder without a readable skill file is not a skill */ }
     }
-    return rows;
+    return found;
   }
 
   /** Every skill, each with the folder it is read from when this image carries it (otherwise null). @returns {Promise<any[]>} */

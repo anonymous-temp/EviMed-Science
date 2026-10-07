@@ -35,6 +35,8 @@ test('project-scoped CAS, atomic job and saved history survive restarts and conf
   const restarted = new PluginService(db);
   assert.deepEqual((await restarted.get(owner,project)).desired,{revision:3,enabled:true,settings:{timeoutMs:4000}});
   assert.deepEqual((await restarted.history(owner,project)).items.map(x=>x.revision),[3,2,1]);
+  // A reader tells configurations apart by the day they were saved: every history row carries it.
+  assert.ok((await restarted.history(owner,project)).items.every(x=>typeof x.recordedAt==='string'&&!Number.isNaN(Date.parse(x.recordedAt))));
   assert.equal((await db.query("SELECT count(*)::int AS n FROM evimed_product.jobs WHERE user_id=$1 AND kind='plugin-apply'",[owner])).rows[0].n,3);
   for(let n=0;n<3;n++)await service.get(owner,project);
   assert.equal((await service.history(owner,project)).items.length,3);

@@ -14,7 +14,7 @@ const CJK = /[㐀-鿿]/
 /** The origins the runtime image mounts as skill roots a model can see: what a researcher is offered. */
 const MODEL_VISIBLE = new Set(['core', 'curated', 'office', 'community', 'evimed'])
 
-/** Skill folders in a root, by name (a folder holding a SKILL.md). */
+/** Skill folders in a root, by name (a folder holding a SKILL.md). @param {string} relative */
 function skillFolders(relative) {
   return readdirSync(path.join(root, relative), { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
@@ -27,8 +27,9 @@ test('every model-visible shipped skill has a Chinese name, a use, a trigger and
   assert.deepEqual(Object.keys(SKILL_DISPLAY).sort(), shipped, 'the display table and the shipped skills name the same set')
   for (const [name, row] of Object.entries(SKILL_DISPLAY)) {
     assert.ok(SKILL_DISPLAY_GROUPS.includes(row.group), `${name}: group ${row.group} is not a listed group`)
+    const words = /** @type {Record<string, string>} */ (/** @type {unknown} */ (row))
     for (const field of ['title', 'use', 'when']) {
-      assert.ok(typeof row[field] === 'string' && CJK.test(row[field]), `${name}.${field} is a Chinese sentence`)
+      assert.ok(typeof words[field] === 'string' && CJK.test(words[field]), `${name}.${field} is a Chinese sentence`)
     }
     assert.ok(!/\bSKILL\.md\b|\.mjs\b|\.py\b/.test(`${row.title}${row.use}${row.when}`), `${name} names a file`)
   }
