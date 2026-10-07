@@ -45,8 +45,8 @@ import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { POPULATION_METHOD_WORDS, PROFILE_MISSING_SENTENCE, constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import {
-  abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns,
-  presentModelCard, resultNode, scenarioName, valueString,
+  abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
+  presentModelCard, registryDesignWords, resultNode, scenarioName, valueString,
 } from "./vcrViews.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
@@ -414,9 +414,14 @@ export function presentModelAssessments(bundle) {
     records: list(bundle.assessments).slice(0, 30).map((/** @type {any} */ record) => {
       const rule = text(record.riskRule);
       const by = text(record.by);
+      // The library's own title for the model the record is about (a record names a model and, when it knows, its version): a reader
+      // is told 「事件时间终点参考仿真器」, not the id the engine files it under. A model the library no longer holds keeps its id.
+      const held = list(bundle.models).find((/** @type {any} */ model) => model.name === record.modelName
+        && (!record.modelVersion || model.version === record.modelVersion));
       return {
         key: String(record.key), version: Number(record.version) || 1,
         modelName: String(record.modelName ?? ""), modelVersion: String(record.modelVersion ?? ""),
+        modelTitle: text(object(held?.card).title) ?? String(record.modelName ?? ""),
         risk: text(record.risk), riskLabel: text(record.risk) ? (/** @type {Record<string, string>} */ (VCR_RATING_LABELS_ZH))[String(record.risk)] ?? null : null,
         riskRule: rule, riskRuleText: rule ? (/** @type {Record<string, string>} */ (VCR_MODEL_RISK_RULE_LABELS_ZH))[rule] ?? null : null,
         // The risk row's reason is the author's own; the rule that fired is said once, beside the risk.
@@ -615,8 +620,11 @@ export function presentComparatorTab(bundle) {
     context: { route: shown?.route }, tab: "comparator" });
   const measureRowsOf = (/** @type {readonly string[]} */ names) => names.map((name) => measureOf(name)).filter((measure) => measure !== undefined)
     .map((measure) => ({ key: String(object(measure).name), label: measureLabel(String(object(measure).name)), value: value(measure) }));
-  // What only some routes produce: the treatment arm's median, and a MAP prior's own numbers.
-  const routeRows = measureRowsOf(["median_survival_treatment", "map_mean", "map_sd", "prior_effective_sample_size_moment",
+  // What only some routes produce: the treatment arm's median (a number of the comparison, which stays with the weighting rows), and
+  // a MAP prior's own numbers — how much information the borrowed prior is worth, which is a different thing from the weights'
+  // effective sample size and is drawn in a card of its own (`prior`).
+  const routeRows = measureRowsOf(["median_survival_treatment"]);
+  const priorRows = measureRowsOf(["map_mean", "map_sd", "prior_effective_sample_size_moment",
     "prior_effective_sample_size_elir", "map_effective_sample_size_moment", "map_effective_sample_size_elir",
     "prior_effective_sample_size_ceiling", "tau_posterior_median"]);
   // Why the newest version has no numbers, in the compute's own words.
@@ -696,6 +704,7 @@ export function presentComparatorTab(bundle) {
     comparabilityNote: balance.length ? "标准化差异是加权之后的；界值 0.1。" : null,
     dimensions,
     diagnostics: [...diagnosticRows, ...routeRows],
+    prior: priorRows,
     robustness: robustnessView(result, value),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
@@ -1371,7 +1380,7 @@ export function presentDataTab(bundle, query = {}) {
     ],
     ...(evidence?.registryCoverage?.length ? { registryCoverage: evidence.registryCoverage } : {}),
     assumptions: cards,
-    reviews: list(bundle.reviews).map(presentVcrReview),
+    reviews: list(bundle.reviews).map((/** @type {any} */ review) => presentVcrReview(review, reviewContextOf(bundle))),
     selectedId: cards.find((card) => card.id === query.card || card.key === query.card)?.id ?? null,
     precedents,
     precedentSources: precedents.length ? `${precedents.length} 项试验先例` : null,
@@ -1412,7 +1421,7 @@ function presentPrecedentRow(row) {
     registry: (/** @type {Record<string, string>} */ ({ "clinicaltrials.gov": "ClinicalTrials.gov", chictr: "ChiCTR", ctis: "EU CTIS", cde: "CDE 登记" }))[String(row.registry)] ?? text(row.registry),
     title: text(row.title),
     population: list(pico.conditions).length ? list(pico.conditions).join("、") : null,
-    design: [list(design.phases).join("/"), text(design.allocation), text(design.masking)].filter(Boolean).join(" · ") || null,
+    design: registryDesignWords(design),
     planned: numeric(enrollment.planned),
     actual,
     sites: siteCount,

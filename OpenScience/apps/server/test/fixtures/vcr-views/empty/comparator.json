@@ -102,6 +102,7 @@
     }
   ],
   "diagnostics": [],
+  "prior": [],
   "robustness": null,
   "gaps": null,
   "counts": null,

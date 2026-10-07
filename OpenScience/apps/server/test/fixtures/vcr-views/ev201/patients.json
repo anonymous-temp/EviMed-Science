@@ -66,6 +66,7 @@
         "version": 1,
         "modelName": "nsclc-docetaxel-pfs-weibull",
         "modelVersion": "1.2",
+        "modelTitle": "二线 NSCLC 多西他赛组 PFS · Weibull",
         "risk": "high",
         "riskLabel": "高",
         "riskRule": "driven_by_consequence",
@@ -562,6 +563,9 @@
     "effectiveSampleSize": null,
     "generatedRecords": 2000,
     "note": "设计阶段：尚无真实患者",
+    "notes": {
+      "generatedRecords": "模拟生成的记录，不是患者"
+    },
     "scope": "2000 名虚拟患者"
   },
   "stale": null,

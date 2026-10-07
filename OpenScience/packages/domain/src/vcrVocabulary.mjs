@@ -525,6 +525,16 @@ export const VCR_SYNTHETIC_USE_LABELS_ZH = Object.freeze({
 export const VCR_ENDPOINT_TYPES = frozen(['continuous', 'binary', 'time_to_event'])
 export const VCR_ENDPOINT_TYPE_LABELS_ZH = Object.freeze({ continuous: '连续', binary: '二分类', time_to_event: '事件时间' })
 
+/**
+ * What a trial registry writes for a trial's phase, allocation and masking, in words (R11). ClinicalTrials.gov's own enumerations,
+ * closed: a value another registry writes in its own wording (ChiCTR, CTIS) is not here and is shown as it came.
+ */
+export const VCR_REGISTRY_PHASE_LABELS_ZH = Object.freeze({
+  EARLY_PHASE1: '早期 1 期', PHASE1: '1 期', PHASE2: '2 期', PHASE3: '3 期', PHASE4: '4 期', NA: '不适用',
+})
+export const VCR_REGISTRY_ALLOCATION_LABELS_ZH = Object.freeze({ RANDOMIZED: '随机', NON_RANDOMIZED: '非随机', NA: '不适用' })
+export const VCR_REGISTRY_MASKING_LABELS_ZH = Object.freeze({ NONE: '开放标签', SINGLE: '单盲', DOUBLE: '双盲', TRIPLE: '三盲', QUADRUPLE: '四盲' })
+
 /** The five comparator routes, ordered by precedent and data demand (§5.3). */
 export const VCR_COMPARATOR_ROUTES = frozen(['prognostic_adjustment', 'external_control', 'literature_control', 'model_comparator', 'hybrid_control'])
 export const VCR_COMPARATOR_ROUTE_LABELS_ZH = Object.freeze({

@@ -540,6 +540,10 @@ export function countsView(counts, options = {}) {
   const notes = {};
   if (options.tier === "T0" && view.realPatients === 0) view.note = "设计阶段：尚无真实患者";
   if (options.tier === "T1" && view.events == null) notes.events = "T1 无结局记录";
+  // 「生成记录数」 of a simulation is replicates times patients per replicate — hundreds of millions that no reader should take for people.
+  if (typeof view.generatedRecords === "number" && Number.isFinite(view.generatedRecords) && view.generatedRecords > 0) {
+    notes.generatedRecords = "模拟生成的记录，不是患者";
+  }
   if (options.note) view.note = options.note;
   view.notes = Object.keys(notes).length ? notes : undefined;
   view.scope = options.scope ?? null;
@@ -718,24 +722,38 @@ export function scaledSeries(series, factor) {
   return { ...series, points: series.points.map((/** @type {any} */ point) => ({ ...point, y: scale(point.y), low: scale(point.low), high: scale(point.high) })) };
 }
 
-/** Reader-facing review provenance, distinct from method or numerical validation.
- * @param {any} review */
-export function presentVcrReview(review) {
+/**
+ * Reader-facing review provenance, distinct from method or numerical validation.
+ *
+ * A finding is read for its sentence (`fix`, or `message` where there is no fix) and for the one object it is about. The reviewer
+ * writes `location` as a path into the frozen JSON snapshot and `evidence` as the JSON it quoted: both are the review's own
+ * provenance, kept in the stored record and in the exported package (`raw`), and never printed to a reader. What a reader may
+ * follow is `target` — the object the location names, when it names one the study has (`context.target`, a closed lookup the caller
+ * builds from the study's own objects) — as `{ label, tab, key }`, or null. The moment is said the way the rest of the page says it
+ * (「今天 14:32」); an ISO timestamp is a record's, not a reader's.
+ * @param {any} review
+ * @param {{ raw?: boolean, now?: Date, target?: (location: string) => { label: string, tab: string, key: string | null } | null }} [context]
+ */
+export function presentVcrReview(review, context = {}) {
   const ai = review.reviewerKind === 'ai';
   const status = review.status ?? (['queued', 'running', 'failed'].includes(review.state) ? review.state : review.state === 'ai_set' ? 'queued' : 'done');
   const provenance = review.provenance ?? {};
   const findings = provenance.findings ?? [];
   const state = status === 'queued' ? '等待审查' : status === 'running' ? '审查中' : status === 'failed' ? '审查未完成'
     : review.current === false ? '研究已有更新' : !ai ? '已复核' : findings.length ? '有修订建议' : '未发现明确问题';
+  const at = provenance.finishedAt ?? review.createdAt ?? null;
   return { id: review.id ?? review.platformReviewId ?? `legacy:${review.kind}:${review.createdAt}:${(review.nodes ?? []).join(",")}`, reviewerKind: ai ? 'ai' : 'human', role: review.kind,
     label: `${ai ? 'AI' : '人工'}${review.kind === 'clinical' ? '临床' : review.kind === 'statistical' ? '统计' : '数据'}复核`,
     // An AI review is attributed by its label (「AI 统计复核」), never by the model that wrote it: a model name, a configuration
     // revision and an input digest are the platform's own record, and a reader of the page has no use for any of them.
     state, status, current: review.current !== false, by: ai ? null : review.reviewerName ?? null,
-    at: provenance.finishedAt ?? review.createdAt ?? null,
+    at: context.raw === true ? at : zhTime(at, context.now ?? new Date()),
     note: status === 'failed' ? '审查暂未完成；已完成的研究与导出仍可使用。' : '审查意见供参考，不代表实证验证。',
-    findings: findings.map(finding => ({ id: finding.id, kind: finding.kind, location: finding.location, evidence: finding.evidence,
-      message: finding.message, fix: finding.fix, response: finding.response ?? null })) };
+    findings: findings.map(finding => context.raw === true
+      ? { id: finding.id, kind: finding.kind, location: finding.location, evidence: finding.evidence,
+        message: finding.message, fix: finding.fix, response: finding.response ?? null }
+      : { id: finding.id, kind: finding.kind, message: finding.message, fix: finding.fix, response: finding.response ?? null,
+        target: typeof finding.location === 'string' && context.target ? context.target(finding.location) : null }) };
 }
 
 /** The evidence items a model card lists, in Chinese. */
