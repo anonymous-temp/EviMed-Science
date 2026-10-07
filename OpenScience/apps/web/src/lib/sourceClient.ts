@@ -1,6 +1,6 @@
 import { knownErrorCodeMessage } from "@evimed/domain";
 import type { SourceMaterialsLedger } from "@/lib/sourceMaterials";
-import type { WebMe } from "./apiClient";
+import { invokeCommand, type WebMe } from "./apiClient";
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
 
 export type SourceStatus = "queued" | "parsing" | "complete" | "needs_attention" | "failed" | "missing" | "canceled";
@@ -62,6 +62,8 @@ export interface SourceUnderstandingResult {
   depth: SourceDepth;
   status: SourceStatus;
   current: SourceUnderstanding | null;
+  /** The pages of the text the understanding's anchors are offsets into (`sourcePageForOffset`); null when the parse had none. */
+  pageMap?: Array<{ page: number; start: number; end: number }> | null;
 }
 /** The bounded omission notice `sourceOmissionRecord` keeps on the source row.
  *
@@ -101,8 +103,40 @@ export interface SourceMetadata {
     at?: string;
   };
 }
+/** The chip a document is counted under (`SOURCE_KINDS` in `@evimed/domain`), and where it came from (`SOURCE_ORIGINS`). */
+export type SourceKind = "literature" | "table" | "document" | "page" | "note" | "image";
+export type SourceOrigin = "upload" | "drive" | "link" | "note" | "frontier" | "conversation";
+/**
+ * What a row says about its document, worked out by the control plane (`sourceDisplayOf`) so the page computes
+ * nothing about content: what it is called, one line of what it says (once it is understood), its type, the chip it
+ * is counted under, where it came from and the facts a meta line states. `shared` is whether the account library
+ * holds it, `null` where the list did not ask.
+ */
+export interface SourceDisplay {
+  title: string;
+  gist: string | null;
+  docType: string;
+  typeLabel: string;
+  typeShort: string;
+  kind: SourceKind;
+  origin: SourceOrigin;
+  format: string | null;
+  pages: number | null;
+  size: number | null;
+  site: string | null;
+  url: string | null;
+  shared: boolean | null;
+}
+/** How many documents fall under each chip, over the whole scope and the search — not over the page. */
+export type SourceCounts = Record<"all" | SourceKind, number>;
 export interface SourcePayload {
   paths: string[];
+  /** The title a note or a saved page was filed under. */
+  title?: string;
+  /** Where a saved page was read from, and when. */
+  link?: { url: string; finalUrl: string; site: string; fetchedAt: string; rendered: boolean; original: string | null } | null;
+  /** Set once the type was named by the judge (`judge`) or settled by a reclassification (`format`). */
+  typeClassification?: { origin: "judge" | "format" } | null;
   status: SourceStatus;
   docType: string;
   depth: SourceDepth;
@@ -178,7 +212,11 @@ export function listSourceUnderstandingHistory(id: string, cursor?: string | nul
  * while the understanding still runs, so the page never says what the
  * pipeline is doing behind that.
  */
-export type SourceRecord = ProductRecord<SourcePayload> & { projectId: string; readable?: boolean };
+export type SourceRecord = ProductRecord<SourcePayload> & { projectId: string; readable?: boolean; display: SourceDisplay };
+/** A page of the list: the documents, the cursor for the next page and, for the page's own list, the chip counts. */
+export type SourcePage = ProductPage<SourceRecord> & { counts?: SourceCounts };
+/** Whose documents a list is of: one project's, or the account's shared documents (every project reads them). */
+export type SourceScope = { kind: "project"; projectId: string } | { kind: "shared" };
 /** What the page filters by, in the words a row says (`SOURCE_STATES`). */
 export type SourceListState = "reading" | "ready" | "attention";
 export interface OpenListEntry {
@@ -190,14 +228,62 @@ export interface OpenListEntry {
   providerHash: string | null;
 }
 
-export function listSources(projectId: string, { status = "", state }: { status?: string; state?: SourceListState } = {}) {
-  const query = new URLSearchParams({ projectId });
+export interface SourceListOptions {
+  /** The pipeline's own word, or what the page says about a document; one or the other. */
+  status?: string;
+  state?: SourceListState;
+  /** A chip: the list holds only documents of that kind. */
+  kind?: SourceKind;
+  /** A search over what a document is called and what it says, run where the documents are. */
+  q?: string;
+  cursor?: string | null;
+  limit?: number;
+}
+
+/**
+ * One page of a scope's documents, newest first. A project id alone is that project's list, as it always was.
+ * `counts` come with every page: the whole scope's inventory by chip, which a chosen chip does not move.
+ */
+export function listSources(scope: string | SourceScope, { status = "", state, kind, q = "", cursor, limit }: SourceListOptions = {}) {
+  const query = new URLSearchParams();
+  if (typeof scope === "string") query.set("projectId", scope);
+  else if (scope.kind === "shared") query.set("scope", "shared");
+  else query.set("projectId", scope.projectId);
   if (state) query.set("state", state);
   else if (status) query.set("status", status);
-  return productRequest<ProductPage<SourceRecord>>(`/sources?${query}`);
+  if (kind) query.set("kind", kind);
+  if (q.trim()) query.set("q", q.trim());
+  if (cursor) query.set("cursor", cursor);
+  if (limit) query.set("limit", String(limit));
+  return productRequest<SourcePage>(`/sources?${query}`);
 }
-export function overrideSource(id: string, input: { expectedRevision: number; docType: string; depth: string; reason: string }) {
-  return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}`, "PATCH", input);
+
+/** 「添加网页链接」: the control plane reads the page and keeps a snapshot of it in the project's knowledge base. */
+export function addSourceLink(projectId: string, url: string) {
+  return productRequest<{ source: SourceRecord; duplicate: boolean; changed: boolean }>("/sources/links", "POST", { projectId, url });
+}
+/** 「新建笔记」: a Markdown document the researcher writes. */
+export function addSourceNote(projectId: string, input: { title: string; body: string }) {
+  return productRequest<{ source: SourceRecord; duplicate: boolean }>("/sources/notes", "POST", { projectId, ...input });
+}
+/** What a note's editor opens with. */
+export function getSourceNote(id: string) {
+  return productRequest<{ title: string; body: string }>(`/sources/${encodeURIComponent(id)}/note`);
+}
+/** 「保存」 in a note's editor: changed text is the note's next version — a new document id — and it is read again. */
+export function saveSourceNote(id: string, input: { title: string; body: string }) {
+  return productRequest<{ source: SourceRecord; duplicate: boolean; changed: boolean }>(`/sources/${encodeURIComponent(id)}/note`, "PUT", input);
+}
+/** 「重新读取」 on a saved page: read its address again. */
+export function refetchSource(id: string) {
+  return productRequest<{ source: SourceRecord; duplicate: boolean; changed: boolean }>(`/sources/${encodeURIComponent(id)}/refetch`, "POST", {});
+}
+/**
+ * 「存入知识库」 on a file a conversation produced: a copy in this project's knowledge base, read like an upload. The
+ * path is the file's, relative to the project's workspace; the destination is the control plane's.
+ */
+export function saveToKnowledgeBase(path: string) {
+  return invokeCommand<{ path: string; duplicate: boolean; sourceId: string | null }>("save_to_knowledge_base", { path });
 }
 export function retrySource(id: string, expectedRevision: number) {
   return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}/retry`, "POST", { expectedRevision });

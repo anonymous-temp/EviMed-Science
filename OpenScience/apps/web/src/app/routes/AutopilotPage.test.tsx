@@ -413,7 +413,7 @@ describe("scheduled tasks", () => {
     mocks.listAgendas.mockResolvedValue({ items: [withMaterial] });
     render(); const panel = await detail(); await userEvent.click(await within(panel).findByRole("button", { name: "从知识库选择" }));
     const dialog = await screen.findByRole("dialog", { name: "从知识库添加资料" });
-    expect(files.listSources).toHaveBeenCalledWith("project-one", { state: "ready" });
+    expect(files.listSources).toHaveBeenCalledWith("project-one", expect.objectContaining({ state: "ready" }));
     expect(await within(dialog).findByText("新的.pdf")).toBeInTheDocument(); expect(within(dialog).queryByText("已添加.pdf")).not.toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "添加到这个任务" })).toBeDisabled();
     await userEvent.click(within(dialog).getByRole("checkbox")); await userEvent.click(within(dialog).getByRole("button", { name: "添加到这个任务" }));

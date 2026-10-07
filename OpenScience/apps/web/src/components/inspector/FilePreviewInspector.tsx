@@ -88,6 +88,8 @@ export function FilePreviewInspector({
   controls,
   kindLabel,
   lead,
+  embedded = false,
+  page,
 }: {
   data: FilePreviewInspectorT;
   onClose: () => void;
@@ -99,6 +101,13 @@ export function FilePreviewInspector({
   kindLabel?: string | null;
   /** What is known about the file, above its preview (a document's 摘要). */
   lead?: React.ReactNode;
+  /**
+   * The preview alone, for a pane that has its own header (the knowledge base drawer's 原文 tab): no title bar, no
+   * version history, no file actions — the caller offers those where it wants them.
+   */
+  embedded?: boolean;
+  /** The page a PDF opens on (a claim's 「第 5 页」). Other formats have no pages to open on. */
+  page?: number;
 }) {
   const reportRun = useReportRun();
   const kind = previewKindForName(data.filename);
@@ -130,7 +139,7 @@ export function FilePreviewInspector({
     try {
       if (hostedWeb) {
         if (data.content !== undefined) downloadInlineArtifact(data.content, data.filename);
-        else await downloadArtifact(data.path, data.root, data.filename);
+        else await downloadArtifact(data.path, data.root, data.filename, data.projectId);
       } else {
         await openArtifactExternally(data.path, data.root);
       }
@@ -153,7 +162,7 @@ export function FilePreviewInspector({
     (async () => {
       try {
         if (needsUrl) {
-          const u = await previewUrl(data.path, data.root);
+          const u = await previewUrl(data.path, data.root, data.projectId);
           if (cancelled) return;
           setUrl(u);
           // Browser dev has no local server; html can still preview inline content.
@@ -162,7 +171,7 @@ export function FilePreviewInspector({
           }
         }
         if (needsText && data.content === undefined) {
-          const f = await readArtifact(data.path, data.root);
+          const f = await readArtifact(data.path, data.root, data.projectId);
           if (cancelled) return;
           if (f && f.encoding === "utf8") setText(f.data);
           // The file was read but isn't text — say so instead of falling
@@ -172,7 +181,7 @@ export function FilePreviewInspector({
             setError("当前文件暂不支持在线预览。");
         }
         if (needsBytes) {
-          const f = await readArtifact(data.path, data.root);
+          const f = await readArtifact(data.path, data.root, data.projectId);
           if (cancelled) return;
           if (f && f.encoding === "base64") setBytes(base64ToBytes(f.data));
           else setError("当前文件暂不支持在线预览。");
@@ -186,7 +195,7 @@ export function FilePreviewInspector({
     return () => {
       cancelled = true;
     };
-  }, [data.path, data.content, data.root, kind, needsUrl, needsText, needsBytes]);
+  }, [data.path, data.content, data.root, data.projectId, kind, needsUrl, needsText, needsBytes]);
 
   const canToggle =
     kind === "html" || kind === "markdown" || kind === "molecule" || kind === "genome" || matrixFile;
@@ -202,7 +211,7 @@ export function FilePreviewInspector({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+      {!embedded && <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         <span className="truncate text-ui font-medium text-text">{data.filename}</span>
         {tag && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{tag}</span>}
@@ -240,12 +249,12 @@ export function FilePreviewInspector({
         <button className="text-text hover:opacity-60" aria-label="关闭预览" onClick={onClose}>
           <X size={16} aria-hidden="true" />
         </button>
-      </header>
+      </header>}
 
-      {hostedWeb && data.content === undefined && (kind === "markdown" || /\.txt$/i.test(data.filename)) && (
+      {!embedded && hostedWeb && data.content === undefined && (kind === "markdown" || /\.txt$/i.test(data.filename)) && (
         <div className="shrink-0 border-b border-border px-4 py-2"><DocumentExportActions source={{ artifactId: data.path, root: data.root }} /></div>
       )}
-      {lead && <div className="shrink-0 border-b border-border px-4 py-3">{lead}</div>}
+      {!embedded && lead && <div className="shrink-0 border-b border-border px-4 py-3">{lead}</div>}
 
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto bg-surface-2">
         {showHistory && <ProvenancePanel path={data.path} language={data.language} runId={reportRun?.runId} />}
@@ -260,6 +269,7 @@ export function FilePreviewInspector({
             filename={data.filename}
             path={data.path}
             root={data.root}
+            projectId={data.projectId}
             onOpenExternally={() => void runFileAction()}
             externalActionLabel={fileActionLabel}
             externalActionKind={hostedWeb ? "download" : "open"}
@@ -278,6 +288,7 @@ export function FilePreviewInspector({
               language={data.language}
               root={data.root}
               matrixFile={matrixFile}
+              page={page}
             />
           </Suspense>
         )}
@@ -297,6 +308,7 @@ function Body({
   language,
   root,
   matrixFile,
+  page,
 }: {
   kind: PreviewKind;
   url: string | null;
@@ -308,6 +320,7 @@ function Body({
   language?: string;
   root?: FileRoot;
   matrixFile?: boolean;
+  page?: number;
 }) {
   const reportRun = useReportRun();
   if (matrixFile && !showCode) {
@@ -460,8 +473,10 @@ function Body({
   }
   if (kind === "pdf") {
     // The webview's native PDF viewer (WKWebView / WebView2) renders the served URL.
+    // A page is a fragment the native viewer opens on; a new page is a new frame, since a changed fragment alone
+    // does not move every viewer.
     return url ? (
-      <iframe title="PDF 预览" src={url} className="h-full min-h-[480px] w-full" />
+      <iframe key={page ?? 0} title="PDF 预览" src={page ? `${url}#page=${page}` : url} className="h-full min-h-[480px] w-full" />
     ) : (
       <Note text="当前文件暂不支持在线预览。" />
     );
@@ -561,6 +576,7 @@ export function PreviewError({
   error,
   path,
   root,
+  projectId,
   onOpenExternally,
   externalActionLabel = "用本地应用打开",
   externalActionKind = "open",
@@ -570,6 +586,7 @@ export function PreviewError({
   filename: string;
   path?: string;
   root?: FileRoot;
+  projectId?: string;
   onOpenExternally: () => void;
   externalActionLabel?: string;
   externalActionKind?: "open" | "download";
@@ -584,7 +601,7 @@ export function PreviewError({
     setProbing(true);
     setProbeError(null);
     try {
-      setPointer(await probeLargeFile(path, root));
+      setPointer(projectId ? await probeLargeFile(path, root, projectId) : await probeLargeFile(path, root));
     } catch (e) {
       setProbeError(parseFailureMessage(e, "该文件"));
     } finally {

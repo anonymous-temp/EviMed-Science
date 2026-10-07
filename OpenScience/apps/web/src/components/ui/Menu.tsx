@@ -33,7 +33,15 @@ export interface MenuItem {
   toggle?: boolean;
 }
 
-export type MenuEntry = MenuItem | "separator";
+/**
+ * A quiet label over a group of items (「我的项目」, 「虚拟临研」): not an item — it takes no focus, is skipped by the
+ * arrow keys, and selects nothing.
+ */
+export interface MenuHeading {
+  heading: string;
+}
+
+export type MenuEntry = MenuItem | MenuHeading | "separator";
 
 export function Menu({
   items,
@@ -73,7 +81,7 @@ export function Menu({
     buttons[next]?.focus();
   };
 
-  const single = items.some((item) => item !== "separator" && !item.toggle && item.checked !== undefined);
+  const single = items.some((item) => item !== "separator" && !("heading" in item) && !item.toggle && item.checked !== undefined);
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -98,6 +106,8 @@ export function Menu({
           <div ref={list} role="menu" aria-label={label} tabIndex={-1} onKeyDown={onKeyDown} className="flex flex-col outline-none">
             {items.map((item, index) => item === "separator" ? (
               <div key={`separator-${index}`} role="separator" className="my-1 h-px bg-border" />
+            ) : "heading" in item ? (
+              <div key={`heading-${index}`} role="presentation" className="px-2 pb-1 pt-2 text-meta text-text-3">{item.heading}</div>
             ) : (
               <button
                 key={`${item.label}-${index}`}

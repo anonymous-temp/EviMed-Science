@@ -1138,12 +1138,20 @@ export class SourceService {
     return published;
   }
 
+  /**
+   * What the current generation of a source was understood to say, with its page map: the pages of the text the
+   * understanding's anchors are offsets into, so a claim can say 「第 5 页」. The map is null when the parse returned none
+   * (a plain text file has no pages) or a map the capture does not vouch for.
+   * @param {string} userId @param {string} sourceId
+   */
   async getUnderstanding(userId, sourceId) {
     const source = await this.requireSource(userId, sourceId);
     const row = source.payload.currentUnderstandingId ? await this.documents.get(userId, "knowledge", source.payload.currentUnderstandingId) : null;
-    return { sourceId, generation: source.payload.generation, depth: source.payload.depth, status: source.payload.status,
-      current: row?.projectId === source.projectId && row.payload.sourceId === sourceId && row.payload.generation === source.payload.generation
-        ? projectSourceDerivedRecord(await this.hydrateUnderstanding(userId, row)) : null };
+    const current = row?.projectId === source.projectId && row.payload.sourceId === sourceId && row.payload.generation === source.payload.generation
+      ? projectSourceDerivedRecord(await this.hydrateUnderstanding(userId, row)) : null;
+    const pageMap = current && this.documents.database ? await this.loadPageMap(userId, source).catch(() => null) : null;
+    return { sourceId, generation: source.payload.generation, depth: source.payload.depth, status: source.payload.status, current,
+      pageMap: pageMap?.length ? pageMap.map(({ page, start, end }) => ({ page, start, end })) : null };
   }
 
   async hydrateUnderstanding(userId, row) {

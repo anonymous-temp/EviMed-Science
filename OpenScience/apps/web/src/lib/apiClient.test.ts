@@ -204,6 +204,21 @@ describe("apiClient", () => {
     expect(callHeaders(fetchMock, 1).get("X-Open-Science-CSRF")).toBe("csrf_test");
   });
 
+  it("runs a command in another project when the caller names one, without moving the tab", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(responseJson("data"));
+    const client = await loadClient("https://science.example");
+
+    client.setWebProjectId("paper_1");
+    await client.invokeCommand("read_artifact", { path: "knowledge-base/a.pdf", root: "base" }, { projectId: "paper_2" });
+
+    expect(callHeaders(fetchMock, 1).get("X-Open-Science-Project")).toBe("paper_2");
+    expect(client.getWebProjectId()).toBe("paper_1");
+    expect(client.webFileDownloadUrl("knowledge-base/a.pdf", "base", "paper_2")).toContain("projectId=paper_2");
+    expect(client.webFileDownloadUrl("knowledge-base/a.pdf", "base")).toContain("projectId=paper_1");
+  });
+
   it("sends the selected web project id with command requests", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(csrfMeResponse())

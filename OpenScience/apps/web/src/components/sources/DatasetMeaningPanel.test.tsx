@@ -115,11 +115,20 @@ describe("DatasetMeaningPanel", () => {
     expect(await screen.findByRole("heading", { name: /^数据含义/ })).toBeInTheDocument();
   });
 
-  it("does not show another project's dataset after the project changes under it", async () => {
-    let release: (value: unknown) => void = () => {};
-    mocks.list.mockReturnValue(new Promise((resolve) => { release = resolve; }));
-    const { container } = render(<DatasetMeaningPanel projectId="project-one" path="knowledge-base/visits.csv" sha256={SHA_A} />);
+  // The knowledge base lists any project of the account, and the panel names the project its document belongs to: the
+  // tab being in another project is not a reason to drop the answer for that one.
+  it("shows the document's own project's meaning whichever project the tab is in", async () => {
     mocks.projectId = "project-two";
+    render(<DatasetMeaningPanel projectId="project-one" path="knowledge-base/visits.csv" sha256={SHA_A} />);
+    expect(await screen.findByRole("heading", { name: /^数据含义/ })).toBeInTheDocument();
+    expect(mocks.list).toHaveBeenCalledWith("project-one");
+  });
+
+  it("does not show a dataset after the panel has moved on to another document", async () => {
+    let release: (value: unknown) => void = () => {};
+    mocks.list.mockReturnValueOnce(new Promise((resolve) => { release = resolve; })).mockResolvedValue({ items: [] });
+    const { container, rerender } = render(<DatasetMeaningPanel projectId="project-one" path="knowledge-base/visits.csv" sha256={SHA_A} />);
+    rerender(<DatasetMeaningPanel projectId="project-two" path="knowledge-base/other.csv" sha256={"f".repeat(64)} />);
     release({ items: [listing()] });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(container).toBeEmptyDOMElement();
