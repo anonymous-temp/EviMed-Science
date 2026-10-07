@@ -4635,6 +4635,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           await vcr.store.transaction((client) => deleteVcrProjectRows(client, study.userId, study.projectId));
           return;
         }
+        // What the project holds beyond its rows goes first, as a project's deletion does it: the conversation's runtime (a draft was
+        // opened in one, and it would hold the workspace the deletion removes) and the memory the project may have written. A project
+        // with work in it, or one that is already gone, is told apart by the code the store answers with.
+        const project = await store.requireProject(owner, study.projectId).catch((error) => {
+          if (error?.code === "project_not_found") return null;
+          throw error;
+        });
+        if (project) {
+          if (await taskManager.hasActiveProject(project)) throw Object.assign(new Error("project_busy"), { code: "project_busy" });
+          await runtimeManager.stop(project, { by: "platform" });
+          if (researchMemory.configured) await researchMemory.deleteProjectMemory(owner.id, project.id);
+        }
         await removeStudyProject(owner, study.projectId).catch(async (error) => {
           // A project that is already gone leaves its draft behind: the row is the only thing left to remove.
           if (error?.code !== "project_not_found") throw error;

@@ -832,3 +832,27 @@ test("shared exports serve all VCR kinds to current members without a new resear
   assert.equal((await call("lead", "GET", `/api/document-exports/${lastId}`)).status, 404);
   assert.equal((await call("lead", "GET", `/api/document-exports/${lastId}/download/docx`)).status, 404);
 });
+
+test("a draft nobody spoke in is swept with its project an hour on, through the real server; one that was named is not a draft and stays", options, async () => {
+  const projectIds = async () => (await call("viewer", "GET", "/api/projects")).body.data.map((/** @type {any} */ project) => project.id);
+  const draft = await call("viewer", "POST", "/api/vcr/studies", {});
+  assert.equal(draft.status, 201, draft.text);
+  const { id, projectId } = draft.body.data;
+  assert.equal((await rows(`SELECT status FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].status, "draft");
+  assert.ok((await projectIds()).includes(projectId), "the project is there while the draft is");
+
+  // Young: nothing happens.
+  assert.equal((await context.app.vcr.drafts.sweep()).deleted, 0);
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 1);
+
+  const named = await call("viewer", "POST", "/api/vcr/studies", { name: "已命名的研究" });
+  assert.equal(named.status, 201, named.text);
+  await rows(`UPDATE evimed_vcr.studies SET created_at = now() - interval '3 hours' WHERE id = ANY($1)`, [[id, named.body.data.id]]);
+
+  const swept = await context.app.vcr.drafts.sweep();
+  assert.ok(swept.deleted >= 1, "the old draft is deleted");
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 0, "the study row goes");
+  assert.equal((await projectIds()).includes(projectId), false, "and its project with it");
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [named.body.data.id]))[0].n, 1, "a study that is not a draft is never swept");
+  assert.deepEqual(await context.app.vcr.drafts.sweep().then((result) => result.deleted), 0, "a second sweep has nothing left to do");
+});
