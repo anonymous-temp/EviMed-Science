@@ -130,6 +130,19 @@ describe("the study list", () => {
     expect(within(glp1).getByText("还没有开始")).toBeInTheDocument();
   });
 
+  it("stacks the progress under the conclusion below md, so a phone's row title is not squeezed to one character per line", async () => {
+    draw();
+    await screen.findByRole("link", { name: EV201 });
+    const li = row(EV201);
+    // jsdom has no layout: the contract is the classes. The right column is fixed-width only from md up.
+    expect(li.className).toContain("flex-col");
+    expect(li.className).toContain("md:flex-row");
+    const aside = li.querySelector("[data-vcr-row-aside]") as HTMLElement;
+    expect(aside.className).toContain("md:w-72");
+    expect(aside.className).not.toMatch(/(^|\s)w-72(\s|$)/);
+    expect(aside.className).toMatch(/(^|\s)w-full(\s|$)/);
+  });
+
   it("names the step under way, with 进行中", async () => {
     const home = fixture("ev201/home.json");
     home.studies[0].steps.trial = { status: "running", requested: true };

@@ -44,9 +44,11 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const failed = study.steps.patients?.status === "failed";
-  const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity
-    && data.assessments.records.length === 0;
-  if (nothing) {
+  // The patient set's own result. A model assessment is about the model the study uses (a trial simulation's, say), not about this
+  // set: a study with an assessment and no patients is a study with no virtual patients yet, and the assessment follows that sentence.
+  const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity;
+  const assessed = data.assessments.records.length > 0;
+  if (nothing && !assessed) {
     return failed
       ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
       : <VcrStepPending studyId={studyId} study={study} step="patients" />;
@@ -55,6 +57,17 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
   // A chart is drawn only when it has a series to draw; a card whose plot is empty is a title over an empty box.
   const trajectories = data.trajectories && data.trajectories.series.length > 0 ? data.trajectories : null;
   const panels = data.panels.filter((panel) => (panel.rows?.length ?? 0) > 0 || (panel.series?.length ?? 0) > 0);
+
+  if (nothing) {
+    return (
+      <div className="flex flex-col gap-6">
+        {failed
+          ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
+          : <VcrStepPending studyId={studyId} study={study} step="patients" />}
+        <VcrModelAssessments studyId={studyId} assessments={data.assessments} canEdit={study.abilities.includes("manage_study")} onSaved={reload} withoutPatients />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">

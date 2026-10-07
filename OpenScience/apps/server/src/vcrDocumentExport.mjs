@@ -29,7 +29,8 @@ export function canonicalVcrDocument(study, row) {
   if (!model?.study || !reports.length) throw new HttpError(409, 'document_source_pending', 'The research report is still being prepared.');
   const title = `${model.study.name ?? study.name} — ${VCR_EXPORT_KIND_LABELS_ZH[row.kind] ?? row.kind}`;
   const reviewLines = reviewRecords.map(review => {
-    const shown = presentVcrReview(review);
+    // The exported package is the study's record: a finding keeps the location and the quotation the reviewer wrote.
+    const shown = presentVcrReview(review, { raw: true });
     const findings = shown.findings.map(finding => `  - ${finding.location ? `${finding.location}：` : ''}${finding.message ?? finding.evidence ?? ''}${finding.fix ? ` 建议：${finding.fix}` : ''}${finding.response ? ` 已说明：${finding.response}` : ''}`).join('\n');
     const failure = shown.status === 'failed' && review.provenance?.error === 'review_configuration_changed'
       ? ' 本次审查因服务配置变化未完成。' : '';

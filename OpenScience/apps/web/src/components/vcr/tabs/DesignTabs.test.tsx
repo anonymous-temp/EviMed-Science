@@ -374,6 +374,33 @@ describe("人群", () => {
       expect(screen.getByRole("button", { name: "重新生成" })).toBeInTheDocument();
     });
 
+    it("draws that sentence as a line under the header and not as a card — and the two cards that remain sit side by side", async () => {
+      serveGenerated((raw) => {
+        raw.profile = []; raw.profileKind = null; raw.profileMissing = true;
+        raw.profileNote = "这个人群生成时还没有画像：点“重新生成”，按同样的设定再生成一次，就能看到每个变量的分布。";
+      });
+      const { container } = draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+      const note = await found(container, "[data-vcr-profile-missing]");
+      expect(note.closest(".rounded-card")).toBeNull();
+      expect(note).toHaveAttribute("role", "status");
+      const sides = note.nextElementSibling as HTMLElement;
+      expect(sides.className).toContain("lg:grid-cols-2");
+      expect(within(sides).getByText("怎么生成的")).toBeInTheDocument();
+      expect(within(sides).getByText("能用来做什么")).toBeInTheDocument();
+    });
+
+    it("tells a reader who cannot write the same sentence, with no button of its own to press", async () => {
+      serveGenerated((raw) => {
+        raw.profile = []; raw.profileKind = null; raw.profileMissing = true;
+        raw.profileNote = null;
+      });
+      const readOnly = fixture("ev201/study.json");
+      readOnly.abilities = ["read"];
+      draw(<PopulationTab studyId={STUDY_ID} study={readVcrStudy(readOnly)} />);
+      expect(await screen.findByText(/这个人群生成时还没有画像/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "重新生成" })).toBeNull();
+    });
+
     it("offers 改设定, which opens the numbers it was generated from and writes the next version with only what changed", async () => {
       serveGenerated(() => undefined, {
         [`GET /vcr/studies/${STUDY_ID}/cards?kind=population`]: {
@@ -594,6 +621,47 @@ describe("对照", () => {
     expect(table.querySelector("[data-vcr-dimension='diagnosis']")).toHaveTextContent("未评估");
   });
 
+  it("says in one sentence, over the ten dimensions, that none of them has been assessed — and says nothing when some have", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.dimensions = raw.dimensions.map((dimension: any) => ({ ...dimension, state: "unknown", reason: null }));
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
+    const note = await found(container, "[data-vcr-dimensions-unassessed]");
+    expect(note).toHaveTextContent("十个维度都还没有评估。上面的“可估计”只表示在设定的输入下能算出来，不表示真实人群与对照可比。");
+    expect(note.nextElementSibling?.matches("[data-vcr-dimensions]")).toBe(true);
+  });
+
+  it("does not say it when some dimension was assessed", async () => {
+    const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
+    await found(container, "[data-vcr-dimensions]");
+    expect(container.querySelector("[data-vcr-dimensions-unassessed]")).toBeNull();
+  });
+
+  it("puts a borrowed prior's numbers in a card of its own, with what a prior effective sample size is — apart from the weights", async () => {
+    const raw = fixture("ev201/comparator.json");
+    const row = (key: string, label: string, value: number) => ({ key, label, value: { value, text: null, unit: "例", source: "calculated", interval: null, mcse: null, review: "ai_set", precision: null, reason: null, stale: false, detail: null } });
+    raw.prior = [row("prior_effective_sample_size_moment", "先验有效样本量（矩法）", 79.2), row("prior_effective_sample_size_elir", "先验有效样本量（ELIR）", 59.4)];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
+    const prior = await found(container, "[data-vcr-prior]");
+    const card = prior.closest("section") as HTMLElement;
+    expect(within(card).getByText("先验借用")).toBeInTheDocument();
+    expect(prior).toHaveTextContent("先验有效样本量（矩法）");
+    expect(prior).toHaveTextContent("先验有效样本量（ELIR）");
+    expect(within(card).getByText("先验有效样本量说的是这个先验相当于多少例本研究患者的信息量；“矩法”和“ELIR”是两种算法，同一个先验会得到不同的数。")).toBeInTheDocument();
+    // The weights' card holds the weights and not the prior.
+    const weights = (container.querySelector("[data-vcr-diagnostics]") as HTMLElement);
+    expect(weights).not.toHaveTextContent("先验");
+    expect(weights.closest("section")).not.toBe(card);
+  });
+
+  it("draws no prior card when no route borrowed one", async () => {
+    const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
+    await found(container, "[data-vcr-diagnostics]");
+    expect(container.querySelector("[data-vcr-prior]")).toBeNull();
+    expect(screen.queryByText("先验借用")).toBeNull();
+  });
+
   it("writes the external control as a not-estimable card with its gaps, while another route is the selected one", async () => {
     const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
     const card = await found(container, "[data-vcr-not-estimable]");
@@ -717,6 +785,85 @@ describe("试验", () => {
     expect(d.querySelector("[data-vcr-dominated-note]")).toHaveTextContent("在比较目标的全部指标上都不优于 C");
     expect(d.querySelectorAll("[data-vcr-measure]")).toHaveLength(0);
     expect(d.textContent).not.toContain("%");
+  });
+
+  describe("designs nothing has computed", () => {
+    /** The conversation wrote the scenarios and the engine has not finished: designs with their configured size and cost, no measure of a result. */
+    const written = (names: string[] = ["A", "B", "C", "D"]) => {
+      const raw = fixture("ev201/trial.json");
+      raw.designs = raw.designs.filter((design: any) => names.includes(design.code)).map((design: any) => ({
+        ...design, dominated: false, dominatedBy: null, chosen: false,
+        measures: Object.fromEntries(Object.entries(design.measures).filter(([key]) => key === "sample_size" || key === "cost")),
+      }));
+      raw.columns = raw.columns.filter((column: any) => column.key === "sample_size" || column.key === "cost");
+      raw.headline = null; raw.decision = null; raw.footnotes = []; raw.grid = null; raw.powerCurve = null; raw.forecasts = []; raw.milestones = []; raw.ademp = []; raw.partial = null; raw.stale = null;
+      return raw;
+    };
+
+    it("is a list with 「还没算」 on each design and the step's own state under it — no table, no metric column, and never 选定方案", async () => {
+      installVcrServer(network.productRequest, { [tab("trial")]: written() });
+      const { container } = draw(<TrialTab studyId={STUDY_ID} study={withStep("trial", { status: "none", requested: false })} />);
+      const list = await found(container, "[data-vcr-not-computed]");
+      expect(screen.queryByRole("table", { name: "方案的对比" })).toBeNull();
+      const rows = [...list.querySelectorAll("li[data-vcr-design]")];
+      expect(rows.map((row) => row.getAttribute("data-vcr-design"))).toEqual(["A", "B", "C", "D"]);
+      for (const row of rows) expect(row).toHaveTextContent("还没算");
+      // The state is a sentence and the way to start it, not a form.
+      expect(within(list).getByRole("button", { name: "让 AI 做" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: "登记预测" })).toBeNull();
+      // What the conversation does stays: another design, another hypothesis.
+      expect(screen.getByRole("button", { name: "加一个方案" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "改假设" })).toBeInTheDocument();
+    });
+
+    it("says the computation is under way while it is, and offers nothing to start", async () => {
+      installVcrServer(network.productRequest, { [tab("trial")]: written() });
+      const { container } = draw(<TrialTab studyId={STUDY_ID} study={withStep("trial", { status: "running" })} />);
+      const list = await found(container, "[data-vcr-not-computed]");
+      expect(within(list).getByText("正在进行，做完会显示在这里。")).toBeInTheDocument();
+      expect(within(list).queryByRole("button")).toBeNull();
+    });
+
+    it("says a step that did not finish once, on top with 接着做 — and does not say it again under the list", async () => {
+      installVcrServer(network.productRequest, { [tab("trial")]: written() });
+      const { container } = draw(<TrialTab studyId={STUDY_ID} study={withStep("trial", { status: "failed", note: "计算时间用完了" })} />);
+      const list = await found(container, "[data-vcr-not-computed]");
+      expect(container.querySelectorAll("[data-vcr-step-failed]")).toHaveLength(1);
+      expect(list.querySelector("[data-vcr-step-failed]")).toBeNull();
+      expect(screen.getAllByRole("button", { name: "接着做" })).toHaveLength(1);
+    });
+
+    it("offers no conclusion box to a reader who cannot write when there is nothing to conclude", async () => {
+      const raw = written();
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
+      const reader = fixture("ev201/study.json");
+      reader.abilities = ["read"];
+      reader.steps.trial = { status: "none", requested: false };
+      const { container } = draw(<TrialTab studyId={STUDY_ID} study={readVcrStudy(reader)} />);
+      await found(container, "[data-vcr-not-computed]");
+      expect(container.querySelector("[data-vcr-conclusion]")).toBeNull();
+    });
+
+    it("keeps the table when some designs ran: the unrun rows say 「还没算」 where the numbers would be, and cannot be chosen", async () => {
+      const raw = fixture("ev201/trial.json");
+      // Design C has been written and not computed.
+      raw.designs[2].measures = Object.fromEntries(Object.entries(raw.designs[2].measures).filter(([key]) => key === "sample_size" || key === "cost"));
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
+      const { container } = draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
+      await trialDrawn();
+      expect(container.querySelector("[data-vcr-not-computed]")).toBeNull();
+      const c = container.querySelector("tr[data-vcr-design='C']") as HTMLElement;
+      expect(c.querySelector("[data-vcr-measure='power']")).toBeNull();
+      expect(c.querySelectorAll("[data-vcr-not-run]").length).toBeGreaterThan(0);
+      expect(c).toHaveTextContent("还没算");
+      // A design that ran with no value in one column is 「—」, not 「还没算」.
+      expect(container.querySelector("tr[data-vcr-design='A']")).not.toHaveTextContent("还没算");
+      await userEvent.click(screen.getByRole("button", { name: /选定方案|改选方案/ }));
+      const drawer = await screen.findByRole("dialog");
+      expect(within(drawer).getByRole("radio", { name: "C" })).toBeDisabled();
+      expect(within(drawer).getByRole("radio", { name: "A" })).toBeEnabled();
+    });
   });
 
   it("puts a Monte-Carlo error beside every simulated number in the grid", async () => {

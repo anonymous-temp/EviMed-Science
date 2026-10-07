@@ -12,17 +12,18 @@ import test from "node:test";
 import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
-  JOB_KIND_LABELS, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard, presentModels,
-  presentExport, presentPrecedent, presentStudy, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
+  JOB_KIND_LABELS, assumptionNames, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, nodeLabel, notEstimableDesign, numberString, presentDeliverable,
+  presentDesigns, presentModelCard, presentModels, presentExport, presentPrecedent, presentStudy, presentSummary, registryDesignWords, reviewContextOf, reviewTargetFor, useCeilingOf,
+  valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
 import { frozenVersion, modelInputs, reportModelFor, resultRows, study as modelStudy } from "./vcrModelDocumentFixtures.mjs";
 import {
-  presentComparatorTab, presentDataTab, presentIntake, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab, qualityReportView,
+  presentComparatorTab, presentDataTab, presentIntake, presentMatchingTab, presentModelAssessments, presentPatientsTab, presentPopulationTab, presentTrialTab, qualityReportView,
   seriesView, criterionCodes, vcrLocatorText,
 } from "../src/vcrViewsTabs.mjs";
 import {
   METHOD_LABELS, VCR_FAILED_SENTENCE, VCR_ROBUSTNESS_MEASURES, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote,
-  vcrFailureSentence, vcrPageSentence, withReviewState, zhDate, zhTime,
+  presentVcrReview, vcrFailureSentence, vcrPageSentence, withReviewState, zhDate, zhTime,
 } from "../src/vcrViewsKit.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
 
@@ -217,6 +218,15 @@ test("the four counts stay four: missing is null, a real zero is a zero, and a d
   assert.equal("reconstructedPseudoPatients" in countsView({}), false, "the optional two appear only when their route was used");
   assert.equal(countsView({ reconstructedPseudoPatients: 801 }).reconstructedPseudoPatients, 801);
   assert.equal(countsView({ realPatients: 3412 }, { tier: "T1" }).notes?.events, "T1 无结局记录");
+});
+
+test("a simulation's records are said to be records, not patients — once, under the number, whenever there are any", () => {
+  assert.equal(countsView({ realPatients: 0, generatedRecords: 212_382_000 }, { tier: "T0" }).notes?.generatedRecords, "模拟生成的记录，不是患者");
+  assert.equal(countsView({ generatedRecords: 1000 }).notes?.generatedRecords, "模拟生成的记录，不是患者");
+  // Nothing generated says nothing about it; the other notes are not touched.
+  assert.equal(countsView({ generatedRecords: 0 }).notes, undefined);
+  assert.equal(countsView({ generatedRecords: null }).notes, undefined);
+  assert.deepEqual(countsView({ generatedRecords: 5, realPatients: 3412 }, { tier: "T1" }).notes, { events: "T1 无结局记录", generatedRecords: "模拟生成的记录，不是患者" });
 });
 
 // --- intervals and stale ---------------------------------------------------------------------------------
@@ -1108,9 +1118,11 @@ test("C2-8 C2-13 a hybrid control shows the MAP prior's own numbers, each with i
       { name: "prior_effective_sample_size_moment", value: 31.2, source: "assumed" }, { name: "tau_posterior_median", value: 0.3, source: "assumed" }],
     diagnostics: { inputsAssumed: true } };
   const tab = presentComparatorTab({ ...emptyBundle(), comparators: [comparator], results: [stored], allResults: [stored] });
-  assert.deepEqual(tab.diagnostics.map((row) => row.key), ["map_mean", "map_sd", "prior_effective_sample_size_moment", "tau_posterior_median"]);
-  assert.ok(tab.diagnostics.every((row) => row.value.source === "assumed"));
-  assert.equal(tab.diagnostics[2].label, "先验有效样本量（矩法）");
+  // The prior's own numbers are the 先验借用 card's, apart from the weights' diagnostics.
+  assert.deepEqual(tab.prior.map((row) => row.key), ["map_mean", "map_sd", "prior_effective_sample_size_moment", "tau_posterior_median"]);
+  assert.ok(tab.prior.every((row) => row.value.source === "assumed"));
+  assert.equal(tab.prior[2].label, "先验有效样本量（矩法）");
+  assert.deepEqual(tab.diagnostics, []);
   assert.match(String(tab.headline), /输入为假设/);
 });
 
@@ -1191,4 +1203,126 @@ test("a locator that names a knowledge pack says 知识包, and 「AI 草拟」 
   assert.equal(vcrLocatorText({ pack: "rare_thing", entry: "c1" }, { draftPack: false }), "知识包");
   assert.equal(vcrLocatorText({ registryId: "NCT02296125", field: "eligibility" }), null);
   assert.equal(vcrLocatorText(null), null);
+});
+
+// --- R11: the rows of the 2026-10-07 audit ----------------------------------------------------------------
+
+test("a requested document reads 排队中 only while it is fresh: past half an hour its run is gone and the row says so", () => {
+  const row = (/** @type {Record<string, any>} */ extra) => ({ id: "exp_1", kind: "simulation_report", state: "queued", runId: null, location: null, cover: {},
+    createdAt: "2026-09-28T08:00:00.000Z", updatedAt: "2026-09-28T08:40:00.000Z", ...extra });
+  const meta = (/** @type {Record<string, any>} */ extra) => presentDeliverable(row(extra), 0, [row(extra)], NOW).meta;
+  // NOW is 09:00: a request 20 minutes old is waiting; one 80 minutes old is not.
+  assert.match(meta({}), /排队中/);
+  assert.match(meta({ updatedAt: "2026-09-28T07:40:00.000Z" }), /没有生成/);
+  assert.doesNotMatch(meta({ updatedAt: "2026-09-28T07:40:00.000Z" }), /排队中/);
+  // Exactly at the limit is already stale; a document that is being made or was made is never touched by the rule.
+  assert.match(meta({ updatedAt: "2026-09-28T08:30:00.000Z" }), /没有生成/);
+  assert.match(meta({ state: "running", updatedAt: "2026-09-28T01:00:00.000Z" }), /生成中/);
+  assert.match(meta({ state: "ready", updatedAt: "2026-09-28T01:00:00.000Z" }), /已生成/);
+  // A row with no readable time keeps its word: the rule is about time and nothing else.
+  assert.match(meta({ updatedAt: "" }), /排队中/);
+});
+
+test("a review finding reaches the reader as its sentence and the object it is about — never the reviewer's path into the snapshot, the JSON it quoted, or an ISO timestamp", () => {
+  const review = { id: "rev_1", reviewerKind: "ai", kind: "statistical", status: "done", current: true, createdAt: "2026-09-27T01:07:00.000Z", nodes: ["assumption:orr_control@1"],
+    provenance: { finishedAt: "2026-09-27T01:07:00.000Z", model: "some-model", findings: [
+      { id: "F1", kind: "range", location: "snapshot.model.results.trial_scenario.diagnostics.issues", evidence: "{\"issues\":[{\"code\":\"cpu_budget_exhausted\"}]}", message: "有一项计算没有算完。", fix: "把这一项再算一次。" },
+      { id: "F2", kind: "number_untraced", location: "assumption:orr_control@1", evidence: "ORR 0.31", message: "数字没有来源。", fix: "" },
+      { id: "F3", kind: "number_untraced", location: "result:res_9@2", evidence: "x", message: "结果里的数字没有对应的运行。", fix: "" },
+      { id: "F4", kind: "x", location: "result:res_missing@1", evidence: "x", message: "不认识的结果。", fix: "" },
+    ] } };
+  const bundle = { ...emptyBundle(), assumptions: [{ key: "orr_control", name: "对照组 ORR", version: 1 }], allResults: [{ id: "res_9", kind: "trial_scenario" }] };
+  const shown = presentVcrReview(review, reviewContextOf(bundle));
+  assert.equal(shown.at, "昨天 09:07", "the moment is said the way the page says every moment");
+  assert.deepEqual(shown.findings.map((finding) => Object.keys(finding).sort()), shown.findings.map(() => ["fix", "id", "kind", "message", "response", "target"]));
+  assert.equal(JSON.stringify(shown).includes("snapshot."), false);
+  assert.equal(JSON.stringify(shown).includes("cpu_budget"), false);
+  assert.equal(JSON.stringify(shown).includes("some-model"), false);
+  // A path into the JSON names nothing a page has: no target. A node of the study does, by its card's own name, and a result by its own kind's tab.
+  assert.equal(shown.findings[0].target, null);
+  assert.deepEqual(shown.findings[1].target, { label: "假设卡「对照组 ORR」", tab: "data", key: "orr_control" });
+  assert.deepEqual(shown.findings[2].target, { label: "结果", tab: "trial", key: null });
+  assert.equal(shown.findings[3].target, null, "a result the study does not hold has no tab");
+  // The record keeps everything: the exported package and the stored review read it whole.
+  const raw = presentVcrReview(review, { raw: true });
+  assert.equal(raw.at, "2026-09-27T01:07:00.000Z");
+  assert.equal(raw.findings[0].location, "snapshot.model.results.trial_scenario.diagnostics.issues");
+  assert.equal(raw.findings[0].evidence.startsWith("{"), true);
+});
+
+test("a card is named by its own name wherever a lineage node is shown, and its key never reaches a reader", () => {
+  const names = new Map([["accrual_duration", "入组时长"]]);
+  assert.equal(nodeLabel("assumption:accrual_duration@2", { names }), "假设卡「入组时长」 v2");
+  assert.equal(nodeLabel("assumption:accrual_duration@2", { names, version: false }), "假设卡「入组时长」");
+  // A card the study no longer holds is 假设卡 and nothing more: the key is the engine's identifier.
+  assert.equal(nodeLabel("assumption:gone_card@1", { names, version: false }), "假设卡");
+  assert.equal(nodeLabel("assumption:gone_card@1", { version: false }), "假设卡");
+  assert.equal(nodeLabel("trial_scenario:scn_1@3", { version: false }), "试验方案");
+  assert.equal(nodeLabel("not a node"), "");
+  assert.deepEqual([...assumptionNames({ assumptions: [{ key: "a", name: "甲" }, { key: "b", name: "" }, { key: "c" }] })], [["a", "甲"]]);
+  // The study page's changes list says what was reviewed by the card's name.
+  const page = presentStudy({ ...emptyBundle(), now: NOW, roles: ["lead"], assumptions: [{ key: "accrual_duration", name: "入组时长", version: 1, createdAt: "2026-09-27T01:00:00.000Z", reviewState: "reviewed" }],
+    reviews: [{ id: "rev_2", reviewerKind: "human", kind: "statistical", status: "done", createdAt: "2026-09-27T02:00:00.000Z", nodes: ["assumption:accrual_duration@1"], provenance: {} }] });
+  assert.ok(page.overview.changes.some((change) => change.text.includes("假设卡「入组时长」") && !change.text.includes("accrual_duration")), JSON.stringify(page.overview.changes));
+  assert.equal(page.overview.changes.some((change) => change.text.includes("accrual_duration")), false, "no card key in a line the reader reads");
+  // A review's finding about a node of the study carries the target the page links to.
+  assert.deepEqual(reviewTargetFor({ ...emptyBundle(), assumptions: [{ key: "accrual_duration", name: "入组时长" }] })("assumption:accrual_duration@1"),
+    { label: "假设卡「入组时长」", tab: "data", key: "accrual_duration" });
+});
+
+test("a model assessment names the model by the library's title, and the id only when the library no longer holds it", () => {
+  const record = (/** @type {Record<string, any>} */ extra) => ({ key: "pfs", version: 1, modelName: "reference-time-to-event", modelVersion: "1.0.0", risk: "high", riskRule: null, by: "runtime", createdAt: "2026-09-27T01:00:00.000Z", ...extra });
+  const models = [{ id: "mdl_1", name: "reference-time-to-event", version: "1.0.0", card: { title: "事件时间终点参考仿真器" } },
+    { id: "mdl_2", name: "reference-time-to-event", version: "2.0.0", card: { title: "事件时间终点参考仿真器（新版）" } }];
+  const shown = presentModelAssessments({ ...emptyBundle(), assessments: [record({}), record({ key: "other", modelName: "private-model", modelVersion: "" }), record({ key: "newer", modelVersion: "2.0.0" }), record({ key: "nover", modelVersion: "" })], models });
+  assert.deepEqual(shown.records.map((entry) => entry.modelTitle), ["事件时间终点参考仿真器", "private-model", "事件时间终点参考仿真器（新版）", "事件时间终点参考仿真器"],
+    "by name and, when the record names one, by version; a record with no version takes the first match");
+  assert.equal(shown.records[0].modelName, "reference-time-to-event", "the id stays in the record: it is what the edit is keyed by");
+});
+
+test("the comparator page keeps the weights and the borrowed prior apart: a prior's effective sample size is not a weighting diagnostic", () => {
+  const comparator = { id: "cmp_h", version: 1, route: "hybrid_control", estimand: "ATE", conclusion: "estimable", gapList: [], resultId: "res_h", targetTrial: {}, configuration: {}, reviewState: "ai_set", createdAt: "2026-09-28T01:00:00.000Z" };
+  const result = { id: "res_h", version: 1, kind: "comparator", conclusion: "estimable", reviewState: "ai_set", counts: {}, executionId: null,
+    measures: [
+      { name: "prior_effective_sample_size_moment", value: 79.2, source: "calculated" }, { name: "prior_effective_sample_size_elir", value: 59.4, source: "calculated" },
+      { name: "map_mean", value: -0.2, source: "calculated" }, { name: "median_survival_treatment", value: 9.1, source: "calculated" },
+    ],
+    diagnostics: { weights: { effectiveSampleSize: 412.5, max: 6.2 } } };
+  const tab = presentComparatorTab({ ...emptyBundle(), comparators: [comparator], results: [result], allResults: [result] });
+  assert.deepEqual(tab.prior.map((row) => row.key), ["map_mean", "prior_effective_sample_size_moment", "prior_effective_sample_size_elir"]);
+  assert.deepEqual(tab.diagnostics.map((row) => row.key), ["ess", "max", "median_survival_treatment"], "the weights and the treatment arm's median stay together");
+  assert.deepEqual(presentComparatorTab(emptyBundle()).prior, []);
+});
+
+test("the comparator page names the method that computed it in Chinese, and never prints the engine's own id", () => {
+  const comparator = { id: "cmp_l", version: 1, route: "literature_control", estimand: "ATT", conclusion: "limited", gapList: [], resultId: "res_l", targetTrial: {}, configuration: {}, reviewState: "ai_set", createdAt: "2026-09-28T01:00:00.000Z" };
+  const result = { id: "res_l", version: 1, kind: "comparator", conclusion: "limited", reviewState: "ai_set", counts: {}, executionId: "exe_1", measures: [], diagnostics: {} };
+  const named = (/** @type {string} */ method) => presentComparatorTab({ ...emptyBundle(), comparators: [comparator], results: [result], allResults: [result],
+    executions: new Map([["exe_1", { id: "exe_1", method, methodVersion: "1.0.0" }]]) }).methods[0];
+  assert.equal(named("evidence.reconstruct_km").label, "生存曲线重建（Guyot）");
+  assert.equal(named("comparator.rmst").label, "RMST 比较");
+  assert.equal(named("something.the_table_does_not_hold").label, "引擎计算");
+  assert.equal(named("evidence.reconstruct_km").version, "v1.0.0");
+});
+
+test("the method library says the endpoints in words, and a model's endpoint list too", () => {
+  const library = presentModels({ models: [{ id: "m1", name: "m", version: "1", card: { title: "模型" }, applicability: { endpoints: ["continuous", "time_to_event"] }, evidence: [], validation: {} }],
+    methods: [{ id: "mth_1", method: "patients.binary", version: "1.0.0", endpoints: ["continuous", "binary", "time_to_event"], validationEvidence: { status: "unmeasured" }, assumptions: [] },
+      { id: "mth_2", method: "evidence.pool", version: "1.0.0", endpoints: ["binary", "not_an_endpoint"], validationEvidence: {}, assumptions: [] }, { id: "mth_3", method: "x", endpoints: [], validationEvidence: {} }],
+    usedBy: new Map(), engineAvailable: true, engineMismatch: null });
+  assert.deepEqual(library.methods.map((method) => method.endpoints), ["连续 · 二分类 · 事件时间", "二分类 · not_an_endpoint", null]);
+  assert.equal(library.models[0].endpoint, "连续、事件时间");
+  assert.equal(JSON.stringify(library.methods.map((method) => method.endpoints)).includes("time_to_event"), false);
+});
+
+test("a registry's design is said in words from the registry's own enumerations, and another registry's wording passes through unchanged", () => {
+  assert.equal(registryDesignWords({ phases: ["PHASE3"], allocation: "RANDOMIZED", masking: "QUADRUPLE" }), "3 期 · 随机 · 四盲");
+  assert.equal(registryDesignWords({ phases: ["PHASE2", "PHASE3"], allocation: "NON_RANDOMIZED", masking: "NONE" }), "2 期/3 期 · 非随机 · 开放标签");
+  assert.equal(registryDesignWords({ phases: ["EARLY_PHASE1"], allocation: "NA", masking: "SINGLE" }), "早期 1 期 · 不适用 · 单盲");
+  assert.equal(registryDesignWords({ phases: ["PHASE4"], masking: "DOUBLE" }), "4 期 · 双盲");
+  assert.equal(registryDesignWords({ phases: ["III 期"], allocation: "随机对照", masking: "TRIPLE" }), "III 期 · 随机对照 · 三盲", "a ChiCTR or CTIS word is shown as it came");
+  assert.equal(registryDesignWords({}), null);
+  assert.equal(registryDesignWords({ phases: [], allocation: null, masking: "" }), null);
+  const precedent = presentPrecedent({ id: "p1", registry_id: "NCT1", registry: "clinicaltrials.gov", design: { phases: ["PHASE3"], allocation: "RANDOMIZED", masking: "QUADRUPLE" }, pico: {}, enrollment: {}, sites: {}, results: {} });
+  assert.equal(precedent.design, "3 期 · 随机 · 四盲");
 });

@@ -415,11 +415,17 @@ export function vcrStepUpdates({ steps, seen, flying, plan }) {
     const stored = steps?.[step]?.status ?? "none";
     // Where the data has no word, a step still stored as running with no run out for it is put back.
     const idle = read ? null : vcrIdleStepStatus(stored, flying.has(step));
-    const found = read ?? idle;
+    // 「进行中」 is a statement about now, and the run that wrote it is gone: the step is stored as running and no run holds it. What
+    // the data says of it then stands, wanted or not — a partial computation (one design out of four stopped at its budget) reads
+    // 未完成 with 续算 offered, not 进行中 for ever, which is what a step that was running and is no longer wanted used to keep.
+    const orphan = stored === "running" && !flying.has(step);
+    let found = read ?? idle;
     if (!found) continue;
+    // Nothing is queued for a step nobody asks for: a design that waits for a job nobody will enqueue is not 「排队中」.
+    if (orphan && read && read.status === "queued" && !plan.want.has(step)) found = { status: "none", note: null };
     // A step a person has not asked for and which nothing has produced stays
     // where it is: observation never invents progress.
-    if (!idle && !plan.want.has(step) && !FINISHED.has(found.status) && found.status !== "stale") continue;
+    if (!idle && !orphan && !plan.want.has(step) && !FINISHED.has(found.status) && found.status !== "stale") continue;
     // Only a failure note is this pass's to write, and only a failed step's to clear.
     const note = found.status === "failed" || found.status === "none" ? found.note : (stored === "failed" ? null : undefined);
     if (stored === found.status && (note === undefined || (steps?.[step]?.note ?? null) === note)) continue;

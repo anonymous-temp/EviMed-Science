@@ -37,7 +37,7 @@ import { documentExportDigest } from "@evimed/domain";
 import {
   VCR_COMPARATOR_ROUTE_LABELS_ZH, VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_RISK_EVIDENCE, VCR_MODEL_RISK_LABELS_ZH, VCR_MODEL_TIER_LABELS_ZH, VCR_POOLING_METHOD_LABELS_ZH, VCR_MODEL_TIER_USE_CEILING, VCR_MODEL_TIERS,
-  VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
+  VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
   allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
@@ -548,22 +548,26 @@ export function presentReviewNotes(groups, now) {
     .map(({ sortAt: _sortAt, ...note }) => note);
 }
 
-/** 「统计复核：假设卡 os_hr 等 3 项」. @param {Record<string, any>} review */
-function reviewSubject(review, { version = true } = {}) {
+/** 「统计复核：假设卡 os_hr 等 3 项」. @param {Record<string, any>} review @param {{ version?: boolean, names?: ReadonlyMap<string, string> }} [options] */
+function reviewSubject(review, { version = true, names } = {}) {
   const kind = (/** @type {Record<string, string>} */ (VCR_REVIEW_KIND_LABELS_ZH))[String(review.kind)] ?? "复核";
   const nodes = list(review.nodes).map(String);
-  const first = nodeLabel(nodes[0] ?? "", { version });
+  const first = nodeLabel(nodes[0] ?? "", { version, names });
   return nodes.length > 1 ? `${kind}：${first} 等 ${nodes.length} 项` : `${kind}：${first || "这个研究"}`;
 }
 
-/** A lineage node in the reader's words. @param {string} node */
-export function nodeLabel(node, { version: withVersion = true } = {}) {
+/**
+ * A lineage node in the reader's words. An assumption is named by its card's own name (`names`, key to name): the key is the engine's
+ * identifier and never reaches a reader — a card the study no longer holds is 「假设卡」 and nothing more.
+ * @param {string} node @param {{ version?: boolean, names?: ReadonlyMap<string, string> }} [options]
+ */
+export function nodeLabel(node, { version: withVersion = true, names } = {}) {
   const parsed = parseLineageNode(node);
   if (!parsed) return "";
   // The change log says what was reviewed and when, not which version of it: a date is what tells two apart.
   const version = withVersion ? `v${parsed.version}` : "";
   switch (parsed.kind) {
-    case "assumption": return `假设卡「${parsed.id}」${version}`.trim();
+    case "assumption": { const name = names?.get(parsed.id); return `${name ? `假设卡「${name}」` : "假设卡"}${version ? ` ${version}` : ""}`; }
     case "population": return `人群 ${version}`.trim();
     case "patient_set": return `虚拟患者集 ${version}`.trim();
     case "comparator_design": return `对照设计 ${version}`.trim();
@@ -574,6 +578,51 @@ export function nodeLabel(node, { version: withVersion = true } = {}) {
     case "result": return `结果 ${version}`.trim();
     default: return `${parsed.kind} ${version}`.trim();
   }
+}
+
+/** The tab each lineage node kind is read on; a result's is its own kind's (see `RESULT_KIND_TABS`). */
+const NODE_KIND_TABS = Object.freeze(/** @type {Record<string, string>} */ ({
+  assumption: "data", study_definition: "data", protocol_version: "data", snapshot: "data", population: "population", patient_set: "patients",
+  comparator_design: "comparator", trial_scenario: "trial", design_grid: "trial", matching_assessment: "matching",
+}));
+const RESULT_KIND_TABS = Object.freeze(/** @type {Record<string, string>} */ ({
+  population: "population", patient_set: "patients", comparator: "comparator", trial_scenario: "trial", design_grid: "trial",
+  matching: "matching", accrual_forecast: "trial", evidence_pool: "data", snapshot_profile: "data",
+}));
+
+/** The cards' own names, by key. @param {Record<string, any>} bundle @returns {Map<string, string>} */
+export function assumptionNames(bundle) {
+  /** @type {Map<string, string>} */
+  const names = new Map();
+  for (const card of list(bundle.assumptions)) {
+    const name = text(card.name);
+    if (name) names.set(String(card.key), name);
+  }
+  return names;
+}
+
+/**
+ * What a reader may follow from a review finding: the object its location names, when the location is a lineage node of this study
+ * (`kind:id@version`) — the reviewer writes other locations as paths into the frozen JSON, and those name nothing a page has. A
+ * closed lookup on the node's kind (and, for a result, on the kind of that result); no text is read. An assumption's key rides
+ * along for the page to open the card (`?card=`).
+ * @param {Record<string, any>} bundle
+ */
+export function reviewTargetFor(bundle) {
+  const names = assumptionNames(bundle);
+  const resultKinds = new Map(allResultsOf(bundle).map((/** @type {any} */ result) => [String(result.id), String(result.kind)]));
+  return (/** @type {string} */ location) => {
+    const parsed = parseLineageNode(location);
+    if (!parsed) return null;
+    const tab = parsed.kind === "result" ? RESULT_KIND_TABS[resultKinds.get(parsed.id) ?? ""] : NODE_KIND_TABS[parsed.kind];
+    if (!tab) return null;
+    return { label: nodeLabel(location, { version: false, names }), tab, key: parsed.kind === "assumption" ? parsed.id : null };
+  };
+}
+
+/** What the page's presenters tell `presentVcrReview` about the study: the clock and the objects a finding may point at. @param {Record<string, any>} bundle */
+export function reviewContextOf(bundle) {
+  return { now: bundle.now ?? new Date(), target: reviewTargetFor(bundle) };
 }
 
 // --- the study page --------------------------------------------------------------------------------------------------
@@ -613,7 +662,7 @@ export function presentStudy(bundle) {
     attention: attentionOf({ assumptions, scenarios, comparators, results, allResults: allResultsOf(bundle), stale, jobs, steps: study.steps, exports }),
     changes: presentChanges(bundle),
     // The AI reviews and the people's, apart from the changes: the study page's 变更记录 shows both (no model names: `presentVcrReview`).
-    reviews: reviews.slice(0, 6).map((/** @type {any} */ review) => presentVcrReview(review)),
+    reviews: reviews.slice(0, 6).map((/** @type {any} */ review) => presentVcrReview(review, reviewContextOf(bundle))),
     deliverables: exports.map((/** @type {any} */ row, /** @type {number} */ index) => presentDeliverable(row, index, exports, now)),
   };
   return {
@@ -776,7 +825,8 @@ function presentChanges(bundle) {
     rows.push({ id: `assumption:${card.id}`, at: card.createdAt, text: `假设卡「${card.name || card.key}」已更新`, by: null,
       state: card.reviewState === "reviewed" ? "reviewed" : null });
   }
-  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review, { version: false })} · ${presentVcrReview(review).state}`, by: presentVcrReview(review).by, state: !review.status || review.status === "done" ? "reviewed" : "ai_set" });
+  const names = assumptionNames(bundle);
+  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review, { version: false, names })} · ${presentVcrReview(review, { now }).state}`, by: presentVcrReview(review, { now }).by, state: !review.status || review.status === "done" ? "reviewed" : "ai_set" });
   for (const decision of decisions.slice(0, 1)) rows.push({ id: `decision:${decision.id}`, at: decision.createdAt, text: `写入决策记录：${decision.question}`, by: null, state: null });
   for (const row of exports.slice(0, 2)) {
     rows.push({ id: `export:${row.id}`, at: row.createdAt,
@@ -785,6 +835,9 @@ function presentChanges(bundle) {
   return rows.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 12)
     .map((row) => ({ id: row.id, at: zhTime(row.at, now) ?? "", text: row.text, by: row.by, state: row.state }));
 }
+
+/** How long a requested document may wait before the page stops calling it 排队中: past this a queued export has lost its run. */
+const EXPORT_QUEUED_FRESH_MS = 30 * 60_000;
 
 /**
  * One deliverable of the list. The version number is the package's own
@@ -797,7 +850,12 @@ export function presentDeliverable(row, index, all, now) {
   const kindWord = (/** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH))[String(row.kind)] ?? "研究包";
   // `exports` is newest first, so the ordinal counts the older ones of its kind.
   const older = all.slice(index + 1).filter((other) => other.kind === row.kind).length;
-  const stateWord = /** @type {Record<string, string>} */ ({ queued: "排队中", running: "生成中", ready: "已生成", failed: "未完成" })[String(row.state)] ?? "";
+  // 「排队中」 is a statement about now: a request nobody has picked up for half an hour is not waiting in a line — the run it was
+  // for is gone, and the row must not say 排队中 for ever. A rule about time, never about text.
+  const forgotten = row.state === "queued" && Number.isFinite(Date.parse(String(row.updatedAt)))
+    && now.getTime() - Date.parse(String(row.updatedAt)) >= EXPORT_QUEUED_FRESH_MS;
+  const stateWord = forgotten ? "没有生成"
+    : /** @type {Record<string, string>} */ ({ queued: "排队中", running: "生成中", ready: "已生成", failed: "未完成" })[String(row.state)] ?? "";
   // A newer document of its kind replaces it, and it stays listed as what it was: a document is asked for again when the study moved
   // on from what it was written from, and the earlier one is not dropped.
   const superseded = all.slice(0, Math.max(0, index)).some((other) => other.kind === row.kind && vcrExportHoldsDocument(other.cover));
@@ -1153,7 +1211,9 @@ export function presentModels({ models, methods, usedBy, engineAvailable, engine
         name: METHOD_LABELS[String(method.method)] ?? String(method.method),
         method: String(method.method),
         version: text(method.version),
-        endpoints: list(method.endpoints).length ? list(method.endpoints).map(String).join(" · ") : null,
+        // The endpoint types as a reader says them (「连续 · 二分类 · 事件时间」); an id the vocabulary does not hold passes through unchanged.
+        endpoints: list(method.endpoints).length
+          ? list(method.endpoints).map((endpoint) => (/** @type {Record<string, string>} */ (VCR_ENDPOINT_TYPE_LABELS_ZH))[String(endpoint)] ?? String(endpoint)).join(" · ") : null,
         numeric: references.length ? `${references.length} 个参考用例通过` : null,
         validation: references.length ? validation : { status: 'unmeasured', reason: validation.reason ?? 'no_reference_evidence' },
         assumptions: references.length ? list(method.assumptions) : [],
@@ -1213,7 +1273,8 @@ export function presentModelCard(model, usedBy) {
     useCeiling: model.useCeiling ?? (/** @type {Record<string, string>} */ (VCR_MODEL_TIER_USE_CEILING))[tier],
     scope: text(applicability.population),
     region: text(applicability.region),
-    endpoint: text(model.endpointType) ?? (list(applicability.endpoints).length ? list(applicability.endpoints).join("、") : null),
+    endpoint: text(model.endpointType) ?? (list(applicability.endpoints).length
+      ? list(applicability.endpoints).map((endpoint) => (/** @type {Record<string, string>} */ (VCR_ENDPOINT_TYPE_LABELS_ZH))[String(endpoint)] ?? String(endpoint)).join("、") : null),
     timeRange: text(applicability.timeRange),
     inputRange: text(applicability.inputRange),
     sources: list(applicability.sources).length ? `来源 ${list(applicability.sources).length} 项：${list(applicability.sources).join("、")}` : null,
@@ -1247,6 +1308,21 @@ export function presentModelCard(model, usedBy) {
 // --- precedents -------------------------------------------------------------------------------------------------------------------------
 
 /**
+ * A trial's design as a reader says it — 「3 期 · 随机 · 四盲」 — from the registry's own enumerations (`PHASE3` / `RANDOMIZED` / `QUADRUPLE`).
+ * Each part goes through its closed table; a value the tables do not hold (another registry's wording) passes through unchanged, and
+ * phases join with 「/」 (a phase 2/3 trial is `PHASE2`, `PHASE3`).
+ * @param {Record<string, any>} design the precedent row's `design` object @returns {string | null}
+ */
+export function registryDesignWords(design) {
+  /** @param {Record<string, string>} table @param {unknown} value */
+  const word = (table, value) => table[String(value)] ?? String(value);
+  const phases = list(design.phases).map((phase) => text(phase)).filter((phase) => phase !== null)
+    .map((phase) => word(/** @type {Record<string, string>} */ (VCR_REGISTRY_PHASE_LABELS_ZH), phase));
+  return [phases.join("/"), text(design.allocation) ? word(/** @type {Record<string, string>} */ (VCR_REGISTRY_ALLOCATION_LABELS_ZH), design.allocation) : null,
+    text(design.masking) ? word(/** @type {Record<string, string>} */ (VCR_REGISTRY_MASKING_LABELS_ZH), design.masking) : null].filter(Boolean).join(" · ") || null;
+}
+
+/**
  * One registry precedent, planned and actual apart, the raw text beside the
  * normalised value (plan §6.4).
  * @param {Record<string, any>} row a `precedents` table row
@@ -1267,7 +1343,7 @@ export function presentPrecedent(row) {
     registry: text(row.registry) ? (/** @type {Record<string, string>} */ ({ "clinicaltrials.gov": "ClinicalTrials.gov", chictr: "ChiCTR", ctis: "EU CTIS", cde: "CDE 登记" }))[String(row.registry)] ?? String(row.registry) : null,
     title: text(row.title),
     population: list(pico.conditions).length ? list(pico.conditions).join("、") : null,
-    design: [list(design.phases).join("/"), text(design.allocation), text(design.masking)].filter(Boolean).join(" · ") || null,
+    design: registryDesignWords(design),
     planned,
     actual,
     sites: siteCount,
@@ -1350,7 +1426,7 @@ export function presentExport(row, bundle) {
     document: {
       reviews: [...list(bundle.reviews).filter(review => review.provenance?.subjectRef?.exportId === row.id),
         ...list(model.review?.records).filter(review => !list(bundle.reviews).some(live => live.platformReviewId && live.platformReviewId === review.platformReviewId))].map(review => presentVcrReview({ ...review, current: vcrReviewIsCurrent(review,
-          { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: [row] }) })),
+          { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: [row] }) }, reviewContextOf(bundle))),
       status: coverStatus({ cover, row, bundle, model }),
       // The two model documents read as their own structure (M15's sections, the platform's tables); every other export as the nine parts of §8.3.
       sections: modelSections(row, cover, model) ?? packageSections({ cover, row, bundle, model }),
@@ -1393,7 +1469,7 @@ function coverStatus({ cover, row, bundle, model }) {
     } else if (done) {
       const at = zhTime(object(done).at ?? object(done).createdAt, now);
       status.push({ label, value: `已复核${at ? `（${at.replace(/ \d\d:\d\d$/, "")}）` : ""}`, state: "ok",
-        note: list(object(done).nodes).length ? `针对 ${list(object(done).nodes).map((/** @type {string} */ node) => nodeLabel(String(node))).filter(Boolean).slice(0, 2).join("、")}` : null });
+        note: list(object(done).nodes).length ? `针对 ${list(object(done).nodes).map((/** @type {string} */ node) => nodeLabel(String(node), { names: assumptionNames(bundle) })).filter(Boolean).slice(0, 2).join("、")}` : null });
     } else {
       status.push({ label, value: "未复核", state: "attention", note: null });
     }

@@ -1,4 +1,4 @@
-import { VcrRegistryCoverage } from "./VcrRegistryCoverage";
+import { registryCoverageSummary, VcrRegistryCoverage } from "./VcrRegistryCoverage";
 import { Fragment, useState, type ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 import { getVcrPrecedents, type VcrPrecedent } from "@/lib/vcrClient";
@@ -6,6 +6,7 @@ import { safeLink } from "@/lib/frontierClient";
 import { cn } from "@/lib/cn";
 import { buttonClasses } from "@/components/ui/Button";
 import { drawnColumns, type DataColumn } from "@/components/ui/DataTable";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { useVcrLoad, VcrFacts, VcrTabError, VcrToolbar } from "./vcrTabKit";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
@@ -44,7 +45,6 @@ export function VcrPrecedentsPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      {state.kind === "ready" && <VcrRegistryCoverage sources={state.data.registryCoverage} />}
       <VcrToolbar summary={state.kind === "ready" ? `${state.data.precedents.length} 项` : undefined}>
         <SearchInput
           label="搜索先例"
@@ -67,6 +67,20 @@ export function VcrPrecedentsPanel() {
                 footnote={state.data.sources ?? "计划值取自登记记录的预计字段，只用于对照；历史基准只用实际值。"}
               />
             )}
+
+      {/* What the registries could and could not be read for is the answer to 「为什么没有这一条」, one click under the precedents rather than above them. */}
+      {state.kind === "ready" && (state.data.registryCoverage?.length ?? 0) > 0 && (
+        <Disclosure
+          summary={(
+            <span className="inline-flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <span className="font-medium text-text">注册源覆盖</span>
+              <span data-vcr-coverage-summary="" className="text-caption text-text-3">{registryCoverageSummary(state.data.registryCoverage ?? [])}</span>
+            </span>
+          )}
+        >
+          <VcrRegistryCoverage sources={state.data.registryCoverage} heading={false} />
+        </Disclosure>
+      )}
     </div>
   );
 }
@@ -141,7 +155,9 @@ export function VcrPrecedentTable({ rows, footnote, withUse = false }: {
 
   return (
     <div>
-      <div className="overflow-x-auto">
+      {/* The table scrolls sideways on a narrow screen: the scroller is a named region a keyboard can reach and scroll. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be reachable by keyboard (axe: scrollable-region-focusable). */}
+      <div role="region" aria-label="试验先例" tabIndex={0} className="overflow-x-auto">
         <table className="w-full min-w-[48rem] border-collapse">
           <caption className="sr-only">试验先例</caption>
           <thead>

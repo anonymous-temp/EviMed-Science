@@ -1269,6 +1269,9 @@
     "effectiveSampleSize": null,
     "generatedRecords": 6480000,
     "note": "设计阶段：尚无真实患者",
+    "notes": {
+      "generatedRecords": "模拟生成的记录，不是患者"
+    },
     "scope": "方案 B"
   },
   "stale": null,

@@ -111,7 +111,13 @@ export function VcrTabSkeleton({ rows = 4 }: { rows?: number }) {
  * second composer (plan §9.5). A step that failed with nothing to show says
  * so, and offers to go on from where it stopped rather than to begin again.
  */
-export function VcrStepPending({ studyId, study, step }: { studyId: string; study: VcrStudy; step: VcrStepKey }) {
+export function VcrStepPending({ studyId, study, step, hint }: {
+  studyId: string;
+  study: VcrStudy;
+  step: VcrStepKey;
+  /** What 「让 AI 做」 starts, when the step's own sentence does not fit this study (matching at T0). */
+  hint?: string;
+}) {
   const state = study.steps[step];
   // A queued step the allowance would not start is not work under way: it says what it waits on and where that is put right.
   const allowanceWait = stepAllowanceWait(state);
@@ -137,7 +143,7 @@ export function VcrStepPending({ studyId, study, step }: { studyId: string; stud
   if (state?.status === "none" && state.requested === true) {
     return <p data-vcr-step-waiting={step} className="py-12 text-center text-ui text-text-3">{VCR_STEP_QUEUED}</p>;
   }
-  return <VcrStepAsk studyId={studyId} study={study} step={step} />;
+  return <VcrStepAsk studyId={studyId} study={study} step={step} hint={hint} />;
 }
 
 /**
@@ -167,11 +173,11 @@ export function VcrNoDefinition({ study }: { study: Pick<VcrStudy, "projectId" |
 }
 
 /** 「让 AI 做」: one sentence about the step and the button that starts it. */
-function VcrStepAsk({ studyId, study, step }: { studyId: string; study: VcrStudy; step: VcrStepKey }) {
+function VcrStepAsk({ studyId, study, step, hint }: { studyId: string; study: VcrStudy; step: VcrStepKey; hint?: string }) {
   const { run, busy } = useVcrRun(study);
   return (
     <div data-vcr-step-empty={step} className="flex flex-col items-center gap-4 py-12 text-center">
-      <p className="max-w-measure text-ui text-text-2">{VCR_STEP_EMPTY[step]}</p>
+      <p className="max-w-measure text-ui text-text-2">{hint ?? VCR_STEP_EMPTY[step]}</p>
       {/* Starting a step is `run`'s: a reader who cannot start one is not offered the button. */}
       {study.abilities.includes("run") && (
         <Button onClick={() => run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。")} loading={busy}>让 AI 做</Button>

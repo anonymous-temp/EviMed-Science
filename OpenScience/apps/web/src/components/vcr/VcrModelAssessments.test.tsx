@@ -16,13 +16,17 @@ vi.mock("@/lib/productClient", () => network);
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
-const study = (abilities?: string[]): VcrStudy => {
+const study = (abilities?: string[], patients?: Record<string, unknown>): VcrStudy => {
   const raw = fixture("ev201/study.json");
   if (abilities) raw.abilities = abilities;
+  if (patients) raw.steps.patients = patients;
   return readVcrStudy(raw);
 };
 const draw = (node: React.ReactElement) => render(<MemoryRouter>{node}</MemoryRouter>);
-const card = () => screen.findByText("模型评估").then((heading) => heading.closest("section") as HTMLElement);
+// The assessment is folded: its line names the model in Chinese with its risk, and the nine rows open under it.
+const SUMMARY = "模型评估 · 1 个模型";
+const TITLE = "二线 NSCLC 多西他赛组 PFS · Weibull";
+const card = () => screen.findByText(SUMMARY).then((line) => line.closest("details") as HTMLDetailsElement);
 
 beforeEach(() => {
   toasts.success.mockReset();
@@ -34,7 +38,9 @@ describe("模型评估", () => {
   it("reads the record as the guideline's table: each element, the derived risk with the rule that settled it, and who wrote it", async () => {
     draw(<PatientsTab studyId={STUDY_ID} study={study()} />);
     const section = within(await card());
-    expect(section.getByText("nsclc-docetaxel-pfs-weibull")).toBeInTheDocument();
+    // The model is named by the library's Chinese title, never by the id the engine files it under, and with no version number.
+    expect(section.getByRole("heading", { name: TITLE })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/nsclc-docetaxel-pfs-weibull/);
     for (const label of ["关注的问题", "使用情境", "模型影响力", "错误决策的后果", "模型风险", "模型冲击", "技术标准", "所拟用法的适当性", "模型与模型结果的评价", "证据评估的结论"]) {
       expect(section.getByText(label)).toBeInTheDocument();
     }
@@ -45,6 +51,42 @@ describe("模型评估", () => {
     expect(section.getByText("AI 写入 · 昨天")).toBeInTheDocument();
     // What nobody has written yet says so; it is never a blank that reads as a finding.
     expect(within(section.getByText("模型与模型结果的评价").closest("[data-vcr-assessment-row]") as HTMLElement).getByText("未填写")).toBeInTheDocument();
+  });
+
+  it("is folded under one line that names each model in Chinese with the risk, and opens to the nine rows", async () => {
+    draw(<PatientsTab studyId={STUDY_ID} study={study()} />);
+    const details = await card();
+    expect(details.open).toBe(false);
+    expect(within(details).getByText(`${TITLE} · 模型风险 高`)).toBeInTheDocument();
+    await userEvent.click(within(details).getByText(SUMMARY));
+    expect(details.open).toBe(true);
+    // The patient set exists on this study, so the page does not say that no patients were generated.
+    expect(screen.queryByText("这些评估写的是本研究已经用到的模型；虚拟患者还没有生成。")).toBeNull();
+  });
+
+  it("with an assessment and no patient set says there are no virtual patients, offers 让 AI 做, and never draws 「还没有选定模型」 over an assessment of another model", async () => {
+    const raw = fixture("ev201/patients.json");
+    Object.assign(raw, { model: null, trajectories: null, example: null, panels: [], sensitivity: null, headline: null, twin: null, sets: [], counts: null, partial: null, stale: null });
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/patients`]: raw });
+    const { container } = draw(<PatientsTab studyId={STUDY_ID} study={study(undefined, { status: "none", requested: false })} />);
+    expect(await screen.findByText(/还没有虚拟患者/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "让 AI 做" })).toBeInTheDocument();
+    expect(screen.queryByText("还没有选定模型")).toBeNull();
+    expect(container.querySelector("[data-vcr-not-applicable]")).toBeNull();
+    // The assessment follows, folded and named in Chinese, with the sentence that says whose models it is about.
+    const details = await card();
+    expect(details.open).toBe(false);
+    expect(within(details).getByText("这些评估写的是本研究已经用到的模型；虚拟患者还没有生成。")).toBeInTheDocument();
+    expect(within(details).getByText(`${TITLE} · 模型风险 高`)).toBeInTheDocument();
+  });
+
+  it("with a result but no model keeps the card that says so, above the folded assessment", async () => {
+    const raw = fixture("ev201/patients.json");
+    raw.model = null;
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/patients`]: raw });
+    draw(<PatientsTab studyId={STUDY_ID} study={study()} />);
+    expect(await screen.findByText("还没有选定模型")).toBeInTheDocument();
+    expect(await card()).toBeInTheDocument();
   });
 
   it("offers the edit to the lead and to nobody else", async () => {

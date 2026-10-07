@@ -17,7 +17,7 @@ import { useVcrLoad } from "./vcrTabKit";
  * its numbers. A record of the past is not what a reader arrives at the study for, so it is one menu entry away rather than a
  * section of the first page. The reviews are named by what they reviewed and never by the model that wrote them.
  */
-export function VcrChangeLogDrawer({ study, onClose }: { study: Pick<VcrStudy, "overview">; onClose: () => void }) {
+export function VcrChangeLogDrawer({ study, onClose }: { study: Pick<VcrStudy, "id" | "overview">; onClose: () => void }) {
   const { changes, reviews } = study.overview;
   return (
     <Drawer title="变更记录" onClose={onClose} widthClassName="max-w-lg">
@@ -38,7 +38,7 @@ export function VcrChangeLogDrawer({ study, onClose }: { study: Pick<VcrStudy, "
               ))}
             </ol>
           )}
-        <VcrReviews reviews={reviews} />
+        <VcrReviews reviews={reviews} studyId={study.id} onNavigate={onClose} />
       </div>
     </Drawer>
   );

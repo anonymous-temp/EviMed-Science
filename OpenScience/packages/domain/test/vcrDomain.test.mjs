@@ -23,6 +23,9 @@ import {
   VCR_JOB_METHODS,
   VCR_MIN_CELL_SIZE,
   VCR_MODEL_TIERS,
+  VCR_REGISTRY_ALLOCATION_LABELS_ZH,
+  VCR_REGISTRY_MASKING_LABELS_ZH,
+  VCR_REGISTRY_PHASE_LABELS_ZH,
   VCR_REPLICATES_NULL_MIN,
   VCR_STEPS,
   VCR_STEP_CAPABILITIES,
@@ -429,4 +432,17 @@ test("a claim to a tier needs data that supports it; T3 is the lead's declaratio
   assert.deepEqual(["T0", "T1", "T2", "T3"].map((tier) => vcrTierIsSupported(tier, "T1")), [true, true, false, false]);
   assert.deepEqual(["T0", "T1", "T2", "T3"].map((tier) => vcrTierIsSupported(tier, "T2")), [true, true, true, true]);
   assert.equal(vcrTierIsSupported("T7", "T2"), false);
+});
+
+test("a registry's phase, allocation and masking have a Chinese word each, in ClinicalTrials.gov's own enumerations", () => {
+  const cjk = /[\u4e00-\u9fff]/;
+  assert.deepEqual(Object.keys(VCR_REGISTRY_PHASE_LABELS_ZH), ["EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4", "NA"]);
+  assert.deepEqual(Object.keys(VCR_REGISTRY_ALLOCATION_LABELS_ZH), ["RANDOMIZED", "NON_RANDOMIZED", "NA"]);
+  assert.deepEqual(Object.keys(VCR_REGISTRY_MASKING_LABELS_ZH), ["NONE", "SINGLE", "DOUBLE", "TRIPLE", "QUADRUPLE"]);
+  for (const table of [VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH]) {
+    assert.ok(Object.isFrozen(table));
+    for (const word of Object.values(table)) assert.ok(cjk.test(word), word);
+  }
+  assert.equal(VCR_REGISTRY_PHASE_LABELS_ZH.PHASE3, "3 期");
+  assert.equal(VCR_REGISTRY_MASKING_LABELS_ZH.QUADRUPLE, "四盲");
 });

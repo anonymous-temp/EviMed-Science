@@ -102,6 +102,20 @@ describe("the four counts", () => {
     expect(screen.getByText("801")).toBeInTheDocument();
   });
 
+  it("lets a label and a note wrap instead of truncating them — on a phone the four labels read in full — and says what a simulation's records are", () => {
+    const { container } = render(<VcrCountsBand counts={counts({ generatedRecords: 212_382_000, notes: { generatedRecords: "模拟生成的记录，不是患者" } })} />);
+    const tile = container.querySelector("[data-vcr-count='generatedRecords']")?.parentElement as HTMLElement;
+    expect(within(tile).getByText("模拟生成的记录，不是患者")).toBeInTheDocument();
+    for (const label of ["真实患者数", "事件数", "有效样本量", "生成记录数"]) {
+      expect(screen.getByText(label).className).not.toContain("truncate");
+    }
+    expect(within(tile).getByText("模拟生成的记录，不是患者").className).not.toContain("truncate");
+    // The scope and the design-stage note stack with the grid below `sm`; beside it only from `sm` up.
+    const band = container.querySelector("[data-vcr-counts] > div") as HTMLElement;
+    expect(band.className).toContain("flex-col");
+    expect(band.className).toContain("sm:flex-row");
+  });
+
   it("says the same four on one line where a card has no room for the band", () => {
     render(<VcrCountsLine counts={counts({ events: 138 })} />);
     expect(screen.getByText("事件数")).toBeInTheDocument();

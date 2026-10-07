@@ -560,6 +560,9 @@
       "effectiveSampleSize": null,
       "generatedRecords": 6480000,
       "note": "设计阶段：尚无真实患者",
+      "notes": {
+        "generatedRecords": "模拟生成的记录，不是患者"
+      },
       "scope": "方案 B"
     },
     "designs": [
@@ -1477,7 +1480,7 @@
       {
         "id": "review:rvw_1",
         "at": "昨天 09:07",
-        "text": "统计复核：假设卡「orr_control」 · 已复核",
+        "text": "统计复核：假设卡「对照组 ORR」 · 已复核",
         "by": null,
         "state": "reviewed"
       }
@@ -1492,7 +1495,7 @@
         "status": "done",
         "current": true,
         "by": null,
-        "at": "2026-09-27T01:07:00.000Z",
+        "at": "昨天 09:07",
         "note": "审查意见供参考，不代表实证验证。",
         "findings": []
       }
@@ -1502,7 +1505,7 @@
         "id": "exp_1",
         "kind": "cde_communication_pack",
         "title": "CDE 沟通交流资料包 v1",
-        "meta": "今天 09:14 · 排队中",
+        "meta": "今天 09:14 · 没有生成",
         "draft": true,
         "runId": null,
         "path": null

@@ -759,6 +759,43 @@ test("R10 a computation a conversation queues is filed under the design it was q
   assert.equal(simulationNotices.length, 2, "two simulations were asked for, and C was the programme's own");
 });
 
+test("R11 a step stored as running whose run is gone follows the data: three designs have results, one stopped at its budget, no job is open — the trial step reads 未完成 with its note, never 进行中", options, async () => {
+  const module = compose({ dispatch: false });
+  const study = await makeStudy("orphan");
+  const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+    study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+  await write("definition", { ...definition, title: "二线肺癌 EV 的样本量", question: "单臂 II 期能不能用外部对照？" });
+  await write("assumption", [{ key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" }]);
+  const written = await write("trial_scenario", conversationDesigns);
+  const gateway = conversationGateway(module, study);
+  for (const [at, id] of written.ids.entries()) {
+    const answer = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: id, scenario: engineScenario(at, "design_simulation") });
+    assert.equal(answer.status, 200, JSON.stringify(answer));
+  }
+  // The population step is what somebody asked for; the trial step is not wanted — it was only ever running because a run was sent.
+  await store.setStep(study.id, "population", { requested: true, status: "none" });
+  await drainJobs(module, study);
+  assert.equal((await store.studyById(study.id)).steps.trial.status, "minimal", "every design has its result, and nobody asked for the step: the data says it is there as the minimal version");
+
+  // The live case: the step is stored running, its run is gone, one design's compute stopped at its budget and left a partial result.
+  const designs = await store.trialScenarios(study.id);
+  assert.ok(designs.every((design) => design.resultId), "all designs hold a result");
+  await store.setStep(study.id, "trial", { status: "running", runId: "run_gone" });
+  await store.query(`INSERT INTO evimed_vcr.schedule_marks (study_id, key, user_id, kind, state, step, detail, done_at)
+    VALUES ($1, $2, $3, 'job', 'failed', 'trial', $4::jsonb, now())`,
+  [study.id, `job:${vcrObjectNode("trial_scenario", designs[1])}`, study.userId,
+    JSON.stringify({ node: vcrObjectNode("trial_scenario", designs[1]), error: "cpu_budget_exhausted", title: "计算时间用完", message: "这个方案的模拟只算了一部分。" })]);
+  assert.equal((await store.studyById(study.id)).steps.trial.status, "running");
+  assert.deepEqual(await store.rows("SELECT 1 FROM evimed_vcr.jobs WHERE study_id = $1 AND state IN ('queued', 'running', 'awaiting_budget')", [study.id]), []);
+
+  await module.orchestrator.advance(study.id);
+  const after = (await store.studyById(study.id)).steps.trial;
+  assert.equal(after.status, "failed", "the step follows the data once no run holds it");
+  assert.match(String(after.note), /计算时间用完/);
+  assert.notEqual(after.status, "running");
+});
+
 /** The notices the inbox double took from a composed module that are about a finished computation. @param {any} module */
 function notices_of(module) {
   return module.notices.filter((/** @type {any} */ notice) => /完成/.test(String(notice.title)) && notice.source?.type === "vcr");

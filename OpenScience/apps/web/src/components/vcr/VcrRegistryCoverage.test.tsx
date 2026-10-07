@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { VcrRegistryCoverage } from './VcrRegistryCoverage';
+import { registryCoverageSummary, VcrRegistryCoverage } from './VcrRegistryCoverage';
 describe('registry coverage', () => {
   it('shows missing credentials and list-only limitations separately from a successful source', () => {
     render(<VcrRegistryCoverage sources={[
@@ -23,5 +23,19 @@ describe('registry coverage', () => {
     expect(screen.getByText('仅登记列表')).toBeInTheDocument();
     expect(screen.getByText(/不能作为历史基线/)).toBeInTheDocument();
     expect(screen.queryByText(/0 项/)).not.toBeInTheDocument();
+  });
+
+  it('counts the sources from their own fields — readable, limited, and out of reach for now — and reads no prose', () => {
+    const source = (extra: Record<string, unknown>) => ({ key: 'k', label: 'L', configured: true, coverage: 'structured', availability: 'available', reason: null, lastCheckedAt: null, ...extra }) as never;
+    expect(registryCoverageSummary([source({}), source({ availability: 'not_queried' }), source({ coverage: 'list_only' }), source({ coverage: 'unsupported', configured: false })]))
+      .toBe('2 个来源可查，2 个仅列表或未接入');
+    expect(registryCoverageSummary([source({}), source({ availability: 'unavailable' }), source({ configured: false })])).toBe('1 个来源可查，2 个暂时读不到');
+    expect(registryCoverageSummary([source({ coverage: 'unsupported' })])).toBe('0 个来源可查，1 个仅列表或未接入');
+  });
+
+  it('can leave its heading to a caller that names the block itself', () => {
+    render(<VcrRegistryCoverage heading={false} sources={[{ key: 'ctgov', label: 'ClinicalTrials.gov', configured: true, coverage: 'structured', availability: 'available', reason: null, lastCheckedAt: null }]} />);
+    expect(screen.queryByRole('heading', { name: '注册源覆盖' })).not.toBeInTheDocument();
+    expect(screen.getByText('ClinicalTrials.gov')).toBeInTheDocument();
   });
 });

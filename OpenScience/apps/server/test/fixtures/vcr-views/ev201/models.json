@@ -322,7 +322,7 @@
       "name": "双重稳健估计（AIPW）",
       "method": "comparator.aipw",
       "version": "1.0.0",
-      "endpoints": "continuous · binary",
+      "endpoints": "连续 · 二分类",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -336,7 +336,7 @@
       "name": "协变量集敏感性分析",
       "method": "comparator.covariate_sets",
       "version": "1.0.0",
-      "endpoints": "continuous · binary · time_to_event",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -350,7 +350,7 @@
       "name": "熵平衡加权",
       "method": "comparator.entropy_balance",
       "version": "1.0.0",
-      "endpoints": "continuous · binary · time_to_event",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -364,7 +364,7 @@
       "name": "E 值",
       "method": "comparator.evalue",
       "version": "1.0.0",
-      "endpoints": "binary · time_to_event",
+      "endpoints": "二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -378,7 +378,7 @@
       "name": "匹配调整间接比较",
       "method": "comparator.maic",
       "version": "1.0.0",
-      "endpoints": "continuous · binary · time_to_event",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -392,7 +392,7 @@
       "name": "事件时间终点的匹配调整间接比较",
       "method": "comparator.maic_time_to_event",
       "version": "1.0.0",
-      "endpoints": "time_to_event",
+      "endpoints": "事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -406,7 +406,7 @@
       "name": "MAP 先验",
       "method": "comparator.map_prior",
       "version": "1.0.0",
-      "endpoints": "binary · continuous",
+      "endpoints": "二分类 · 连续",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -420,7 +420,7 @@
       "name": "阴性对照结局",
       "method": "comparator.negative_control",
       "version": "1.0.0",
-      "endpoints": "binary · time_to_event",
+      "endpoints": "二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -434,7 +434,7 @@
       "name": "预后评分校正（二分类/事件时间）",
       "method": "comparator.prognostic_adjustment",
       "version": "1.0.0",
-      "endpoints": "binary · time_to_event",
+      "endpoints": "二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -448,7 +448,7 @@
       "name": "倾向评分加权",
       "method": "comparator.propensity_weight",
       "version": "1.0.0",
-      "endpoints": "continuous · binary · time_to_event",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -462,7 +462,7 @@
       "name": "RMST 比较",
       "method": "comparator.rmst",
       "version": "1.0.0",
-      "endpoints": "time_to_event",
+      "endpoints": "事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -476,7 +476,7 @@
       "name": "缺失数据的临界点分析",
       "method": "comparator.tipping_point",
       "version": "1.0.0",
-      "endpoints": "binary · time_to_event",
+      "endpoints": "二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -490,7 +490,7 @@
       "name": "加权 Cox 风险比",
       "method": "comparator.weighted_cox",
       "version": "1.0.0",
-      "endpoints": "time_to_event",
+      "endpoints": "事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -504,7 +504,7 @@
       "name": "方案的解析计算",
       "method": "design.analytic",
       "version": "1.1.0",
-      "endpoints": "continuous · binary · time_to_event",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -518,7 +518,7 @@
       "name": "成功把握",
       "method": "design.assurance",
       "version": "1.1.0",
-      "endpoints": "continuous · binary · time_to_event",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -532,7 +532,7 @@
       "name": "设计网格",
       "method": "design.grid",
       "version": "1.2.0",
-      "endpoints": "continuous · binary · time_to_event",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -546,7 +546,7 @@
       "name": "预后协变量调整",
       "method": "design.procova",
       "version": "1.0.0",
-      "endpoints": "continuous",
+      "endpoints": "连续",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -560,7 +560,7 @@
       "name": "方案的模拟运行",
       "method": "design.simulate",
       "version": "1.2.0",
-      "endpoints": "continuous · binary · time_to_event",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -588,7 +588,7 @@
       "name": "生存曲线重建（Guyot）",
       "method": "evidence.reconstruct_km",
       "version": "1.0.0",
-      "endpoints": "time_to_event",
+      "endpoints": "事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -616,7 +616,7 @@
       "name": "虚拟患者（二分类终点）",
       "method": "patients.binary",
       "version": "1.0.0",
-      "endpoints": "binary",
+      "endpoints": "二分类",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -630,7 +630,7 @@
       "name": "虚拟患者（连续终点）",
       "method": "patients.continuous",
       "version": "1.0.0",
-      "endpoints": "continuous",
+      "endpoints": "连续",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -644,7 +644,7 @@
       "name": "虚拟患者（纵向轨迹）",
       "method": "patients.longitudinal",
       "version": "1.0.0",
-      "endpoints": "continuous",
+      "endpoints": "连续",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -658,7 +658,7 @@
       "name": "虚拟患者（事件时间终点）",
       "method": "patients.time_to_event",
       "version": "1.0.0",
-      "endpoints": "time_to_event",
+      "endpoints": "事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",

@@ -157,7 +157,7 @@ export function VcrHomePage() {
 function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly VcrRecruitTodo[] }) {
   const need = todos[0] ?? null;
   return (
-    <li className="relative flex items-start gap-6 px-2 py-5 hover:bg-surface-1">
+    <li className="relative flex flex-col gap-3 px-2 py-5 hover:bg-surface-1 md:flex-row md:items-start md:gap-6">
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2">
           <Link
@@ -181,8 +181,9 @@ function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly Vc
           </p>
         )}
       </div>
-      <div className="flex w-72 shrink-0 flex-col items-end gap-2">
-        <VcrStepProgress steps={study.steps} />
+      {/* Below `md` the progress goes under the conclusion: a fixed 288 px column beside the text left a phone one character per line. */}
+      <div data-vcr-row-aside="" className="flex w-full flex-row flex-wrap items-center justify-between gap-2 md:w-72 md:shrink-0 md:flex-col md:items-end">
+        <VcrStepProgress steps={study.steps} className="justify-start md:justify-end" />
         <span className="text-caption tabular-nums text-text-3">{study.updatedAt}</span>
       </div>
     </li>
