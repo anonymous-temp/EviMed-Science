@@ -48,6 +48,20 @@ function useDebounced<T>(value: T, delay: number): T {
   return settled;
 }
 
+/** Whether the window is a phone's width: the chips then keep three inline and the rest under 「更多」, since a row of seven is cut off. */
+function useNarrow(): boolean {
+  const query = "(max-width: 639px)";
+  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia(query);
+    const update = () => setNarrow(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return narrow;
+}
+
 /**
  * 知识库: the documents a researcher hands EviMed to read — papers and guidelines, protocols, tables, a hospital's
  * rules, a web page, a note — which a conversation reads and cites. One list, in a scope: a project's, or the
@@ -80,6 +94,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const [kind, setKind] = useState<SourceKind | null>(null);
   const [query, setQuery] = useState("");
   const search = useDebounced(query.trim(), SEARCH_DEBOUNCE_MS);
+  const narrow = useNarrow();
   const [items, setItems] = useState<SourceRecord[] | null>(null);
   const [counts, setCounts] = useState<SourceCounts | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -331,7 +346,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
         </>}
       >
         {(kindsPresent >= 2 || kind !== null) && (
-          <FilterChips label="资料类型" className="mb-4" options={kindOptions} maxVisible={kindOptions.length} value={kind ?? "all"} onChange={(value) => setKind(value === "all" ? null : value)} />
+          <FilterChips label="资料类型" className="mb-4" options={kindOptions} maxVisible={narrow ? 3 : kindOptions.length} value={kind ?? "all"} onChange={(value) => setKind(value === "all" ? null : value)} />
         )}
         {error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
         {items === null ? <FilesSkeleton /> : items.length === 0 ? (error ? null

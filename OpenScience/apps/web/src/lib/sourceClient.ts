@@ -399,48 +399,13 @@ export function importOpenListSource(projectId: string, path: string) {
   return productRequest<{ source: SourceRecord; duplicate: boolean }>("/sources/openlist/import", "POST", { projectId, path });
 }
 
-/** A document in the personal library (`GET /api/library`): one entry per
- *  document however many projects hold it — `projects` are those projects and
- *  `sourceIds` their sources, which is how a project's source card knows its
- *  document is in the library. `detached` means no project holds it any more
- *  and the library keeps the last copy it made. */
-export type LibraryItemStatus = "ready" | "processing" | "failed" | "detached";
-export interface LibraryItem {
-  sourceId: string;
-  title: string;
-  authors?: string[];
-  doi?: string;
-  doiStatus?: "verified" | "unconfirmed";
-  kind: string;
-  format?: string;
-  addedAt: string;
-  projects: string[];
-  sourceIds: string[];
-  pageCount?: number;
-  status: LibraryItemStatus;
-  published?: { at: string; capsuleId: string; facts: number; methods: number };
-}
-export interface LibraryPublication {
-  sourceId: string;
-  capsuleId: string;
-  capsuleTitle: string;
-  generation: number;
-  facts: number;
-  methods: number;
-  added: number;
-  kept: number;
-  retired: number;
-}
-
-export function listLibrary() {
-  return productRequest<{ items: LibraryItem[]; maxItems: number }>("/library");
-}
+/**
+ * 「所有项目可用」: a document made available to every project of the account (the personal library, `/api/library`).
+ * Which documents are is the list's own answer (`display.shared`, and the shared scope), so the page reads no second list.
+ */
 export function addToLibrary(sourceId: string) {
-  return productRequest<LibraryItem>("/library", "POST", { sourceId });
+  return productRequest<{ sourceId: string; status: string }>("/library", "POST", { sourceId });
 }
 export function removeFromLibrary(sourceId: string) {
   return productRequest<{ sourceId: string; removed: true }>(`/library/${encodeURIComponent(sourceId)}`, "DELETE");
-}
-export function publishLibraryItem(sourceId: string) {
-  return productRequest<LibraryPublication>(`/library/${encodeURIComponent(sourceId)}/publish-to-capsule`, "POST");
 }
