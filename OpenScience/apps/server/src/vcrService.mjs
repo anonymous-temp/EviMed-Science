@@ -458,7 +458,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -526,7 +526,17 @@ export class VcrService {
    */
   async listStudies(user) {
     const now = this.now();
-    const studies = await this.store.listStudies(String(user.id));
+    // A draft somebody has spoken in is theirs to come back to even before its first definition names it: it is listed (as
+    // 「未命名研究」) and its project stays in the sidebar. Only a draft nobody has typed in is left out — that one is the click that
+    // was never followed by a word, and the sweep removes it. A ledger that cannot be read lists the draft: showing an empty row costs
+    // nothing, hiding a conversation loses it.
+    const drafts = await this.store.draftStudies(String(user.id));
+    const spokenIn = this.packages.draftSpokenIn;
+    const spoken = spokenIn
+      ? (await Promise.all(drafts.map(async (study) => ((await Promise.resolve(spokenIn(study)).catch(() => true)) ? study : null)))).filter(Boolean)
+      : [];
+    const spokenIds = new Set(spoken.map((study) => study.id));
+    const studies = [...spoken, ...await this.store.listStudies(String(user.id))];
     const groups = await Promise.all(studies.map(async (study) => {
       const [results, allResults, stale, jobs, assumptions, scenarios, comparators, reviews, roles, grid, decisions, exports] = await Promise.all([
         this.store.results(study.id),
@@ -560,8 +570,8 @@ export class VcrService {
     }
     const reviews = presentReviewNotes(groups.map((group) => ({ study: group.study, reviews: group.reviews })), now);
     if (reviews.length) home.reviews = reviews;
-    // The projects of the account's drafts: they are not on the list, and the sidebar leaves them out of its project list.
-    home.draftProjectIds = (await this.store.draftStudies(String(user.id))).map((study) => study.projectId);
+    // The projects of the drafts nobody has spoken in: they are not on the list, and the sidebar leaves them out of its project list.
+    home.draftProjectIds = drafts.filter((study) => !spokenIds.has(study.id)).map((study) => study.projectId);
     return home;
   }
 

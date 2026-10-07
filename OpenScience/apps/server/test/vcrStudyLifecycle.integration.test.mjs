@@ -98,6 +98,26 @@ test("「新建研究」 makes a draft called 未命名研究: not on the list, 
   assert.equal((await service.requireStudy(user, created.id)).id, created.id);
 });
 
+test("a draft somebody has spoken in is on the list and in the sidebar, so its conversation is never out of reach", options, async () => {
+  const user = { id: `u_${randomUUID().slice(0, 8)}` };
+  const quiet = await service.createStudy(user, {}, hooksFor("vcr-quiet", "prj_draft_quiet"));
+  const spoken = await service.createStudy(user, {}, hooksFor("vcr-spoken", "prj_draft_spoken"));
+  service.attach({ draftSpokenIn: async (/** @type {any} */ study) => study.id === spoken.id });
+  try {
+    const home = await service.listStudies(user);
+    assert.deepEqual(home.studies.map((/** @type {any} */ study) => study.id), [spoken.id], "the one with a message in it is listed, still unnamed");
+    assert.deepEqual(home.draftProjectIds, ["prj_draft_quiet"], "only the one nobody typed in is left out of the sidebar");
+    // A run ledger that cannot be read lists the draft rather than hide a conversation.
+    service.attach({ draftSpokenIn: async () => { throw new Error("ledger unavailable"); } });
+    const unreadable = await service.listStudies(user);
+    assert.equal(unreadable.studies.length, 2);
+    assert.deepEqual(unreadable.draftProjectIds, []);
+  } finally {
+    service.packages.draftSpokenIn = null;
+  }
+  assert.equal(quiet.status, "draft");
+});
+
 test("a caller that says what the study is gets an active study at once, named from it", options, async () => {
   const user = { id: `u_${randomUUID().slice(0, 8)}` };
   const created = await service.createStudy(user, { question: "糖尿病情景人群生成是否可行？" }, hooksFor("vcr-q"));

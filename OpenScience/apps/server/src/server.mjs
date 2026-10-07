@@ -4668,13 +4668,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     vcr.service.attach({ jobs: vcr.jobs, seal: vcr.seal });
     // A study nobody described (「新建研究」 made it before the first word) is deleted with its project an hour after it was made,
     // unless somebody spoke in it: the run ledger holds every message a person sent, so a project with any run is kept.
+    /** Whether anybody has sent a message in a draft's conversation: the run ledger holds every one. @param {any} study */
+    const draftSpokenIn = async (study) => {
+      const owner = await store.userById(study.userId);
+      if (!owner) return false;
+      return (await agentRuns.list(await store.requireProject(owner, study.projectId))).length > 0;
+    };
+    // The home list shows a draft somebody has spoken in, so the conversation is never out of reach.
+    vcr.service.attach({ draftSpokenIn });
     vcr.drafts = createVcrDraftSweeper({
       store: vcr.store, ttlMs: Number(config.vcrDraftTtlMinutes) > 0 ? Number(config.vcrDraftTtlMinutes) * 60_000 : undefined,
-      spokenIn: async (study) => {
-        const owner = await store.userById(study.userId);
-        if (!owner) return false;
-        return (await agentRuns.list(await store.requireProject(owner, study.projectId))).length > 0;
-      },
+      spokenIn: draftSpokenIn,
       remove: async (study) => {
         const owner = await store.userById(study.userId);
         if (!owner) {
