@@ -1025,6 +1025,58 @@ export const RUNTIME_ROOM_WAIT_CODES = Object.freeze(['runtime_capacity_full'])
 /** Every refusal of a runtime start for want of room, whoever's it is: the codes a worker defers on without spending an attempt. */
 export const RUNTIME_ROOM_REFUSAL_CODES = Object.freeze([...RUNTIME_ROOM_WAIT_CODES, 'runtime_limit_exceeded'])
 
+/** @typedef {'wait' | 'autopilot' | 'slots' | 'room' | 'preparing' | 'spend' | 'retry'} RuntimeStartRecovery */
+
+/**
+ * What a researcher is to do about a refused runtime start, by its cause (2026-10-07).
+ *
+ * The shell used to read the class of the code — `capped`, "a ceiling or a hold" — and offer the allowance page
+ * for every one of them. That class is right for a worker deciding whether to spend an attempt and wrong for a
+ * person: a runtime still being cleaned up, one that is stopping, the project's own scheduled research and a
+ * spending cap are four different things to do, and a reader whose project was held for a cleanup was sent to
+ * their usage page for hours, where nothing could lift it (impeccable audit B03). This closed table names what
+ * to do instead, by code and never by prose:
+ *
+ *  - `wait`       the platform is finishing something: the opening asks again by itself, then offers a retry
+ *                 and the results the project already holds (`runtime_cleanup_required`, `runtime_busy`)
+ *  - `autopilot`  the project's own scheduled research holds the runtime: a retry, and the page of scheduled tasks
+ *  - `slots`      the researcher's own ceiling of simultaneous conversations: end one, then retry
+ *  - `room`       every slot of the deployment is taken: a place in line (`RUNTIME_ROOM_WAIT_CODES`)
+ *  - `preparing`  the project's runtime settings are being applied: opened again by itself a few times
+ *  - `spend`      a spending ceiling or an empty allowance: no retry can lift it, the page that states it can
+ *  - `retry`      anything else, including a rate limit and a code this table has never heard of
+ *
+ * @type {Readonly<Record<string, RuntimeStartRecovery>>}
+ */
+export const RUNTIME_START_RECOVERY = Object.freeze({
+  runtime_cleanup_required: 'wait',
+  runtime_busy: 'wait',
+  runtime_reserved_for_autopilot: 'autopilot',
+  runtime_limit_exceeded: 'slots',
+  runtime_capacity_full: 'room',
+  plugin_apply_in_progress: 'preparing',
+  usage_budget_exceeded: 'spend',
+  runtime_spend_limit_reached: 'spend',
+  credits_exhausted: 'spend',
+  simulated_credits_exhausted: 'spend',
+  credits_daily_limit_reached: 'spend',
+  credits_weekly_limit_reached: 'spend',
+})
+
+/**
+ * The recovery for a refused runtime start. The code decides; the HTTP status
+ * only places a 402 that carries no code we know, which our model gateway
+ * answers for the spending limit and for nothing else.
+ * @param {unknown} code @param {number} [status]
+ * @returns {RuntimeStartRecovery}
+ */
+export function runtimeStartRecovery(code, status) {
+  const text = String(code ?? '')
+  if (Object.hasOwn(RUNTIME_START_RECOVERY, text)) return RUNTIME_START_RECOVERY[text]
+  if (/^credits_/.test(text) || status === 402) return 'spend'
+  return 'retry'
+}
+
 /**
  * Codes a person meets outside a run's verdict: a refusal before anything
  * starts, and the autopilot verification episode's own outcomes.
