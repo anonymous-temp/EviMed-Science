@@ -49,7 +49,7 @@ import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocu
 import { vcrObjectNode } from "./vcrStore.mjs";
 import {
   allResultsOf, countsView, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
-  text, cpuText, zhTime,
+  text, cpuText, zhTime, vcrFailureSentence, vcrPageSentence,
 } from "./vcrViewsKit.mjs";
 
 /** The lineage node a result carries. @param {Record<string, any>} result */
@@ -141,7 +141,8 @@ export function jobView(job, now) {
     cpuSecondsUsed: numeric(job.cpuSecondsUsed),
     seed: job.seed == null ? null : Number(job.seed),
     replicates: job.replicates == null ? null : Number(job.replicates),
-    error: error && (error.code || error.message) ? { code: text(error.code), message: text(error.message), partial: error.partial === true } : null,
+    // The record keeps what the engine said; the page says it in Chinese, or says that the part which finished is kept (`vcrFailureSentence`).
+    error: error && (error.code || error.message) ? { code: text(error.code), message: vcrFailureSentence(error), partial: error.partial === true } : null,
     updatedAt: zhTime(job.updatedAt ?? job.createdAt, now),
     cancelable: ["queued", "running", "awaiting_budget"].includes(String(job.state)),
     // Present only when there is something to say: a page that is told nothing shows nothing.
@@ -585,7 +586,8 @@ export function nodeLabel(node, { version: withVersion = true } = {}) {
 function publicSteps(steps) {
   return Object.fromEntries(Object.entries(steps ?? {}).map(([step, entry]) => {
     const { askedAt: _askedAt, ...rest } = object(entry);
-    return [step, rest];
+    // A step's note is a job's or a refusal's recorded sentence: the page reads its Chinese part and drops an engine's English one.
+    return [step, "note" in rest ? { ...rest, note: vcrPageSentence(rest.note) } : rest];
   }));
 }
 

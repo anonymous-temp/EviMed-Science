@@ -21,8 +21,8 @@ import {
   seriesView, criterionCodes, vcrLocatorText,
 } from "../src/vcrViewsTabs.mjs";
 import {
-  METHOD_LABELS, VCR_ROBUSTNESS_MEASURES, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote,
-  withReviewState, zhDate, zhTime,
+  METHOD_LABELS, VCR_FAILED_SENTENCE, VCR_ROBUSTNESS_MEASURES, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote,
+  vcrFailureSentence, vcrPageSentence, withReviewState, zhDate, zhTime,
 } from "../src/vcrViewsKit.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
 
@@ -605,6 +605,56 @@ test("the budget is CPU seconds — no money — and a job says what it would ne
   assert.deepEqual(failed.progress, { done: 3, total: 10 });
 });
 
+test("a failed job reaches the page in Chinese only: the engine's English note and its codes stay in the record", () => {
+  const cut = "这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。";
+  // The record (`vcrErrorFromIssues`): the domain's sentence, then the engine's own words in brackets.
+  const recorded = { code: "cpu_budget_exhausted", message: `${cut}（The CPU budget ran out before every replicate ran; the measures below use the replicates that finished.）`, partial: true };
+  const job = jobView({ id: "job_9", kind: "design_simulation", state: "failed", progress: { done: 18000, total: 20000 }, error: recorded }, NOW);
+  assert.equal(job.error?.message, cut);
+  assert.equal(job.error?.partial, true);
+  assert.doesNotMatch(job.error?.message ?? "", /CPU budget|ran out|replicate/);
+  // The engine's brackets may hold brackets of their own; a stopped engine's code is the engine's word too.
+  assert.equal(vcrPageSentence("这个情景没有效应。（The scenario has no effect (hazardRatio 1).）"), "这个情景没有效应。");
+  assert.equal(vcrPageSentence("计算进程异常退出，没有做成。（engine_crashed）"), "计算进程异常退出，没有做成。");
+  assert.equal(vcrPageSentence("需要 T2（完整治疗与纵向结局）。"), "需要 T2（完整治疗与纵向结局）。", "a bracket that holds Chinese is the sentence's own");
+  assert.equal(vcrPageSentence("样本量 (n = 60)，检验功效 90%（单侧）。（see log）"), "样本量 (n = 60)，检验功效 90%（单侧）。", "only the trailing English group goes");
+  // A sentence with no Chinese is the engine's alone: the page says what the code means, else that the finished part is kept.
+  assert.equal(vcrPageSentence("The CPU budget ran out."), null);
+  assert.equal(vcrPageSentence(null), null);
+  assert.equal(jobView({ id: "j", kind: "rmst", state: "failed", error: { code: "cpu_budget_exhausted", message: "The CPU budget ran out." } }, NOW).error?.message, cut);
+  assert.equal(jobView({ id: "j", kind: "rmst", state: "failed", error: { code: "an_engine_code_nobody_wrote_down", message: "Something broke inside R." } }, NOW).error?.message, VCR_FAILED_SENTENCE);
+  assert.equal(vcrFailureSentence({ code: "rule_column_unknown", message: "" }), "规则里用了数据表里没有的列；核对列名。");
+  assert.match(VCR_FAILED_SENTENCE, /已算出的部分保留/);
+  assert.equal(jobView({ id: "j", kind: "rmst", state: "running" }, NOW).error, null);
+});
+
+test("a step's recorded note is read in Chinese too: an English one is dropped from the page, a code in brackets with it", () => {
+  const study = { id: "std_1", name: "EV-201", question: "q", status: "active", dataTier: "T0", intendedUse: "exploratory", budget: {}, createdAt: "2026-09-28T01:00:00.000Z", updatedAt: "2026-09-28T01:00:00.000Z",
+    steps: { trial: { status: "failed", requested: true, askedAt: "2026-09-28T01:00:00.000Z", note: "这一步没有算成：配置里有引擎不读的字段（vcr_scenario_unknown_fields）" },
+      population: { status: "failed", requested: true, note: "Engine said no." }, comparator: { status: "none", requested: false, note: null } } };
+  const page = presentStudy({ ...emptyBundle(), study, now: NOW, roles: ["lead"] });
+  assert.equal(page.steps.trial.note, "这一步没有算成：配置里有引擎不读的字段");
+  assert.equal(page.steps.population.note, null);
+  assert.equal(page.steps.comparator.note, null);
+  assert.equal("askedAt" in page.steps.trial, false, "when a person last asked is the programme's bookkeeping");
+});
+
+test("a computation that stopped part-way is one Chinese sentence over the part that is there: how far, and why — never the engine's note", () => {
+  const partial = (/** @type {Record<string, any>} */ diagnostics) => ({ id: "res_1", version: 1, kind: "trial_scenario", conclusion: "limited", reviewState: "ai_set", counts: {}, executionId: null,
+    measures: [{ name: "power", value: 0.9, simulated: true, mcse: 0.004, source: "synthetic" }], diagnostics: { partial: true, ...diagnostics } });
+  const sentenceOf = (/** @type {Record<string, any>} */ diagnostics) => presentTrialTab({ ...emptyBundle(), results: [partial(diagnostics)], allResults: [partial(diagnostics)] }).partial;
+  const english = [{ code: "cpu_budget_exhausted", field: "cpuSecondsLimit", detail: "The CPU budget ran out before every replicate ran." }];
+  assert.deepEqual(sentenceOf({ replicatesCompleted: 18000, replicatesPlanned: 20000, issues: english }),
+    { sentence: "这次模拟算完了 18,000 / 20,000 次重复就到了计算时间上限，下面是已完成部分的结果。" });
+  assert.deepEqual(sentenceOf({ replicatesCompleted: 1200, replicatesPlanned: 2000, canceled: true }),
+    { sentence: "这次模拟算完了 1,200 / 2,000 次重复就被取消了，下面是已完成部分的结果。" });
+  assert.deepEqual(sentenceOf({ issues: english }), { sentence: "这次模拟只算出了一部分就到了计算时间上限，下面是已完成部分的结果。" });
+  assert.deepEqual(sentenceOf({}), { sentence: "这次模拟只算出了一部分就停下了，下面是已完成部分的结果。" });
+  // Said once: no second box, no “保留 / 未完成” pair, no English.
+  assert.doesNotMatch(JSON.stringify(sentenceOf({ replicatesCompleted: 18000, replicatesPlanned: 20000, issues: english })), /CPU|budget|检查点|未完成/);
+  assert.equal(presentTrialTab({ ...emptyBundle(), results: [{ ...partial({}), diagnostics: {} }], allResults: [] }).partial, null, "a result that finished has no partial note");
+});
+
 // --- charts: a series is a series or nothing --------------------------------------------------------------------
 
 test("a series is drawn only from a well-formed summary; anything else is dropped rather than repaired", () => {
@@ -1072,8 +1122,10 @@ test("C2-14 when the latest comparator version has no result, the page keeps the
     jobMarks: [{ key: `job:${node}`, state: "failed", detail: { node, error: "vcr_scenario_unknown_fields", message: "配置里有引擎不读的字段：foo" } }] };
   const tab = presentComparatorTab(bundle);
   assert.equal(tab.rmst.value.value, 1.5, "the last good result's numbers are still on the page");
-  assert.match(tab.partial.done, /上一版对照设计（v1）/);
-  assert.match(tab.partial.missing, /最新一版（v2）没有算成：配置里有引擎不读的字段：foo/);
+  // One sentence, in Chinese, with no version numbers: these are the previous design's numbers, and why the latest has none.
+  assert.deepEqual(Object.keys(tab.partial), ["sentence"]);
+  assert.equal(tab.partial.sentence, "最新一版对照设计没有算成：配置里有引擎不读的字段：foo。这里显示的是上一版的结果，不是最新一版的。");
+  assert.doesNotMatch(tab.partial.sentence, /v\d/);
   assert.equal(tab.routes.find((route) => route.route === "external_control").selected, true);
   // A route with only a failed version and nothing before it has nothing to keep.
   const none = presentComparatorTab({ ...bundle, comparators: [latest], results: [], allResults: [] });

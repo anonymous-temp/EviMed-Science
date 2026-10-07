@@ -38,7 +38,7 @@ import {
   VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
-  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_SYNTHETIC_USE_LABELS_ZH, vcrAssessmentIssues, vcrAssessmentRows,
+  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_SYNTHETIC_USE_LABELS_ZH, knownErrorCodeMessage, vcrAssessmentIssues, vcrAssessmentRows,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -51,6 +51,7 @@ import {
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
   personName, plainText, PARAMETER_LABELS, METHOD_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
+  vcrFailureSentence, vcrPageSentence,
 } from "./vcrViewsKit.mjs";
 
 /** A plain value (a number or `{ value, unit, … }` a row stored) as a page value. @param {unknown} raw @param {Record<string, any>} defaults */
@@ -111,20 +112,24 @@ export function seriesView(raw) {
 const seriesList = (raw) => list(raw).map(seriesView).filter((series) => series !== null);
 
 /**
- * The step's own failure, when its last job failed: the reader is told the step
- * did not finish, and what was kept.
- * @param {Record<string, any>} bundle @param {readonly string[]} kinds
+ * What a result that stopped before it was finished says, as the one sentence its tab prints over the part that is there.
+ *
+ * It names the computation (`what`: 「这次模拟」), how far it got when the engine counted replicates, and why it stopped — the spent
+ * compute time, a cancel, or no stated reason — in words of ours: the engine's own note (an English sentence in `diagnostics.issues`) is
+ * never passed through, it stays in the record. What was kept is said by the tab showing it, so the sentence ends by pointing there.
+ * @param {Record<string, any>} bundle @param {readonly string[]} kinds @param {string} what 「这次模拟」 / 「这次生成」 / 「这次分析」
+ * @returns {{ sentence: string } | null}
  */
-function partialOf(bundle, kinds) {
+function partialOf(bundle, kinds, what) {
   const result = bundle.results.find((/** @type {any} */ entry) => kinds.includes(entry.kind) && object(entry.diagnostics).partial === true);
   if (!result) return null;
   const diagnostics = object(result.diagnostics);
   const done = numeric(diagnostics.replicatesCompleted);
   const planned = numeric(diagnostics.replicatesPlanned);
-  return {
-    done: done !== null && planned !== null ? `已算完 ${done.toLocaleString("en-US")} / ${planned.toLocaleString("en-US")} 次重复的结果` : "已算出的部分结果",
-    missing: "其余重复没有做完，可以从检查点续跑",
-  };
+  const spent = list(diagnostics.issues).some((/** @type {any} */ issue) => object(issue).code === "cpu_budget_exhausted");
+  const stopped = diagnostics.canceled === true ? "被取消了" : spent ? "到了计算时间上限" : "停下了";
+  const reached = done !== null && planned !== null ? `算完了 ${done.toLocaleString("en-US")} / ${planned.toLocaleString("en-US")} 次重复` : "只算出了一部分";
+  return { sentence: `${what}${reached}就${stopped}，下面是已完成部分的结果。` };
 }
 
 // --- 人群 ---------------------------------------------------------------------------------------------------------------------
@@ -374,7 +379,7 @@ export function presentPopulationTab(bundle) {
       ? `按${protocol ? `方案 v${protocol.version}` : "当前方案"}，${total.toLocaleString("en-US")} 人中 ${outcome.eligible.toLocaleString("en-US")} 人全部满足、${outcome.insufficient.toLocaleString("en-US")} 人至少 1 条无法判断。`
       : null,
     stale: staleNote(marks),
-    partial: partialOf(bundle, ["population"]),
+    partial: partialOf(bundle, ["population"], "这次生成"),
     ...(bundle.knowledge ? { knowledge: bundle.knowledge } : {}),
   };
 }
@@ -510,7 +515,7 @@ export function presentPatientsTab(bundle) {
     } : null,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier, scope: current.name || null }) : null,
     stale: staleNote(marks),
-    partial: partialOf(bundle, ["patient_set"]),
+    partial: partialOf(bundle, ["patient_set"], "这次生成"),
     sets: patientSets.map((/** @type {any} */ set) => ({ id: set.id, label: `虚拟患者集 v${set.version}`, stale: Boolean(markFor(stale, vcrObjectNode("patient_set", set))) })),
   };
 }
@@ -701,10 +706,10 @@ export function presentComparatorTab(bundle) {
     } : null,
     at: shown ? zhTime(shown.createdAt, now) : null,
     stale: staleNote(marks),
+    // One sentence, and no version numbers: the page says that these are the previous design's numbers, not which version that was.
     partial: lastGood ? {
-      done: `这里显示的是上一版对照设计（v${lastGood.version}）的结果`,
-      missing: `最新一版（v${current?.version}）没有算成${failure ? `：${failure}` : ""}；上一版的数字保留在这里，不是最新一版的结果`,
-    } : partialOf(bundle, ["comparator"]),
+      sentence: `最新一版对照设计没有算成${failure ? `：${failure.replace(/[。.]$/u, "")}` : ""}。这里显示的是上一版的结果，不是最新一版的。`,
+    } : partialOf(bundle, ["comparator"], "这次分析"),
   };
 }
 
@@ -717,7 +722,8 @@ export function presentComparatorTab(bundle) {
 function failureOfNode(bundle, node) {
   const mark = list(bundle.jobMarks).map(object).find((entry) => entry.state === "failed" && object(entry.detail).node === node);
   const job = list(bundle.jobs).map(object).find((entry) => entry.state === "failed" && object(entry.checkpoint).node === node);
-  const said = text(object(mark?.detail).message) ?? text(object(job?.error).message);
+  const said = vcrPageSentence(object(mark?.detail).message) ?? knownErrorCodeMessage(String(object(mark?.detail).error ?? ""))
+    ?? (job?.error ? vcrFailureSentence(job.error) : null);
   // Long enough for a refusal that names the keys of the place it was refused (`readsHint` in the orchestrator): that list is what
   // a run repairs from, and the same words are what the researcher's page shows.
   return said ? said.slice(0, 400) : null;
@@ -880,7 +886,7 @@ export function presentTrialTab(bundle) {
     milestones,
     counts: headlineRow ? countsView(headlineRow._result?.counts, { tier: study.dataTier, scope: `方案 ${headlineRow.code}` }) : null,
     stale: staleNote(marks),
-    partial: partialOf(bundle, ["trial_scenario", "design_grid"]),
+    partial: partialOf(bundle, ["trial_scenario", "design_grid"], "这次模拟"),
   };
 }
 
