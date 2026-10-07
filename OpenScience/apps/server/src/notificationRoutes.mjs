@@ -34,6 +34,7 @@ export function createNotificationRoutes({ store, service, maxJsonBytes }) {
     if (parts.length === 0 && method === "GET") {
       return reply(await service.list(user.id, {
         noticeType: url.searchParams.get("noticeType"),
+        severity: url.searchParams.get("severity"),
         unreadOnly: booleanParam(url, "unread"),
         unresolvedOnly: booleanParam(url, "unresolved"),
         limit: Number(url.searchParams.get("limit") ?? 50),

@@ -25,6 +25,7 @@ import {
 } from "@/lib/inboxClient";
 import { inboxWhen, orderInbox, severityOf } from "@/lib/inboxGroups";
 import { splitNoticeBody } from "@/lib/qualityNotices";
+import { toast } from "@/lib/toast";
 import { useOperator } from "@/lib/useOperator";
 import { cn } from "@/lib/cn";
 
@@ -41,7 +42,10 @@ const WAITING: Record<string, string> = { question: "待回答", review: "待核
  * memory goes there, and reading it marks it read; one that names nothing
  * opens in place. 「标为已读」 appears on hover, a decision the notice asks
  * for is in its 「⋯」. Unread clinical-safety findings stay above everything,
- * the one class allowed to interrupt.
+ * the one class allowed to interrupt — fetched by name, not cut out of the
+ * loaded page: the list is ordered by notice type, so a safety notice behind
+ * fifty briefings is on a page nobody opens, and the section's number is the
+ * bell's. 「全部已读」 leaves them unread; each is opened.
  *
  * What it no longer is (2026-09-23 plan §5.8): a card with two buttons per
  * notice, a segmented control, day headings, a subtitle about when it
@@ -55,6 +59,9 @@ export function InboxPage() {
   const [items, setItems] = useState<InboxItem[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [unreadTotal, setUnreadTotal] = useState<number | null>(null);
+  /** The unread clinical-safety findings as the server counts them; null until the page that asks for them answers (or when it cannot). */
+  const [safety, setSafety] = useState<{ items: InboxItem[]; cursor: string | null; total: number } | null>(null);
+  const [loadingSafety, setLoadingSafety] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -70,12 +77,17 @@ export function InboxPage() {
     setBusyId(null);
     mutationGeneration.current++;
     setError(null);
+    // The pinned class is its own request: a failure there leaves the loaded page to pin what it holds, as before.
+    const pinned = listInbox({ unread: true, severity: "safety" }).catch(() => null);
     try {
       const page = await listInbox({ unread: filter === "unread" });
+      const found = await pinned;
       if (current !== generation.current) return;
       setItems(page.items);
       setCursor(page.nextCursor);
       setUnreadTotal(typeof page.unreadTotal === "number" ? page.unreadTotal : null);
+      setSafety(found && typeof found.unreadTotal === "number"
+        ? { items: found.items, cursor: found.nextCursor, total: found.unreadTotal } : null);
     } catch (caught) {
       if (current === generation.current) { setItems([]); setError(inboxErrorMessage(caught)); }
     }
@@ -93,6 +105,15 @@ export function InboxPage() {
       : existing?.map((candidate) => candidate.id === saved.id ? saved : candidate) ?? []);
   };
 
+  /** An unread item became read: the page's count and, for a safety finding, the pinned section's, drop by one. */
+  const noteRead = (saved: InboxItem) => {
+    setUnreadTotal((count) => (count == null ? count : Math.max(0, count - 1)));
+    if (severityOf(saved) === "safety") {
+      setSafety((existing) => existing && { ...existing, items: existing.items.filter((candidate) => candidate.id !== saved.id), total: Math.max(0, existing.total - 1) });
+    }
+    announceInboxChanged();
+  };
+
   const update = async (item: InboxItem, operation: () => Promise<InboxItem>) => {
     if (busyId) return;
     const current = generation.current;
@@ -105,10 +126,7 @@ export function InboxPage() {
       const saved = await operation();
       if (current !== generation.current || currentFilter !== filter) return;
       applySaved(saved, currentFilter);
-      if (wasUnread && saved.readAt) {
-        setUnreadTotal((count) => (count == null ? count : Math.max(0, count - 1)));
-        announceInboxChanged();
-      }
+      if (wasUnread && saved.readAt) noteRead(saved);
     } catch (caught) {
       if (current === generation.current && mutation === mutationGeneration.current) setError(inboxErrorMessage(caught));
     } finally {
@@ -126,8 +144,7 @@ export function InboxPage() {
     void markInboxRead(item.id, item.revision)
       .then((saved) => {
         applySaved(saved, filter);
-        setUnreadTotal((count) => (count == null ? count : Math.max(0, count - 1)));
-        announceInboxChanged();
+        noteRead(saved);
       })
       .catch(() => undefined);
   };
@@ -136,8 +153,11 @@ export function InboxPage() {
     setMarkingAll(true);
     setError(null);
     try {
-      await markAllInboxRead();
+      const result = await markAllInboxRead();
       announceInboxChanged();
+      // Safety findings are not read by a sweep: the sentence says so, and where they are.
+      const kept = result?.safetyKept ?? 0;
+      toast.success(kept > 0 ? `已读 ${result?.updated ?? 0} 条；涉及临床安全的 ${kept} 条请逐条查看。` : `已读 ${result?.updated ?? 0} 条。`);
       await reload();
     } catch (caught) {
       setError(inboxErrorMessage(caught));
@@ -168,8 +188,32 @@ export function InboxPage() {
     }
   };
 
-  const order = items ? orderInbox(items) : null;
-  const hasUnread = unreadTotal != null ? unreadTotal > 0 : (items ?? []).some((item) => !item.readAt);
+  const loadMoreSafety = async () => {
+    if (!safety?.cursor || loadingSafety) return;
+    const requested = safety.cursor;
+    const current = generation.current;
+    setLoadingSafety(true);
+    setError(null);
+    try {
+      const page = await listInbox({ unread: true, severity: "safety", cursor: requested });
+      if (current !== generation.current) return;
+      setSafety((existing) => {
+        if (!existing || existing.cursor !== requested) return existing;
+        const known = new Set(existing.items.map((item) => item.id));
+        return { ...existing, items: [...existing.items, ...page.items.filter((item) => !known.has(item.id))], cursor: page.nextCursor };
+      });
+    } catch (caught) {
+      if (current === generation.current) setError(inboxErrorMessage(caught));
+    } finally {
+      if (current === generation.current) setLoadingSafety(false);
+    }
+  };
+
+  const order = items ? orderInbox(items, safety?.items) : null;
+  // The heading says what the bell says; the loaded rows can only be fewer than the count, never more.
+  const safetyUnread = order ? Math.max(safety?.total ?? 0, order.pinned.length) : 0;
+  // 「全部已读」 leaves the safety findings unread, so it is only offered while something else is.
+  const hasUnread = unreadTotal != null ? unreadTotal - safetyUnread > 0 : (items ?? []).some((item) => !item.readAt && severityOf(item) !== "safety");
 
   const row = (item: InboxItem) => (
     <InboxRow
@@ -206,15 +250,18 @@ export function InboxPage() {
       {error && <LoadError className="mt-4" message={error} onRetry={() => void reload()} />}
       <div className="mt-4">
         {items === null || order === null ? <RunsSkeleton filter={false} />
-          : items.length === 0 ? (!error && <EmptyState icon={Bell} title={filter === "unread" ? "没有未读消息" : "收件箱为空"} />)
+          : items.length === 0 && order.pinned.length === 0 ? (!error && <EmptyState icon={Bell} title={filter === "unread" ? "没有未读消息" : "收件箱为空"} />)
             : (
               <>
                 {order.pinned.length > 0 && (
                   <section aria-labelledby="inbox-pinned" className="mb-4">
                     <h2 id="inbox-pinned" className="mb-1 flex items-center gap-1.5 px-2 text-caption font-medium text-danger-strong">
-                      <ShieldAlert size={16} aria-hidden="true" />涉及临床安全 · 未读 {order.pinned.length} 条
+                      <ShieldAlert size={16} aria-hidden="true" />涉及临床安全 · 未读 {safetyUnread} 条
                     </h2>
                     <List label="涉及临床安全">{order.pinned.map(row)}</List>
+                    {safety?.cursor && (
+                      <Button variant="text" className="mt-1" loading={loadingSafety} onClick={() => void loadMoreSafety()}>显示更多涉及临床安全的消息</Button>
+                    )}
                   </section>
                 )}
                 {order.rest.length > 0 && <List label="消息">{order.rest.map(row)}</List>}
@@ -285,7 +332,8 @@ function InboxRow({ item, operator, busy, open, onToggle, onRead, onResolve, onO
           className={cn("mt-2 h-1.5 w-1.5 self-start rounded-full", unread && (safety ? "bg-danger" : "bg-accent"))}
         />
       )}
-      title={<>{item.title}{unread && <span className="sr-only">（未读）</span>}</>}
+      // Two lines of title on a phone, then an ellipsis; an open row shows the whole of it.
+      title={<span className={cn("block", !(open && !href) && "line-clamp-2")}>{item.title}{unread && <span className="sr-only">（未读）</span>}</span>}
       to={href ?? undefined}
       onOpen={href ? () => onOpened(item) : onToggle}
       expanded={href ? undefined : open}

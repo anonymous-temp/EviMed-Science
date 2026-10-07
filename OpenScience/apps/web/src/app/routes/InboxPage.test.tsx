@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { InboxPage } from "./InboxPage";
 import * as api from "@/lib/inboxClient";
+import { useToastStore } from "@/lib/toast";
 
 const operator = vi.hoisted(() => ({ value: false }));
 vi.mock("@/lib/inboxClient");
@@ -29,6 +30,17 @@ function runNotice(over: Partial<api.InboxItem>): api.InboxItem {
   };
 }
 
+/**
+ * The list route as the page sees it: the main page, and — for the request that names `severity: "safety"` — the unread
+ * clinical-safety findings with their own total, found where the server would find them (pages the main one never reaches).
+ */
+function serve(main: api.InboxPageResult, safety?: api.InboxPageResult) {
+  const unreadSafety = main.items.filter((item) => !item.readAt && item.severity === "safety");
+  vi.mocked(api.listInbox).mockImplementation(async (args) => args?.severity === "safety"
+    ? (safety ?? { items: unreadSafety, nextCursor: null, unreadTotal: unreadSafety.length })
+    : main);
+}
+
 function Where() {
   const location = useLocation();
   return <p data-testid="where">{location.pathname}{location.search}</p>;
@@ -48,7 +60,8 @@ function open() {
 beforeEach(() => {
   vi.resetAllMocks();
   operator.value = false;
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [review], nextCursor: null });
+  serve({ items: [review], nextCursor: null });
+  vi.mocked(api.markAllInboxRead).mockResolvedValue({ updated: 0, safetyKept: 0 });
   vi.mocked(api.inboxErrorMessage).mockImplementation(() => "操作未完成，请重试。");
 });
 
@@ -67,7 +80,7 @@ it("sits in the one page column with a one-line header and no subtitle", async (
 });
 
 it("filters with two quiet chips, 全部 and 未读 with its count, and no segmented control", async () => {
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 2 });
+  serve({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 2 });
   open();
   expect(await screen.findByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("button", { name: /^未读\s*2$/ })).toHaveAttribute("aria-pressed", "false");
@@ -77,7 +90,7 @@ it("filters with two quiet chips, 全部 and 未读 with its count, and no segme
 });
 
 it("draws a notice as a row: unread dot, title, one line of what happened, and the time", async () => {
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice({ id: "row", createdAt: yesterdayNoon })], nextCursor: null });
+  serve({ items: [runNotice({ id: "row", createdAt: yesterdayNoon })], nextCursor: null });
   open();
   const link = await screen.findByRole("link", { name: /中医药治疗儿童疳证的 Meta 分析检索 已完成/ });
   const row = link.closest("li")!;
@@ -91,7 +104,7 @@ it("draws a notice as a row: unread dot, title, one line of what happened, and t
 
 it("opens the whole row: it goes where the notice points and marks it read on the way", async () => {
   const notice = runNotice({ id: "follow" });
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null, unreadTotal: 1 });
+  serve({ items: [notice], nextCursor: null, unreadTotal: 1 });
   vi.mocked(api.markInboxRead).mockResolvedValue({ ...notice, readAt: at(0), revision: 2 });
   open();
   const link = await screen.findByRole("link", { name: /已完成/ });
@@ -111,7 +124,7 @@ it("opens a 虚拟临床研究 notice on its study's tab, and nothing that is no
     ...review, id, noticeType: "notify", title, body: "", severity: "attention",
     source: { type: "vcr", id: sourceId }, actions: [{ id: "open", label: "打开", style: "primary" }], readAt: at(1),
   });
-  vi.mocked(api.listInbox).mockResolvedValue({
+  serve({
     items: [
       notice("vcr", "EV-201：P-0192 等 1 人可以联系", "std_1/matching"),
       notice("vcr-study", "EV-201：研究包完成", "std_1"),
@@ -130,7 +143,7 @@ it("opens a 虚拟临床研究 notice on its study's tab, and nothing that is no
 });
 
 it("opens a digest, the frontier daily and a memory where each lives, without deciding anything", async () => {
-  vi.mocked(api.listInbox).mockResolvedValue({
+  serve({
     items: [
       { ...review, id: "digest", title: "主动科研简报：GLP-1", source: { type: "digest", id: "digest-owned" },
         actions: [{ id: "open", label: "查看简报", style: "neutral" }], readAt: at(1), resolvedAt: at(1) },
@@ -161,7 +174,7 @@ it("opens a digest, the frontier daily and a memory where each lives, without de
 
 it("offers 「标为已读」 on the row, including one that carries actions", async () => {
   const notice = runNotice({ id: "with-action" });
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null, unreadTotal: 1 });
+  serve({ items: [notice], nextCursor: null, unreadTotal: 1 });
   vi.mocked(api.markInboxRead).mockResolvedValue({ ...notice, readAt: at(0), revision: 2 });
   open();
   const mark = await screen.findByRole("button", { name: "标为已读" });
@@ -175,7 +188,7 @@ it("offers 「标为已读」 on the row, including one that carries actions", a
 });
 
 it("keeps a failed 「标为已读」 retryable and says why", async () => {
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice({ id: "notice-one" })], nextCursor: null });
+  serve({ items: [runNotice({ id: "notice-one" })], nextCursor: null });
   vi.mocked(api.markInboxRead).mockRejectedValue(new Error("network"));
   open();
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
@@ -203,7 +216,7 @@ it("opens a notice that points nowhere in place, whole, and reads it", async () 
     body: "绑定的飞书身份：张三。\n如果不是你本人扫的码，点「解除绑定」。",
     source: { type: "system", id: "feishu-binding:1" }, actions: [{ id: "feishu-unbind", label: "解除绑定", style: "danger" }],
   };
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null });
+  serve({ items: [notice], nextCursor: null });
   vi.mocked(api.markInboxRead).mockResolvedValue({ ...notice, readAt: at(0), revision: 2 });
   open();
   const title = await screen.findByRole("button", { name: /飞书机器人已绑定到你的账号/ });
@@ -216,7 +229,7 @@ it("opens a notice that points nowhere in place, whole, and reads it", async () 
 });
 
 it("empties the view with one sentence and no button", async () => {
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [], nextCursor: null });
+  serve({ items: [], nextCursor: null });
   open();
   expect(await screen.findByText("收件箱为空")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "未读" }));
@@ -226,7 +239,12 @@ it("empties the view with one sentence and no button", async () => {
 });
 
 it("says so, with a retry, when the list cannot be read, rather than showing an empty inbox", async () => {
-  vi.mocked(api.listInbox).mockRejectedValueOnce(new Error("down")).mockResolvedValue({ items: [review], nextCursor: null });
+  let calls = 0;
+  vi.mocked(api.listInbox).mockImplementation(async (args) => {
+    if (args?.severity === "safety") return { items: [], nextCursor: null, unreadTotal: 0 };
+    if (calls++ === 0) throw new Error("down");
+    return { items: [review], nextCursor: null };
+  });
   open();
   expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
   expect(screen.queryByText("收件箱为空")).not.toBeInTheDocument();
@@ -246,7 +264,8 @@ it("discards a late page after changing filters and prevents duplicate page requ
   await userEvent.click(more);
   expect(more).toBeDisabled();
   await userEvent.click(more);
-  expect(api.listInbox).toHaveBeenCalledTimes(2);
+  // The page, the unread safety findings it pins, and the one next page — not two.
+  expect(api.listInbox).toHaveBeenCalledTimes(3);
   await userEvent.click(screen.getByRole("button", { name: "未读" }));
   expect(await screen.findByText("没有未读消息")).toBeInTheDocument();
   finishPage({ items: [{ ...review, id: "late-review", title: "旧筛选消息" }], nextCursor: null });
@@ -255,7 +274,7 @@ it("discards a late page after changing filters and prevents duplicate page requ
 
 it("removes a read item from the unread view and ignores a late mutation after reload", async () => {
   const notice = runNotice({ id: "read-one", title: "研究完成" });
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null });
+  serve({ items: [notice], nextCursor: null });
   let finishRead!: (value: api.InboxItem) => void;
   vi.mocked(api.markInboxRead).mockImplementation(() => new Promise((resolve) => { finishRead = resolve; }));
   open();
@@ -273,7 +292,7 @@ it("removes a read item from the unread view and ignores a late mutation after r
 
 it("does not leak an old mutation failure or busy state into a reloaded filter", async () => {
   const notice = runNotice({ id: "stale-read", title: "旧请求" });
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null });
+  serve({ items: [notice], nextCursor: null });
   let failRead!: (error: Error) => void;
   vi.mocked(api.markInboxRead).mockImplementation(() => new Promise((_resolve, reject) => { failRead = reject; }));
   open();
@@ -287,11 +306,11 @@ it("does not leak an old mutation failure or busy state into a reloaded filter",
 });
 
 it("reads the whole inbox in one request", async () => {
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 7 });
+  serve({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 7 });
   vi.mocked(api.markAllInboxRead).mockResolvedValue({ updated: 7 });
   open();
   expect(await screen.findByRole("button", { name: /^未读\s*7$/ })).toBeInTheDocument();
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice({ id: "a", readAt: at(0) })], nextCursor: null, unreadTotal: 0 });
+  serve({ items: [runNotice({ id: "a", readAt: at(0) })], nextCursor: null, unreadTotal: 0 });
   await userEvent.click(screen.getByRole("button", { name: "全部已读" }));
   await waitFor(() => expect(api.markAllInboxRead).toHaveBeenCalledTimes(1));
   expect(api.markInboxRead).not.toHaveBeenCalled();
@@ -305,7 +324,7 @@ it("reads the whole inbox in one request", async () => {
 // silent any more, a proactive result arrives as its digest, and whatever the
 // list route returns is a row — no grouping field is read.
 it("renders every item as a row: no automated-run fold, no merged completions", async () => {
-  vi.mocked(api.listInbox).mockResolvedValue({
+  serve({
     items: [
       { ...review, id: "digest", title: "主动科研简报：GLP-1 受体激动剂在心衰中的新证据", body: "3 条重点发现，1 条待验证线索。",
         source: { type: "digest", id: "digest-1" }, actions: [{ id: "open", label: "查看简报", style: "neutral" }], readAt: at(0) },
@@ -325,7 +344,7 @@ it("renders every item as a row: no automated-run fold, no merged completions", 
 
 // C1: SAFETY is the only class allowed to interrupt.
 it("keeps an unread clinical-safety finding above everything, and only it", async () => {
-  vi.mocked(api.listInbox).mockResolvedValue({
+  serve({
     items: [
       { ...review, id: "later", title: "今天的审阅", createdAt: at(0) },
       runNotice({ id: "safety", title: "〈研究〉：有 1 处用药安全提示", severity: "safety", createdAt: yesterdayNoon }),
@@ -340,6 +359,73 @@ it("keeps an unread clinical-safety finding above everything, and only it", asyn
   expect(pinned.compareDocumentPosition(screen.getByText("今天的审阅")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
+// The list route orders by notice type, so fifty briefings come before a safety notice written as a plain notify: the
+// pinned section is asked for by name, not cut out of the page that happens to be loaded (2026-10-07, 27 unread, 2 shown).
+it("finds an unread safety finding that is not on the loaded page, and counts what the bell counts", async () => {
+  const hidden = (id: string, title: string) => runNotice({ id, title, severity: "safety", createdAt: yesterdayNoon });
+  serve(
+    { items: [{ ...review, id: "briefing", title: "主动科研简报：GLP-1" }], nextCursor: "page-2", unreadTotal: 306 },
+    { items: [hidden("s1", "Kimi 把玛仕度肽说成口服药"), hidden("s2", "豆包讲错玛仕度肽")], nextCursor: "safety-2", unreadTotal: 27 },
+  );
+  open();
+  const heading = await screen.findByRole("heading", { name: "涉及临床安全 · 未读 27 条" });
+  const section = heading.closest("section")!;
+  expect(within(section).getByText("Kimi 把玛仕度肽说成口服药")).toBeInTheDocument();
+  expect(within(section).getByText("豆包讲错玛仕度肽")).toBeInTheDocument();
+  expect(api.listInbox).toHaveBeenCalledWith({ unread: true, severity: "safety" });
+  // Not drawn twice: nothing in the ordinary list repeats a pinned row.
+  expect(within(screen.getByRole("list", { name: "消息" })).queryByText("Kimi 把玛仕度肽说成口服药")).not.toBeInTheDocument();
+  // The rest of the class is one click away, in its own section.
+  serve(
+    { items: [{ ...review, id: "briefing", title: "主动科研简报：GLP-1" }], nextCursor: "page-2", unreadTotal: 306 },
+    { items: [hidden("s3", "Qwen 讲错替尔泊肽")], nextCursor: null, unreadTotal: 27 },
+  );
+  await userEvent.click(within(section).getByRole("button", { name: "显示更多涉及临床安全的消息" }));
+  expect(await within(section).findByText("Qwen 讲错替尔泊肽")).toBeInTheDocument();
+  expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true, severity: "safety", cursor: "safety-2" });
+  expect(within(section).queryByRole("button", { name: "显示更多涉及临床安全的消息" })).not.toBeInTheDocument();
+});
+
+it("lowers the section's number when a pinned finding is read, and shows no section once none is unread", async () => {
+  const finding = runNotice({ id: "s1", title: "Kimi 把玛仕度肽说成口服药", severity: "safety", createdAt: yesterdayNoon, revision: 3 });
+  serve({ items: [], nextCursor: null, unreadTotal: 1 }, { items: [finding], nextCursor: null, unreadTotal: 1 });
+  vi.mocked(api.markInboxRead).mockResolvedValue({ ...finding, readAt: at(0), revision: 4 });
+  open();
+  const heading = await screen.findByRole("heading", { name: "涉及临床安全 · 未读 1 条" });
+  await userEvent.click(within(heading.closest("section")!).getByRole("button", { name: "标为已读" }));
+  await waitFor(() => expect(screen.queryByRole("heading", { name: /涉及临床安全/ })).not.toBeInTheDocument());
+  expect(api.announceInboxChanged).toHaveBeenCalled();
+});
+
+// 全部已读 must not swallow the class the pin exists for: the server keeps them unread, and the page says so.
+it("says how many safety findings 「全部已读」 left to open one by one, and offers it only while something else is unread", async () => {
+  const finding = runNotice({ id: "s1", title: "Kimi 把玛仕度肽说成口服药", severity: "safety", createdAt: yesterdayNoon });
+  serve({ items: [runNotice({ id: "a" }), finding], nextCursor: null, unreadTotal: 5 }, { items: [finding], nextCursor: null, unreadTotal: 2 });
+  vi.mocked(api.markAllInboxRead).mockResolvedValue({ updated: 3, safetyKept: 2 });
+  open();
+  await screen.findByRole("heading", { name: "涉及临床安全 · 未读 2 条" });
+  // 5 unread, 2 of them safety: 3 can be swept, so the button is live.
+  expect(screen.getByRole("button", { name: "全部已读" })).toBeEnabled();
+  serve({ items: [runNotice({ id: "a", readAt: at(0) }), finding], nextCursor: null, unreadTotal: 2 }, { items: [finding], nextCursor: null, unreadTotal: 2 });
+  await userEvent.click(screen.getByRole("button", { name: "全部已读" }));
+  await waitFor(() => expect(useToastStore.getState().toasts.map((toast) => toast.message)).toContain("已读 3 条；涉及临床安全的 2 条请逐条查看。"));
+  expect(await screen.findByRole("heading", { name: "涉及临床安全 · 未读 2 条" })).toBeInTheDocument();
+  // Only safety findings are unread now: nothing is left for a sweep.
+  expect(screen.getByRole("button", { name: "全部已读" })).toBeDisabled();
+});
+
+it("keeps a long title to two lines in the row, and whole once the row is open", async () => {
+  const long = "Kimi 把玛仕度肽说成每天注射一次的口服药并且给出了没有任何依据的剂量建议和适应证扩展说法";
+  const notice = { ...review, id: "long", noticeType: "notify" as const, title: long, body: "点开看这条回答和依据。\n依据：“每天一次”", actions: [] };
+  serve({ items: [notice], nextCursor: null });
+  vi.mocked(api.markInboxRead).mockResolvedValue({ ...notice, readAt: at(0), revision: 2 });
+  open();
+  const title = await screen.findByRole("button", { name: new RegExp(long.slice(0, 12)) });
+  expect(title.querySelector(".line-clamp-2")).not.toBeNull();
+  await userEvent.click(title);
+  expect(title.querySelector(".line-clamp-2")).toBeNull();
+});
+
 // Bodies written before 2026-09-18 carried the gate's sentences verbatim; they
 // are held back, and shown as written only to an operator.
 it("holds back the sentences an old run notice quoted for the agent, except for an operator", async () => {
@@ -347,7 +433,7 @@ it("holds back the sentences an old run notice quoted for the agent, except for 
     id: "old-run", title: "研究已交付，待你复核",
     body: ["结果已交付，但有质量检查没有通过。", "MUST FIX — claims[52].claim numeric fact 6 is not present in its direct support."].join("\n"),
   });
-  vi.mocked(api.listInbox).mockResolvedValue({ items: [old], nextCursor: null });
+  serve({ items: [old], nextCursor: null });
   const first = open();
   expect(await screen.findByText("结果已交付，但有质量检查没有通过。")).toBeInTheDocument();
   expect(screen.queryByText(/numeric fact/)).not.toBeInTheDocument();
@@ -366,7 +452,7 @@ it("opens a share where it lives: a delivery on its own page, a withdrawal or ta
     ...review, id, noticeType: "notify", title, body: "2 条做法", severity: "info",
     source: { type: "share", id: sourceId }, actions: [{ id: "open", label: "查看并试用", style: "primary" }], readAt: at(1),
   });
-  vi.mocked(api.listInbox).mockResolvedValue({
+  serve({
     items: [
       notice("delivery", "李主任 向你分享了一套工作方式", "delivery/dlv_abc123"),
       notice("withdrawn", "李主任撤回了发给你的一份分享", "withdrawn/dlv_abc123"),

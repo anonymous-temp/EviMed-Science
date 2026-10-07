@@ -26,14 +26,21 @@ export interface InboxOrder {
   rest: InboxItem[];
 }
 
-export function orderInbox(items: readonly InboxItem[]): InboxOrder {
-  const pinnedIds = new Set(items
-    .filter((item) => !item.readAt && severityOf(item) === "safety")
-    .map((item) => item.id));
+/**
+ * The page's two parts. `fetchedPinned` is the page the server returned for
+ * `severity=safety, unread` — the list route orders by notice type, so a
+ * safety notice written as a plain notify sits behind every briefing, and the
+ * pinned section cannot be cut out of the loaded page. Whatever the loaded
+ * page also holds of the class is pinned too, and is never drawn twice.
+ */
+export function orderInbox(items: readonly InboxItem[], fetchedPinned: readonly InboxItem[] = []): InboxOrder {
+  const unreadSafety = (item: InboxItem) => !item.readAt && severityOf(item) === "safety";
+  const pinned = new Map<string, InboxItem>();
+  for (const item of [...fetchedPinned, ...items]) if (unreadSafety(item) && !pinned.has(item.id)) pinned.set(item.id, item);
   const newestFirst = (a: InboxItem, b: InboxItem) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
   return {
-    pinned: items.filter((item) => pinnedIds.has(item.id)).sort(newestFirst),
-    rest: items.filter((item) => !pinnedIds.has(item.id)),
+    pinned: [...pinned.values()].sort(newestFirst),
+    rest: items.filter((item) => !pinned.has(item.id)),
   };
 }
 
