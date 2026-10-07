@@ -79,7 +79,8 @@ vcr_case("E10a", c("AC-04", "AC-26"), function() {
   # emptied `inputs` or `scenario` as "no change". A refusal of a job whose
   # seed, method, version or replicate count is itself malformed cannot echo a
   # valid one, so protocol validity is asked only of the other mutations.
-  cs <- jobs[[which(vapply(jobs, function(x) x[[1]] == "design.simulate", logical(1)))]]
+  # the first design.simulate job: a method may have several (the robustness methods and the 2026-10-07 extensions add more)
+  cs <- jobs[[which(vapply(jobs, function(x) x[[1]] == "design.simulate", logical(1)))[1]]]
   base <- vcr_test_job(cs[[1]], cs[[2]], cs[[3]], seed = 5L, replicates = 60L)
   echoed <- c("seed", "replicates", "methodVersion", "method", "jobId", "studyId")
   muts <- list(list("seed", "x"), list("seed", -1), list("seed", 1.5), list("replicates", "x"), list("replicates", 0), list("replicates", 1e12),
@@ -178,7 +179,7 @@ vcr_case("E10b", c("AC-28", "AC-04"), function() {
   cf <- tempfile("cancel"); file.create(cf); on.exit(unlink(cf), add = TRUE)
   run_c <- function(method, scenario, inputs = NULL, replicates = NULL) vcr_run_job(vcr_test_json(vcr_test_job(method, scenario, inputs, seed = 3L, replicates = replicates)), cancel_file = cf)
   jobs <- vcr_test_handler_jobs()
-  pick <- function(m) jobs[[which(vapply(jobs, function(x) x[[1]] == m, logical(1)))]]
+  pick <- function(m) jobs[[which(vapply(jobs, function(x) x[[1]] == m, logical(1)))[1]]]   # the first job of a method (a method may have several)
   staggered <- pick("accrual.poisson_gamma")
   staggered[[2]]$sites <- lapply(seq_along(staggered[[2]]$sites), function(i) { x <- staggered[[2]]$sites[[i]]; x$startTime <- 2 * (i - 1); x })
   canceled <- lapply(c("design.simulate", "comparator.entropy_balance", "accrual.poisson_gamma", "population.synthpop"), function(m) {
