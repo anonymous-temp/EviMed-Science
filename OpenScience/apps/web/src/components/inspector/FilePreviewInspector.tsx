@@ -538,11 +538,11 @@ function Body({
 
 /** A clinical evidence matrix opened on its own: the table, with its checks. */
 function MatrixFileView({ path, root, runId }: { path: string; root?: FileRoot; runId: string | null }) {
-  const { document, verified } = useClaimMatrix(path, root);
+  const { document, verified, verificationState } = useClaimMatrix(path, root);
   if (!document) return <Note text="正在读取证据矩阵" />;
   return (
     <div className="p-4">
-      <EvidenceMatrixTable claims={document.claims} verified={verified} runId={runId} />
+      <EvidenceMatrixTable claims={document.claims} verified={verified} verificationState={verificationState} runId={runId} ground="surface-2" />
     </div>
   );
 }

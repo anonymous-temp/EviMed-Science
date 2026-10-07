@@ -79,9 +79,38 @@ describe("RunFilePage", () => {
     expect(mocks.readArtifact).toHaveBeenCalledWith(REPORT, "workspace");
   });
 
-  it("shows a matrix as its table", async () => {
+  it("shows a matrix as its table, the check in the second column, and opens a claim in a drawer", async () => {
+    mocks.readClaimVerification.mockResolvedValue({
+      claims: [{ claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified" }] }],
+      counts: { verified: 1 },
+    });
     renderAt(`/app/runs/run_1/files/${MATRIX}`);
-    expect(await screen.findByRole("table", { name: "证据矩阵：1 条结论" })).toBeInTheDocument();
+    const table = await screen.findByRole("table", { name: "证据矩阵：1 条结论" });
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["结论", "核对", "内容", "来源", "类型"]);
+    expect(await within(table).findByText("✓ 已核对")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "搜索结论" })).toBeInTheDocument();
+    await userEvent.click(within(table).getByText("结论。"));
+    const drawer = await screen.findByRole("dialog", { name: "CLM-001" });
+    expect(within(drawer).getByText("“the conclusion”")).toBeInTheDocument();
+  });
+
+  // The matrix is read first and its checks second: for that moment, and when they cannot be read, 「未核对」 is not what a row says.
+  it("says 核对中 while the checks are being read and 暂无核对结果 when there are none to read", async () => {
+    let arrive!: (value: unknown) => void;
+    mocks.readClaimVerification.mockReturnValue(new Promise((resolve) => { arrive = resolve; }));
+    const first = renderAt(`/app/runs/run_1/files/${MATRIX}`);
+    const table = await screen.findByRole("table", { name: "证据矩阵：1 条结论" });
+    expect(within(table).getByText("核对中")).toBeInTheDocument();
+    expect(within(table).queryByText("未核对")).toBeNull();
+    arrive(null);
+    expect(await within(table).findByText("暂无核对结果")).toBeInTheDocument();
+    expect(within(table).queryByText("未核对")).toBeNull();
+    first.unmount();
+
+    mocks.readClaimVerification.mockRejectedValue(new Error("offline"));
+    renderAt(`/app/runs/run_1/files/${MATRIX}`);
+    expect(await screen.findByText("暂无核对结果")).toBeInTheDocument();
+    expect(screen.queryByText("未核对")).toBeNull();
   });
 
   it("refuses a path that leaves the workspace, and says what to do", async () => {
