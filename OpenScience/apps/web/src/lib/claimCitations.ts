@@ -182,6 +182,77 @@ export function claimVerificationSummary(verification: ClaimVerification | null 
   return { text: `⚠ ${pending} 条待核对`, attention: true };
 }
 
+/**
+ * Whether a report's claim checks have been read: still being read, read, or
+ * not readable (the read failed, or the report was never checked). The matrix
+ * must tell the three apart — a column reading 「未核对」 while the checks are
+ * still on their way is a claim about the report that nobody has made.
+ */
+export type ClaimCheckState = "loading" | "ready" | "unavailable";
+
+export type ClaimCheckKind = "verified" | "attention" | "derived" | "checking" | "unavailable" | "unchecked";
+
+/** A claim's overall check as one short mark: a word and a symbol, never a colour alone. */
+export interface ClaimCheckMark {
+  kind: ClaimCheckKind;
+  text: string;
+  tone: "ok" | "warn" | "muted";
+}
+
+const CHECK_MARKS: Record<string, ClaimCheckMark> = {
+  verified: { kind: "verified", text: "✓ 已核对", tone: "ok" },
+  quote_not_found: { kind: "attention", text: "⚠ 原文中未找到", tone: "warn" },
+  source_unavailable: { kind: "attention", text: "⚠ 原文未保存", tone: "warn" },
+  no_quote: { kind: "attention", text: "⚠ 无引文", tone: "warn" },
+  derived: { kind: "derived", text: "推导，无引文", tone: "muted" },
+};
+
+/** What one source's own check found, in the same words as a claim's. */
+export function sourceCheckMark(status: string | undefined): ClaimCheckMark {
+  return (status ? CHECK_MARKS[status] : undefined) ?? { kind: "unchecked", text: "未核对", tone: "muted" };
+}
+
+/**
+ * The mark a claim wears in the matrix. A check the control plane made always
+ * speaks for itself; without one the mark says why: 「核对中」 while the checks
+ * are being read, 「暂无核对结果」 when they could not be, and 「未核对」 only
+ * when they were read and this claim is not among them. A derived claim has no
+ * quotation to check, which is true whatever the state.
+ */
+export function claimCheckMark(
+  claim: Pick<ClaimEvidence, "claimType">,
+  check: ClaimVerification["claims"][number] | undefined,
+  state: ClaimCheckState = "ready",
+): ClaimCheckMark {
+  if (check) return sourceCheckMark(String(check.status));
+  if (claim.claimType === "derived") return CHECK_MARKS.derived;
+  if (state === "loading") return { kind: "checking", text: "核对中", tone: "muted" };
+  if (state === "unavailable") return { kind: "unavailable", text: "暂无核对结果", tone: "muted" };
+  return { kind: "unchecked", text: "未核对", tone: "muted" };
+}
+
+/** Whether a claim is one to look at again: not found, not preserved, unquoted, or never checked. */
+export function claimNeedsReview(mark: ClaimCheckMark): boolean {
+  return mark.kind !== "verified" && mark.kind !== "derived";
+}
+
+export const CLAIM_TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
+
+export function claimTypeLabel(claimType: string): string {
+  return CLAIM_TYPE_LABEL[claimType] ?? "结论";
+}
+
+/**
+ * Everything a reader might type to find a claim, folded to lower case: its
+ * id, its sentence, each source's title and identifier, each quotation. A plain
+ * substring match over this is the matrix's search (112 claims need no index).
+ */
+export function claimMatrixSearchText(claim: ClaimEvidence): string {
+  const parts = [claim.claimId, claim.claim];
+  for (const source of claimSources(claim)) parts.push(source.sourceTitle ?? "", source.identifier ?? "", source.supportQuote ?? "");
+  return parts.join("\n").toLowerCase();
+}
+
 /** The link target a citation is rendered from. Not a URL anyone navigates. */
 export const CLAIM_LINK_PREFIX = "#evimed-claims=";
 

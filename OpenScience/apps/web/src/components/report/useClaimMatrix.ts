@@ -6,6 +6,7 @@ import {
   claimMatrixPathFor,
   isClaimMatrixPath,
   parseClaimMatrixDocument,
+  type ClaimCheckState,
   type ClaimMatrixDocument,
   type ClaimVerification,
 } from "@/lib/claimCitations";
@@ -18,33 +19,53 @@ import type { VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
  *
  * Best effort on both counts: without the matrix the report still reads, and
  * a report nobody checked shows no marks rather than wrong ones.
+ *
+ * `verificationState` says which of three things an empty `verified` means:
+ * the checks are still being read (`loading`), they were read (`ready` — a
+ * claim missing from them was not checked), or they cannot be read
+ * (`unavailable`: the read failed, or this report was never checked).
  */
 export function useClaimMatrix(path: string, root: FileRoot | undefined, enabled = true, immutableVersion?: ResultVersion): {
   matrixPath: string | null;
   document: ClaimMatrixDocument | null;
   verification: ClaimVerification | null;
   verified: Map<string, VerifiedClaim>;
+  verificationState: ClaimCheckState;
 } {
   const matrixPath = enabled ? (isClaimMatrixPath(path) ? path : claimMatrixPathFor(path)) : null;
   const [document, setDocument] = useState<ClaimMatrixDocument | null>(null);
   const [verification, setVerification] = useState<ClaimVerification | null>(null);
+  const [readState, setReadState] = useState<ClaimCheckState>("loading");
 
   useEffect(() => {
     setDocument(null);
     setVerification(null);
-    if (!matrixPath) return;
+    setReadState("loading");
+    if (!matrixPath) {
+      setReadState("unavailable");
+      return;
+    }
     let cancelled = false;
     readArtifact(matrixPath, root)
       .then((file) => {
-        if (cancelled || !file || file.encoding !== "utf8") return;
-        const parsed = parseClaimMatrixDocument(file.data);
-        if (parsed.claims.size === 0) return;
+        if (cancelled) return;
+        const parsed = file && file.encoding === "utf8" ? parseClaimMatrixDocument(file.data) : null;
+        if (!parsed || parsed.claims.size === 0) {
+          setReadState("unavailable");
+          return;
+        }
         setDocument(parsed);
         readClaimVerification(matrixPath, root)
-          .then((found) => { if (!cancelled) setVerification(found); })
-          .catch(() => { /* unchecked: the citations still open */ });
+          .then((found) => {
+            if (cancelled) return;
+            setVerification(found);
+            setReadState(found ? "ready" : "unavailable");
+          })
+          // Unchecked: the citations still open, and the matrix says the checks could not be read.
+          .catch(() => { if (!cancelled) setReadState("unavailable"); });
       })
-      .catch(() => { /* no matrix, no citations; the report itself is unaffected */ });
+      // No matrix, no citations; the report itself is unaffected.
+      .catch(() => { if (!cancelled) setReadState("unavailable"); });
     return () => { cancelled = true; };
   }, [matrixPath, root]);
 
@@ -65,5 +86,8 @@ export function useClaimMatrix(path: string, root: FileRoot | undefined, enabled
     () => new Map((selectedVerification?.claims ?? []).map((claim) => [claim.claimId, claim] as const)),
     [selectedVerification],
   );
-  return { matrixPath, document: immutableVersion ? frozenDocument : document, verification: selectedVerification, verified };
+  const verificationState: ClaimCheckState = immutableVersion
+    ? (selectedVerification ? "ready" : "unavailable")
+    : readState;
+  return { matrixPath, document: immutableVersion ? frozenDocument : document, verification: selectedVerification, verified, verificationState };
 }

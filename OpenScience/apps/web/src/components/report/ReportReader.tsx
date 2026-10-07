@@ -85,7 +85,7 @@ export function ReportReader({
   /** Historical bytes may only read evidence captured for the same version. */
   immutableVersion?: ResultVersion;
 }) {
-  const { document: matrix, verification, verified } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
+  const { document: matrix, verification, verified, verificationState } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
   const [view, setView] = useState<"report" | "matrix">("report");
   const [toc, setToc] = useState<TocEntry[]>([]);
   const [active, setActive] = useState<string | null>(null);
@@ -236,11 +236,16 @@ export function ReportReader({
         />
       )}
       <div className="flex-1" />
-      <Button size="md" variant="text" onClick={() => void download()}>
-        <Download size={16} aria-hidden="true" />下载 Markdown
+      {/* One row on a phone: the short words are what is drawn, the full ones what is read out. */}
+      <Button size="md" variant="text" aria-label="下载 Markdown" onClick={() => void download()}>
+        <Download size={16} aria-hidden="true" />
+        <span aria-hidden="true" className="sm:hidden">下载</span>
+        <span aria-hidden="true" className="max-sm:hidden">下载 Markdown</span>
       </Button>
-      <Button size="md" variant="text" onClick={() => window.print()}>
-        <Printer size={16} aria-hidden="true" />打印 / 存为 PDF
+      <Button size="md" variant="text" aria-label="打印 / 存为 PDF" onClick={() => window.print()}>
+        <Printer size={16} aria-hidden="true" />
+        <span aria-hidden="true" className="sm:hidden">打印</span>
+        <span aria-hidden="true" className="max-sm:hidden">打印 / 存为 PDF</span>
       </Button>
     </div>
   );
@@ -282,7 +287,16 @@ export function ReportReader({
   );
 
   const body = view === "matrix" && matrix
-    ? <EvidenceMatrixTable claims={matrix.claims} verified={verified} runId={reading.runId} className="max-sm:rounded-none max-sm:border-x-0" />
+    ? (
+      <EvidenceMatrixTable
+        claims={matrix.claims}
+        verified={verified}
+        verificationState={verificationState}
+        runId={reading.runId}
+        ground={layout === "pane" ? "surface-2" : "bg"}
+        className="max-sm:rounded-none max-sm:border-x-0"
+      />
+    )
     : reportPage;
 
   return (
