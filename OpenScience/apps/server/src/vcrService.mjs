@@ -366,9 +366,15 @@ export function vcrRouteOptions(dataTier) {
   return VCR_COMPARATOR_ROUTES.map((route) => {
     const minimum = /** @type {Record<string, string>} */ (VCR_ROUTE_MIN_TIER)[route];
     const needed = VCR_DATA_TIERS.indexOf(minimum);
-    return { route, minimumTier: minimum, available: order >= 0 && needed >= 0 && order >= needed };
+    // A route this version has no engine method for is not offered at any tier: it is listed as unsupported (`supported: false`),
+    // and a comparator written for it is refused by name rather than recorded as a verdict about a route nobody could take.
+    const supported = !VCR_UNSUPPORTED_COMPARATOR_ROUTES.includes(route);
+    return { route, minimumTier: minimum, supported, available: supported && order >= 0 && needed >= 0 && order >= needed };
   });
 }
+
+/** The comparator routes this version cannot compute: the model-prediction comparator (the engine's simulators give set values, not predictions for a population). */
+export const VCR_UNSUPPORTED_COMPARATOR_ROUTES = Object.freeze(["model_comparator"]);
 
 /**
  * The accounts the matching page names: whoever countersigned the assessment on

@@ -12,7 +12,7 @@ import test from "node:test";
 import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
-  JOB_KIND_LABELS, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
+  JOB_KIND_LABELS, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard, presentModels,
   presentExport, presentPrecedent, presentStudy, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
 import { frozenVersion, modelInputs, reportModelFor, resultRows, study as modelStudy } from "./vcrModelDocumentFixtures.mjs";
@@ -477,6 +477,22 @@ test("a cohort the engine built is read from its result: the waterfall, the thre
   assert.deepEqual(tab.allowedUses, []);
 });
 
+test("a comparator somebody wrote for the unsupported route is still shown as what it found; the library lists what this version does not do, as 暂不支持", () => {
+  const bundle = { ...emptyBundle(), comparators: [{ id: "cmp_m", version: 1, route: "model_comparator", conclusion: "not_estimable", gapList: [], resultId: null, reviewState: "ai_set" }] };
+  const routes = presentComparatorTab(bundle).routes.map((route) => [route.route, route.state]);
+  assert.ok(routes.some(([route, state]) => route === "model_comparator" && state === "not_estimable"));
+  const library = presentModels({ models: [], methods: [], usedBy: new Map(), engineAvailable: true, engineMismatch: null });
+  assert.deepEqual(library.unsupported.map((entry) => entry.label), ["模型预测比较器", "数字孪生与基线条件化预测模型", "机制模型（QSP、PBPK）", "非劣效设计", "适应性设计", "平台试验设计"]);
+  assert.ok(library.unsupported.every((entry) => entry.note === "暂不支持"));
+});
+
+test("the matching tab offers one direction, from the protocol to the patients, and a request for the other reads the same view", () => {
+  for (const direction of [undefined, "trial_to_patient", "patient_to_trial"]) {
+    const tab = presentMatchingTab(emptyBundle(), { direction });
+    assert.equal(tab.direction ?? "trial_to_patient", "trial_to_patient");
+  }
+});
+
 test("the sentence about the designs names a range and never a winner", () => {
   const { designs } = presentDesigns(designsBundle());
   const sentence = designsSentence(designs);
@@ -619,7 +635,8 @@ test("a study with nothing in it gives every tab its empty state, and none of th
   const patients = presentPatientsTab(bundle);
   assert.deepEqual([patients.model, patients.trajectories, patients.example, patients.sensitivity], [null, null, null, null]);
   const comparator = presentComparatorTab(bundle);
-  assert.equal(comparator.routes.length, 5);
+  assert.equal(comparator.routes.length, 4, "the four routes the engine can compute: the model-prediction comparator is not one of the choices");
+  assert.ok(!comparator.routes.some((route) => route.route === "model_comparator"));
   assert.equal(comparator.dimensions.length, 10);
   assert.equal(comparator.gaps, null);
   const trial = presentTrialTab(bundle);

@@ -1127,8 +1127,20 @@ export function presentModels({ models, methods, usedBy, engineAvailable, engine
     })),
     engineAvailable,
     engineMismatch: engineMismatch ? [...engineMismatch] : null,
+    // What the plan lists and this version does not do: said once, here, and never offered as an option anywhere else.
+    unsupported: VCR_UNSUPPORTED.map((entry) => ({ ...entry, note: "暂不支持" })),
   };
 }
+
+/** The methods the module's plan names and this version does not compute (R10, plan §8.2): listed in the method library as 暂不支持. */
+export const VCR_UNSUPPORTED = Object.freeze([
+  { key: "model_comparator", label: "模型预测比较器", group: "对照" },
+  { key: "digital_twin", label: "数字孪生与基线条件化预测模型", group: "虚拟患者" },
+  { key: "mechanistic", label: "机制模型（QSP、PBPK）", group: "虚拟患者" },
+  { key: "non_inferiority", label: "非劣效设计", group: "试验设计" },
+  { key: "adaptive", label: "适应性设计", group: "试验设计" },
+  { key: "platform", label: "平台试验设计", group: "试验设计" },
+]);
 
 /**
  * One model as the §8.2 card: what it is for, where it may be used, how it

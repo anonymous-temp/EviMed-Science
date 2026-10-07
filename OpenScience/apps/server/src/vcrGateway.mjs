@@ -1046,7 +1046,8 @@ const WRITERS = {
 
   async comparator(item, { store, study }) {
     if (!item.only(["route", "estimand", "targetTrial", "configuration"])) return null;
-    const route = item.choice("route", vcrRouteOptions(study.dataTier).map((option) => option.route), { required: true });
+    // The routes this version can compute: the model-prediction comparator is not one of them, at any tier (it is listed as unsupported).
+    const route = item.choice("route", vcrRouteOptions(study.dataTier).filter((option) => option.supported).map((option) => option.route), { required: true });
     const estimand = item.choice("estimand", VCR_ESTIMANDS, { fallback: "ATT" });
     const targetTrial = item.obj("targetTrial") ?? {};
     const configuration = item.obj("configuration") ?? {};

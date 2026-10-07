@@ -42,6 +42,7 @@ import {
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
+import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { POPULATION_METHOD_WORDS, PROFILE_MISSING_SENTENCE, constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns,
@@ -567,7 +568,8 @@ export function presentComparatorTab(bundle) {
   const tierIndex = VCR_DATA_TIERS.indexOf(study.dataTier);
   const latestByRoute = new Map();
   for (const design of comparators) if (!latestByRoute.has(design.route)) latestByRoute.set(design.route, design);
-  const routes = VCR_COMPARATOR_ROUTES.map((route) => {
+  // A route this version cannot compute is not one of the choices — unless a design somebody wrote earlier names it, which is then shown as what it found.
+  const routes = VCR_COMPARATOR_ROUTES.filter((route) => !VCR_UNSUPPORTED_COMPARATOR_ROUTES.includes(route) || latestByRoute.has(route)).map((route) => {
     const minimum = /** @type {Record<string, string>} */ (VCR_ROUTE_MIN_TIER)[route];
     const reachable = tierIndex >= 0 && tierIndex >= VCR_DATA_TIERS.indexOf(minimum);
     const design = latestByRoute.get(route) ?? null;
@@ -1206,8 +1208,10 @@ export function presentMatchingTab(bundle, query = {}) {
     available: true,
     headline: total ? `${total.toLocaleString("en-US")} 人已评估，${(eligible ?? 0).toLocaleString("en-US")} 人全部满足，${insufficient.toLocaleString("en-US")} 人至少有 1 条未知或待复评。` : null,
     partner: total ? { name: null, candidates: total, tier: study.dataTier, snapshotAt: match.snapshotAt ? zhDate(match.snapshotAt, now) : null } : null,
-    direction: ["trial_to_patient", "patient_to_trial"].includes(String(query.direction)) ? String(query.direction)
-      : (subjects[0]?.direction === "patient_to_trial" ? "patient_to_trial" : "trial_to_patient"),
+    // One direction: from the protocol to the patients. 「给患者找试验」 has no data path (the evaluator only ever writes this direction), so
+    // it is not offered and a request for it reads the same view.
+    direction: "trial_to_patient",
+    directions: ["trial_to_patient"],
     funnel,
     candidates,
     selected,
