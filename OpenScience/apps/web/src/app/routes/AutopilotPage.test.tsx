@@ -427,6 +427,13 @@ describe("scheduled tasks", () => {
     // Nothing of the engine: no zone identifier, no status word of the ledger.
     for (const each of rows) expect(each.textContent).not.toMatch(/Asia\/|merged|failed|running/);
   });
+  it("does not say a task never ran when its runs are only older than the list the page holds", async () => {
+    const older = { ...agenda, id: "older", payload: { ...agenda.payload, title: "很久以前跑过的任务", lastScheduledDate: `${new Date().getFullYear()}-03-04` } };
+    mocks.listAgendas.mockResolvedValue({ items: [older] }); mocks.listEpisodes.mockResolvedValue({ items: [] });
+    render("/app/autopilot");
+    const row = (await screen.findByRole("button", { name: "很久以前跑过的任务" })).closest("li")!;
+    expect(row).toHaveTextContent("上次 3月4日"); expect(row).not.toHaveTextContent("还没有运行");
+  });
   it("offers a run's documents and keeps its scripts and intermediate files behind one line, nothing deleted", async () => {
     const ref = (path: string) => ({ projectId: "project-one", runId: "run-one", sessionId: "ses-one", path });
     mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, payload: { ...episode.payload, artifactRefs: [

@@ -89,7 +89,12 @@ export function latestRun(agendaId: string, episodes: readonly EpisodeRecord[]):
  */
 export function lastRunLine(agenda: AgendaRecord, episodes: readonly EpisodeRecord[], { withTime = false } = {}): string {
   const run = latestRun(agenda.id, episodes);
-  if (!run) return "还没有运行";
+  if (!run) {
+    // The list holds the project's newest runs only: a task whose runs are all older is not one that never ran. The scheduler
+    // records the day it last queued one, and that day is said without an outcome it cannot know.
+    const day = calendarDay(agenda.payload.lastScheduledDate ?? undefined);
+    return day ? `上次 ${day}` : "还没有运行";
+  }
   const state = runState(run.payload);
   if (RUN_IN_FLIGHT.includes(run.payload.status)) return state;
   const zone = scheduleOf(agenda).timeZone;
