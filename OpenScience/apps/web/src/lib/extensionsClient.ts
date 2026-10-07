@@ -56,3 +56,17 @@ export function extensionStatus(item: Pick<ExtensionInstallation, "effective" | 
   if (item.effective) return "可使用";
   return ({ preparing: "准备中", waiting: "待启用", saved: "已保存", failed: "需要重试", unsupported: "此环境不支持", removed: "已移除", "connection-needed": "需要连接账户", applying: "正在启用", "rolled-back": "已恢复上一版" } as Record<string, string>)[item.phase] ?? "尚未启用";
 }
+
+/**
+ * What the plugins page lists for a project: what is on, the research tool set in Chinese, and one yes or no per
+ * calculation engine. Nothing here is a version, a phase or a state the server cannot know.
+ */
+export interface PluginInventory {
+  projectId: string;
+  items: Array<{ id: "dsh-cite" | "dsh-annotation" | "dsh-mermaid"; management: "project" | "deployment"; enabled: boolean | null }>;
+  webRead: boolean;
+  researchTools: { count: number; groups: Array<{ title: string; tools: string[] }> };
+  /** Empty where the deployment could not read them: the page then draws no engine rows. */
+  engines: Array<{ id: string; available: boolean }>;
+}
+export const pluginInventory = (projectId: string) => productRequest<PluginInventory>(`/projects/${encodeURIComponent(projectId)}/plugin-inventory`);

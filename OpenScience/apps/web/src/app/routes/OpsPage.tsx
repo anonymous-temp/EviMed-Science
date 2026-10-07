@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { fetchWebMe, getWebProjectId } from "@/lib/apiClient";
-import { PluginsCard } from "@/components/settings/PluginsCard";
 import { WebReadinessCard } from "@/components/settings/WebReadinessCard";
 import { WebResourcesCard } from "@/components/settings/WebResourcesCard";
 import { WebAuditCard } from "@/components/settings/WebAuditCard";
@@ -51,7 +50,6 @@ export function OpsPage() {
       <WebErrorsCard key={`errors-${projectId}`} />
       <WebSecurityCard key={`security-${projectId}`} />
       <GeoMarketCard />
-      <PluginsCard projectId={projectId} />
     </div>
   );
 }

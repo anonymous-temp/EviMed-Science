@@ -24,11 +24,6 @@ export interface SkillAvailabilityView {
   also?: Array<{ code: string; detail?: string }>; notes: Array<{ code: string; detail?: string }>;
 }
 export interface SkillSupplyResult { revision: number; nativeName: string | null; baseKnown: boolean; package: SkillPackageView | null; availability: SkillAvailabilityView | null }
-/** The one-line label a session catalogue row carries. */
-export interface SkillCatalogueLabel {
-  state: WebAvailabilityState; label: string; text: string; notes: Array<{ code: string; detail?: string }>;
-  version: string | null; sourceText: string | null; licenceText: string | null;
-}
 export type SkillUpdateDecision = "unchanged" | "same" | "keep-local" | "take-upstream" | "add" | "remove" | "conflict";
 export interface SkillUpdatePlan {
   revision?: number; baseKnown: boolean; changes: number; conflicts: number; counts: Record<SkillUpdateDecision, number>;
@@ -80,32 +75,28 @@ export async function uploadPersonalSkill(file: File) {
   return value.data;
 }
 
-export interface EffectiveSkill {
-  key: string; name: string; description: string;
-  invocation: { userInvocable: boolean; modelInvocable: boolean };
-  source: "builtin" | "community" | "personal" | "unknown";
-  canDuplicate: boolean;
-  personalRef?: { skillId: string; revision: number; title: string };
-  /** Absent from a control plane that predates it; null where no shipped package carries the name. */
-  supply?: SkillCatalogueLabel | null;
+/** One of the skills the platform ships, as the list gives it: Chinese words, never an identifier. */
+export interface PlatformSkill {
+  /** `<origin>:<name>`, one path segment. */
+  id: string; name: string; title: string; use: string; group: string;
+  source: "platform" | "community";
+  /** Whether the control plane can copy this skill into the account's own skills. */
+  canCopy: boolean;
 }
-export interface EffectiveSkillCatalogue {
-  state: "available" | "unavailable" | "unknown";
-  runtimeGeneration: string | null; sessionId: string | null;
-  items: EffectiveSkill[];
-  learnedMethods: Array<{ id: string; title: string; href: string }>;
-  findings: Array<{ code: string }>;
+export interface PlatformSkillList { groups: string[]; items: PlatformSkill[] }
+export interface PlatformSkillDetail extends PlatformSkill {
+  /** The sentence that says when the skill is used; null where there is none. */
+  when: string | null;
+  /** The skill's full text, or null where the control plane does not carry the file. */
+  instructions: string | null;
 }
-export interface EffectiveSkillDetail {
-  state: "available"; runtimeGeneration: string; sessionId: string;
-  skill: EffectiveSkill & { operationHelp?: string | null; instructions: string; metadata: Record<string, unknown>; whenToUse: string | null;
-    resources: Array<{ path: string; size: number; digest: string }>; scripts: Array<{ path: string; size: number }>; digest: string };
-  findings: Array<{ code: string }>;
-}
-const effectivePath = (projectId: string) => `/projects/${encodeURIComponent(projectId)}/skills/effective`;
-export const effectiveSkills = (projectId: string, sessionId: string) => productRequest<EffectiveSkillCatalogue>(`${effectivePath(projectId)}?${new URLSearchParams({ sessionId })}`);
-export const effectiveSkill = (projectId: string, key: string, sessionId: string, expectedRuntimeGeneration: string) => productRequest<EffectiveSkillDetail>(`${effectivePath(projectId)}/${encodeURIComponent(key)}?${new URLSearchParams({ sessionId, expectedRuntimeGeneration })}`);
-export const duplicateEffectiveSkill = (projectId: string, input: { sessionId: string; key: string; title: string; idempotencyKey: string; expectedRuntimeGeneration: string }) => productRequest<PersonalSkill>(`/projects/${encodeURIComponent(projectId)}/skills/duplicate`, "POST", { sessionId: input.sessionId, key: input.key, title: input.title, idempotencyKey: input.idempotencyKey, expectedRuntimeGeneration: input.expectedRuntimeGeneration });
+const platformPath = (id: string) => `/skills/platform/${encodeURIComponent(id)}`;
+/** Answered from the control plane's own packages: needs no runtime and no session. */
+export const listPlatformSkills = () => productRequest<PlatformSkillList>("/skills/platform");
+export const readPlatformSkill = (id: string) => productRequest<PlatformSkillDetail>(platformPath(id));
+/** The same request key returns the same copy: a retry after a lost answer does not make a second skill. */
+export const copyPlatformSkill = (id: string, input: { title: string; idempotencyKey: string }) =>
+  productRequest<PersonalSkill>(`${platformPath(id)}/copy`, "POST", { title: input.title, idempotencyKey: input.idempotencyKey });
 
 export interface SkillRepositoryPreview {
   resourceId: string;
