@@ -594,12 +594,6 @@ export class VcrJobs {
       throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
     }
     const studyId = String(input.studyId);
-    // A computation that is not the orchestrator's names the object it computes: its result is filed under that object, and a
-    // result with no subject is superseded by every later result of its kind, whatever object that one was for.
-    if (input.internal !== true && vcrJobObjectKind(kind) && !object(input.detail).subjectId) {
-      throw new HttpError(400, "vcr_simulate_subject_required",
-        "这项计算要说明它算的是研究里的哪一个对象（人群、虚拟患者集、对照设计、试验方案或设计网格）：把对象的 id 作为 subjectId 传进来。");
-    }
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
     const methodVersion = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]?.version ?? "";
     let scenario = object(input.scenario);

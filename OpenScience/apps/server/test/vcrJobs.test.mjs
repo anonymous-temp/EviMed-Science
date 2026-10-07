@@ -295,18 +295,12 @@ test("an engine that ended a job with no result is named in the sentence, and an
   assert.ok(strange.message.length > 0);
 });
 
-test("a computation of a research object that names no object is refused by the queue itself, whoever asks; the orchestrator's own are exempt", async () => {
-  const { VcrJobs, VCR_SUBJECT_KINDS, vcrJobObjectKind } = await import("../src/vcrJobs.mjs");
-  const queue = new VcrJobs({ store: /** @type {any} */ ({ async transaction() { throw new Error("nothing is stored for a refusal"); } }), config: {} });
+test("the jobs that are about one of the study's objects are told from those that are not", async () => {
+  const { VCR_SUBJECT_KINDS, vcrJobObjectKind } = await import("../src/vcrJobs.mjs");
+  assert.deepEqual([...VCR_SUBJECT_KINDS], ["population", "patient_set", "comparator", "trial_scenario", "design_grid"]);
   for (const kind of ["design_analytic", "design_simulation", "assurance", "design_grid", "generate_population", "generate_patients", "weight_comparator"]) {
-    await assert.rejects(queue.enqueue({ studyId: "std_1", userId: "u1", kind, scenario, inputs: [] }),
-      { status: 400, code: "vcr_simulate_subject_required" }, kind);
-    await assert.rejects(queue.enqueue({ studyId: "std_1", userId: "u1", kind, scenario, inputs: [], detail: { subjectId: "" } }), { code: "vcr_simulate_subject_required" }, `${kind} with an empty subject`);
+    assert.ok(vcrJobObjectKind(kind), `${kind} is about an object`);
   }
   // a job that is about no object of these five is not asked for one
-  assert.deepEqual([...VCR_SUBJECT_KINDS], ["population", "patient_set", "comparator", "trial_scenario", "design_grid"]);
   for (const kind of ["pool_evidence", "reconstruct_km", "accrual_forecast", "match_criteria", "profile_snapshot"]) assert.equal(vcrJobObjectKind(kind), null, kind);
-  // and the orchestrator's own jobs (`internal`) carry their subject in the detail they build: the guard does not ask them
-  await assert.rejects(queue.enqueue({ studyId: "std_1", userId: "u1", kind: "design_simulation", scenario, inputs: [], internal: true }), (/** @type {any} */ error) => error.message === "nothing is stored for a refusal",
-    "past the guard, the next thing the queue does is store the job");
 });

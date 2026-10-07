@@ -760,7 +760,9 @@ test("DL-13 DL-15 readiness names the module and its engine; the metrics carry t
   const ready = await (await fetch(`${context.base}/api/ready`)).json();
   const vcr = ready.data.checks.vcr;
   assert.equal(vcr.ok, true, JSON.stringify(vcr));
-  assert.equal(vcr.engine, "wired");
+  // `wired` until something has asked the engine, `answering` once a study page (which reads the engine's presence, R10) or a job has.
+  assert.ok(["wired", "answering"].includes(vcr.engine), `the engine is composed and not known to be down: ${vcr.engine}`);
+  assert.equal(vcr.engineAvailable, true);
   assert.equal(vcr.warnings?.includes("vcr_engine_unconfigured") ?? false, false);
   const text = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
   for (const line of [/^open_science_vcr_enabled 1$/m, /^open_science_vcr_tables_readable 1$/m, /^open_science_vcr_engine_configured 1$/m,
