@@ -451,7 +451,7 @@ export const VCR_STEP_NEEDS = Object.freeze({
 export const VCR_TABS = frozen(['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data'])
 export const VCR_TAB_LABELS_ZH = Object.freeze({
   overview: '总览', population: '人群', patients: '虚拟患者', comparator: '对照', trial: '试验',
-  matching: '匹配与招募', data: '数据与证据',
+  matching: '匹配与招募', data: '定义与证据',
 })
 
 /** The four action cards on the module's home page (§9.2), and where each starts. */
@@ -460,9 +460,24 @@ export const VCR_ACTION_LABELS_ZH = Object.freeze({
   cohort: '创建虚拟队列', patients: '创建虚拟患者', comparator: '构建合成对照', trial: '模拟临床试验',
 })
 
-/** A study's lifecycle on the list page. */
-export const VCR_STUDY_STATUSES = frozen(['active', 'paused', 'archived'])
-export const VCR_STUDY_STATUS_LABELS_ZH = Object.freeze({ active: '进行中', paused: '已暂停', archived: '已归档' })
+/**
+ * A study's lifecycle on the list page. `draft` is a study nobody has spoken to
+ * yet: «新建研究» makes the study and its project at once (the conversation needs
+ * both before it can open), but until the first definition version is written the
+ * study is not on the list, not in the sidebar and not scheduled — and an hour
+ * after it was made with no message in its conversation it is deleted. A person
+ * never sets it (`VCR_USER_STUDY_STATUSES`).
+ */
+export const VCR_STUDY_STATUSES = frozen(['draft', 'active', 'paused', 'archived'])
+export const VCR_STUDY_STATUS_LABELS_ZH = Object.freeze({ draft: '未命名', active: '进行中', paused: '已暂停', archived: '已归档' })
+/** The statuses a lead may move a study between. */
+export const VCR_USER_STUDY_STATUSES = frozen(['active', 'paused', 'archived'])
+/** What a draft study is called until its definition names it. */
+export const VCR_DRAFT_STUDY_NAME = '未命名研究'
+/** The name every study carried before the draft state existed; one that still has it is named on its next definition write. */
+export const VCR_LEGACY_DEFAULT_STUDY_NAME = '新虚拟临研研究'
+/** The longest a study's name is taken from its question, in characters. */
+export const VCR_STUDY_NAME_FROM_QUESTION_MAX = 24
 
 // ---------------------------------------------------------------------------
 // Members and access (§11.1 conclusion 4, §11.2 layer 2)

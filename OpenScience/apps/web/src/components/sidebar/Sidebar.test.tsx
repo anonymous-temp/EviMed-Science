@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "./Sidebar";
 
 const mocks = vi.hoisted(() => ({
+  finishedToasts: vi.fn(),
   fetchInboxUnreadCount: vi.fn(),
   fetchWebConnectors: vi.fn(),
   fetchWebMe: vi.fn(),
@@ -15,6 +16,9 @@ vi.mock("@/lib/apiClient", () => ({
   fetchWebMe: mocks.fetchWebMe,
   getWebProjectId: () => "default",
 }));
+
+// The toast for a finished computation rides the inbox's signal; its own behaviour is held by `useVcrFinishedToasts.test.tsx`.
+vi.mock("@/components/vcr/useVcrFinishedToasts", () => ({ useVcrFinishedToasts: mocks.finishedToasts }));
 
 vi.mock("@/lib/inboxClient", () => ({
   fetchInboxUnreadCount: mocks.fetchInboxUnreadCount,
@@ -213,6 +217,20 @@ describe("Sidebar navigation", () => {
     await screen.findByRole("link", { name: "虚拟临研" });
     await waitFor(() => expect(screen.getByTestId("project-browser")).toHaveAttribute("data-vcr", "true"));
     expect(screen.getByTestId("project-browser")).toHaveAttribute("data-geo", "false");
+  });
+
+  it("watches for a finished computation only where the module is offered", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
+    renderSidebar();
+    await screen.findByRole("link", { name: "虚拟临研" });
+    await waitFor(() => expect(mocks.finishedToasts).toHaveBeenLastCalledWith(true));
+  });
+
+  it("does not watch for one where it is not", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
+    renderSidebar();
+    await screen.findByRole("link", { name: "循证传播" });
+    expect(mocks.finishedToasts).not.toHaveBeenCalledWith(true);
   });
 
   it("keeps the row out when /api/me cannot be read", async () => {

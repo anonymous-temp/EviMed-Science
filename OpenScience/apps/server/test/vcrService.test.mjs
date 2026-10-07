@@ -297,7 +297,7 @@ test("a rise in tier needs data that supports it; T3 needs the data that qualifi
     assert.equal(updated.status, 409, `${from}→${to} on ${supports} data`);
     assert.equal(updated.code, "vcr_tier_unsupported");
     assert.ok(updated.message.includes(reached), updated.message);
-    assert.match(updated.message, /数据与证据/);
+    assert.match(updated.message, /定义与证据/);
     assert.deepEqual(updates, [], "nothing was written");
   }
   // Supported: the move is made, as before.

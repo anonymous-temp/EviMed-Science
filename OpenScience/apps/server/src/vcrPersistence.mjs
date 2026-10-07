@@ -138,6 +138,20 @@ CREATE INDEX IF NOT EXISTS vcr_studies_user_idx ON evimed_vcr.studies (user_id, 
 -- NULL means not tagged yet — the vocabulary could not tag when the study was
 -- written — and a pass over those rows tags them.
 ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS entity_keys text[];
+-- The conversation the study was opened with (the one bound to its first capability): the page's 「对话」 opens it, not whichever
+-- background run's conversation is newest. NULL for a study made before this column; the route then falls back to the oldest
+-- conversation bound to the study's first capability.
+ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS conversation_session_id text;
+-- A study nobody has spoken to yet is a draft (see VCR_STUDY_STATUSES). A database that predates the state has a CHECK without it.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conrelid = 'evimed_vcr.studies'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%''draft''%') THEN
+    ALTER TABLE evimed_vcr.studies DROP CONSTRAINT IF EXISTS studies_status_check;
+    ALTER TABLE evimed_vcr.studies ADD CONSTRAINT studies_status_check CHECK (status IN ${inList(VCR_STUDY_STATUSES)});
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS vcr_studies_draft_idx ON evimed_vcr.studies (created_at) WHERE status = 'draft' AND deleted_at IS NULL;
 
 -- Study members and their roles (plan §11.1 conclusion 4): project-level only,
 -- deliberately not an organization model.

@@ -82,11 +82,13 @@ describe("匹配与招募 — choosing a person", () => {
     expect(screen.getByRole("button", { name: /^P-0192/ })).toHaveAttribute("aria-current", "true");
   });
 
-  it("switches direction with the segmented control and sends it", async () => {
+  // The other direction has no data path on the platform: a switch whose other side is always empty is not drawn.
+  it("has only the one direction — no switch to 给患者找试验 — and asks for it by name", async () => {
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
     await screen.findByRole("heading", { name: "P-0201" });
-    await userEvent.click(screen.getByRole("radio", { name: "给患者找试验" }));
-    await waitFor(() => expect(matchingReads(server).some((query) => query.get("direction") === "patient_to_trial")).toBe(true));
+    expect(screen.queryByRole("radio", { name: "给患者找试验" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "给试验找患者" })).toBeNull();
+    expect(matchingReads(server).every((query) => query.get("direction") === "trial_to_patient")).toBe(true);
   });
 
   // The ranking hint orders a coordinator's work; it is never a probability.
@@ -632,7 +634,8 @@ describe("数据与证据 — the card's §6.1 fields", () => {
     expect(screen.getByText("二线 NSCLC，多西他赛单药；含中国人群的研究")).toBeInTheDocument();
     expect(screen.getByText("敏感性范围 3–5.6")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "方案 B 2:1 随机" })).toHaveAttribute("href", "/app/virtual-research/std_1/trial");
-    expect(screen.getByText("版本记录")).toBeInTheDocument();
+    expect(screen.getByText("改动记录")).toBeInTheDocument();
+    expect(screen.queryByText("版本记录")).toBeNull();
     // UI-27: no line beside a title that explains the system.
     expect(screen.queryByText("下游结果随版本重算")).toBeNull();
   });
@@ -642,7 +645,7 @@ describe("数据与证据 — the card's §6.1 fields", () => {
     await screen.findByRole("heading", { name: "对照组 ORR" });
     // A missing display name stays absent; immutable account ids are not names.
     expect(within(detail()).getByText("已复核（昨天）")).toBeInTheDocument();
-    expect(screen.getByText("统计复核 · 昨天 · 针对版本 1")).toBeInTheDocument();
+    expect(screen.getByText("统计复核 · 昨天")).toBeInTheDocument();
     expect(screen.queryByText(/u_stat/)).toBeNull();
     // A card already countersigned offers no second countersignature.
     expect(screen.queryByRole("button", { name: "签注复核" })).toBeNull();
@@ -702,7 +705,7 @@ describe("数据与证据 — 改这张卡", () => {
       endpoint: "PFS", applicability: { population: "二线 NSCLC，多西他赛单药", region: "含中国人群的研究", calibre: "overall" },
       sourceKind: "expert_set", valueSource: "assumed",
     }));
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已保存为版本 2。"));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已保存。"));
     await waitFor(() => expect(server.calls.filter((call) => call.path === DATA).length).toBe(reads + 1));
   });
 
@@ -740,7 +743,7 @@ describe("数据与证据 — 签注复核", () => {
     await userEvent.click(screen.getByRole("button", { name: "签注复核" }));
     await userEvent.click(screen.getByRole("radio", { name: "统计复核" }));
     await userEvent.type(screen.getByLabelText("备注"), "核对过 7 项来源");
-    await userEvent.click(screen.getByRole("button", { name: "签注版本 1" }));
+    await userEvent.click(screen.getByRole("button", { name: "签注" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/reviews`, "POST", {
       kind: "statistical", nodes: ["assumption:control_median_pfs@1"], note: "核对过 7 项来源",
     }));
@@ -753,7 +756,7 @@ describe("数据与证据 — 签注复核", () => {
     await screen.findByRole("heading", { name: "目标 HR" });
     await userEvent.click(screen.getByRole("button", { name: "签注复核" }));
     expect(screen.queryByRole("radiogroup", { name: "复核类型" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "签注版本 1" }));
+    await userEvent.click(screen.getByRole("button", { name: "签注" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/reviews`, "POST", {
       kind: "clinical", nodes: ["assumption:target_hr@1"],
     }));

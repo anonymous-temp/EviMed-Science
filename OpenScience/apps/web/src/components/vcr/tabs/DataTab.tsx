@@ -1,5 +1,4 @@
 import { VcrRegistryCoverage } from "../VcrRegistryCoverage";
-import { VcrReviews } from "../VcrReviews";
 import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ExternalLink } from "lucide-react";
@@ -24,12 +23,16 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Tag } from "@/components/ui/Tag";
 import { IntakePanel } from "../data/IntakePanel";
+import { VcrKnowledgeSection } from "../VcrKnowledge";
+import { VcrNoDefinition } from "../VcrStates";
+import { hasDefinition } from "../vcrTabs";
+import { intendedUseLabel } from "../vcrText";
 import { VcrForestPlot } from "../VcrDiagrams";
 import { ReviewChip, SourceTag } from "../VcrMarks";
 import { VcrValueText } from "../VcrNumber";
 import { VcrPrecedentTable } from "../VcrPrecedentsPanel";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
-import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
+import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError } from "../vcrTabKit";
 import { intervalText, reviewKindLabel, valueText } from "../vcrText";
 import { vcrTabPath } from "../vcrTabs";
 
@@ -67,8 +70,11 @@ export function reviewKindsFor(abilities: readonly string[]): VcrReviewKind[] {
 }
 
 /**
- * 数据与证据: every parameter the study rests on, as a card, and the sentence
- * in the literature each one was read out of.
+ * 定义与证据: what the study is about, and every parameter it rests on — the
+ * definition, the disease pack it works from, each parameter as a card with the
+ * sentence in the literature it was read out of, the trial precedents, and the
+ * data intake. Where the study's tier allows real data the intake comes first,
+ * because everything below it is read from what it holds.
  *
  * The forest plot here is the reason the tab exists. It draws the pooled
  * estimate **and the prediction interval** as separate marks, because the
@@ -100,14 +106,27 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
     // Freezing a snapshot can move what the study's data support: the header re-reads, so its offer to move up appears with no further step.
     ? <IntakePanel studyId={studyId} intake={intake} onChanged={() => { reload(); onStudyChanged?.(); }} />
     : null;
+  // A tier that allows real data puts the intake first: the definition below it is matched against what it holds.
+  const realData = study.tier !== "T0";
+  const defined = hasDefinition(study);
+  const pack = (
+    <VcrKnowledgeSection
+      studyId={studyId}
+      knowledge={study.knowledge}
+      canWrite={study.abilities.includes("write")}
+      onChanged={() => onStudyChanged?.()}
+    />
+  );
   if (data.assumptions.length === 0 && data.precedents.length === 0) {
     return (
       <div className="flex flex-col gap-6">
+        {realData && intakePanel}
+        {defined ? <DefinitionCard study={study} /> : null}
+        {defined ? pack : null}
         {note}
         <VcrRegistryCoverage sources={data.registryCoverage} />
-        <VcrReviews reviews={data.reviews} />
-        <VcrStepPending studyId={studyId} study={study} step="evidence" />
-        {intakePanel}
+        {defined ? <VcrStepPending studyId={studyId} study={study} step="evidence" /> : <VcrNoDefinition study={study} />}
+        {!realData && intakePanel}
       </div>
     );
   }
@@ -125,12 +144,10 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
 
   return (
     <div className="flex flex-col gap-6">
-      {data.status && data.status.length > 0 && (
-        <VcrToolbar summary={data.status.map((item) => `${item.label} ${item.value}`).join(" · ")} />
-      )}
+      {realData && intakePanel}
+      <DefinitionCard study={study} />
+      {pack}
       {note}
-      <VcrRegistryCoverage sources={data.registryCoverage} />
-      <VcrReviews reviews={data.reviews} />
       {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
 
       {data.assumptions.length > 0 && (
@@ -190,32 +207,47 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
       )}
 
       {data.precedents.length > 0 && (
-        <VcrSection title="试验先例" meta={data.precedentSources ?? `${data.precedents.length} 项`}>
+        <VcrSection title="试验先例">
           <VcrPrecedentTable
             rows={data.precedents}
             withUse
             footnote={data.precedentNote ?? "计划值取自登记记录的预计字段，只用于对照；历史基准只用实际值。"}
           />
+          <VcrRegistryCoverage sources={data.registryCoverage} />
         </VcrSection>
       )}
 
       {data.precedentCandidates && data.precedentCandidates.length > 0 && <PrecedentCandidates rows={data.precedentCandidates} />}
 
-      {intakePanel}
-
-      {data.decisions && data.decisions.length > 0 && (
-        <VcrSection title="决策记录" meta={`${data.decisions.length}`}>
-          <ol className="divide-y divide-faint">
-            {data.decisions.map((decision) => (
-              <li key={decision.id} data-vcr-decision={decision.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
-                <span className="w-28 shrink-0 text-caption tabular-nums text-text-3">{decision.at ?? ""}</span>
-                <span className="min-w-0 flex-1 text-ui text-text">{decision.text}</span>
-              </li>
-            ))}
-          </ol>
-        </VcrSection>
-      )}
+      {!realData && intakePanel}
     </div>
+  );
+}
+
+/**
+ * 研究定义: what the study is about, in the words it was described in — the question, the four lines of the PICO, what the result
+ * is measured as and what it may be used for. It is the one thing every other tab reads, so it is the first card of the tab that is
+ * about what the study rests on. Read-only: the definition is written in the conversation, and a change to it is a new one.
+ */
+export function DefinitionCard({ study }: { study: VcrStudy }) {
+  const definition = study.definition;
+  const rows = [
+    { label: "研究问题", value: study.question },
+    { label: "人群", value: definition?.population },
+    { label: "干预", value: definition?.intervention },
+    { label: "对照", value: definition?.comparator },
+    { label: "结局", value: definition?.outcome },
+    { label: "估计什么", value: definition?.estimand },
+    { label: "终点类型", value: definition?.endpoint },
+    { label: "预期用途", value: study.ceiling && !study.ceiling.withinCeiling
+      ? `${intendedUseLabel(study.ceiling.requested)}（结果目前只够用于${intendedUseLabel(study.ceiling.ceiling)}）`
+      : definition?.intendedUse ?? intendedUseLabel(study.intendedUse) },
+  ].filter((row): row is { label: string; value: string } => typeof row.value === "string" && row.value.length > 0);
+  if (rows.length === 0) return null;
+  return (
+    <Card title="研究定义">
+      <div data-vcr-definition=""><VcrFacts rows={rows} /></div>
+    </Card>
   );
 }
 
@@ -268,7 +300,7 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
     ...(assumption.sensitivity ? [{ label: "敏感性", value: assumption.sensitivity }] : []),
     ...(review ? [{
       label: "复核",
-      value: [review.kind, review.by, review.at, review.version != null ? `针对版本 ${review.version}` : null].filter(Boolean).join(" · "),
+      value: [review.kind, review.by, review.at].filter(Boolean).join(" · "),
     }] : []),
   ];
 
@@ -282,7 +314,6 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
           <ReviewChip state={assumption.value.review} by={review?.by} at={review?.at} />
           {assumption.isKey && <Tag>关键假设</Tag>}
           {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
-          {assumption.version != null && <span className="text-caption tabular-nums text-text-3">{`版本 ${assumption.version}`}</span>}
           <span className="flex-1" />
           {mode === "read" && mayEdit && <Button size="sm" variant="secondary" onClick={() => setMode("edit")}>改这张卡</Button>}
           {mode === "read" && maySign && <Button size="sm" variant="secondary" onClick={() => setMode("sign")}>签注复核</Button>}
@@ -310,7 +341,7 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
 
       {facts.length > 0 && <VcrFacts rows={facts} className="mt-3" />}
 
-      {assumption.newEvidence && <NewEvidence news={assumption.newEvidence} version={assumption.version ?? null} />}
+      {assumption.newEvidence && <NewEvidence news={assumption.newEvidence} />}
 
       {detail?.forest && detail.forest.length > 0 && (
         <div className="mt-4">
@@ -360,11 +391,10 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
       )}
 
       {detail?.versions && detail.versions.length > 0 && (
-        <VcrSection title="版本记录" className="mt-6">
+        <VcrSection title="改动记录" className="mt-6">
           <ol className="divide-y divide-faint">
             {detail.versions.map((version) => (
               <li key={version.version} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
-                <span className="w-8 shrink-0 text-caption tabular-nums text-text-3">{`v${version.version}`}</span>
                 <span className="w-28 shrink-0 text-caption tabular-nums text-text-3">{version.at ?? ""}</span>
                 <span className="min-w-0 flex-1 text-ui text-text">{version.text}</span>
                 {version.note && <span className="shrink-0 text-caption text-text-3">{version.note}</span>}
@@ -385,7 +415,7 @@ const NEWS_CAUSE_LABELS: Readonly<Record<NonNullable<VcrAssumption["newEvidence"
  * 有新证据: what bears on the card's sources, and where the new version is. Said in words and never decided here: the platform asks
  * for the version, the engine pools it, and a study whose analysis plan has frozen keeps the version it froze with.
  */
-function NewEvidence({ news, version }: { news: NonNullable<VcrAssumption["newEvidence"]>; version: number | null }) {
+function NewEvidence({ news }: { news: NonNullable<VcrAssumption["newEvidence"]> }) {
   return (
     <div data-vcr-new-evidence="" role="status" className="mt-4 rounded-card border border-border bg-surface-1 p-3">
       <p className="text-ui font-medium text-text">{news.label}</p>
@@ -401,7 +431,7 @@ function NewEvidence({ news, version }: { news: NonNullable<VcrAssumption["newEv
         </ul>
       )}
       {news.afterFreezeVersion != null && (
-        <p className="mt-1.5 text-caption text-text-3">{`分析计划已经冻结：新版本 v${news.afterFreezeVersion} 放在冻结的${version != null ? ` v${version} ` : "版本"}旁边，研究仍按冻结的版本计算。`}</p>
+        <p className="mt-1.5 text-caption text-text-3">分析计划已经冻结：新版本放在冻结的版本旁边，研究仍按冻结的版本计算。</p>
       )}
     </div>
   );
@@ -445,7 +475,7 @@ function EditCard({ studyId, assumption, onClose, onSaved }: {
       sourceKind: "expert_set",
       valueSource: "assumed",
     })
-      .then((saved) => { toast.success(saved?.version ? `已保存为版本 ${saved.version}。` : "已保存。"); onSaved(); })
+      .then(() => { toast.success("已保存。"); onSaved(); })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这张卡暂时无法保存，请稍后重试。" })))
       .finally(() => { holding.current = false; setBusy(false); });
   };
@@ -514,7 +544,7 @@ function SignCard({ studyId, assumption, kinds, onClose, onSigned }: {
       <Input label="备注" value={note} onChange={(event) => setNote(event.target.value)} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-        <Button type="submit" loading={busy} disabled={busy}>{`签注版本 ${assumption.version ?? ""}`.trim()}</Button>
+        <Button type="submit" loading={busy} disabled={busy}>签注</Button>
       </div>
     </form>
   );

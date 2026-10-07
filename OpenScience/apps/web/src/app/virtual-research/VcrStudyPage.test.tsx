@@ -74,12 +74,19 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe("the study page's header", () => {
-  it("carries the study's name, its data tier and — within its ceiling — the plain intended use", async () => {
+  it("carries the study's name and its data tier — and, within its ceiling, no intended-use tag: that is a line of the definition", async () => {
     draw();
     expect(await heading()).toBeInTheDocument();
     expect(screen.getByText("T0 公开资料")).toBeInTheDocument();
-    expect(screen.getByText("研究设计支持")).toBeInTheDocument();
+    expect(screen.queryByText("研究设计支持")).toBeNull();
     expect(document.querySelector("[data-vcr-ceiling]")).toBeNull();
+  });
+
+  it("goes back to the list from a link over the title, and has no rail of seven steps", async () => {
+    draw();
+    await heading();
+    expect(screen.getByRole("link", { name: /虚拟临研/ })).toHaveAttribute("href", "/app/virtual-research");
+    expect(screen.queryByRole("list", { name: "七步进度" })).toBeNull();
   });
 
   // UI-17: a study whose results cannot carry the use it asked for says both,
@@ -89,40 +96,81 @@ describe("the study page's header", () => {
     study.intendedUse = "specified_analysis";
     study.ceiling = {
       ceiling: "design_support", requested: "specified_analysis", withinCeiling: false,
-      reasons: [{ code: "model_tier", detail: "所用模型的可信度层级最多支持「研究设计支持」" }, { code: "review", detail: "关键假设还没有复核" }],
+      reasons: [{ code: "model_tier", detail: "所用模型的可信度层级最多支持“研究设计支持”" }, { code: "review", detail: "关键假设还没有复核" }],
     };
     server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
     draw();
     const tag = await screen.findByRole("button", { name: "指定研究分析 → 研究设计支持" });
     await userEvent.click(tag);
     const drawer = await screen.findByRole("dialog", { name: "预期用途" });
-    expect(within(drawer).getByText("所用模型的可信度层级最多支持「研究设计支持」")).toBeInTheDocument();
+    expect(within(drawer).getByText("所用模型的可信度层级最多支持“研究设计支持”")).toBeInTheDocument();
     expect(within(drawer).getByText("关键假设还没有复核")).toBeInTheDocument();
   });
 
-  it("draws the seven steps as one rail, each linking to the tab that holds its result", async () => {
-    draw();
-    const rail = await screen.findByRole("list", { name: "七步进度" });
-    expect(within(rail).getAllByRole("listitem")).toHaveLength(7);
-    expect(within(rail).getByText("4 张假设卡")).toBeInTheDocument();
-    expect(within(rail).getByRole("link", { name: /证据/ })).toHaveAttribute("href", "/app/virtual-research/std_1/data");
-  });
-
   // 2026-09-20 ruling: the study page grows no second composer.
-  it("has no composer of its own: 对话 opens the study's conversation", async () => {
+  it("has no composer of its own: 对话 opens the conversation the study was opened with", async () => {
+    const study = fixture("ev201/study.json");
+    study.sessionId = "ses_own";
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
     draw();
     await heading();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /对话/ }));
     await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_ev201", expect.any(Function)));
   });
+
+  it("says in one line at the top that the computation engine is not there, instead of waiting for a job to fail", async () => {
+    const missing = fixture("ev201/study.json");
+    missing.engine = "missing";
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: missing });
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-engine='missing']")).toHaveTextContent("计算引擎暂不可用，计算类步骤会在引擎恢复后继续");
+  });
+
+  it("says nothing of the engine while it answers, or has not been asked yet", async () => {
+    for (const engine of ["answering", "wired"]) {
+      const study = fixture("ev201/study.json");
+      study.engine = engine;
+      server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+      const view = draw();
+      await heading();
+      expect(document.querySelector("[data-vcr-engine]")).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it("says it too when the engine was asked and did not answer", async () => {
+    const study = fixture("ev201/study.json");
+    study.engine = "not_answering";
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-engine='not_answering']")).not.toBeNull();
+  });
 });
 
 describe("the seven tabs", () => {
-  it("offers exactly the seven tabs the vocabulary names", async () => {
+  // One row of tabs replaces the step rail and the tabs: five of the seven steps were named like five of the seven tabs.
+  it("is one row of seven, the stage tabs each wearing the state of its stage as a dot that is also said in words", async () => {
     draw();
     await heading();
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["总览", "人群", "虚拟患者", "对照", "试验", "匹配与招募", "数据与证据"]);
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["总览", "定义与证据已完成", "人群已完成", "虚拟患者需要留意", "对照已完成", "试验已完成", "匹配与招募已完成"]);
+    const dots = tabs.map((tab) => tab.querySelector("[data-tab-dot]")?.getAttribute("data-tab-dot") ?? null);
+    // 总览 is the study as a whole and has no dot; the failed 患者 step needs the reader.
+    expect(dots).toEqual([null, "done", "done", "attention", "done", "done", "done"]);
+  });
+
+  it("shows a stage that has not begun as todo, and one under way as active", async () => {
+    const study = fixture("ev201/study.json");
+    study.steps.trial = { ...study.steps.trial, status: "running" };
+    study.steps.matching = { ...study.steps.matching, status: "none" };
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    draw();
+    await heading();
+    expect(screen.getByRole("tab", { name: /^试验/ }).querySelector("[data-tab-dot]")).toHaveAttribute("data-tab-dot", "active");
+    expect(screen.getByRole("tab", { name: /^匹配与招募/ }).querySelector("[data-tab-dot]")).toHaveAttribute("data-tab-dot", "todo");
   });
 
   // Contract §5: every tab renders from what the server sends, and none of
@@ -142,7 +190,7 @@ describe("the seven tabs", () => {
 
   // A payload a tab cannot read is an error card inside that tab; the header,
   // the rail and the other tabs stay where they are.
-  it("keeps a tab that cannot read its payload inside the tab, with the header and rail still there", async () => {
+  it("keeps a tab that cannot read its payload inside the tab, with the header and the other tabs still there", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const junk = { ...fixture("ev201/data.json"), headline: { overview: 5 } };
     server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/data`]: junk });
@@ -154,15 +202,20 @@ describe("the seven tabs", () => {
     });
     expect(panel).toHaveTextContent("这一页的内容暂时读不出来");
     expect(screen.getByRole("heading", { level: 1, name: STUDY_NAME })).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "七步进度" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "人群" }));
+    expect(screen.getAllByRole("tab")).toHaveLength(7);
+    await userEvent.click(screen.getByRole("tab", { name: /^人群/ }));
     await waitFor(() => expect(document.querySelector("#vcr-tab-panel [data-vcr-tab-error]")).toBeNull());
   });
 });
 
 describe("the study page's addresses", () => {
-  it("rewrites a step name to the tab that holds it, in place", async () => {
+  it("rewrites a step name to the tab that holds it, in place — 定义 and 证据 are one tab now", async () => {
     draw(`/app/virtual-research/${STUDY_ID}/evidence`);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_1/data"));
+  });
+
+  it("reads a link to the definition step as the tab that holds it", async () => {
+    draw(`/app/virtual-research/${STUDY_ID}/definition`);
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_1/data"));
   });
 
@@ -201,32 +254,61 @@ describe("the study page's addresses", () => {
   it("opens a package in the reader on the study's own address", async () => {
     draw(`/app/virtual-research/${STUDY_ID}?package=exp_2`);
     expect(await screen.findByRole("heading", { name: "研究包 v1" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "人群" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /^人群/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /返回研究/ }));
-    expect(await screen.findByRole("tab", { name: "人群" })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: /^人群/ })).toBeInTheDocument();
   });
 });
 
-describe("「运行」 and the second human stop", () => {
-  it("lists what is running and what waits, with the budget line and its CPU time", async () => {
+describe("what is computing, in one line", () => {
+  it("is one line under the tabs for the computation under way: its name, how far it has come, and 取消 — no card of every job", async () => {
     draw();
     await heading();
     const strip = document.querySelector("[data-vcr-jobs]") as HTMLElement;
     expect(strip).not.toBeNull();
     const running = strip.querySelector("[data-vcr-job='job_seed_16']") as HTMLElement;
-    expect(running).toHaveTextContent("方案的模拟运行");
+    expect(running).toHaveTextContent("正在方案的模拟运行");
     expect(running).toHaveTextContent("3 / 10");
-    expect(running).toHaveTextContent("进行中");
-    expect(strip.querySelector("[data-vcr-job='job_seed_17']")).toHaveTextContent("待确认预算");
-    // A succeeded job is history, not something going on.
+    expect(within(running).getByRole("progressbar", { name: "进度" })).toHaveAttribute("aria-valuenow", "30");
+    // The strip is under the tab row and above the panel.
+    const tabs = screen.getByRole("tablist");
+    expect(tabs.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A job that waits on the budget is a line of its own; a succeeded job is history and is not listed at all.
+    expect(strip.querySelector("[data-vcr-job='job_seed_17']")).toBeNull();
     expect(strip.querySelector("[data-vcr-job='job_seed_18']")).toBeNull();
     expect(within(strip).getByText("有 1 项计算等待预算确认 · 需 2.5 小时 CPU 时间")).toBeInTheDocument();
     // The budget is CPU time; there is no money anywhere on it.
     expect(strip.textContent).not.toMatch(/¥|元/);
+    // And no heading: it is not a section.
+    expect(within(strip).queryByRole("heading")).toBeNull();
+  });
+
+  it("is absent when nothing runs, waits or failed", async () => {
+    const study = fixture("ev201/study.json");
+    study.jobs = study.jobs.filter((job: { state: string }) => job.state === "succeeded");
+    study.budget = { ...study.budget, awaitingBudget: 0 };
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-jobs]")).toBeNull();
+  });
+
+  it("says how many wait behind the one that runs", async () => {
+    const study = fixture("ev201/study.json");
+    study.jobs = [
+      { ...study.jobs.find((job: { id: string }) => job.id === "job_seed_16") },
+      { ...study.jobs.find((job: { id: string }) => job.id === "job_seed_18"), id: "job_q1", state: "queued", cancelable: true },
+      { ...study.jobs.find((job: { id: string }) => job.id === "job_seed_18"), id: "job_q2", state: "queued", cancelable: true },
+    ];
+    study.budget = { ...study.budget, awaitingBudget: 0 };
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-job='job_seed_16']")).toHaveTextContent("另有 2 项排队");
   });
 
   // The 2026-10-05 observation: the engine container was stopped and a job kept reading 「进行中」 with nothing to say why.
-  it("says in one line, with nothing to press, that a running job waits on an engine that is not answering", async () => {
+  it("says in the same line, with nothing to press, that a running job waits on an engine that is not answering", async () => {
     installVcrServer(network.productRequest, {
       "GET /vcr/studies/std_1": () => {
         const study = fixture("ev201/study.json");
@@ -236,15 +318,11 @@ describe("「运行」 and the second human stop", () => {
     });
     draw();
     await heading();
-    const strip = document.querySelector("[data-vcr-jobs]") as HTMLElement;
-    const running = strip.querySelector("[data-vcr-job='job_seed_16']") as HTMLElement;
+    const running = document.querySelector("[data-vcr-job='job_seed_16']") as HTMLElement;
     const line = running.querySelector("[data-vcr-job-wait='engine']") as HTMLElement;
     expect(line).toHaveTextContent("计算引擎暂时没有回应，它恢复后这项计算会自动继续，无需操作。");
-    // It is a sentence, not a control: the only button on the row is the cancel it already had.
+    // It is a sentence, not a control: the only button on the line is the cancel it already had.
     expect(within(line).queryByRole("button")).toBeNull();
-    expect(running).toHaveTextContent("进行中");
-    // The job that waits on something else (the budget) is not told it waits on the engine.
-    expect(strip.querySelector("[data-vcr-job='job_seed_17'] [data-vcr-job-wait]")).toBeNull();
   });
 
   it("says nothing about the engine for a job the engine is working on", async () => {
@@ -273,14 +351,14 @@ describe("「运行」 and the second human stop", () => {
 
   it("confirms everything that waits with the CPU time it needs, from the header menu's entry too", async () => {
     draw();
-    await openMenu("设定计算预算");
+    await openMenu("计算预算");
     const dialog = await screen.findByRole("dialog", { name: "计算预算" });
     await userEvent.click(within(dialog).getByRole("button", { name: "全部确认" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1/budget", "POST", { cpuSeconds: 9000 }));
     expect(server.calls.filter((call) => call.path === "/vcr/studies/std_1/budget")).toHaveLength(1);
   });
 
-  it("cancels a running job by its id and re-reads the study", async () => {
+  it("cancels the running job by its id and re-reads the study", async () => {
     draw();
     await heading();
     const row = document.querySelector("[data-vcr-job='job_seed_16']") as HTMLElement;
@@ -289,26 +367,54 @@ describe("「运行」 and the second human stop", () => {
     expect(toasts.success).toHaveBeenCalledWith("已取消。");
   });
 
-  it("shows a job that did not finish with the reason it gave", async () => {
+  it("shows a computation that did not finish with the reason it gave — when nothing else is running", async () => {
     const study = fixture("ev201/study.json");
-    study.jobs[0] = { ...study.jobs[0], state: "failed", cancelable: false, error: { code: "vcr_engine_failed", message: "引擎在第 3 批重复时退出", partial: true } };
+    study.jobs = [{ ...study.jobs[0], state: "failed", cancelable: false, error: { code: "vcr_engine_failed", message: "引擎在第 3 批重复时退出", partial: true } }];
+    study.budget = { ...study.budget, awaitingBudget: 0 };
     server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
     draw();
     await heading();
-    const row = document.querySelector("[data-vcr-job='job_seed_18']") as HTMLElement;
-    expect(row).toHaveTextContent("未完成");
-    expect(row).toHaveTextContent("引擎在第 3 批重复时退出");
+    expect(document.querySelector("[data-vcr-job-failed]")).toHaveTextContent("引擎在第 3 批重复时退出");
+  });
+
+  it("does not show a failure the same computation has since got past", async () => {
+    const study = fixture("ev201/study.json");
+    const success = { ...study.jobs.find((job: { id: string }) => job.id === "job_seed_18") };
+    study.jobs = [success, { ...success, id: "job_old", state: "failed", error: { code: "x", message: "旧的失败" } }];
+    study.budget = { ...study.budget, awaitingBudget: 0 };
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-jobs]")).toBeNull();
   });
 });
 
+/** Pick what to export in the dialog 「导出…」 opens, and export it. */
+async function exportAs(label: string) {
+  await openMenu("导出…");
+  const dialog = await screen.findByRole("dialog", { name: "导出" });
+  await userEvent.click(within(dialog).getByRole("radio", { name: label }));
+  await userEvent.click(within(dialog).getByRole("button", { name: "导出" }));
+}
+
 describe("the 「⋯」 menu", () => {
+  // The six exports are one entry that opens a choice, not six entries.
+  it("offers the exports as one entry that opens the choice, the study package first", async () => {
+    draw();
+    await openMenu("导出…");
+    const dialog = await screen.findByRole("dialog", { name: "导出" });
+    expect(within(dialog).getAllByRole("radio").map((radio) => (radio.closest("label") as HTMLElement).textContent)).toEqual(
+      ["研究包", "模拟报告", "CDE 沟通交流资料包", "系统验证文档包", "模型分析计划", "模型分析报告"]);
+    expect(within(dialog).getByRole("radio", { name: "研究包" })).toBeChecked();
+  });
+
   // CW-19: an export that could not start now stays on the page with its sentence.
   it("keeps a deferred export on the page, with the sentence", async () => {
     server = installVcrServer(network.productRequest, {
       [`POST /vcr/studies/${STUDY_ID}/export`]: { export: { id: "exp_9" }, sessionId: null, runId: null, deferred: "前一个运行还没结束" },
     });
     draw();
-    await openMenu("导出研究包");
+    await exportAs("研究包");
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1/export", "POST", { kind: "study_package" }));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith(VCR_DEFERRED_SENTENCE));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_1");
@@ -317,22 +423,22 @@ describe("the 「⋯」 menu", () => {
 
   it("opens the conversation of an export that did start", async () => {
     draw();
-    await openMenu("导出 CDE 沟通交流资料包");
+    await exportAs("CDE 沟通交流资料包");
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1/export", "POST", { kind: "cde_communication_pack" }));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
   });
 
   it.each([
-    ["导出模拟报告", "simulation_report"],
-    ["导出系统验证文档包", "validation_pack"],
-    ["导出模型分析计划", "model_analysis_plan"],
-    ["导出模型分析报告", "model_analysis_report"],
-  ])("dispatches %s through the current reader's export ability", async (label, kind) => {
+    ["模拟报告", "simulation_report"],
+    ["系统验证文档包", "validation_pack"],
+    ["模型分析计划", "model_analysis_plan"],
+    ["模型分析报告", "model_analysis_report"],
+  ])("exports the %s through the current reader's export ability", async (label, kind) => {
     const study = fixture("ev201/study.json");
     study.abilities = ["read", "export"];
     server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
     draw();
-    await openMenu(label);
+    await exportAs(label);
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1/export", "POST", { kind }));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
     expect(server.calls.filter((call) => call.path === "/vcr/studies/std_1/export")).toHaveLength(1);
@@ -364,6 +470,91 @@ describe("the 「⋯」 menu", () => {
     expect(server.calls.filter((call) => call.method === "DELETE")).toHaveLength(1);
     await act(async () => { finish({ id: STUDY_ID, projectId: "prj_ev201", deleted: true }); });
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/virtual-research$/));
+  });
+});
+
+describe("重命名", () => {
+  it("opens with the name as it is, saves the new one with exactly { name }, re-reads the study and asks for the project list again", async () => {
+    draw();
+    await openMenu("重命名");
+    const dialog = await screen.findByRole("dialog", { name: "重命名研究" });
+    const field = within(dialog).getByLabelText("研究名称");
+    expect(field).toHaveValue(STUDY_NAME);
+    await userEvent.clear(field);
+    await userEvent.type(field, "  EV-201 外部对照可行性  ");
+    const reads = () => server.calls.filter((call) => call.method === "GET" && call.path === "/vcr/studies/std_1").length;
+    const before = reads();
+    await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1", "PATCH", { name: "EV-201 外部对照可行性" }));
+    await waitFor(() => expect(reads()).toBe(before + 1));
+    expect(store.load).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "重命名研究" })).toBeNull());
+  });
+
+  it("closes without asking the server when the name did not change, and will not save an empty or too long one", async () => {
+    draw();
+    await openMenu("重命名");
+    const dialog = await screen.findByRole("dialog", { name: "重命名研究" });
+    const save = within(dialog).getByRole("button", { name: "保存" });
+    await userEvent.clear(within(dialog).getByLabelText("研究名称"));
+    expect(save).toBeDisabled();
+    await userEvent.type(within(dialog).getByLabelText("研究名称"), STUDY_NAME);
+    await userEvent.click(save);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "重命名研究" })).toBeNull());
+    expect(server.calls.some((call) => call.method === "PATCH")).toBe(false);
+  });
+
+  it("says why when the server refuses, and keeps what was typed", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`PATCH /vcr/studies/${STUDY_ID}`]: () => { throw new WebApiError("no", { status: 403, code: "vcr_forbidden" }); },
+    });
+    draw();
+    await openMenu("重命名");
+    const dialog = await screen.findByRole("dialog", { name: "重命名研究" });
+    await userEvent.type(within(dialog).getByLabelText("研究名称"), "！");
+    await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+    expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("研究名称")).toHaveValue(`${STUDY_NAME}！`);
+  });
+});
+
+describe("变更记录", () => {
+  it("holds what changed and the AI reviews, in a drawer — not under the overview's numbers", async () => {
+    draw();
+    expect(document.querySelector("[data-vcr-changes]")).toBeNull();
+    await openMenu("变更记录");
+    const drawer = await screen.findByRole("dialog", { name: "变更记录" });
+    const log = drawer.querySelector("[data-vcr-changes]") as HTMLElement;
+    expect(within(log).getAllByRole("listitem").length).toBeGreaterThan(0);
+    // No version label and no model name: a date says when, and a reviewer is said by what it reviewed.
+    expect(log.textContent).not.toMatch(/\bv\d+\b|qwen|deepseek/i);
+  });
+});
+
+describe("AI 运行", () => {
+  const runs = { runs: [
+    { sessionId: "ses_ev", label: "虚拟临研 · 证据", state: "finished", at: "今天 09:01" },
+    { sessionId: "ses_an", label: "虚拟临研 · 分析", state: "running", at: "今天 09:12" },
+  ] };
+
+  it("lists the programme's background conversations by what they did, with a state word and a time, and opens the one pressed", async () => {
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/runs`]: runs });
+    draw();
+    await openMenu("AI 运行");
+    const drawer = await screen.findByRole("dialog", { name: "AI 运行" });
+    const rows = await within(drawer).findAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual(["虚拟临研 · 证据已完成 · 今天 09:01", "虚拟临研 · 分析进行中 · 今天 09:12"]);
+    expect(drawer.textContent).not.toMatch(/run_|ses_/);
+    await userEvent.click(within(drawer).getByRole("button", { name: "虚拟临研 · 分析" }));
+    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_ev201", expect.any(Function)));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+  });
+
+  it("says plainly when the AI has done nothing in the background", async () => {
+    draw();
+    await openMenu("AI 运行");
+    const drawer = await screen.findByRole("dialog", { name: "AI 运行" });
+    expect(await within(drawer).findByText("AI 还没有在后台做过什么。")).toBeInTheDocument();
   });
 });
 
@@ -440,23 +631,21 @@ describe("the 「⋯」 menu follows the reader's abilities", () => {
     return (await screen.findAllByRole("menuitem")).map((item) => item.textContent);
   };
 
-  it("offers the lead everything, the members entry included", async () => {
+  it("offers the lead everything: rename, export, members, budget, pause, the record, the AI's runs, and — apart — delete", async () => {
     draw();
-    expect(await items()).toEqual(["导出研究包", "导出 CDE 沟通交流资料包", "导出模拟报告", "导出系统验证文档包", "导出模型分析计划", "导出模型分析报告", "设定计算预算", "成员与角色", "暂停", "删除"]);
+    expect(await items()).toEqual(["重命名", "导出…", "成员与角色", "计算预算", "暂停", "变更记录", "AI 运行", "删除"]);
   });
 
-  it("offers a reader who only exports all six exports and nothing that changes the study", async () => {
+  it("offers a reader who only exports the export, and the two records — nothing that changes the study", async () => {
     withAbilities(["read", "review_clinical", "export"]);
     draw();
-    expect(await items()).toEqual(["导出研究包", "导出 CDE 沟通交流资料包", "导出模拟报告", "导出系统验证文档包", "导出模型分析计划", "导出模型分析报告"]);
+    expect(await items()).toEqual(["导出…", "变更记录", "AI 运行"]);
   });
 
-  it("keeps the budget, the status, the members and the deletion from a data manager, who is not the lead", async () => {
+  it("keeps the budget, the status, the members and the deletion from a data manager, who is not the lead — and lets them rename", async () => {
     withAbilities(["read", "write", "run", "manage_data", "read_patient_level"]);
     draw();
-    await heading();
-    // Nothing in the menu is theirs: no menu at all rather than an empty one.
-    expect(screen.queryByRole("button", { name: "更多操作" })).toBeNull();
+    expect(await items()).toEqual(["重命名", "变更记录", "AI 运行"]);
   });
 
   it("shows a reader who cannot confirm the budget the line that jobs wait, and no button that would be refused", async () => {

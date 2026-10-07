@@ -35,7 +35,7 @@ import { useVcrLoad, VcrSection, VcrTabError } from "./vcrTabKit";
 import { numberText } from "./vcrText";
 
 /**
- * 知识包与人群定义库: which disease pack a study works from and which library
+ * 病种定义包与人群定义库: which disease pack a study works from and which library
  * definitions it used, and the account's library itself.
  *
  * Hidden knowledge:
@@ -97,7 +97,7 @@ export function VcrKnowledgeSection({ studyId, knowledge, canWrite, onChanged }:
   const { pack, definitions } = knowledge;
   if (!pack && definitions.length === 0 && !canWrite) return null;
   return (
-    <VcrSection title="知识包与定义">
+    <VcrSection title="病种定义包">
       <div data-vcr-knowledge="" className="flex flex-col gap-4">
         {pack ? <PackRow studyId={studyId} pack={pack} onChanged={onChanged} /> : <BindPack studyId={studyId} canWrite={canWrite} onChanged={onChanged} />}
         {definitions.length > 0 && (
@@ -142,7 +142,6 @@ function PackRow({ studyId, pack, onChanged }: { studyId: string; pack: VcrPackS
       <p className="flex flex-wrap items-center gap-2 text-ui text-text">
         <span className="font-medium">{packName(pack)}</span>
         <PackStatusTag status={pack.status} />
-        <span className="text-caption tabular-nums text-text-3">{`v${pack.version}`}</span>
         <span className="text-caption text-text-3">{counts}</span>
         {pack.canPromote && <Button size="sm" variant="secondary" loading={busy} onClick={promote}>复核后标为已整理</Button>}
       </p>
@@ -161,7 +160,7 @@ function PackRow({ studyId, pack, onChanged }: { studyId: string; pack: VcrPackS
 function PlatformAttribution({ platform }: { platform: NonNullable<VcrPackSummary["platform"]> }) {
   return (
     <p data-vcr-platform-pack={platform.state} className="flex flex-wrap items-center gap-2 text-caption text-text-3">
-      <Tag tone="accent">平台知识包</Tag>
+      <Tag tone="accent">平台病种定义包</Tag>
       <span>{platform.author.name ? `${platform.author.name} 整理 · 取自其 v${platform.author.sourceVersion}` : `取自一位已撤回署名的作者的 v${platform.author.sourceVersion}`}</span>
       {platform.state === "retired" && <Tag>已撤回，不再提供给新研究</Tag>}
       {platform.sourceChanged && <Tag>来源有变更</Tag>}
@@ -170,7 +169,7 @@ function PlatformAttribution({ platform }: { platform: NonNullable<VcrPackSummar
 }
 
 /**
- * 申请成为平台知识包: offered to the lead once the pack is marked curated. The code re-checks the pack; a pack that passes becomes the
+ * 申请成为平台病种定义包: offered to the lead once the pack is marked curated. The code re-checks the pack; a pack that passes becomes the
  * platform's own version under the author's name, one that fails stays this account's and the page names what failed.
  */
 function PlatformRequest({ studyId, request, onChanged }: { studyId: string; request: NonNullable<VcrPackSummary["platformRequest"]>; onChanged: () => void }) {
@@ -184,25 +183,25 @@ function PlatformRequest({ studyId, request, onChanged }: { studyId: string; req
     void requestVcrPlatformPack(studyId)
       .then((result) => {
         setAnswer(result);
-        if (result.state === "passed") { toast.success("复核通过，已成为平台知识包。"); onChanged(); }
+        if (result.state === "passed") { toast.success("复核通过，已成为平台病种定义包。"); onChanged(); }
       })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法申请，请稍后重试。" })))
       .finally(() => { holding.current = false; setBusy(false); });
   };
   const failing = answer ? (answer.state === "failed" ? answer.failing : []) : (request.recheck?.state === "failed" ? request.recheck.failing : []);
-  if (!request.canRequest && request.requested) return <p data-vcr-platform-request="done" className="text-caption text-text-3">这份知识包已经是平台知识包。</p>;
+  if (!request.canRequest && request.requested) return <p data-vcr-platform-request="done" className="text-caption text-text-3">这份病种定义包已经是平台病种定义包。</p>;
   if (!request.canRequest && failing.length === 0) return null;
   return (
     <div data-vcr-platform-request="" className="flex flex-col gap-2">
       {request.canRequest && (
         <p className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="secondary" loading={busy} onClick={ask}>申请成为平台知识包</Button>
+          <Button size="sm" variant="secondary" loading={busy} onClick={ask}>申请成为平台病种定义包</Button>
           <span className="text-caption text-text-3">平台会重新核对结构、授权和来源；通过后所有账号都能选用，并署上你的名字。</span>
         </p>
       )}
       {failing.length > 0 && (
         <div role="status" data-vcr-platform-failing="" className="rounded-card border border-border bg-surface-1 p-3">
-          <p className="text-ui font-medium text-text">复核没有通过，知识包仍是你账号里的：</p>
+          <p className="text-ui font-medium text-text">复核没有通过，病种定义包仍是你账号里的：</p>
           <ul className="mt-1.5 flex flex-col gap-1 text-caption text-text-2">
             {failing.map((entry) => <li key={`${entry.section ?? ""}-${entry.id}-${entry.code}`}>{`${entry.section ? `${entry.section} · ` : ""}${entry.id}：${entry.detail}`}</li>)}
           </ul>
@@ -219,22 +218,22 @@ function BindPack({ studyId, canWrite, onChanged }: { studyId: string; canWrite:
   const [busy, setBusy] = useState(false);
   const holding = useRef(false);
   const selectId = useId();
-  if (!canWrite) return <p className="text-ui text-text-3">这个研究还没有知识包。</p>;
-  if (state.kind !== "ready") return <p className="text-ui text-text-3">这个研究还没有知识包。</p>;
-  if (state.data.length === 0) return <p className="text-ui text-text-3">这个研究还没有知识包。</p>;
+  if (!canWrite) return <p className="text-ui text-text-3">这个研究还没有病种定义包。</p>;
+  if (state.kind !== "ready") return <p className="text-ui text-text-3">这个研究还没有病种定义包。</p>;
+  if (state.data.length === 0) return <p className="text-ui text-text-3">这个研究还没有病种定义包。</p>;
   const bind = () => {
     if (!choice || holding.current) return;
     holding.current = true;
     setBusy(true);
     void bindVcrPack(studyId, choice)
-      .then(() => { toast.success("已绑定知识包。"); onChanged(); })
+      .then(() => { toast.success("已绑定病种定义包。"); onChanged(); })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法绑定，请稍后重试。" })))
       .finally(() => { holding.current = false; setBusy(false); });
   };
   return (
     <div data-vcr-bind-pack="" className="flex flex-wrap items-end gap-3">
       <div className="min-w-48">
-        <Select id={selectId} label="选用知识包" value={choice} onChange={(event) => setChoice(event.target.value)}>
+        <Select id={selectId} label="选用病种定义包" value={choice} onChange={(event) => setChoice(event.target.value)}>
           <option value="">请选择</option>
           {state.data.map((pack) => <option key={`${pack.origin}-${pack.id}`} value={pack.id}>{`${packName(pack)}${pack.status === "ai-draft" ? "（AI 草拟）" : ""}`}</option>)}
         </Select>

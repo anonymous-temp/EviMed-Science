@@ -62,7 +62,7 @@
 
 import { createHash } from "node:crypto";
 
-import { PLATFORM_PUBLISHER_USER_ID, VCR_ENGINE_PROTOCOL_VERSION, canonicalScenarioJson, vcrResultOutputPayload } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, VCR_DRAFT_STUDY_NAME, VCR_ENGINE_PROTOCOL_VERSION, VCR_LEGACY_DEFAULT_STUDY_NAME, canonicalScenarioJson, vcrResultOutputPayload } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
@@ -1009,7 +1009,19 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     // Platform packs (flywheel F26): off, no platform row is read and the request is a 404 by its own code.
     platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
       people: (ids) => store.personNames(ids) } });
-  service.attach({ corrections, knowledge });
+  service.attach({ corrections, knowledge, engineProbe });
+  // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
+  // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
+  if (projectStore?.renameProject) {
+    store.onStudyNamed = async ({ study, previousName }) => {
+      const owner = await projectStore.userById(study.userId);
+      if (!owner) return;
+      const current = (await projectStore.listProjects(owner)).find((/** @type {any} */ project) => project.id === study.projectId);
+      if (current && [previousName, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME].includes(current.name)) {
+        await projectStore.renameProject(owner, study.projectId, [...String(study.name)].slice(0, 40).join(""));
+      }
+    };
+  }
   // The public 「模拟研究」 column: the lead's publish and withdraw, and the reader the public pages package takes. Neither exists
   // while the switch is off, so nothing reads the table and the routes answer 404 by their own code.
   const publications = config.vcrPublicSimulationsEnabled ? createVcrPublications({ store, service, matchStore }) : null;

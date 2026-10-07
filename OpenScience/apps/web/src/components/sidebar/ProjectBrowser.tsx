@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
 import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
-import { useVcrProjectIds } from "@/components/vcr/useVcrProjectIds";
+import { useVcrProjects } from "@/components/vcr/useVcrProjectIds";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 /** Conversation rows a group shows before 「展开其余 N 条对话」 — the kernel's own
@@ -124,7 +124,8 @@ export function ProjectBrowser({ geo = false, vcr = false }: {
   const { projects, currentId, switching, loading, error, load, select, create, rename } = useProjectStore();
   const projectsKey = projects.map((project) => project.id).join("\u0000");
   const geoProjectIds = useGeoProjectIds(geo, projectsKey);
-  const { ids: vcrProjectIds, drafts: vcrDraftIds } = useVcrProjectIds(vcr, projectsKey);
+  // A draft study (「新建研究」 before the first thing is said in it) is not one of the account's projects yet: it is left out of the list.
+  const { studies: vcrProjectIds, drafts: vcrDraftIds } = useVcrProjects(vcr, projectsKey);
   const navigate = useNavigate();
   const location = useLocation();
   const headingId = useId();

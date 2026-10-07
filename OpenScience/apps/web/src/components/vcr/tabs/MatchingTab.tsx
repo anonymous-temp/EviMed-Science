@@ -26,7 +26,6 @@ import { DataTable } from "@/components/ui/DataTable";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Tag } from "@/components/ui/Tag";
 import { VcrJudgmentDrawer } from "../VcrJudgmentDrawer";
-import { VcrCountsBand } from "../VcrCounts";
 import { VcrForecastChart } from "../VcrCharts";
 import { VcrFunnelBar } from "../VcrDiagrams";
 import { SourceTag } from "../VcrMarks";
@@ -45,10 +44,11 @@ const VIEWS: ReadonlyArray<{ value: View; label: string }> = Object.freeze([
   { value: "followup", label: "随访" },
 ]);
 
-const DIRECTIONS: ReadonlyArray<{ value: Direction; label: string }> = Object.freeze([
-  { value: "trial_to_patient", label: "给试验找患者" },
-  { value: "patient_to_trial", label: "给患者找试验" },
-]);
+/**
+ * The one direction there is: from the trial's criteria to the people who might meet them. The other (「给患者找试验」) has no data path
+ * on the platform, so no control for it is drawn — a switch whose other side is always empty is a promise nothing keeps.
+ */
+const DIRECTION: Direction = "trial_to_patient";
 
 /**
  * What the model's ranking hint is called wherever it appears. It orders a
@@ -98,10 +98,9 @@ const STATE_ICON: Record<VcrCriterionState, typeof CircleCheck> = {
  */
 export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const [view, setView] = useState<View>("matching");
-  const [direction, setDirection] = useState<Direction>("trial_to_patient");
   const [candidate, setCandidate] = useState<string | null>(null);
-  const { state, reload } = useVcrLoad(`${studyId}:matching:${view}:${direction}`, () => getVcrMatching(studyId, {
-    view, direction, ...(view === "matching" && candidate ? { candidate } : {}),
+  const { state, reload } = useVcrLoad(`${studyId}:matching:${view}`, () => getVcrMatching(studyId, {
+    view, direction: DIRECTION, ...(view === "matching" && candidate ? { candidate } : {}),
   }));
   const pick = (id: string) => {
     setCandidate(id);
@@ -109,15 +108,11 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     reload();
   };
   const switchView = (next: View) => { setView(next); setCandidate(null); };
-  const switchDirection = (next: Direction) => { setDirection(next); setCandidate(null); };
 
   const toolbar = (summary?: string) => (
     <VcrToolbar summary={summary}>
       {study.abilities.includes("export") && study.abilities.includes("read_patient_level") && <VcrCorrectionCasesActions key={studyId} studyId={studyId} />}
       <SegmentedControl aria-label="匹配与招募的视图" value={view} onChange={switchView} options={[...VIEWS]} />
-      {view === "matching" && (
-        <SegmentedControl aria-label="匹配方向" value={direction} onChange={switchDirection} options={[...DIRECTIONS]} />
-      )}
     </VcrToolbar>
   );
   if (state.kind === "loading") return <div className="flex flex-col gap-6">{toolbar()}<VcrTabSkeleton /></div>;
@@ -160,7 +155,6 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       {view === "referral" && <ReferralView studyId={studyId} data={data} abilities={study.abilities} />}
       {view === "sites" && <SitesView data={data} />}
       {view === "followup" && <FollowupView data={data} />}
-      <VcrCountsBand counts={data.counts} />
     </div>
   );
 }

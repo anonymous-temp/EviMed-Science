@@ -176,6 +176,10 @@ function requests(target, ids) {
   return {
     "GET /studies/:id": async () => ["GET", S, undefined],
     "GET /studies/:id/:tab": async () => ["GET", `${S}/overview`, undefined],
+    "GET /studies/:id/runs": async () => ["GET", `${S}/runs`, undefined],
+    "GET /studies/:id/cards": async () => ["GET", `${S}/cards?kind=criteria`, undefined],
+    // A request that no card answers: the point of the grid is who is refused, and a write that reaches nothing proves that as well.
+    "POST /studies/:id/cards": async () => ["POST", `${S}/cards`, { kind: "criteria", set: { "99.requirement.value": 1 } }],
     "PATCH /studies/:id name,question,action": async () => ["PATCH", S, { name: "改个名字", question: "同一个问题" }],
     "PATCH /studies/:id dataTier,intendedUse,status": async () => ["PATCH", S, { status: "active" }],
     "DELETE /studies/:id": async () => ["DELETE", `/api/vcr/studies/${await ids.disposable()}`, undefined],
@@ -757,7 +761,8 @@ test("DL-13 DL-15 readiness names the module and its engine; the metrics carry t
   const ready = await (await fetch(`${context.base}/api/ready`)).json();
   const vcr = ready.data.checks.vcr;
   assert.equal(vcr.ok, true, JSON.stringify(vcr));
-  assert.equal(vcr.engine, "wired");
+  // Composed, and either not asked yet (`wired`) or answering: a study page read since the last probe asks the engine's /health.
+  assert.ok(["wired", "answering"].includes(vcr.engine), String(vcr.engine));
   assert.equal(vcr.warnings?.includes("vcr_engine_unconfigured") ?? false, false);
   const text = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
   for (const line of [/^open_science_vcr_enabled 1$/m, /^open_science_vcr_tables_readable 1$/m, /^open_science_vcr_engine_configured 1$/m,
@@ -826,4 +831,28 @@ test("shared exports serve all VCR kinds to current members without a new resear
   assert.equal((await call("owner", "DELETE", `/api/vcr/studies/${study.id}/members/${accounts.lead}`)).status, 200);
   assert.equal((await call("lead", "GET", `/api/document-exports/${lastId}`)).status, 404);
   assert.equal((await call("lead", "GET", `/api/document-exports/${lastId}/download/docx`)).status, 404);
+});
+
+test("a draft nobody spoke in is swept with its project an hour on, through the real server; one that was named is not a draft and stays", options, async () => {
+  const projectIds = async () => (await call("viewer", "GET", "/api/projects")).body.data.map((/** @type {any} */ project) => project.id);
+  const draft = await call("viewer", "POST", "/api/vcr/studies", {});
+  assert.equal(draft.status, 201, draft.text);
+  const { id, projectId } = draft.body.data;
+  assert.equal((await rows(`SELECT status FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].status, "draft");
+  assert.ok((await projectIds()).includes(projectId), "the project is there while the draft is");
+
+  // Young: nothing happens.
+  assert.equal((await context.app.vcr.drafts.sweep()).deleted, 0);
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 1);
+
+  const named = await call("viewer", "POST", "/api/vcr/studies", { name: "已命名的研究" });
+  assert.equal(named.status, 201, named.text);
+  await rows(`UPDATE evimed_vcr.studies SET created_at = now() - interval '3 hours' WHERE id = ANY($1)`, [[id, named.body.data.id]]);
+
+  const swept = await context.app.vcr.drafts.sweep();
+  assert.ok(swept.deleted >= 1, "the old draft is deleted");
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 0, "the study row goes");
+  assert.equal((await projectIds()).includes(projectId), false, "and its project with it");
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [named.body.data.id]))[0].n, 1, "a study that is not a draft is never swept");
+  assert.deepEqual(await context.app.vcr.drafts.sweep().then((result) => result.deleted), 0, "a second sweep has nothing left to do");
 });

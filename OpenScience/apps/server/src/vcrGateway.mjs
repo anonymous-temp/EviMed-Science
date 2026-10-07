@@ -672,7 +672,10 @@ async function checkedCriteria(deps, rows, issues, what) {
  */
 const WRITERS = {
   async definition(item, { store, study }) {
-    if (!item.only(["pico", "estimand", "endpointType", "intendedUse", "fieldSources"])) return null;
+    if (!item.only(["pico", "estimand", "endpointType", "intendedUse", "fieldSources", "title", "question"])) return null;
+    // The study's name and its question in one sentence: the first definition names a draft study from them (`VcrStore.saveDefinition`).
+    const title = item.str("title", { max: 60 });
+    const question = item.str("question", { max: 2000 });
     const pico = item.obj("pico") ?? {};
     const estimand = item.obj("estimand") ?? {};
     const endpointType = item.choice("endpointType", VCR_ENDPOINT_TYPES);
@@ -688,6 +691,7 @@ const WRITERS = {
     if (!item.ok) return null;
     const saved = await store.saveDefinition({
       studyId: study.id, userId: study.userId, pico, estimand, endpointType: endpointType ?? null, intendedUse, fieldSources, reviewState: "ai_set",
+      title: title ?? null, question: question ?? null,
     });
     return saved.id;
   },

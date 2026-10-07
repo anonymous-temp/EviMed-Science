@@ -7,6 +7,7 @@ import { useProjectStore } from "@/lib/projects";
 import { PROJECT_EXPLAINER } from "@/lib/projectNames";
 import { RUNS_CHANGED_EVENT } from "@/lib/runPresentation";
 import { provideFrameSessionSearch } from "@/lib/runtimeUiBridge";
+import { hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
 import { ProjectBrowser } from "./ProjectBrowser";
 
 const PROJECTS = [
@@ -739,7 +740,8 @@ describe("ProjectBrowser — 虚拟临研 studies", () => {
   });
 
   it("does not list a study that is still a draft anywhere, and a control plane with no draft state hides nothing", async () => {
-    mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "未命名研究", status: "draft" }] });
+    // The control plane lists a draft's project apart from the studies (`draftProjectIds`), so no row of `studies` is a draft.
+    mocks.getVcrHome.mockResolvedValue({ studies: [], draftProjectIds: ["p-heart"] });
     const first = renderModules({ vcr: true });
     await screen.findByRole("button", { name: "Paper 1" });
     await waitFor(() => expect(screen.queryByRole("button", { name: "心衰" })).not.toBeInTheDocument());
@@ -760,6 +762,37 @@ describe("ProjectBrowser — 虚拟临研 studies", () => {
     await userEvent.click(vcrGroup);
     expect(JSON.parse(window.localStorage.getItem("ai4s.sidebar.moduleGroups") ?? "{}")).toEqual({ vcr: true });
     expect(screen.getByRole("button", { name: /循证传播/ })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  // 「新建研究」 makes the study and its project before anything is said in it: until the first definition names it, it is a draft and
+  // not one of the account's projects, so the list leaves it out (and an hour with nothing said deletes it).
+  it("leaves a draft study's project out of the list, and keeps every other", async () => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [], draftProjectIds: ["p-heart"] });
+    render(
+      <MemoryRouter initialEntries={["/app/chat"]}>
+        <ProjectBrowser vcr />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: "Paper 1" });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "心衰" })).toBeNull());
+    expect(screen.getByRole("button", { name: "Paper 1" })).toBeInTheDocument();
+  });
+
+  it("keeps a draft's project when the module is not offered: the list only knows drafts from the module", async () => {
+    renderBrowser();
+    expect(await screen.findByRole("button", { name: "心衰" })).toBeInTheDocument();
+  });
+
+  it("leaves a project out at once when this browser has just made it as a draft, before the list has been read again", async () => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [], draftProjectIds: [] });
+    render(
+      <MemoryRouter initialEntries={["/app/chat"]}>
+        <ProjectBrowser vcr />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: "心衰" });
+    act(() => { hintVcrDraftProject("p-heart"); });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "心衰" })).toBeNull());
   });
 
   it("reads no study list when the module is not offered", async () => {

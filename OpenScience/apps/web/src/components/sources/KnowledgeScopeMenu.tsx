@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ChevronDown, FolderOpen, Library, Radar, UsersRound } from "lucide-react";
 import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
-import { useVcrProjectIds } from "@/components/vcr/useVcrProjectIds";
+import { useVcrProjects } from "@/components/vcr/useVcrProjectIds";
 import { Button } from "@/components/ui/Button";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { useGeoFeature } from "@/lib/geoClient";
@@ -28,7 +28,7 @@ export function KnowledgeScopeMenu({ scope, onChange }: { scope: SourceScope; on
   const vcrOn = useVcrFeature() === "on";
   const geoIds = useGeoProjectIds(geoOn, projectsKey);
   // A draft study (nobody has spoken in it yet) is not a place documents are filed; it is left out like the sidebar leaves it out.
-  const { ids: vcrIds, drafts: vcrDrafts } = useVcrProjectIds(vcrOn, projectsKey);
+  const { studies: vcrIds, drafts: vcrDrafts } = useVcrProjects(vcrOn, projectsKey);
   const entries = useMemo(() => {
     const own = projects.filter((project) => !geoIds.has(project.id) && !vcrIds.has(project.id));
     const studies = projects.filter((project) => vcrIds.has(project.id) && !vcrDrafts.has(project.id));

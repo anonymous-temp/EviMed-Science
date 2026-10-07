@@ -548,29 +548,30 @@ export function presentReviewNotes(groups, now) {
 }
 
 /** 「统计复核：假设卡 os_hr 等 3 项」. @param {Record<string, any>} review */
-function reviewSubject(review) {
+function reviewSubject(review, { version = true } = {}) {
   const kind = (/** @type {Record<string, string>} */ (VCR_REVIEW_KIND_LABELS_ZH))[String(review.kind)] ?? "复核";
   const nodes = list(review.nodes).map(String);
-  const first = nodeLabel(nodes[0] ?? "");
+  const first = nodeLabel(nodes[0] ?? "", { version });
   return nodes.length > 1 ? `${kind}：${first} 等 ${nodes.length} 项` : `${kind}：${first || "这个研究"}`;
 }
 
 /** A lineage node in the reader's words. @param {string} node */
-export function nodeLabel(node) {
+export function nodeLabel(node, { version: withVersion = true } = {}) {
   const parsed = parseLineageNode(node);
   if (!parsed) return "";
-  const version = `v${parsed.version}`;
+  // The change log says what was reviewed and when, not which version of it: a date is what tells two apart.
+  const version = withVersion ? `v${parsed.version}` : "";
   switch (parsed.kind) {
-    case "assumption": return `假设卡「${parsed.id}」${version}`;
-    case "population": return `人群 ${version}`;
-    case "patient_set": return `虚拟患者集 ${version}`;
-    case "comparator_design": return `对照设计 ${version}`;
-    case "trial_scenario": return `试验方案 ${version}`;
-    case "design_grid": return `设计网格 ${version}`;
-    case "study_definition": return `研究定义 ${version}`;
-    case "protocol_version": return `方案 ${version}`;
-    case "result": return `结果 ${version}`;
-    default: return `${parsed.kind} ${version}`;
+    case "assumption": return `假设卡「${parsed.id}」${version}`.trim();
+    case "population": return `人群 ${version}`.trim();
+    case "patient_set": return `虚拟患者集 ${version}`.trim();
+    case "comparator_design": return `对照设计 ${version}`.trim();
+    case "trial_scenario": return `试验方案 ${version}`.trim();
+    case "design_grid": return `设计网格 ${version}`.trim();
+    case "study_definition": return `研究定义 ${version}`.trim();
+    case "protocol_version": return `方案 ${version}`.trim();
+    case "result": return `结果 ${version}`.trim();
+    default: return `${parsed.kind} ${version}`.trim();
   }
 }
 
@@ -597,6 +598,8 @@ export function presentStudy(bundle) {
     designs,
     attention: attentionOf({ assumptions, scenarios, comparators, results, allResults: allResultsOf(bundle), stale, jobs, steps: study.steps, exports }),
     changes: presentChanges(bundle),
+    // The AI reviews and the people's, apart from the changes: the study page's 变更记录 shows both (no model names: `presentVcrReview`).
+    reviews: reviews.slice(0, 6).map((/** @type {any} */ review) => presentVcrReview(review)),
     deliverables: exports.map((/** @type {any} */ row, /** @type {number} */ index) => presentDeliverable(row, index, exports, now)),
   };
   return {
@@ -604,6 +607,8 @@ export function presentStudy(bundle) {
     projectId: study.projectId,
     name: study.name,
     question: text(study.question),
+    // The definition card of 「定义与证据」: what the study is about, as words (null before anything has been said).
+    definition: presentDefinition(bundle.definition),
     tier: study.dataTier,
     intendedUse: study.intendedUse,
     status: study.status,
@@ -620,6 +625,29 @@ export function presentStudy(bundle) {
     overview,
     updatedAt: zhTime(study.updatedAt, now),
     createdAt: study.createdAt,
+  };
+}
+
+/**
+ * The study's definition as the page reads it: the four PICO lines, the estimand's own sentence, the endpoint and the intended use,
+ * each one line of the reader's words. A field the definition does not state is absent; no definition is `null`.
+ * @param {Record<string, any> | null | undefined} definition
+ */
+export function presentDefinition(definition) {
+  if (!definition) return null;
+  const pico = object(definition.pico);
+  const estimand = object(definition.estimand);
+  /** @param {unknown} value */
+  const line = (value) => {
+    if (typeof value === "string") return text(value.trim() || null);
+    if (Array.isArray(value)) return text(value.map((entry) => (typeof entry === "string" ? entry : text(object(entry).name) ?? "")).filter(Boolean).join("、") || null);
+    return null;
+  };
+  const endpoint = /** @type {Record<string, string>} */ (VCR_ENDPOINT_TYPE_LABELS_ZH)[String(definition.endpointType)] ?? null;
+  const use = /** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH)[String(definition.intendedUse)] ?? null;
+  return {
+    population: line(pico.population), intervention: line(pico.intervention), comparator: line(pico.comparator), outcome: line(pico.outcome),
+    estimand: text(estimand.text) ?? text(estimand.variable), endpoint, intendedUse: use,
   };
 }
 
@@ -727,20 +755,20 @@ function presentChanges(bundle) {
   // A few of each kind, so a study with many results still shows its reviews,
   // decisions and packages: they are the changes a person made.
   for (const result of results.slice(0, 3)) {
-    rows.push({ id: `result:${result.id}`, at: result.createdAt, text: `${RESULT_KIND_LABELS[result.kind] ?? "结果"}的结果已更新（v${result.version}）`,
+    rows.push({ id: `result:${result.id}`, at: result.createdAt, text: `${RESULT_KIND_LABELS[result.kind] ?? "结果"}的结果已更新`,
       by: null, state: staleNodes.has(resultNode(result)) ? "stale" : null });
   }
   for (const card of [...assumptions].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 2)) {
-    rows.push({ id: `assumption:${card.id}`, at: card.createdAt, text: `假设卡「${card.name || card.key}」v${card.version}`, by: null,
+    rows.push({ id: `assumption:${card.id}`, at: card.createdAt, text: `假设卡「${card.name || card.key}」已更新`, by: null,
       state: card.reviewState === "reviewed" ? "reviewed" : null });
   }
-  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review)} · ${presentVcrReview(review).state}`, by: presentVcrReview(review).by, state: !review.status || review.status === "done" ? "reviewed" : "ai_set" });
+  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review, { version: false })} · ${presentVcrReview(review).state}`, by: presentVcrReview(review).by, state: !review.status || review.status === "done" ? "reviewed" : "ai_set" });
   for (const decision of decisions.slice(0, 1)) rows.push({ id: `decision:${decision.id}`, at: decision.createdAt, text: `写入决策记录：${decision.question}`, by: null, state: null });
   for (const row of exports.slice(0, 2)) {
     rows.push({ id: `export:${row.id}`, at: row.createdAt,
       text: `${(/** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH))[row.kind] ?? "研究包"}${row.state === "ready" ? "已生成" : "已请求"}`, by: null, state: null });
   }
-  return rows.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 8)
+  return rows.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 12)
     .map((row) => ({ id: row.id, at: zhTime(row.at, now) ?? "", text: row.text, by: row.by, state: row.state }));
 }
 
