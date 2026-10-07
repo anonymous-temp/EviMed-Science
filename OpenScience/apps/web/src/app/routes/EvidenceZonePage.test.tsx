@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,6 +24,17 @@ beforeEach(() => {
 });
 
 describe("a zone's page and the features the server says it has", () => {
+  it("is headed by the way back to 前沿动态 — no row of the feed's views — and still goes back to the directory", async () => {
+    client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: open, feedback: [] });
+    upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: false, upkeep: false });
+    mount();
+    await screen.findByRole("heading", { name: "卒中研究" });
+    expect(within(screen.getByRole("navigation", { name: "返回" })).getByRole("link", { name: "前沿动态" })).toHaveAttribute("href", "/app/frontier");
+    expect(screen.queryByRole("navigation", { name: "前沿动态" })).toBeNull();
+    expect(screen.getByRole("link", { name: "返回证据专区" })).toHaveAttribute("href", "/app/frontier/zones");
+  });
+
+
   it("links the public page of a published zone opened to the internet, when the server reports public pages", async () => {
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: open, feedback: [] });
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, upkeep: false });

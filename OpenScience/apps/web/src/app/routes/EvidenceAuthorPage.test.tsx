@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,15 @@ const mount = () => render(<MemoryRouter initialEntries={["/app/frontier/authors
 beforeEach(() => vi.clearAllMocks());
 
 describe("an author's page", () => {
+  it("is headed by the way back to 前沿动态, with no row of the feed's views", async () => {
+    client.fetchEvidenceAuthor.mockResolvedValue(author);
+    mount();
+    await screen.findByRole("heading", { name: "李研究" });
+    expect(within(screen.getByRole("navigation", { name: "返回" })).getByRole("link", { name: "前沿动态" })).toHaveAttribute("href", "/app/frontier");
+    expect(screen.queryByRole("navigation", { name: "前沿动态" })).toBeNull();
+  });
+
+
   it("shows the author's zones and cards and names the one citation signal for what it is", async () => {
     client.fetchEvidenceAuthor.mockResolvedValue(author);
     mount();

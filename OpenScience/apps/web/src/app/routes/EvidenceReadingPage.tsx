@@ -7,7 +7,7 @@ import {
 import { CardEditor } from "@/components/frontier/EvidenceEditors";
 import { Textarea, inputClasses } from "@/components/ui/Input";
 import { PageShell } from "@/components/layout/PageShell";
-import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
+import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EvidenceReading } from "@/components/frontier/EvidenceReading";
 import { EvidenceCardLinks, EvidenceContinueAction } from "@/components/frontier/EvidenceCardLinks";
@@ -122,8 +122,7 @@ function EvidenceReadingContent({
     }
   };
   return (
-    <PageShell title="前沿动态">
-      <FrontierNavigation active="zones" />
+    <PageShell title="证据专区" back={<FrontierBack />}>
       <div className="my-4 flex items-center justify-between gap-3">
         <Link
           className="text-caption text-accent"

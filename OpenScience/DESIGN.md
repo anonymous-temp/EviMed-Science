@@ -318,7 +318,7 @@ bordered pill or bordered `<button>` outside it:
 | Component | What it is |
 |---|---|
 | `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle |
-| `Tabs` | a page's views: underlined tabs over a hairline |
+| `Tabs` | a page's views: underlined tabs over a hairline; `trailing` puts the open view's controls (filters, a search box) at the row's right on the same hairline, dropping under the tabs below 640 px |
 | `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 13 px (no border; selected sits on grey), the rest in “更多 ▾” |
 | `Tag` | the metadata label: 22 px, 12 px text, 6 px corner, grey, no border; `safety` red |
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |

@@ -2226,7 +2226,10 @@ export class AutopilotService {
       if (digest.projectId !== agenda.projectId || digest.payload.agendaId !== agenda.id) throw new HttpError(409, "autopilot_digest_conflict", "Digest identity belongs to another agenda.");
     }
     // The platform's own agendas have no reader to tell: their conclusions become cards, or stay in the internal project.
-    if (this.notifications && !this.programme?.owns(userId, agenda.projectId)) await this.notifications.create(userId, {
+    // Nor does a day that found nothing: 「0 条重点发现，0 条待验证线索」 every morning is an inbox item that asks to be
+    // opened and says nothing (2026-10-07 review). The digest above and the episode stay recorded — the 简报 is where a
+    // quiet day is written down — and only the notice is withheld, so a day with a finding or a lead notifies as before.
+    if (this.notifications && !this.programme?.owns(userId, agenda.projectId) && (headlines.length > 0 || leads.length > 0)) await this.notifications.create(userId, {
       noticeType: "review", title: `主动科研简报：${agenda.payload.title}`,
       body: `${headlines.length} 条重点发现，${leads.length} 条待验证线索。`, projectId: agenda.projectId,
       source: { type: "digest", id: digest.id }, idempotencyKey: `autopilot-digest:${digest.id}`,

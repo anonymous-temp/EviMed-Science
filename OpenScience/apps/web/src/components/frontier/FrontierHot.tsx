@@ -1,13 +1,11 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
 import { Link } from "react-router";
 import { Flame } from "lucide-react";
-import { FRONTIER_HEAT_METHOD_ZH } from "@evimed/domain";
 import { cn } from "@/lib/cn";
 import { FRONTIER_HOT_WINDOWS, type FrontierHotBoard, type FrontierHotEvent, type FrontierHotWindow } from "@/lib/frontierClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { Card } from "@/components/ui/Card";
-import { Disclosure } from "@/components/ui/Disclosure";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -20,15 +18,15 @@ const eventPath = (id: string) => `/app/frontier/events/${encodeURIComponent(id)
 const WINDOW_OPTIONS = FRONTIER_HOT_WINDOWS.map((value) => ({ value, label: value === "current" ? "当前" : value === "week" ? "本周" : "本月" }));
 
 /**
- * 当前热点, at the top of 精选 (plan 2026-09-23 §6.2): the five hottest
- * events, each one line — the rank in the rank colours, the title, the heat
- * in grey and how the rank moved (「↑2」, 「新」). The whole line opens the
- * event. Nothing hot, no card: an empty 「当前热点」 box is a promise the page
- * cannot keep.
+ * 当前热点, at the top of 精选 (plan 2026-09-23 §6.2): the three hottest
+ * events (five until 2026-10-07 — the full ranking is one tab away), each one
+ * line — the rank in the rank colours, the title, the heat in grey and how the
+ * rank moved (「↑2」, 「新」). The whole line opens the event. Nothing hot, no
+ * card: an empty 「当前热点」 box is a promise the page cannot keep.
  */
 export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEvent[]; onOpenAll: () => void }) {
   const origin = useFrontierOrigin();
-  const top = events.slice(0, 5);
+  const top = events.slice(0, 3);
   if (top.length === 0) return null;
   return (
     <Card
@@ -41,10 +39,10 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
       )}
     >
       <ol aria-label="当前热点" className="px-1">
-        {top.map((event, index) => {
+        {top.map((event) => {
           const change = rankChangeLabel(event.rankChange);
           return (
-            <li key={event.id} className={index >= 3 ? "hidden sm:list-item" : undefined}>
+            <li key={event.id}>
               <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
                 <span className={cn("w-5 shrink-0 text-right font-semibold tabular-nums", rankTone(event.rank))}>{event.rank}</span>
                 <span data-row-title className="min-w-0 flex-1 truncate font-medium text-text group-hover:text-accent">{event.title}</span>
@@ -63,22 +61,41 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
 export type HotState = { board: FrontierHotBoard | null; error: string | null } | null;
 
 /**
+ * 当前 · 本周 · 本月: the 热榜's time range, at the end of the page's view row
+ * with when the ranking was taken beside it (small, grey).
+ *
+ * The chips appear once the server stamps its rankings (`board.takenAt`): a
+ * server without them answers every window with the current list, and a chip
+ * that changed nothing would say something false. They stay while another
+ * window's ranking is read.
+ */
+export function HotWindowChips({ window, board, onWindow }: {
+  window: FrontierHotWindow;
+  /** The ranking on screen, for the time it was taken. */
+  board: FrontierHotBoard | null;
+  onWindow: (window: FrontierHotWindow) => void;
+}) {
+  return (
+    <FilterChips
+      label="时间范围"
+      options={WINDOW_OPTIONS}
+      value={window}
+      onChange={onWindow}
+      trailing={board?.takenAt ? <span className="text-caption text-text-3">{hotBoardStamp(board.window, board.takenAt)}</span> : undefined}
+    />
+  );
+}
+
+/**
  * 热榜 (plan 2026-09-23 §6.2; research B §8 #1–#7): ten events, each with its
  * rank, an optional 「新」 or 「升温」, the title, how many institutions reported
  * it and whether the parties' own texts are among them, and on the right the
- * heat — the one number — over its 24-hour trend. 当前 · 本周 · 本月 above,
- * when the ranking was taken at the right, and 「热度怎么算」 folded below.
- *
- * The window chips appear once the server stamps its rankings (`windows`,
- * from a `takenAt` it sent): a server without them answers every window with
- * the current list, and a chip that changed nothing would say something
- * false. They stay while another window's ranking is read.
+ * heat — the one number — over its 24-hour trend. The time range chips live
+ * in the page's view row (`HotWindowChips`); there is no 「热度怎么算」 any
+ * more — the number is shown and the page does not explain the system.
  */
-export function HotBoard({ state, window, windows, onWindow, onRetry }: {
+export function HotBoard({ state, onRetry }: {
   state: HotState;
-  window: FrontierHotWindow;
-  windows: boolean;
-  onWindow: (window: FrontierHotWindow) => void;
   onRetry: () => void;
 }) {
   const board = state?.board ?? null;
@@ -87,31 +104,11 @@ export function HotBoard({ state, window, windows, onWindow, onRetry }: {
       : !board ? <EmptyState icon={Flame} title="热榜还在准备" />
         : board.events.length === 0 ? <EmptyState icon={Flame} title="暂无热点" />
           : (
-            <ol aria-label="热榜" className="mt-1">
+            <ol aria-label="热榜">
               {board.events.map((event) => <HotRow key={event.id} event={event} />)}
             </ol>
           );
-  return (
-    <div>
-      {windows && (
-        <FilterChips
-          label="时间范围"
-          options={WINDOW_OPTIONS}
-          value={window}
-          onChange={onWindow}
-          trailing={board?.takenAt ? <span className="text-caption text-text-3">{hotBoardStamp(board.window, board.takenAt)}</span> : undefined}
-        />
-      )}
-      {body}
-      {board?.events.some((event) => event.heat !== null) && (
-        <Disclosure className="mt-4" summary={<span className="text-caption">热度怎么算</span>}>
-          <div className="max-w-measure space-y-2 text-caption text-text-2">
-            {FRONTIER_HEAT_METHOD_ZH.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-          </div>
-        </Disclosure>
-      )}
-    </div>
-  );
+  return <div>{body}</div>;
 }
 
 /**

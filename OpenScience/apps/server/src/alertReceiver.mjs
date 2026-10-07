@@ -18,6 +18,9 @@
  *   back unread. Alertmanager re-sends a firing alert every repeat interval
  *   and retries a failed delivery; each replay is recognised by its key and
  *   changes nothing.
+ * - The item reads in Chinese: a title and one sentence per rule from
+ *   `alertNotices.mjs`, 「系统告警」 with the rule's summary for a rule it does
+ *   not know (2026-10-07: the inbox used to show the rule's program name).
  * - An alert labelled `audit_probe="true"` (the integration audit's) is
  *   recorded as a probe — a counter and a timestamp on /api/ops/metrics — and
  *   never written to anyone's inbox.
@@ -30,6 +33,7 @@
 
 import { createHash, timingSafeEqual } from "node:crypto";
 
+import { alertNoticeText } from "./alertNotices.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 export const ALERT_RECEIVER_PATH = "/api/ops/alerts";
@@ -39,9 +43,6 @@ export const ALERT_PROBE_LABEL = "audit_probe";
  *  body past this is not one. */
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_ALERTS = 100;
-/** Labels shown on the notice besides the name and severity, in this order;
- *  the rest are the rule's own bookkeeping. */
-const SHOWN_LABELS = ["service", "job", "instance", "probe", "source", "engine", "purpose"];
 
 /** @param {string} value */
 function digest(value) {
@@ -100,25 +101,22 @@ function parsedAlert(value) {
   };
 }
 
-/** @param {NonNullable<ReturnType<typeof parsedAlert>>} alert */
+/**
+ * The inbox item for one alert: a Chinese title and one sentence (`alertNotices.mjs`),
+ * never the rule's own name and never its labels. A resolution keeps the
+ * title and says it is over, so the item it folds into reads as one story.
+ * @param {NonNullable<ReturnType<typeof parsedAlert>>} alert
+ */
 function inboxItem(alert) {
   const severity = alert.labels.severity ?? "";
   const resolved = alert.status === "resolved";
-  const shown = SHOWN_LABELS.filter((key) => alert.labels[key]).map((key) => `${key}=${alert.labels[key]}`);
-  const lines = [
-    alert.summary,
-    alert.description,
-    `级别：${severity || "未标注"}`,
-    `开始：${alert.startsAt}`,
-    ...(resolved && alert.endsAt ? [`结束：${alert.endsAt}`] : []),
-    ...(shown.length ? [`标签：${shown.join(" · ")}`] : []),
-  ].filter(Boolean);
+  const { title, sentence } = alertNoticeText(alert);
   const instance = `${alert.fingerprint}:${alert.startsAt}`;
   return {
     noticeType: "notify",
     severity: resolved ? "info" : ["critical", "page", "warning"].includes(severity) ? "attention" : "info",
-    title: `${resolved ? "已恢复" : "告警"}：${alert.alertname}`.slice(0, 150),
-    body: lines.join("\n").slice(0, 8000),
+    title: `${resolved ? "已恢复：" : ""}${title}`.slice(0, 150),
+    body: (resolved ? "这个问题已经解除，现在不需要处理。" : sentence).slice(0, 8000),
     // One item per alert instance; its resolution folds into it.
     groupKey: `ops-alert:${instance}`.slice(0, 200),
     // One write per (instance, status); a replay changes nothing.

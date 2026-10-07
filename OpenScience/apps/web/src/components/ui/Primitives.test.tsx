@@ -111,6 +111,24 @@ describe("Tabs", () => {
     await userEvent.keyboard("{End}");
     expect(screen.getByRole("tab", { name: "日报" })).toHaveAttribute("aria-selected", "true");
   });
+
+  it("puts the controls of the open view in the same row, outside the tab list, under one hairline", () => {
+    render(
+      <Tabs
+        label="视图"
+        value="a"
+        onChange={() => {}}
+        items={[{ value: "a", label: "甲" }, { value: "b", label: "乙" }]}
+        trailing={<button type="button">全部栏目</button>}
+      />,
+    );
+    const list = screen.getByRole("tablist", { name: "视图" });
+    // The controls are not tabs and not inside the tab list; both sit in one row.
+    expect(list).not.toContainElement(screen.getByRole("button", { name: "全部栏目" }));
+    expect(list.parentElement).toContainElement(screen.getByRole("button", { name: "全部栏目" }));
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(list.parentElement).toHaveClass("sm:border-b");
+  });
 });
 
 describe("ListRow", () => {
