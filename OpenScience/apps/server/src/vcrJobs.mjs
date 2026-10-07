@@ -433,6 +433,22 @@ export function vcrResultKindFor(kind) {
   return "snapshot_profile";
 }
 
+/**
+ * The kinds of research object a result is filed under: the result's `subject_id` is that object's id, and a result is superseded
+ * only by another result of the same subject (`recordResult`).
+ */
+export const VCR_SUBJECT_KINDS = Object.freeze(["population", "patient_set", "comparator", "trial_scenario", "design_grid"]);
+
+/**
+ * The kind of research object a job of this kind computes, or null for one that is not about an object (pooling evidence, matching
+ * criteria, an accrual forecast, the profile of a snapshot).
+ * @param {string} kind
+ */
+export function vcrJobObjectKind(kind) {
+  const filed = vcrResultKindFor(kind);
+  return VCR_SUBJECT_KINDS.includes(filed) ? filed : null;
+}
+
 export class VcrJobs {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config?: Record<string, any>, engine?: any,
@@ -578,6 +594,12 @@ export class VcrJobs {
       throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
     }
     const studyId = String(input.studyId);
+    // A computation that is not the orchestrator's names the object it computes: its result is filed under that object, and a
+    // result with no subject is superseded by every later result of its kind, whatever object that one was for.
+    if (input.internal !== true && vcrJobObjectKind(kind) && !object(input.detail).subjectId) {
+      throw new HttpError(400, "vcr_simulate_subject_required",
+        "这项计算要说明它算的是研究里的哪一个对象（人群、虚拟患者集、对照设计、试验方案或设计网格）：把对象的 id 作为 subjectId 传进来。");
+    }
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
     const methodVersion = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]?.version ?? "";
     let scenario = object(input.scenario);

@@ -90,7 +90,7 @@ export const VCR_READING_ROLES = Object.freeze(VCR_MEMBER_ROLES.filter((role) =>
 /** A study's step record, all seven present. @param {unknown} value */
 export function normalizedVcrSteps(value) {
   const raw = object(value);
-  /** @type {Record<string, { status: string, requested: boolean, runId: string | null, jobId: string | null, updatedAt: string | null, note: string | null, waiting: string | null }>} */
+  /** @type {Record<string, { status: string, requested: boolean, askedAt: string | null, runId: string | null, jobId: string | null, updatedAt: string | null, note: string | null, waiting: string | null }>} */
   const steps = {};
   for (const step of VCR_STEPS) {
     const entry = object(raw[step]);
@@ -98,6 +98,8 @@ export function normalizedVcrSteps(value) {
     steps[step] = {
       status,
       requested: entry.requested === true,
+      // When a person last asked for this step with 「让 AI 做」: what tells a computation somebody waits for from the programme's own.
+      askedAt: text(entry.askedAt),
       runId: text(entry.runId),
       jobId: text(entry.jobId),
       updatedAt: text(entry.updatedAt),
@@ -489,8 +491,8 @@ export class VcrStore extends VcrStoreBase {
   /**
    * One step's record. Merged into `steps`, never replacing it, so two
    * packages writing different steps do not overwrite each other.
-   * @param {string} studyId @param {string} step @param {{ status?: string, requested?: boolean, runId?: string | null,
-   *   jobId?: string | null, note?: string | null }} fields
+   * @param {string} studyId @param {string} step @param {{ status?: string, requested?: boolean, askedAt?: string | null, runId?: string | null,
+   *   jobId?: string | null, note?: string | null, waiting?: string | null }} fields
    */
   async setStep(studyId, step, fields) {
     if (!VCR_STEPS.includes(step)) throw new TypeError(`setStep: unknown step ${JSON.stringify(step)}`);
@@ -499,7 +501,7 @@ export class VcrStore extends VcrStoreBase {
     }
     /** @type {Record<string, any>} */
     const entry = { updatedAt: new Date().toISOString() };
-    for (const key of ["status", "requested", "runId", "jobId", "note", "waiting"]) {
+    for (const key of ["status", "requested", "askedAt", "runId", "jobId", "note", "waiting"]) {
       if (fields[/** @type {keyof typeof fields} */ (key)] !== undefined) entry[key] = fields[/** @type {keyof typeof fields} */ (key)];
     }
     const row = await this.one(`UPDATE ${VCR_SCHEMA}.studies

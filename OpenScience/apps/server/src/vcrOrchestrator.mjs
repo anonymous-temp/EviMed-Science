@@ -72,6 +72,8 @@ import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelA
 import { isModelDocumentKind } from "./vcrModelDocuments.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
+import { VCR_SUBJECT_KINDS, vcrResultKindFor } from "./vcrJobs.mjs";
+import { vcrObjectLine } from "./vcrSubjects.mjs";
 import { vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrInputDigest, vcrReviewIsCurrent } from "./vcrViews.mjs";
@@ -105,6 +107,9 @@ export function vcrProductsOfSteps(steps) {
   const named = new Set(steps.map((step) => /** @type {Record<string, string>} */ (VCR_STEP_PRODUCTS)[step]).filter(Boolean));
   return [...new Set(Object.values(VCR_STEP_PRODUCTS))].filter((kind) => named.has(kind));
 }
+
+/** What a study with nothing said about it is waiting for: the note of its definition step and the answer of a click on any step. */
+export const VCR_DEFINITION_FIRST_SENTENCE = "先说一句要研究什么：在对话里写下问题，或上传方案。";
 
 /** A step is finished when it is `done` or a deliberate `minimal`. */
 const FINISHED = new Set(["done", "minimal"]);
@@ -1366,7 +1371,7 @@ export class VcrOrchestrator {
     /** @type {Map<string, number>} when a settled-review request was last attempted for a study, so a review that cannot be queued is not rebuilt every tick */
     this.reviewAttempts = new Map();
     this.counters = { ticks: 0, dispatched: 0, deferred: 0, dispatchFailed: 0, runsFinished: 0, jobsEnqueued: 0,
-      jobsSkipped: 0, recomputes: 0, notices: 0, studyErrors: 0, verdicts: 0, evidenceRefreshes: 0 };
+      jobsSkipped: 0, recomputes: 0, notices: 0, studyErrors: 0, verdicts: 0, evidenceRefreshes: 0, runtimeJobsNoted: 0 };
     /** @type {string | null} */
     this.lastDeferral = null;
     /** @type {string | null} */
@@ -1589,9 +1594,16 @@ export class VcrOrchestrator {
     const study = await this.store.getStudy(String(user.id), String(input.id));
     if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
     if (study.status !== "active") throw new HttpError(409, "vcr_study_paused", "This study is paused.");
+    // 「让 AI 做」 on a study nobody has said anything about used to answer 「已排队」 for a run that could not go out: every step
+    // reads the research definition, and the definition is written from the question (or the conversation's first words). With
+    // neither, the click is told what the study is waiting for, in the sentence the pending pages use, and nothing is requested.
+    // A study with a question but no definition yet is fine: the definition run goes out first and the step waits for it.
+    if (!String(study.question ?? "").trim() && !(await this.store.latestDefinition(study.id))) {
+      throw new HttpError(409, "vcr_definition_missing", VCR_DEFINITION_FIRST_SENTENCE);
+    }
     const status = study.steps[step]?.status ?? "none";
     const again = ["none", "failed", "stale"].includes(status);
-    await this.store.setStep(study.id, step, { requested: true, ...(again ? { status: "queued" } : {}) });
+    await this.store.setStep(study.id, step, { requested: true, askedAt: this.now().toISOString(), ...(again ? { status: "queued" } : {}) });
     await this.#allowRetries(study, step);
     // A job that failed, was cancelled or could not be queued is tried again
     // because a person asked: its mark is what says it was already tried.
@@ -2152,13 +2164,7 @@ export class VcrOrchestrator {
    * @returns {Promise<string[]>}
    */
   async #lineOf(studyId, kind, row) {
-    /** @type {any[]} */
-    let rows = [];
-    if (kind === "population") rows = await this.store.populations(studyId, 50);
-    else if (kind === "patient_set") rows = await this.store.patientSets(studyId, 50);
-    else if (kind === "comparator") rows = (await this.store.comparatorDesigns(studyId, 50)).filter((entry) => entry.route === row.route);
-    else if (kind === "trial_scenario") rows = (await this.store.trialScenarios(studyId, 60)).filter((entry) => (entry.label || entry.id) === (row.label || row.id));
-    return rows.filter((entry) => entry.id !== row.id && Number(entry.version) < Number(row.version)).map((entry) => String(entry.id));
+    return vcrObjectLine(this.store, studyId, kind, row);
   }
 
   /**
@@ -2213,6 +2219,10 @@ export class VcrOrchestrator {
         // is its own subject, so N designs are N current results.
         detail: { node, step: item.step, stage: stage.stage, plannedStages: planned, resultKind: VCR_OBJECT_RESULT_KINDS[item.kind] ?? null,
           subjectId: item.row.id, supersedes: line, keepTables: stage.keepTables, bound: stage.bound,
+          // Whose computation this is, for the notice that tells the researcher it is done: the programme's recomputation after a
+          // change tells nobody, and a computation of a step somebody asked for with 「让 AI 做」 does.
+          ...(read.staleByNode.has(node) ? { recompute: true } : {}),
+          ...(study.steps?.[item.step]?.askedAt && !read.staleByNode.has(node) ? { asked: true } : {}),
           // A hybrid control's historical counts are evidence only when verified extractions say so.
           ...(stage.jobKind === "map_prior" && !(await this.#historicalIsVerified(study, stage.scenario)) ? { inputsAssumed: true } : {}),
           ...stage.detail },
@@ -2383,8 +2393,11 @@ export class VcrOrchestrator {
     if (!study) return false;
     await this.#exclusive(study.id, async () => {
       const detail = object(mark?.detail);
-      const node = String(detail.node ?? "");
-      const stage = detail.stage ? String(detail.stage) : null;
+      // A computation a conversation queued is not the orchestrator's: its mark may belong to an earlier job of the same stage (the
+      // programme ran it before), and the node and stage it carries are on the job itself.
+      const named = object(job.checkpoint);
+      const node = String(detail.node ?? named.node ?? "");
+      const stage = detail.stage ? String(detail.stage) : (named.stage ? String(named.stage) : null);
       if (result && node) await this.#landResult(study, job, result, node);
       if (mark) {
         const state = job.state === "succeeded" ? "done" : job.state === "canceled" ? "skipped" : "failed";
@@ -2396,11 +2409,81 @@ export class VcrOrchestrator {
         } });
       }
       if (job.state === "succeeded" && result) await this.#registerForecasts(study, job, result);
+      await this.#noticeJobFinished(study, job, result);
     });
     // No review here: the study's results are reviewed once they have stopped changing (`#reviewSettled`), not
     // each time the queue drains, and the review of a package or a finished programme is queued by its run.
     await this.advance(job.studyId);
     return true;
+  }
+
+  /**
+   * Tell the researcher a computation they asked for has ended: one the conversation queued (`origin: "runtime"`) or one of a step
+   * they asked for with 「让 AI 做」 (`asked`), never the programme's recomputation after a change. An object that is computed in
+   * stages says so once, when its last stage lands; a failure is always said, because nobody else will say it.
+   * @param {any} study @param {any} job @param {any} result
+   */
+  async #noticeJobFinished(study, job, result) {
+    if (!this.notifier?.jobFinished || !["succeeded", "failed"].includes(String(job.state))) return;
+    const named = object(job.checkpoint);
+    const conversation = named.origin === "runtime";
+    if (!conversation && named.asked !== true) return;
+    if (named.recompute === true) return;
+    const resultKind = String(named.resultKind || vcrResultKindFor(String(job.kind)));
+    if (!VCR_SUBJECT_KINDS.includes(resultKind) && !["accrual_forecast", "matching"].includes(resultKind)) return;
+    const stage = named.stage ? String(named.stage) : null;
+    const planned = list(named.plannedStages).map(String);
+    if (job.state === "succeeded" && !conversation && stage && planned.length && planned[planned.length - 1] !== stage) return;
+    const owner = named.subjectId ? await this.#subjectLabel(study.id, resultKind, String(named.subjectId)) : null;
+    await this.#notice(study, `notice:job:${job.id}`, () => this.notifier.jobFinished(study, {
+      jobId: job.id, resultKind, stage, label: owner, state: job.state, result, error: job.error ?? null,
+    }));
+  }
+
+  /** The words a design, a population or a comparator is called by. @param {string} studyId @param {string} kind @param {string} id */
+  async #subjectLabel(studyId, kind, id) {
+    const table = /** @type {Record<string, string>} */ ({ population: "populations", patient_set: "patient_sets", comparator: "comparator_designs",
+      trial_scenario: "trial_scenarios" })[kind];
+    if (!table) return null;
+    const column = kind === "comparator" ? "route" : kind === "trial_scenario" ? "label" : "name";
+    const row = await this.store.one(`SELECT ${column} AS label FROM ${VCR_SCHEMA}.${table} WHERE study_id = $1 AND id = $2`, [studyId, id]);
+    return row?.label ? String(row.label) : null;
+  }
+
+  /**
+   * The job that is computing this stage of this object right now, when the programme has one out: a design written in the
+   * conversation is picked up by the next pass, so the run that then asks for its simulation has already been answered by it.
+   * The run is given that job to read, not a second one beside it (five thousand replicates are minutes of the study's compute).
+   * @param {string} studyId @param {{ node: string, stage?: string | null }} subject
+   * @returns {Promise<any | null>}
+   */
+  async inFlightStage(studyId, subject) {
+    const mark = await this.#mark(studyId, subject.stage ? `job:${subject.node}#${subject.stage}` : `job:${subject.node}`);
+    if (!mark || !["claimed", "running"].includes(String(mark.state)) || !mark.job_id) return null;
+    const job = await this.store.job(studyId, String(mark.job_id));
+    return job && ["queued", "running", "awaiting_budget"].includes(String(job.state)) ? job : null;
+  }
+
+  /**
+   * A computation a conversation queued for one of the study's objects (`vcr_simulate`): the programme learns that the stage is
+   * taken, so it does not queue the same stage again on its next pass — a simulation of five thousand replicates is minutes of
+   * compute, and two of them racing to the same result is the cost of not saying so. The finished job lands its result on the
+   * object like any stage of the programme's own (`onJobFinished`).
+   * A stage the programme already ran stays as it is: its mark records what the programme did.
+   * @param {{ id: string, userId: string }} study
+   * @param {{ node: string, step?: string, stage?: string | null }} subject what `resolveJobSubject` answered
+   * @param {{ id: string, kind: string }} job
+   */
+  async noteRuntimeJob(study, subject, job) {
+    const key = subject.stage ? `job:${subject.node}#${subject.stage}` : `job:${subject.node}`;
+    await this.store.query(`INSERT INTO ${VCR_SCHEMA}.schedule_marks (study_id, key, user_id, kind, state, step, job_id, detail)
+      VALUES ($1, $2, $3, 'job', 'running', $4, $5, $6::jsonb)
+      ON CONFLICT (study_id, key) DO UPDATE SET state = 'running', job_id = EXCLUDED.job_id, done_at = NULL,
+        detail = schedule_marks.detail || EXCLUDED.detail, updated_at = now()
+        WHERE schedule_marks.state IN ('failed', 'skipped')`,
+    [study.id, key, study.userId, subject.step ?? null, job.id,
+      JSON.stringify({ jobKind: job.kind, node: subject.node, ...(subject.stage ? { stage: subject.stage } : {}) })]);
+    this.counters.runtimeJobsNoted += 1;
   }
 
   /**
@@ -2557,14 +2640,20 @@ export class VcrOrchestrator {
     const active = (await this.store.rows(`SELECT 1 FROM ${VCR_SCHEMA}.schedule_marks
       WHERE study_id = $1 AND kind = 'run' AND state IN ('claimed', 'running') LIMIT 1`, [study.id])).length > 0;
     if (active) return;
+    // A programme run reads the research definition: the evidence, analysis and matching runs of a study that has none
+    // would have nothing to write from, and on a study nobody has spoken to yet they went out with the name and an empty
+    // question (B §1.4). They wait for the definition, which the conversation or an uploaded protocol writes.
+    const defined = Boolean(await this.store.latestDefinition(study.id));
     const candidates = [
       () => this.#pendingReviewRepair(study),
       () => this.#pendingExport(study),
       () => this.#pendingEvidenceRefresh(study),
       () => this.#stepRun(study, plan, "definition"),
-      () => this.#stepRun(study, plan, "evidence"),
-      () => this.#analysisRun(study, plan),
-      () => this.#stepRun(study, plan, "matching"),
+      ...(defined ? [
+        () => this.#stepRun(study, plan, "evidence"),
+        () => this.#analysisRun(study, plan),
+        () => this.#stepRun(study, plan, "matching"),
+      ] : []),
     ];
     for (const candidate of candidates) {
       const spec = await candidate();
@@ -2650,7 +2739,7 @@ export class VcrOrchestrator {
     // definition from; a run on an empty brief would invent one. It waits for the
     // question (the composer's sentence, or an uploaded protocol's title).
     if (step === "definition" && !String(study.question ?? "").trim() && !(await this.store.latestDefinition(study.id))) {
-      await this.#step(study, step, { note: "先说一句要研究什么：在对话里写下问题，或上传方案。" });
+      await this.#step(study, step, { note: VCR_DEFINITION_FIRST_SENTENCE });
       return null;
     }
     if (step === "definition" && String(study.steps.definition?.note ?? "").startsWith("先说一句")) await this.#step(study, step, { note: null });

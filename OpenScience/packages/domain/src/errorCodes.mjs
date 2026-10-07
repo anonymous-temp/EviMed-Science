@@ -621,6 +621,9 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_write_payload_invalid",
   "vcr_simulate_action_invalid",
   "vcr_simulate_payload_invalid",
+  // A computation names the object it is for; the answer says which ones the study holds.
+  "vcr_simulate_subject_required",
+  "vcr_simulate_subject_unknown",
   "vcr_job_not_found",
   // The run's own request was wrong: a job the engine's protocol refuses (the
   // scenario names a key the method does not read, a design it does not
@@ -1190,6 +1193,9 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_intended_use_invalid',
   'vcr_status_invalid',
   'vcr_step_invalid',
+  'vcr_definition_missing',
+  'vcr_simulate_subject_required',
+  'vcr_simulate_subject_unknown',
   'vcr_tab_not_found',
   'vcr_job_kind_invalid',
   'vcr_job_scenario_invalid',
@@ -1241,6 +1247,8 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   'vcr_write_payload_invalid',
   'vcr_simulate_action_invalid',
   'vcr_simulate_payload_invalid',
+  'vcr_simulate_subject_required',
+  'vcr_simulate_subject_unknown',
   'registry_unavailable',
   // What the trial registry channel answers (`trialRegistryClient.mjs`): each
   // reaches the run as itself, because 「没有这条登记」 and 「登记库没配置」 are
@@ -1806,6 +1814,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_intended_use_invalid: '预期用途只能选：探索、研究设计支持、指定研究分析、申报准备。',
   vcr_status_invalid: '研究状态只能是进行中、已暂停或已归档。',
   vcr_step_invalid: '没有这一步；研究的步骤是定义、证据、人群、患者、对照、试验、匹配。',
+  vcr_definition_missing: '先说一句要研究什么：在对话里写下问题，或上传方案。',
+  vcr_simulate_subject_required: '这项计算要说明它算的是研究里的哪一个对象：把对象的 id 作为 subjectId 传进来，先用 vcr_write 写下这个对象。',
+  vcr_simulate_subject_unknown: 'subjectId 不是本研究的对象；用 vcr_read 看研究里现有的对象，再传它的 id。',
   vcr_tab_not_found: '研究页没有这个页签。',
   vcr_job_kind_invalid: '没有这种计算；请在页面上给出的计算类型里选。',
   vcr_job_scenario_invalid: '这项计算的参数不符合引擎的要求，没有排队；按提示的字段修改后再提交。',

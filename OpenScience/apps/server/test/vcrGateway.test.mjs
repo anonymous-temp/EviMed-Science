@@ -41,6 +41,14 @@ function response() {
 
 const study = { id: "std_1", userId: "u1", projectId: "prj_1", name: "EV-201", dataTier: "T0",
   intendedUse: "exploratory", status: "active", steps: {}, budget: {}, outcomeSeal: {} };
+/** Three designs of one study, the way a conversation names them: 2:1 fixed, 1:1 fixed and 1:1 with an interim look. */
+const DESIGN_A = { id: "scn_a", version: 1, label: "A 2:1 固定设计", design: "two_arm_fixed", endpointType: "time_to_event",
+  configuration: { design: { nTreat: 120, nControl: 60, allocation: 0.6667 }, truth: { hazardRatio: 0.7 } } };
+const DESIGN_B = { id: "scn_b", version: 2, label: "B 1:1 固定设计", design: "two_arm_fixed", endpointType: "time_to_event",
+  configuration: { design: { nTreat: 90, nControl: 90, allocation: 0.5 }, truth: { hazardRatio: 0.7 } } };
+const DESIGN_C = { id: "scn_c", version: 3, label: "C 1:1 序贯设计", design: "group_sequential", endpointType: "time_to_event",
+  configuration: { design: { nTreat: 90, nControl: 90, allocation: 0.5, informationRates: [0.5, 1] }, truth: { hazardRatio: 0.7 } } };
+
 const config = { vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:8788/internal/models/v1" };
 const runtimeManager = { assertActiveModelGatewayToken: (/** @type {string} */ token) => {
   if (token !== "token") throw new Error("bad token");
@@ -87,6 +95,11 @@ function fixture(overrides = {}) {
     async latestPopulation() { return null; },
     async latestComparatorDesign() { return null; },
     async trialScenarios() { return []; },
+    // The objects a computation can be for: one comparator, no population, patient set, design or grid until a test gives some.
+    async comparatorDesigns() { return [{ id: "cmp_1", version: 1, route: "external_control" }]; },
+    async populations() { return []; },
+    async patientSets() { return []; },
+    async latestDesignGrid() { return null; },
     async models() { return [{ id: "mdl_ref", name: "reference-time-to-event", version: "1.0.0" }]; },
     async saveModelAssessment(input) { calls.push(["assessment", input.record.key, input.record.risk, input.record.influence]); return { id: "mia_1", version: 1 }; },
     async exports() { return []; },
@@ -551,11 +564,12 @@ test("a refused scenario tells the run where it was refused as a code and a path
         { code: "scenario_field_missing", field: "scenario.accrual.duration", detail: "duration is required." },
         { code: "Not A Code", field: "scenario.x" }, { code: "scenario_value_invalid", field: "" }, { code: "scenario_value_invalid" }, "text",
       ], ...extra });
-    return fixture({ jobs: { async enqueue() { throw error; } } });
+    return fixture({ jobs: { async enqueue() { throw error; } }, store: { ...fixture().vcr.store,
+      async trialScenarios() { return [DESIGN_A]; }, async patientSets() { return [{ id: "pts_1", version: 1, name: "虚拟患者" }]; } } });
   };
   const send = async (/** @type {any} */ handler, /** @type {string} */ kind) => {
     const res = response();
-    await handler(request("/internal/vcr/v1/simulate", { action: "start", kind, scenario: { accrual: { months: 24 } } }), res);
+    await handler(request("/internal/vcr/v1/simulate", { action: "start", kind, subjectId: kind === "design_analytic" ? "scn_a" : "pts_1", scenario: { accrual: { months: 24 } } }), res);
     return res;
   };
   const analytic = await send(refusing().handler, "design_analytic");
@@ -570,15 +584,18 @@ test("a refused scenario tells the run where it was refused as a code and a path
   assert.equal(patients.json().alternatives.length, 3);
   assert.deepEqual(patients.json().issues.map((/** @type {any} */ issue) => issue.field), ["scenario.accrual.months", "scenario.accrual.duration"]);
   // A refusal with no findings sends none, and a failure that is not a refusal never invents any.
-  const plain = fixture({ jobs: { async enqueue() { throw new HttpError(400, "vcr_job_scenario_invalid", "no fields"); } } });
+  const plain = fixture({ jobs: { async enqueue() { throw new HttpError(400, "vcr_job_scenario_invalid", "no fields"); } },
+    store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_A]; } } });
   assert.equal("issues" in (await send(plain.handler, "design_analytic")).json(), false);
 });
 
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
-  const { calls, handler } = fixture();
+  const { calls, handler, vcr } = fixture({ store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_A]; } } });
+  void vcr;
   const started = response();
   await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation", scenario: { design: { kind: "two_arm_fixed" } } }), started);
-  assert.deepEqual(started.json().data, { action: "start", jobId: "job_1", state: "queued", progress: {} });
+  assert.deepEqual(started.json().data, { action: "start", jobId: "job_1", state: "queued", progress: {},
+    subject: { kind: "trial_scenario", id: "scn_a", version: 1 } }, "the one design the scenario fits is the one it is about");
   assert.ok(calls.some((call) => call[0] === "enqueue" && call[1] === "design_simulation"));
 
   const status = response();
@@ -591,7 +608,8 @@ test("simulate is start / status / cancel, and a job over budget says so plainly
   assert.equal(missing.json().code, "vcr_job_not_found");
 
   const overBudget = createVcrGatewayHandler(config, runtimeManager, {
-    vcr: { ...fixture().vcr, jobs: { async enqueue() { return { job: { id: "job_2", state: "awaiting_budget", progress: {} }, created: true }; } } },
+    vcr: { ...fixture().vcr, store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_A]; } },
+      jobs: { async enqueue() { return { job: { id: "job_2", state: "awaiting_budget", progress: {} }, created: true }; } } },
   });
   const waiting = response();
   await overBudget(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation" }), waiting);
@@ -608,6 +626,118 @@ test("simulate is start / status / cancel, and a job over budget says so plainly
   assert.equal(again.json().data.state, "awaiting_budget");
   assert.equal(again.json().data.awaitingBudget, true);
   assert.match(again.json().data.message, /只有研究者确认后才会继续/);
+});
+
+test("a design's computation names the trial scenario it is for: its result is filed under it, the programme is told the stage is taken, and the scenario's earlier versions are replaced", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  /** @type {any[]} */
+  const noted = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: `job_${queued.length}`, kind: input.kind, state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_x", state: "canceled" }, canceled: true }; },
+  };
+  const olderB = { ...DESIGN_B, id: "scn_b0", version: 1 };
+  const orchestrator = { async noteRuntimeJob(/** @type {any} */ studyRow, /** @type {any} */ subject, /** @type {any} */ job) { noted.push([studyRow.id, subject, job.id]); } };
+  const { handler } = fixture({ jobs, orchestrator, store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_C, DESIGN_B, DESIGN_A, olderB]; } } });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+
+  const analytic = await start({ kind: "design_analytic", subjectId: "scn_b", scenario: { design: { kind: "two_arm_fixed", allocation: 0.5 } } });
+  assert.equal(analytic.status, 200, analytic.body);
+  assert.deepEqual(analytic.json().data.subject, { kind: "trial_scenario", id: "scn_b", version: 2 });
+  assert.deepEqual(queued[0].detail, { subjectId: "scn_b", origin: "runtime", resultKind: "trial_scenario", node: "trial_scenario:scn_b@2", step: "trial",
+    stage: "analytic", supersedes: ["scn_b0"] }, "the subject, where the result lands, the stage it is, and the earlier version of the same design it replaces");
+  assert.match(queued[0].idempotencyKey, /design_analytic:scn_b:/, "the same scenario asked for another design is another job");
+  assert.deepEqual(noted[0].slice(0, 1), ["std_1"]);
+  assert.equal(noted[0][1].node, "trial_scenario:scn_b@2");
+  assert.equal(noted[0][2], "job_1");
+
+  // the simulation of the same design is the next stage of the same result, not another result
+  await start({ kind: "design_simulation", subjectId: "scn_b", scenario: { design: { kind: "two_arm_fixed", allocation: 0.5 } } });
+  assert.equal(queued[1].detail.stage, "simulation");
+  assert.equal(queued[1].detail.subjectId, "scn_b");
+  // and the other designs are other subjects
+  await start({ kind: "design_simulation", subjectId: "scn_a", scenario: {} });
+  assert.equal(queued[2].detail.subjectId, "scn_a");
+  assert.deepEqual(queued[2].detail.supersedes, []);
+});
+
+test("a computation that names no object is attached to the one design its scenario fits, and refused by name when it fits several or none", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: `job_${queued.length}`, kind: input.kind, state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_x", state: "canceled" }, canceled: true }; },
+  };
+  const { handler } = fixture({ jobs, store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_C, DESIGN_B, DESIGN_A]; } } });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+
+  // 1:1 allocation with a fixed design is B and only B
+  const fitsOne = await start({ kind: "design_simulation", scenario: { design: { kind: "two_arm_fixed", nTreat: 100, nControl: 100 }, endpoint: { type: "time_to_event" } } });
+  assert.equal(fitsOne.status, 200, fitsOne.body);
+  assert.equal(queued.at(-1).detail.subjectId, "scn_b");
+  // 2:1 is A
+  await start({ kind: "design_analytic", scenario: { design: { kind: "two_arm_fixed", allocation: 0.6667 } } });
+  assert.equal(queued.at(-1).detail.subjectId, "scn_a");
+
+  const before = queued.length;
+  // a scenario that fits B and C equally well is not a choice the gateway makes
+  const several = await start({ kind: "design_simulation", scenario: { design: { allocation: 0.5 } } });
+  assert.equal(several.status, 400);
+  assert.equal(several.json().code, "vcr_simulate_subject_required");
+  for (const id of ["scn_b", "scn_c"]) assert.match(several.json().error, new RegExp(id), "the answer lists the designs the study holds");
+  assert.match(several.json().error, /不替你选/);
+  // a scenario that fits none names what the study holds
+  const none = await start({ kind: "design_simulation", scenario: { design: { kind: "single_arm" } } });
+  assert.equal(none.json().code, "vcr_simulate_subject_required");
+  assert.match(none.json().error, /scn_a/);
+  assert.equal(queued.length, before, "a refused computation never reaches the queue");
+
+  // an id that is not one of the study's designs
+  const stranger = await start({ kind: "design_simulation", subjectId: "scn_of_another_study", scenario: {} });
+  assert.equal(stranger.status, 400);
+  assert.equal(stranger.json().code, "vcr_simulate_subject_unknown");
+  assert.match(stranger.json().error, /scn_a/);
+  // a study with no design at all is told to write one first
+  const empty = fixture({ jobs });
+  const nothing = response();
+  await empty.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation", scenario: {} }), nothing);
+  assert.equal(nothing.json().code, "vcr_simulate_subject_required");
+  assert.match(nothing.json().error, /vcr_write what="trial_scenario"/);
+});
+
+test("every kind of object a computation can be for is named the same way; a computation that is not about an object is not asked for one", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: `job_${queued.length}`, kind: input.kind, state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_x", state: "canceled" }, canceled: true }; },
+  };
+  const store = { ...fixture().vcr.store,
+    async populations() { return [{ id: "pop_2", version: 2, kind: "scenario", name: "情景人群" }, { id: "pop_1", version: 1, kind: "scenario", name: "情景人群" }]; },
+    async patientSets() { return [{ id: "pts_1", version: 1, name: "虚拟患者" }]; },
+    async latestDesignGrid() { return { id: "grd_1", version: 1 }; } };
+  const { handler } = fixture({ jobs, store });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+  const expected = /** @type {Array<[string, string, string, string[]]>} */ ([
+    ["generate_population", "pop_2", "population", ["pop_1"]],
+    ["generate_patients", "pts_1", "patient_set", []],
+    ["design_grid", "grd_1", "design_grid", []],
+    ["weighted_cox_comparator", "cmp_1", "comparator", []],
+  ]);
+  for (const [kind, subject, resultKind, supersedes] of expected) {
+    const res = await start({ kind, scenario: {}, inputs: kind === "weighted_cox_comparator" ? [{ kind: "snapshot", id: "snp_1" }] : [] });
+    assert.equal(res.status, 200, `${kind}: ${res.body}`);
+    assert.equal(queued.at(-1).detail.subjectId, subject, `${kind} is attached to the one object of its kind that is current`);
+    assert.equal(queued.at(-1).detail.resultKind, resultKind);
+    assert.deepEqual(queued.at(-1).detail.supersedes, supersedes);
+  }
+  // A literature population is not the scenario population: the job's kind has to be the population's.
+  const literature = await start({ kind: "literature_population", scenario: {} });
+  assert.equal(literature.json().code, "vcr_simulate_subject_required");
+  // Evidence pooling and an accrual forecast are about no object of these five.
+  const accrual = await start({ kind: "accrual_forecast", scenario: {} });
+  assert.notEqual(accrual.json().code, "vcr_simulate_subject_required");
 });
 
 test("digitize hands a calibration to the digitizer for the token's own study and answers a receipt, a refusal, or a named error", async () => {

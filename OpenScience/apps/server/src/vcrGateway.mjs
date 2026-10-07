@@ -72,6 +72,7 @@ import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { VCR_TRIAL_RESTRICTED_FIELDS, deriveFromExit, followupFidelityFindings, postExitEpisode, trialPeriodEpisode } from "./vcrRecruit.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION } from "./vcrMatching.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE } from "./vcrJobs.mjs";
+import { resolveJobSubject } from "./vcrSubjects.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
@@ -112,7 +113,8 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
   "vcr_curve_provenance_unavailable", "vcr_curve_provenance_invalid", "vcr_curve_source_changed",
   "vcr_curve_calibration_invalid", "vcr_curve_digitizer_unavailable", "vcr_intake_busy", "vcr_intake_timeout", "vcr_intake_failed",
-  "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_job_not_found", "registry_unavailable",
+  "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_simulate_subject_required", "vcr_simulate_subject_unknown",
+  "vcr_job_not_found", "registry_unavailable",
 ]);
 
 class VcrGatewayError extends Error {
@@ -1927,11 +1929,24 @@ async function startJob(vcr, study, request) {
   const derived = request.reconstructionResultId
     ? [{ resultId: request.reconstructionResultId, table: VCR_RECONSTRUCTION_REFERENCE.table, bindTo: VCR_RECONSTRUCTION_REFERENCE.bindTo }] : [];
   const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
+  // A computation of a research object names it: its result is filed under that object and replaces only that object's earlier
+  // results. The id the run gave is checked against the study; with none, the one object the scenario fits is taken, and several
+  // (or none) are refused by name with what the study holds.
+  const subject = await resolveJobSubject({ store: vcr.store, study, kind: request.kind, subjectId: request.subjectId, scenario });
+  if (subject) {
+    detail = { ...detail, ...subject.detail };
+    const running = await vcr.orchestrator?.inFlightStage?.(study.id, subject.detail);
+    if (running) {
+      return { action: "start", jobId: running.id, state: running.state, progress: running.progress ?? {}, alreadyRunning: true,
+        subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version) },
+        message: "这个对象的这一步平台已经在算了：读这个作业的进度和结果就行，不必再排一个。" };
+    }
+  }
   const { job } = await vcr.jobs.enqueue({
     studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs, ...(derived.length ? { derived } : {}),
     seed: request.seed, replicates: request.replicates, cpuSecondsLimit: request.cpuSecondsLimit,
     // The same frozen scenario asked for twice is the same job; a changed one is not.
-    idempotencyKey: `vcr:${study.id}:runtime:${request.kind}:${request.subjectId ?? ""}:${scenarioHash}`,
+    idempotencyKey: `vcr:${study.id}:runtime:${request.kind}:${subject?.row.id ?? request.subjectId ?? ""}:${scenarioHash}`,
     detail,
   }).catch(error => {
     if (error?.status === 400 && ['generate_population', 'literature_population', 'synthesize_population',
@@ -1947,7 +1962,11 @@ async function startJob(vcr, study, request) {
     }
     throw error;
   });
+  // The programme learns the stage is taken and lands the result on the object when it ends; a failure to say so costs a
+  // duplicate computation, never this job.
+  if (subject && vcr.orchestrator?.noteRuntimeJob) await vcr.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
   return { action: "start", jobId: job.id, state: job.state, progress: job.progress, ...(notes ? { notes } : {}),
+    ...(subject ? { subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version) } } : {}),
     // A job stopped for budget is the second human stop: the run is
     // told plainly so it goes on with what it can do (§10.1).
     ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };

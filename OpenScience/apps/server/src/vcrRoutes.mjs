@@ -68,6 +68,7 @@ import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, so
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
 import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
+import { resolveJobSubject } from "./vcrSubjects.mjs";
 
 /**
  * Every code these routes answer with — or that a module behind them answers
@@ -87,6 +88,10 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_intended_use_invalid",
   "vcr_status_invalid",
   "vcr_step_invalid",
+  // 「让 AI 做」 on a study nothing has been said about; a computation that names no object, or one that is not the study's.
+  "vcr_definition_missing",
+  "vcr_simulate_subject_required",
+  "vcr_simulate_subject_unknown",
   "vcr_tab_not_found",
   "vcr_job_kind_invalid",
   "vcr_job_scenario_invalid",
@@ -861,8 +866,11 @@ export function createVcrRoutes(dependencies) {
         return reply({ jobs: await hooks.jobs.listForStudy(study.id), budget: await hooks.jobs.budgetOf?.(study.id) ?? null });
       }
       if (parts.length === 3 && method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit"]);
+        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId"]);
         word(body.kind, VCR_JOB_KINDS, "vcr_job_kind_invalid", "kind");
+        if (body.subjectId != null && (typeof body.subjectId !== "string" || !ID.test(body.subjectId))) {
+          throw new HttpError(400, "vcr_job_scenario_invalid", "subjectId is the id of one of the study's objects.");
+        }
         if (body.scenario != null && (typeof body.scenario !== "object" || Array.isArray(body.scenario))) {
           throw new HttpError(400, "vcr_job_scenario_invalid", "scenario is an object.");
         }
@@ -872,11 +880,16 @@ export function createVcrRoutes(dependencies) {
         const { study } = await authorize(id, "run");
         if (!hooks.jobs?.enqueue) throw UNAVAILABLE();
         const cpuSecondsLimit = body.cpuSecondsLimit == null ? null : wholeNumber(body.cpuSecondsLimit, "cpuSecondsLimit", CPU_SECONDS_MAX);
+        // A computation names the object it is for, like the conversation's (`resolveJobSubject`): its result is filed under it.
+        const subject = hooks.jobs.store
+          ? await resolveJobSubject({ store: hooks.jobs.store, study, kind: body.kind, subjectId: body.subjectId ?? null, scenario: body.scenario ?? {} }) : null;
         const { job, created } = await audited("vcr.job.enqueue", (result) => ({ code: result.job.id, detail: String(body.kind) }),
           { code: id, detail: String(body.kind) }, () => hooks.jobs.enqueue({
             studyId: study.id, userId: String(user.id), kind: body.kind, scenario: body.scenario ?? {}, inputs: body.inputs ?? [],
             seed: body.seed ?? null, replicates: body.replicates ?? null, cpuSecondsLimit,
+            detail: subject ? { ...subject.detail, origin: "page" } : (body.subjectId ? { subjectId: body.subjectId } : {}),
           }));
+        if (subject && hooks.orchestrator?.noteRuntimeJob) await hooks.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
         return reply(job, created ? 201 : 200);
       }
       if (parts.length === 4 && method === "GET") {

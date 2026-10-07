@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's notices (build plan 2026-09-28 §10.4). Exactly six kinds
+ * 「虚拟临研」's notices (build plan 2026-09-28 §10.4). Exactly seven kinds
  * reach a person; every other thing a study does is only shown on its page.
  *
  *   1. 研究包完成            info       — a study package finished
@@ -8,6 +8,7 @@
  *   4. 有新的匹配候选         info       — pushed to the coordinators, not to everyone
  *   5. 实际入组偏离预测       attention  — the registered forecast and the actual have parted
  *   6. 假设卡有了新证据       info       — the frontier feed or a source-change record bears on a card (flywheel F24, 2026-10-06)
+ *   7. 你要的计算算完了       info       — a computation the researcher asked for, in the conversation or with 「让 AI 做」, ended (R10, 2026-10-07)
  *
  * Hidden knowledge:
  *
@@ -36,10 +37,10 @@
  */
 
 import {
-  VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_TAB_LABELS_ZH,
+  VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_TAB_LABELS_ZH, errorCodeMessage,
 } from "@evimed/domain";
 
-/** The five kinds, by the key each notice is counted under. */
+/** The seven kinds, by the key each notice is counted under. */
 export const VCR_NOTICE_KINDS = VCR_NOTIFICATION_KINDS;
 
 const SOURCE_PATH = /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80})?$/;
@@ -68,8 +69,78 @@ export function vcrStudyName(study) {
 /** The inbox refuses a replay whose content moved; that event was sent. @param {unknown} error */
 const alreadySent = (error) => /** @type {any} */ (error)?.code === "notification_idempotency_conflict";
 
+/** @param {unknown} value @returns {any[]} */
+const list = (value) => (Array.isArray(value) ? value : []);
+
 /** A tab label as a reader reads it. @param {string} tab */
 const tabLabel = (tab) => /** @type {Record<string, string>} */ (VCR_TAB_LABELS_ZH)[tab] ?? tab;
+
+/** @param {unknown} value */
+const finiteNumber = (value) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+
+/** A proportion as a reader reads it: 0.915 → 「91.5%」. @param {number} value */
+const percent = (value) => `${Math.round(value * 1000) / 10}%`;
+
+/** A count as a reader reads it: 1000 → 「1,000」. @param {number} value */
+const count = (value) => Math.round(value).toLocaleString("en-US");
+
+/**
+ * The words of a finished computation: what was computed, and — from the engine's own measures, formatted here and never
+ * typed anywhere — the one number a reader wants first. A design's label is the researcher's or the model's own wording
+ * (「B 1:1 固定设计」 reads as 「1:1 固定设计」: the letter is the page's).
+ *
+ * @param {{ resultKind: string, stage?: string | null, label?: string | null, state: "succeeded" | "failed", result?: Record<string, any> | null,
+ *   error?: Record<string, any> | null }} facts
+ * @returns {{ title: string, body: string, tab: string } | null} null for a computation that has nothing to say (a not-estimable comparator has its own notice)
+ */
+export function vcrJobNoticeText({ resultKind, stage = null, label = null, state, result = null, error = null }) {
+  const tab = /** @type {Record<string, string>} */ ({
+    population: "population", patient_set: "patients", comparator: "comparator", trial_scenario: "trial", design_grid: "trial",
+    accrual_forecast: "trial", matching: "matching",
+  })[resultKind] ?? "overview";
+  const what = resultKind === "trial_scenario"
+    ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
+    : (/** @type {Record<string, string>} */ ({ population: "人群生成", patient_set: "虚拟患者生成", comparator: "对照分析", design_grid: "设计网格",
+      accrual_forecast: "入组预测", matching: "匹配评估" })[resultKind] ?? "计算");
+  const name = clip(String(label ?? "").replace(/^[A-Z]\d*\s+/, ""), 24);
+  if (state === "failed") {
+    const code = typeof error?.code === "string" ? error.code : "";
+    const reason = clip(code ? errorCodeMessage(code) : (typeof error?.message === "string" ? error.message : ""), 80);
+    return {
+      title: `${what}没有算完${name ? `：${name}` : ""}`,
+      body: `${reason ? `${reason.replace(/[。.]$/, "")}。` : ""}已经算出的部分保留着；在对话里改一下设定，可以接着再算。`,
+      tab,
+    };
+  }
+  if (result?.conclusion === "not_estimable" && resultKind === "comparator") return null;
+  const measure = (/** @type {string} */ wanted) => list(result?.measures).map((entry) => /** @type {any} */ (entry))
+    .find((entry) => entry && entry.name === wanted && finiteNumber(entry.value) !== null);
+  /** @type {string | null} */
+  let headline = null;
+  if (resultKind === "trial_scenario") {
+    const power = measure("power");
+    const typeOne = measure("type_one_error");
+    const assurance = measure("assurance");
+    const events = measure("required_events");
+    const total = measure("required_total");
+    if (stage === "analytic" && (events || total)) {
+      headline = [name, events ? `所需事件数 ${count(events.value)} 例` : null, total ? `所需样本量 ${count(total.value)} 例` : null].filter(Boolean).join(" ");
+    } else if (stage === "assurance" && assurance) headline = `${name}成功把握 ${percent(assurance.value)}`.trim();
+    else if (power) headline = `${name}功效 ${percent(power.value)}`.trim();
+    else if (typeOne) headline = `${name}I 类错误 ${percent(typeOne.value)}`.trim();
+  } else if (resultKind === "population" || resultKind === "patient_set") {
+    const generated = finiteNumber(result?.counts?.generatedRecords);
+    const real = finiteNumber(result?.counts?.realPatients);
+    headline = generated !== null && generated > 0 ? `${count(generated)} 条生成记录` : real !== null && real > 0 ? `${count(real)} 人` : null;
+  } else if (resultKind === "comparator") {
+    headline = /** @type {Record<string, string>} */ ({ estimable: "可以估计", limited: "有限制地估计" })[String(result?.conclusion)] ?? null;
+  }
+  return {
+    title: `${what}完成${headline ? `：${headline}` : ""}`,
+    body: `结果在「${tabLabel(tab)}」页上，对话里也可以接着问。`,
+    tab,
+  };
+}
 
 /**
  * @param {{ notifications: { create: (userId: string, input: Record<string, any>) => Promise<any> } | null,
@@ -216,6 +287,24 @@ export function createVcrNotifier({ notifications, store, config = {}, now = () 
         title: `${vcrStudyName(study)}：${named}有了新证据`,
         body: tail, severity: "info", source: source(String(study.id), "data"),
         idempotencyKey: `vcr:${study.id}:new-evidence:${batchKey}`,
+      });
+    },
+
+    /**
+     * 7. 你要的计算算完了 — a computation the researcher asked for ended, in the conversation or with 「让 AI 做」. One notice
+     * per job; the programme's own recomputation sends none. The source is the study's tab, which carries both the study and the
+     * tab for whoever opens it or toasts it.
+     * @param {any} study @param {{ jobId: string, resultKind: string, stage?: string | null, label?: string | null,
+     *   state: "succeeded" | "failed", result?: Record<string, any> | null, error?: Record<string, any> | null }} facts
+     */
+    async jobFinished(study, { jobId, resultKind, stage = null, label = null, state, result = null, error = null }) {
+      const text = vcrJobNoticeText({ resultKind, stage, label, state, result, error });
+      if (!text) return true;
+      return send(study, "job_finished", {
+        // The title is the finding; which study it is about is the first thing the body says.
+        title: text.title, body: `研究「${vcrStudyName(study)}」：${text.body}`,
+        severity: state === "failed" ? "attention" : "info", source: source(String(study.id), text.tab),
+        idempotencyKey: `vcr:${study.id}:job:${jobId}`,
       });
     },
 
