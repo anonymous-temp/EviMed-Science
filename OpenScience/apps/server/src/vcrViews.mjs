@@ -548,29 +548,30 @@ export function presentReviewNotes(groups, now) {
 }
 
 /** 「统计复核：假设卡 os_hr 等 3 项」. @param {Record<string, any>} review */
-function reviewSubject(review) {
+function reviewSubject(review, { version = true } = {}) {
   const kind = (/** @type {Record<string, string>} */ (VCR_REVIEW_KIND_LABELS_ZH))[String(review.kind)] ?? "复核";
   const nodes = list(review.nodes).map(String);
-  const first = nodeLabel(nodes[0] ?? "");
+  const first = nodeLabel(nodes[0] ?? "", { version });
   return nodes.length > 1 ? `${kind}：${first} 等 ${nodes.length} 项` : `${kind}：${first || "这个研究"}`;
 }
 
 /** A lineage node in the reader's words. @param {string} node */
-export function nodeLabel(node) {
+export function nodeLabel(node, { version: withVersion = true } = {}) {
   const parsed = parseLineageNode(node);
   if (!parsed) return "";
-  const version = `v${parsed.version}`;
+  // The change log says what was reviewed and when, not which version of it: a date is what tells two apart.
+  const version = withVersion ? `v${parsed.version}` : "";
   switch (parsed.kind) {
-    case "assumption": return `假设卡「${parsed.id}」${version}`;
-    case "population": return `人群 ${version}`;
-    case "patient_set": return `虚拟患者集 ${version}`;
-    case "comparator_design": return `对照设计 ${version}`;
-    case "trial_scenario": return `试验方案 ${version}`;
-    case "design_grid": return `设计网格 ${version}`;
-    case "study_definition": return `研究定义 ${version}`;
-    case "protocol_version": return `方案 ${version}`;
-    case "result": return `结果 ${version}`;
-    default: return `${parsed.kind} ${version}`;
+    case "assumption": return `假设卡「${parsed.id}」${version}`.trim();
+    case "population": return `人群 ${version}`.trim();
+    case "patient_set": return `虚拟患者集 ${version}`.trim();
+    case "comparator_design": return `对照设计 ${version}`.trim();
+    case "trial_scenario": return `试验方案 ${version}`.trim();
+    case "design_grid": return `设计网格 ${version}`.trim();
+    case "study_definition": return `研究定义 ${version}`.trim();
+    case "protocol_version": return `方案 ${version}`.trim();
+    case "result": return `结果 ${version}`.trim();
+    default: return `${parsed.kind} ${version}`.trim();
   }
 }
 
@@ -761,7 +762,7 @@ function presentChanges(bundle) {
     rows.push({ id: `assumption:${card.id}`, at: card.createdAt, text: `假设卡「${card.name || card.key}」已更新`, by: null,
       state: card.reviewState === "reviewed" ? "reviewed" : null });
   }
-  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review)} · ${presentVcrReview(review).state}`, by: presentVcrReview(review).by, state: !review.status || review.status === "done" ? "reviewed" : "ai_set" });
+  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review, { version: false })} · ${presentVcrReview(review).state}`, by: presentVcrReview(review).by, state: !review.status || review.status === "done" ? "reviewed" : "ai_set" });
   for (const decision of decisions.slice(0, 1)) rows.push({ id: `decision:${decision.id}`, at: decision.createdAt, text: `写入决策记录：${decision.question}`, by: null, state: null });
   for (const row of exports.slice(0, 2)) {
     rows.push({ id: `export:${row.id}`, at: row.createdAt,

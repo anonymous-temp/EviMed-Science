@@ -90,24 +90,27 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
         ? <VcrStepFailed studyId={studyId} study={study} step="trial" partial={data.partial} />
         : data.partial && <PartialResultNote done={data.partial.done} missing={data.partial.missing} />}
 
+      {/* The sentence is dimmed with the numbers it states while they are stale; the three things a reader does about it are not. */}
+      <section data-vcr-conclusion="" className="rounded-card border border-border bg-surface p-5">
+        <div className={cn(data.stale && "text-text-2 opacity-disabled")}>
+          {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
+          {decided && data.decision?.recordedAt && (
+            <p data-vcr-decided="" className="mt-2 text-ui text-text-2">
+              {`已选定${data.decision.chosenLabel ? `：${data.decision.chosenLabel}` : ""}${data.decision.rationale ? `，理由：${data.decision.rationale}` : ""}`}
+            </p>
+          )}
+        </div>
+        {canWrite && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>
+            <Button variant="text" onClick={() => draft(VCR_ADD_DESIGN_DRAFT)}>加一个方案</Button>
+            <Button variant="text" onClick={() => draft(VCR_CHANGE_ASSUMPTION_DRAFT)}>改假设</Button>
+          </div>
+        )}
+      </section>
+
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">
-          <section data-vcr-conclusion="" className="rounded-card border border-border bg-surface p-5">
-            {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
-            {decided && data.decision?.recordedAt && (
-              <p data-vcr-decided="" className="mt-2 text-ui text-text-2">
-                {`已选定${data.decision.chosenLabel ? `：${data.decision.chosenLabel}` : ""}${data.decision.rationale ? `，理由：${data.decision.rationale}` : ""}`}
-              </p>
-            )}
-            {canWrite && (
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>
-                <Button variant="text" onClick={() => draft(VCR_ADD_DESIGN_DRAFT)}>加一个方案</Button>
-                <Button variant="text" onClick={() => draft(VCR_CHANGE_ASSUMPTION_DRAFT)}>改假设</Button>
-              </div>
-            )}
-          </section>
-
           {data.designs.length > 0 && (
             <div>
               <DataTable

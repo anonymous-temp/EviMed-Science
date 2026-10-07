@@ -117,37 +117,73 @@ describe("a model or a route that cannot apply", () => {
   });
 });
 
+/** The EV-201 study — which has a definition — with one step put in a state: what a step says when it is the step that has nothing. */
+const evWithStep = (step: string, fields: Record<string, unknown>) => {
+  const raw = fixture("ev201/study.json");
+  raw.steps[step] = { ...raw.steps[step], ...fields };
+  return readVcrStudy(raw);
+};
+
 describe("a step with nothing yet", () => {
   it("says one quiet line while it is being worked on, and offers nothing to press", () => {
-    const study = emptyStudy();
-    study.steps.trial = { status: "running" };
-    draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={study} step="trial" />);
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("trial", { status: "running" })} step="trial" />);
     expect(screen.getByText("正在进行，做完会显示在这里。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
   });
 
-  it("says what it waits for when it was asked for but its input is not ready", () => {
-    draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={emptyStudy()} step="patients" />);
-    expect(screen.getByText("人群版本定下来后开始生成虚拟患者。")).toBeInTheDocument();
+  // 「正在排队」 was a lie for a study nobody has described: nothing is queued, it waits for its first sentence.
+  describe("on a study nobody has described", () => {
+    it("says so in the words of what is missing, with the way to the conversation — in every step's tab", async () => {
+      for (const step of ["definition", "evidence", "population", "patients", "comparator", "trial", "matching"] as const) {
+        const { unmount } = draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={emptyStudy()} step={step} />);
+        expect(screen.getByText("先在对话里说一句要研究什么")).toBeInTheDocument();
+        expect(screen.queryByText(/正在排队|开始后|写好后/)).toBeNull();
+        unmount();
+      }
+    });
+
+    it("keeps 让 AI 做 in view and not pressable until a definition exists, and 去对话 opens the study's conversation", async () => {
+      installVcrServer(network.productRequest);
+      draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={emptyStudy()} step="evidence" />);
+      const ask = screen.getByRole("button", { name: "让 AI 做" });
+      expect(ask).toBeDisabled();
+      await userEvent.click(ask);
+      expect(network.productRequest.mock.calls.some(([path]) => String(path).endsWith("/run"))).toBe(false);
+      await userEvent.click(screen.getByRole("button", { name: "去对话" }));
+      await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_empty", expect.any(Function)));
+    });
+
+    it("shows a reader who cannot run a step no 让 AI 做 at all", () => {
+      const study = emptyStudy();
+      study.abilities = ["read"];
+      draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={study} step="evidence" />);
+      expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "去对话" })).toBeInTheDocument();
+    });
+  });
+
+  it("says a step that was asked for on a described study is arranged, with no queue it could be stuck in", () => {
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("patients", { status: "none", requested: true })} step="patients" />);
+    expect(screen.getByText("已安排，开始后这里会显示进度。")).toBeInTheDocument();
   });
 
   // 「让 AI 做」 starts the step in the study's own conversation: there is no
   // second composer on the study page.
   it("offers 让 AI 做, which starts the step in the study's conversation", async () => {
     installVcrServer(network.productRequest);
-    draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={emptyStudy()} step="evidence" />);
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
     await userEvent.click(screen.getByRole("button", { name: "让 AI 做" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${EMPTY_STUDY_ID}/run`, "POST", { step: "evidence" }));
-    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_empty", expect.any(Function)));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "evidence" }));
+    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_ev201", expect.any(Function)));
   });
 
   // A step asked for twice is two runs: the second click does nothing (CW-18).
   it("holds one request at a time while it waits for the answer", async () => {
     let release: (value: unknown) => void = () => {};
     installVcrServer(network.productRequest, {
-      [`POST /vcr/studies/${EMPTY_STUDY_ID}/run`]: () => new Promise((resolve) => { release = resolve; }),
+      [`POST /vcr/studies/${STUDY_ID}/run`]: () => new Promise((resolve) => { release = resolve; }),
     });
-    draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={emptyStudy()} step="evidence" />);
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
     const button = screen.getByRole("button", { name: "让 AI 做" });
     await userEvent.click(button);
     await userEvent.click(button);
@@ -159,17 +195,17 @@ describe("a step with nothing yet", () => {
   // Starting a step is `run`'s: a reader who cannot start one is told what the
   // step needs, and is not offered a button the route would refuse.
   it("offers no 让 AI 做 to a reader who cannot run a step", () => {
-    const study = emptyStudy();
+    const study = evWithStep("evidence", { status: "none", requested: false });
     study.abilities = ["read", "review_clinical", "export"];
-    draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={study} step="evidence" />);
+    draw(<VcrStepPending studyId={STUDY_ID} study={study} step="evidence" />);
     expect(document.querySelector("[data-vcr-step-empty='evidence']")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
   });
 
   // A run that could not start now stays on the page with one sentence (CW-19).
   it("stays on the page and says the run is queued behind the previous one", async () => {
-    installVcrServer(network.productRequest, { [`POST /vcr/studies/${EMPTY_STUDY_ID}/run`]: { sessionId: null, runId: null, deferred: "another_run_active" } });
-    draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={emptyStudy()} step="evidence" />);
+    installVcrServer(network.productRequest, { [`POST /vcr/studies/${STUDY_ID}/run`]: { sessionId: null, runId: null, deferred: "another_run_active" } });
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
     await userEvent.click(screen.getByRole("button", { name: "让 AI 做" }));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith(VCR_DEFERRED_SENTENCE));
     expect(store.select).not.toHaveBeenCalled();
@@ -179,7 +215,7 @@ describe("a step with nothing yet", () => {
 describe("a step that did not finish", () => {
   // A failed step is not one that never ran (plan §9.6): it says it did not
   // finish, what it kept, and offers to go on from where it stopped.
-  it("says so, keeps what it computed in view, and offers to continue from the checkpoint", async () => {
+  it("says so, keeps what it computed in view, and offers to go on", async () => {
     installVcrServer(network.productRequest);
     const study = ev201();
     expect(study.steps.patients?.status).toBe("failed");
@@ -188,13 +224,13 @@ describe("a step that did not finish", () => {
         studyId={STUDY_ID}
         study={study}
         step="patients"
-        partial={{ done: "已算完 1,200 / 2,000 次重复的结果", missing: "其余重复没有做完，可以从检查点续跑" }}
+        partial={{ done: "已算完 1,200 / 2,000 次重复的结果", missing: "其余重复没有做完，可以接着做" }}
       />,
     );
     expect(screen.getByText("这一步未完成")).toBeInTheDocument();
     expect(screen.getByText(/这一次运行只完成了一部分/)).toBeInTheDocument();
     expect(screen.getByText(/已算完 1,200 \/ 2,000 次重复的结果/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "从检查点续跑" }));
+    await userEvent.click(screen.getByRole("button", { name: "接着做" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "patients" }));
   });
 
@@ -203,7 +239,7 @@ describe("a step that did not finish", () => {
     study.abilities = ["read"];
     draw(<VcrStepFailed studyId={STUDY_ID} study={study} step="patients" />);
     expect(screen.getByText("这一步未完成")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "从检查点续跑" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "接着做" })).not.toBeInTheDocument();
   });
 
   it("is what a step with nothing to show says when it failed, instead of the empty offer", () => {

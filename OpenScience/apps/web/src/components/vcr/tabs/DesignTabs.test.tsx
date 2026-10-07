@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { OverviewTab } from "./OverviewTab";
 import { PopulationTab } from "./PopulationTab";
@@ -9,7 +10,7 @@ import { PatientsTab, VCR_COUNTERFACTUAL_SENTENCE } from "./PatientsTab";
 import { ComparatorTab } from "./ComparatorTab";
 import { TrialTab } from "./TrialTab";
 import { EMPTY_STUDY_ID, fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
-import { VCR_STEP_WAITING } from "../vcrText";
+import { VCR_NO_DEFINITION, VCR_STEP_QUEUED } from "../vcrText";
 
 /**
  * The five design tabs, rendered from what the server sends.
@@ -35,15 +36,15 @@ vi.mock("@/lib/projects", () => ({
   useProjectStore: { getState: () => ({ projects: [{ id: "prj_ev201" }, { id: "prj_empty" }], select: store.select, load: store.load }) },
 }));
 
+const web = vi.hoisted(() => ({ fetchWithWebAuth: vi.fn() }));
+vi.mock("@/lib/apiClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
+  fetchWithWebAuth: web.fetchWithWebAuth,
+}));
+
 const draw = (node: React.ReactElement) => render(<MemoryRouter>{node}</MemoryRouter>);
 const ev201 = (): VcrStudy => readVcrStudy(fixture("ev201/study.json"));
 const emptyStudy = (): VcrStudy => readVcrStudy(fixture("empty/study.json"));
-/** The empty study with nothing asked for yet: every step offers 「让 AI 做」. */
-const unaskedStudy = (): VcrStudy => {
-  const raw = fixture("empty/study.json");
-  for (const step of Object.values(raw.steps) as Array<{ requested: boolean }>) step.requested = false;
-  return readVcrStudy(raw);
-};
 const tab = (name: string) => `GET /vcr/studies/${STUDY_ID}/${name}`;
 const gets = (name: string) => network.productRequest.mock.calls.filter(([path, method]) => path === `/vcr/studies/${STUDY_ID}/${name}` && (method ?? "GET") === "GET");
 
@@ -53,8 +54,16 @@ const found = (root: ParentNode, selector: string) => waitFor(() => {
   if (!node) throw new Error(`nothing at ${selector}`);
   return node as HTMLElement;
 });
-/** The trial tab has read its route and drawn its grid. */
-const trialDrawn = () => screen.findByRole("heading", { name: "方案的运行特征" });
+/** The trial tab has read its route and drawn its comparison of the designs. */
+const trialDrawn = () => screen.findByRole("table", { name: "方案的对比" });
+/** The EV-201 study with one step set to a state: the study has a definition, so an empty tab is the step's own state and not 「还没有说话」. */
+const withStep = (step: string, fields: Record<string, unknown>): VcrStudy => {
+  const raw = fixture("ev201/study.json");
+  raw.steps[step] = { ...raw.steps[step], ...fields };
+  return readVcrStudy(raw);
+};
+/** The tab's payload of the study nothing was done for, so the tab has nothing to draw. */
+const nothingIn = (name: string) => ({ [tab(name)]: fixture(`empty/${name}.json`) });
 
 /** Every 「区间」 on screen carries its name (plan §9.6). */
 const BARE_INTERVAL = /(?<!预测|置信|可信|蒙特卡洛)区间/;
@@ -67,13 +76,21 @@ beforeEach(() => {
 });
 
 describe("总览", () => {
-  it("leads with the study's own sentence and gives each number its source and named interval", () => {
+  it("leads with the study's own sentence", () => {
     draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
     expect(screen.getByText("已模拟 3 个方案，成功把握 58%～74%；真实外部对照不可估计，缺 3 项数据。")).toBeInTheDocument();
-    expect(screen.getAllByText("对照组中位 PFS").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/80% 预测区间 3\.0–5\.6/).length).toBeGreaterThan(0);
-    // A route that cannot be estimated is a tile with its word, not a blank or a zero.
-    expect(screen.getByText("不可估计")).toBeInTheDocument();
+  });
+
+  // Four things and nothing stacked under them: the tiles, the chart, the change log and the disease pack each have a place of their own.
+  it("keeps four things — the sentence, the next step, the four numbers, the deliverables — and none of what used to be stacked under them", () => {
+    const { container } = draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
+    expect(container.querySelector("[data-vcr-counts]")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "交付物" })).toBeInTheDocument();
+    for (const gone of ["关键数字", "最近的变化", "知识包与定义", "病种定义包", "方案的成功把握与周期、成本"]) {
+      expect(screen.queryByText(gone)).toBeNull();
+    }
+    expect(container.querySelector("[data-vcr-scatter]")).toBeNull();
+    expect(container.querySelector("[data-vcr-knowledge]")).toBeNull();
   });
 
   it("fixes the four counts in the band, with the design they are of", () => {
@@ -94,38 +111,72 @@ describe("总览", () => {
     expect(within(budget).queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("prints the scatter's numbers as the server sent them, with their error and the cost's unit", () => {
-    const { container } = draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
-    const scatter = container.querySelector("[data-vcr-scatter]") as HTMLElement;
-    const b = scatter.querySelector("[data-vcr-scatter-label='B']") as HTMLElement;
-    expect(b).toHaveTextContent("71.0%");
-    expect(b).toHaveTextContent("±0.40");
-    expect(b).toHaveTextContent("3,900 万元");
-    // 71 is already a percentage: nothing on the axis was multiplied again.
-    expect(scatter.textContent).not.toMatch(/7,?100%/);
-    // The brand follows the recorded decision (B), and only it.
-    expect(scatter.querySelectorAll("[data-vcr-chosen]")).toHaveLength(1);
-    expect(scatter.querySelector("[data-vcr-scatter-point='B']")).toHaveAttribute("data-vcr-chosen");
-    // D has no numbers to place it by; it is named with the design that beats it.
-    expect(scatter.querySelector("[data-vcr-scatter-dominated='D']")).toHaveTextContent("被 C 占优");
-  });
-
-  it("names the stale tiles in a bar above the band", () => {
+  it("draws 需要关注 only while there is something in it", () => {
     const raw = fixture("ev201/study.json");
-    raw.overview.metrics[0].value.stale = true;
+    raw.overview.attention = [];
     draw(<OverviewTab studyId={STUDY_ID} study={readVcrStudy(raw)} />);
-    expect(document.querySelector("[data-vcr-stale]")).toHaveTextContent("对照组中位 PFS · 输入已变更，这些数字可能已过期");
+    expect(screen.queryByText("需要关注")).toBeNull();
+    expect(screen.queryByText(/现在没有需要你处理的事/)).toBeNull();
   });
 
-  it("is the definition step's own state before the study is defined", () => {
-    draw(<OverviewTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />);
-    expect(screen.getByText(VCR_STEP_WAITING.definition)).toBeInTheDocument();
+  it("lists the deliverables, each opening the package in the reader on this page", () => {
+    draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
+    const first = fixture("ev201/study.json").overview.deliverables[0];
+    expect(screen.getByRole("link", { name: first.title })).toHaveAttribute("href", `/app/virtual-research/${STUDY_ID}?package=${encodeURIComponent(first.id)}`);
   });
 
-  it("offers 让 AI 做 for the definition, which starts it in the study's conversation", async () => {
-    draw(<OverviewTab studyId={EMPTY_STUDY_ID} study={unaskedStudy()} />);
-    await userEvent.click(screen.getByRole("button", { name: "让 AI 做" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${EMPTY_STUDY_ID}/run`, "POST", { step: "definition" }));
+  describe("the next step", () => {
+    it("is one primary button naming the first step nothing has started, and starts it in the study's conversation", async () => {
+      const study = withStep("trial", { status: "none", requested: false });
+      study.steps.matching = { ...study.steps.matching, status: "done" };
+      draw(<OverviewTab studyId={STUDY_ID} study={study} />);
+      const button = screen.getByRole("button", { name: "让 AI 做下一步：模拟试验方案" });
+      await userEvent.click(button);
+      await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "trial" }));
+    });
+
+    it("asks for the earliest unstarted step when several are", () => {
+      const raw = fixture("ev201/study.json");
+      raw.steps.evidence = { status: "none", requested: false };
+      raw.steps.population = { status: "none", requested: false };
+      draw(<OverviewTab studyId={STUDY_ID} study={readVcrStudy(raw)} />);
+      expect(screen.getByRole("button", { name: "让 AI 做下一步：找证据、整理假设卡" })).toBeInTheDocument();
+    });
+
+    it("says what is under way and offers no second thing to start, while a step runs and nothing else is unstarted", () => {
+      const study = withStep("trial", { status: "running" });
+      draw(<OverviewTab studyId={STUDY_ID} study={study} />);
+      expect(screen.queryByRole("button", { name: /让 AI 做下一步/ })).toBeNull();
+      expect(document.querySelector("[data-vcr-next='underway']")).toHaveTextContent("正在进行：试验");
+    });
+
+    it("is not offered to a reader who cannot start a step", () => {
+      const raw = fixture("ev201/study.json");
+      raw.steps.trial = { status: "none", requested: false };
+      raw.abilities = ["read"];
+      draw(<OverviewTab studyId={STUDY_ID} study={readVcrStudy(raw)} />);
+      expect(screen.queryByRole("button", { name: /让 AI 做下一步/ })).toBeNull();
+    });
+  });
+
+  // 「正在排队」 was a lie: nothing is queued for a study nobody has described. It is waiting for its first sentence.
+  describe("a study nobody has described", () => {
+    it("says what is missing — the first sentence, in the conversation — and offers 去对话, with 让 AI 做 present and not pressable", async () => {
+      draw(<OverviewTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />);
+      expect(screen.getByText(VCR_NO_DEFINITION)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "让 AI 做" })).toBeDisabled();
+      expect(screen.queryByText("研究定义正在排队。")).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "去对话" }));
+      await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_empty", expect.any(Function)));
+    });
+
+    it("offers no next step either, and no 让 AI 做 to a reader who cannot run one", () => {
+      const raw = fixture("empty/study.json");
+      raw.abilities = ["read"];
+      draw(<OverviewTab studyId={EMPTY_STUDY_ID} study={readVcrStudy(raw)} />);
+      expect(screen.queryByRole("button", { name: /让 AI 做/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "去对话" })).toBeInTheDocument();
+    });
   });
 });
 
@@ -190,21 +241,227 @@ describe("人群", () => {
     expect(screen.queryByText("版本对比")).not.toBeInTheDocument();
   });
 
-  it("fixes the four counts at the foot, and keeps them when nothing has counted yet", async () => {
-    const { container, unmount } = draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+  // The four numbers are on 总览 and nowhere else: a band under every tab was the same four numbers read five times.
+  it("has no counts band of its own", async () => {
+    const { container } = draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
     await screen.findByText("逐条筛选");
-    expect(container.querySelector("[data-vcr-counts] [data-vcr-count='realPatients']")).toHaveTextContent("3,412");
-    expect(container.querySelector("[data-vcr-counts] [data-vcr-count='generatedRecords']")).toHaveTextContent("0");
-    unmount();
+    expect(container.querySelector("[data-vcr-counts]")).toBeNull();
+  });
 
-    const raw = fixture("ev201/population.json");
-    raw.counts = null;
-    installVcrServer(network.productRequest, { [tab("population")]: raw });
-    const again = draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
-    await screen.findByText("逐条筛选");
-    const band = again.container.querySelector("[data-vcr-counts]") as HTMLElement;
-    expect(within(band).getByText("尚无运行")).toBeInTheDocument();
-    expect(band.querySelectorAll("[data-vcr-count]")).toHaveLength(4);
+  describe("a generated population", () => {
+    /** What the server sends for a scenario population the engine has described (the profile is the engine's own, one entry per variable). */
+    const generated = () => {
+      const raw = fixture("ev201/population.json");
+      raw.version = "人群 v1";
+      raw.kind = "情景人群";
+      raw.versions = [{ id: "pop_1", label: "人群 v1", stale: false, counts: null }];
+      raw.method = "按设定的分布和相关性抽样";
+      raw.allowedUses = [{ key: "design", label: "设计" }, { key: "feasibility", label: "可行性" }];
+      raw.constraints = [{ label: "成年", violations: 0 }, { label: "eGFR 下限", violations: 3 }];
+      raw.profileKind = "generated";
+      raw.profileNote = null;
+      raw.profileMissing = false;
+      raw.profile = [
+        { key: "age", variable: "age", label: "年龄（岁）", kind: "continuous", declaredText: "正态分布，均数 58、标准差 10", generatedText: "均数 58.2，标准差 9.8",
+          histogram: { breaks: [20, 30, 40, 50, 60, 70, 80, 90], counts: [4, 11, 24, 31, 19, 8, 3] } },
+        { key: "female", variable: "female", label: "女性", kind: "binary", declaredText: "二分类，取 1 的概率 45%", generatedText: "女性 44.6%", histogram: null,
+          levels: [{ level: "1", label: "是", n: 446, percent: 44.6, suppressed: false }] },
+        { key: "tumour", variable: "tumour", label: "肿瘤类型", kind: "categorical", declaredText: null, generatedText: "腺癌 62%，鳞癌 38%", histogram: null, missingText: "缺失 12 条（1.2%）" },
+      ];
+      raw.criteria = []; raw.attrition = []; raw.outcome = null; raw.unknownReasons = []; raw.blockers = []; raw.quality = null; raw.headline = null; raw.definition = null;
+      raw.counts = { realPatients: null, events: null, effectiveSampleSize: null, generatedRecords: 1000, note: null, notes: {}, scope: null };
+      raw.download = { path: "records/res_9.csv", rows: 1000 };
+      return raw;
+    };
+    const serveGenerated = (patch: (raw: any) => void = () => undefined, overrides: Record<string, unknown> = {}) => {
+      const raw = generated();
+      patch(raw);
+      installVcrServer(network.productRequest, { [tab("population")]: raw, ...overrides });
+    };
+
+    it("says what it is in one line — version, kind, how many records — with what it may be used for beside it", async () => {
+      serveGenerated();
+      const { container } = draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+      const header = await found(container, "[data-vcr-population-header]");
+      expect(header).toHaveTextContent("人群 v1 · 情景人群 · 1,000 条生成记录");
+      expect(within(header).getByText("仅用于设计、可行性")).toBeInTheDocument();
+      // A population is a result, so there is no counts band and no cohort funnel under it.
+      expect(container.querySelector("[data-vcr-counts]")).toBeNull();
+      expect(screen.queryByText("逐条筛选")).toBeNull();
+    });
+
+    it("sets what the study declared for each variable beside what came out, with the distribution's shape — and says when nothing was declared", async () => {
+      serveGenerated();
+      const { container } = draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+      const table = await found(container, "[data-vcr-generated]");
+      const age = table.querySelector("[data-vcr-variable='age']") as HTMLElement;
+      expect(age).toHaveTextContent("年龄（岁）");
+      expect(age).toHaveTextContent("正态分布，均数 58、标准差 10");
+      expect(age).toHaveTextContent("均数 58.2，标准差 9.8");
+      expect(age.querySelectorAll("[data-vcr-histogram] > span")).toHaveLength(7);
+      expect(table.querySelector("[data-vcr-variable='female']")).toHaveTextContent("女性 44.6%");
+      expect(table.querySelector("[data-vcr-variable='female'] [data-vcr-histogram]")).toBeNull();
+      const tumour = table.querySelector("[data-vcr-variable='tumour']") as HTMLElement;
+      expect(tumour).toHaveTextContent("按真实数据合成，没有设定的分布");
+      expect(tumour).toHaveTextContent("缺失 12 条（1.2%）");
+    });
+
+    it("has two small cards: how it was made, constraint checks included, and what it may be used for — and says it is not a real patient", async () => {
+      serveGenerated();
+      draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+      const how = (await screen.findByText("怎么生成的")).closest("section") as HTMLElement;
+      expect(how).toHaveTextContent("按设定的分布和相关性抽样。");
+      expect(how).toHaveTextContent("约束“成年”没有记录违反。");
+      expect(how).toHaveTextContent("约束“eGFR 下限”有 3 条记录违反。");
+      const uses = screen.getByText("能用来做什么").closest("section") as HTMLElement;
+      expect(uses).toHaveTextContent("可用于设计、可行性。它不是真实患者，不能当作外部对照或疗效证据。");
+    });
+
+    describe("the records", () => {
+      let click: ReturnType<typeof vi.spyOn>;
+      beforeEach(() => {
+        web.fetchWithWebAuth.mockReset();
+        click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+        URL.createObjectURL = vi.fn(() => "blob:records");
+        URL.revokeObjectURL = vi.fn();
+      });
+
+      it("downloads the CSV through the records route, under the file's own name", async () => {
+        serveGenerated();
+        web.fetchWithWebAuth.mockResolvedValue(new Response("a,b\n1,2\n", { status: 200, headers: { "content-disposition": 'attachment; filename="synthetic-population.csv"' } }));
+        draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+        await userEvent.click(await screen.findByRole("button", { name: /下载记录（CSV）/ }));
+        await waitFor(() => expect(click).toHaveBeenCalled());
+        expect(String(web.fetchWithWebAuth.mock.calls[0][0])).toMatch(/\/vcr\/studies\/std_1\/records\/res_9\.csv$/);
+        const anchor = click.mock.contexts[0] as HTMLAnchorElement;
+        expect(anchor.download).toBe("synthetic-population.csv");
+      });
+
+      it("says why when the file may not leave — nothing is saved under its name", async () => {
+        serveGenerated();
+        web.fetchWithWebAuth.mockResolvedValue(new Response(JSON.stringify({ error: "x", code: "vcr_records_not_synthetic" }), { status: 403, headers: { "content-type": "application/json" } }));
+        draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+        await userEvent.click(await screen.findByRole("button", { name: /下载记录（CSV）/ }));
+        await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+        expect(click).not.toHaveBeenCalled();
+      });
+
+      it("offers no download where the server offered no records (a real cohort, or nothing computed yet)", async () => {
+        serveGenerated((raw) => { raw.download = null; });
+        draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+        await screen.findByText("怎么生成的");
+        expect(screen.queryByRole("button", { name: /下载记录/ })).toBeNull();
+      });
+    });
+
+    it("generates it again with the settings it has — one request, then the tab is read again", async () => {
+      serveGenerated();
+      draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+      await userEvent.click(await screen.findByRole("button", { name: "重新生成" }));
+      await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cards`, "POST", { kind: "population", regenerate: true }));
+      expect(toasts.success).toHaveBeenCalledWith("已重新生成，结果算好后会显示在这里。");
+      await waitFor(() => expect(gets("population")).toHaveLength(2));
+    });
+
+    it("says in one sentence that a population generated before profiles existed has none, and offers 重新生成 — it never shows half a table", async () => {
+      serveGenerated((raw) => {
+        raw.profile = []; raw.profileKind = null; raw.profileMissing = true;
+        raw.profileNote = "这个人群生成时还没有画像：点“重新生成”，按同样的设定再生成一次，就能看到每个变量的分布。";
+      });
+      const { container } = draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+      expect(await screen.findByText(/这个人群生成时还没有画像/)).toBeInTheDocument();
+      expect(container.querySelector("[data-vcr-generated]")).toBeNull();
+      expect(screen.getByRole("button", { name: "重新生成" })).toBeInTheDocument();
+    });
+
+    it("offers 改设定, which opens the numbers it was generated from and writes the next version with only what changed", async () => {
+      serveGenerated(() => undefined, {
+        [`GET /vcr/studies/${STUDY_ID}/cards?kind=population`]: {
+          kind: "population", objectId: "pop_1", title: "人群设定",
+          settings: [
+            { path: "n", label: "生成记录数", value: 1000, unit: "条", integer: true, min: 1, max: null },
+            { path: "population.variables.0.mean", label: "age 均数", value: 58, unit: null, integer: false, min: null, max: null },
+          ],
+        },
+      });
+      draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+      await userEvent.click(await screen.findByRole("button", { name: "改设定" }));
+      const drawer = await screen.findByRole("dialog", { name: "改人群设定" });
+      const records = await within(drawer).findByLabelText("生成记录数（条）");
+      expect(records).toHaveValue(1000);
+      expect(within(drawer).getByRole("button", { name: "保存" })).toBeDisabled();
+      await userEvent.clear(records);
+      await userEvent.type(records, "2000");
+      await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
+      await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cards`, "POST", { kind: "population", set: { n: 2000 } }));
+      expect(toasts.success).toHaveBeenCalledWith("已保存，依赖它的结果会重新计算。");
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "改人群设定" })).toBeNull());
+      await waitFor(() => expect(gets("population")).toHaveLength(2));
+    });
+
+    it("tells a typed value the engine's range would refuse in place, and sends nothing", async () => {
+      serveGenerated(() => undefined, {
+        [`GET /vcr/studies/${STUDY_ID}/cards?kind=population`]: {
+          kind: "population", objectId: "pop_1", title: "人群设定",
+          settings: [{ path: "n", label: "生成记录数", value: 1000, unit: "条", integer: true, min: 1, max: null }],
+        },
+      });
+      draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+      await userEvent.click(await screen.findByRole("button", { name: "改设定" }));
+      const drawer = await screen.findByRole("dialog", { name: "改人群设定" });
+      const records = await within(drawer).findByLabelText("生成记录数（条）");
+      await userEvent.clear(records);
+      await userEvent.type(records, "0");
+      expect(await within(drawer).findByText("不能小于 1")).toBeInTheDocument();
+      expect(within(drawer).getByRole("button", { name: "保存" })).toBeDisabled();
+      expect(network.productRequest.mock.calls.some(([path, method]) => String(path).endsWith("/cards") && method === "POST")).toBe(false);
+    });
+
+    it("shows a refusal of the engine's as the one sentence naming the setting, and keeps the drawer", async () => {
+      serveGenerated(() => undefined, {
+        [`GET /vcr/studies/${STUDY_ID}/cards?kind=population`]: {
+          kind: "population", objectId: "pop_1", title: "人群设定",
+          settings: [{ path: "population.variables.0.sd", label: "age 标准差", value: 10, unit: null, integer: false, min: null, max: null }],
+        },
+        [`POST /vcr/studies/${STUDY_ID}/cards`]: () => { throw new WebApiError("“age 标准差”这样填引擎不会接受，没有保存。", { status: 422, code: "vcr_card_edit_refused" }); },
+      });
+      draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+      await userEvent.click(await screen.findByRole("button", { name: "改设定" }));
+      const drawer = await screen.findByRole("dialog", { name: "改人群设定" });
+      const sd = await within(drawer).findByLabelText("age 标准差");
+      await userEvent.clear(sd);
+      await userEvent.type(sd, "12");
+      await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
+      expect(await within(drawer).findByRole("alert")).toHaveTextContent("“age 标准差”这样填引擎不会接受，没有保存。");
+      expect(screen.getByRole("dialog", { name: "改人群设定" })).toBeInTheDocument();
+    });
+
+    it("offers a reader who cannot write the download and nothing that would be refused", async () => {
+      serveGenerated();
+      const raw = fixture("ev201/study.json");
+      raw.abilities = ["read"];
+      draw(<PopulationTab studyId={STUDY_ID} study={readVcrStudy(raw)} />);
+      await screen.findByRole("button", { name: /下载记录（CSV）/ });
+      expect(screen.queryByRole("button", { name: "重新生成" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "改设定" })).toBeNull();
+    });
+  });
+
+  it("offers a real cohort's criteria numbers for editing, and writes the next protocol version with only what changed", async () => {
+    installVcrServer(network.productRequest, {
+      [`GET /vcr/studies/${STUDY_ID}/cards?kind=criteria`]: {
+        kind: "criteria", objectId: "prt_1", title: "入排条件",
+        settings: [{ path: "0.requirement.value", label: "年龄 ≥ 18 岁 · 界值", value: 18, unit: null, integer: false, min: null, max: null }],
+      },
+    });
+    draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "改数值" }));
+    const drawer = await screen.findByRole("dialog", { name: "改入排条件的数值" });
+    const threshold = await within(drawer).findByLabelText("年龄 ≥ 18 岁 · 界值");
+    await userEvent.clear(threshold);
+    await userEvent.type(threshold, "20");
+    await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cards`, "POST", { kind: "criteria", set: { "0.requirement.value": 20 } }));
   });
 
   it("flags a covariate past the balance floor", async () => {
@@ -212,13 +469,20 @@ describe("人群", () => {
     expect(await screen.findByRole("img", { name: /既往免疫治疗 标准化差异 0.31，超过界值/ })).toBeInTheDocument();
   });
 
-  it("is the step's waiting line on an empty study, and 让 AI 做 when nothing was asked", async () => {
-    const { unmount } = draw(<PopulationTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />);
-    expect(await screen.findByText(VCR_STEP_WAITING.population)).toBeInTheDocument();
+  it("says the first sentence is missing on a study nobody has described — not that something is queued", async () => {
+    draw(<PopulationTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />);
+    expect(await screen.findByText(VCR_NO_DEFINITION)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "让 AI 做" })).toBeDisabled();
+  });
+
+  it("says a step that was asked for is arranged, and offers 让 AI 做 when nothing was asked", async () => {
+    installVcrServer(network.productRequest, nothingIn("population"));
+    const { unmount } = draw(<PopulationTab studyId={STUDY_ID} study={withStep("population", { status: "none", requested: true })} />);
+    expect(await screen.findByText(VCR_STEP_QUEUED)).toBeInTheDocument();
     unmount();
-    draw(<PopulationTab studyId={EMPTY_STUDY_ID} study={unaskedStudy()} />);
+    draw(<PopulationTab studyId={STUDY_ID} study={withStep("population", { status: "none", requested: false })} />);
     await userEvent.click(await screen.findByRole("button", { name: "让 AI 做" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${EMPTY_STUDY_ID}/run`, "POST", { step: "population" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "population" }));
   });
 });
 
@@ -256,12 +520,12 @@ describe("虚拟患者", () => {
     const failed = await found(container, "[data-vcr-step-failed='patients']");
     expect(within(failed).getByText("这一步未完成")).toBeInTheDocument();
     expect(failed.querySelector("[data-vcr-partial]")).toHaveTextContent("已算完 1,200 / 2,000 次重复的结果");
-    expect(within(failed).getByRole("button", { name: "从检查点续跑" })).toBeInTheDocument();
+    expect(within(failed).getByRole("button", { name: "接着做" })).toBeInTheDocument();
     // The data are still there, under it.
     const example = screen.getByText("VP-0412");
     expect(failed.compareDocumentPosition(example) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText("这次运行的结果")).toBeInTheDocument();
-    expect(container.querySelector("[data-vcr-counts] [data-vcr-count='generatedRecords']")).toHaveTextContent("2,000");
+    expect(container.querySelector("[data-vcr-counts]")).toBeNull();
     expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
   });
 
@@ -303,9 +567,17 @@ describe("虚拟患者", () => {
     expect(screen.getAllByText("未观察时段").length).toBeGreaterThan(0);
   });
 
-  it("is the step's waiting line on an empty study", async () => {
+  it("puts the result above what it was made with: the headline and the charts first, the model and its assessment after", async () => {
+    const { container } = draw(<PatientsTab studyId={STUDY_ID} study={ev201()} />);
+    const model = await found(container, "[data-vcr-model]");
+    const chart = container.querySelector("[data-vcr-series]") as Element;
+    expect(chart.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(model).not.toHaveTextContent("1.2");
+  });
+
+  it("says the first sentence is missing on a study nobody has described", async () => {
     draw(<PatientsTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />);
-    expect(await screen.findByText(VCR_STEP_WAITING.patients)).toBeInTheDocument();
+    expect(await screen.findByText(VCR_NO_DEFINITION)).toBeInTheDocument();
   });
 });
 
@@ -376,13 +648,10 @@ describe("对照", () => {
     expect(again.container.querySelector("[data-vcr-legend='pooled']")).toHaveTextContent("假设");
   });
 
-  it("fixes the four counts, and the reconstructed pseudo-patients beside them when that route was used", async () => {
+  it("has no counts band of its own: the four numbers are on 总览", async () => {
     const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
-    const band = await found(container, "[data-vcr-counts]");
-    expect(band.querySelector("[data-vcr-count='realPatients']")).toHaveTextContent("0");
-    expect(band.querySelector("[data-vcr-count='events']")).toHaveTextContent("812");
-    expect(band.querySelector("[data-vcr-count='effectiveSampleSize']")).toHaveTextContent("—");
-    expect(band.querySelector("[data-vcr-count='reconstructedPseudoPatients']")).toHaveTextContent("801");
+    await found(container, "[data-vcr-diagnostics]");
+    expect(container.querySelector("[data-vcr-counts]")).toBeNull();
   });
 
   it("says the method's conclusion and the review state apart", async () => {
@@ -429,9 +698,9 @@ describe("对照", () => {
     expect(screen.queryByText("稳健性与预后校正分析")).toBeNull();
   });
 
-  it("is the step's waiting line on an empty study, not a rail of routes nobody ran", async () => {
+  it("says the first sentence is missing on a study nobody has described, not a rail of routes nobody ran", async () => {
     const { container } = draw(<ComparatorTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />);
-    expect(await screen.findByText(VCR_STEP_WAITING.comparator)).toBeInTheDocument();
+    expect(await screen.findByText(VCR_NO_DEFINITION)).toBeInTheDocument();
     expect(container.querySelector("[data-vcr-route]")).toBeNull();
   });
 });
@@ -490,13 +759,13 @@ describe("试验", () => {
     expect(b).toHaveTextContent("80% 预测区间 13.90–19.30");
   });
 
-  it("registers each forecast with its hash and freezing time, and sets it beside the actual once there is one", async () => {
+  it("registers each forecast with its freezing time — and no hash, no version: those are the registry's — and sets it beside the actual once there is one", async () => {
     const { container, unmount } = draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
     const forecast = await found(container, "[data-vcr-forecast='fct_1']");
     expect(within(forecast.closest("section") as HTMLElement).getByText("预测登记")).toBeInTheDocument();
     expect(forecast).toHaveTextContent("入组预测");
-    expect(forecast).toHaveTextContent("v1");
-    expect(forecast.querySelector("[data-vcr-forecast-hash]")).toHaveTextContent("哈希 HASH");
+    expect(forecast.querySelector("[data-vcr-forecast-hash]")).toBeNull();
+    expect(forecast.textContent).not.toMatch(/哈希|HASH|\bv\d+\b/);
     expect(forecast).toHaveTextContent("冻结于 今天 09:07");
     expect(forecast.querySelector("[data-vcr-forecast-line='last_patient_in_months']")).toHaveTextContent("14.2 个月");
     expect(within(forecast).queryByText("实际")).not.toBeInTheDocument();
@@ -513,16 +782,69 @@ describe("试验", () => {
     expect(compared).toHaveTextContent("与实际对照于 今天 12:00");
   });
 
-  it("highlights only the design a recorded decision chose, and starts the card from that record", async () => {
+  it("highlights only the design a recorded decision chose, says so under the conclusion, and starts 改选方案 from that record", async () => {
     const { container } = draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
     await trialDrawn();
     const ours = [...container.querySelectorAll("tr[data-row-ours]")].map((row) => row.getAttribute("data-vcr-design"));
     expect(ours).toEqual(["B"]);
-    expect(screen.getByLabelText("比较目标")).toHaveValue("在成功把握尽量高、样本量尽量少的目标下选哪个方案");
-    expect(screen.getByRole("radio", { name: "B" })).toBeChecked();
-    expect(screen.getByLabelText("选择理由")).toHaveValue("成功把握与样本量的折中；方案 C 周期更长。");
-    expect(screen.getByText("平台不自动选定方案。")).toBeInTheDocument();
-    expect(screen.getByText("上次记录于 今天 09:07")).toBeInTheDocument();
+    expect(container.querySelector("[data-vcr-decided]")).toHaveTextContent("已选定：B，理由：成功把握与样本量的折中；方案 C 周期更长。");
+    // The decision form is behind the button, not a card under the table.
+    expect(screen.queryByLabelText("比较目标")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "改选方案" }));
+    const drawer = await screen.findByRole("dialog", { name: "选定方案" });
+    expect(within(drawer).getByLabelText("比较目标")).toHaveValue("在成功把握尽量高、样本量尽量少的目标下选哪个方案");
+    expect(within(drawer).getByRole("radio", { name: "B" })).toBeChecked();
+    expect(within(drawer).getByLabelText("选择理由")).toHaveValue("成功把握与样本量的折中；方案 C 周期更长。");
+    expect(within(drawer).getByText("平台不自动选定方案。")).toBeInTheDocument();
+    expect(within(drawer).getByText("上次记录于 今天 09:07")).toBeInTheDocument();
+  });
+
+  it("is a conclusion, three things to do about it, and the table of designs — in that order", async () => {
+    const { container } = draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
+    await trialDrawn();
+    const conclusion = container.querySelector("[data-vcr-conclusion]") as HTMLElement;
+    expect(within(conclusion).getByRole("button", { name: "改选方案" })).toBeInTheDocument();
+    expect(within(conclusion).getByRole("button", { name: "加一个方案" })).toBeInTheDocument();
+    expect(within(conclusion).getByRole("button", { name: "改假设" })).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: "方案的对比" });
+    expect(conclusion.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The setup of the simulation is explained after the table, in words — no letters, no jargon tag.
+    const setup = container.querySelector("[data-vcr-setup]") as HTMLElement;
+    expect(table.compareDocumentPosition(setup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(setup.textContent).not.toMatch(/ADEMP/);
+    expect(screen.queryByText("ADEMP")).toBeNull();
+  });
+
+  it("offers 选定方案 as the one primary action while nothing has been chosen, and 改选方案 once something is", async () => {
+    const raw = fixture("ev201/trial.json");
+    raw.decision = null;
+    for (const design of raw.designs) design.chosen = false;
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+    draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
+    await trialDrawn();
+    expect(screen.getByRole("button", { name: "选定方案" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "改选方案" })).toBeNull();
+    expect(document.querySelector("[data-vcr-decided]")).toBeNull();
+  });
+
+  it("puts a draft in the conversation for 加一个方案 and for 改假设 — and does not send it", async () => {
+    draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
+    await trialDrawn();
+    await userEvent.click(screen.getByRole("button", { name: "加一个方案" }));
+    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_ev201", expect.any(Function)));
+    expect(network.productRequest.mock.calls.some(([path, method]) => method === "POST" && String(path).includes("/run"))).toBe(false);
+  });
+
+  it("offers none of the three to a reader who cannot write, and no 改设定 either", async () => {
+    const raw = fixture("ev201/study.json");
+    raw.abilities = ["read"];
+    draw(<TrialTab studyId={STUDY_ID} study={readVcrStudy(raw)} />);
+    await trialDrawn();
+    for (const name of ["选定方案", "改选方案", "加一个方案", "改假设", "改设定"]) {
+      expect(screen.queryByRole("button", { name: new RegExp(`^${name}`) })).toBeNull();
+    }
+    // What was decided is still said.
+    expect(document.querySelector("[data-vcr-decided]")).not.toBeNull();
   });
 
   it("writes nothing until a goal is written and a design chosen, then posts the exact decision and re-reads", async () => {
@@ -532,20 +854,22 @@ describe("试验", () => {
     installVcrServer(network.productRequest, { [tab("trial")]: raw });
     const { container } = draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
     await trialDrawn();
-    const save = screen.getByRole("button", { name: "写入决策记录" });
+    await userEvent.click(screen.getByRole("button", { name: "选定方案" }));
+    const drawer = await screen.findByRole("dialog", { name: "选定方案" });
+    const save = within(drawer).getByRole("button", { name: "写入决策记录" });
     expect(save).toBeDisabled();
     // Nobody chose: every design is a grey.
     expect(container.querySelectorAll("tr[data-row-ours]")).toHaveLength(0);
-    expect(screen.getByRole("radio", { name: "D" })).toBeDisabled();
+    expect(within(drawer).getByRole("radio", { name: "D" })).toBeDisabled();
 
-    await userEvent.click(screen.getByRole("radio", { name: "B" }));
+    await userEvent.click(within(drawer).getByRole("radio", { name: "B" }));
     expect(save).toBeDisabled();
-    // Choosing on the card is not a recorded decision: still no brand.
+    // Choosing in the form is not a recorded decision: still no brand.
     expect(container.querySelectorAll("tr[data-row-ours]")).toHaveLength(0);
 
-    await userEvent.type(screen.getByLabelText("比较目标"), "成功把握不低于 70%");
+    await userEvent.type(within(drawer).getByLabelText("比较目标"), "成功把握不低于 70%");
     expect(save).toBeEnabled();
-    await userEvent.type(screen.getByLabelText("选择理由"), "样本量更少");
+    await userEvent.type(within(drawer).getByLabelText("选择理由"), "样本量更少");
     await userEvent.click(save);
 
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/decisions`, "POST", {
@@ -555,8 +879,9 @@ describe("试验", () => {
       rationale: "样本量更少",
     }));
     expect(toasts.success).toHaveBeenCalledWith("已写入决策记录。");
-    // The tab is read again, so the highlight comes back from the server.
+    // The tab is read again, so the highlight comes back from the server, and the form is closed.
     await waitFor(() => expect(gets("trial")).toHaveLength(2));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "选定方案" })).toBeNull());
   });
 
   it("sends one decision while the first is still being written", async () => {
@@ -566,7 +891,8 @@ describe("试验", () => {
     });
     draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
     await trialDrawn();
-    const save = screen.getByRole("button", { name: "写入决策记录" });
+    await userEvent.click(screen.getByRole("button", { name: "改选方案" }));
+    const save = within(await screen.findByRole("dialog", { name: "选定方案" })).getByRole("button", { name: "写入决策记录" });
     await userEvent.click(save);
     await userEvent.click(save);
     expect(network.productRequest.mock.calls.filter(([path, method]) => String(path).endsWith("/decisions") && method === "POST")).toHaveLength(1);
@@ -575,7 +901,7 @@ describe("试验", () => {
     await waitFor(() => expect(toasts.success).toHaveBeenCalled());
   });
 
-  it("keeps a stale result on screen under its bar, and leaves the decision card usable", async () => {
+  it("keeps a stale result on screen under its bar, and leaves what a reader does about it usable", async () => {
     const raw = fixture("ev201/trial.json");
     raw.stale = { reason: "假设卡已变更", queued: false, since: null };
     installVcrServer(network.productRequest, { [tab("trial")]: raw });
@@ -584,26 +910,76 @@ describe("试验", () => {
     expect(container.querySelector("[data-vcr-stale]")).toHaveTextContent("假设卡已变更 · 输入已变更，这些数字可能已过期");
     const greyed = container.querySelector("[data-vcr-stale-block] .opacity-disabled") as HTMLElement;
     expect(greyed.querySelector("tr[data-vcr-design='B']")).not.toBeNull();
-    expect(greyed.querySelector("[data-vcr-decision]")).toBeNull();
-    expect(screen.getByRole("button", { name: "写入决策记录" })).toBeEnabled();
+    // The buttons are not under the grey.
+    expect(greyed.querySelector("[data-vcr-conclusion]")).toBeNull();
+    expect(screen.getByRole("button", { name: "改选方案" })).toBeEnabled();
   });
 
-  it("fixes the four counts at the foot, with 尚无运行 when nothing has counted", async () => {
-    const raw = fixture("ev201/trial.json");
-    raw.counts = null;
-    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+  it("has no counts band of its own: the four numbers are on 总览", async () => {
     const { container } = draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
     await trialDrawn();
-    const band = container.querySelector("[data-vcr-counts]") as HTMLElement;
-    expect(within(band).getByText("尚无运行")).toBeInTheDocument();
-    for (const key of ["realPatients", "events", "effectiveSampleSize", "generatedRecords"]) {
-      expect(band.querySelector(`[data-vcr-count='${key}']`)).toHaveTextContent("—");
-    }
+    expect(container.querySelector("[data-vcr-counts]")).toBeNull();
   });
 
-  it("is the step's waiting line on an empty study", async () => {
+  describe("the comparison", () => {
+    it("shows how many replicates the simulation ran and what each number comes from, for the designs that have them", async () => {
+      const raw = fixture("ev201/trial.json");
+      raw.designs[1].replicates = 5000;
+      raw.designs[1].method = "解析 + 模拟";
+      raw.designs[2].replicates = 3000;
+      raw.designs[2].method = "模拟";
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
+      const { container } = draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
+      await trialDrawn();
+      expect(screen.getByRole("columnheader", { name: "模拟次数" })).toBeInTheDocument();
+      expect(container.querySelector("tr[data-vcr-design='B'] [data-vcr-replicates]")).toHaveTextContent("5,000");
+      expect(container.querySelector("tr[data-vcr-design='B'] [data-vcr-method]")).toHaveTextContent("解析 + 模拟");
+      expect(container.querySelector("tr[data-vcr-design='C'] [data-vcr-method]")).toHaveTextContent("模拟");
+    });
+
+    it("draws neither column where nobody has the number", async () => {
+      draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
+      await trialDrawn();
+      expect(screen.queryByRole("columnheader", { name: "模拟次数" })).toBeNull();
+      expect(screen.queryByRole("columnheader", { name: "来源" })).toBeNull();
+    });
+
+    it("says what ± is and that a number opens what it was made from, once, under the table", async () => {
+      draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
+      await trialDrawn();
+      expect(screen.getByText("功效后的 ± 是蒙特卡洛标准误。点任一个数，看它用了哪些假设、哪次运行。")).toBeInTheDocument();
+    });
+
+    it("opens a design's numbers for editing from its own row — written as that design's next version", async () => {
+      installVcrServer(network.productRequest, {
+        [`GET /vcr/studies/${STUDY_ID}/cards?kind=trial_scenario&object=scn_2`]: {
+          kind: "trial_scenario", objectId: "scn_2", title: "B",
+          settings: [{ path: "design.nTreat", label: "试验组人数", value: 400, unit: "人", integer: true, min: 1, max: null }],
+        },
+      });
+      draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
+      await trialDrawn();
+      await userEvent.click(screen.getByRole("button", { name: "改设定：方案 B" }));
+      const drawer = await screen.findByRole("dialog", { name: /改设定：B/ });
+      const field = await within(drawer).findByLabelText("试验组人数（人）");
+      await userEvent.clear(field);
+      await userEvent.type(field, "450");
+      await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
+      await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cards`, "POST",
+        { kind: "trial_scenario", objectId: "scn_2", set: { "design.nTreat": 450 } }));
+      await waitFor(() => expect(gets("trial")).toHaveLength(2));
+    });
+  });
+
+  it("says the first sentence is missing on a study nobody has described, with no decision form", async () => {
     draw(<TrialTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />);
-    expect(await screen.findByText(VCR_STEP_WAITING.trial)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "写入决策记录" })).not.toBeInTheDocument();
+    expect(await screen.findByText(VCR_NO_DEFINITION)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "选定方案" })).not.toBeInTheDocument();
+  });
+
+  it("says a step that was asked for is arranged", async () => {
+    installVcrServer(network.productRequest, nothingIn("trial"));
+    draw(<TrialTab studyId={STUDY_ID} study={withStep("trial", { status: "none", requested: true })} />);
+    expect(await screen.findByText(VCR_STEP_QUEUED)).toBeInTheDocument();
   });
 });

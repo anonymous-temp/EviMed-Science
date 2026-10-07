@@ -1481,7 +1481,7 @@ export function readVcrModelCard(raw: unknown): VcrModelCard {
 function readGeneratedRow(raw: unknown): VcrGeneratedRow {
   const value = obj(raw);
   const histogram = obj(value.histogram);
-  const counts = arr(histogram.counts as unknown).length ? (histogram.counts as unknown[]) : [];
+  const counts = Array.isArray(histogram.counts) ? histogram.counts : [];
   const numbers = (items: unknown[]) => items.map((item) => (typeof item === "number" && Number.isFinite(item) ? item : 0));
   return {
     key: text(value.key) ?? text(value.variable) ?? "",

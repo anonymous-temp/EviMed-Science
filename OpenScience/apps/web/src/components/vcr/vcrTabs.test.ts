@@ -4,7 +4,7 @@ import type { VcrStepKey, VcrStepStatus, VcrStudy } from "@/lib/vcrClient";
 import { hasDefinition, isVcrTab, resolveVcrTab, stepsOfTab, tabDot, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath } from "./vcrTabs";
 
 const steps = (status: Partial<Record<VcrStepKey, VcrStepStatus>>, extra: Partial<Record<VcrStepKey, Record<string, unknown>>> = {}): VcrStudy["steps"] =>
-  Object.fromEntries(VCR_STEPS.map((step) => [step, { status: status[step] ?? "none", ...(extra[step as VcrStepKey] ?? {}) }])) as VcrStudy["steps"];
+  Object.fromEntries(VCR_STEPS.map((step) => [step, { status: status[step as VcrStepKey] ?? "none", ...(extra[step as VcrStepKey] ?? {}) }])) as VcrStudy["steps"];
 
 describe("the study page's tabs", () => {
   it("is the domain's set with the domain's names, in the page's reading order", () => {

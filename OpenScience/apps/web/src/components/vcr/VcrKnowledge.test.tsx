@@ -47,7 +47,7 @@ beforeEach(() => {
 
 const posted = (method: string, path: string) => network.productRequest.mock.calls.filter((call) => call[0] === path && call[1] === method);
 
-describe("知识包与定义 on the overview", () => {
+describe("病种定义包 on 定义与证据", () => {
   it("marks a draft 「AI 草拟」, lists each source with its link and licence, and lets the lead promote it", async () => {
     const changed = vi.fn();
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite onChanged={changed} />);
@@ -55,7 +55,8 @@ describe("知识包与定义 on the overview", () => {
     expect(pack).toHaveAttribute("data-vcr-pack", "ai-draft");
     expect(within(pack).getByText("某罕见病")).toBeInTheDocument();
     expect(within(pack).getByText("AI 草拟")).toBeInTheDocument();
-    expect(within(pack).getByText("v2")).toBeInTheDocument();
+    // The pack's own version number is the platform's, not a reader's.
+    expect(within(pack).queryByText("v2")).toBeNull();
     expect(pack).toHaveTextContent("术语 3 · 表型 0 · 终点 2 · 入排条件 4");
     await userEvent.click(within(pack).getByText("来源 1"));
     const link = within(pack).getByRole("link", { name: /A review/ });
@@ -94,7 +95,7 @@ describe("知识包与定义 on the overview", () => {
     });
     const changed = vi.fn();
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf({ pack: null, definitions: [] })} canWrite onChanged={changed} />);
-    const select = await screen.findByLabelText("选用知识包");
+    const select = await screen.findByLabelText("选用病种定义包");
     expect(within(select).getByRole("option", { name: "某罕见病（AI 草拟）" })).toBeInTheDocument();
     await userEvent.selectOptions(select, "nsclc");
     await userEvent.click(screen.getByRole("button", { name: "绑定" }));
@@ -109,7 +110,7 @@ describe("知识包与定义 on the overview", () => {
   });
 });
 
-describe("申请成为平台知识包 (flywheel F26)", () => {
+describe("申请成为平台病种定义包 (flywheel F26)", () => {
   const curated = (platformRequest: Record<string, unknown>) => knowledgeOf({
     pack: { origin: "stored", id: "pkg_1", diseaseKey: "rare_thing", name: "Rare thing", nameZh: "某罕见病", version: 2, status: "curated", counts: { terms: 3 }, sources: [], canPromote: false, platformRequest },
   });
@@ -118,7 +119,7 @@ describe("申请成为平台知识包 (flywheel F26)", () => {
     installVcrServer(network.productRequest, { [`POST /vcr/studies/${STUDY_ID}/pack/platform`]: { state: "passed", existing: false, failing: [] } });
     const changed = vi.fn();
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={curated({ canRequest: true, requested: false, recheck: null })} canWrite onChanged={changed} />);
-    await userEvent.click(screen.getByRole("button", { name: "申请成为平台知识包" }));
+    await userEvent.click(screen.getByRole("button", { name: "申请成为平台病种定义包" }));
     await waitFor(() => expect(posted("POST", `/vcr/studies/${STUDY_ID}/pack/platform`)).toHaveLength(1));
     expect(posted("POST", `/vcr/studies/${STUDY_ID}/pack/platform`)[0][2]).toEqual({});
     expect(toasts.success).toHaveBeenCalled();
@@ -130,10 +131,10 @@ describe("申请成为平台知识包 (flywheel F26)", () => {
       [`POST /vcr/studies/${STUDY_ID}/pack/platform`]: { state: "failed", existing: false, failing: [{ section: "terms", id: "t1", code: "source_changed", detail: "A review（doi:10.1000/x）已有「retraction」记录" }] },
     });
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={curated({ canRequest: true, requested: false, recheck: null })} canWrite onChanged={() => undefined} />);
-    await userEvent.click(screen.getByRole("button", { name: "申请成为平台知识包" }));
+    await userEvent.click(screen.getByRole("button", { name: "申请成为平台病种定义包" }));
     const failing = await screen.findByText(/复核没有通过/);
     expect(failing.closest("[data-vcr-platform-failing]")).toHaveTextContent("terms · t1：A review（doi:10.1000/x）已有「retraction」记录");
-    expect(screen.getByRole("button", { name: "申请成为平台知识包" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "申请成为平台病种定义包" })).toBeInTheDocument();
   });
 
   it("shows the last re-check that failed from the study's own payload, and says a platform pack is one already", () => {
@@ -142,8 +143,8 @@ describe("申请成为平台知识包 (flywheel F26)", () => {
     expect(document.querySelector("[data-vcr-platform-failing]")).toHaveTextContent("endpoints · e1");
     unmount();
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={curated({ canRequest: false, requested: true, recheck: null })} canWrite onChanged={() => undefined} />);
-    expect(screen.getByText("这份知识包已经是平台知识包。")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "申请成为平台知识包" })).not.toBeInTheDocument();
+    expect(screen.getByText("这份病种定义包已经是平台病种定义包。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "申请成为平台病种定义包" })).not.toBeInTheDocument();
   });
 
   it("names a platform pack's author by the name they allow, and labels a changed source without offering a request", () => {
@@ -153,10 +154,10 @@ describe("申请成为平台知识包 (flywheel F26)", () => {
     });
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={platform} canWrite onChanged={() => undefined} />);
     const mark = document.querySelector("[data-vcr-platform-pack]") as HTMLElement;
-    expect(mark).toHaveTextContent("平台知识包");
+    expect(mark).toHaveTextContent("平台病种定义包");
     expect(mark).toHaveTextContent("张主任 整理 · 取自其 v2");
     expect(mark).toHaveTextContent("来源有变更");
-    expect(screen.queryByRole("button", { name: "申请成为平台知识包" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "申请成为平台病种定义包" })).not.toBeInTheDocument();
   });
 });
 

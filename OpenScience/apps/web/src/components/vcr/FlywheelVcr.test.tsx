@@ -43,7 +43,7 @@ describe("the data tab (F23, F24)", () => {
     expect(news).toHaveTextContent("有新证据");
     expect(news).toHaveTextContent("新的结果");
     expect(news).toHaveTextContent("Final overall survival of NCT09900001");
-    expect(news).toHaveTextContent("分析计划已经冻结：新版本 v2 放在冻结的 v1 旁边，研究仍按冻结的版本计算。");
+    expect(news).toHaveTextContent("分析计划已经冻结：新版本放在冻结的版本旁边，研究仍按冻结的版本计算。");
     expect(container.querySelector(`[data-vcr-assumption='${card.id}']`)).toHaveTextContent("有新证据");
     expect(screen.getByText("冻结后新增，不影响已冻结的计划")).toBeInTheDocument();
   });
@@ -137,12 +137,12 @@ describe("登记预测", () => {
   it("is not on the page without the registry, or for a reader who is not the lead", async () => {
     const off = ev201({ features: { simulations: false, predictions: false, platformPacks: false } });
     const { unmount } = draw(<TrialTab studyId={STUDY_ID} study={off} />);
-    await screen.findByRole("heading", { name: "方案的运行特征" });
+    await screen.findByRole("table", { name: "方案的对比" });
     expect(document.querySelector("[data-vcr-file-prediction]")).toBeNull();
     unmount();
     const member = ev201({ features: { simulations: false, predictions: true, platformPacks: false }, abilities: ["read", "write"] });
     draw(<TrialTab studyId={STUDY_ID} study={member} />);
-    await screen.findByRole("heading", { name: "方案的运行特征" });
+    await screen.findByRole("table", { name: "方案的对比" });
     expect(document.querySelector("[data-vcr-file-prediction]")).toBeNull();
   });
 });
