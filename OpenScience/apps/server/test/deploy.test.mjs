@@ -425,6 +425,28 @@ test("web Dockerfile only copies sources that exist in the build context", async
   assert.deepEqual(missing, []);
 });
 
+test("every evals/ file the server reads at run time is in the web image", async () => {
+  // 2026-10-07: 循证进化's module loops read three development case files the image never
+  // carried, so each 前沿动态, 循证传播 and 主动科研 mission would have stopped on ENOENT. The
+  // evolution packaging test watched paper-gold only; this derives every literal read.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
+  const copied = dockerfile.split("\n").filter((line) => line.startsWith("COPY --from=build "))
+    .flatMap((line) => splitDockerWords(line).slice(2, -1)).filter((source) => source.startsWith("/app/evals/"))
+    .map((source) => source.slice("/app/".length));
+  // A directory the server lists (`evals/tool-graph/`) counts as carried when something in it is copied.
+  const covers = (file) => copied.some((source) => source === file || file.startsWith(`${source}/`) || (file.endsWith("/") && source.startsWith(file))
+    || (source.includes("*") && new RegExp(`^${source.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*")}$`).test(file)));
+  const sourceRoot = path.join(repoRoot, "apps/server/src");
+  const read = new Set();
+  for (const name of (await readdir(sourceRoot)).filter((file) => file.endsWith(".mjs"))) {
+    const body = await readFile(path.join(sourceRoot, name), "utf8");
+    for (const [, file] of body.matchAll(/["'`]\.\.\/\.\.\/\.\.\/(evals\/[^"'`$]+)["'`]/g)) read.add(file);
+  }
+  assert.ok(read.has("evals/frontier-editing/cases.json") && read.has("evals/paper-gold/evaluator.mjs"), "the scan, not the image, is wrong");
+  const missing = [...read].filter((file) => !covers(file)).sort();
+  assert.deepEqual(missing, [], `read at run time but not in the web image: ${missing.join(", ")}`);
+});
+
 test("web Dockerfile embeds immutable OCI release metadata", async () => {
   const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
   assert.match(dockerfile, /ARG APP_VERSION=0\.1\.3/);

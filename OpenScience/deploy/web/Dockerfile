@@ -107,6 +107,12 @@ COPY --from=build /app/evals/paper-gold/economics-reference-manifest.json /app/e
 COPY --from=build /app/evals/paper-gold/development-contract.json /app/evals/paper-gold/diagnostic-posterior-development.json /app/evals/paper-gold/decision-net-benefit-development.json ./evals/paper-gold/
 COPY --from=build /app/evals/tool-graph/*.json ./evals/tool-graph/
 COPY --from=build /app/evals/method-quality ./evals/method-quality
+# 循证进化's module loops read their development cases at run time (moduleEvolutionPreparation,
+# moduleEvolutionEvaluators, moduleEvolutionCalibration): without them every 前沿动态, 循证传播 and
+# 主动科研 mission stopped on a missing file before its first smoke.
+COPY --from=build /app/evals/frontier-editing/cases.json ./evals/frontier-editing/cases.json
+COPY --from=build /app/evals/autopilot-next-action/cases.json ./evals/autopilot-next-action/cases.json
+COPY --from=build /app/evals/geo-judge-cards/cases.json ./evals/geo-judge-cards/cases.json
 COPY --from=build /app/evals/evidence-appraisal/briefs.json ./evals/evidence-appraisal/briefs.json
 COPY --from=build /app/evals/evidence-appraisal/hidden ./evals/evidence-appraisal/hidden
 # The ops scripts ship inside this image and several of them import workspace

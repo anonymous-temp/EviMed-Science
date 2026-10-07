@@ -154,7 +154,10 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // evidence content copies. This digest is calculated from the resolved recipe;
 // independent merge review and complete production image acceptance remain pending.
 // The hosted extension adapters and measured source closure now ship in the Web image.
-export const WEB_DOCKERFILE_SHA256 = "sha256:d7fde8de63057f5c0d7c286535cdbc74103cd04a2d4c5df21c54a7a63310a3c7";
+// 2026-10-07: three added lines — 循证进化's module loops read evals/frontier-editing,
+// evals/autopilot-next-action and evals/geo-judge-cards cases.json at run time and the
+// image did not carry them (deploy.test.mjs now derives every literal evals/ read).
+export const WEB_DOCKERFILE_SHA256 = "sha256:5e7e3c2f8f0d8b992526a0ef3872fa1ca93a530c8a8dba341e808925b736780a";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",
