@@ -1,35 +1,39 @@
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
-import { cancelGeoOrder, getGeoDistribution, type GeoDistribution, type GeoOrder, type GeoOwnedLink, type GeoProject } from "@/lib/geoClient";
+import { cancelGeoOrder, type GeoDistribution, type GeoOrder, type GeoOwnedLink, type GeoProject } from "@/lib/geoClient";
 import { safeWebHref } from "@/lib/readPages";
 import { toast } from "@/lib/toast";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { ScrollRegion } from "@/components/ui/ScrollRegion";
 import { GEO_ORDER_CANCELLABLE, engineName, layerName, monthDay, orderStateWord, ownedPlatformName } from "../geoText";
 import { BudgetDialog } from "./BudgetDialog";
-import { StepPending, TabError, TabSection, TabSkeleton, TD, TH, useGeoLoad } from "./geoTabKit";
+import { StepPending, TabSection, TD, TH } from "./geoTabKit";
 import { yuan } from "./geoTabText";
+
+/** Whether there is anything to show: a market to place with, a budget, an order, or a page the brand published itself. */
+export function hasDistribution(data: GeoDistribution | null | undefined): boolean {
+  if (!data) return false;
+  return data.market?.configured !== false
+    || (data.budget != null && typeof data.budget.totalCny === "number")
+    || (Array.isArray(data.orders) && data.orders.some((order) => order && order.id))
+    || (Array.isArray(data.ownedLinks) && data.ownedLinks.some((link) => link && link.id));
+}
 
 /**
  * 投放 (plan §3.7, mockup g10). The budget is the program's one money stop:
- * until it is set the tab asks for it, with the tier's suggestion prefilled;
- * after that the control plane places orders within it. The orders list says
- * where each article went and where it stands; “撤单” is offered only while
- * the outlet has not accepted it yet. While the marketplace is not connected
- * nothing can be placed: the tab says so in a sentence and asks for nothing —
- * no budget button, no “等你” (G20). Below the orders, the pages the brand
- * published itself (百家号, 公众号 …), which the program checks after
- * publication as it checks an order.
+ * until it is set the section asks for it, with the tier's suggestion
+ * prefilled; after that the control plane places orders within it. The orders
+ * list says where each article went and where it stands; “撤单” is offered only
+ * while the outlet has not accepted it yet. While the marketplace is not
+ * connected nothing can be placed and the section asks for nothing — no budget
+ * button, no “等你” (G20); `ActionsTab` says why, under the stage counts, and
+ * does not draw this section at all when there is nothing in it. Below the
+ * orders, the pages the brand published itself (百家号, 公众号 …), which the
+ * program checks after publication as it checks an order.
  */
-export function DistributionTab({ geoId, project }: { geoId: string; project: GeoProject }) {
-  const { state, reload } = useGeoLoad(`distribution:${geoId}`, () => getGeoDistribution(geoId));
-  if (state.kind === "loading") return <TabSkeleton />;
-  if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
-  return <Distribution geoId={geoId} project={project} data={state.data} onChanged={reload} />;
-}
-
-function Distribution({ geoId, project, data, onChanged }: { geoId: string; project: GeoProject; data: GeoDistribution; onChanged: () => void }) {
+export function Distribution({ geoId, project, data, onChanged }: { geoId: string; project: GeoProject; data: GeoDistribution; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const orders = (Array.isArray(data?.orders) ? data.orders : []).filter((order) => order && order.id);
   const ownedLinks = (Array.isArray(data?.ownedLinks) ? data.ownedLinks : []).filter((link) => link && link.id);
@@ -38,11 +42,6 @@ function Distribution({ geoId, project, data, onChanged }: { geoId: string; proj
 
   return (
     <div data-geo-tab="distribution">
-      {!configured && (
-        <p data-geo-market-off="" className="mb-4 max-w-measure text-ui text-text-2">
-          投放要等媒介集市接通：接通之前不会下单，写好的稿件先留在这里。
-        </p>
-      )}
       {(configured || budget) && <BudgetLine data={data} budget={budget} onEdit={configured ? () => setEditing(true) : null} />}
       {orders.length > 0
         ? <Orders geoId={geoId} orders={orders} onChanged={onChanged} />
@@ -139,7 +138,7 @@ function Orders({ geoId, orders, onChanged }: { geoId: string; orders: GeoOrder[
 
   return (
     <TabSection title="订单" meta={`${orders.length} 单`} className="mt-8">
-      <div className="overflow-x-auto">
+      <ScrollRegion label="订单" className="relative">
         <table className="w-full min-w-[44rem] border-collapse">
           <thead>
             <tr className="border-b border-border">
@@ -184,7 +183,7 @@ function Orders({ geoId, orders, onChanged }: { geoId: string; orders: GeoOrder[
             })}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
       {pending && (
         <ConfirmDialog
           title={`撤下“${pending.articleTitle || "这一单"}”？`}
@@ -202,7 +201,7 @@ function Orders({ geoId, orders, onChanged }: { geoId: string; orders: GeoOrder[
 function OwnedLinks({ links }: { links: GeoOwnedLink[] }) {
   return (
     <TabSection title="自有发布" meta={`${links.length} 条`} className="mt-8">
-      <div className="overflow-x-auto">
+      <ScrollRegion label="自有发布" className="relative">
         <table className="w-full min-w-[44rem] border-collapse">
           <thead>
             <tr className="border-b border-border">
@@ -239,7 +238,7 @@ function OwnedLinks({ links }: { links: GeoOwnedLink[] }) {
             })}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </TabSection>
   );
 }

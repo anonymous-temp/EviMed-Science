@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import { ChevronRight } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
@@ -13,10 +14,12 @@ import {
 import { safeWebHref } from "@/lib/readPages";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { Tag } from "@/components/ui/Tag";
 import { GEO_POOL_KINDS, GEO_POOL_NAMES, GEO_POOLS, groupName, monthDay, platformName } from "../geoText";
+import { answerPath } from "./geoTabText";
 import { FilterRow, StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 
 type PoolFilter = "all" | GeoPool;
@@ -44,6 +47,10 @@ const PHRASINGS_SHOWN = 6;
  * phrasings collected from social platforms, with the platform named.
  * Control groups are marked. A locked set is versioned: an older version can
  * be looked at, and removing a question writes a new one.
+ *
+ * A search box finds a question by any word of it (88 questions in 25 groups are
+ * too many to scan); the groups it matches open by themselves. A measured
+ * question opens the answer it last got, so “他们到底怎么答的” is one click.
  */
 export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const [version, setVersion] = useState<number | null>(null);
@@ -82,7 +89,10 @@ function QuestionMap({
   onChanged: () => void;
 }) {
   const [pool, setPool] = useState<PoolFilter>("all");
-  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const [query, setQuery] = useState("");
+  /** What the reader opened or closed by hand during this search; a new search starts from what it matched. */
+  const [chosen, setChosen] = useState<Map<string, boolean>>(() => new Map());
+  const needle = query.trim().toLowerCase();
   const counts = useMemo(() => {
     const questions = groups.flatMap((group) => list(group.questions));
     return {
@@ -99,59 +109,100 @@ function QuestionMap({
   const sets = Array.isArray(data.sets) ? data.sets.filter((set) => set && typeof set.version === "number") : [];
   const latest = sets.reduce<number | null>((top, set) => (top === null || set.version > top ? set.version : top), null);
   const current = data.version ?? latest;
-  const toggle = (id: string) => setOpen((previous) => {
-    const next = new Set(previous);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    return next;
-  });
+  const shownPools = pool === "all" || !pools.includes(pool as GeoPool) ? pools : [pool as GeoPool];
+  const matches = useMemo(() => new Map(groups.map((group) => [group.id, matchGroup(group, needle)])), [groups, needle]);
+  const found = shownPools.flatMap((key) => groups.filter((group) => group.pool === key && matches.get(group.id)));
+  const matchedQuestions = found.reduce((sum, group) => sum + (matches.get(group.id)?.count ?? 0), 0);
+  const isOpen = (id: string) => chosen.get(id) ?? needle !== "";
+  const toggle = (id: string) => setChosen((previous) => new Map(previous).set(id, !(previous.get(id) ?? needle !== "")));
+  const search = (value: string) => {
+    setQuery(value);
+    setChosen(new Map());
+  };
 
   return (
     <div data-geo-tab="questions">
-      <FilterRow summary={`${counts.groups} 个语义群 · ${counts.measured} 问 · ${counts.real.toLocaleString("zh-CN")} 条真实问法`}>
-        <FilterChips
-          label="问句池"
-          options={options}
-          value={pools.includes(pool as GeoPool) ? pool : "all"}
-          onChange={setPool}
-          trailing={sets.length > 1 ? (
-            <FilterSelect<string>
-              label="问句版本"
-              options={[...sets].sort((a, b) => b.version - a.version).map((set) => ({
-                value: String(set.version),
-                label: [`第 ${set.version} 版`, set.lockedAt ? `${monthDay(set.lockedAt)}锁定` : null].filter(Boolean).join(" · "),
-              }))}
-              value={current === null ? null : String(current)}
-              onChange={(value) => onVersion(value === null || Number(value) === latest ? null : Number(value))}
-            />
-          ) : undefined}
-        />
-      </FilterRow>
-      {(pool === "all" || !pools.includes(pool as GeoPool) ? pools : [pool as GeoPool]).map((key) => (
-        <section key={key} aria-label={GEO_POOL_KINDS[key]} className="mt-8">
-          {/* A pool is a group heading over its rows, in the list's meta
-              level: the groups under it are what a reader opens. */}
-          <h2 className="flex items-baseline gap-2 text-caption text-text-3">
-            <span className="text-text-2">{GEO_POOL_KINDS[key]}</span>
-            {!GEO_POOL_NAMES[key].startsWith(GEO_POOL_KINDS[key]) && <span>{GEO_POOL_NAMES[key]}</span>}
-          </h2>
-          <ul className="mt-2 flex flex-col divide-y divide-faint">
-            {groups.filter((group) => group.pool === key).map((group) => (
-              <GroupRow
-                key={group.id}
-                geoId={geoId}
-                group={group}
-                expanded={open.has(group.id)}
-                onToggle={() => toggle(group.id)}
-                onChanged={onChanged}
-                editable={current === latest}
+      <FilterRow summary={needle ? `匹配 ${matchedQuestions} 个问题` : `${counts.groups} 个语义群 · ${counts.measured} 问 · ${counts.real.toLocaleString("zh-CN")} 条真实问法`}>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 max-sm:w-full">
+          <FilterChips
+            label="问句池"
+            options={options}
+            value={pools.includes(pool as GeoPool) ? pool : "all"}
+            onChange={setPool}
+            trailing={sets.length > 1 ? (
+              <FilterSelect<string>
+                label="问句版本"
+                options={[...sets].sort((a, b) => b.version - a.version).map((set) => ({
+                  value: String(set.version),
+                  label: [`第 ${set.version} 版`, set.lockedAt ? `${monthDay(set.lockedAt)}锁定` : null].filter(Boolean).join(" · "),
+                }))}
+                value={current === null ? null : String(current)}
+                onChange={(value) => onVersion(value === null || Number(value) === latest ? null : Number(value))}
               />
-            ))}
-          </ul>
-        </section>
-      ))}
+            ) : undefined}
+          />
+          <SearchInput label="搜索问题" size="sm" value={query} maxLength={80} onChange={(event) => search(event.target.value)} className="w-52 max-sm:w-full" />
+        </div>
+      </FilterRow>
+      {needle && found.length === 0 && (
+        <p className="py-10 text-center text-ui text-text-3">{`没有包含“${query.trim()}”的问题。`}</p>
+      )}
+      {shownPools.map((key) => {
+        const inPool = groups.filter((group) => group.pool === key && matches.get(group.id));
+        if (inPool.length === 0) return null;
+        return (
+          <section key={key} aria-label={GEO_POOL_KINDS[key]} className="mt-8">
+            {/* A pool is a group heading over its rows, in the list's meta
+                level: the groups under it are what a reader opens. */}
+            <h2 className="flex items-baseline gap-2 text-caption text-text-3">
+              <span className="text-text-2">{GEO_POOL_KINDS[key]}</span>
+              {!GEO_POOL_NAMES[key].startsWith(GEO_POOL_KINDS[key]) && <span>{GEO_POOL_NAMES[key]}</span>}
+            </h2>
+            <ul className="mt-2 flex flex-col divide-y divide-faint">
+              {inPool.map((group) => (
+                <GroupRow
+                  key={group.id}
+                  geoId={geoId}
+                  group={group}
+                  match={matches.get(group.id)!}
+                  expanded={isOpen(group.id)}
+                  onToggle={() => toggle(group.id)}
+                  onChanged={onChanged}
+                  editable={current === latest}
+                />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
     </div>
   );
+}
+
+/** What of a group a search leaves: nothing (no match), or the parts to show. Without a search, all of it. */
+interface GroupMatch {
+  typical: boolean;
+  measured: GeoQuestion[];
+  phrasings: GeoQuestion[];
+  /** The questions this group puts in front of the reader: the typical one when it stands alone, the measured ones, the phrasings. */
+  count: number;
+}
+
+function matchGroup(group: GeoQuestionGroup, needle: string): GroupMatch | null {
+  const questions = list(group.questions);
+  const hit = (text: string | null | undefined) => !needle || (text ?? "").toLowerCase().includes(needle);
+  // A group named for what the reader typed keeps every question: they asked for the topic.
+  const topic = !needle || groupName(group.name).toLowerCase().includes(needle) || (group.name ?? "").toLowerCase().includes(needle);
+  const take = (question: GeoQuestion) => topic || hit(question.text);
+  const measured = questions.filter((question) => question.isMeasured && take(question));
+  const phrasings = questions.filter((question) => !question.isMeasured && question.kind === "real" && take(question));
+  const typicalText = (group.typicalQuestion ?? "").trim();
+  const typical = Boolean(typicalText)
+    && !questions.some((question) => question.isMeasured && question.text.trim() === typicalText)
+    && (topic || hit(typicalText));
+  const count = (typical ? 1 : 0) + measured.length + phrasings.length;
+  if (needle && !topic && count === 0) return null;
+  return { typical, measured, phrasings, count };
 }
 
 function list<T>(value: T[] | null | undefined): T[] {
@@ -161,6 +212,7 @@ function list<T>(value: T[] | null | undefined): T[] {
 function GroupRow({
   geoId,
   group,
+  match,
   expanded,
   onToggle,
   onChanged,
@@ -168,6 +220,8 @@ function GroupRow({
 }: {
   geoId: string;
   group: GeoQuestionGroup;
+  /** The parts of the group a search leaves; all of it without one. */
+  match: GroupMatch;
   expanded: boolean;
   onToggle: () => void;
   onChanged: () => void;
@@ -175,13 +229,12 @@ function GroupRow({
   editable: boolean;
 }) {
   const questions = list(group.questions);
-  const measured = questions.filter((question) => question.isMeasured);
-  const phrasings = questions.filter((question) => !question.isMeasured && question.kind === "real");
-  // Every real phrasing counts, measured ones too: the header's total does (G18).
+  const { measured, phrasings } = match;
+  // The header counts the whole group, whatever a search shows of it. Every real phrasing counts, measured ones too (G18).
   const real = questions.filter((question) => question.kind === "real").length;
   const meta = [
     group.journeyStage || null,
-    `${measured.length} 问`,
+    `${questions.filter((question) => question.isMeasured).length} 问`,
     `${real} 条原话`,
     group.signal ? SIGNAL_WORDS[group.signal] ?? null : null,
   ].filter(Boolean).join(" · ");
@@ -206,7 +259,7 @@ function GroupRow({
       {expanded && (
         <div id={panelId} className="mt-3 flex flex-col gap-3 pl-6">
           {/* A typical question that is itself measured is listed once, with its action. */}
-          {group.typicalQuestion && !measured.some((question) => question.text.trim() === group.typicalQuestion.trim()) && (
+          {match.typical && (
             <p className="flex items-start gap-2 text-ui text-text">
               <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
               <span className="max-w-measure">{group.typicalQuestion}</span>
@@ -238,17 +291,27 @@ function MeasuredRow({ geoId, question, editable, onChanged }: { geoId: string; 
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一句无法移出，请稍后重试。" })))
       .finally(() => setBusy(false));
   };
+  // The answer it last got: the first engine of the project's order; the answer page lists the other engines' answers beside it.
+  const answered = Array.isArray(question.answers) ? question.answers.find((answer) => answer?.snapshotId) : null;
   return (
-    <li data-geo-question={question.id} className="flex items-start gap-3 rounded px-2 py-2 hover:bg-surface-1">
+    <li data-geo-question={question.id} className="flex flex-col gap-1 rounded px-2 py-2 hover:bg-surface-1 sm:flex-row sm:items-start sm:gap-3">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="max-w-measure text-ui text-text">{question.text}</span>
         <span className="text-caption text-text-3">
           {[KIND_WORDS[question.kind] ?? null, platformName(question.platform)].filter(Boolean).join(" · ")}
         </span>
       </div>
-      {editable && (
-        <Button variant="text" size="sm" loading={busy} onClick={remove}>移出测量问句</Button>
-      )}
+      <div className="flex shrink-0 items-center gap-1">
+        {answered && (
+          <Link to={answerPath(geoId, answered.snapshotId)} className={buttonClasses({ variant: "text", size: "sm", className: "text-accent hover:text-accent" })}>
+            看回答
+            <span className="sr-only">{`：${question.text}`}</span>
+          </Link>
+        )}
+        {editable && (
+          <Button variant="text" size="sm" loading={busy} onClick={remove}>移出测量问句</Button>
+        )}
+      </div>
     </li>
   );
 }

@@ -8,7 +8,6 @@ import {
   articlesFilled,
   cell,
   diagnosisFilled,
-  distributionFilled,
   evidenceFilled,
   geoProject,
   journeyFilled,
@@ -18,7 +17,6 @@ import {
 } from "../__fixtures__/geoTabs";
 import { AccuracyTab } from "./AccuracyTab";
 import { ContentTab } from "./ContentTab";
-import { DistributionTab } from "./DistributionTab";
 import { EffectSection } from "./EffectSection";
 import { EvidenceTab } from "./EvidenceTab";
 import { JourneyTab } from "./JourneyTab";
@@ -159,6 +157,29 @@ describe("证据", () => {
     await userEvent.click(screen.getByRole("button", { name: "每周一次皮下注射，从低剂量起始，按说明书逐步增加剂量。" }));
     expect(screen.getByText("本品每周注射一次。")).toBeInTheDocument();
   });
+
+  it("shows 8 claims first, 显示更多 with how many are left, and finds one by a word of it", async () => {
+    const claims = Array.from({ length: 108 }, (_, index) => ({
+      ...evidenceFilled.claims[0],
+      id: `clm_${index}`,
+      statement: `第 ${index} 条结论：${index === 77 ? "饭后服用可减轻胃肠反应" : "按说明书使用"}。`,
+    }));
+    client.getGeoEvidence.mockResolvedValue({ ...evidenceFilled, claims });
+    renderTab(<EvidenceTab {...props()} />);
+    const list = await screen.findByRole("list");
+    expect(within(list).getAllByRole("listitem")).toHaveLength(8);
+    expect(screen.getByText("108 条结论")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 100 条" }));
+    expect(within(screen.getByRole("list")).getAllByRole("listitem")).toHaveLength(28);
+
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索结论" }), "饭后");
+    expect(screen.getByText("匹配 1 条结论")).toBeInTheDocument();
+    expect(within(screen.getByRole("list")).getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索结论" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索结论" }), "没有这个词");
+    expect(screen.getByText("没有包含“没有这个词”的结论。")).toBeInTheDocument();
+  });
 });
 
 describe("旅程", () => {
@@ -230,6 +251,47 @@ describe("问题", () => {
     expect(screen.getByText("孕期、哺乳期与未成年人")).toBeInTheDocument();
   });
 
+  it("finds a question by a word of it, opens the groups it matches and says how many questions matched", async () => {
+    client.getGeoQuestions.mockResolvedValue(questionsFilled);
+    renderTab(<QuestionsTab {...props()} />);
+    await screen.findByText("3 个语义群 · 2 问 · 2 条真实问法");
+    expect(screen.queryByText("打了减重针一直恶心，要不要停药？")).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索问题" }), "剂量");
+    // One real phrasing contains it; its group opens by itself and shows that phrasing alone.
+    expect(screen.getByText("匹配 1 个问题")).toBeInTheDocument();
+    expect(screen.getByText("恶心是不是说明剂量太大")).toBeInTheDocument();
+    expect(screen.queryByText("打完减肥针一直吐正常吗")).not.toBeInTheDocument();
+    expect(screen.queryByText("孕期、哺乳期与未成年人")).not.toBeInTheDocument();
+
+    // A group named for the word keeps every question in it.
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索问题" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索问题" }), "恶心呕吐");
+    expect(screen.getByText("打了减重针一直恶心，要不要停药？")).toBeInTheDocument();
+    expect(screen.getByText("打完减肥针一直吐正常吗")).toBeInTheDocument();
+
+    // It can still be closed by hand, and a new search starts from what it matches.
+    await userEvent.click(screen.getByRole("button", { name: "恶心呕吐与胃肠反应" }));
+    expect(screen.queryByText("打完减肥针一直吐正常吗")).not.toBeInTheDocument();
+
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索问题" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索问题" }), "不存在的词");
+    expect(screen.getByText("没有包含“不存在的词”的问题。")).toBeInTheDocument();
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索问题" }));
+    expect(screen.getByText("3 个语义群 · 2 问 · 2 条真实问法")).toBeInTheDocument();
+  });
+
+  it("a measured question opens the answer it last got; one never asked has nothing to open", async () => {
+    client.getGeoQuestions.mockResolvedValue(questionsFilled);
+    renderTab(<QuestionsTab {...props()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "恶心呕吐与胃肠反应" }));
+    const asked = document.querySelector("[data-geo-question='q_1']") as HTMLElement;
+    expect(within(asked).getByRole("link", { name: /^看回答/ })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_doubao");
+    await userEvent.click(screen.getByRole("button", { name: "停药与体重反弹" }));
+    const never = document.querySelector("[data-geo-question='q_4']") as HTMLElement;
+    expect(within(never).queryByRole("link", { name: /看回答/ })).not.toBeInTheDocument();
+  });
+
   it("removes a question from measurement with the row's own action, always visible", async () => {
     client.getGeoQuestions.mockResolvedValue(questionsFilled);
     client.unmeasureGeoQuestion.mockResolvedValue({});
@@ -243,176 +305,115 @@ describe("问题", () => {
 });
 
 describe("信源", () => {
-  it("lists sources with the three conditions, leaves impostors out and says how many", async () => {
+  const many = (count: number) => Array.from({ length: count }, (_, index) => ({
+    id: `src_m${index}`,
+    domain: `site${index}.example`,
+    name: `站点${index}`,
+    kind: null,
+    layer: null,
+    conditions: { icp: null, newsIndexed: null, medical: null },
+    impostor: false,
+    cited: { doubao: count - index },
+    mentionsOurs: 0,
+    wrongOurs: 0,
+    market: null,
+  }));
+  const rowOf = (domain: string) => document.querySelector(`[data-geo-source='${domain}']`)?.closest("li") as HTMLElement;
+
+  it("lists sources as rows that say the risk without opening: cited, wrong, named, in that order of weight; impostors are left out and counted", async () => {
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     renderTab(<SourcesTab {...props()} />);
-    expect(await screen.findByText("已排除 1 个冒名站")).toBeInTheDocument();
-    const table = screen.getAllByRole("table")[0];
-    expect(within(table).queryByText("某某时报网")).not.toBeInTheDocument();
-    expect(within(table).getAllByText("健康媒体", { selector: "span" })).toHaveLength(2);
-    expect(within(table).getByText("有 1 处讲错")).toHaveClass("text-danger");
-    expect(within(table).getByText("¥120")).toBeInTheDocument();
-    expect(document.querySelector("[data-geo-source='baike.baidu.com'] [data-geo-condition='newsIndexed:no']")).not.toBeNull();
-    expect(document.querySelector("[data-geo-source='baike.baidu.com'] [data-geo-condition='medical:unknown']")).not.toBeNull();
+    expect(await screen.findByText("3 个信源 · 已排除 1 个冒名站")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "信源" });
+    expect(within(list).queryByText("某某时报网")).not.toBeInTheDocument();
+    // Most cited first.
+    expect(within(list).getAllByRole("listitem").map((row) => row.querySelector("[data-geo-source]")?.getAttribute("data-geo-source")))
+      .toEqual(["dxy.com", "baike.baidu.com", "39.net"]);
+    const baike = rowOf("baike.baidu.com");
+    expect(baike).toHaveTextContent("被引用 33 次 · 有 1 处讲错 · 提到你 2 次");
+    expect(within(baike).getByText("有 1 处讲错")).toHaveClass("text-danger");
+    expect(within(baike).getByText("百科")).toBeInTheDocument();
+    expect(within(rowOf("dxy.com")).getByText("健康媒体")).toBeInTheDocument();
+    expect(within(rowOf("dxy.com")).getByText("覆盖")).toBeInTheDocument();
+    expect(within(rowOf("39.net")).getByText("¥120/篇")).toBeInTheDocument();
+    // The conditions are for opening the row, not for the first screen.
+    expect(document.querySelector("[data-geo-condition]")).toBeNull();
+    // What the page used to put under the list is on 方案 now.
+    expect(screen.queryByText("预期匹配")).not.toBeInTheDocument();
+    expect(screen.queryByText("主战场")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "档三" })).not.toBeInTheDocument();
+  });
 
+  it("opens a source in place to its conditions as words, merging the ones nobody checked", async () => {
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源 · 已排除 1 个冒名站");
+    await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
+    const detail = rowOf("baike.baidu.com").querySelector("[data-geo-source-detail]") as HTMLElement;
+    expect(detail.querySelector("[data-geo-condition='icp:yes']")).not.toBeNull();
+    expect(detail.querySelector("[data-geo-condition='newsIndexed:no']")).not.toBeNull();
+    expect(detail).toHaveTextContent("医疗未核实");
+    expect(detail.querySelector("[data-geo-condition='medical:unknown']")).toBeNull();
+    expect(screen.getByText("“未核实”是平台还没核对这一项，不等于不满足。")).toBeInTheDocument();
+
+    await userEvent.click(within(rowOf("39.net")).getByRole("button", { name: /39 健康网/ }));
+    expect(rowOf("39.net").querySelector("[data-geo-source-detail]")).toHaveTextContent("单篇价格 ¥120");
+    // One row open at a time.
+    expect(rowOf("baike.baidu.com").querySelector("[data-geo-source-detail]")).toBeNull();
+  });
+
+  it("says “三项都未核实” once instead of three dashes", async () => {
+    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: many(2) });
+    renderTab(<SourcesTab {...props()} />);
+    await userEvent.click(await screen.findByRole("button", { name: /站点0/ }));
+    const detail = rowOf("site0.example").querySelector("[data-geo-source-detail]") as HTMLElement;
+    expect(detail).toHaveTextContent("三项都未核实");
+    expect(detail.querySelector("[data-geo-condition]")).toBeNull();
+  });
+
+  it("filters by engine, by what a site did to us, and by a word of its name or domain", async () => {
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源 · 已排除 1 个冒名站");
     await userEvent.click(screen.getByRole("button", { name: "豆包" }));
-    expect(within(screen.getAllByRole("table")[0]).queryByText("百度百科")).not.toBeInTheDocument();
+    expect(screen.queryByText("百度百科")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "全部引擎" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "只看" }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "讲错过我方" }));
+    expect(screen.getByRole("list", { name: "信源" }).querySelectorAll("li")).toHaveLength(1);
+    expect(screen.getByText("百度百科")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^只看/ }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "全部信源" }));
+
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索信源" }), "39.NET");
+    expect(screen.getByText("匹配 1 个信源 · 已排除 1 个冒名站")).toBeInTheDocument();
+    expect(screen.getByText("39 健康网")).toBeInTheDocument();
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索信源" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索信源" }), "不存在");
+    expect(screen.getByText("没有包含“不存在”的信源。")).toBeInTheDocument();
+  });
+
+  it("shows 30 of a thousand sources, then 30 more at a time, and starts over when the query changes", async () => {
+    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: many(1000) });
+    renderTab(<SourcesTab {...props()} />);
+    const list = await screen.findByRole("list", { name: "信源" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(30);
+    expect(screen.getByText("1,000 个信源")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 970 个" }));
+    expect(within(screen.getByRole("list", { name: "信源" })).getAllByRole("listitem")).toHaveLength(60);
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索信源" }), "site9");
+    // site9, site90–99, site900–999: 111 matches, back to the first 30.
+    expect(screen.getByText("匹配 111 个信源")).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "信源" })).getAllByRole("listitem")).toHaveLength(30);
+    expect(screen.getByRole("button", { name: "显示更多 · 还有 81 个" })).toBeInTheDocument();
   });
 
   it("says which engines' citations had no link instead of leaving them out silently (G8)", async () => {
     client.getGeoSources.mockResolvedValue({ ...sourcesFilled, linklessEngines: ["qianwen"] });
     renderTab(<SourcesTab {...props()} />);
     expect(await screen.findByText("千问的引用只有标题、没有链接，引用了哪些信源测不出")).toBeInTheDocument();
-  });
-
-  it("shows each engine's expectation, the battlefield and the tiers, and switches the tier", async () => {
-    client.getGeoSources.mockResolvedValue(sourcesFilled);
-    client.setGeoTier.mockResolvedValue({});
-    renderTab(<SourcesTab {...props()} />);
-    await screen.findByText("证据最硬、竞品最弱。");
-    const expectation = document.querySelector("[data-geo-expectation='deepseek']") as HTMLElement;
-    expect(within(expectation).getByText("锚点 + 覆盖")).toBeInTheDocument();
-    expect(within(document.querySelector("[data-geo-expectation='baidu']") as HTMLElement).getByText("只测提及")).toBeInTheDocument();
-    expect(screen.getByText("证据最硬、竞品最弱。")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "档二（已选）" })).toBeInTheDocument();
-    expect(screen.getByRole("rowheader", { name: "品牌提及率（增量）" })).toBeInTheDocument();
-    expect(screen.getByText("¥15,000")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "档三" }));
-    await waitFor(() => expect(client.setGeoTier).toHaveBeenCalledWith("geo_1", "3"));
-  });
-});
-
-describe("内容", () => {
-  it("lists articles by layer with their status, holds the safety one for 放行, and opens one in the reader", async () => {
-    client.getGeoArticles.mockResolvedValue(articlesFilled);
-    client.releaseGeoArticle.mockResolvedValue({});
-    renderTab(<ContentTab {...props()} />);
-    expect(await screen.findByText("3 篇 · 已发布 1")).toBeInTheDocument();
-    expect(screen.getByText("已发布 · 已被 AI 引用")).toBeInTheDocument();
-    expect(screen.getByText("安全待复核")).toHaveClass("text-danger-strong");
-
-    await userEvent.click(screen.getByRole("button", { name: "放行" }));
-    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "放行" }));
-    await waitFor(() => expect(client.releaseGeoArticle).toHaveBeenCalledWith("geo_1", "art_2"));
-
-    await userEvent.click(screen.getAllByRole("button", { name: "打开" })[0]);
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/runs/run_1/files/articles/art_1.md"));
-    expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function));
-  });
-
-  it("says in the article's own line what the evidence chain found: a cited conclusion since updated, a reference that does not resolve, a paid label", async () => {
-    client.getGeoArticles.mockResolvedValue({
-      articles: [
-        { ...articlesFilled.articles[0], title: "被引更新的稿件", staleReferences: [{ cardId: "ec_1", claimId: "dose", revision: 1, category: "correction", summary: "修正", occurredAt: "2026-10-07T00:00:00Z" }], placementLabel: "commercial_cooperation", placements: 1 },
-        { ...articlesFilled.articles[0], id: "art_9", title: "对不上的稿件", referenceStatus: "unresolved", placements: 0 },
-        { ...articlesFilled.articles[0], id: "art_8", title: "平常的稿件", referenceStatus: "resolved", staleReferences: [], placementLabel: null, placements: 0 },
-      ],
-    });
-    renderTab(<ContentTab {...props()} />);
-    expect(await screen.findByText("科普稿件 · 投放 1 家 · 商业合作 · 被引结论已更新")).toBeInTheDocument();
-    expect(screen.getByText("科普稿件 · 引用的结论对不上")).toBeInTheDocument();
-    // A notice is a line of text, not a stop: the article still opens and withdraws as before.
-    expect(screen.getAllByRole("button", { name: "打开" })).toHaveLength(3);
-  });
-
-  it("a card-layer article has no file, so it is read as the card renders it: 查看 shows the text the platform would publish", async () => {
-    client.getGeoArticles.mockResolvedValue({
-      articles: [{ ...articlesFilled.articles[1], id: "art_card", path: null, runId: null, cardId: "ec_1", cardRevision: 2, safety: "clear", title: "用药后体重能降多少？" }],
-    });
-    client.getGeoArticleText.mockResolvedValue({ articleId: "art_card", layer: "card", aiGenerated: true, markdown: "# 用药后体重能降多少？\n\n出品方：某某制药\n\n本文由 AI 辅助生成。\n" });
-    renderTab(<ContentTab {...props()} />);
-    await screen.findByText("用药后体重能降多少？");
-    expect(screen.queryByRole("button", { name: "打开" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "查看" }));
-    expect(client.getGeoArticleText).toHaveBeenCalledWith("geo_1", "art_card");
-    const dialog = await screen.findByRole("dialog", { name: "用药后体重能降多少？" });
-    expect(within(dialog).getByText(/出品方：某某制药/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/本文由 AI 辅助生成/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("withdraws after asking, and a withdrawn article has no 撤回", async () => {
-    client.getGeoArticles.mockResolvedValue(articlesFilled);
-    client.withdrawGeoArticle.mockResolvedValue({});
-    renderTab(<ContentTab {...props()} />);
-    await screen.findByText("3 篇 · 已发布 1");
-    expect(screen.getAllByRole("button", { name: "撤回" })).toHaveLength(1);
-    await userEvent.click(screen.getByRole("button", { name: "撤回" }));
-    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "撤回" }));
-    await waitFor(() => expect(client.withdrawGeoArticle).toHaveBeenCalledWith("geo_1", "art_1"));
-  });
-});
-
-describe("投放", () => {
-  it("without a media market, asks for nothing and says what placing waits for (G20)", async () => {
-    client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, budget: null, orders: [], market: { configured: false } });
-    renderTab(<DistributionTab {...props()} />);
-    expect(await screen.findByText(/投放要等媒介集市接通/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "设置投放预算" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/等你/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
-  });
-
-  it("asks for the budget when unset, with the suggestion prefilled, and saves it", async () => {
-    client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, budget: null, orders: [], market: { configured: true } });
-    client.setGeoBudget.mockResolvedValue({});
-    renderTab(<DistributionTab {...props()} />);
-    await userEvent.click(await screen.findByRole("button", { name: "设置投放预算" }));
-    const dialog = screen.getByRole("dialog", { name: "设置投放预算" });
-    expect(within(dialog).getByLabelText("总预算（元）")).toHaveValue("8000");
-    expect(within(dialog).getByLabelText("每天最多（元）")).toHaveValue("800");
-    await userEvent.clear(within(dialog).getByLabelText("每天最多（元）"));
-    await userEvent.type(within(dialog).getByLabelText("每天最多（元）"), "9000");
-    await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
-    expect(within(dialog).getByText("每天最多花的钱不能超过总预算。")).toBeInTheDocument();
-    expect(client.setGeoBudget).not.toHaveBeenCalled();
-    await userEvent.clear(within(dialog).getByLabelText("每天最多（元）"));
-    await userEvent.type(within(dialog).getByLabelText("每天最多（元）"), "500");
-    await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(client.setGeoBudget).toHaveBeenCalledWith("geo_1", { totalCny: 8000, dailyCny: 500 }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  });
-
-  it("offers 撤单 only before the outlet accepted", async () => {
-    client.getGeoDistribution.mockResolvedValue(distributionFilled);
-    client.cancelGeoOrder.mockResolvedValue({});
-    renderTab(<DistributionTab {...props()} />);
-    await screen.findByText("¥2,460");
-    const submitted = document.querySelector("[data-geo-order='ord_3']") as HTMLElement;
-    const accepted = document.querySelector("[data-geo-order='ord_2']") as HTMLElement;
-    const verified = document.querySelector("[data-geo-order='ord_1']") as HTMLElement;
-    expect(screen.getAllByRole("button", { name: "撤单" })).toHaveLength(1);
-    expect(within(accepted).queryByRole("button", { name: "撤单" })).not.toBeInTheDocument();
-    expect(within(accepted).getByText("媒体已接单")).toBeInTheDocument();
-    expect(within(verified).getByRole("link", { name: /查看/ })).toHaveAttribute("href", "https://39.net/a");
-    expect(screen.queryByText(/媒介集市/)).not.toBeInTheDocument();
-    expect(screen.getByText("¥2,460")).toBeInTheDocument();
-    await userEvent.click(within(submitted).getByRole("button", { name: "撤单" }));
-    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "撤单" }));
-    await waitFor(() => expect(client.cancelGeoOrder).toHaveBeenCalledWith("geo_1", "ord_3"));
-  });
-
-  it("lists the pages the brand published itself beside the orders: platform, which engines cite it, and a retired one as 已下线", async () => {
-    client.getGeoDistribution.mockResolvedValue(distributionFilled);
-    renderTab(<DistributionTab {...props()} />);
-    await screen.findByRole("heading", { name: "自有发布" });
-    const live = document.querySelector("[data-geo-owned-link='gol_1']") as HTMLElement;
-    const retired = document.querySelector("[data-geo-owned-link='gol_2']") as HTMLElement;
-    expect(within(live).getByRole("rowheader")).toHaveTextContent("百家号");
-    expect(live).toHaveTextContent("DeepSeek、Kimi");
-    expect(within(live).getByRole("link", { name: /查看/ })).toHaveAttribute("href", "https://baijiahao.baidu.com/s?id=1");
-    expect(within(live).queryByText("已下线")).not.toBeInTheDocument();
-    expect(within(retired).getByRole("rowheader")).toHaveTextContent("微信公众号");
-    expect(within(retired).getByText("已下线")).toBeInTheDocument();
-    expect(screen.queryByText("wechat_mp")).not.toBeInTheDocument();
-  });
-
-  it("shows the brand's own pages even with no order and no market", async () => {
-    client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, budget: null, orders: [], market: { configured: false } });
-    renderTab(<DistributionTab {...props()} />);
-    expect(await screen.findByText("减重针常见问题 10 问")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "订单" })).not.toBeInTheDocument();
   });
 });
 

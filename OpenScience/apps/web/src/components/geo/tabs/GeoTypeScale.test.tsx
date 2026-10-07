@@ -99,7 +99,7 @@ function typeCombos(root: Element): string[] {
  * What each tab may carry today — a ratchet, not the target. Measured on
  * 2026-09-27 after the GEO files were moved onto the named levels (metric-lg
  * 40/600 once a page, the title 18/600, body 14/400, meta 12/400): 总览 13 → 11,
- * 可见度 7 → 6, 准确与安全 10 → 10, 问题与回答 4 → 4, 信源 6 → 5, 行动 8 → 7,
+ * 可见度 7 → 6, 准确与安全 10 → 10, 问题与回答 4 → 4, 信源 6 → 5 → 4 (R11: a list of rows, no section title), 行动 8 → 7,
  * 方案 6 → 5. Every pair above four comes from a shared primitive the GEO
  * files do not own: `StatTile` (unit 14/500, a non-lead number 32/600, a
  * placeholder word 20/600), `Delta` (12/500), `Rank` and `SeverityBadge`
@@ -112,7 +112,7 @@ const CEILING: Readonly<Record<string, readonly string[]>> = Object.freeze({
   可见度: ["12/400", "13/400", "13/500", "14/400", "14/500", "18/600"],
   准确与安全: ["12/400", "12/500", "12/600", "13/400", "13/500", "14/400", "14/500", "18/600", "32/600", "40/600"],
   问题与回答: ["12/400", "13/400", "13/500", "14/400"],
-  信源: ["12/400", "13/400", "13/500", "14/400", "18/600"],
+  信源: ["12/400", "13/400", "13/500", "14/400"],
   行动: ["12/400", "13/400", "13/500", "14/400", "14/500", "18/600", "32/600"],
   方案: ["12/400", "13/400", "13/500", "14/400", "14/600"],
 });
@@ -144,9 +144,9 @@ describe("每个页签至多四种字号 × 字重 (ratchet)", () => {
     ["可见度", () => <VisibilityTab {...props} />, "哪一类问题里最容易被提到"],
     ["准确与安全", () => <AccuracyTab {...props} />, "事实准确率"],
     ["问题与回答", () => <QuestionsTab {...props} />, "恶心呕吐与胃肠反应"],
-    ["信源", () => <SourcesTab {...props} />, "预期匹配"],
-    ["行动", () => <ActionsTab {...props} />, "投放"],
-    ["方案", () => <PlanTab {...props} />, "信尔美"],
+    ["信源", () => <SourcesTab {...props} />, "丁香医生"],
+    ["行动", () => <ActionsTab {...props} />, "效果"],
+    ["方案", () => <PlanTab {...props} />, "目标"],
   ] as const)("%s", async (name, tab, ready) => {
     const combos = await measured(tab(), ready);
     // The walk proves it walked: a tab that rendered nothing would pass any ceiling.

@@ -2,10 +2,16 @@ import { useMemo, useState } from "react";
 import { getGeoEvidence, type GeoClaim, type GeoEvidence, type GeoProject } from "@/lib/geoClient";
 import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
 import { List, ListRow } from "@/components/ui/ListRow";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { Tag } from "@/components/ui/Tag";
 import { monthDay } from "../geoText";
 import { claimSourceKindWord, CLAIM_SOURCE_KIND_WORDS } from "./geoTabText";
 import { FilterRow, StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { ShowMore, useShowMore } from "./showMore";
+
+/** Claims listed before 「显示更多」, and how many each press adds. */
+const CLAIMS_SHOWN = 8;
+const CLAIMS_STEP = 20;
 
 type KindFilter = "all" | keyof typeof CLAIM_SOURCE_KIND_WORDS;
 
@@ -79,6 +85,7 @@ function Identity({ rows, ambiguous }: { rows: IdentityRow[]; ambiguous: boolean
 
 function Claims({ claims }: { claims: GeoClaim[] }) {
   const [kind, setKind] = useState<KindFilter>("all");
+  const [query, setQuery] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const options = useMemo<FilterOption<KindFilter>[]>(() => {
     const present = new Set(claims.map((claim) => claim.sourceKind).filter(Boolean));
@@ -89,44 +96,61 @@ function Claims({ claims }: { claims: GeoClaim[] }) {
         .map((key) => ({ value: key, label: CLAIM_SOURCE_KIND_WORDS[key] })),
     ];
   }, [claims]);
-  const shown = kind === "all" ? claims : claims.filter((claim) => claim.sourceKind === kind);
+  const needle = query.trim().toLowerCase();
+  const matching = useMemo(
+    () => claims
+      .filter((claim) => kind === "all" || claim.sourceKind === kind)
+      .filter((claim) => !needle || `${claim.statement} ${claim.quote ?? ""}`.toLowerCase().includes(needle)),
+    [claims, kind, needle],
+  );
+  const { visible, remaining, more } = useShowMore(matching, { first: CLAIMS_SHOWN, step: CLAIMS_STEP, resetKey: `${kind}|${needle}` });
 
   return (
     <section aria-label="结论" className="mt-6">
-      <FilterRow summary={`${claims.length} 条结论`}>
-        <FilterChips label="出处类型" options={options} value={kind} onChange={setKind} />
+      <FilterRow summary={`${needle ? "匹配 " : ""}${matching.length} 条结论`}>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 max-sm:w-full">
+          <FilterChips label="出处类型" options={options} value={kind} onChange={setKind} />
+          <SearchInput label="搜索结论" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} className="w-52 max-sm:w-full" />
+        </div>
       </FilterRow>
-      <List divided className="mt-3">
-        {shown.map((claim) => {
-          const expanded = open === claim.id;
-          return (
-            <ListRow
-              key={claim.id}
-              title={claim.statement}
-              onOpen={() => setOpen(expanded ? null : claim.id)}
-              expanded={expanded}
-              muted={claim.status === "expired"}
-              meta={(
-                <>
-                  <ClaimMeta claim={claim} />
-                  {expanded && claim.quote && (
-                    <blockquote className="mt-2 max-w-measure border-l-2 border-border pl-3 text-ui text-text-2">
-                      {claim.quote}
-                    </blockquote>
+      {matching.length === 0 ? (
+        <p className="py-10 text-center text-ui text-text-3">{needle ? `没有包含“${query.trim()}”的结论。` : "没有符合的结论。"}</p>
+      ) : (
+        <>
+          <List divided className="mt-3">
+            {visible.map((claim) => {
+              const expanded = open === claim.id;
+              return (
+                <ListRow
+                  key={claim.id}
+                  title={claim.statement}
+                  onOpen={() => setOpen(expanded ? null : claim.id)}
+                  expanded={expanded}
+                  muted={claim.status === "expired"}
+                  meta={(
+                    <>
+                      <ClaimMeta claim={claim} />
+                      {expanded && claim.quote && (
+                        <blockquote className="mt-2 max-w-measure border-l-2 border-border pl-3 text-ui text-text-2">
+                          {claim.quote}
+                        </blockquote>
+                      )}
+                    </>
                   )}
-                </>
-              )}
-              trailing={(
-                <>
-                  {claim.status === "expired" && <Tag>待重核</Tag>}
-                  {claim.inLabel === true && <Tag>说明书内</Tag>}
-                  {claim.inLabel === false && <Tag>说明书外</Tag>}
-                </>
-              )}
-            />
-          );
-        })}
-      </List>
+                  trailing={(
+                    <>
+                      {claim.status === "expired" && <Tag>待重核</Tag>}
+                      {claim.inLabel === true && <Tag>说明书内</Tag>}
+                      {claim.inLabel === false && <Tag>说明书外</Tag>}
+                    </>
+                  )}
+                />
+              );
+            })}
+          </List>
+          <ShowMore remaining={remaining} unit="条" onMore={more} />
+        </>
+      )}
     </section>
   );
 }
