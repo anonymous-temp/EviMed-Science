@@ -44,6 +44,8 @@ import {
   normalizeVcrAssessment, roleAllows, useWithin,
 } from "@evimed/domain";
 
+import { DISPLAY_TIME_ZONE, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME, VCR_STUDY_NAME_FROM_QUESTION_MAX } from "@evimed/domain";
+
 import { HttpError } from "./security.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
@@ -76,8 +78,8 @@ export const VCR_OBJECT_NODE_KINDS = Object.freeze({
   trial_scenario: "trial_scenario", design_grid: "design_grid",
 });
 
-/** The name a new study and its control-plane project carry before the AI names them. */
-export const VCR_DEFAULT_STUDY_NAME = "新虚拟临研研究";
+/** The name a new study and its control-plane project carry until its definition names them. */
+export const VCR_DEFAULT_STUDY_NAME = VCR_DRAFT_STUDY_NAME;
 
 /**
  * The roles whose holder may see a study at all. Derived from the domain's
@@ -126,9 +128,48 @@ export function vcrStudyFromRow(row) {
     outcomeSeal: object(row.outcome_seal),
     // What the study is about, by the shared entity vocabulary (`entityVocabulary.mjs`); none until it could be tagged.
     entityKeys: Array.isArray(row.entity_keys) ? row.entity_keys.map(String) : [],
+    // The conversation the study was opened with; null for a study made before it was recorded.
+    conversationSessionId: text(row.conversation_session_id),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
+}
+
+/** The longest a study's name is, in characters: the project's own limit (`projectDisplayName`), because the project carries the same name. */
+const VCR_STUDY_NAME_MAX = 40;
+
+/**
+ * What a study is called, from what its definition says about it: the
+ * definition's `title`, else the first {@link VCR_STUDY_NAME_FROM_QUESTION_MAX}
+ * characters of its question. The question is the researcher's own sentence, so
+ * it is cut where it is, never reworded, and a closing punctuation mark the cut
+ * leaves is dropped. Nothing to name it from is `null`: the study keeps the
+ * name it has.
+ * @param {{ title?: unknown, question?: unknown }} input
+ * @returns {string | null}
+ */
+export function vcrStudyNameFrom({ title, question }) {
+  /** @param {unknown} value */
+  const clean = (value) => (typeof value === "string"
+    ? [...value].map((char) => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? " " : char)).join("").replace(/\s+/g, " ").trim() : "");
+  const named = clean(title);
+  if (named) return [...named].slice(0, VCR_STUDY_NAME_MAX).join("").trim();
+  const asked = clean(question);
+  if (!asked) return null;
+  const cut = [...asked].slice(0, VCR_STUDY_NAME_FROM_QUESTION_MAX).join("").replace(/[\s，。、；：！？,.;:!?]+$/u, "").trim();
+  return cut || null;
+}
+
+/** 「10月7日」, in the display time zone: what a second study of the same name is told apart by. @param {string | Date | null} at */
+export function vcrMonthDay(at) {
+  const parts = new Intl.DateTimeFormat("zh-CN", { timeZone: DISPLAY_TIME_ZONE, month: "numeric", day: "numeric" }).formatToParts(at ? new Date(at) : new Date());
+  const get = (/** @type {string} */ type) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("month")}月${get("day")}日`;
+}
+
+/** Whether a study still carries a name nobody gave it. @param {{ status?: string, name?: string }} study */
+export function vcrStudyIsUnnamed(study) {
+  return study?.status === "draft" || study?.name === VCR_DRAFT_STUDY_NAME || study?.name === VCR_LEGACY_DEFAULT_STUDY_NAME;
 }
 
 /**
@@ -371,12 +412,48 @@ export class VcrStore extends VcrStoreBase {
    * @param {string} userId
    */
   async listStudies(userId) {
+    // A draft (a study nobody has spoken to yet) is not a study of the list: see `draftStudies`.
     const rows = await this.rows(`SELECT s.* FROM ${VCR_SCHEMA}.studies s
-      WHERE s.deleted_at IS NULL
+      WHERE s.deleted_at IS NULL AND s.status <> 'draft'
         AND (s.user_id = $1 OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.members m
           WHERE m.study_id = s.id AND m.user_id = $1 AND m.role = ANY($2::text[])))
       ORDER BY s.updated_at DESC LIMIT 500`, [String(userId), [...VCR_READING_ROLES]]);
     return rows.map(vcrStudyFromRow);
+  }
+
+  /**
+   * The account's own drafts: studies made by 「新建研究」 whose definition has
+   * not been written. Not on the list and not in the sidebar, so the sidebar asks
+   * for their projects to leave them out.
+   * @param {string} userId
+   */
+  async draftStudies(userId) {
+    const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.studies
+      WHERE user_id = $1 AND status = 'draft' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 200`, [String(userId)]);
+    return rows.map(vcrStudyFromRow);
+  }
+
+  /**
+   * Drafts made before `cutoff`, oldest first: the sweep's candidates. Whether
+   * anyone has spoken in one is the control plane's ledger, not this schema's,
+   * so the sweep asks for that itself.
+   * @param {string | Date} cutoff @param {number} [limit]
+   */
+  async draftsOlderThan(cutoff, limit = 50) {
+    const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.studies
+      WHERE status = 'draft' AND deleted_at IS NULL AND created_at < $1 ORDER BY created_at LIMIT $2`,
+    [new Date(cutoff).toISOString(), Math.max(1, Math.min(500, Number(limit) || 50))]);
+    return rows.map(vcrStudyFromRow);
+  }
+
+  /**
+   * Record the conversation a study was opened with. Written once, right after the
+   * session is bound: a later call does not move it.
+   * @param {string} studyId @param {string} sessionId
+   */
+  async setConversationSession(studyId, sessionId) {
+    return vcrStudyFromRow(await this.one(`UPDATE ${VCR_SCHEMA}.studies SET conversation_session_id = $2
+      WHERE id = $1 AND deleted_at IS NULL AND conversation_session_id IS NULL RETURNING *`, [studyId, String(sessionId)]));
   }
 
   /** Where the last tick stopped: studies are walked in id order, a page at a time, and the walk wraps. */
@@ -410,26 +487,29 @@ export class VcrStore extends VcrStoreBase {
   /**
    * A new study: one row beside an ordinary project, plus the owner's `lead`
    * membership, so 「谁能看」 is one predicate from the first second.
+   * `status` is `draft` for a study 「新建研究」 made before anyone has said what
+   * it is about, and `active` otherwise.
    * @param {{ userId: string, projectId: string, name?: string, question?: string, dataTier?: string,
-   *   intendedUse?: string, budget?: Record<string, any> }} input
+   *   intendedUse?: string, budget?: Record<string, any>, status?: "draft" | "active" }} input
    */
   async createStudy(input) {
     const userId = String(input.userId);
     const id = vcrId("study");
+    const status = input.status === "draft" ? "draft" : "active";
     const dataTier = VCR_DATA_TIERS.includes(String(input.dataTier)) ? String(input.dataTier) : "T0";
     const intendedUse = VCR_INTENDED_USES.includes(String(input.intendedUse)) ? String(input.intendedUse) : "exploratory";
     const name = String(input.name ?? VCR_DEFAULT_STUDY_NAME);
     const question = String(input.question ?? "");
     const entityKeys = await this.#entityKeys({ name, question }, null);
     return this.transaction(async (client) => {
-      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies (id, user_id, project_id, name, question, data_tier, intended_use, budget, entity_keys)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[]) RETURNING *`,
+      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies (id, user_id, project_id, name, question, data_tier, intended_use, budget, entity_keys, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[], $10) RETURNING *`,
       [id, userId, String(input.projectId), name, question,
-        dataTier, intendedUse, JSON.stringify(input.budget ?? {}), entityKeys])).rows[0];
+        dataTier, intendedUse, JSON.stringify(input.budget ?? {}), entityKeys, status])).rows[0];
       await client.query(`INSERT INTO ${VCR_SCHEMA}.members (study_id, user_id, role, invited_by)
         VALUES ($1, $2, 'lead', $2) ON CONFLICT DO NOTHING`, [id, userId]);
       await this.audit({ client, studyId: id, userId, actor: userId, action: "vcr.study.create", object: id,
-        detail: { projectId: String(input.projectId), dataTier, intendedUse } });
+        detail: { projectId: String(input.projectId), dataTier, intendedUse, status } });
       return vcrStudyFromRow(row);
     });
   }
@@ -527,16 +607,57 @@ export class VcrStore extends VcrStoreBase {
   /**
    * The research question as an object. A new version every time; nothing
    * downstream is rewritten (AC-05).
+   *
+   * **The first definition names the study.** A study made by 「新建研究」 is a
+   * draft called 「未命名研究」; the definition that says what it is about gives it
+   * its name (`title`, else the first words of the question), writes the question
+   * back to the row when the row has none, and makes it `active` — the moment it
+   * appears on the list, in the sidebar and in the orchestrator's walk. A study
+   * made before drafts existed keeps its status and is only named. A study that
+   * was named by a person (or by an earlier definition) is left alone: a later
+   * definition never renames it. `onStudyNamed` is how the control plane's own
+   * project takes the same name, after the commit and never able to undo it.
+   *
    * @param {{ studyId: string, userId: string, pico?: Record<string, any>, estimand?: Record<string, any>,
-   *   endpointType?: string | null, intendedUse?: string, fieldSources?: Record<string, any>, reviewState?: string }} input
+   *   endpointType?: string | null, intendedUse?: string, fieldSources?: Record<string, any>, reviewState?: string,
+   *   title?: string | null, question?: string | null }} input
    */
   async saveDefinition(input) {
+    const before = await this.studyById(input.studyId);
+    const unnamed = before ? vcrStudyIsUnnamed(before) : false;
+    const asked = typeof input.question === "string" ? input.question.trim().slice(0, 2_000) : "";
+    const question = before && !before.question ? asked : "";
+    // The structured population and intervention stand in for a question nobody wrote (a definition always states one of them).
+    const pico = object(input.pico);
+    const stated = [pico.population, pico.intervention].filter((value) => typeof value === "string" && value.trim()).join(" ");
+    const proposed = unnamed ? vcrStudyNameFrom({ title: input.title, question: question || before?.question || asked || stated }) : null;
     // The definition names the disease and the treatment: the study is tagged again from it.
-    const study = this.entityVocabulary ? await this.studyById(input.studyId) : null;
-    const entityKeys = study ? await this.#entityKeys(study, input.pico) : null;
-    return this.transaction(async (client) => {
+    const entityKeys = before ? await this.#entityKeys({ name: proposed ?? before.name, question: question || before.question }, input.pico) : null;
+    const saved = await this.transaction(async (client) => {
       const version = await this.nextVersion(client, "study_definitions", "study_id = $1", [input.studyId]);
-      if (study) await client.query(`UPDATE ${VCR_SCHEMA}.studies SET entity_keys = $2::text[] WHERE id = $1`, [input.studyId, entityKeys]);
+      /** @type {{ name: string, status: string } | null} */
+      let named = null;
+      if (before && unnamed) {
+        let name = proposed ?? before.name;
+        if (proposed) {
+          // A second study of the same name is told apart by the day it was made; two on one day by a number.
+          const taken = async (/** @type {string} */ candidate) => Boolean((await client.query(
+            `SELECT 1 FROM ${VCR_SCHEMA}.studies WHERE user_id = $1 AND id <> $2 AND deleted_at IS NULL AND status <> 'draft' AND name = $3 LIMIT 1`,
+            [before.userId, before.id, candidate])).rowCount);
+          if (await taken(name)) {
+            const dated = `${[...name].slice(0, VCR_STUDY_NAME_MAX - 8).join("")} ${vcrMonthDay(before.createdAt)}`;
+            name = dated;
+            for (let n = 2; await taken(name) && n < 50; n += 1) name = `${dated} ${n}`;
+          }
+        }
+        const row = (await client.query(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, question = CASE WHEN question = '' THEN $3 ELSE question END,
+            status = CASE WHEN status = 'draft' THEN 'active' ELSE status END, updated_at = now() WHERE id = $1 RETURNING status`,
+        [before.id, name, question])).rows[0];
+        named = { name, status: String(row?.status ?? "active") };
+        await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.study.name", object: input.studyId,
+          detail: { name, from: before.name, status: named.status } });
+      }
+      if (entityKeys) await client.query(`UPDATE ${VCR_SCHEMA}.studies SET entity_keys = $2::text[] WHERE id = $1`, [input.studyId, entityKeys]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.study_definitions
         (id, study_id, user_id, version, pico, estimand, endpoint_type, intended_use, field_sources, review_state)
         VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9::jsonb, $10) RETURNING *`,
@@ -546,9 +667,21 @@ export class VcrStore extends VcrStoreBase {
         JSON.stringify(input.fieldSources ?? {}), input.reviewState ?? "ai_set"])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.definition.save",
         object: String(row.id), detail: { version } });
-      return this.#definitionFromRow(row);
+      return { definition: this.#definitionFromRow(row), named };
     });
+    if (saved.named && before) {
+      // The project carries the study's name; a failure to rename it leaves the study named.
+      await Promise.resolve(this.onStudyNamed?.({ study: { ...before, name: saved.named.name, status: saved.named.status }, previousName: before.name }))
+        .catch(() => null);
+    }
+    return saved.definition;
   }
+
+  /**
+   * Set by the composition: how the study's control-plane project takes the study's name once the study has one.
+   * @type {((event: { study: Record<string, any>, previousName: string }) => Promise<unknown> | unknown) | null}
+   */
+  onStudyNamed = null;
 
   /** @param {any} row */
   #definitionFromRow(row) {

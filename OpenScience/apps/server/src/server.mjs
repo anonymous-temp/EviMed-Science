@@ -113,7 +113,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun, VCR_STEP_CAPABILITIES } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -324,6 +324,7 @@ import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
+import { createVcrDraftSweeper } from "./vcrDrafts.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
 import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
@@ -2392,6 +2393,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     resolveProject: project => resultProvenance.scope(project.userId, project.id),
     onFailure: failure => securityAudit(config, "result.capture", "failed", failure) });
   const observeResult = (project, runId, observed) => resultCaptureQueue.observe(project, runId, observed);
+  /**
+   * A study's project and the study with it, in the one transaction a project's deletion already is (a failed 「新建研究」 and the
+   * draft sweep both end here).
+   * @param {any} user @param {string} projectId
+   */
+  const removeStudyProject = (user, projectId) => store.deleteProject(user, projectId, {
+    beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
+  });
   const vcrRoutes = createVcrRoutes({
     // The platform's store answers the session and the CSRF check; every
     // question about a study goes to the module's own (review CS-1).
@@ -2402,9 +2411,31 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A study whose row (or first conversation) could not be made takes the
       // project the same request made with it, and the study row if one got as
       // far as existing, in the one transaction a project deletion is.
-      remove: (user, projectId) => store.deleteProject(user, projectId, {
-        beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
-      }),
+      remove: (user, projectId) => removeStudyProject(user, projectId),
+      // The project carries the study's name, so a rename of the study is the project's too (the sidebar lists projects). A project
+      // the researcher renamed on its own is left alone: only a name equal to the study's previous one follows it.
+      rename: async (user, projectId, name, previousName) => {
+        const current = (await store.listProjects(user)).find((project) => project.id === projectId);
+        if (current && current.name === previousName) await store.renameProject(user, projectId, [...String(name)].slice(0, 40).join(""));
+      },
+      // The conversation a study made before it recorded its own was opened with: the oldest one bound to its first capability, which
+      // is made at creation and before any programme step runs in the project.
+      conversationSessionId: async (user, projectId) => {
+        const project = await store.requireProject(user, projectId);
+        const sessions = await researchSessions.list(project);
+        const oldest = (/** @type {any[]} */ rows) => [...rows].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))[0]?.sessionId ?? null;
+        return oldest(sessions.filter((entry) => entry.agentId === VCR_STEP_CAPABILITIES.definition)) ?? oldest(sessions);
+      },
+      // What the programme did in the background: the project's automated runs, each with the conversation it ran in.
+      backgroundRuns: async (userId, projectId, conversationSessionId) => {
+        const owner = await store.userById(userId);
+        if (!owner) return [];
+        const runs = await agentRuns.list(await store.requireProject(owner, projectId));
+        return runs
+          .filter((run) => run.automated === true && run.sessionId && run.sessionId !== conversationSessionId)
+          .sort((a, b) => String(b.startedAt ?? b.createdAt ?? "").localeCompare(String(a.startedAt ?? a.createdAt ?? "")))
+          .map((run) => ({ sessionId: run.sessionId, capabilityId: run.effectiveAgentId ?? null, status: run.status, startedAt: run.startedAt ?? run.createdAt ?? null }));
+      },
       // The study's first conversation, bound to a 虚拟临研 capability before
       // the study has a step to run: the binding is what puts the module's
       // chip on the composer and what makes the router honour the choice.
@@ -4585,13 +4616,38 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     vcr.orchestrator = orchestrator;
     vcr.exporter = { requestExport: (user, study, kind) => orchestrator.requestExport(user, study, kind) };
     vcr.service.attach({ jobs: vcr.jobs, seal: vcr.seal });
+    // A study nobody described (「新建研究」 made it before the first word) is deleted with its project an hour after it was made,
+    // unless somebody spoke in it: the run ledger holds every message a person sent, so a project with any run is kept.
+    vcr.drafts = createVcrDraftSweeper({
+      store: vcr.store, ttlMs: config.vcrDraftTtlMinutes * 60_000,
+      spokenIn: async (study) => {
+        const owner = await store.userById(study.userId);
+        if (!owner) return false;
+        return (await agentRuns.list(await store.requireProject(owner, study.projectId))).length > 0;
+      },
+      remove: async (study) => {
+        const owner = await store.userById(study.userId);
+        if (!owner) {
+          // The account is gone: its rows go with it (`deleteVcrUserRows`); a stray draft has nothing else to wait for.
+          await vcr.store.transaction((client) => deleteVcrProjectRows(client, study.userId, study.projectId));
+          return;
+        }
+        await removeStudyProject(owner, study.projectId).catch(async (error) => {
+          // A project that is already gone leaves its draft behind: the row is the only thing left to remove.
+          if (error?.code !== "project_not_found") throw error;
+          await vcr.store.transaction((client) => deleteVcrProjectRows(client, study.userId, study.projectId));
+        });
+      },
+      report: (code) => process.stderr.write(`vcr drafts: ${code}\n`),
+      audit: vcrAudit,
+    });
     vcr.worker = new VcrWorker({
       pollMs: config.vcrPollMs ?? 5_000, leaseMs: config.vcrLeaseMs ?? 900_000,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
       // `matching` is the deferral recheck loop: a washout that ends is re-judged on
       // its own day, not when someone next opens the study.
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge }),
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge, drafts: vcr.drafts }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.

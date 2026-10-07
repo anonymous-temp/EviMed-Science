@@ -61,13 +61,15 @@
 import {
   VCR_ACTIONS, VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_RATINGS,
   VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
-  VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_STUDY_STATUSES, VCR_TABS, VCR_VALUE_SOURCES, roleAllows } from "@evimed/domain";
+  VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
 
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
 import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
+import { VCR_CARD_KINDS, createVcrCardEdits } from "./vcrCardEdits.mjs";
+import { zhTime } from "./vcrViewsKit.mjs";
 
 /**
  * Every code these routes answer with — or that a module behind them answers
@@ -136,6 +138,9 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
 export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id": ["read"],
   "GET /studies/:id/:tab": ["read"],
+  "GET /studies/:id/runs": ["read"],
+  "GET /studies/:id/cards": ["read"],
+  "POST /studies/:id/cards": ["write"],
   "PATCH /studies/:id name,question,action": ["write"],
   "PATCH /studies/:id dataTier,intendedUse,status": ["manage_study"],
   "DELETE /studies/:id": ["manage_study"],
@@ -214,7 +219,7 @@ export function vcrRoutePattern(pathname) {
   if (parts[0] !== "studies") return "/api/vcr/:route";
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
-  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions"];
+  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -333,9 +338,12 @@ function wholeNumber(value, field, max) {
  *   projects?: { create: (user: any, name: string) => Promise<{ id: string, name: string }>,
  *     bindSession: (user: any, projectId: string, capabilityId: string) => Promise<{ sessionId: string, bound: boolean }>,
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
+ *     conversationSessionId?: (user: any, projectId: string) => Promise<string | null>,
+ *     backgroundRuns?: (userId: string, projectId: string, conversationSessionId: string | null) => Promise<Array<Record<string, any>>>,
+ *     rename?: (user: any, projectId: string, name: string, previousName: string) => Promise<unknown>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, cards?: any }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -377,6 +385,8 @@ export function createVcrRoutes(dependencies) {
       get publications() { return dependencies.publications ?? null; },
       // Filing a prediction with the registry (`vcrPredictions.mjs`); null while no registry is composed.
       get predictions() { return dependencies.predictions ?? null; },
+      // The page's own edits of a population, a design and the criteria (`vcrCardEdits.mjs`); composed here from the module's store unless given.
+      get cards() { return dependencies.cards ?? null; },
     };
     /** The module's own store: roles, assumptions, reviews, decisions, exports, members. */
     const data = () => {
@@ -571,8 +581,12 @@ export function createVcrRoutes(dependencies) {
     if (parts.length === 2) {
       if (method === "GET") {
         const { study, roles } = await authorize(id, "read");
-        const view = await service.studyView(user, study.id);
-        const sessionId = await dependencies.projects?.latestSessionId?.(user, view.projectId).catch(() => null) ?? null;
+        const { conversationSessionId, ...view } = await service.studyView(user, study.id);
+        // 「对话」 is the conversation the study was opened with, never whichever background run's is newest: the one recorded at
+        // creation, else (a study made before it was recorded) the oldest one bound to the study's first capability, else the newest.
+        const sessionId = conversationSessionId
+          ?? await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null)
+          ?? await dependencies.projects?.latestSessionId?.(user, view.projectId).catch(() => null) ?? null;
         const abilities = new Set(abilitiesOfRoles(roles));
         if (roles.some((role) => roleHolds(role, "manage_study"))) abilities.add("manage_study");
         // What this caller may do, from the roles it holds now: the page reads
@@ -600,9 +614,15 @@ export function createVcrRoutes(dependencies) {
         if (body.intendedUse !== undefined) {
           patch.intendedUse = word(body.intendedUse, VCR_INTENDED_USES, "vcr_intended_use_invalid", "intendedUse");
         }
-        if (body.status !== undefined) patch.status = word(body.status, VCR_STUDY_STATUSES, "vcr_status_invalid", "status");
-        return reply(await audited("vcr.study.update", () => ({ code: id, detail: Object.keys(patch).join(",") }),
-          { detail: Object.keys(patch).join(",") }, () => service.updateStudy(user, id, patch)));
+        // A person moves a study between these; `draft` is the platform's own state (a study nobody has spoken to).
+        if (body.status !== undefined) patch.status = word(body.status, VCR_USER_STUDY_STATUSES, "vcr_status_invalid", "status");
+        const updated = await audited("vcr.study.update", () => ({ code: id, detail: Object.keys(patch).join(",") }),
+          { detail: Object.keys(patch).join(",") }, () => service.updateStudy(user, id, patch));
+        // The project carries the study's name (the sidebar lists projects): a rename follows it, and never undoes the study's.
+        if (patch.name !== undefined && study.name !== patch.name) {
+          await dependencies.projects?.rename?.(user, study.projectId, patch.name, study.name).catch(() => null);
+        }
+        return reply(updated);
       }
       if (method === "DELETE") {
         await bodyOf(req, maxJsonBytes, []);
@@ -620,6 +640,50 @@ export function createVcrRoutes(dependencies) {
     if (parts.length === 3 && method === "GET" && VCR_TABS.includes(section)) {
       await authorize(id, "read");
       return reply(await service.tab(user, id, section, url.searchParams));
+    }
+
+    // --- 「AI 运行」: the conversations the programme opened in the study's project ------------------------------------------
+    // Apart from the conversation the study was opened with (its 「对话」): what the platform did in the background, each row a
+    // place to read it. Capability titles and a state word, never ids.
+    if (parts.length === 3 && method === "GET" && section === "runs") {
+      const { study } = await authorize(id, "read");
+      const projects = dependencies.projects;
+      const own = study.conversationSessionId ?? await projects?.conversationSessionId?.(user, study.projectId).catch(() => null) ?? null;
+      const runs = projects?.backgroundRuns ? await projects.backgroundRuns(study.userId, study.projectId, own).catch(() => []) : [];
+      const now = typeof service.now === "function" ? service.now() : new Date();
+      return reply({
+        runs: runs.slice(0, 50).map((run) => ({
+          sessionId: String(run.sessionId),
+          label: capabilityTitle(String(run.capabilityId ?? "")) ?? "后台分析",
+          state: ["running", "queued", "starting"].includes(String(run.status)) ? "running" : String(run.status) === "succeeded" ? "finished" : "stopped",
+          at: zhTime(run.startedAt ?? null, now),
+        })),
+      });
+    }
+
+    // --- the cards a person edits on the page: population, a design, the criteria -------------------------------------------
+    // GET answers the numbers a form may change; POST writes the object's next version and marks what stood on the old one stale.
+    if (parts.length === 3 && section === "cards" && (method === "GET" || method === "POST")) {
+      const cards = hooks.cards ?? createVcrCardEdits({
+        store: data(), matchStore: service.packages?.matchStore ?? null, orchestrator: hooks.orchestrator,
+        audit: (event, status, details) => audit(event, status, details),
+      });
+      if (method === "GET") {
+        const { study } = await authorize(id, "read");
+        const kind = String(url.searchParams.get("kind") ?? "");
+        if (!VCR_CARD_KINDS.includes(kind)) throw new HttpError(400, "vcr_payload_invalid", `kind is one of: ${VCR_CARD_KINDS.join(", ")}.`);
+        const objectId = url.searchParams.get("object");
+        if (objectId != null && !ID.test(objectId)) throw new HttpError(400, "vcr_payload_invalid", "object is the id of one of the study's objects.");
+        return reply(await cards.read(study, kind, objectId));
+      }
+      const body = await bodyOf(req, maxJsonBytes, ["kind", "objectId", "set"]);
+      if (typeof body.kind !== "string" || !VCR_CARD_KINDS.includes(body.kind)) throw new HttpError(400, "vcr_payload_invalid", `kind is one of: ${VCR_CARD_KINDS.join(", ")}.`);
+      if (body.objectId != null && (typeof body.objectId !== "string" || !ID.test(body.objectId))) throw new HttpError(400, "vcr_payload_invalid", "objectId is the id of one of the study's objects.");
+      if (!body.set || typeof body.set !== "object" || Array.isArray(body.set)) throw new HttpError(400, "vcr_payload_invalid", "set is { setting: number }.");
+      const { study } = await authorize(id, "write");
+      const written = await audited("vcr.card.edit", (result) => ({ code: id, detail: `${result.kind}@${result.version}` }), { code: id, detail: body.kind },
+        () => cards.apply(study, user, { kind: body.kind, objectId: body.objectId ?? null, set: body.set }));
+      return reply(written, 201);
     }
 
     // --- the study's pack and the definitions of the account's library ------------------------

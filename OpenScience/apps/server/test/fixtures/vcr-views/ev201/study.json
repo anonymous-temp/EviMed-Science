@@ -1435,21 +1435,21 @@
       {
         "id": "result:res_7",
         "at": "今天 10:52",
-        "text": "匹配评估的结果已更新（v1）",
+        "text": "匹配评估的结果已更新",
         "by": null,
         "state": null
       },
       {
         "id": "result:res_8",
         "at": "今天 10:45",
-        "text": "数据快照画像的结果已更新（v1）",
+        "text": "数据快照画像的结果已更新",
         "by": null,
         "state": null
       },
       {
         "id": "result:res_9",
         "at": "今天 10:38",
-        "text": "证据合并的结果已更新（v1）",
+        "text": "证据合并的结果已更新",
         "by": null,
         "state": null
       },
@@ -1477,16 +1477,38 @@
       {
         "id": "assumption:asm_3",
         "at": "昨天 09:28",
-        "text": "假设卡「脱落率」v1",
+        "text": "假设卡「脱落率」已更新",
         "by": null,
         "state": null
       },
       {
         "id": "assumption:asm_4",
         "at": "昨天 09:21",
-        "text": "假设卡「对照组 ORR」v1",
+        "text": "假设卡「对照组 ORR」已更新",
         "by": null,
         "state": "reviewed"
+      },
+      {
+        "id": "review:rvw_1",
+        "at": "昨天 09:07",
+        "text": "统计复核：假设卡「orr_control」v1 · 已复核",
+        "by": null,
+        "state": "reviewed"
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rvw_1",
+        "reviewerKind": "human",
+        "role": "statistical",
+        "label": "人工统计复核",
+        "state": "已复核",
+        "status": "done",
+        "current": true,
+        "by": null,
+        "at": "2026-09-27T01:07:00.000Z",
+        "note": "审查意见供参考，不代表实证验证。",
+        "findings": []
       }
     ],
     "deliverables": [
@@ -1511,5 +1533,7 @@
     ]
   },
   "updatedAt": "今天 09:09",
-  "createdAt": "2026-09-27T01:07:00.000Z"
+  "createdAt": "2026-09-27T01:07:00.000Z",
+  "conversationSessionId": null,
+  "engine": "missing"
 }

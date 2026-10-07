@@ -1,4 +1,4 @@
-// The worker's timer and its six loops, without a database: which loops exist
+// The worker's timer and its seven loops, without a database: which loops exist
 // and how often they start, what a loop without its function reports, that one
 // loop failing leaves the others running, and that the recheck loop is wired to
 // the matching package's `recheckDue` and only when it is composed.
@@ -6,8 +6,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { VCR_WORKER_LOOPS, VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "../src/vcrWorker.mjs";
 
-test("the six loops, their cadences and which of them are leased", () => {
-  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "orchestrator", "recompute", "recheck", "frontierEvents", "packSources"]);
+test("the seven loops, their cadences and which of them are leased", () => {
+  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "orchestrator", "recompute", "recheck", "frontierEvents", "packSources", "drafts"]);
   const packs = VCR_WORKER_LOOPS.find((loop) => loop.name === "packSources");
   assert.deepEqual([packs?.leased, packs?.optional], [true, true], "a platform pack is watched once, by whichever control plane sees it first, and only while the switch is on");
   const events = VCR_WORKER_LOOPS.find((loop) => loop.name === "frontierEvents");
@@ -29,6 +29,15 @@ test("the recheck loop is the matching package's own function, and absent when m
   assert.deepEqual(calls, ["due"]);
   assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null }).recheck, null);
   assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, matching: {} }).recheck, null);
+});
+
+test("the drafts loop is the sweeper's own pass, every ten minutes, and absent where none is composed", async () => {
+  const drafts = VCR_WORKER_LOOPS.find((loop) => loop.name === "drafts");
+  assert.deepEqual([drafts?.every, drafts?.leased, drafts?.optional], [10 * 60_000, true, true], "a draft is deleted once, by whichever control plane sees it first");
+  const sweeper = { async sweep() { return { deleted: 2, kept: 1, failed: 0 }; } };
+  const loops = createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, drafts: sweeper });
+  assert.deepEqual(await loops.drafts?.(), { deleted: 2, kept: 1, failed: 0 });
+  assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null }).drafts, null);
 });
 
 test("the frontier loop is the consumer's own tick, absent while off, and an absent optional loop is not reported missing", async () => {

@@ -106,8 +106,11 @@
     "designs": [],
     "attention": [],
     "changes": [],
+    "reviews": [],
     "deliverables": []
   },
   "updatedAt": "今天 09:18",
-  "createdAt": "2026-09-27T01:14:00.000Z"
+  "createdAt": "2026-09-27T01:14:00.000Z",
+  "conversationSessionId": null,
+  "engine": "missing"
 }

@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's background work: one timer, six loops (build plan
+ * 「虚拟临研」's background work: one timer, seven loops (build plan
  * 2026-09-28 §11.2 layer 2).
  *
  *   `jobs`          — claim queued compute, push each running job one step,
@@ -18,6 +18,8 @@
  *   `packSources`   — label a live platform knowledge pack 「来源有变更」 when the
  *                     source-change ledger holds a change to one of its sources
  *                     (flywheel F26; absent while platform packs are off)
+ *   `drafts`        — delete the drafts nobody spoke in for an hour (`vcrDrafts.mjs`;
+ *                     R10: 「新建研究」 makes the study before the first word)
  *
  * Hidden knowledge:
  *
@@ -57,6 +59,7 @@ export const VCR_WORKER_LOOPS = Object.freeze([
   Object.freeze({ name: "recheck", package: "matching", every: 15 * MINUTE, leased: true }),
   Object.freeze({ name: "frontierEvents", package: "frontierEvents", every: 10 * MINUTE, leased: true, optional: true }),
   Object.freeze({ name: "packSources", package: "knowledge", every: 30 * MINUTE, leased: true, optional: true }),
+  Object.freeze({ name: "drafts", package: "drafts", every: 10 * MINUTE, leased: true, optional: true }),
 ]);
 
 /** @param {unknown} error */
@@ -251,9 +254,9 @@ export class VcrWorker {
  * `server.mjs` composes a worker with one call and the loops' own logic stays
  * with the packages that own it.
  *
- * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any }} vcr
+ * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any, drafts?: any }} vcr
  */
-export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null }) {
+export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null }) {
   return {
     /**
      * Claim what is queued, then push everything this process holds one step.
@@ -333,5 +336,8 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
 
     /** The platform packs' source watch (`vcrKnowledge.mjs`). Absent while platform packs are off. */
     packSources: knowledge?.platform?.enabled && knowledge.watchPlatformPackSources ? () => knowledge.watchPlatformPackSources() : null,
+
+    /** The drafts nobody spoke in for an hour (`vcrDrafts.mjs`). */
+    drafts: drafts?.sweep ? () => drafts.sweep() : null,
   };
 }

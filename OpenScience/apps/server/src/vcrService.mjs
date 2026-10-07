@@ -43,7 +43,7 @@ import {
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
-import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode } from "./vcrStore.mjs";
+import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrStore.mjs";
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import {
@@ -414,7 +414,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -491,6 +491,8 @@ export class VcrService {
     }
     const reviews = presentReviewNotes(groups.map((group) => ({ study: group.study, reviews: group.reviews })), now);
     if (reviews.length) home.reviews = reviews;
+    // The projects of the account's drafts: they are not on the list, and the sidebar leaves them out of its project list.
+    home.draftProjectIds = (await this.store.draftStudies(String(user.id))).map((study) => study.projectId);
     return home;
   }
 
@@ -520,17 +522,27 @@ export class VcrService {
   /**
    * `POST /api/vcr/studies`: the control-plane project, its study row, and a
    * conversation bound to `vcr-protocol` — the first step of the seven.
+   *
+   * **A study nobody has described is a draft.** 「新建研究」 sends neither a name
+   * nor a question, so the study is made as `draft` called 「未命名研究」: the
+   * conversation needs a project and a runtime before the first word can be
+   * typed, but the study is not on the list, not in the sidebar and not walked by
+   * the orchestrator until its first definition names it (`saveDefinition`), and
+   * an hour with no message in it deletes it (`vcrDrafts.mjs`). A caller that does
+   * say what the study is — a name, or a question to name it from — gets an
+   * active study at once.
    * @param {{ id: string }} user
    * @param {{ name?: string, question?: string, dataTier?: string, intendedUse?: string, action?: string }} input already validated by the route
    * @param {{ createResearcherProject: (user: any, name: string) => Promise<{ id: string, name: string }>,
    *   bindSession: (user: any, projectId: string, capabilityId: string) => Promise<{ sessionId: string, bound: boolean }> }} hooks
    */
   async createStudy(user, input, hooks) {
-    const name = String(input.name || VCR_DEFAULT_STUDY_NAME);
+    const given = String(input.name ?? "").trim() || vcrStudyNameFrom({ question: input.question });
+    const name = given || VCR_DEFAULT_STUDY_NAME;
     const control = await hooks.createResearcherProject(user, name);
     const study = await this.store.createStudy({
       userId: String(user.id), projectId: control.id, name, question: String(input.question ?? ""),
-      dataTier: input.dataTier, intendedUse: input.intendedUse,
+      dataTier: input.dataTier, intendedUse: input.intendedUse, status: given ? "active" : "draft",
     });
     // What the study is asked for at birth. One of the home page's four action
     // cards asks for that one step, and whatever it needs upstream comes as a
@@ -542,11 +554,26 @@ export class VcrService {
     }
     const session = await hooks.bindSession(user, control.id, VCR_STEP_CAPABILITIES.definition)
       .catch(() => ({ sessionId: "", bound: false }));
+    // The conversation the study was opened with is the one its 「对话」 opens, whatever background runs follow.
+    if (session.sessionId) await this.store.setConversationSession(study.id, session.sessionId);
     this.counters.studiesCreated += 1;
     return {
-      id: study.id, projectId: control.id, name: study.name, requested: [...vcrRequestedSteps(input.action)],
+      id: study.id, projectId: control.id, name: study.name, status: study.status, requested: [...vcrRequestedSteps(input.action)],
       sessionId: session.sessionId || null, bound: session.bound === true,
     };
+  }
+
+  /**
+   * Whether the computation engine is there to be asked: `missing` (not composed
+   * here), `wired` (composed, nobody has asked it yet), `answering`, or
+   * `not_answering` (asked, and did not answer). The study page says so in one
+   * line at its top instead of letting a job fail to find out.
+   * @returns {"missing" | "wired" | "answering" | "not_answering"}
+   */
+  engineState() {
+    if (!this.engine?.configured?.()) return "missing";
+    const reading = this.packages.engineProbe?.snapshot?.() ?? null;
+    return reading?.state === "answering" ? "answering" : reading?.state === "not_answering" ? "not_answering" : "wired";
   }
 
   /**
@@ -633,7 +660,8 @@ export class VcrService {
    */
   async studyView(user, id) {
     const study = await this.requireStudy(user, id);
-    return presentStudy(await this.#bundle(study, user));
+    // `conversationSessionId` is the route's to resolve into `sessionId`; `engine` is what the page's one line at the top says.
+    return { ...presentStudy(await this.#bundle(study, user)), conversationSessionId: study.conversationSessionId ?? null, engine: this.engineState() };
   }
 
   /**

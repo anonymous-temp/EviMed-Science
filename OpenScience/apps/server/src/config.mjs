@@ -854,6 +854,9 @@ function vcrSettings(overrides) {
     vcrFrontierEventsEnabled: overrides.vcrFrontierEventsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_FRONTIER_EVENTS_ENABLED", false),
     vcrFrontierEventsStudiesPerTick: integer("vcrFrontierEventsStudiesPerTick", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_STUDIES_PER_TICK", 10, 1, 200),
     vcrFrontierEventsWindowDays: integer("vcrFrontierEventsWindowDays", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_WINDOW_DAYS", 30, 1, 365),
+    // How long a draft study (made by 「新建研究」, never described) lives with nobody speaking in it, in minutes; then the sweep deletes
+    // it and its project. A resource limit, not an opinion: every draft is a project row, a conversation record and a runtime slot's worth.
+    vcrDraftTtlMinutes: integer("vcrDraftTtlMinutes", "OPEN_SCIENCE_VCR_DRAFT_TTL_MINUTES", 60, 5, 10_080),
     vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
     // The deterministic engine. Unset = not composed; the steps that need it say so.

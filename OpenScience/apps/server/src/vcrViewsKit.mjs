@@ -663,9 +663,10 @@ export function presentVcrReview(review) {
     : review.current === false ? '研究已有更新' : !ai ? '已复核' : findings.length ? '有修订建议' : '未发现明确问题';
   return { id: review.id ?? review.platformReviewId ?? `legacy:${review.kind}:${review.createdAt}:${(review.nodes ?? []).join(",")}`, reviewerKind: ai ? 'ai' : 'human', role: review.kind,
     label: `${ai ? 'AI' : '人工'}${review.kind === 'clinical' ? '临床' : review.kind === 'statistical' ? '统计' : '数据'}复核`,
-    state, status, current: review.current !== false, by: ai ? provenance.model ?? null : review.reviewerName ?? null,
-    configuredModel: ai ? provenance.configuration?.model ?? null : null, configurationRevision: ai ? provenance.configuration?.revision ?? null : null,
-    inputDigest: provenance.inputDigest ?? null, at: provenance.finishedAt ?? review.createdAt ?? null,
+    // An AI review is attributed by its label (「AI 统计复核」), never by the model that wrote it: a model name, a configuration
+    // revision and an input digest are the platform's own record, and a reader of the page has no use for any of them.
+    state, status, current: review.current !== false, by: ai ? null : review.reviewerName ?? null,
+    at: provenance.finishedAt ?? review.createdAt ?? null,
     note: status === 'failed' ? '审查暂未完成；已完成的研究与导出仍可使用。' : '审查意见供参考，不代表实证验证。',
     findings: findings.map(finding => ({ id: finding.id, kind: finding.kind, location: finding.location, evidence: finding.evidence,
       message: finding.message, fix: finding.fix, response: finding.response ?? null })) };

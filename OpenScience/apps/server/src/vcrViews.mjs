@@ -597,6 +597,8 @@ export function presentStudy(bundle) {
     designs,
     attention: attentionOf({ assumptions, scenarios, comparators, results, allResults: allResultsOf(bundle), stale, jobs, steps: study.steps, exports }),
     changes: presentChanges(bundle),
+    // The AI reviews and the people's, apart from the changes: the study page's 变更记录 shows both (no model names: `presentVcrReview`).
+    reviews: reviews.slice(0, 6).map((/** @type {any} */ review) => presentVcrReview(review)),
     deliverables: exports.map((/** @type {any} */ row, /** @type {number} */ index) => presentDeliverable(row, index, exports, now)),
   };
   return {
@@ -727,11 +729,11 @@ function presentChanges(bundle) {
   // A few of each kind, so a study with many results still shows its reviews,
   // decisions and packages: they are the changes a person made.
   for (const result of results.slice(0, 3)) {
-    rows.push({ id: `result:${result.id}`, at: result.createdAt, text: `${RESULT_KIND_LABELS[result.kind] ?? "结果"}的结果已更新（v${result.version}）`,
+    rows.push({ id: `result:${result.id}`, at: result.createdAt, text: `${RESULT_KIND_LABELS[result.kind] ?? "结果"}的结果已更新`,
       by: null, state: staleNodes.has(resultNode(result)) ? "stale" : null });
   }
   for (const card of [...assumptions].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 2)) {
-    rows.push({ id: `assumption:${card.id}`, at: card.createdAt, text: `假设卡「${card.name || card.key}」v${card.version}`, by: null,
+    rows.push({ id: `assumption:${card.id}`, at: card.createdAt, text: `假设卡「${card.name || card.key}」已更新`, by: null,
       state: card.reviewState === "reviewed" ? "reviewed" : null });
   }
   for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review)} · ${presentVcrReview(review).state}`, by: presentVcrReview(review).by, state: !review.status || review.status === "done" ? "reviewed" : "ai_set" });
@@ -740,7 +742,7 @@ function presentChanges(bundle) {
     rows.push({ id: `export:${row.id}`, at: row.createdAt,
       text: `${(/** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH))[row.kind] ?? "研究包"}${row.state === "ready" ? "已生成" : "已请求"}`, by: null, state: null });
   }
-  return rows.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 8)
+  return rows.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 12)
     .map((row) => ({ id: row.id, at: zhTime(row.at, now) ?? "", text: row.text, by: row.by, state: row.state }));
 }
 
