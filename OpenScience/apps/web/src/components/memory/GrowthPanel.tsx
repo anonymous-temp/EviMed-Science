@@ -38,7 +38,9 @@ function sentence(item: MemoryLearnedItem): string {
  * the beginning, and anything this page cannot find in its lists (a method
  * stopped since), is text.
  */
-export function GrowthPanel({ canOpen, onOpen }: {
+export function GrowthPanel({ practices, canOpen, onOpen }: {
+  /** How many ways of working the 做法 tab lists (methods in force and active handbooks); null when that list could not be read. */
+  practices: number | null;
   /** Whether a method or handbook of this id is on the page, so its row can open it. */
   canOpen: (what: "method" | "handbook", id: string) => boolean;
   onOpen: (what: "method" | "handbook", id: string) => void;
@@ -53,7 +55,7 @@ export function GrowthPanel({ canOpen, onOpen }: {
   return (
     <div className="space-y-6">
       {(unread || failed) && <LoadError message="没有读到全部成长记录。" onRetry={reload} />}
-      <CapsuleGrowth growth={data.growth} />
+      <CapsuleGrowth growth={data.growth} practices={practices} />
       {days.length > 0 ? (
         <div className="space-y-6">
           {days.map((entry) => (
@@ -67,7 +69,7 @@ export function GrowthPanel({ canOpen, onOpen }: {
             </section>
           ))}
         </div>
-      ) : !unread && !growthView(data.growth, GROWTH_DEFAULT_WIDTH) ? (
+      ) : !unread && !growthView(data.growth, GROWTH_DEFAULT_WIDTH, { practices }) ? (
         <EmptyState icon={TrendingUp} title="还没有成长记录" description="学会的做法和经验，会按天出现在这里。" />
       ) : null}
     </div>

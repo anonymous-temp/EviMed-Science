@@ -13,7 +13,10 @@ import type { MemoryGrowth, MemoryGrowthMoment } from "@/lib/memoryClient";
  *
  *  - **One sentence, which is the heading.** When it began, how much it holds
  *    now, how many ways of working it learned — the chart proves that sentence
- *    (spec §32.1) and says nothing else. No tile, no percentage, nothing about
+ *    (spec §32.1) and says nothing else. The memories are the facts of 关于你
+ *    and 项目; the ways of working are the rows of 做法, counted by the page
+ *    that lists them and handed in (`practices`), never inferred from the
+ *    moments on the line — the first count read 79 over tabs that held 5 and 15. No tile, no percentage, nothing about
  *    how a memory is written or used.
  *  - **Only once there is a line.** A capsule whose whole history fits in one
  *    week or one month is a list, not a trend: the chart stays away until its
@@ -135,16 +138,23 @@ export function growthCount(value: number): string {
   return formatApproxCount(Math.round(value));
 }
 
-/** The sentence the chart proves; null when there is no line to draw yet. `width` is the plot's, in CSS px. */
-export function growthView(growth: MemoryGrowth | null | undefined, width: number = GROWTH_DEFAULT_WIDTH): GrowthView | null {
+/**
+ * The sentence the chart proves; null when there is no line to draw yet. `width` is the plot's, in CSS px.
+ * `practices` is how many ways of working the 做法 tab lists now (methods in force and active handbooks); unknown (null,
+ * or not passed) says nothing of them rather than a number the page does not show.
+ */
+export function growthView(
+  growth: MemoryGrowth | null | undefined,
+  width: number = GROWTH_DEFAULT_WIDTH,
+  { practices = null }: { practices?: number | null } = {},
+): GrowthView | null {
   if (!growth || !growth.unit || !Array.isArray(growth.points)) return null;
   const points = growth.points;
   const held = points.findIndex((point) => point.known > 0);
   if (held < 0 || points.length - held < 2) return null;
   const starts = points.map((point) => point.start);
   const last = points[points.length - 1].known;
-  const learned = (growth.moments ?? []).filter((moment) => moment.kind === "method").length;
-  const tail = learned > 0 ? `，学会 ${learned} 种做法` : "";
+  const tail = practices !== null && practices > 0 ? `，学会 ${practices} 种做法` : "";
   let title: string;
   if (growth.fromStart && growth.first) {
     const lastYear = ymd(starts[starts.length - 1]).year;

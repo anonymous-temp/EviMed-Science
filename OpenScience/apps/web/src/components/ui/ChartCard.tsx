@@ -22,6 +22,7 @@ export type ChartCardState = "content" | "loading" | "empty" | "error";
 
 export function ChartCard({
   title,
+  level = 3,
   meta,
   legend,
   footnote,
@@ -35,6 +36,8 @@ export function ChartCard({
 }: {
   /** The conclusion this chart shows, as a sentence. */
   title: ReactNode;
+  /** The heading level of the title: 3 under a section's heading, 2 where the card follows the page's title directly. */
+  level?: 2 | 3;
   /** A count or a link at the heading's right end. */
   meta?: ReactNode;
   /** The series legend, under the heading on a narrow screen and beside it otherwise. */
@@ -54,7 +57,9 @@ export function ChartCard({
   return (
     <section className={cn("flex min-w-0 flex-col rounded-card border border-border bg-surface p-4", className)}>
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="min-w-0 text-section font-semibold text-text">{title}</h3>
+        {level === 2
+          ? <h2 className="min-w-0 text-section font-semibold text-text">{title}</h2>
+          : <h3 className="min-w-0 text-section font-semibold text-text">{title}</h3>}
         {meta != null && <span className="shrink-0 text-caption tabular-nums text-text-3">{meta}</span>}
       </header>
       {legend != null && <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">{legend}</div>}

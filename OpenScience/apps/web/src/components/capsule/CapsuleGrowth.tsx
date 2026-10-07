@@ -21,7 +21,12 @@ const WIDTH_STEP = 80;
  * 2026-09-28). A read that fails leaves the page as it was without the chart —
  * the list is what the page is for.
  */
-export function CapsuleGrowth({ growth, className }: { growth: MemoryGrowth | null | undefined; className?: string }) {
+export function CapsuleGrowth({ growth, practices = null, className }: {
+  growth: MemoryGrowth | null | undefined;
+  /** How many ways of working the 做法 tab lists, for the sentence's tail; null when that list could not be read. */
+  practices?: number | null;
+  className?: string;
+}) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(GROWTH_DEFAULT_WIDTH);
   useEffect(() => {
@@ -33,10 +38,10 @@ export function CapsuleGrowth({ growth, className }: { growth: MemoryGrowth | nu
     observer.observe(host);
     return () => observer.disconnect();
   }, [host]);
-  const view = useMemo(() => growthView(growth, width), [growth, width]);
+  const view = useMemo(() => growthView(growth, width, { practices }), [growth, width, practices]);
   if (!view) return null;
   return (
-    <ChartCard title={view.title} className={className}>
+    <ChartCard title={view.title} level={2} className={className}>
       <div ref={setHost} data-capsule-growth="">
         <TrendChart input={view.input} label={view.title} format={growthCount} height={160} integer unpainted={view.title} />
       </div>

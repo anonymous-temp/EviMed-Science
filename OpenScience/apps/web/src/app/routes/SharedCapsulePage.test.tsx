@@ -93,6 +93,40 @@ describe("收到的分享", () => {
     expect(screen.queryByRole("button", { name: "收下" })).not.toBeInTheDocument();
   });
 
+  it("a share that does not exist offers no retry — it says what it can be, and leads back to 记忆胶囊", async () => {
+    share.openShareLink.mockRejectedValue(Object.assign(new Error("这个分享不存在，或已经不能用了。"), { status: 404, code: "capsule_share_not_found" }));
+    page(`/app/memory/shared/${"T".repeat(32)}`);
+    expect(await screen.findByText("这个分享不能打开")).toBeInTheDocument();
+    expect(screen.getByText("链接可能已失效、已被撤回，或不是发给这个账号的。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "回到记忆胶囊" }));
+    expect(await screen.findByTestId("where")).toHaveTextContent("/app/memory");
+  });
+
+  it("a delivery that is gone is the same card, and a refusal that names itself says what it is", async () => {
+    share.openDelivery.mockRejectedValue(Object.assign(new Error("这个分享链接已过期，请向分享的人要一个新的。"), { status: 410, code: "capsule_share_link_expired" }));
+    page("/app/memory/delivered/dlv_gone");
+    expect(await screen.findByText("这个分享不能打开")).toBeInTheDocument();
+    expect(screen.getByText("这个分享链接已过期，请向分享的人要一个新的。")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "回到记忆胶囊" })).toHaveAttribute("href", "/app/memory");
+    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+  });
+
+  it("a service that is down keeps its retry, and a withdrawn delivery keeps its way back", async () => {
+    share.openShareLink.mockRejectedValueOnce(Object.assign(new Error("服务暂时不可用"), { status: 503 })).mockResolvedValue({ preview, link: { expiresAt: "", usesLeft: 1 } });
+    page(`/app/memory/shared/${"T".repeat(32)}`);
+    expect(await screen.findByText("服务暂时不可用")).toBeInTheDocument();
+    expect(screen.queryByText("这个分享不能打开")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("来自李主任 · 2 条做法")).toBeInTheDocument();
+    cleanup();
+    share.openDelivery.mockResolvedValue({ preview: null, delivery: { id: "dlv_1", state: "withdrawn", sender: { name: "李主任" } } });
+    page("/app/memory/delivered/dlv_1");
+    expect(await screen.findByText("分享的人已经撤回了这份分享，不能再收下。")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "回到记忆胶囊" })).toHaveAttribute("href", "/app/memory");
+  });
+
   it("an import that is refused stays on the page and says why", async () => {
     share.openShareLink.mockResolvedValue({ preview, link: { expiresAt: "", usesLeft: 1 } });
     share.importShareLink.mockRejectedValue(new Error("这个胶囊已被下架，不能再启用或试用。"));

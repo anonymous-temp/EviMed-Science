@@ -106,7 +106,7 @@ const method = {
   description: "Runs the last guards.", whenToUse: "", title: "提交前给成品做最后把关",
   summary: "先留改动前的副本，再逐项确认每道检查真的能报错。", status: "approved", statusReason: null, origin: "inferred",
   counts: { eligible: 1, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 }, evaluations: [],
-  promotion: { status: "approved", reasons: [], missing: [] }, body: "1. 先复制一份。\n2. 再逐项检查。", steps: null,
+  promotion: { status: "approved", reasons: [], missing: [] }, body: "## Purpose\nRun the last guards before the bytes are frozen.", steps: "1. 先复制一份。\n2. 再逐项检查。",
   scope: { applicability: "报告交付前", counterexamples: [], current: true },
   statusChangedAt: "2026-09-22T02:00:00Z", bodyUpdatedAt: "2026-09-22T02:00:00Z", trajectories: 3, createdAt: "2026-09-21T06:00:00Z", updatedAt: "2026-09-22T06:00:00Z",
 };
@@ -242,10 +242,60 @@ describe("记忆胶囊", () => {
     expect(screen.queryByRole("group", { name: "筛选记忆" })).toBeNull();
   });
 
+  it("opens on the first tab that has something in it, once: an empty 关于你 gives way to 项目, then 做法", async () => {
+    const user = userEvent.setup();
+    // Nothing about the person yet; the shell's own project has facts.
+    fetchMemoryProfile.mockResolvedValue({ records: [record({ id: "rec_3", kind: "project_fact", scope: "project", scopeId: "prj_1", key: "project.fact.scope", value: "纳入范围覆盖疳证与小儿厌食症。", summary: "纳入范围覆盖疳证与小儿厌食症。" })], groups: {}, activeCount: 1, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
+    fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
+    open();
+    expect(await screen.findByRole("button", { name: /纳入范围覆盖疳证/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /项目/ })).toHaveAttribute("aria-selected", "true");
+    // Only once: going back to the empty tab is the researcher's own choice and stays.
+    await user.click(screen.getByRole("tab", { name: /关于你/ }));
+    expect(await screen.findByText("还没有关于你的记忆")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("opens on the project that has facts when the shell's own has none", async () => {
+    fetchMemoryProfile.mockResolvedValue({ records: [record({ id: "rec_6", kind: "project_fact", scope: "project", scopeId: "prj_2", key: "project.fact.product", value: "信尔美为处方药，需冷链。", summary: "信尔美为处方药，需冷链。" })], groups: {}, activeCount: 1, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
+    fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
+    open();
+    expect(await screen.findByRole("button", { name: /信尔美为处方药/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "项目：信尔美" })).toBeInTheDocument();
+  });
+
+  it("opens on 做法 when only what was learned is there, and stays on 关于你 when a read failed rather than guess it empty", async () => {
+    fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
+    fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
+    const first = open();
+    expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /做法/ })).toHaveAttribute("aria-selected", "true");
+    first.unmount();
+    fetchMemoryProfile.mockRejectedValue(new Error("down"));
+    open();
+    expect(await screen.findByText("没有读到全部记忆。")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("an address that names a tab is obeyed, and a tab the researcher clicked before the data came is not moved", async () => {
+    const user = userEvent.setup();
+    fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
+    fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
+    const named = open("?tab=growth");
+    expect(await screen.findByRole("heading", { level: 2, name: /开始记住你/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "成长" })).toHaveAttribute("aria-selected", "true");
+    named.unmount();
+    open("?tab=self");
+    expect(await screen.findByText("还没有关于你的记忆")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /项目/ }));
+    expect(screen.getByRole("tab", { name: /项目/ })).toHaveAttribute("aria-selected", "true");
+  });
+
   it("starts on 关于你: facts about the person under small headers by kind, newest first, as bare sentences", async () => {
     open();
     await screen.findByRole("button", { name: /药学背景/ });
-    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["背景", "偏好", "工作与写作习惯"]);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["背景", "偏好", "工作与写作习惯"]);
     const texts = (name: string) => within(screen.getByRole("list", { name })).getAllByRole("listitem").map((item) => item.textContent);
     expect(texts("背景")).toEqual(["药学背景，关注老年人用药安全与抗栓治疗。"]);
     expect(texts("偏好")).toEqual(["偏好结论先行的回答。"]);
@@ -340,7 +390,7 @@ describe("记忆胶囊", () => {
     const user = userEvent.setup();
     open();
     await user.click(await screen.findByRole("tab", { name: /^做法/ }));
-    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["所有研究都会用", "用在某个科研工具里"]);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["所有研究都会用", "用在某个科研工具里"]);
     const every = within(screen.getByRole("list", { name: "所有研究都会用的做法" }));
     expect(every.getAllByRole("listitem").map((item) => item.textContent)).toEqual(["提交前给成品做最后把关先留改动前的副本，再逐项确认每道检查真的能报错。"]);
     // A handbook names the research tool it is for, by the title the researcher knows.
@@ -360,6 +410,7 @@ describe("记忆胶囊", () => {
     const drawer = await screen.findByRole("dialog", { name: "提交前给成品做最后把关" });
     expect(within(drawer).getByText("做法 · 从你的对话中学到 · 第 2 版 · 9月22日")).toBeInTheDocument();
     expect(within(drawer).getByText(/先复制一份/)).toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/Purpose|the last guards/);
     expect(within(drawer).getByText("报告交付前")).toBeInTheDocument();
     expect(await within(drawer).findByText("儿童疳证中医药新证据 · 9月22日")).toBeInTheDocument();
     // An earlier version is read in place, not navigated to.
@@ -395,7 +446,8 @@ describe("记忆胶囊", () => {
     const user = userEvent.setup();
     open();
     await user.click(await screen.findByRole("tab", { name: "成长" }));
-    const heading = await screen.findByRole("heading", { level: 3, name: "9月12日开始记住你，现在有 4 条记忆，学会 1 种做法" });
+    // The ways of working are the ones 做法 lists (one method in force, one active handbook), not the moments on the line.
+    const heading = await screen.findByRole("heading", { level: 2, name: "9月12日开始记住你，现在有 4 条记忆，学会 2 种做法" });
     expect(within(heading.closest("section")!).getByRole("img", { name: heading.textContent! })).toBeInTheDocument();
     // The chart is on this tab and only here: the page's top is the tabs.
     expect(screen.queryByRole("searchbox", { name: "搜索记忆" })).toBeNull();

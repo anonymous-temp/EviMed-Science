@@ -265,16 +265,19 @@ export async function memoryTimeline({ researchMemory, agentRuns = null, feedbac
  * capsule page's one chart (the owner's timeline of change and growth,
  * 2026-08-23).
  *
- * Hidden knowledge: the line counts exactly the rows the capsule page lists —
- * the memories (never a run summary), the learned methods, and the notes in the
- * researcher's own capsules outside the document layer — and it counts each
- * from the day it began to hold until the day it stopped: forgotten, replaced,
- * or a method stood down. So the line's last point is what the page shows
- * today, a fact that was replaced is carried on by the fact that replaced it
- * rather than dropping out and coming back, and a reset, which deletes, takes
- * its history with it. Nothing here is a counter of use or a pipeline state;
- * the only other things it names are two kinds of moment the researcher can
- * see on the page — a method learned, a capsule received.
+ * Hidden knowledge: the line counts exactly the facts the capsule page lists
+ * under 关于你 and 项目 — the memories (never a run summary) and the notes in
+ * the researcher's own capsules outside the document layer — and it counts each
+ * from the day it began to hold until the day it stopped: forgotten or
+ * replaced. So the line's last point is what those two tabs hold today, a fact
+ * that was replaced is carried on by the fact that replaced it rather than
+ * dropping out and coming back, and a reset, which deletes, takes its history
+ * with it. The learned methods are not in the count: they are a list of their
+ * own (做法), the page says how many in its own words, and a headline that
+ * counted them as memories read 79 over tabs that held 5 and 15 (2026-10-07
+ * audit). Nothing here is a counter of use or a pipeline state; the only other
+ * things it names are two kinds of moment the researcher can see on the page —
+ * a method learned, a capsule received.
  *
  * Every source is read whole, never a page of it: the memories grouped by day
  * in the database, the methods and notes paged through to the end under a
@@ -389,13 +392,12 @@ export async function memoryGrowth({ researchMemory, learning = null, capsules =
   if (learning?.documents) {
     const methods = await everyDocument(learning.documents, user.id, "method", {
       filter: { recordType: LEARNED_METHOD_RECORD_TYPE },
-      fields: { status: true, statusChangedAt: true, origin: true, provenance: true, display: true, frontmatter: true },
+      fields: { origin: true, provenance: true, display: true, frontmatter: true },
     });
     for (const method of methods) {
       const payload = method.payload ?? {};
       const began = day(method.createdAt);
-      note(began, "added");
-      if (payload.status === "retired") note(day(payload.statusChangedAt) ?? day(method.updatedAt), "ended");
+      // A learned method is a moment on the line, never a memory in its count.
       if (began && (payload.origin ?? payload.provenance?.origin) === "inferred") {
         moments.push({ day: began, kind: "method", title: excerpt(cleanMethodDisplay(payload.display)?.title ?? payload.frontmatter?.name ?? "", 80) });
       }

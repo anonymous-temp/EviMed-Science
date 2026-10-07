@@ -15,6 +15,11 @@ import { Drawer } from "@/components/ui/Drawer";
 import { ConversationLink } from "./ConversationLink";
 import { DrawerSection } from "./DrawerSection";
 
+/** Whether an earlier version has anything in the researcher's words to read. */
+function readable(version: MethodVersion): boolean {
+  return Boolean(version.summary || version.steps || version.whenToUse);
+}
+
 /** What a drawer can say about a read that has not answered: nothing yet, or that it could not. */
 type Loaded<T> = T | null | "failed";
 
@@ -93,13 +98,14 @@ function PracticeDrawerView({ view }: { view: PracticeView }) {
             <ul className="space-y-2">
               {earlier.map((version) => (
                 <li key={version.revision} className="text-ui text-text-2">
-                  <span>{[`第 ${version.version} 版`, formatDay(version.at)].filter(Boolean).join(" · ")} · </span>
-                  <button type="button" aria-expanded={reading === version.version} onClick={() => setReading(reading === version.version ? null : version.version)}
-                    className="text-accent hover:underline">{reading === version.version ? "收起" : "查看"}</button>
-                  {reading === version.version && (
+                  {/* A version written only for the model (no summary, no steps in the researcher's words) has nothing to read: its line stands without 「查看」. */}
+                  <span>{[`第 ${version.version} 版`, formatDay(version.at)].filter(Boolean).join(" · ")}{readable(version) ? " · " : ""}</span>
+                  {readable(version) && <button type="button" aria-expanded={reading === version.version} onClick={() => setReading(reading === version.version ? null : version.version)}
+                    className="text-accent hover:underline">{reading === version.version ? "收起" : "查看"}</button>}
+                  {readable(version) && reading === version.version && (
                     <div className="mt-2 space-y-2 border-l border-border pl-3">
                       {version.summary && <p className="text-ui text-text">{version.summary}</p>}
-                      {(version.steps || version.body) && <MarkdownViewer className="text-ui text-text-2">{version.steps ?? version.body ?? ""}</MarkdownViewer>}
+                      {version.steps && <MarkdownViewer className="text-ui text-text-2">{version.steps}</MarkdownViewer>}
                       {version.whenToUse && <p className="text-caption text-text-3">什么时候用：{version.whenToUse}</p>}
                     </div>
                   )}
@@ -175,8 +181,8 @@ export function MethodDrawer({ method, onClose, onChanged }: { method: WebMethod
   return (
     <PracticeDrawerView view={{
       title, kind: "做法", origin: methodOrigin(method), version: method.version ?? 1, at: method.bodyUpdatedAt ?? method.updatedAt,
-      // The steps in the researcher's language when there are any; the SKILL.md written for the model otherwise.
-      steps: method.steps ?? (method.body || null), stepsLoading: false,
+      // The steps in the researcher's language, or no 「怎么做」 at all: the body is the SKILL.md written for the model, in English.
+      steps: method.steps || null, stepsLoading: false,
       whenToUse: method.scope?.applicability || method.whenToUse || "",
       sources, versions, busy, onGoBack: () => void goBack(), onStop: () => void stop(), onClose,
     }} />
@@ -226,7 +232,7 @@ export function HandbookDrawer({ handbook, tool, onClose, onChanged }: { handboo
   return (
     <PracticeDrawerView view={{
       title: handbook.title, kind: `用在${tool}`, origin: "从你的对话中学到", version: current?.version ?? null, at: handbook.appliedAt ?? handbook.updatedAt,
-      steps: read ? read.steps ?? (read.body || null) : null, stepsLoading: detail === null,
+      steps: read ? read.steps || null : null, stepsLoading: detail === null,
       whenToUse: handbook.whenToUse || read?.whenToUse || "",
       sources: read ? read.sources : detail === "failed" ? "failed" : null, versions, busy, onGoBack: () => void goBack(), onStop: () => void stop(), onClose,
     }} />

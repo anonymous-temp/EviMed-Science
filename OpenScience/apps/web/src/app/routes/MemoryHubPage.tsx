@@ -41,10 +41,10 @@ const TAB_NAMES: Record<MemoryTab, string> = { self: "关于你", project: "项�
  * has always carried and `?tab=capsules` the old `/app/capsules` redirect;
  * both were ignored, so every deep link landed on the one list there was.
  */
-function tabFromAddress(params: URLSearchParams): MemoryTab {
+function tabFromAddress(params: URLSearchParams): MemoryTab | null {
   if (params.get("method")) return "methods";
   const named = params.get("tab");
-  return named === "methods" || named === "project" || named === "growth" ? named : "self";
+  return named === "methods" || named === "project" || named === "growth" || named === "self" ? named : null;
 }
 
 /** The reads a tab needs that did not answer, named by tab: a list that could not be read is never an empty one. */
@@ -87,7 +87,7 @@ export function MemoryHubPage() {
   const [params, setParams] = useSearchParams();
   const projects = useProjectStore((state) => state.projects);
   const currentProjectId = useProjectStore((state) => state.currentId);
-  const [tab, setTab] = useState<MemoryTab>(() => tabFromAddress(params));
+  const [tab, setTab] = useState<MemoryTab>(() => tabFromAddress(params) ?? "self");
   const [query, setQuery] = useState("");
   const [projectChoice, setProjectChoice] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -97,6 +97,9 @@ export function MemoryHubPage() {
   const [searchFailed, setSearchFailed] = useState(false);
   const [searchAttempt, setSearchAttempt] = useState(0);
   const [missing, setMissing] = useState<string | null>(null);
+  // The tab is chosen for the researcher once: an address that names one, a notice that names a memory or a method, or a tab they
+  // clicked is theirs; otherwise the page opens on the first tab that has something in it, when the data is in.
+  const landed = useRef(tabFromAddress(params) !== null || params.has("record") || params.has("method"));
 
   // 「刚记住了 … 撤销」 for what changed by itself since the last visit.
   useMemoryWritePrompt();
@@ -174,6 +177,30 @@ export function MemoryHubPage() {
   const unread = (Object.entries(data ?? {}) as [string, unknown][]).filter(([, value]) => value === null).map(([name]) => name);
   const tabUnread = SOURCES_OF[tab].some((name) => unread.includes(name));
 
+  // 关于你 is the first tab and, for most accounts early on, the empty one while 项目 and 做法 hold what was learned: landing on an
+  // empty list reads as 「什么都没记住」. A tab whose read failed is not known to be empty, so the choice stops there.
+  useEffect(() => {
+    if (!data || landed.current) return;
+    landed.current = true;
+    const everyFact = factItems(records, entries);
+    const holds: [MemoryTab, number][] = [
+      ["self", everyFact.filter((fact) => fact.group === "self").length],
+      ["project", everyFact.filter((fact) => fact.group === "project").length],
+      ["methods", everyPractice.methods.length + everyPractice.handbooks.length],
+    ];
+    for (const [candidate, rows] of holds) {
+      if (SOURCES_OF[candidate].some((name) => (data as unknown as Record<string, unknown>)[name] === null)) return;
+      if (rows === 0) continue;
+      if (candidate === "project") {
+        // The dropdown names one project at a time: open the first that has facts when the shell's own has none.
+        const withFacts = choices.find((choice) => factsOfProject(everyFact, choice.id, knownProjects).length > 0);
+        if (withFacts && factsOfProject(everyFact, scope, knownProjects).length === 0) setProjectChoice(withFacts.id);
+      }
+      if (candidate !== "self") setTab(candidate);
+      return;
+    }
+  }, [data, records, entries, everyPractice, choices, scope, knownProjects]);
+
   const counts: Record<MemoryTab, number | undefined> = {
     self: loading ? undefined : self.length,
     project: loading ? undefined : projectFacts.length,
@@ -204,6 +231,7 @@ export function MemoryHubPage() {
     if (tab === "growth") {
       return (
         <GrowthPanel
+          practices={data.methods === null || data.handbooks === null ? null : everyPractice.methods.length + everyPractice.handbooks.length}
           canOpen={(what, id) => (what === "method" ? everyPractice.methods : everyPractice.handbooks).some((item) => item.key === `${what}:${id}`)}
           onOpen={(what, id) => setOpenKey(`${what}:${id}`)}
         />
@@ -266,7 +294,7 @@ export function MemoryHubPage() {
     >
       {/* One row: the tabs, and the search box at its end; on a phone the box takes its own line. */}
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-border">
-        <Tabs label="记忆" items={tabs} value={tab} onChange={setTab} className="min-w-0 flex-1 border-b-0" />
+        <Tabs label="记忆" items={tabs} value={tab} onChange={(next) => { landed.current = true; setTab(next); }} className="min-w-0 flex-1 border-b-0" />
         {tab !== "growth"
           ? <SearchInput label="搜索记忆" value={query} onChange={(event) => setQuery(event.target.value)} className="mb-1.5 w-full sm:w-60" />
           // 成长 has nothing to search, and the row keeps its height so the rule under the tabs does not jump between tabs.

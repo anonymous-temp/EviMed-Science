@@ -65,10 +65,12 @@ describe("one learned method, opened from its row", () => {
     expect(await within(drawer).findByText("第 1 版 · 9月21日 ·")).toBeInTheDocument();
   });
 
-  it("falls back to the method's own name and text until it has a title and steps", () => {
+  it("never prints the model's own text: with no steps in the researcher's words there is no 「怎么做」, and the rest stays", () => {
     open({ title: null, summary: null, steps: null });
     const drawer = screen.getByRole("dialog", { name: "pre-submission-freeze-check" });
-    expect(within(drawer).getByText(/A deliverable that reports a study/)).toBeInTheDocument();
+    expect(within(drawer).queryByText("怎么做")).not.toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/A deliverable that reports a study|Purpose/);
+    expect(within(drawer).getByText("什么时候用")).toBeInTheDocument();
   });
 
   it("says a method the researcher set is theirs", () => {
@@ -206,10 +208,13 @@ describe("one capability handbook, opened from its row", () => {
     expect(drawer.textContent).not.toMatch(/model text|效果待观察|对照评估/);
   });
 
-  it("falls back to the text written for the model when there are no steps", async () => {
+  it("has no 「怎么做」 when there are no steps — never the text written for the model", async () => {
     handbooks.handbookDetail.mockResolvedValue({ ...(handbook as object), body: "model text", steps: null, sources: [] });
     openHandbook();
-    expect(await screen.findByText("model text")).toBeInTheDocument();
+    const drawer = screen.getByRole("dialog", { name: "每一句结论落回来源" });
+    await waitFor(() => expect(within(drawer).queryByRole("status")).not.toBeInTheDocument());
+    expect(within(drawer).queryByText("怎么做")).not.toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/model text/);
   });
 
   it("goes back to the version before, by naming it", async () => {
