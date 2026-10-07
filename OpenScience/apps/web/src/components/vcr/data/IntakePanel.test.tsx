@@ -27,8 +27,10 @@ vi.mock("@/lib/projects", () => ({
 
 const DATA = `/vcr/studies/${STUDY_ID}/data`;
 
+// A tier that takes real data: the intake is the tab's first section, under its own heading. (At T0 it is one folded line, `DataTab.test.tsx`.)
 function study(change?: (raw: any) => void): VcrStudy {
   const raw = fixture("ev201/study.json");
+  raw.tier = "T2";
   change?.(raw);
   return readVcrStudy(raw);
 }

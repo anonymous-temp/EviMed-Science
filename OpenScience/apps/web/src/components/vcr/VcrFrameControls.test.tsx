@@ -84,6 +84,25 @@ describe("the 虚拟临床研究 chip", () => {
     expect(f.sent.filter(([type]) => type !== "vcr-options")).toEqual([]);
   });
 
+  it("draws the six starting points of a new study on the blank conversation — with the chip's options or, with no study found, without them — and a pill only fills the composer", () => {
+    const f = vcrFrame();
+    const Hero = f.components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
+    const view = render(<Hero />);
+    act(() => f.kit.hub.deliver("capability", { capabilityId: "vcr-protocol", sessionId: "session-a" }));
+    const labels = ["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"];
+    // No study yet (the shell could not read one): the pills are still there, and the chip has no options to offer.
+    act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", null)));
+    expect(labels.every((label) => view.queryByRole("button", { name: label }))).toBe(true);
+    expect(view.queryByRole("combobox", { name: "起点" })).toBeNull();
+    // The study the shell found by its project — a draft nobody has spoken in — gives the chip its options, and the pills stay.
+    act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", { ...study(["read", "write", "manage_study"]), status: "draft" } as VcrStudy)));
+    expect(view.getByRole("combobox", { name: "起点" })).toHaveValue("auto");
+    expect(labels.every((label) => view.queryByRole("button", { name: label }))).toBe(true);
+    fireEvent.click(view.getByRole("button", { name: "模拟试验方案" }));
+    expect(f.drafts).toEqual(["帮我模拟几个试验方案：比较样本量、功效、成功把握、周期和成本，研究是："]);
+    expect(f.sent.filter(([type]) => type !== "vcr-options")).toEqual([]);
+  });
+
   it("puts the study's own value back when the shell says the write did not land", () => {
     const f = vcrFrame();
     const Chip = f.components.get("evimed-tool") as (props: Record<string, unknown>) => React.ReactElement;

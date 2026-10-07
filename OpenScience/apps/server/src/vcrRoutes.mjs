@@ -633,7 +633,7 @@ export function createVcrRoutes(dependencies) {
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
-    /** What a set of roles may do on a study: the roles' abilities, and `manage_study` for the lead's own (the second human stop). @param {readonly string[]} roles */
+    /** What a set of roles may do on a study: the roles' abilities, and `manage_study` for the lead's own (the second human stop). @param {string[]} roles */
     const abilitiesFor = (roles) => {
       const abilities = new Set(abilitiesOfRoles(roles));
       if (roles.some((role) => roleHolds(role, "manage_study"))) abilities.add("manage_study");
