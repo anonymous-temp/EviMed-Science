@@ -657,6 +657,13 @@ const PATIENT_KINDS = Object.freeze(/** @type {Record<string, string>} */ ({
   time_to_event: "generate_patients", continuous: "generate_patients_continuous", binary: "generate_patients_binary",
 }));
 
+/**
+ * The generator a patient set's scenario runs: the endpoint family's, or the trajectory model's when the scenario states a visit
+ * schedule (`visits` is a key no other generator reads, so it is the scenario's own word and never a guess from prose).
+ * @param {unknown} scenario @param {unknown} type
+ */
+const patientKindOf = (scenario, type) => (Array.isArray(object(scenario).visits) ? "generate_patients_longitudinal" : PATIENT_KINDS[String(type)]);
+
 /** The job a population of each kind runs. */
 const POPULATION_KINDS = Object.freeze(/** @type {Record<string, string>} */ ({
   real: "build_cohort", scenario: "generate_population", literature: "literature_population", empirical_synthetic: "synthesize_population",
@@ -669,7 +676,7 @@ export function vcrJobKindFor(kind, row, context = {}) {
   if (kind === "population") return POPULATION_KINDS[String(object(row).kind)] ?? "generate_population";
   if (kind === "patient_set") {
     const endpoint = String(object(object(row).scenario).endpoint?.type ?? object(context.definition).endpointType ?? "time_to_event");
-    return PATIENT_KINDS[endpoint] ?? "generate_patients";
+    return patientKindOf(object(row).scenario, endpoint) ?? "generate_patients";
   }
   if (kind === "comparator") {
     const route = String(object(row).route);
@@ -1005,7 +1012,7 @@ export function vcrBuildStages(item, context) {
     const type = object(scenario.endpoint).type ?? endpointDefault;
     if (!type) return { ok: false, refused: { code: "vcr_scenario_endpoint_missing", message: "虚拟患者集要知道终点类型：先写研究定义，或在场景里写 endpoint.type。" } };
     scenario.endpoint = { ...object(scenario.endpoint), type };
-    const jobKind = PATIENT_KINDS[String(type)];
+    const jobKind = patientKindOf(scenario, type);
     // A model answers only for what it declares it covers. A patient set that names a model
     // the study is outside of is refused before any job is queued, with what fell outside
     // (the reference simulators declare an endpoint and nothing else, so they pass).
@@ -1037,8 +1044,9 @@ export function vcrBuildStages(item, context) {
       if (!population?.resultId) return { ok: false, waiting: "population_pending" };
       derived.push({ from: "object", table: "population" });
     }
+    // The trajectory model's `effect` is a change per time unit, not the difference an outcome card holds: no card is bound into it.
     const built = stage(jobKind, scenario, { endpoint: String(type), derived, keepTables: ["virtual-patients"], snapshot: false,
-      detail: { modelId: row.modelId ?? null, modelVersion: row.modelVersion ?? null } });
+      bindAll: jobKind !== "generate_patients_longitudinal", detail: { modelId: row.modelId ?? null, modelVersion: row.modelVersion ?? null } });
     return finish([built]);
   }
 
@@ -1166,7 +1174,7 @@ export function vcrBuildStages(item, context) {
     if (!stages.length) {
       return { ok: false, unavailable: { rule: "route_unavailable_in_version", reason: "design_not_supported", gaps: [{
         title: `${row.design} 设计在当前版本的引擎里没有实现`,
-        detail: `当前支持固定样本两组比较（三类终点）、成组序贯（事件时间），以及二分类的精确单臂、分层历史对照和 Simon 两阶段；${row.design} 与 ${type} 的这个组合尚未实现。`,
+        detail: `当前支持固定样本两组比较（三类终点）、成组序贯（事件时间），单臂试验（二分类的精确检验，连续和事件时间终点对固定基准的单样本检验），以及二分类的分层历史对照和 Simon 两阶段；${row.design} 与 ${type} 的这个组合尚未实现。`,
         answers: "改用引擎支持的设计并排比较，或等这个设计完成数值验证后再算。" }] } };
     }
     // Assurance integrates power over the design prior the effect's card states.

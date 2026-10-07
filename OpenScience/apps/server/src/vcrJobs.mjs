@@ -208,7 +208,7 @@ export function vcrBindReconstruction(kind, scenario, entries, resolved) {
 
 export const VCR_DERIVED_SOURCES = Object.freeze({
   "population.scenario": "synthetic", "population.literature": "synthetic", "population.synthpop": "synthetic",
-  "patients.continuous": "synthetic", "patients.binary": "synthetic", "patients.time_to_event": "synthetic",
+  "patients.continuous": "synthetic", "patients.binary": "synthetic", "patients.time_to_event": "synthetic", "patients.longitudinal": "synthetic",
   "evidence.reconstruct_km": "reconstructed",
 });
 
@@ -299,7 +299,7 @@ export function vcrScenarioColumns(scenario) {
 
 /** Job kinds whose work is heavy enough to be the study's budget question. */
 const HEAVY_KINDS = new Set(["design_simulation", "design_grid", "synthesize_population", "generate_patients",
-  "generate_patients_continuous", "generate_patients_binary"]);
+  "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"]);
 
 /** Weakest first: the worst of two conclusions is the later one. */
 const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
@@ -423,7 +423,7 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
 export function vcrResultKindFor(kind) {
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "";
   if (["build_cohort", "generate_population", "literature_population", "synthesize_population", "population_quality"].includes(kind)) return "population";
-  if (["generate_patients", "generate_patients_continuous", "generate_patients_binary"].includes(kind)) return "patient_set";
+  if (["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind)) return "patient_set";
   if (method.startsWith("comparator.") || kind === "procova") return "comparator";
   if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
   if (kind === "design_grid") return "design_grid";
