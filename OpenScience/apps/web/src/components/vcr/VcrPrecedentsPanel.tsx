@@ -1,9 +1,10 @@
 import { VcrRegistryCoverage } from "./VcrRegistryCoverage";
 import { Fragment, useState, type ReactNode } from "react";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { getVcrPrecedents, type VcrPrecedent } from "@/lib/vcrClient";
 import { safeLink } from "@/lib/frontierClient";
 import { cn } from "@/lib/cn";
+import { buttonClasses } from "@/components/ui/Button";
 import { drawnColumns, type DataColumn } from "@/components/ui/DataTable";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { useVcrLoad, VcrFacts, VcrTabError, VcrToolbar } from "./vcrTabKit";
@@ -104,29 +105,26 @@ export function VcrPrecedentTable({ rows, footnote, withUse = false }: {
       header: "登记号",
       rowHeader: true,
       cell: (row) => {
-        const expandable = hasDetail(row);
-        const body = (
-          <span className="block min-w-0">
-            <span className="block tabular-nums text-text">{row.registryId}</span>
-            <span className="block text-caption text-text-3">{[row.registry, row.population].filter(Boolean).join(" · ")}</span>
-          </span>
-        );
-        if (!expandable) return body;
+        // The registry number is the row's one control — plain text in the accent colour, one line — and what the registry says about
+        // the trial is a line of the table under it. A chevron and a second line inside the button made it a kind of control of its own.
+        const caption = [row.registry, row.population].filter(Boolean).join(" · ");
         return (
-          <button
-            type="button"
-            aria-expanded={open.has(row.id)}
-            aria-controls={`vcr-precedent-${row.id}`}
-            onClick={() => toggle(row.id)}
-            className="flex w-full items-start gap-1 text-left"
-          >
-            <ChevronRight
-              size={16}
-              aria-hidden="true"
-              className={cn("mt-0.5 shrink-0 text-text-3 transition-transform duration-fast", open.has(row.id) && "rotate-90")}
-            />
-            {body}
-          </button>
+          <span className="block min-w-0">
+            {hasDetail(row)
+              ? (
+                <button
+                  type="button"
+                  aria-expanded={open.has(row.id)}
+                  aria-controls={`vcr-precedent-${row.id}`}
+                  onClick={() => toggle(row.id)}
+                  className="text-left tabular-nums text-link hover:underline"
+                >
+                  {row.registryId}
+                </button>
+              )
+              : <span className="block tabular-nums text-text">{row.registryId}</span>}
+            {caption && <span className="block text-caption text-text-3">{caption}</span>}
+          </span>
         );
       },
     },
@@ -214,7 +212,7 @@ function PrecedentDetail({ row }: { row: VcrPrecedent }) {
         </dl>
       )}
       {link && (
-        <a href={link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ui text-link hover:underline">
+        <a href={link} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm", className: "w-fit text-link" })}>
           打开登记记录
           <ExternalLink size={16} aria-hidden="true" />
         </a>

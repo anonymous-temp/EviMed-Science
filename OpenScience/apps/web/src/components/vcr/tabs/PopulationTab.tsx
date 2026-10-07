@@ -142,7 +142,7 @@ export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: str
             </VcrSection>
           )}
 
-          {data.quality && (
+          {data.quality && (data.quality.groups.length > 0 || data.quality.trainingRecords != null || data.quality.copies != null) && (
             <div className="grid gap-4 lg:grid-cols-2">
               <QualityCard quality={data.quality} />
             </div>

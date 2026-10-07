@@ -41,33 +41,32 @@ export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStu
 
       {attention.length > 0 && <AttentionCard items={attention} studyId={studyId} />}
 
-      <VcrSection title="交付物">
-        {deliverables.length === 0
-          ? <p className="py-6 text-ui text-text-3">还没有交付物。</p>
-          : (
-            <ul className="divide-y divide-faint">
-              {deliverables.map((item) => (
-                <li key={item.id} className="relative flex items-center gap-3 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 truncate text-ui text-text">
-                      {/* The package opens in the reader on this page (`?package=`), which is one address rather than a route
-                          of its own; the file itself is one click further, inside it. */}
-                      <Link
-                        to={`${vcrTabPath(studyId, "overview")}?package=${encodeURIComponent(item.id)}`}
-                        className="min-w-0 truncate after:absolute after:inset-0 after:rounded after:content-['']"
-                      >
-                        {item.title}
-                      </Link>
-                      {item.draft && <Tag>草稿</Tag>}
-                    </p>
-                    {item.meta && <p className="truncate text-caption tabular-nums text-text-3">{item.meta}</p>}
-                  </div>
-                  <Download size={16} aria-hidden="true" className="shrink-0 text-text-3" />
-                </li>
-              ))}
-            </ul>
-          )}
-      </VcrSection>
+      {/* Not drawn while there is none: a heading over 「还没有交付物」 is a title over an empty box. */}
+      {deliverables.length > 0 && (
+        <VcrSection title="交付物">
+          <ul className="divide-y divide-faint">
+            {deliverables.map((item) => (
+              <li key={item.id} className="relative flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-2 truncate text-ui text-text">
+                    {/* The package opens in the reader on this page (`?package=`), which is one address rather than a route
+                        of its own; the file itself is one click further, inside it. */}
+                    <Link
+                      to={`${vcrTabPath(studyId, "overview")}?package=${encodeURIComponent(item.id)}`}
+                      className="min-w-0 truncate after:absolute after:inset-0 after:rounded after:content-['']"
+                    >
+                      {item.title}
+                    </Link>
+                    {item.draft && <Tag>草稿</Tag>}
+                  </p>
+                  {item.meta && <p className="truncate text-caption tabular-nums text-text-3">{item.meta}</p>}
+                </div>
+                <Download size={16} aria-hidden="true" className="shrink-0 text-text-3" />
+              </li>
+            ))}
+          </ul>
+        </VcrSection>
+      )}
     </div>
   );
 }

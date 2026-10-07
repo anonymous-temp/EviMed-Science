@@ -57,6 +57,8 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const failed = study.steps.comparator?.status === "failed";
+  // The estimand card is drawn only when it has a line to say: a card holding its title and a source tag is an empty box.
+  const estimand = data.estimand && (data.estimand.rows.length > 0 || data.estimand.note) ? data.estimand : null;
   // The five routes and the ten dimensions are what every study has before
   // anything ran — they say what each route could be at this tier — so they
   // do not count as a result.
@@ -146,22 +148,22 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
               )}
               {data.curves.length === 0 && (data.rmst || data.median) && <ComparatorNumbers data={data} />}
 
-              {(data.estimand || data.comparability.length > 0) && (
+              {(estimand || data.comparability.length > 0) && (
                 <div className="grid gap-4 lg:grid-cols-2">
-                  {data.estimand && (
+                  {estimand && (
                     <Card
                       header={(
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="text-section font-semibold text-text">估计目标</h2>
-                          <SourceTag source={data.estimand.source ?? undefined} />
+                          <SourceTag source={estimand.source ?? undefined} />
                           <span className="flex-1" />
-                          <ReviewChip state={data.estimand.review ?? null} />
+                          <ReviewChip state={estimand.review ?? null} />
                         </div>
                       )}
                     >
-                      <VcrFacts rows={data.estimand.rows.map((row) => ({ label: row.label, value: row.value }))} />
-                      {data.estimand.note && (
-                        <p className="mt-3 rounded bg-surface-1 px-3 py-2 text-caption text-text-2">{data.estimand.note}</p>
+                      <VcrFacts rows={estimand.rows.map((row) => ({ label: row.label, value: row.value }))} />
+                      {estimand.note && (
+                        <p className="mt-3 rounded bg-surface-1 px-3 py-2 text-caption text-text-2">{estimand.note}</p>
                       )}
                     </Card>
                   )}
@@ -189,7 +191,7 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
             </div>
           </div>
 
-          {data.robustness && <RobustnessCard robustness={data.robustness} />}
+          {data.robustness && (data.robustness.rows.length > 0 || data.robustness.qualification || data.robustness.notes.length > 0) && <RobustnessCard robustness={data.robustness} />}
 
           {data.gaps && (
             <NotEstimableCard

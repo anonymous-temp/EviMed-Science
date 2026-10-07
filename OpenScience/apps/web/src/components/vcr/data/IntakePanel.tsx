@@ -112,35 +112,37 @@ function RegisterSource({ studyId, options, onChanged }: { studyId: string; opti
  * seal that keeps the outcomes closed until the plan is frozen. Patient-level
  * rows never come back to this page: it shows structure, counts and states.
  */
-export function IntakePanel({ studyId, intake, onChanged }: { studyId: string; intake: VcrIntake; onChanged: () => void }) {
+export function IntakePanel({ studyId, intake, onChanged, bare = false }: {
+  studyId: string;
+  intake: VcrIntake;
+  onChanged: () => void;
+  /** Without its own heading: the page folds it under one (a study whose tier takes no real data). */
+  bare?: boolean;
+}) {
   if (!intake.available) {
-    return (
-      <VcrSection title="数据接入">
-        <p data-vcr-intake-unavailable="" className="text-ui text-text-3">{intake.message ?? "本部署未接入数据平面，暂不能接入患者级数据。"}</p>
-      </VcrSection>
-    );
+    const sentence = <p data-vcr-intake-unavailable="" className="text-ui text-text-3">{intake.message ?? "本部署未接入数据平面，暂不能接入患者级数据。"}</p>;
+    return bare ? sentence : <VcrSection title="数据接入">{sentence}</VcrSection>;
   }
-  return (
-    <VcrSection title="数据接入" meta={intake.sources.length ? `${intake.sources.length} 个数据源` : undefined}>
-      <div data-vcr-intake="" className="flex flex-col gap-4">
-        {intake.seal && (intake.seal.required || intake.seal.planFrozenAt || intake.seal.outcomeFirstReadAt) && <SealNote seal={intake.seal} />}
-        {intake.sources.length === 0 && (
-          <p className="text-ui text-text-3">
-            {intake.canManage ? "还没有数据源。登记一个，再上传文件、说明每一列是什么，冻结成快照后引擎才能读取。" : "这个研究还没有数据源。"}
-          </p>
-        )}
-        {intake.sources.map((source) => (
-          <SourceCard
-            key={source.id} studyId={studyId} source={source} snapshots={intake.snapshots}
-            options={intake.options} canManage={intake.canManage} onChanged={onChanged}
-          />
-        ))}
-        {intake.canManage && (
-          intake.sources.length === 0
-            ? <RegisterSource studyId={studyId} options={intake.options} onChanged={onChanged} />
-            : <Disclosure summary="登记另一个数据源"><RegisterSource studyId={studyId} options={intake.options} onChanged={onChanged} /></Disclosure>
-        )}
-      </div>
-    </VcrSection>
+  const body = (
+    <div data-vcr-intake="" className="flex flex-col gap-4">
+      {intake.seal && (intake.seal.required || intake.seal.planFrozenAt || intake.seal.outcomeFirstReadAt) && <SealNote seal={intake.seal} />}
+      {intake.sources.length === 0 && (
+        <p className="text-ui text-text-3">
+          {intake.canManage ? "还没有数据源。登记一个，再上传文件、说明每一列是什么，冻结成快照后引擎才能读取。" : "这个研究还没有数据源。"}
+        </p>
+      )}
+      {intake.sources.map((source) => (
+        <SourceCard
+          key={source.id} studyId={studyId} source={source} snapshots={intake.snapshots}
+          options={intake.options} canManage={intake.canManage} onChanged={onChanged}
+        />
+      ))}
+      {intake.canManage && (
+        intake.sources.length === 0
+          ? <RegisterSource studyId={studyId} options={intake.options} onChanged={onChanged} />
+          : <Disclosure summary="登记另一个数据源"><RegisterSource studyId={studyId} options={intake.options} onChanged={onChanged} /></Disclosure>
+      )}
+    </div>
   );
+  return bare ? body : <VcrSection title="数据接入" meta={intake.sources.length ? `${intake.sources.length} 个数据源` : undefined}>{body}</VcrSection>;
 }

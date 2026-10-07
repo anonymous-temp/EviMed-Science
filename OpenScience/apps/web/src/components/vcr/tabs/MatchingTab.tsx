@@ -279,15 +279,17 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
-          <Card title={referralStateLabel("candidate")}>
-            <ul className="flex flex-col gap-1">
-              {data.candidates.map((candidate) => (
-                <li key={candidate.id}>
-                  <CandidateButton candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
-                </li>
-              ))}
-            </ul>
-          </Card>
+          {data.candidates.length > 0 && (
+            <Card title={referralStateLabel("candidate")}>
+              <ul className="flex flex-col gap-1">
+                {data.candidates.map((candidate) => (
+                  <li key={candidate.id}>
+                    <CandidateButton candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           {data.gaps.length > 0 && (
             <Card title="待补证的主要缺口">

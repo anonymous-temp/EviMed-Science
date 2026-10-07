@@ -85,6 +85,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
   // The trade-off is drawn only when there is something to place: two designs with a duration and an assurance. A card whose chart
   // draws nothing is a title over an empty box.
   const tradeoff = data.designs.length > 1 && canDrawTradeoff(data.designs, "duration_months", "assurance");
+  const powerCurve = data.powerCurve && data.powerCurve.series.length > 0 ? data.powerCurve : null;
 
   // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
   const draft = (text: string) => {
@@ -170,24 +171,24 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
             </Disclosure>
           )}
 
-          {(data.powerCurve || (data.grid && data.grid.rows.length > 0)) && (
+          {(powerCurve || (data.grid && data.grid.rows.length > 0)) && (
             <div className="grid gap-4 xl:grid-cols-2">
-              {data.powerCurve && (
+              {powerCurve && (
                 <ChartCard
                   title="功效随真实效应的变化"
-                  legend={<VcrSeriesLegend series={data.powerCurve.series} />}
+                  legend={<VcrSeriesLegend series={powerCurve.series} />}
                 >
                   <VcrTrajectoryChart
-                    series={data.powerCurve.series}
-                    xLabel={data.powerCurve.xLabel}
-                    yLabel={data.powerCurve.yLabel}
+                    series={powerCurve.series}
+                    xLabel={powerCurve.xLabel}
+                    yLabel={powerCurve.yLabel}
                     // The server sends the curve as percentages, like every design measure: 0 to 100 is its whole range.
                     domain={[0, 100]}
                     formatY={(value) => `${Math.round(value)}%`}
                   />
-                  {data.powerCurve.markers && data.powerCurve.markers.length > 0 && (
+                  {powerCurve.markers && powerCurve.markers.length > 0 && (
                     <p className="mt-2 flex flex-wrap gap-x-4 text-caption text-text-3">
-                      {data.powerCurve.markers.map((marker) => (
+                      {powerCurve.markers.map((marker) => (
                         <span key={marker.label} data-vcr-marker={marker.kind ?? ""} className="inline-flex items-center gap-1.5">
                           {marker.label}
                           {marker.kind === "assumed" && <Tag>假设</Tag>}
