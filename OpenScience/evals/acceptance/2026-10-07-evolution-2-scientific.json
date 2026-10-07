@@ -1,0 +1,95 @@
+{
+ "schemaVersion": 1,
+ "recordedAt": "2026-10-07T10:45:00Z",
+ "plan": "docs/superpowers/plans/2026-10-06-research-evolution-2.md",
+ "implementationRecord": "OpenScience/evals/acceptance/2026-10-06-evolution-2-implementation.json",
+ "scope": "ordinary deployment on the test host, 循证进化 on by default (owner 2026-10-07)",
+ "deployments": [
+  {
+   "releaseId": "evimed-23be13a63176-1",
+   "liveAt": "2026-10-07T07:43Z",
+   "settings": [
+    "OPEN_SCIENCE_EVOLUTION_ENABLED=true",
+    "OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED=true",
+    "OPEN_SCIENCE_EVIDENCE_RECALCULATION_CARDS_ENABLED=true",
+    "OPEN_SCIENCE_PREDICTION_REGISTRY_ENABLED=true",
+    "OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED=true"
+   ]
+  },
+  {
+   "releaseId": "evimed-2d90906faf6b-1",
+   "liveAt": "2026-10-07T10:39Z",
+   "carries": [
+    "3f6f58799 light lanes independent of the heavy lane",
+    "1bc1d8ae2 module proposal facts written by code",
+    "d46a7d86b page-walk findings"
+   ],
+   "acceptance": "readiness 30/30, UI walk 54 pages 0 failures, deployment smoke passed"
+  }
+ ],
+ "wholeScientificPlanAccepted": false,
+ "liveDefectsFixedBeforeAcceptanceCouldRun": [
+  {
+   "commit": "a5e9fd434",
+   "defect": "the web image lacked evals/frontier-editing, autopilot-next-action and geo-judge-cards cases.json; every frontier, geo and autopilot mission would have stopped on ENOENT"
+  },
+  {
+   "commit": "c53a4f99a+4a8804cc4",
+   "defect": "the confirmation curator re-read the first 100 feed entries after the freeze on every wake; a 30-item cohort could not fill. Now a cursor, a feed-date prefilter and read-until-full"
+  },
+  {
+   "commit": "c53a4f99a",
+   "defect": "the environment epoch hashed the platform source revision: every release rolled back an interleaved policy trial (item 3). Now model + provider + kernel"
+  },
+  {
+   "commit": "c53a4f99a",
+   "defect": "weekly self-research read the oldest medical entries, not the AI discovery channel"
+  },
+  {
+   "commit": "3f6f58799",
+   "defect": "the two light lanes waited for every heavy job; module missions queued behind a tool mission (observed live)"
+  },
+  {
+   "commit": "1bc1d8ae2",
+   "defect": "module proposals had to carry rollbackVersion and failureReproduced from the model; no code set failureReproduced, so a repair mission could never pass (observed live: five-screen-repairs-exhausted)"
+  }
+ ],
+ "items": [
+  {
+   "id": 1,
+   "requirement": "Actual post-freeze public confirmation cohorts at the required per-module size; old corpus and generated checks are not substituted for new scientific evidence.",
+   "status": "running",
+   "howItConcludes": "a module candidate freezes after its development smoke; the curator adds only papers whose earliest exact public date is after the freeze, each extracted and independently reviewed (Qwen); minimums frontier 30, geo 30, autopilot 20, runtime 10, tools 2 hidden + 1 fresh published case; then a paired first-attempt evaluation and a verdict",
+   "observed": "geo and autopilot baseline audits completed on development tasks (4 and 9); the first frontier mission (a repair of a recorded edit-verification failure) was rejected at the proposal-metadata stage, a defect fixed in 1bc1d8ae2; no candidate frozen yet. The plan gives a module one mission per opportunity per week, so the next frontier research mission is created by the plan of the week of 2026-10-12",
+   "earliest": "a frontier freeze in the week of 2026-10-12; papers dated the day after the freeze are the first that count, and with 500-1,500 fresh DOI entries a day a cohort of 30 is expected 2-5 days later"
+  },
+  {
+   "id": 2,
+   "requirement": "The plan's live growth-chain and cross-module transfer/pruning outcomes, including denominator preservation promoted in two modules and nonregression in a third.",
+   "status": "running",
+   "howItConcludes": "growth chains (paper to capability, demand and data to resumed research, success to a new opportunity) run from the worker; transfer needs promotions in two modules and an audit-only verdict within the noise band in a third (frontier, geo, autopilot or tools; runtime, sources, evidence and memory go through reviewed engine PRs and never produce a verdict); pruning runs monthly and needs four observations",
+   "observed": "paper-to-capability chain started: scout dossiers for a trial fragility calculator wait for resources",
+   "earliest": "promotions need item 1 first; monthly pruning first evaluates on 2026-11-01"
+  },
+  {
+   "id": 3,
+   "requirement": "A policy proposal supported by independent prior-quarter history, followed by an actual calendar month of interleaved missions and a data-based adoption or rollback decision.",
+   "status": "scheduled",
+   "howItConcludes": "monthly meta loop: proposal on the first tick of a month, replay on replay-independent missions of the three prior months, trial in the following calendar month split by mission hash, adoption or rollback at its end",
+   "observed": "evolution-policy-trial-2026-10 recorded as replay_pending on 2026-10-07 (no replay-independent missions before the month); a release no longer changes the environment epoch",
+   "earliest": "proposal 2026-11-01 on October's history, trial through December 2026, decision 2027-01-01"
+  },
+  {
+   "id": 4,
+   "requirement": "Prospective published outcomes, monthly longitudinal progress and quarterly unseen audit rotation after team merge and ordinary deployment.",
+   "status": "scheduled",
+   "howItConcludes": "prediction registry scores a registration when its trial publishes; monthly metrics record on the first of each month; the audit pool rotates per quarter from tasks first public after the quarter boundary",
+   "observed": "merged to main and deployed 2026-10-07; prediction registry on; evolution-monthly-metrics-2026-09 and evolution-heldout-audit-2026-09 recorded (empty months); the 2026-Q4 audit pool is waiting for audit tasks",
+   "earliest": "first monthly metrics 2026-11-01; Q4 audit pool as soon as audit tasks curated from papers after 2026-10-01 exist; prospective outcomes when registered trials publish (months)"
+  }
+ ],
+ "alsoLive": {
+  "jevJudge": "PR #9 merged; J4 (backstage-prose notice after delivery) settled 252 calls for CNY 0.03 on its first afternoon; J2 has no Feishu traffic on this host",
+  "toolProbe": "45 of 53 tools execution-certified live on evimed-23be13a63176-1 (six specialists without a receipt on the rebuilt engines, USGS water 403 from this host, research_calculate needs an owned calculation)"
+ }
+}
