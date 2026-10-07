@@ -530,6 +530,33 @@ test("CS-7 every route in the ability table is driven as every role, and 403 fal
   assert.ok(asserted >= (VCR_MEMBER_ROLES.length + 1) * Object.keys(VCR_ROUTE_ABILITIES).length, "the walk covered the whole grid");
 });
 
+test("a computation queued from the page names the object it is for: the id is checked against the study's objects and rides the job; a bad id is refused", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  /** @type {any[]} */
+  const noted = [];
+  const store = {
+    async trialScenarios() { return [{ id: "scn_1", version: 2, label: "B 1:1", design: "two_arm_fixed", endpointType: "time_to_event", configuration: { design: { nTreat: 90, nControl: 90 } } }]; },
+    async populations() { return []; }, async patientSets() { return []; }, async comparatorDesigns() { return []; }, async latestDesignGrid() { return null; },
+  };
+  const overrides = { ...composedHooks(),
+    jobs: { store, enqueue: async (/** @type {any} */ input) => { queued.push(input); return { job: { id: "job_1" }, created: true }; }, get: async () => null, listForStudy: async () => [], budgetOf: async () => ({}), cancel: async () => ({}), confirmBudget: async () => ({}) },
+    orchestrator: { runStep: async () => ({}), recomputeAfterChange: async () => ({}), noteRuntimeJob: async (/** @type {any} */ _study, /** @type {any} */ subject) => { noted.push(subject.node); } } };
+  const { routes } = fixture({ overrides });
+  const ok = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/jobs", { kind: "design_simulation", subjectId: "scn_1", scenario: { design: { kind: "two_arm_fixed" } } }), ok);
+  assert.equal(ok.status, 201);
+  assert.deepEqual([queued[0].detail.subjectId, queued[0].detail.resultKind, queued[0].detail.stage, queued[0].detail.origin], ["scn_1", "trial_scenario", "simulation", "page"]);
+  assert.deepEqual(noted, ["trial_scenario:scn_1@2"], "the programme is told the stage is taken");
+  // a design that is not the study's, and one that fits nothing, are refused by name before anything is queued
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/jobs", { kind: "design_simulation", subjectId: "scn_other", scenario: {} }), response()),
+    { status: 400, code: "vcr_simulate_subject_unknown" });
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/jobs", { kind: "design_simulation", scenario: { design: { kind: "single_arm" } } }), response()),
+    { status: 400, code: "vcr_simulate_subject_required" });
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/jobs", { kind: "design_simulation", subjectId: "../x", scenario: {} }), response()), { status: 400, code: "vcr_job_scenario_invalid" });
+  assert.equal(queued.length, 1);
+});
+
 test("a site reads no page of the study: its referrals are its own, and the study list does not name it", async () => {
   const { routes, as } = fixture({ roles: { siteuser: ["site"] }, overrides: composedHooks() });
   as("siteuser");

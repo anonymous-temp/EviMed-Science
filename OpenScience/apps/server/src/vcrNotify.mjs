@@ -220,10 +220,10 @@ export function createVcrNotifier({ notifications, store, config = {}, now = () 
      */
     notEstimable(study, { resultId, rule = null, what = "对照分析", gaps = [] }) {
       const reason = rule ? /** @type {Record<string, string>} */ (VCR_NOT_ESTIMABLE_RULE_LABELS_ZH)[rule] ?? rule : null;
-      const list = gaps.length ? `缺：${gaps.slice(0, 3).map((gap) => clip(gap, 20)).join("、")}。` : "";
+      const missing = gaps.length ? `缺：${gaps.slice(0, 3).map((gap) => clip(gap, 20)).join("、")}。` : "";
       return send(study, "not_estimable", {
         title: `${vcrStudyName(study)}：${what}判定为不可估计`,
-        body: `${reason ? `${clip(reason, 90)}。` : ""}${list}结果和缺口清单都在研究页上，其余步骤照常。`,
+        body: `${reason ? `${clip(reason, 90)}。` : ""}${missing}结果和缺口清单都在研究页上，其余步骤照常。`,
         severity: "attention", source: source(String(study.id), "comparator"),
         idempotencyKey: `vcr:${study.id}:not-estimable:${resultId}`,
       });

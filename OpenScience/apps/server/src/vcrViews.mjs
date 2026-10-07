@@ -899,15 +899,15 @@ export function presentDesigns(bundle) {
   // The result a design is read through: the simulation's (it carries the counts, the power curve and the run), else the
   // analytic stage's, else whatever the design's row points at — with the measures of every stage, the simulation's first.
   const resultOf = (/** @type {any} */ scenario) => {
-    const { stages, latest } = /** @type {ReturnType<typeof designStages>} */ (staged.get(scenario.id));
-    const main = stages.simulation?.result ?? stages.analytic?.result ?? stages.assurance?.result ?? latest;
+    const { stages, latest: newest } = /** @type {ReturnType<typeof designStages>} */ (staged.get(scenario.id));
+    const main = stages.simulation?.result ?? stages.analytic?.result ?? stages.assurance?.result ?? newest;
     if (!main) return null;
     /** @type {Map<string, any>} */
     const byName = new Map();
     for (const name of ["analytic", "simulation", "assurance"]) {
       for (const measure of stages[name]?.measures ?? []) byName.set(String(object(measure).name), measure);
     }
-    return { ...main, measures: [...byName.values()] };
+    return /** @type {Record<string, any>} */ ({ ...main, measures: [...byName.values()] });
   };
   const dominated = grid?.comparisonGoal ? dominatedOf(ordered, resultOf, grid.comparisonGoal) : new Map();
   const decision = decisions[0] ?? null;

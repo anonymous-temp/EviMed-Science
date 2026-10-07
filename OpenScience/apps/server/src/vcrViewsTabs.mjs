@@ -983,6 +983,7 @@ function forecastView(forecast, now) {
   const actual = forecast.actual == null ? null : object(forecast.actual);
   /** @type {Array<{ key: string, label: string, predicted: string, actual: string | null }>} */
   const lines = [];
+  /** @type {Array<[string, Record<string, any>]>} */
   const measures = Array.isArray(prediction.measures)
     ? prediction.measures.map(object).map((entry) => [String(entry.name ?? ""), entry])
     : Object.entries(object(prediction.measures)).map(([name, entry]) => [name, object(entry)]);

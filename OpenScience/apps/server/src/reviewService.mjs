@@ -292,6 +292,7 @@ export class ReviewService {
    *   agentRegistry?: Promise<any> | any, attributeRun?: (input: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
    *   notifications?: any, imService?: any, webReader?: any, fetchImpl?: typeof fetch, referenceResolver?: any,
    *   report?: (code: string, detail?: string) => void, now?: () => Date, retryDelayMs?: number, evolutionSignals?:any,
+   *   vcrFacts?: ((identity: { userId: string, projectId: string }) => Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>) | null,
    * }} deps
    */
   constructor({ config, database, jobs = null, usageLedger = null, judgeService = null, runtimeManager = null, store, agentRegistry = null, attributeRun = async () => null,

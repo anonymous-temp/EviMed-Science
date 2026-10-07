@@ -824,6 +824,37 @@ test("R10 the backfill gives the results the old path left without a subject the
   assert.ok(!everyStudy.studies.some((entry) => entry.studyId === study.id), "and the study is no longer one with results left to give a subject");
 });
 
+test("R10 a computation of a step the researcher asked for with 「让 AI 做」 ends in one notice when the design's last stage lands; the programme's own recomputation after a change tells nobody", options, async () => {
+  const module = compose();
+  const study = await makeStudy("asked");
+  const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+    study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+  await write("definition", definition);
+  await write("assumption", [
+    { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" },
+  ]);
+  // The researcher asks for the trial step: the page stamps when, and the programme's jobs for it are theirs.
+  await module.orchestrator.runStep({ id: study.userId }, study, "trial");
+  assert.ok((await store.studyById(study.id)).steps.trial.askedAt, "the click is remembered");
+  assert.equal(JSON.stringify(await module.service.studyView({ id: study.userId }, study.id)).includes("askedAt"), false, "and never shown on the page");
+  await write("trial_scenario", trialA);
+  await module.orchestrator.advance(study.id);
+  await drainJobs(module, study);
+  const first = notices_of(module);
+  assert.equal(first.length, 1, `one notice for the design, not one per stage: ${first.map((notice) => notice.title).join(" | ")}`);
+  assert.match(first[0].title, /^方案(模拟|计算)完成/);
+  assert.equal(first[0].source.id, `${study.id}/trial`);
+
+  // A changed assumption recomputes the design: the programme's own work, which tells nobody.
+  const before = notices_of(module).length;
+  await write("assumption", [{ key: "dropout_rate", name: "脱落率", pointValue: 0.15, sourceKind: "expert_set", valueSource: "assumed" }]);
+  await drainJobs(module, study);
+  assert.equal((await store.jobs(study.id)).filter((job) => job.kind === "design_simulation").length, 2, "it was recomputed");
+  assert.equal(notices_of(module).length, before, "and nobody was told");
+});
+
 test("AC-33 everything the run set carries the AI-set label until a person countersigns it", options, async () => {
   const module = compose();
   const study = await makeStudy("aiset");
