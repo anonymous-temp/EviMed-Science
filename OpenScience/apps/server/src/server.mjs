@@ -113,7 +113,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, VCR_CAPABILITIES, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -2840,6 +2840,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let review = null;
   if (config.reviewEnabled && productDatabase) {
     const service = new ReviewService({ evolutionSignals,
+      // A 虚拟临研 study's conversation is held against the numbers its engine computed (vcrReplyCheck.mjs).
+      vcrFacts: vcr?.service ? (identity) => vcr.service.replyCheckFacts(identity) : null,
       config, database: productDatabase, jobs: productJobs, usageLedger, judgeService, runtimeManager, store, agentRegistry,
       attributeRun: (input) => attributeRun(input),
       notifications: notificationService,
@@ -3430,7 +3432,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         void (async () => {
           const stored = await readRunTranscript(project, run.id);
           const reply = stored ? replyOfRun(stored.messages.filter((/** @type {any} */ message) => message.sessionId === run.sessionId), run) : null;
-          if (reply) await review.service.considerReply({ userId: project.userId, projectId: project.id }, run, reply);
+          // A reply in a 虚拟临研 study's own conversation is also held against the study's computed numbers.
+          const study = reply && VCR_CAPABILITIES.includes(agentId) ? await vcr?.store?.studyByControlProject?.(project.userId, project.id).catch(() => null) : null;
+          if (reply) await review.service.considerReply({ userId: project.userId, projectId: project.id }, run, reply, { studyId: study?.id ?? null });
         })().catch((error) => process.stderr.write(`review reply check not queued: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`));
       }
       // Queue the lessons this run is evidence for — a finished delivery, a

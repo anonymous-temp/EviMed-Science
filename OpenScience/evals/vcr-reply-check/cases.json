@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "harness": "vcr-reply-check",
+  "about": "Labelled sentences of a 虚拟临研 conversation reply for the reply check's numbers (apps/server/src/vcrReplyCheck.mjs). `claims` is the label of the language judgement the reviewer model makes — the numbers the sentence gives as something the platform computed, written as in the sentence; code then re-verifies and looks each up in `study`. `expect` is the verdict of the code half given the labelled claims, and is held by apps/server/test/vcrReplyCheckCases.test.mjs on every run. The model half is measured by putting each `sentence` to the reviewer with the production prompt and comparing its claims with `claims`; run it before changing the prompt or the model, never in CI.",
+  "study": {
+    "note": "The study every case reads: three designs' engine results (required events, simulated power with its Monte-Carlo error), the settings the researcher gave (hazard ratio 0.7, alpha 0.025) and 5,000 replicates.",
+    "results": [
+      { "measures": [{ "name": "required_events", "value": 950 }, { "name": "required_total", "value": 13764 }, { "name": "power", "value": 0.898, "mcse": 0.004 }], "counts": { "generatedRecords": 1000 }, "diagnostics": {} },
+      { "measures": [{ "name": "required_events", "value": 845 }, { "name": "required_total", "value": 11799 }, { "name": "power", "value": 0.915, "mcse": 0.004 }], "counts": {}, "diagnostics": {} },
+      { "measures": [{ "name": "required_events", "value": 847 }, { "name": "power", "value": 0.905, "mcse": 0.004 }, { "name": "boundary_1", "value": 2.963 }], "counts": {}, "diagnostics": {} }
+    ],
+    "inputs": [[{ "point": 0.7 }, { "point": 0.025 }]],
+    "executions": [{ "replicates": 5000 }]
+  },
+  "cases": [
+    { "id": "events-and-patients", "sentence": "1:1 固定设计需要 845 例事件，约 11,800 名患者。", "claims": ["845", "11,800"], "expect": "found" },
+    { "id": "power-with-error", "sentence": "模拟功效 91.5%，蒙特卡洛标准误 ±0.4%。", "claims": ["91.5%", "0.4%"], "expect": "found" },
+    { "id": "rounded-power", "sentence": "三个方案的功效都在 90% 左右。", "claims": ["90%"], "expect": "found" },
+    { "id": "difference-of-designs", "sentence": "2:1 分配比 1:1 多 105 例事件。", "claims": ["105"], "expect": "found" },
+    { "id": "boundary", "sentence": "第一次期中分析的界值是 z = 2.96。", "claims": ["2.96"], "expect": "found" },
+    { "id": "retyped-events", "sentence": "1:1 固定设计需要 850 例事件。", "claims": ["850"], "expect": "not_found", "why": "845 computed; 850 is not 845 to the unit it is printed in" },
+    { "id": "invented-power", "sentence": "按这个设定，功效大约是 93.1%。", "claims": ["93.1%"], "expect": "not_found" },
+    { "id": "invented-patients", "sentence": "总共需要约 12,500 名患者。", "claims": ["12,500"], "expect": "not_found" },
+    { "id": "setting-restated", "sentence": "在 HR 0.7、单侧 α 0.025 的设定下，需要 845 例事件。", "claims": ["845"], "expect": "found", "why": "0.7 and 0.025 are settings the model was not asked to list; 845 is computed" },
+    { "id": "replicates", "sentence": "每个方案模拟了 5,000 次。", "claims": ["5,000"], "expect": "found" },
+    { "id": "year-and-ordinal", "sentence": "按 2026 年的指南，第 3 个方案更稳妥。", "claims": [], "expect": "nothing", "why": "a year and an ordinal are not results" },
+    { "id": "no-claim", "sentence": "你想先看哪个方案？", "claims": [], "expect": "nothing" }
+  ]
+}

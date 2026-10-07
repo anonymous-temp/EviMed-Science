@@ -78,6 +78,7 @@ import {
 import { callReviewModel, reviewModelApiKey, ReviewModelError } from "./reviewModel.mjs";
 import { JEV_RETRY_DELAY_MS, callJev } from "./jevModel.mjs";
 import { judgeCitedSentences } from "./replyCheckJev.mjs";
+import { VCR_REPLY_SCHEMA, acceptReplyClaims, replyNumberSentences, studyNumbers, vcrReplyMessage, vcrReplySystemPrompt, vcrReplyVerdicts } from "./vcrReplyCheck.mjs";
 import { StudyReviews, assertStudyReviewConfiguration, studyReviewConfiguration, studyReviewDigest } from "./studyReview.mjs";
 import { ProductJobs } from "./productJobs.mjs";
 import { migrateReview } from "./reviewPersistence.mjs";
@@ -295,8 +296,14 @@ export class ReviewService {
    */
   constructor({ config, database, jobs = null, usageLedger = null, judgeService = null, runtimeManager = null, store, agentRegistry = null, attributeRun = async () => null,
     notifications = null, imService = null, webReader = null, fetchImpl = globalThis.fetch, referenceResolver = null, report = () => {}, now = () => new Date(),
-    retryDelayMs = EDITOR_RETRY_DELAY_MS, evolutionSignals = null }) {
+    retryDelayMs = EDITOR_RETRY_DELAY_MS, evolutionSignals = null, vcrFacts = null }) {
     this.config = config;
+    /**
+     * What a 虚拟临研 study's conversation is checked against: `(userId, projectId) → { studyId, results, inputs, executions } | null`
+     * (`VcrService.replyCheckFacts`). Null where the module is not composed, and the check is not made.
+     * @type {((identity: { userId: string, projectId: string }) => Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>) | null}
+     */
+    this.vcrFacts = vcrFacts;
     this.evolutionSignals = evolutionSignals;
     this.retryDelayMs = retryDelayMs;
     this.database = database;
@@ -905,17 +912,19 @@ export class ReviewService {
    * @param {{ id: string, sessionId?: string }} run
    * @param {{ replyText: string, question?: string, turnSeq?: number | null }} reply
    */
-  async considerReply(identity, run, { replyText, question = "", turnSeq = null }) {
+  async considerReply(identity, run, { replyText, question = "", turnSeq = null }, { studyId = null } = {}) {
     if (!this.enabled || this.config.reviewRepliesEnabled === false) return null;
     const tier = replyReviewTier(replyText);
-    if (tier.tier !== "L1") return null;
+    // A reply in a 虚拟临研 study's conversation that states a number is checked against the study's results even when it cites nothing.
+    const numbers = Boolean(studyId && this.vcrFacts && replyNumberSentences(replyText).length);
+    if (tier.tier !== "L1" && !numbers) return null;
     await migrateReview(this.database);
     const id = newId("rc_");
     const inserted = await this.database.query(`INSERT INTO evimed_review.reply_checks
-      (id,user_id,project_id,run_id,session_id,turn_seq,status,reply_text,question,medicines)
-      VALUES ($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9) ON CONFLICT (user_id, project_id, run_id) DO NOTHING RETURNING id`,
+      (id,user_id,project_id,run_id,session_id,turn_seq,status,reply_text,question,medicines,study_id)
+      VALUES ($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,$10) ON CONFLICT (user_id, project_id, run_id) DO NOTHING RETURNING id`,
     [id, identity.userId, identity.projectId, run.id, String(run.sessionId ?? ""), Number.isSafeInteger(turnSeq) ? turnSeq : null,
-      clip(replyText, 60_000), clip(question, 4_000), tier.medicines.slice(0, 20)]);
+      clip(replyText, 60_000), clip(question, 4_000), tier.medicines.slice(0, 20), numbers ? String(studyId) : null]);
     return inserted.rows[0]?.id ?? null;
   }
 
@@ -993,6 +1002,13 @@ export class ReviewService {
       cost = judged.cost;
       model = judged.models.join("+") || null;
     }
+    // The numbers the reply reports as computed, held against the study's own results (a notice, never a stop: no judgement is no verdict).
+    if (row.study_id && this.vcrFacts) {
+      const held = await this.#checkVcrNumbers(row);
+      verdicts = [...verdicts, ...held.verdicts].sort((left, right) => left.sentence - right.sentence);
+      cost += held.cost;
+      if (held.model) model = [model, held.model].filter(Boolean).join("+");
+    }
     const counts = { ...replyCheckCounts(verdicts), cautions: cautions.length };
     for (const verdict of verdicts) this.counts.replyVerdicts[verdict.verdict] = (this.counts.replyVerdicts[verdict.verdict] ?? 0) + 1;
     this.counts.replyChecks += 1;
@@ -1001,6 +1017,29 @@ export class ReviewService {
     [row.id, JSON.stringify(sentences.map((sentence) => ({ index: sentence.index, numbers: sentence.numbers }))), JSON.stringify(verdicts),
       JSON.stringify(cautions), JSON.stringify(counts), model, cost]);
     if (counts.contradictedSafety > 0 && !row.notified) await this.#alertSafety(row, verdicts.filter((verdict) => verdict.safety === "contradicted"));
+  }
+
+  /**
+   * The numbers a 虚拟临研 reply reports as computed, against the study's engine results (`vcrReplyCheck.mjs`): the reviewer says which
+   * numbers of which sentences the reply gives as results, code re-reads that they are written there and looks each up within rounding.
+   * A reviewer that fails fails the check, which is tried again — never a verdict the reply did not earn.
+   * @param {Record<string, any>} row @returns {Promise<{ verdicts: any[], cost: number, model: string | null }>}
+   */
+  async #checkVcrNumbers(row) {
+    const sentences = replyNumberSentences(row.reply_text);
+    if (!sentences.length) return { verdicts: [], cost: 0, model: null };
+    const facts = await this.vcrFacts?.({ userId: row.user_id, projectId: row.project_id });
+    if (!facts || facts.studyId !== row.study_id) return { verdicts: [], cost: 0, model: null };
+    const ledger = { config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl };
+    const answer = await callReviewModel(ledger, {
+      userId: row.user_id, projectId: row.project_id, runId: row.run_id,
+      messages: [{ role: "system", content: vcrReplySystemPrompt() }, { role: "user", content: vcrReplyMessage(sentences) }],
+      schema: VCR_REPLY_SCHEMA, schemaName: "vcr_reply_numbers", thinking: { enabled: false }, maxTokens: 2_000,
+      timeoutMs: Number(this.config.reviewReplyTimeoutMs ?? 90_000),
+    });
+    const claims = acceptReplyClaims(answer.value, sentences);
+    const verdicts = vcrReplyVerdicts({ claims, candidates: studyNumbers(facts) });
+    return { verdicts, cost: Number(answer.cost) || 0, model: answer.model ?? null };
   }
 
   /**

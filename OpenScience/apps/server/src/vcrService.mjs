@@ -437,6 +437,31 @@ export class VcrService {
   ready() { return this.store.ready(); }
 
   /**
+   * What a study's conversation is checked against (`vcrReplyCheck.mjs`): every result the engine wrote for it — superseded ones too, a
+   * reply may restate a number that has since been recomputed and was true when it was said — and what the study was set to
+   * (the assumption cards and the objects' own settings), and what each job ran. The study is the one whose conversation this project is.
+   * @param {{ userId: string, projectId: string }} identity
+   * @returns {Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>}
+   */
+  async replyCheckFacts({ userId, projectId }) {
+    const study = await this.store.studyByControlProject(String(userId), String(projectId));
+    if (!study) return null;
+    const [results, assumptions, scenarios, populations, patientSets, comparators, grid, executions] = await Promise.all([
+      this.store.allResults(study.id), this.store.assumptions(study.id), this.store.trialScenarios(study.id, 100), this.store.populations(study.id, 50),
+      this.store.patientSets(study.id, 50), this.store.comparatorDesigns(study.id, 50), this.store.latestDesignGrid(study.id), this.#executions(study.id),
+    ]);
+    return {
+      studyId: study.id, results,
+      inputs: [
+        assumptions.map((card) => ({ point: card.pointValue, distribution: card.distribution, sensitivity: card.sensitivity, pooling: card.pooling })),
+        scenarios.map((row) => row.configuration), populations.map((row) => row.definition), patientSets.map((row) => row.scenario),
+        comparators.map((row) => row.configuration), grid ? [grid.dimensions, grid.truthScenarios] : [],
+      ],
+      executions: [...executions.values()],
+    };
+  }
+
+  /**
    * What a page says about the statistics engine, from the one reading readiness reports (`vcrEngineProbe.mjs`): `missing` (no engine
    * is composed here), `wired` (composed, nobody has asked it yet), `answering`, `not_answering`. `available` is false for the first and
    * the last — the computations that need it wait or say so — and a study page puts one line at its top instead of letting the first
