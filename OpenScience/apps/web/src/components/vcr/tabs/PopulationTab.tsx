@@ -20,6 +20,9 @@ import { VcrDefinitionsSection } from "../VcrKnowledge";
 import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
 import { countText, numberText } from "../vcrText";
 
+/** What a population generated before the engine described its own tables says — one line, and the way to get a profile. */
+const PROFILE_MISSING_SENTENCE = "这个人群生成时还没有画像：点“重新生成”，按同样的设定再生成一次，就能看到每个变量的分布。";
+
 /**
  * 人群: what the study means by "these patients", how many survive each rule,
  * and how the survivors compare with the comparator's population.
@@ -238,42 +241,53 @@ function GeneratedProfile({ data }: { data: PopulationData }) {
     ...data.constraints.map((constraint) => `约束“${constraint.label}”${constraint.violations === 0 ? "没有记录违反" : `有 ${numberText(constraint.violations, 0)} 条记录违反`}。`),
   ].join("");
   const uses = data.allowedUses.map((use) => use.label);
+  const profiled = data.generated.length > 0;
+  // Two small cards side by side when there is no table beside them (the table takes the wide column when there is one).
+  const sides = (
+    <>
+      <Card title="怎么生成的"><p className="text-ui text-text-2">{how}</p></Card>
+      <Card title="能用来做什么">
+        <p className="text-ui text-text-2">
+          {uses.length > 0 ? `可用于${uses.join("、")}。` : ""}它不是真实患者，不能当作外部对照或疗效证据。
+        </p>
+      </Card>
+    </>
+  );
+  if (!profiled) {
+    // A card whose whole content is one sentence is a title-less empty box stretched to the height of its neighbours: the sentence is a
+    // line under the header (the 重新生成 it names is the header's own button), and the two cards that remain sit side by side.
+    return (
+      <div className="flex flex-col gap-4">
+        <p
+          data-vcr-profile-missing=""
+          role="status"
+          className="rounded bg-surface-2 px-3 py-2 text-ui text-text-2"
+        >
+          {data.profileNote ?? PROFILE_MISSING_SENTENCE}
+        </p>
+        <div className="grid gap-4 lg:grid-cols-2">{sides}</div>
+      </div>
+    );
+  }
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-      {data.generated.length > 0
-        ? (
-          <Card>
-            <table data-vcr-generated="" className="w-full border-collapse text-ui">
-              <caption className="sr-only">每个变量设定的分布和生成的结果</caption>
-              <thead>
-                <tr className="border-b border-border text-caption text-text-3">
-                  <th scope="col" className="py-2 pr-3 text-left font-normal">变量</th>
-                  <th scope="col" className="px-3 py-2 text-left font-normal">设定的分布</th>
-                  <th scope="col" className="px-3 py-2 text-right font-normal">生成结果</th>
-                  <th scope="col" className="py-2 pl-3 text-right font-normal">分布</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.generated.map((row) => <GeneratedRow key={row.key} row={row} />)}
-              </tbody>
-            </table>
-          </Card>
-        )
-        : (
-          <Card>
-            <p data-vcr-profile-missing="" className="py-4 text-ui text-text-2">
-              {data.profileNote ?? "这个人群还没有画像：重新生成一次，就能看到每个变量的分布。"}
-            </p>
-          </Card>
-        )}
-      <div className="flex flex-col gap-4">
-        <Card title="怎么生成的"><p className="text-ui text-text-2">{how}</p></Card>
-        <Card title="能用来做什么">
-          <p className="text-ui text-text-2">
-            {uses.length > 0 ? `可用于${uses.join("、")}。` : ""}它不是真实患者，不能当作外部对照或疗效证据。
-          </p>
-        </Card>
-      </div>
+      <Card>
+        <table data-vcr-generated="" className="w-full border-collapse text-ui">
+          <caption className="sr-only">每个变量设定的分布和生成的结果</caption>
+          <thead>
+            <tr className="border-b border-border text-caption text-text-3">
+              <th scope="col" className="py-2 pr-3 text-left font-normal">变量</th>
+              <th scope="col" className="px-3 py-2 text-left font-normal">设定的分布</th>
+              <th scope="col" className="px-3 py-2 text-right font-normal">生成结果</th>
+              <th scope="col" className="py-2 pl-3 text-right font-normal">分布</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.generated.map((row) => <GeneratedRow key={row.key} row={row} />)}
+          </tbody>
+        </table>
+      </Card>
+      <div className="flex flex-col gap-4">{sides}</div>
     </div>
   );
 }

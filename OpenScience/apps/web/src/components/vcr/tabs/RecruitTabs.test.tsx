@@ -336,6 +336,44 @@ describe("匹配与招募 — what a rule says about a person", () => {
   });
 });
 
+describe("匹配与招募 — before anything has been judged", () => {
+  const T0_SENTENCE = "这项研究现在只有公开资料（T0），没有可以匹配的真实患者。让 AI 做会把入排条件整理成逐条可判定的标准；接入你的数据（T1 及以上）后才能逐个匹配、转诊和随访。";
+  const emptyPage = () => ({ view: "matching", available: true, direction: "trial_to_patient", funnel: [], candidates: [], selected: null, gaps: [], counts: null,
+    forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
+  const idle = (raw: any) => { raw.steps.matching = { status: "none", requested: false }; };
+
+  it("at T0 is the one sentence and one button — no export, no four views over it — and the sentence says there is nobody to match", async () => {
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: emptyPage() });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
+    expect(await screen.findByText(T0_SENTENCE)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "让 AI 做" })).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "匹配与招募的视图" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /导出纠正案例/ })).toBeNull();
+    expect(screen.queryByText(/每个人是否符合/)).toBeNull();
+  });
+
+  it("above T0 keeps the step's own sentence — there are people to judge", async () => {
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: emptyPage() });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study((raw) => { idle(raw); raw.tier = "T1"; })} />);
+    expect(await screen.findByText("还没有匹配评估：逐条判定每个人是否符合入排条件，并给出补证建议。")).toBeInTheDocument();
+    expect(screen.queryByText(T0_SENTENCE)).toBeNull();
+    expect(screen.getByRole("button", { name: "让 AI 做" })).toBeInTheDocument();
+  });
+
+  it("keeps the switch of views for a reader who chose a view that came back empty — the way back to the matching one", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => (query.get("view") === "sites" ? emptyPage() : fixture("ev201/matching.json")),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("radio", { name: "中心" }));
+    await screen.findByRole("button", { name: "让 AI 做" });
+    const views = screen.getByRole("radiogroup", { name: "匹配与招募的视图" });
+    await userEvent.click(within(views).getByRole("radio", { name: "匹配" }));
+    expect(await screen.findByRole("heading", { name: "P-0201" })).toBeInTheDocument();
+  });
+});
+
 /** The page contract's two ids: the assessment the panel is about, and each rule's own id. */
 function addressed(payload: any) {
   payload.selected.assessmentId = "asm_192";

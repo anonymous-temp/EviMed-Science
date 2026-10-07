@@ -25,6 +25,17 @@ import { useOpenVcrConversation } from "../useOpenVcrConversation";
 import { useVcrLoad, VcrHeadline, VcrTabError } from "../vcrTabKit";
 import { intervalText, mcseText, numberText, valueText } from "../vcrText";
 
+/**
+ * Whether a design has been computed: it holds a number of a result. A design with only its configured sample size (or its cost) has
+ * been written, not run — the rule `designsSentence` applies on the server — and is neither compared nor chosen on that.
+ */
+export const designRan = (design: Pick<VcrDesign, "measures" | "dominated">): boolean =>
+  // A dominated design was computed — dominance is decided on its numbers — and the server sends none for it (it prints one sentence instead).
+  design.dominated === true || Object.keys(design.measures ?? {}).some((key) => key !== "sample_size" && key !== "cost");
+
+/** What a design that has not been computed says where its numbers would be. */
+const NOT_RUN = "还没算";
+
 /** What the decision card says under its button, when the server does not say it itself. */
 const NO_AUTO_PICK = "平台不自动选定方案。";
 
@@ -77,6 +88,9 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
       : <VcrStepPending studyId={studyId} study={study} step="trial" />;
   }
   const chosenCodes = data.designs.filter((design) => design.chosen).map((design) => design.code);
+  // Designs written and not computed (a conversation wrote the scenarios and the engine has not finished) are a list with a word, not a
+  // comparison: a table of names and the choice of one of them is a form without the basis for the choice.
+  const noneRan = !data.designs.some(designRan);
   const canWrite = study.abilities.includes("write");
   const decided = Boolean(data.decision?.chosen);
   // 「登记预测」 is the lead's (and only where the deployment has a registry); a reader who may not file still opens what has been filed.
@@ -100,7 +114,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
         : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "trial" }} />}
 
       {/* The sentence is dimmed with the numbers it states while they are stale; the three things a reader does about it are not. */}
-      <section data-vcr-conclusion="" className="rounded-card border border-border bg-surface p-5">
+      {(data.headline || canWrite || ((!noneRan && canFile) || hasForecasts)) && <section data-vcr-conclusion="" className="rounded-card border border-border bg-surface p-5">
         <div className={cn(data.stale && "text-text-2 opacity-disabled")}>
           {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
           {decided && data.decision?.recordedAt && (
@@ -109,23 +123,25 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
             </p>
           )}
         </div>
-        {(canWrite || canFile || hasForecasts) && (
+        {(canWrite || (!noneRan && canFile) || hasForecasts) && (
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {canWrite && (
               <>
-                <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>
-                <Button variant="text" onClick={() => draft(VCR_ADD_DESIGN_DRAFT)}>加一个方案</Button>
+                {!noneRan && <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>}
+                <Button variant={noneRan ? "secondary" : "text"} onClick={() => draft(VCR_ADD_DESIGN_DRAFT)}>加一个方案</Button>
                 <Button variant="text" onClick={() => draft(VCR_CHANGE_ASSUMPTION_DRAFT)}>改假设</Button>
               </>
             )}
-            {(canFile || hasForecasts) && <Button variant="secondary" onClick={() => setRegistering(true)}>登记预测</Button>}
+            {((!noneRan && canFile) || hasForecasts) && <Button variant="secondary" onClick={() => setRegistering(true)}>登记预测</Button>}
           </div>
         )}
-      </section>
+      </section>}
+
+      {noneRan && <NotComputedDesigns designs={data.designs} studyId={studyId} study={study} failed={failed} />}
 
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">
-          {data.designs.length > 0 && (
+          {!noneRan && (
             <div>
               <DataTable
                 label="方案的对比"
@@ -293,6 +309,29 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
   );
 }
 
+/**
+ * The designs a conversation wrote that nothing has computed: each with 「还没算」, and under them what is happening to that — being
+ * done now, did not finish, or waiting for 让 AI 做. No table, no metric column and no choice: there is nothing to compare yet.
+ */
+function NotComputedDesigns({ designs, studyId, study, failed }: { designs: readonly VcrDesign[]; studyId: string; study: VcrStudy; failed: boolean }) {
+  if (designs.length === 0) return null;
+  return (
+    <div data-vcr-not-computed="">
+      <ul className="divide-y divide-faint">
+        {designs.map((design) => (
+          <li key={design.id} data-vcr-design={design.code} className="flex items-center gap-2 py-2.5">
+            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag bg-surface-2 text-meta font-semibold text-text-2">{design.code}</span>
+            <span className="min-w-0 flex-1 text-ui text-text">{design.name}</span>
+            <Tag>{NOT_RUN}</Tag>
+          </li>
+        ))}
+      </ul>
+      {/* A step that did not finish already says so at the top of the tab, with 接着做. */}
+      {!failed && <VcrStepPending studyId={studyId} study={study} step="trial" />}
+    </div>
+  );
+}
+
 /** The design a dominated row points at, in the server's words when it sent some. */
 function dominatedSentence(design: VcrDesign): string {
   return design.note ?? (design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优");
@@ -337,7 +376,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
             : null;
         }
         const value = design.measures[column.key];
-        if (!value) return <span className="text-text-3">—</span>;
+        if (!value) return <span data-vcr-not-run={designRan(design) ? undefined : ""} className="text-text-3">{designRan(design) ? "—" : NOT_RUN}</span>;
         const mcse = mcseText(value.mcse);
         // A Monte-Carlo interval is the standard error said again (±1.96 of
         // it); a predicted one — when the last patient comes in — is a
@@ -402,9 +441,12 @@ function DecisionForm({ studyId, decision, designs, onRecorded }: {
   const [rationale, setRationale] = useState(decision?.rationale ?? "");
   const [busy, setBusy] = useState(false);
   const holding = useRef(false);
-  const options = decision?.options.length
+  // A design nobody has computed is not chosen on: there is no number to choose it by.
+  const notRun = new Set(designs.filter((design) => !designRan(design)).map((design) => design.id));
+  const options = (decision?.options.length
     ? decision.options
-    : designs.map((design) => ({ id: design.id, label: design.code, name: design.name, disabled: design.dominated }));
+    : designs.map((design) => ({ id: design.id, label: design.code, name: design.name, disabled: design.dominated })))
+    .map((option) => (notRun.has(option.id) ? { ...option, disabled: true } : option));
   const ready = goal.trim().length > 0 && chosen !== null;
 
   const save = () => {

@@ -150,6 +150,53 @@ describe("no title over an empty box", () => {
     expect(emptyTitles(view.container)).toEqual([]);
   });
 
+  it("holds on a generated population with no profile: the sentence is a line, not a card, and the two cards that remain are there", async () => {
+    const raw = fixture("ev201/population.json");
+    Object.assign(raw, { version: "人群 v1", kind: "情景人群", method: "按设定的分布和相关性抽样", allowedUses: [{ key: "design", label: "设计" }],
+      constraints: [], profile: [], profileKind: null, profileMissing: true, generated: [], criteria: [], attrition: [], outcome: null, unknownReasons: [], blockers: [],
+      quality: null, headline: null, definition: null, download: null, knowledge: KNOWLEDGE_EMPTY,
+      profileNote: "这个人群生成时还没有画像：点“重新生成”，按同样的设定再生成一次，就能看到每个变量的分布。" });
+    installVcrServer(network.productRequest, { [tab("population")]: raw, "GET /vcr/definitions": { definitions: [] } });
+    const view = await drawTab(<PopulationTab studyId={STUDY_ID} study={study()} />);
+    const note = view.container.querySelector("[data-vcr-profile-missing]") as HTMLElement;
+    expect(note).not.toBeNull();
+    expect(note.closest("[class~='rounded-card']")).toBeNull();
+    expect(view.getByText("怎么生成的")).toBeInTheDocument();
+    expect(view.getByText("能用来做什么")).toBeInTheDocument();
+    expect(emptyTitles(view.container)).toEqual([]);
+  });
+
+  // The class this guards (report 「虚拟临研的完成状态没有对应的可读结果」): a page that says it is done, or offers a choice, with nothing computed under it.
+  it("never offers a choice on a tab whose objects have no computed measure: no 选定方案 on designs nobody ran, no 「还没有选定模型」 over another model's assessment", async () => {
+    const trial = fixture("ev201/trial.json");
+    trial.designs = trial.designs.map((design: any) => ({ ...design, dominated: false, chosen: false,
+      measures: Object.fromEntries(Object.entries(design.measures).filter(([key]) => key === "sample_size" || key === "cost")) }));
+    trial.decision = null; trial.headline = null;
+    installVcrServer(network.productRequest, { [tab("trial")]: trial });
+    const trialView = await drawTab(<TrialTab studyId={STUDY_ID} study={study()} />);
+    expect(trialView.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
+    expect(trialView.queryByRole("table", { name: "方案的对比" })).toBeNull();
+    expect(emptyTitles(trialView.container)).toEqual([]);
+    trialView.unmount();
+
+    const patients = fixture("ev201/patients.json");
+    Object.assign(patients, { model: null, trajectories: null, example: null, panels: [], sensitivity: null, headline: null, twin: null, sets: [], counts: null, partial: null, stale: null });
+    installVcrServer(network.productRequest, { [tab("patients")]: patients });
+    const patientView = await drawTab(<PatientsTab studyId={STUDY_ID} study={study((raw) => { raw.steps.patients = { status: "none", requested: false }; })} />);
+    expect(patientView.queryByText("还没有选定模型")).toBeNull();
+    expect(emptyTitles(patientView.container)).toEqual([]);
+  });
+
+  it("holds on the matching tab before anything was judged: one sentence and one button, and no toolbar over it", async () => {
+    const raw = fixture("ev201/matching.json");
+    Object.assign(raw, { candidates: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/matching`]: raw });
+    const view = await drawTab(<MatchingTab studyId={STUDY_ID} study={study((rawStudy) => { rawStudy.steps.matching = { status: "none", requested: false }; })} />);
+    expect(view.container.querySelector("[data-vcr-step-empty='matching']")).not.toBeNull();
+    expect(view.queryByRole("radiogroup", { name: "匹配与招募的视图" })).toBeNull();
+    expect(emptyTitles(view.container)).toEqual([]);
+  });
+
   it("holds on the patients and comparator tabs when their parts come back with a title and no content", async () => {
     const patients = fixture("ev201/patients.json");
     patients.panels = [{ key: "bare", title: "只有标题的面板", rows: [], series: [] }];

@@ -62,8 +62,9 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
   // The five routes and the ten dimensions are what every study has before
   // anything ran — they say what each route could be at this tier — so they
   // do not count as a result.
+  const prior = data.prior ?? [];
   const nothing = data.curves.length === 0 && !data.rmst && !data.median && !data.gaps && !data.estimand
-    && data.comparability.length === 0 && data.diagnostics.length === 0 && data.qc.length === 0 && !data.verdict;
+    && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict;
   if (nothing) {
     return failed
       ? <VcrStepFailed studyId={studyId} study={study} step="comparator" partial={data.partial} />
@@ -171,20 +172,23 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
                 </div>
               )}
 
-              {(data.dimensions.length > 0 || data.diagnostics.length > 0) && (
+              {(data.dimensions.length > 0 || data.diagnostics.length > 0 || prior.length > 0) && (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {data.dimensions.length > 0 && <DimensionsCard dimensions={data.dimensions} />}
-                  {data.diagnostics.length > 0 && (
-                    <Card title="权重与重叠诊断">
-                      <dl data-vcr-diagnostics="" className="flex flex-col gap-2">
-                        {data.diagnostics.map((row) => (
-                          <div key={row.key} className="flex items-baseline justify-between gap-3">
-                            <dt className="min-w-0 text-ui text-text-2">{row.label}</dt>
-                            <dd className="shrink-0 text-ui tabular-nums text-text"><VcrNumber value={row.value} label={row.label} /></dd>
-                          </div>
-                        ))}
-                      </dl>
-                    </Card>
+                  {(data.diagnostics.length > 0 || prior.length > 0) && (
+                    <div className="flex flex-col gap-4">
+                      {data.diagnostics.length > 0 && (
+                        <Card title="权重与重叠诊断">
+                          <NumberRows rows={data.diagnostics} attr="data-vcr-diagnostics" />
+                        </Card>
+                      )}
+                      {prior.length > 0 && (
+                        <Card title="先验借用">
+                          <NumberRows rows={prior} attr="data-vcr-prior" />
+                          <p className="mt-3 text-caption text-text-3">{PRIOR_ESS_SENTENCE}</p>
+                        </Card>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -215,6 +219,26 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
         </div>
       </Stale>
     </div>
+  );
+}
+
+/** What a prior's effective sample size is, and why one prior has two of them. */
+const PRIOR_ESS_SENTENCE = "先验有效样本量说的是这个先验相当于多少例本研究患者的信息量；“矩法”和“ELIR”是两种算法，同一个先验会得到不同的数。";
+
+/** The sentence over the ten dimensions when none of them has been assessed. */
+const DIMENSIONS_UNASSESSED = "十个维度都还没有评估。上面的“可估计”只表示在设定的输入下能算出来，不表示真实人群与对照可比。";
+
+/** A card's numbers, one per line: the name left, the number right. */
+function NumberRows({ rows, attr }: { rows: ReadonlyArray<{ key: string; label: string; value: ComparatorData["diagnostics"][number]["value"] }>; attr: string }) {
+  return (
+    <dl {...{ [attr]: "" }} className="flex flex-col gap-2">
+      {rows.map((row) => (
+        <div key={row.key} className="flex items-baseline justify-between gap-3">
+          <dt className="min-w-0 text-ui text-text-2">{row.label}</dt>
+          <dd className="shrink-0 text-ui tabular-nums text-text"><VcrNumber value={row.value} label={row.label} /></dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -285,6 +309,9 @@ function RouteRail({ data }: { data: ComparatorData }) {
 function DimensionsCard({ dimensions }: { dimensions: readonly VcrDimension[] }) {
   return (
     <Card title="可比性逐项评估">
+      {dimensions.every((dimension) => dimension.state === "unknown") && (
+        <p data-vcr-dimensions-unassessed="" className="mb-3 text-ui text-text-2">{DIMENSIONS_UNASSESSED}</p>
+      )}
       <table data-vcr-dimensions="" className="w-full border-collapse text-caption">
         <caption className="sr-only">十个可比性维度的模拟程度</caption>
         <tbody>

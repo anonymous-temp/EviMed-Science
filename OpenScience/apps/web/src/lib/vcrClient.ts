@@ -277,7 +277,14 @@ export interface VcrReviewSummary {
   id: string; reviewerKind: "ai" | "human"; role: string; label: string; state: string;
   status: "queued" | "running" | "done" | "failed"; current: boolean;
   by?: string | null; at?: string | null; note: string;
-  findings: Array<{ id?: string; kind?: string; location?: string; evidence?: string; message?: string; fix?: string; response?: string | null }>;
+  /**
+   * One sentence each (`fix`, or `message` where the reviewer wrote no fix) and, when the finding is about an object this study holds, the
+   * way to it. The reviewer's path into the frozen snapshot and the JSON it quoted are the review's own provenance and are not sent.
+   */
+  findings: Array<{
+    id?: string; kind?: string; message?: string; fix?: string; response?: string | null;
+    target?: { label: string; tab: string; key?: string | null } | null;
+  }>;
 }
 
 /** 「最近复核」. */
@@ -692,6 +699,8 @@ export interface VcrAssessmentRecord {
   version: number;
   modelName: string;
   modelVersion: string;
+  /** The library's Chinese title of the model; the id again when the library no longer holds it. Absent before the server sent it. */
+  modelTitle?: string;
   risk: "low" | "medium" | "high" | null;
   riskLabel: string | null;
   /** The one rule that settled the risk, in a sentence. */
@@ -803,6 +812,8 @@ export interface VcrComparatorTab {
   dimensions: VcrDimension[];
   /** Weight and overlap diagnostics of a weighted comparison. */
   diagnostics: Array<{ key: string; label: string; value: VcrValue }>;
+  /** What a borrowed prior is worth (prior effective sample sizes, the MAP prior's own numbers) — not a weighting diagnostic. Absent before the server sent it. */
+  prior?: Array<{ key: string; label: string; value: VcrValue }>;
   /**
    * The numbers of the robustness methods (negative controls, tipping point, prognostic adjustment), a sentence for each analysis that
    * could not be computed, and the sentence that no regulator has qualified prognostic adjustment for the endpoint. Null when none.
@@ -1604,6 +1615,7 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
     comparability: arr(value.comparability).map(readProfileRow),
     dimensions: arr(value.dimensions) as unknown as VcrDimension[],
     diagnostics: arr(value.diagnostics).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
+    prior: arr(value.prior).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
     gaps: Object.keys(gaps).length ? { ...(gaps as Loose), items: arr(gaps.items) } as VcrComparatorTab["gaps"] : null,
     counts: readVcrCounts(value.counts),
     verdict: Object.keys(verdict).length ? verdict as unknown as VcrComparatorTab["verdict"] : null,

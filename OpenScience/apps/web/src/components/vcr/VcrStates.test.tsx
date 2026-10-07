@@ -196,6 +196,22 @@ describe("a step with nothing yet", () => {
     expect(screen.getByText("已安排，开始后这里会显示进度。")).toBeInTheDocument();
   });
 
+  it("says what each step starts from: the empty population names what the AI will make and what T1 adds; a hint, where one is given, replaces the step's sentence", () => {
+    const { unmount } = draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("population", { status: "none", requested: false })} step="population" />);
+    expect(screen.getByText("还没有人群：AI 会按研究定义生成一批情景人群；接入你的数据（T1 及以上）后，也可以筛出真实队列。")).toBeInTheDocument();
+    unmount();
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("matching", { status: "none", requested: false })} step="matching" hint="只有公开资料时的一句话。" />);
+    expect(screen.getByText("只有公开资料时的一句话。")).toBeInTheDocument();
+    expect(screen.queryByText(/还没有匹配评估/)).toBeNull();
+    // A hint never hides the button, and never replaces a state: a step that is running says so.
+  });
+
+  it("does not let a hint stand in for a step's state: a running step says it is running", () => {
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("matching", { status: "running" })} step="matching" hint="只有公开资料时的一句话。" />);
+    expect(screen.getByText("正在进行，做完会显示在这里。")).toBeInTheDocument();
+    expect(screen.queryByText("只有公开资料时的一句话。")).toBeNull();
+  });
+
   // 「让 AI 做」 starts the step in the study's own conversation: there is no
   // second composer on the study page.
   it("offers 让 AI 做, which starts the step in the study's conversation", async () => {

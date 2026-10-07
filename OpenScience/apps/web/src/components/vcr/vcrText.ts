@@ -235,12 +235,18 @@ export const staleSentence = (queued: boolean | null | undefined) => (queued ? S
 export const VCR_STEP_EMPTY: Readonly<Record<VcrStepKey, string>> = Object.freeze({
   definition: "研究定义还没写：研究问题、PICO、估计目标和预期用途。",
   evidence: "还没有假设卡：检索试验登记和文献，把参数变成一张张可追溯的卡。",
-  population: "还没有人群版本：入排条件、逐条筛选和人群画像。",
+  population: "还没有人群：AI 会按研究定义生成一批情景人群；接入你的数据（T1 及以上）后，也可以筛出真实队列。",
   patients: "还没有虚拟患者：在给定模型和情景下推演个体轨迹与不确定性。",
   comparator: "还没有对照设计：五条对照路线的诊断、效应或缺口清单。",
   trial: "还没有试验情景：方案对比、运行特征和成功把握。",
   matching: "还没有匹配评估：逐条判定每个人是否符合入排条件，并给出补证建议。",
 });
+
+/**
+ * What the matching tab says before anything has been judged, for a study that has only public material: there is nobody to match yet,
+ * and what 让 AI 做 does instead is structure the criteria (the programme's step 7 at T0). Above T0 the step's own sentence stands.
+ */
+export const VCR_MATCHING_EMPTY_T0 = "这项研究现在只有公开资料（T0），没有可以匹配的真实患者。让 AI 做会把入排条件整理成逐条可判定的标准；接入你的数据（T1 及以上）后才能逐个匹配、转诊和随访。";
 
 /** What a tab says when the study has no definition yet: the programme is not waiting for anything, the study is waiting to be described. */
 export const VCR_NO_DEFINITION = "先在对话里说一句要研究什么";

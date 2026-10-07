@@ -32,7 +32,7 @@ import { SourceTag } from "../VcrMarks";
 import { VcrStat, VcrStatNote } from "../VcrNumber";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useVcrLoad, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
-import { criterionStateLabel, intervalLabel, NO_VALUE, numberText, referralStateLabel } from "../vcrText";
+import { criterionStateLabel, intervalLabel, NO_VALUE, numberText, referralStateLabel, VCR_MATCHING_EMPTY_T0 } from "../vcrText";
 
 type View = "matching" | "referral" | "sites" | "followup";
 type Direction = NonNullable<MatchingData["direction"]>;
@@ -131,12 +131,10 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const nothing = data.candidates.length === 0 && !data.forecast && !data.pendingReview
     && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0;
   if (nothing) {
-    return (
-      <div className="flex flex-col gap-6">
-        {toolbar()}
-        <VcrStepPending studyId={studyId} study={study} step="matching" />
-      </div>
-    );
+    // Before anything has been judged the tab is one sentence and one button: the export and the four views are for what exists. A reader
+    // who switched to another view keeps the switch to get back — that view was chosen, so the matching one had something to show.
+    const pending = <VcrStepPending studyId={studyId} study={study} step="matching" hint={study.tier === "T0" ? VCR_MATCHING_EMPTY_T0 : undefined} />;
+    return view === "matching" ? pending : <div className="flex flex-col gap-6">{toolbar()}{pending}</div>;
   }
   return (
     <div className="flex flex-col gap-6">
