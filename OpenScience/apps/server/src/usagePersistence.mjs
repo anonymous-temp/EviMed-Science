@@ -180,6 +180,10 @@ DO $estimate$ BEGIN
     ALTER TABLE evimed_usage.model_requests VALIDATE CONSTRAINT usage_model_requests_estimated_cost_check;
   END IF;
 END $estimate$;
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS operation text;
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS task_id text;
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS module text;
+CREATE INDEX IF NOT EXISTS model_requests_operation_time_idx ON evimed_usage.model_requests(operation,created_at) WHERE operation IS NOT NULL;
 `;
 
 /** The purpose CHECK's current name, for the tests that pin the migration. */
