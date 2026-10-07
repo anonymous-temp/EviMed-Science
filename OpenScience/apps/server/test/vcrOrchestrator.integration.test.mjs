@@ -675,6 +675,17 @@ const conversationDesigns = [
       accrual: { kind: "uniform", duration: 12, followup: 12 }, truth: { hazardRatio: 0.7, controlMedian: 6 } } },
 ];
 
+/** @param {number} at the design @param {string} kind the computation, as a run states the scenario to the engine (each method reads its own keys) */
+function engineScenario(at, kind) {
+  const own = conversationDesigns[at];
+  const base = { endpoint: { type: own.endpointType }, truth: { hazardRatio: 0.7, controlMedian: 6 } };
+  const looks = own.configuration.design.informationRates ? { informationRates: own.configuration.design.informationRates, spending: "obrien_fleming" } : {};
+  return kind === "design_analytic"
+    ? { ...base, design: { kind: own.design, allocation: own.configuration.design.allocation, ...looks }, analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { duration: 24, followup: 12 } }
+    : { ...base, design: { nTreat: own.configuration.design.nTreat, nControl: own.configuration.design.nControl, kind: own.design, ...looks },
+      analysis: { method: "logrank", alpha: 0.025, sided: 1 }, accrual: { kind: "uniform", duration: 12, followup: 12 } };
+}
+
 test("R10 a computation a conversation queues is filed under the design it was queued for: three designs are three results, each with its analytic and simulated numbers, the notices say so once, and the programme does not queue the same stage again", options, async () => {
   const module = compose();
   const study = await makeStudy("conversation");
@@ -697,15 +708,7 @@ test("R10 a computation a conversation queues is filed under the design it was q
   // The conversation asks for each design's analytic size and its simulation, naming the design.
   /** @type {Record<string, any>} */
   const started = {};
-  /** @param {number} at the design @param {string} kind the computation, as a run states the scenario to the engine (each method reads its own keys) */
-  const asked = (at, kind) => {
-    const own = conversationDesigns[at];
-    const base = { endpoint: { type: own.endpointType }, truth: { hazardRatio: 0.7, controlMedian: 6 } };
-    return kind === "design_analytic"
-      ? { ...base, design: { kind: own.design, allocation: own.configuration.design.allocation }, analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { duration: 24, followup: 12 } }
-      : { ...base, design: { nTreat: own.configuration.design.nTreat, nControl: own.configuration.design.nControl, kind: own.design },
-        analysis: { method: "logrank", alpha: 0.025, sided: 1 }, accrual: { kind: "uniform", duration: 12, followup: 12 } };
-  };
+  const asked = engineScenario;
   for (const [id, at] of /** @type {Array<[string, number]>} */ ([[a, 0], [b, 1]])) {
     for (const kind of ["design_analytic", "design_simulation"]) {
       const answer = await gateway("simulate", { action: "start", kind, subjectId: id, scenario: asked(at, kind) });
@@ -757,6 +760,66 @@ test("R10 a computation a conversation queues is filed under the design it was q
 function notices_of(module) {
   return module.notices.filter((/** @type {any} */ notice) => /完成/.test(String(notice.title)) && notice.source?.type === "vcr");
 }
+
+test("R10 the backfill gives the results the old path left without a subject the design they were computed for, undoes the supersessions that crossed designs, and a second run changes nothing", options, async () => {
+  const module = compose({ dispatch: false });
+  const study = await makeStudy("backfill");
+  await store.updateStudy(study.id, { status: "paused" }, study.userId);
+  const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "trial_scenario", items: conversationDesigns, data: null });
+  const [a, b, c] = written.ids;
+
+  // What the conversation did on 2026-10-07: three analytic jobs and four simulations, each with its own scenario and no subject.
+  /** @param {string} kind @param {number} at @param {Record<string, any>} scenario @param {Record<string, any>} measure */
+  const legacy = async (kind, at, scenario, measure) => {
+    const { job } = await module.jobs.enqueue({ studyId: study.id, userId: study.userId, kind, scenario, inputs: [], internal: true,
+      idempotencyKey: `legacy:${kind}:${at}:${JSON.stringify(scenario).length}:${Math.random()}`, detail: { subjectId: null, origin: "runtime" } });
+    const execution = await store.recordExecution({ jobId: job.id, studyId: study.id, userId: study.userId, method: job.method, methodVersion: "1.0.0", scenarioHash: "h".repeat(16),
+      inputs: [], environment: {}, seed: 1, replicates: null, outputHash: null, receipt: {}, cpuSeconds: 1, startedAt: null, finishedAt: null });
+    return store.recordResult({ studyId: study.id, userId: study.userId, executionId: execution.id, kind: "trial_scenario", subjectId: null,
+      conclusion: "estimable", counts: {}, measures: [measure], diagnostics: {}, tables: [] });
+  };
+  const designOf = engineScenario;
+  const analytic = (/** @type {number} */ value) => ({ name: "required_events", value, source: "calculated" });
+  const power = (/** @type {number} */ value) => ({ name: "power", value, simulated: true, mcse: 0.004, source: "synthetic" });
+  const made = [];
+  made.push(await legacy("design_analytic", 0, designOf(0, "design_analytic"), analytic(950)));
+  made.push(await legacy("design_analytic", 1, designOf(1, "design_analytic"), analytic(845)));
+  made.push(await legacy("design_analytic", 2, designOf(2, "design_analytic"), analytic(841)));
+  made.push(await legacy("design_simulation", 0, designOf(0, "design_simulation"), power(0.898)));
+  made.push(await legacy("design_simulation", 1, designOf(1, "design_simulation"), power(0.915)));
+  made.push(await legacy("design_simulation", 2, designOf(2, "design_simulation"), power(0.905)));
+  made.push(await legacy("design_simulation", 1, { ...designOf(1, "design_simulation"), accrual: { kind: "uniform", duration: 18, followup: 12 } }, power(0.917)));
+  assert.equal((await store.results(study.id, "trial_scenario")).length, 1, "the old path: seven results, one of them current, whichever design it was for");
+
+  const report = await backfillResultSubjects({ store, studyId: study.id });
+  assert.equal(report.apply, false);
+  const only = report.studies[0];
+  assert.equal(only.assigned.length, 7);
+  assert.deepEqual(only.unmatched, []);
+  assert.deepEqual(only.assigned.filter((row) => row.subjectId === b).length, 3, "design B has an analytic and two simulations");
+  assert.equal((await store.results(study.id, "trial_scenario")).length, 1, "a report changes nothing");
+
+  const applied = await backfillResultSubjects({ store, studyId: study.id, apply: true });
+  assert.equal(applied.studies[0].assigned.length, 7);
+  const current = await store.results(study.id, "trial_scenario");
+  assert.deepEqual(current.map((row) => row.subjectId).sort(), [a, b, c].sort(), "one current result per design");
+  const all = await store.allResults(study.id);
+  for (const row of all.filter((entry) => entry.supersededBy)) {
+    assert.equal(all.find((entry) => entry.id === row.supersededBy)?.subjectId, row.subjectId, "a result is superseded only within its design");
+  }
+  const rows = await store.trialScenarios(study.id);
+  for (const id of [a, b, c]) assert.equal(rows.find((row) => row.id === id).resultId, current.find((row) => row.subjectId === id).id, "the design points at its current result");
+  // B's newest result is the second simulation; its earlier analytic and simulation are kept, superseded by it.
+  assert.equal(current.find((row) => row.subjectId === b).id, made[6].id);
+  assert.equal(all.filter((row) => row.subjectId === b && row.supersededBy === made[6].id).length, 2);
+
+  for (const second of [await backfillResultSubjects({ store, studyId: study.id, apply: true }), await backfillResultSubjects({ store, studyId: study.id })]) {
+    const [none] = second.studies;
+    assert.deepEqual([none.assigned, none.unmatched, none.unsuperseded, none.resuperseded, none.landed], [[], [], [], [], []], "a second run changes nothing and reports nothing");
+  }
+  const everyStudy = await backfillResultSubjects({ store });
+  assert.ok(!everyStudy.studies.some((entry) => entry.studyId === study.id), "and the study is no longer one with results left to give a subject");
+});
 
 test("AC-33 everything the run set carries the AI-set label until a person countersigns it", options, async () => {
   const module = compose();
