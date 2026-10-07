@@ -531,7 +531,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     },
     selfCheck: payload => selfCheck.run(payload),
   } });
-  const routes = createEvolutionRoutes({ store, service, decisions, worker, config, evidenceRegistration, capabilityMap: () => loops.map.rebuild(), isOperator: user => config.operatorUsers.includes(user.id),
+  const routes = createEvolutionRoutes({ store, service, decisions, worker, config, evidenceRegistration, capabilityMap: async () => (await service.get('evolution-capability-map'))?.payload ?? null, isOperator: user => config.operatorUsers.includes(user.id),
     registerEvaluationPolicy: async (user, { projectId, policy }) => { await store.requireProject(user, projectId); return evaluationIsolation.registerPending({ userId: user.id, projectId }, policy); },
     evaluationAudit: async (user, { projectId }) => { const project = await store.requireProject(user, projectId); return Promise.all((await agentRuns.list(project)).map(run => evaluationIsolation.audit(run.id))); },
     adoptOpportunity: async (user, { opportunityId, projectId }) => {

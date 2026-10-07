@@ -2124,6 +2124,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const project = await store.requireProject(user, projectId);
         return (await researchSessions.list(project))[0]?.sessionId ?? null;
       },
+      // A rename is the project owner's: an editor of the GEO project asks, and the name is written as its owner.
+      rename: async (ownerId, projectId, name) => {
+        const owner = await store.userById(ownerId);
+        if (!owner) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
+        await store.renameProject(owner, projectId, name);
+      },
     },
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },

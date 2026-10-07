@@ -1436,6 +1436,7 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_payload_invalid',
   'geo_project_not_found',
   'geo_brand_name_invalid',
+  'geo_project_name_invalid',
   'geo_engines_invalid',
   'geo_coverage_invalid',
   'geo_tier_invalid',

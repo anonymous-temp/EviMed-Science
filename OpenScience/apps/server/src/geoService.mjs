@@ -535,14 +535,21 @@ export class GeoService {
   }
 
   /**
-   * `PATCH /api/geo/projects/:id`.
-   * @param {{ id: string }} user @param {string} id @param {{ coverageDays?: number, engines?: string[], tier?: string, status?: string }} patch
+   * `PATCH /api/geo/projects/:id`. A `name` renames the project the module sits on: the name lives on that project (the one
+   * the sidebar lists), never on the GEO row, and it belongs to the project's owner whoever with the right to edit asks — so the
+   * rename is the owner's act, made through the hook the composition gives (`renameControlProject`).
+   * @param {{ id: string }} user @param {string} id
+   * @param {{ coverageDays?: number, engines?: string[], tier?: string, status?: string, name?: string }} patch
+   * @param {{ renameControlProject?: (ownerId: string, projectId: string, name: string) => Promise<unknown> }} [hooks]
    */
-  async updateProject(user, id, patch) {
+  async updateProject(user, id, patch, hooks = {}) {
     const project = await this.requireProject(user, id, "edit");
-    const updated = await this.store.updateProject(project.userId, id, patch);
+    const { name, ...row } = patch;
+    if (name !== undefined && !hooks.renameControlProject) throw failure(503, "geo_unavailable", "Renaming is unavailable.");
+    const updated = await this.store.updateProject(project.userId, id, row);
     if (!updated) throw failure(404, "geo_project_not_found", "GEO project not found.");
-    return updated;
+    if (name !== undefined) await /** @type {NonNullable<typeof hooks.renameControlProject>} */ (hooks.renameControlProject)(project.userId, project.projectId, name);
+    return name === undefined ? updated : { ...updated, name };
   }
 
   /** `DELETE /api/geo/projects/:id`: hidden from 循证传播; the project's conversations and files stay. @param {{ id: string }} user @param {string} id */
