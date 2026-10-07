@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { TextDecoder } from "node:util";
-import { evidenceSourceTypeOf, isEvidenceSourceType } from "@evimed/domain";
+import { SOURCE_FOLDERS, evidenceSourceTypeOf, isEvidenceSourceType } from "@evimed/domain";
 import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
 import { attachClaimSourceLocations, claimVerification } from "./clinicalEvidenceQuality.mjs";
 import {
@@ -386,6 +387,43 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
       });
       if (knowledge) await knowledgeBaseUploads.register(ctx, rel, buffer);
       return relFromFull(base, full);
+    },
+
+    /**
+     * 「存入知识库」 on a file a conversation produced: a copy of it in this project's knowledge base, registered the way
+     * an upload is. Same project only — the file is read from this project's own workspace through the guarded reader
+     * and the copy is written under this project's own `knowledge-base/chat/`; the caller names a path inside the
+     * workspace and never a destination. The copy's name carries a few digits of its content, so the same file saved
+     * twice is one document and a file that changed under the same name is another.
+     */
+    async save_to_knowledge_base(args, ctx) {
+      if (!knowledgeBaseUploads) throw new HttpError(503, "source_state_unavailable", "Source intake is not available on this deployment.");
+      const { base, full, rel } = await resolveFile(ctx.project, { root: "workspace", ...args });
+      const opened = await openScopedFileNoFollow(base, full).catch((err) => {
+        if (err?.code === "ENOENT" || (err instanceof HttpError && err.code === "file_not_found")) throw new HttpError(404, "file_not_found", "File not found.");
+        throw err;
+      });
+      let buffer;
+      try {
+        if (!opened.stat.isFile()) throw new HttpError(400, "not_a_file", "path is not a file.");
+        if (opened.stat.size > ctx.config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
+        buffer = await readStableFileHandle(opened.handle, opened.stat);
+      } finally {
+        await opened.handle.close();
+      }
+      const name = path.posix.basename(rel.replace(/\\/g, "/"));
+      const extension = path.posix.extname(name);
+      const stem = name.slice(0, name.length - extension.length).replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^[-._]+|[-._]+$/g, "").slice(0, 80) || "file";
+      const target = `${SOURCE_FOLDERS.chat}/${stem}-${createHash("sha256").update(buffer).digest("hex").slice(0, 8)}${extension.toLowerCase()}`;
+      const destination = resolveScopedPath(ctx.project.baseDir, target);
+      // The knowledge base's own admission: a format it cannot read is refused by name before a byte is written.
+      knowledgeBaseUploads.admit(target);
+      await withProjectStorageMutation(ctx.project, async () => {
+        await assertProjectCapacity(ctx.project, destination, buffer.length, ctx.config);
+        await writeFileAtomicNoFollow(ctx.project.baseDir, destination, buffer, { mode: 0o600 });
+      });
+      const registered = await knowledgeBaseUploads.register(ctx, target, buffer);
+      return { path: target, duplicate: Boolean(registered?.duplicate), sourceId: registered?.source?.id ?? null };
     },
 
     async add_text_to_workspace(args, ctx) {

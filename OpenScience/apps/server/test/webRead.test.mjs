@@ -311,6 +311,43 @@ test("the read's deadline, or its caller hanging up, ends the parse thread", asy
   assert.ok((used.user + used.system) / 1_000 < 400, `the process used ${((used.user + used.system) / 1_000).toFixed(0)} ms of CPU after both reads ended`);
 });
 
+test("a caller that keeps a snapshot is handed the exact bytes the text came from, and a run that does not ask is not", async () => {
+  const nmpa = "https://www.nmpa.gov.cn/xxgk/ggtg/index.html";
+  const drawn = "<html><head><title>公告通告</title></head><body><div class=\"list\"><ul><li>国家药监局关于第 1 号的公告</li><li>国家药监局关于第 2 号的公告</li><li>国家药监局关于第 3 号的公告</li></ul></div></body></html>";
+  const pdfBytes = Buffer.from("%PDF-1.7\n1 0 obj\n...guideline...\n");
+  const page = fixture("nice-ng136.html");
+  const { transport } = fakeTransport({
+    [nmpa]: html(fixture("nmpa-ggtg.412.html"), 412),
+    "https://www.nice.org.uk/guidance/ng136": html(page),
+    "https://www.escardio.org/Guidelines/hf.pdf": { status: 200, headers: { "content-type": "application/pdf" }, body: pdfBytes },
+    "https://files.example.org/notes.txt": { status: 200, headers: { "content-type": "text/plain; charset=utf-8" }, body: Buffer.from("plain notes") },
+  });
+  const documentParser = { async parseBytes() { return { protocolVersion: 1, extractor: { name: "evimed-extract", version: "v", parser: "api" }, text: "Recommendation 1.", metadata: { title: "ESC" } }; } };
+  const renderer = fakeRenderer({ [nmpa]: { html: drawn, finalUrl: nmpa, status: 200 } });
+  const reader = createWebReader(config, { transport, renderer, documentParser, resolveImpl: publicResolver, now: fixedNow });
+  const kept = async (url) => {
+    /** @type {any[]} */
+    const seen = [];
+    const result = await reader.read(url, { onBytes: (value) => seen.push(value) });
+    return { result, seen };
+  };
+  const direct = await kept("https://www.nice.org.uk/guidance/ng136");
+  assert.equal(direct.seen.length, 1);
+  assert.deepEqual([direct.seen[0].mediaType, direct.seen[0].extension, direct.seen[0].bytes.equals(page)], ["text/html", "html", true]);
+  assert.equal(direct.result.receipt.sha256, createHash("sha256").update(direct.seen[0].bytes).digest("hex"), "the bytes kept are the bytes the receipt hashes");
+  const rendered = await kept(nmpa);
+  assert.deepEqual([rendered.seen.length, rendered.seen[0].extension, rendered.seen[0].bytes.toString("utf8")], [1, "html", drawn], "a browser-drawn page is kept as drawn");
+  const document = await kept("https://www.escardio.org/Guidelines/hf.pdf");
+  assert.deepEqual([document.seen[0].extension, document.seen[0].mediaType, document.seen[0].bytes.equals(pdfBytes)], ["pdf", "application/pdf", true]);
+  const text = await kept("https://files.example.org/notes.txt");
+  assert.deepEqual([text.seen[0].extension, text.seen[0].bytes.toString("utf8")], ["txt", "plain notes"]);
+  // A read that fails keeps nothing, and a read that did not ask is unchanged.
+  const refused = [];
+  await assert.rejects(reader.read("https://www.nice.org.uk/missing", { onBytes: (value) => refused.push(value) }));
+  assert.deepEqual(refused, []);
+  assert.equal((await reader.read("https://www.nice.org.uk/guidance/ng136")).receipt.contentType, "html");
+});
+
 test("a page nested past what the parse thread can walk is refused by name", async () => {
   const { transport } = fakeTransport({ "https://deep.example.org/page": html(`<html><body>${"<span>".repeat(50_000)}deep text</body></html>`) });
   const reader = createWebReader(config, { transport });

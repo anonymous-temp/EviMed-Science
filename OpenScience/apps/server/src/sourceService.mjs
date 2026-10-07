@@ -5,6 +5,10 @@ import { withdrawDerivedMemory, withdrawOrphanedDerivedMemory } from "./derivedM
 import { migrateProductStore, productInteger, productPayload, productTime } from "./productPersistence.mjs";
 import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput,
   sourceUnderstandingAuditSample, sourceUnderstandingOmissionNotice } from "@evimed/domain";
+// What a document is, said once (`sourceVocabulary.mjs`): the types the judge chooses among, the chip each is counted
+// under, and the format-only first guess made before anyone has read a word.
+import { SOURCE_DOC_TYPES, SOURCE_KINDS, SOURCE_TYPES, sourceDocTypeIsDeep, sourceFirstPassType, sourceOriginOf } from "@evimed/domain";
+import { sourceDisplayOf } from "./sourceDisplay.mjs";
 // The knowledge base's format list and page arithmetic, shared with the
 // browser so the picker and this refusal cannot disagree (2026-09-20).
 import { normalizeSourcePageMap, renderSourcePageMarkers, sourceFormatRoute } from "@evimed/domain";
@@ -55,10 +59,12 @@ export function sourceStateOf(payload) {
   return "unavailable";
 }
 
-/** The SQL twin of `sourceReadable`, over a source row aliased `d`. */
+/** The SQL twin of `sourceReadable`, over a source row aliased `d`. A document that failed before its text was captured has
+ *  no `analysis` at all, so each comparison is held to false rather than left unknown: an unknown under `NOT` is unknown,
+ *  and that document was in none of the page's states. */
 export const SOURCE_READABLE_SQL = `(d.payload->>'status' IN ('complete','needs_attention')
-  OR (d.payload->>'status' IN ('parsing','failed') AND jsonb_typeof(d.payload->'analysis'->'readAt')='string'
-    AND d.payload->'analysis'->'generation'=d.payload->'generation'))`;
+  OR (d.payload->>'status' IN ('parsing','failed') AND coalesce(jsonb_typeof(d.payload->'analysis'->'readAt')='string',false)
+    AND coalesce(d.payload->'analysis'->'generation'=d.payload->'generation',false)))`;
 
 /**
  * What the knowledge base page filters by, in the words a row says it:
@@ -74,6 +80,23 @@ const SOURCE_STATE_SQL = Object.freeze({
   attention: `(d.payload->>'status'='needs_attention' OR (d.payload->>'status'='failed' AND NOT ${SOURCE_READABLE_SQL}))`,
 });
 
+/** The chip a source is counted under, as SQL over a source row aliased `d`: the vocabulary's table, written out. */
+const KIND_SQL = `(CASE d.payload->>'docType' ${SOURCE_DOC_TYPES.map((type) => `WHEN '${type.id}' THEN '${type.kind}'`).join(" ")} ELSE 'document' END)`;
+
+/**
+ * What a search looks in, as SQL over a source row aliased `d` and one placeholder holding the search: the title the
+ * researcher or the page gave, the title the parser read, the authors, what the document says (its summary), the name
+ * of its file and the address of a link. A plain substring match with no pattern characters in it, so a `%` or an
+ * `_` the researcher types is what they typed.
+ * @param {string} param
+ */
+function searchSql(param) {
+  return [
+    "regexp_replace(coalesce(d.payload->'paths'->>0,''),'^.*/','')", "d.payload->>'title'", "d.payload->'metadata'->>'title'",
+    "(d.payload->'metadata'->'authors')::text", "d.payload->'outputs'->>'summary'", "d.payload->'link'->>'url'",
+  ].map((expression) => `strpos(lower(coalesce(${expression},'')),lower(${param}::text))>0`).join(" OR ");
+}
+
 function projectRun(run) { return run ? { id: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId } : null; }
 function projectUnit(unit) { return { id: unit.id, unitType: unit.unitType, start: unit.start, end: unit.end,
   ...(typeof unit.text === "string" ? { text: unit.text } : {}), status: unit.status,
@@ -88,7 +111,10 @@ export function projectSourceManifestRecord(row) {
   const verdict = omissionAudit ? { status: omissionAudit.status, reason: omissionAudit.reason, omissionRate: omissionAudit.omissionRate ?? null } : null;
   // `readable` is derived, never stored: the page says 「读取中」 until it is
   // true, whatever the pipeline is still doing behind it.
-  return { ...row, readable: sourceReadable(row.payload), payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
+  // `display` is what a row says about its document (`sourceDisplayOf`), worked out here so the page computes nothing about
+  // content. `shared` is the list query's own column (whether the account library holds the document), not part of the record.
+  const { shared = null, ...record } = row;
+  return { ...record, readable: sourceReadable(row.payload), display: sourceDisplayOf(row, { shared }), payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
     generation: analysis.generation, phase: analysis.phase, schemaVersion: analysis.schemaVersion, unitCount: analysis.unitCount,
     ...(Number.isSafeInteger(analysis.pageCount) ? { pageCount: analysis.pageCount } : {}),
     run: projectRun(analysis.run),
@@ -134,14 +160,8 @@ async function recordRevision(client, row) {
     VALUES ($1,$2,$3,$4,$5,$6)`, [row.user_id, row.kind, row.id, row.revision, row.payload, row.deleted_at]);
 }
 
-export const SOURCE_TYPES = Object.freeze([
-  "published-paper", "preprint-manuscript", "review-guideline", "book-chapter",
-  "conference-material", "grant-proposal", "research-protocol", "peer-review",
-  "medical-case", "patient-record", "cohort-data", "statistical-output",
-  "lecture-slides", "audio-recording", "video-recording", "course-bundle",
-  "note-memo", "message-export", "administrative-record", "certificate-scan",
-  "image-figure", "other",
-]);
+/** The one list of document types (`@evimed/domain`'s `sourceVocabulary.mjs`); the judge and an override choose among them. */
+export { SOURCE_TYPES };
 
 export const SOURCE_DEPTHS = Object.freeze(["skip", "index_only", "structured", "deep"]);
 // No local analysis agent ships today. Nothing registers a `local-agent`
@@ -384,33 +404,23 @@ function normalizedName(file) {
   return name;
 }
 
-/** A deterministic, explainable first pass. A later classifier may refine it,
- * but a source never waits for a model before it is indexed. @param {string} file */
+/** The first pass: what the file's format says it is, and nothing else. A later judge names the type once the text is
+ * read, and a source never waits for a model before it is indexed. Nothing in a file's name decides what it is
+ * (development principle 5): a PDF called `Annual_review.pdf` or `营销方案.docx` is a document until it is read.
+ * @param {string} file @returns {[string, string, string]} */
 function classify(file) {
-  const lower = file.toLowerCase();
-  const extension = path.posix.extname(lower);
-  const name = path.posix.basename(lower, extension);
-  if (/(方案|protocol|sop|checklist|检查表)/i.test(name)) return ["research-protocol", "deep", "The file name identifies a protocol, SOP or checklist."];
-  if (/(grant|标书|申请书|课题申请)/i.test(name)) return ["grant-proposal", "deep", "The file name identifies a grant proposal."];
-  if (/(review|审稿|peer.?review)/i.test(name)) return ["peer-review", "deep", "The file name identifies peer-review material."];
-  if ([".ppt", ".pptx", ".odp"].includes(extension)) return ["lecture-slides", "structured", "The presentation format is indexed slide by slide."];
-  if ([".csv", ".tsv", ".xlsx", ".xls", ".parquet", ".sav", ".dta"].includes(extension)) return ["cohort-data", "structured", "The tabular format is profiled as research data."];
-  if ([".mp3", ".wav", ".m4a", ".flac"].includes(extension)) return ["audio-recording", "structured", "The audio format requires transcription and segment coverage."];
-  if ([".mp4", ".mov", ".mkv", ".webm"].includes(extension)) return ["video-recording", "structured", "The video format requires aligned segment coverage."];
-  if ([".png", ".jpg", ".jpeg", ".tif", ".tiff", ".svg"].includes(extension)) return ["image-figure", "index_only", "The image is indexed before optional visual extraction."];
-  if ([".md", ".txt", ".rtf"].includes(extension)) return ["note-memo", "structured", "The text document can be indexed and distilled directly."];
-  if ([".pdf", ".doc", ".docx", ".odt"].includes(extension)) return ["published-paper", "structured", "The document format is parsed into traceable units."];
-  return ["other", "index_only", "Unknown formats enter the searchable index before deeper processing."];
+  const first = sourceFirstPassType(file);
+  return [first.docType, first.depth, first.reason];
 }
 
 function defaultValueVector(docType) {
-  const deep = ["research-protocol", "grant-proposal", "peer-review", "medical-case", "patient-record"].includes(docType);
-  const data = ["cohort-data", "statistical-output", "medical-case", "patient-record"].includes(docType);
+  const deep = sourceDocTypeIsDeep(docType) || ["medical-case", "patient-record"].includes(docType);
+  const data = ["cohort-data", "dataset", "statistical-output", "medical-case", "patient-record"].includes(docType);
   return {
     profileValue: deep ? 0.7 : 0.2,
     methodValue: deep ? 0.9 : 0.3,
     knowledgeValue: data ? 0.8 : 0.6,
-    evidenceValue: ["published-paper", "review-guideline"].includes(docType) ? 0.9 : 0.4,
+    evidenceValue: ["published-paper", "preprint-manuscript", "review-guideline"].includes(docType) ? 0.9 : 0.4,
     dataValue: data ? 0.9 : 0.1,
     risk: 0,
   };
@@ -473,6 +483,28 @@ function retiredSourceRun(payload) {
   return { pendingRunCancellations: pending };
 }
 
+/**
+ * What a link or a note says about its source beyond the bytes: the title the researcher gave a note or the page gave
+ * itself, and where a snapshot was read from and when. Stored on the source row, so a row can say 「网页 · nmpa.gov.cn · 链接」
+ * and a refresh knows which address to read again; the bytes stay the snapshot's own.
+ * @param {Record<string,any>} input
+ * @returns {{ title: string | null, link: null | { url: string, finalUrl: string, site: string, fetchedAt: string, rendered: boolean, original: string | null } }}
+ */
+function registrationFacts(input) {
+  const title = input.title == null || input.title === "" ? null : text(input.title, "source title", 300);
+  if (input.link == null) return { title, link: null };
+  const link = input.link;
+  if (typeof link !== "object" || Array.isArray(link)) throw new HttpError(400, "source_payload_invalid", "Source link is invalid.");
+  return { title, link: {
+    url: text(link.url, "link url", 2048),
+    finalUrl: text(link.finalUrl ?? link.url, "link final url", 2048),
+    site: text(link.site, "link site", 255),
+    fetchedAt: timestamp(link.fetchedAt, "link fetch time"),
+    rendered: link.rendered === true,
+    original: link.original == null ? null : sourcePath(link.original),
+  } };
+}
+
 /** Durable source manifests and coverage, built on the account-scoped product
  * document ledger and its leased job queue. */
 export class SourceService {
@@ -532,6 +564,7 @@ export class SourceService {
     const mtime = timestamp(input.mtime, "source mtime");
     const mimeType = text(input.mimeType ?? "application/octet-stream", "MIME type", 160);
     const providerHash = input.providerHash == null ? null : text(input.providerHash, "provider hash", 256);
+    const facts = registrationFacts(input);
     const sourceId = sourceIdFor(projectId, sha256);
     const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${file}`).slice(0, 32)}`;
     const { replaces, ...registered } = await this.withRegistrationLocks([`source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
@@ -548,6 +581,9 @@ export class SourceService {
           exact = await this.documents.get(userId, "source", sourceId);
         }
       }
+      // The same bytes read again (a link refreshed, a note saved unchanged) say when they were read and what they are
+      // called now; the document itself is not touched.
+      exact = await this.refreshFacts(userId, exact, facts);
       const job = ["queued", "parsing"].includes(exact.payload.status)
         ? await this.enqueue(exact, userId) : null;
       return { source: exact, duplicate: true, job };
@@ -572,6 +608,8 @@ export class SourceService {
       coverage: null,
       outputs: {},
       override: null,
+      ...(facts.title ? { title: facts.title } : {}),
+      ...(facts.link ? { link: facts.link } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -596,6 +634,27 @@ export class SourceService {
       catch (error) { this.report(typeof error?.code === "string" ? error.code : "source_replacement_unrecorded"); }
     }
     return registered;
+  }
+
+  /**
+   * Bring an existing source's title and link facts up to what was just registered with the same bytes. Best effort:
+   * a source that moved on meanwhile (the worker writes the same row) keeps what it has, and the registration is
+   * complete either way.
+   * @param {string} userId @param {any} source @param {ReturnType<typeof registrationFacts>} facts
+   */
+  async refreshFacts(userId, source, facts) {
+    const stored = source.payload;
+    const linkChanged = facts.link && (stored.link?.fetchedAt !== facts.link.fetchedAt || stored.link?.url !== facts.link.url);
+    const titleChanged = facts.title && stored.title !== facts.title;
+    if (!linkChanged && !titleChanged) return source;
+    try {
+      return await this.documents.put(userId, "source", source.id, { ...stored,
+        ...(titleChanged ? { title: facts.title } : {}), ...(linkChanged ? { link: facts.link } : {}), updatedAt: this.now().toISOString() },
+      { expectedRevision: source.revision, projectId: source.projectId });
+    } catch (error) {
+      if (!isConflict(error)) throw error;
+      return (await this.documents.get(userId, "source", source.id)) ?? source;
+    }
   }
 
   /** @param {string} userId @param {string} sourceId @param {Record<string,any>} input */
@@ -666,23 +725,39 @@ export class SourceService {
     });
   }
 
+  /**
+   * The type of a document from its name and opening text (the J7 judge), or null when the judge did not settle.
+   * Null is an answer: the source keeps the type its format gave it. A judge that names 「其他」 says only that it
+   * could not tell, which the format's own type already says better (a PDF is a 「文档」, not an 「其他」).
+   * @param {any} job @param {any} source @param {unknown} parsedText
+   * @returns {Promise<string | null>}
+   */
+  async judgeDocumentType(job, source, parsedText) {
+    try {
+      const result = await this.judgeService.judge("J7", { filename: source.payload.paths?.[0] ?? "", text: String(parsedText ?? "").slice(0, 1500), types: [...SOURCE_TYPES] },
+        { userId: job.userId, projectId: job.projectId, taskId: job.id, module: "source", regexBaseline: { docType: source.payload.docType } });
+      const docType = result?.value?.docType;
+      if (!["settled", "escalated"].includes(result?.outcome) || !SOURCE_TYPES.includes(docType)) return null;
+      return docType === "other" && source.payload.docType !== "other" ? null : docType;
+    } catch { return null; }
+  }
+
   /** The parser snapshot is immutable across retries and process recovery.
    * Pending capture records are not published source units or knowledge claims. */
   async freezeCapture(job, parsed) {
     // Ask outside the source transaction; the locked generation is rechecked before applying.
     const snapshot = this.judgeService ? await this.withSourceLease(job, async source => source) : null;
-    let classification = null;
-    if (snapshot && !snapshot.payload.override && snapshot.payload.analysis?.generation !== snapshot.payload.generation
-      && /\.(?:pdf|docx?|odt|rtf|md|txt|html?|epub)$/i.test(snapshot.payload.paths?.[0] ?? "")) {
-      try {
-        const result = await this.judgeService.judge("J7", { filename: snapshot.payload.paths?.[0] ?? "", text: String(parsed.text ?? "").slice(0, 1500), types: [...SOURCE_TYPES] }, { userId: job.userId, projectId: job.projectId, taskId: job.id, module: "source", regexBaseline: { docType: snapshot.payload.docType } });
-        if (['settled', 'escalated'].includes(result?.outcome) && SOURCE_TYPES.includes(result.value?.docType)) classification = result.value.docType;
-      } catch { /* Extension-based classification is the explicit fallback. */ }
-    }
+    // What the text says the document is (J7), decided once the text is read. The first pass only knew the format, so a
+    // judge that fails, or does not settle, leaves the document what its format says — read with the general slots,
+    // never as a paper. A note is the researcher's own writing and is not asked.
+    const classification = snapshot && !snapshot.payload.override && snapshot.payload.analysis?.generation !== snapshot.payload.generation
+      && sourceOriginOf({ connectorType: snapshot.payload.connector?.type, path: snapshot.payload.paths?.[0] }) !== "note"
+      && /\.(?:pdf|docx?|odt|rtf|md|txt|html?|epub)$/i.test(snapshot.payload.paths?.[0] ?? "")
+      ? await this.judgeDocumentType(job, snapshot, parsed.text) : null;
     return this.withSourceLease(job, async (source, client) => {
       if (source.payload.analysis?.generation === source.payload.generation) return this.loadCapture(job.userId, source, client);
       if (classification && snapshot?.payload.generation === source.payload.generation && !source.payload.override) {
-        const depth = ["research-protocol", "grant-proposal", "peer-review"].includes(classification) ? "deep" : "structured";
+        const depth = sourceDocTypeIsDeep(classification) ? "deep" : "structured";
         source = { ...source, payload: { ...source.payload, docType: classification, depth: SOURCE_DEPTHS.indexOf(depth) > SOURCE_DEPTHS.indexOf(source.payload.depth) ? depth : source.payload.depth,
           typeClassification: { origin: "judge", generation: source.payload.generation } } };
       }
@@ -1164,16 +1239,36 @@ export class SourceService {
     });
   }
 
-  /** `state` filters by what the page says about a document (`SOURCE_STATES`);
-   *  `status` by the pipeline's own word. One or the other.
-   * @param {string} userId @param {{projectId:string,status?:string|null,state?:string|null,familyId?:string|null,limit?:number,cursor?:string|null}} options */
-  async list(userId, { projectId, status = null, state = null, familyId = null, limit = 50, cursor = null }) {
-    if (state != null && state !== "") {
+  /**
+   * One page of a project's documents — or of the documents the account made available to every project
+   * (`shared`) — newest first, with what the knowledge base page asks of the server:
+   *
+   * - `state`: what the page says about a document (`SOURCE_STATES`); `status`: the pipeline's own word. One or the other.
+   * - `kind`: the chip a document is counted under (`SOURCE_KINDS`); `q`: a search over the document's title, the title
+   *   the parser read, its authors, the first line of what it says and its file name. Both run in the database, so a
+   *   library of five hundred documents is searched as a whole, never as its first fifty.
+   * - `cursor` / `limit`: the product store's page (`ProductDocuments.list`), so a page can ask for the next.
+   *
+   * What comes back carries `counts` — how many documents fall under each chip, for the whole scope and the search, not
+   * for the page and not for the chosen chip — so the chips are an inventory that does not move as one is chosen.
+   * Without a database (`status` or `familyId` asked, or none is configured) it is the plain list and has no counts.
+   * @param {string} userId @param {{projectId?:string|null,shared?:boolean,status?:string|null,state?:string|null,kind?:string|null,q?:string|null,familyId?:string|null,limit?:number,cursor?:string|null}} options
+   */
+  async list(userId, { projectId = null, shared = false, status = null, state = null, kind = null, q = null, familyId = null, limit = 50, cursor = null }) {
+    const wantsState = state != null && state !== "";
+    const wantsStatus = (status != null && status !== "") || (familyId != null && familyId !== "");
+    if (wantsState) {
       if (!SOURCE_STATES.includes(String(state))) throw new HttpError(400, "source_payload_invalid", "source state is invalid.");
-      if ((status != null && status !== "") || (familyId != null && familyId !== "")) {
-        throw new HttpError(400, "source_payload_invalid", "A source list filters by state or by status, not both.");
-      }
-      return this.listByState(userId, { projectId: text(projectId, "project id", 160), state: String(state), limit, cursor });
+      if (wantsStatus) throw new HttpError(400, "source_payload_invalid", "A source list filters by state or by status, not both.");
+    }
+    const wantsKind = kind != null && kind !== "";
+    if (wantsKind && !SOURCE_KINDS.some((entry) => entry.id === kind)) throw new HttpError(400, "source_payload_invalid", "source kind is invalid.");
+    const needle = q == null ? "" : String(q).trim();
+    if (needle.length > 200) throw new HttpError(400, "source_payload_invalid", "The search is too long.");
+    if (shared && wantsStatus) throw new HttpError(400, "source_payload_invalid", "The shared documents are not filtered by status.");
+    if (!wantsStatus) {
+      if (!shared) text(projectId, "project id", 160);
+      return this.listPage(userId, { projectId, shared, state: wantsState ? String(state) : null, kind: wantsKind ? String(kind) : null, q: needle, limit, cursor });
     }
     const selectedStatus = status == null || status === "" ? null : text(status, "source status", 40);
     const selectedFamily = familyId == null || familyId === "" ? null : text(familyId, "family id", 80);
@@ -1184,16 +1279,13 @@ export class SourceService {
   }
 
   /**
-   * One page of a project's sources in one page state, newest first, with the
-   * product store's cursor (`ProductDocuments.list`): a state is a predicate
-   * over two fields, which a containment filter cannot say.
-   * @param {string} userId @param {{projectId:string,state:string,limit?:number,cursor?:string|null}} options
+   * The database half of `list`: the scope (a project's sources, or one source per document the account library holds),
+   * the filters as predicates over the record, the page with its cursor and the chip counts.
+   * @param {string} userId @param {{projectId:string|null,shared:boolean,state:string|null,kind:string|null,q:string,limit:number,cursor:string|null}} options
    */
-  async listByState(userId, { projectId, state, limit = 50, cursor = null }) {
+  async listPage(userId, { projectId, shared, state, kind, q, limit, cursor }) {
     const database = this.documents.database;
-    if (!database) throw new HttpError(503, "source_state_unavailable", "Filtering sources by state requires durable shared storage.");
-    const predicate = SOURCE_STATE_SQL[state];
-    if (!predicate) throw new HttpError(400, "source_payload_invalid", "source state is invalid.");
+    if (!database) throw new HttpError(503, "source_state_unavailable", "Listing sources requires durable shared storage.");
     const bounded = productInteger(limit, 1, 100);
     let after = null;
     if (cursor) {
@@ -1205,14 +1297,53 @@ export class SourceService {
       } catch { throw new HttpError(400, "product_cursor_invalid", "Invalid page cursor."); }
     }
     await migrateProductStore(database);
-    const result = await database.query(`SELECT * FROM evimed_product.documents d
-      WHERE d.user_id=$1 AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=$2
-        AND ($3::timestamptz IS NULL OR (d.created_at,d.id)<($3::timestamptz,$4::text)) AND ${predicate}
-      ORDER BY d.created_at DESC, d.id DESC LIMIT $5`, [userId, projectId, after?.[0] ?? null, after?.[1] ?? null, bounded + 1]);
-    const items = result.rows.slice(0, bounded).map(sourceRecord);
+    // Placeholders are numbered as they are used, so a query never carries a value it does not read. Every other piece of
+    // SQL is a literal this module wrote; nothing in it is built from a request.
+    /** @param {boolean} withKind */
+    const shape = (withKind) => {
+      /** @type {any[]} */
+      const values = [];
+      const bind = (/** @type {any} */ value) => { values.push(value); return `$${values.length}`; };
+      const user = bind(userId);
+      // The shared scope is one source per document the account library holds: the one the entry was added from while it
+      // lives, else any other project's copy of the same bytes.
+      const from = shared
+        ? `(SELECT DISTINCT ON (s.payload->'fingerprint'->>'sha256') s.* FROM evimed_product.documents s
+            JOIN evimed_product.documents l ON l.user_id=s.user_id AND l.kind='preferences' AND l.deleted_at IS NULL
+              AND l.id='library:'||(s.payload->'fingerprint'->>'sha256') AND l.payload->>'recordType'='library-item'
+            WHERE s.user_id=${user} AND s.kind='source' AND s.deleted_at IS NULL
+            ORDER BY s.payload->'fingerprint'->>'sha256', (s.id=l.payload->>'sourceId') DESC, s.created_at DESC, s.id DESC) d`
+        : "evimed_product.documents d";
+      const where = [shared ? "TRUE" : `d.user_id=${user} AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=${bind(projectId)}`];
+      if (state) where.push(SOURCE_STATE_SQL[state]);
+      if (q) where.push(`(${searchSql(bind(q))})`);
+      if (withKind && kind) where.push(`${KIND_SQL}=${bind(kind)}`);
+      return { values, bind, from, where };
+    };
+    const counting = shape(false);
+    const counted = await database.query(`SELECT ${KIND_SQL} AS kind, count(*)::int AS n FROM ${counting.from} WHERE ${counting.where.join(" AND ")} GROUP BY 1`, counting.values);
+    const counts = Object.fromEntries([["all", 0], ...SOURCE_KINDS.map((entry) => [entry.id, 0])]);
+    for (const row of counted.rows) { counts[row.kind] = (counts[row.kind] ?? 0) + row.n; counts.all += row.n; }
+    const paging = shape(true);
+    const afterSql = after ? ` AND (d.created_at,d.id)<(${paging.bind(after[0])}::timestamptz,${paging.bind(after[1])}::text)` : "";
+    const result = await database.query(`SELECT d.*, EXISTS (SELECT 1 FROM evimed_product.documents l WHERE l.user_id=d.user_id AND l.kind='preferences'
+        AND l.deleted_at IS NULL AND l.id='library:'||(d.payload->'fingerprint'->>'sha256') AND l.payload->>'recordType'='library-item') AS shared
+      FROM ${paging.from} WHERE ${paging.where.join(" AND ")}${afterSql}
+      ORDER BY d.created_at DESC, d.id DESC LIMIT ${paging.bind(bounded + 1)}`, paging.values);
+    const items = result.rows.slice(0, bounded).map((row) => ({ ...sourceRecord(row), shared: row.shared }));
     const last = items.at(-1);
-    return { items, nextCursor: result.rows.length > bounded && last
+    return { items, counts, nextCursor: result.rows.length > bounded && last
       ? Buffer.from(JSON.stringify([last.createdAt, last.id])).toString("base64url") : null };
+  }
+
+  /**
+   * One page of a project's sources in one page state, newest first. Kept for the callers that ask by state alone
+   * (`kb_search`'s readiness check); the page uses `list`.
+   * @param {string} userId @param {{projectId:string,state:string,limit?:number,cursor?:string|null}} options
+   */
+  async listByState(userId, { projectId, state, limit = 50, cursor = null }) {
+    const { items, nextCursor } = await this.listPage(userId, { projectId, shared: false, state, kind: null, q: "", limit, cursor });
+    return { items, nextCursor };
   }
 
   /** The version chain a source belongs to: same project, same connector, same

@@ -44,7 +44,9 @@ test("the actual upload path creates one durable source manifest and ingest job"
     assert.equal(first.status, 200);
     const firstBody = await first.json();
     assert.ok(["queued", "parsing", "complete"].includes(firstBody.data.source.payload.status));
-    assert.equal(firstBody.data.source.payload.docType, "research-protocol");
+    // Nothing in the name decides what a document is: 「研究方案」 is a document until its text is read.
+    assert.equal(firstBody.data.source.payload.docType, "document");
+    assert.deepEqual([firstBody.data.source.display.kind, firstBody.data.source.display.origin, firstBody.data.source.display.typeShort], ["document", "upload", "文档"]);
 
     const duplicate = await upload("研究方案-copy.txt");
     assert.equal(duplicate.status, 200);

@@ -177,6 +177,16 @@ function documentFilename(url, extension) {
  */
 
 /**
+ * What `read` hands to an `onBytes` callback: the exact bytes the text was taken from, and what they are. A caller
+ * that keeps a snapshot of the page (the knowledge base's 「添加网页链接」) keeps these beside the text; a run's
+ * `web_read` never asks for them.
+ * @typedef {object} WebReadBytes
+ * @property {Buffer} bytes the page as fetched (HTML cut at `HTML_MAX_BYTES`), or as a browser drew it
+ * @property {string} mediaType
+ * @property {string} extension `html`, `txt`, or the document's own (`pdf`, `docx`, …)
+ */
+
+/**
  * `documentParser` is the document-parser client (contract X2): its
  * `parseBytes({ bytes, filename, mediaType, sha256 })` returns protocol v1.
  * A client without that method means documents are refused by name.
@@ -297,9 +307,10 @@ export function createWebReader(config, {
    * checked against this network's DNS as well: wherever the page's script
    * ran, what it ended up showing is returned from here.
    * @param {URL} requested @param {URL} finalUrl @param {AbortSignal | undefined} signal
+   * @param {((kept: WebReadBytes) => void) | undefined} [onBytes]
    * @returns {Promise<WebReadResult>}
    */
-  async function renderedRead(requested, finalUrl, signal) {
+  async function renderedRead(requested, finalUrl, signal, onBytes) {
     const verdict = await robots.check(finalUrl, { signal });
     await pacer.acquire(finalUrl.hostname, { crawlDelayMs: verdict.crawlDelayMs, signal });
     const rendered = await /** @type {WebRenderer} */ (renderer).render({ url: finalUrl, signal });
@@ -320,6 +331,7 @@ export function createWebReader(config, {
       throw webReadError(422, "web_read_unreadable", `${renderedUrl.hostname} is still unreadable after rendering; use another source for this page.`);
     }
     outcomes.rendered += 1;
+    onBytes?.({ bytes, mediaType: "text/html", extension: "html" });
     return {
       receipt: receipt(requested, renderedUrl, bytes, {
         title: page.title, rendered: true, contentType: "html", mediaType: "text/html", status,
@@ -334,9 +346,10 @@ export function createWebReader(config, {
    * @param {URL} requested
    * @param {{ url: URL, response: import("./webReadNetwork.mjs").TransportResponse, hopsLeft: number }} fetched
    * @param {AbortSignal | undefined} signal
+   * @param {((kept: WebReadBytes) => void) | undefined} [onBytes]
    * @returns {Promise<WebReadResult>}
    */
-  async function interpret(requested, fetched, signal) {
+  async function interpret(requested, fetched, signal, onBytes) {
     const { url: finalUrl, response } = fetched;
     const contentTypeHeader = headerValue(response.headers, "content-type");
     let mediaType = contentTypeHeader.split(";", 1)[0].trim().toLowerCase();
@@ -354,11 +367,12 @@ export function createWebReader(config, {
       // An empty page that says where the document is: one more hop, the
       // same way a 3xx is followed.
       if (ok && page.visibleChars < SHELL_VISIBLE_CHARS && page.refreshUrl && fetched.hopsLeft > 0) {
-        return interpret(requested, await fetchPage(new URL(page.refreshUrl), signal, fetched.hopsLeft - 1), signal);
+        return interpret(requested, await fetchPage(new URL(page.refreshUrl), signal, fetched.hopsLeft - 1), signal, onBytes);
       }
       const reason = renderReason({ status: response.status, html, visibleChars: page.visibleChars });
       const direct = () => {
         outcomes.html += 1;
+        onBytes?.({ bytes, mediaType, extension: "html" });
         return {
           receipt: receipt(requested, finalUrl, bytes, {
             title: page.title, rendered: false, contentType: /** @type {"html"} */ ("html"), mediaType, status: response.status,
@@ -377,7 +391,7 @@ export function createWebReader(config, {
       const thin = ok && reason.kind === "shell" && page.visibleChars > 0;
       if (renderer?.enabled) {
         try {
-          return await renderedRead(requested, finalUrl, signal);
+          return await renderedRead(requested, finalUrl, signal, onBytes);
         } catch (error) {
           if (!thin || error?.code === "web_read_unreadable" || error?.code === "web_read_host_forbidden") throw error;
           outcomes.thin += 1;
@@ -415,6 +429,7 @@ export function createWebReader(config, {
       }
       const title = String(parsed?.metadata?.title ?? "").trim() || filename;
       outcomes.document += 1;
+      onBytes?.({ bytes: response.body, mediaType, extension });
       return {
         receipt: receipt(requested, finalUrl, response.body, {
           title, rendered: false, contentType: "document", mediaType, status: response.status,
@@ -430,6 +445,7 @@ export function createWebReader(config, {
     if (TEXT_MEDIA_TYPES.has(mediaType)) {
       const text = decodePage(response.body, contentTypeHeader);
       outcomes.text += 1;
+      onBytes?.({ bytes: response.body, mediaType, extension: "txt" });
       return {
         receipt: receipt(requested, finalUrl, response.body, {
           title: documentFilename(finalUrl, "txt").replace(/\.txt$/, ""), rendered: false, contentType: "text", mediaType,
@@ -445,14 +461,15 @@ export function createWebReader(config, {
 
   /**
    * @param {string | URL} rawUrl
-   * @param {{ signal?: AbortSignal, runtime?: { userId: string, projectId: string } }} [options]
-   *   `runtime`: the project runtime asking, whose reads share one limit
+   * @param {{ signal?: AbortSignal, runtime?: { userId: string, projectId: string }, onBytes?: (kept: WebReadBytes) => void }} [options]
+   *   `runtime`: the project runtime asking, whose reads share one limit. `onBytes`: told the exact bytes the text came
+   *   from, once they are read — for a caller that keeps a snapshot.
    * @returns {Promise<WebReadResult>}
    */
-  async function read(rawUrl, { signal, runtime } = {}) {
+  async function read(rawUrl, { signal, runtime, onBytes } = {}) {
     try {
       const requested = validatedWebUrl(rawUrl);
-      const whole = async () => interpret(requested, await fetchPage(requested, signal, WEB_READ_MAX_REDIRECTS), signal);
+      const whole = async () => interpret(requested, await fetchPage(requested, signal, WEB_READ_MAX_REDIRECTS), signal, onBytes);
       if (!runtime) return await whole();
       return await runtimeGates.run(`${runtime.userId}\u0000${runtime.projectId}`, whole, { signal });
     } catch (error) {

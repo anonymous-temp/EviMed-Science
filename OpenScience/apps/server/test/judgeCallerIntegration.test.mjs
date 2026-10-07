@@ -76,20 +76,49 @@ test('J22 adds blacklist evidence, keeps regex exclusions and rechecks persisted
 });
 
 test('J7 classifies parsed text before capture and respects manual overrides and generation changes', async () => {
+  const { SOURCE_TYPES } = await import('../src/sourceService.mjs');
   for (const scenario of ['classify', 'override', 'changed']) {
-    const source = { id: 'src_test', projectId: 'project', revision: 1, payload: { paths: ['upload.pdf'], generation: 1, docType: 'published-paper', depth: 'structured', ...(scenario === 'override' ? { override: { docType: 'published-paper' } } : {}) } };
+    // The first pass only knew the format: a PDF is a document, and the judge names it once the text is read.
+    const source = { id: 'src_test', projectId: 'project', revision: 1, payload: { paths: ['upload.pdf'], generation: 1, docType: 'document', depth: 'structured', ...(scenario === 'override' ? { override: { docType: 'document' } } : {}) } };
     let saved, calls = 0;
     const documents = { get: async () => structuredClone(source), put: async (user, kind, id, payload) => { saved = payload; } };
     const service = new SourceService(documents, {}, { judgeService: { judge: async (site, input) => {
-      calls++; assert.equal(site, 'J7'); assert.equal(input.text.length, 1500); assert.equal(input.types.length, 22); return settled({ docType: 'research-protocol' });
+      calls++; assert.equal(site, 'J7'); assert.equal(input.text.length, 1500); assert.deepEqual(input.types, [...SOURCE_TYPES]); return settled({ docType: 'research-protocol' });
     } } });
     let leases = 0;
     service.withSourceLease = async (job, action) => { leases++; return action({ ...source, payload: { ...source.payload, generation: scenario === 'changed' && leases > 1 ? 2 : 1 } }, { query: async () => ({ rows: [] }) }); };
     await service.freezeCapture({ id: 'ingest', userId: 'user', projectId: 'project', payload: { sourceId: source.id } }, { text: 'a'.repeat(2000), units: [], extractor: 'test', summary: 'summary' });
     assert.equal(calls, scenario === 'override' ? 0 : 1);
-    assert.equal(saved.docType, scenario === 'classify' ? 'research-protocol' : 'published-paper');
+    assert.equal(saved.docType, scenario === 'classify' ? 'research-protocol' : 'document');
     assert.equal(saved.depth, scenario === 'classify' ? 'deep' : 'structured');
   }
+});
+
+test('a judge that fails, does not settle or only says other leaves the document what its format said, never a paper', async () => {
+  for (const [name, judge] of [
+    ['throws', async () => { throw new Error('judge unavailable'); }],
+    ['unsettled', async () => ({ outcome: 'unsettled', value: { docType: 'published-paper' } })],
+    ['outside the list', async () => settled({ docType: 'audio-recording' })],
+    ['other', async () => settled({ docType: 'other' })],
+  ]) {
+    const source = { id: 'src_test', projectId: 'project', revision: 1, payload: { paths: ['knowledge-base/Annual_review.pdf'], generation: 1, docType: 'document', depth: 'structured' } };
+    let saved;
+    const service = new SourceService({ get: async () => structuredClone(source), put: async (user, kind, id, payload) => { saved = payload; } }, {}, { judgeService: { judge } });
+    service.withSourceLease = async (job, action) => action(structuredClone(source), { query: async () => ({ rows: [] }) });
+    await service.freezeCapture({ id: 'ingest', userId: 'user', projectId: 'project', payload: { sourceId: source.id } }, { text: 'a'.repeat(100), units: [], extractor: 'test', summary: 'summary' });
+    assert.equal(saved.docType, 'document', name);
+    assert.equal(saved.typeClassification, undefined, name);
+  }
+});
+
+test('a note is never asked: its type is where it was written', async () => {
+  const source = { id: 'src_note', projectId: 'project', revision: 1, payload: { paths: ['knowledge-base/notes/组会-1a2b3c.md'], generation: 1, docType: 'note-memo', depth: 'structured', connector: { type: 'upload', id: 'project-library' } } };
+  let saved, calls = 0;
+  const service = new SourceService({ get: async () => structuredClone(source), put: async (user, kind, id, payload) => { saved = payload; } }, {}, { judgeService: { judge: async () => { calls++; return settled({ docType: 'research-protocol' }); } } });
+  service.withSourceLease = async (job, action) => action(structuredClone(source), { query: async () => ({ rows: [] }) });
+  await service.freezeCapture({ id: 'ingest', userId: 'user', projectId: 'project', payload: { sourceId: source.id } }, { text: '# 组会\n\n确定分组。', units: [], extractor: 'test', summary: 'summary' });
+  assert.equal(calls, 0);
+  assert.equal(saved.docType, 'note-memo');
 });
 
 test('evolution decision calls disable thinking and reject actions outside the supplied options', async () => {

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { HttpError } from "../src/security.mjs";
 import { normalizeSourceText, projectSourceUnderstandingOutput, sourceUnderstandingAuditSample, sourceUnderstandingSchema,
-  validateSourceUnderstanding } from "@evimed/domain";
+  validateSourceUnderstanding, SOURCE_TYPES as DOMAIN_SOURCE_TYPES } from "@evimed/domain";
 import { projectSourceDerivedRecord, projectSourceManifestRecord, readCopyOf, sourceIdFor, sourceIndexDocument, sourceOmissionRecord, sourceReadable, sourceStateOf, SOURCE_DEPTHS, SOURCE_STATES, SOURCE_TYPES,
   SourceService } from "../src/sourceService.mjs";
 
@@ -149,9 +149,13 @@ const upload = (overrides = {}) => ({
   ...overrides,
 });
 
-test("source catalog defines every designed type and the four bounded depths", () => {
-  assert.equal(SOURCE_TYPES.length, 22);
-  assert.equal(new Set(SOURCE_TYPES).size, 22);
+test("source catalog is the one list of document types, and the four bounded depths", () => {
+  assert.equal(new Set(SOURCE_TYPES).size, SOURCE_TYPES.length);
+  assert.deepEqual(SOURCE_TYPES, [...DOMAIN_SOURCE_TYPES]);
+  // Next to the research types: the documents a researcher hands over that are not research.
+  for (const wanted of ["policy-document", "drug-label", "administrative-record", "webpage", "code", "document", "dataset", "published-paper"]) assert.ok(SOURCE_TYPES.includes(wanted), wanted);
+  // The upload refuses recordings, so they are not types.
+  assert.ok(!SOURCE_TYPES.includes("audio-recording") && !SOURCE_TYPES.includes("video-recording"));
   assert.deepEqual(SOURCE_DEPTHS, ["skip", "index_only", "structured", "deep"]);
 });
 
@@ -162,8 +166,9 @@ test("registering an upload creates a traceable manifest and one idempotent inge
   assert.equal(result.duplicate, false);
   assert.equal(result.source.projectId, "project-one");
   assert.equal(result.source.payload.status, "queued");
-  assert.equal(result.source.payload.docType, "research-protocol");
-  assert.equal(result.source.payload.depth, "deep");
+  // The first pass knows the format and nothing in the name: 「我的研究方案.docx」 is a document until it is read.
+  assert.equal(result.source.payload.docType, "document");
+  assert.equal(result.source.payload.depth, "structured");
   assert.equal(result.source.payload.extractorVersion, "evimed-analysis-1.0.0");
   assert.equal(result.source.payload.fingerprint.sha256, "a".repeat(64));
   assert.ok(result.source.payload.reasons.length > 0);
@@ -239,7 +244,10 @@ test("a file that arrives with new bytes tells what rests on the document it rep
 
 test("parser coverage is separate from the unperformed understanding omission audit", async () => {
   const { service } = fixture();
-  const { source } = await service.register("user-one", upload());
+  const registered = await service.register("user-one", upload());
+  // A protocol is read in depth, which is where the stricter failure threshold applies.
+  const source = await service.override("user-one", registered.source.id, { expectedRevision: registered.source.revision,
+    docType: "research-protocol", depth: "deep", reason: "The researcher says this is a protocol." });
   const processing = await service.beginIngestion("user-one", source.id, { generation: source.payload.generation });
   const units = Array.from({ length: 20 }, (_, index) => ({
     id: `page-${index + 1}`,
