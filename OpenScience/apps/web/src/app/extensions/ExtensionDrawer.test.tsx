@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 import type { ExtensionConnection } from "@/lib/extensionsClient";
 import { ExtensionDrawer, extensionState } from "./ExtensionDrawer";
 
@@ -207,4 +208,38 @@ it("removing is confirmed first and closes the drawer when it is done", async ()
   await userEvent.click(within(screen.getByRole("alertdialog", { name: "移除插件" })).getByRole("button", { name: "移除" }));
   await waitFor(() => expect(extensions.removeExtension).toHaveBeenCalledWith(installed.id, installed.revision));
   await waitFor(() => expect(handlers.onClose).toHaveBeenCalled());
+});
+
+it.each([
+  ["a package the catalogue does not list", "no-such-package", () => {}],
+  ["an installation the server no longer has", "extension:gone", () => extensions.extensionInstallation.mockRejectedValue(new WebApiError("gone", { status: 404 }))],
+])("%s says it cannot be found and goes back to the list in one click, offering nothing to add or refresh", async (_, id, arrange) => {
+  arrange();
+  show(id);
+  const drawer = await screen.findByRole("dialog", { name: "插件" });
+  expect(within(drawer).getByText("找不到这个插件，它可能已被移除。")).toBeInTheDocument();
+  expect(within(drawer).queryByRole("button", { name: "刷新" })).not.toBeInTheDocument();
+  expect(within(drawer).queryByRole("alert")).not.toBeInTheDocument();
+  expect(within(drawer).queryByText("可以添加")).not.toBeInTheDocument();
+  expect(within(drawer).queryByRole("button", { name: "添加到我的插件" })).not.toBeInTheDocument();
+  await userEvent.click(within(drawer).getByRole("button", { name: "回到插件列表" }));
+  expect(handlers.onClose).toHaveBeenCalledTimes(1);
+});
+
+it("a read about the project that fails is not a missing package, and keeps the line and 刷新", async () => {
+  extensions.projectExtensions.mockRejectedValueOnce(new WebApiError("gone", { status: 404 })).mockResolvedValue({ revision: 4, selections: [], effectiveGeneration: null });
+  show();
+  const alert = await screen.findByRole("alert");
+  expect(screen.queryByText("找不到这个插件，它可能已被移除。")).not.toBeInTheDocument();
+  await userEvent.click(within(alert).getByRole("button", { name: "刷新" }));
+  expect(await screen.findByRole("button", { name: "用于当前项目" })).toBeInTheDocument();
+});
+
+it("a failure other than a missing package keeps the red line and 刷新", async () => {
+  extensions.extensionInstallation.mockRejectedValueOnce(new WebApiError("down", { status: 500 })).mockResolvedValue(installed);
+  show();
+  const alert = await screen.findByRole("alert");
+  expect(screen.queryByRole("button", { name: "回到插件列表" })).not.toBeInTheDocument();
+  await userEvent.click(within(alert).getByRole("button", { name: "刷新" }));
+  expect(await screen.findByRole("button", { name: "用于当前项目" })).toBeInTheDocument();
 });

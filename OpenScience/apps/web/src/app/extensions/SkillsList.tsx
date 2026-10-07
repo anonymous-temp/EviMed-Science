@@ -23,6 +23,8 @@ function Group({ name, count, children }: { name: string; count: number; childre
 /**
  * The skills page's one list, grouped by use: the reader's own skills first, then the platform's by what they are for. A
  * group shows four rows and offers the rest; a search shows every match, because a match hidden behind 「展开」 is a miss.
+ * A row says nothing about where it comes from: the group heading already does (科研分析, 社区, …), and the drawer's
+ * description names the source.
  */
 export function SkillsList({ personal, platform, query, hasMore, loadingMore, onMore, onOpenPlatform, onOpenPersonal, onResume }: {
   personal: readonly PersonalSkill[];
@@ -69,7 +71,7 @@ export function SkillsList({ personal, platform, query, hasMore, loadingMore, on
             <List label={group.name} divided>
               {rows.map(item => (
                 <ListRow key={item.id} leading={<Icon size={20} aria-hidden className="text-text-3" />} title={item.title} meta={item.use}
-                  trailing={<><span>{item.source === "community" ? "社区" : "平台"}</span><ChevronRight size={16} aria-hidden /></>} onOpen={() => onOpenPlatform(item)} />
+                  trailing={<ChevronRight size={16} aria-hidden />} onOpen={() => onOpenPlatform(item)} />
               ))}
             </List>
             {!needle && group.items.length > SHOWN && (

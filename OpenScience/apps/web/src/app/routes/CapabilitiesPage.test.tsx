@@ -338,14 +338,38 @@ describe("CapabilitiesPage", () => {
       { ...agents[3], availability: availability("peer-review", "unverified", "未验证", "当前是模拟运行环境，不能证明真实可运行。") },
     ];
 
-    it("shows each tool's state as a label in the card", async () => {
+    // A state a reader can act on is drawn; operational history (ran here / carried / not measured) is not — it is the
+    // system explaining itself and opens the same conversation either way. It stays for assistive technology.
+    it("draws a state only where the reader can act on it, and keeps the rest for assistive technology", async () => {
       mocks.listWebResearchAgents.mockResolvedValue(labelled());
       renderPage();
       await screen.findByRole("button", { name: /药品安全性分析/ });
-      expect(card("药品安全性分析")).toHaveTextContent("可运行");
       expect(card("超说明书用药分析")).toHaveTextContent("受限");
       expect(card("自动化 Meta 分析")).toHaveTextContent("不可用");
-      expect(card("论文审稿")).toHaveTextContent("未验证");
+      expect(card("药品安全性分析")).toHaveAccessibleDescription(/成功运行过/);
+      expect(card("论文审稿")).toHaveAccessibleDescription(/模拟运行环境/);
+      // No label of those states is drawn anywhere on the page (the sentence is for assistive technology only).
+      expect(screen.queryByText(/^(可运行|已安装|未验证)$/)).not.toBeInTheDocument();
+      expect(document.querySelectorAll(".sr-only")).toHaveLength(2);
+    });
+
+    it("draws an installed or planned tool by the same rule: installed says nothing, planned says so", async () => {
+      mocks.listWebResearchAgents.mockResolvedValue([
+        { ...agents[0], availability: availability("adr-analysis", "installed", "已安装", "1.0.0 版已提供，还没有在这个部署上成功运行过。") },
+        { ...agents[1], availability: availability("off-label-analysis", "source-planned", "规划中", "目录里列了它，这个部署还没有安装。") },
+      ]);
+      renderPage();
+      await screen.findByRole("button", { name: /药品安全性分析/ });
+      expect(screen.queryByText("已安装")).not.toBeInTheDocument();
+      expect(card("超说明书用药分析")).toHaveTextContent("规划中");
+    });
+
+    it("leaves a tool with no state to draw with its duration alone in the footer", async () => {
+      mocks.listWebResearchAgents.mockResolvedValue(labelled());
+      renderPage();
+      await screen.findByRole("button", { name: /药品安全性分析/ });
+      // No state to draw and no estimate: how long it takes, and nothing else.
+      expect(card("药品安全性分析")).toHaveTextContent(/约 20～40 分钟$/);
     });
 
     it("says why in a sentence only where the reader can act on it, and keeps the rest for assistive technology", async () => {
@@ -443,6 +467,19 @@ describe("CapabilitiesPage", () => {
       expect(within(card(title("off-label-analysis"))).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
       expect(mocks.estimates).toHaveBeenCalledTimes(1);
       expect(mocks.estimates).toHaveBeenCalledWith(LISTED);
+    });
+
+    it("rounds the estimate to whole credits, the low end down and the high end up, so a figure never wraps the card", async () => {
+      mocks.estimates.mockResolvedValue({
+        ...estimates,
+        items: [estimate("adr-analysis", 4.05, 7.02), estimate("off-label-analysis", 0.2, 0.6), estimate("peer-review", 2.4, 2.6)],
+      });
+      renderPage();
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 ¥4～8 额度"));
+      // Under one credit the cents are the figure.
+      expect(card(title("off-label-analysis"))).toHaveTextContent("约 ¥0.2～0.6 额度");
+      // Two ends that round to different whole credits stay a range.
+      expect(card(title("peer-review"))).toHaveTextContent("约 ¥2～3 额度");
     });
 
     it("is left out for a tool nothing supports an estimate of, which gets no mark and no zero", async () => {

@@ -14,6 +14,7 @@ import {
   type CatalogueExtension, type ExtensionConnection, type ExtensionInstallation, type ExtensionRevision, type ProjectExtensions,
 } from "@/lib/extensionsClient";
 import { Link } from "react-router";
+import { MissingRecord, orMissing, RecordMissing } from "./MissingRecord";
 import { DrawerSection } from "./PlatformSkillDrawer";
 import { settingLabel } from "./extensionCopy";
 
@@ -32,7 +33,7 @@ export function extensionState(item: Pick<ExtensionInstallation, "effective" | "
  */
 export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: { extensionId: string; projectId: string; onClose: () => void; onChanged: (installationId?: string) => void }) {
   const alive = useRef(true), generation = useRef(0), requestKeys = useRef(new Map<string, string>()), working = useRef(false), historyRequest = useRef<number | null>(null);
-  const [entry, setEntry] = useState<CatalogueExtension | null>(null), [installation, setInstallation] = useState<ExtensionInstallation | null>(null), [project, setProject] = useState<ProjectExtensions | null>(null), [loaded, setLoaded] = useState(false);
+  const [entry, setEntry] = useState<CatalogueExtension | null>(null), [installation, setInstallation] = useState<ExtensionInstallation | null>(null), [project, setProject] = useState<ProjectExtensions | null>(null), [loaded, setLoaded] = useState(false), [missing, setMissing] = useState(false);
   const [settings, setSettings] = useState<Record<string, string | number | boolean>>({}), [versions, setVersions] = useState<ExtensionRevision[]>([]), [beforeRevision, setBeforeRevision] = useState<number | null>(null), [historyBusy, setHistoryBusy] = useState(false), [historyError, setHistoryError] = useState<string | null>(null);
   const [connections, setConnections] = useState<ExtensionConnection[]>([]), [connectionRefs, setConnectionRefs] = useState<string[]>([]), [connectionError, setConnectionError] = useState<string | null>(null), [connectionsLoaded, setConnectionsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false), [removing, setRemoving] = useState(false);
@@ -40,21 +41,25 @@ export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: 
     const request = ++generation.current;
     historyRequest.current = null; setHistoryBusy(false);
     try {
-      const [discovery, item, selection] = await Promise.all([extensionCatalogue(), extensionId.startsWith("extension:") ? extensionInstallation(extensionId) : Promise.resolve(null), projectExtensions(projectId)]);
+      const [discovery, item, selection] = await Promise.all([extensionCatalogue(), extensionId.startsWith("extension:") ? orMissing(extensionInstallation(extensionId)) : Promise.resolve(null), projectExtensions(projectId)]);
       const descriptor = discovery.items.find(candidate => candidate.id === (item?.catalogueId ?? extensionId)) ?? null;
-      if (!descriptor && !item) throw new Error("找不到这个插件。");
+      if (!descriptor && !item) throw new RecordMissing();
       const exact = descriptor && (!item || (item.integrity === descriptor.integrity && sameExtensionCoordinate(item.coordinate, descriptor.coordinate)));
       const [history, available] = await Promise.allSettled([item ? extensionHistory(item.id) : Promise.resolve({ items: [], nextBeforeRevision: null }), exact && item ? extensionConnections(descriptor.id, projectId) : Promise.resolve({ items: [], supportedKinds: [] })]);
       const selected = selection.selections.find(row => row.installationId === item?.id);
       if (alive.current && request === generation.current) {
-        setEntry(descriptor); setInstallation(item); setProject(selection); setLoaded(true); setError(null);
+        setEntry(descriptor); setInstallation(item); setProject(selection); setLoaded(true); setError(null); setMissing(false);
         setSettings(selected?.settings ?? (exact && descriptor ? Object.fromEntries(Object.entries(descriptor.settingsSchema).filter(([, field]) => field.default !== undefined).map(([key, field]) => [key, field.default!])) : {}));
         setConnectionRefs(selected?.connectionRefs ?? []);
         setConnectionsLoaded(!!exact && !!item && available.status === "fulfilled");
         setConnections(available.status === "fulfilled" ? available.value.items : []); setConnectionError(available.status === "rejected" ? productErrorMessage(available.reason) : null);
         setVersions(history.status === "fulfilled" ? history.value.items : []); setBeforeRevision(history.status === "fulfilled" ? history.value.nextBeforeRevision : null); setHistoryError(history.status === "rejected" ? productErrorMessage(history.reason) : null);
       }
-    } catch (caught) { if (alive.current && request === generation.current) setError(productErrorMessage(caught)); }
+    } catch (caught) {
+      if (!alive.current || request !== generation.current) return;
+      // A package that is not there is its own state, not an error to retry; any other failure keeps the line and 刷新.
+      if (caught instanceof RecordMissing) { setMissing(true); setError(null); } else setError(productErrorMessage(caught));
+    }
   }, [extensionId, projectId]);
   useEffect(() => { const requests = generation; alive.current = true; void load(); return () => { alive.current = false; requests.current++; }; }, [load]);
   useEffect(() => {
@@ -102,6 +107,7 @@ export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: 
     if (alive.current) onChanged(added.installation.id);
   });
   const state = installation ? extensionState(installation) : null;
+  if (missing) return <Drawer title="插件" onClose={onClose}><MissingRecord noun="插件" list="回到插件列表" onBack={onClose} /></Drawer>;
   return (
     <Drawer title={entry?.title ?? "插件"} description={state ? `我的插件 · ${state}` : "可以添加"} onClose={onClose}>
       {error && <p role="alert" className="mb-4 text-ui text-error">{error}<Button variant="text" disabled={busy} onClick={() => void load()}>刷新</Button></p>}

@@ -102,7 +102,7 @@ starterPrompts:
 
 display:
   title: "证据参数化"
-  category: "临床研究"
+  category: "虚拟临床研究"
   description: "按 PICO 找同类试验，逐项抽数并核对原文，交引擎合并，写成带预测区间的假设卡。"
   listed: false
   starterPrompts:

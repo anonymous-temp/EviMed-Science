@@ -13,7 +13,7 @@ import { extensionCatalogue, extensionInstallations, installExtension, pluginInv
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
-import { createPersonalSkill, listPersonalSkills, listPlatformSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
+import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
 import { ENGINE_COPY, PLUGIN_COPY } from "./extensionCopy";
 import { ExtensionDrawer } from "./ExtensionDrawer";
 import { CitationDrawer, ENGINE_WHEN, engineKicker, InfoDrawer, ToolsDrawer } from "./PluginDrawers";
@@ -108,9 +108,26 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   };
   const openSkill = (id: string) => { setOpen(null); navigate(`/app/extensions/skills/${encodeURIComponent(id)}`); };
 
-  const saveNew = async (value: SkillWrite) => {
-    try { const created = await createPersonalSkill(value); reloadPersonal(); openSkill(created.id); }
-    catch (caught) { toast.error(productErrorMessage(caught)); }
+  // One save at a time: the server makes a new skill for every request it gets, so a second click while the first is on its
+  // way would be a second skill.
+  const [saving, setSaving] = useState(false), saveRunning = useRef(false);
+  const saveNew = async (value: SkillWrite, useInProject: boolean) => {
+    if (saveRunning.current) return;
+    saveRunning.current = true; setSaving(true);
+    try {
+      const created = await createPersonalSkill(value);
+      reloadPersonal();
+      // A saved skill is used nowhere until it is selected for a project. Selecting it is a second request on top of a skill
+      // that already exists: if it fails the skill stays, is opened, and the reader is told where to switch it on.
+      if (useInProject) {
+        try {
+          const current = await projectSkills(projectId);
+          await saveProjectSkills(projectId, current.revision, [...current.payload.skills.filter(item => item.skillId !== created.id), { skillId: created.id, revision: created.revision }]);
+        } catch { toast.error("技能已保存，但没能在当前项目启用，可在详情里打开。"); }
+      }
+      openSkill(created.id);
+    } catch (caught) { toast.error(productErrorMessage(caught)); }
+    finally { saveRunning.current = false; setSaving(false); }
   };
 
   const action = tab === "skills" ? (
@@ -151,8 +168,9 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
       {open?.kind === "platform" && <PlatformSkillDrawer key={open.skill.id} skill={open.skill} onClose={close}
         onCopied={created => { reloadPersonal(); toast.success("已复制到我的技能"); openSkill(created.id); }} />}
       {open?.kind === "create" && (
-        <Drawer title="创建技能" onClose={close}>
-          <SkillEditor initial={{ expectedRevision: 0, title: "", description: "", instructions: "" }} busy={false} onSave={value => void saveNew(value)} onCancel={close} />
+        <Drawer title="新建技能" onClose={() => { if (!saving) close(); }}>
+          <SkillEditor initial={{ expectedRevision: 0, title: "", description: "", instructions: "" }} busy={saving} create={{ projectName: projectName ?? "当前项目" }}
+            onSave={(value, useInProject) => void saveNew(value, useInProject)} onCancel={close} />
         </Drawer>
       )}
       {open?.kind === "import" && (

@@ -1089,9 +1089,9 @@
       "origin": "capability",
       "version": "1.2.1",
       "source": {"kind":"release"},
-      "digest": "sha256:6f71e52337ba9ef798d0ef8b5ca89c2833d469124ed46c9e630b151b234befbd",
+      "digest": "sha256:cc4dd2dd51e2e1f342d977c76599c113ba03e46f1f03f80709d2316c55f21c59",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"c4ef0236968c058ed36f1c7d76e3fe74db6df94e77a4ce94c5813c9490d5e295"}],
+      "references": [{"path":"capability.yaml","sha256":"dc4dc0b5929790d4b281f38fa1a61db6fb535f76a4baf2b8a105f0527f48f506"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1133,9 +1133,9 @@
       "origin": "capability",
       "version": "1.0.1",
       "source": {"kind":"release"},
-      "digest": "sha256:ef16ca7a5b5bdedc94fc2193d93c80be44391407c372f0a64674e70795ea15bd",
+      "digest": "sha256:68bbe1774fb69d16e8e1c4c713d77981f1cede76df504dc9115e9b61ac43d587",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"e0b604183659bf7de49f736505ff32e9b9bc4925bc3679b6a6d0e84ea538df28"}],
+      "references": [{"path":"capability.yaml","sha256":"a0ea9931f552438adceb56f5a0b2640ee4fbb9751e54fb77f381eb830bbf7d02"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},

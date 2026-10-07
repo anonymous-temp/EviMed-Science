@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { PersonalSkillDrawer } from "./PersonalSkillDrawer";
 
@@ -117,6 +118,38 @@ it("a skill that cannot be read says so with a way to read it again", async () =
   skills.getPersonalSkill.mockRejectedValueOnce(new Error("down")).mockResolvedValue(skill);
   show();
   const alert = await screen.findByRole("alert");
+  await userEvent.click(within(alert).getByRole("button", { name: "刷新" }));
+  expect(await screen.findByText("Use sources.")).toBeInTheDocument();
+});
+
+it("a skill that is not there says so and goes back to the list in one click, with nothing to refresh", async () => {
+  skills.getPersonalSkill.mockRejectedValue(new WebApiError("gone", { status: 404 }));
+  skills.personalSkillHistory.mockRejectedValue(new WebApiError("gone", { status: 404 }));
+  show();
+  const drawer = await screen.findByRole("dialog", { name: "技能" });
+  expect(within(drawer).getByText("找不到这个技能，它可能已被移除。")).toBeInTheDocument();
+  expect(within(drawer).queryByRole("button", { name: "刷新" })).not.toBeInTheDocument();
+  expect(within(drawer).queryByRole("alert")).not.toBeInTheDocument();
+  expect(within(drawer).queryByText("我的技能")).not.toBeInTheDocument();
+  expect(drawer.querySelector("[aria-hidden].animate-pulse, .animate-pulse")).toBeNull();
+  await userEvent.click(within(drawer).getByRole("button", { name: "回到技能列表" }));
+  expect(handlers.onClose).toHaveBeenCalledTimes(1);
+});
+
+it("a read about the project that fails is not a missing skill, and keeps the line and the way to read it again", async () => {
+  skills.projectSkills.mockRejectedValueOnce(new WebApiError("gone", { status: 404 })).mockResolvedValue({ revision: 6, payload: { skills: [] } });
+  show();
+  const alert = await screen.findByRole("alert");
+  expect(screen.queryByText("找不到这个技能，它可能已被移除。")).not.toBeInTheDocument();
+  await userEvent.click(within(alert).getByRole("button", { name: "刷新" }));
+  expect(await screen.findByText("Use sources.")).toBeInTheDocument();
+});
+
+it("any other failure of the skill's own read keeps the line and 刷新", async () => {
+  skills.getPersonalSkill.mockRejectedValueOnce(new WebApiError("down", { status: 500 })).mockResolvedValue(skill);
+  show();
+  const alert = await screen.findByRole("alert");
+  expect(screen.queryByRole("button", { name: "回到技能列表" })).not.toBeInTheDocument();
   await userEvent.click(within(alert).getByRole("button", { name: "刷新" }));
   expect(await screen.findByText("Use sources.")).toBeInTheDocument();
 });

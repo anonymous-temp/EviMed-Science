@@ -594,7 +594,7 @@
     },
     "vcr-evidence": {
       "title": "证据参数化",
-      "category": "临床研究",
+      "category": "虚拟临床研究",
       "description": "按 PICO 找同类试验，逐项抽数并核对原文，交引擎合并，写成带预测区间的假设卡。",
       "listed": false,
       "starterPrompts": [
@@ -626,7 +626,7 @@
     },
     "vcr-matching": {
       "title": "匹配与招募",
-      "category": "临床研究",
+      "category": "虚拟临床研究",
       "description": "把入排条件结构化，逐条判定候选人并交回待补证据与筛选漏斗，联系患者前等人确认。",
       "listed": false,
       "starterPrompts": [

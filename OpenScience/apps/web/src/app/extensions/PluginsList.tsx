@@ -44,8 +44,9 @@ function Group({ name, aside, children }: { name: string; aside?: string; childr
  * The plugins page's one list, in two groups: what a conversation has to work with, and the calculation engines the research
  * tools call in the background — and, when the deployment offers any, the reader's own extensions and the ones they can add.
  *
- * Only what can really be switched has a switch (the citation check, per project); the rest says 「始终开启」 or its
- * readiness. Nothing says a state the page cannot know.
+ * Only what can really be switched has a switch (the citation check, per project); the rest says 「始终开启」, and an engine
+ * that cannot be used says so — one that can says nothing, because a ready engine is not a state to act on. Nothing says a
+ * state the page cannot know.
  */
 export function PluginsList({ inventory, citation, extensions, allCatalogue, query, busyId, onOpen, onInstall }: {
   inventory: PluginInventory;
@@ -83,13 +84,16 @@ export function PluginsList({ inventory, citation, extensions, allCatalogue, que
   const offered = (extensions?.offered ?? []).filter(entry => show(entry.title));
   const nothing = !citeShown && visibleTools.length === 0 && engines.length === 0 && installed.length === 0 && offered.length === 0;
   const CiteIcon = cite.icon;
+  // The switch shows what was asked for; when that did not take (rolled back, runtime away, failed) the row says so, and the
+  // drawer it opens has 重试 — never a saved setting standing in for a state that never arrived.
+  const citeFailed = citation.plugin?.phase === "rolled_back" || citation.plugin?.phase === "unavailable" || citation.plugin?.phase === "failed";
   return (
     <div className="flex flex-col gap-6">
       {(citeShown || visibleTools.length > 0) && (
         <Group name="对话里的工具">
           <List label="对话里的工具" divided>
             {citeShown && (
-              <ListRow leading={<CiteIcon size={20} aria-hidden className="text-text-3" />} title={cite.title} meta={cite.use} onOpen={() => onOpen({ kind: "cite" })}
+              <ListRow leading={<CiteIcon size={20} aria-hidden className="text-text-3" />} title={cite.title} meta={citeFailed ? "这项设置没能生效，点开重试" : cite.use} onOpen={() => onOpen({ kind: "cite" })}
                 trailing={<Switch label={`在当前项目里使用${cite.title}`} checked={citation.plugin?.desired?.enabled ?? inventory.items.find(item => item.id === "dsh-cite")?.enabled ?? false}
                   disabled={citation.busy || !citation.plugin?.desired} onChange={enabled => void citation.save({ enabled })} />} />
             )}
@@ -109,7 +113,7 @@ export function PluginsList({ inventory, citation, extensions, allCatalogue, que
             {shownEngines.map(({ copy, available }) => {
               const Icon = copy.icon;
               return <ListRow key={copy.id} leading={<Icon size={20} aria-hidden className="text-text-3" />} title={copy.title} meta={copy.use}
-                trailing={<><span>{available ? "可用" : "暂不可用"}</span><ChevronRight size={16} aria-hidden /></>} onOpen={() => onOpen({ kind: "engine", id: copy.id })} />;
+                trailing={<>{!available && <span>暂不可用</span>}<ChevronRight size={16} aria-hidden /></>} onOpen={() => onOpen({ kind: "engine", id: copy.id })} />;
             })}
           </List>
           {!needle && engines.length > ENGINES_SHOWN && (
