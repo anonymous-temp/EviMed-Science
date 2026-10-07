@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,6 +26,7 @@ vi.mock("@/lib/inboxClient", () => ({
 }));
 
 const store = vi.hoisted(() => ({
+  collapsed: false,
   setSidebarWidth: vi.fn(),
   toggleSidebar: vi.fn(),
 }));
@@ -34,7 +35,7 @@ vi.mock("@/lib/store", () => ({
   SIDEBAR_MIN: 220,
   SIDEBAR_MAX: 420,
   useUiStore: () => ({
-    sidebarCollapsed: false,
+    sidebarCollapsed: store.collapsed,
     sidebarWidth: 260,
     setSidebarCollapsed: vi.fn(),
     setSidebarWidth: store.setSidebarWidth,
@@ -81,11 +82,58 @@ function renderSidebar(initialPath = "/app/chat") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  store.collapsed = false;
   projectModule.current = null;
   mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 0, safetyUnread: 0 });
   mocks.fetchWebConnectors.mockResolvedValue([]);
   // A control plane that says nothing about 前沿动态 has not got it.
   mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [] });
+});
+
+// 2026-10-07 audit B-02 and axe `region` (all 21 scans): the divider stood outside the landmark, and a collapsed sidebar —
+// 0 wide, clipped — kept 46 links and buttons in the tab order, the second Tab stop of every page on a phone.
+describe("Sidebar landmark and collapse", () => {
+  it("is one landmark that holds everything of the sidebar, the divider too", async () => {
+    renderSidebar();
+    const landmark = await screen.findByRole("complementary", { name: "侧栏" });
+    expect(within(landmark).getByRole("navigation", { name: "工作台" })).toBeInTheDocument();
+    expect(within(landmark).getByTestId("project-browser")).toBeInTheDocument();
+    expect(within(landmark).getByRole("separator", { name: "调整侧边栏宽度" })).toBeInTheDocument();
+    expect(within(landmark).getByRole("link", { name: "设置" })).toBeInTheDocument();
+    // Nothing of it is a sibling of the landmark.
+    expect(landmark.parentElement?.querySelector("[role='separator']")?.closest("aside")).toBe(landmark);
+    expect(screen.getAllByRole("complementary")).toHaveLength(1);
+  });
+
+  it("is live while open", async () => {
+    renderSidebar();
+    expect(await screen.findByRole("complementary", { name: "侧栏" })).not.toHaveAttribute("inert");
+    expect(screen.getByRole("separator", { name: "调整侧边栏宽度" })).toHaveAttribute("tabindex", "0");
+  });
+
+  it("is inert while collapsed, so none of its links and buttons is a stop in the tab order or in the reading order", async () => {
+    store.collapsed = true;
+    const { container } = renderSidebar();
+    const landmark = container.querySelector("aside[data-sidebar]") as HTMLElement;
+    expect(landmark).toHaveAttribute("inert");
+    expect(landmark).toHaveStyle({ width: "0px" });
+    // The splitter is inside the inert landmark and out of the tab order.
+    expect(landmark.querySelector("[role='separator']")).toHaveAttribute("tabindex", "-1");
+    expect(landmark.querySelectorAll("a[href], button").length).toBeGreaterThan(5);
+  });
+
+  it("stays live while a drag is in flight, because the drag may open it again", async () => {
+    store.collapsed = true;
+    const { container } = renderSidebar();
+    const landmark = container.querySelector("aside[data-sidebar]") as HTMLElement;
+    expect(landmark).toHaveAttribute("inert");
+    const divider = landmark.querySelector("[role='separator']") as HTMLElement;
+    divider.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(divider, { pointerId: 1 });
+    expect(landmark).not.toHaveAttribute("inert");
+    fireEvent.pointerUp(divider, { pointerId: 1 });
+    expect(landmark).toHaveAttribute("inert");
+  });
 });
 
 describe("Sidebar navigation", () => {
