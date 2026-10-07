@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { PluginsPage, SkillsPage } from "./ExtensionsPage";
+import { ExtensionsPage } from "./ExtensionsPage";
 
 const skills = vi.hoisted(() => ({
   listPlatformSkills: vi.fn(), readPlatformSkill: vi.fn(), copyPlatformSkill: vi.fn(), listPersonalSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn(),
@@ -45,8 +45,7 @@ const citePlugin = {
 function Where() { return <p data-testid="where">{useLocation().pathname}</p>; }
 function open(path: string) {
   return render(<MemoryRouter initialEntries={[path]}><Where />
-    <Routes><Route path="/app/extensions/skills" element={<SkillsPage />} /><Route path="/app/extensions/skills/:skillId" element={<SkillsPage />} />
-      <Route path="/app/extensions/plugins" element={<PluginsPage />} /><Route path="/app/extensions/plugins/:extensionId" element={<PluginsPage />} /></Routes></MemoryRouter>);
+    <Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>);
 }
 beforeEach(() => {
   vi.resetAllMocks();
@@ -243,6 +242,18 @@ it("switching tabs keeps one page and clears the search", async () => {
   expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveValue("");
   await screen.findByRole("region", { name: "对话里的工具" });
   expect(screen.queryByRole("button", { name: "新建技能" })).not.toBeInTheDocument();
+  // Both lists were read once, on arrival: going back and forth reads nothing again.
+  await userEvent.click(screen.getByRole("tab", { name: /^技能/ }));
+  await screen.findByRole("region", { name: "科研分析" });
+  expect(skills.listPlatformSkills).toHaveBeenCalledTimes(1);
+  expect(skills.listPersonalSkills).toHaveBeenCalledTimes(1);
+  expect(extensions.pluginInventory).toHaveBeenCalledTimes(1);
+});
+
+it("an address with no such tab goes to the skills tab", async () => {
+  open("/app/extensions/nothing");
+  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/skills"));
+  expect(await screen.findByRole("region", { name: "科研分析" })).toBeInTheDocument();
 });
 
 it("creating a skill saves it from the drawer and opens it at its own address", async () => {

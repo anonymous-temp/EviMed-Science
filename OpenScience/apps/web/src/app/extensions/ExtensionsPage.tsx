@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Navigate, useNavigate, useParams } from "react-router";
 import { Plus, Upload } from "lucide-react";
 import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
@@ -48,9 +48,9 @@ type Open =
  * The address still names the open item (`/app/extensions/skills/:skillId`, `/app/extensions/plugins/:extensionId`), so a
  * link a notice or an earlier page made keeps working.
  */
-function ExtensionsPage({ tab }: { tab: Tab }) {
+function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   const navigate = useNavigate();
-  const { skillId, extensionId } = useParams();
+  const skillId = tab === "skills" ? itemId : undefined, extensionId = tab === "plugins" ? itemId : undefined;
   const projectId = useProjectStore(state => state.currentId);
   const projectName = useProjectStore(state => state.projects.find(project => project.id === state.currentId)?.name);
   const [query, setQuery] = useState("");
@@ -124,7 +124,7 @@ function ExtensionsPage({ tab }: { tab: Tab }) {
 
   return (
     <PageShell title="插件与技能" actions={<><SearchInput label="搜索" value={query} onChange={event => setQuery(event.target.value)} />{action}</>}>
-      <Tabs label="插件与技能" className="mb-6" value={tab} onChange={next => { setQuery(""); navigate(`/app/extensions/${next}`); }}
+      <Tabs label="插件与技能" className="mb-6" value={tab} onChange={next => { setQuery(""); setOpen(null); navigate(`/app/extensions/${next}`); }}
         items={[{ value: "skills", label: "技能", count: skillCount ?? undefined }, { value: "plugins", label: "插件", count: pluginCount ?? undefined }]} />
       {tab === "skills" ? (
         <>
@@ -185,5 +185,12 @@ function PluginTargetDrawer({ target, inventory, citation, projectName, onClose 
   return null;
 }
 
-export function SkillsPage() { return <ExtensionsPage tab="skills" />; }
-export function PluginsPage() { return <ExtensionsPage tab="plugins" />; }
+/**
+ * The one route element for both tabs (`extensions/:tab/:itemId?`): one component instance serves both, so a switch of tab is a
+ * switch of view, not a second read of everything the page has already loaded.
+ */
+export function ExtensionsPage() {
+  const { tab, itemId } = useParams();
+  if (tab !== "skills" && tab !== "plugins") return <Navigate to="/app/extensions/skills" replace />;
+  return <Extensions tab={tab} itemId={itemId} />;
+}

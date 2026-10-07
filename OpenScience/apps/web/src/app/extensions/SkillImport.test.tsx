@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
-import { SkillsPage } from "./ExtensionsPage";
+import { ExtensionsPage } from "./ExtensionsPage";
 import { useProjectStore } from "@/lib/projects";
 
 // The import drawer is the old import page moved, with the same behaviour: a file or a public repository previewed before it
@@ -18,7 +18,7 @@ vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), l
 function pick<T extends object, K extends keyof T>(source: T, keys: K[]): Pick<T, K> { return Object.fromEntries(keys.map(key => [key, source[key]])) as Pick<T, K>; }
 const detail = { skill: { instructions: "Preserve actual source quotations.", description: "核对保留来源", invocation: { userInvocable: true, modelInvocable: false }, metadata: {}, whenToUse: "需要核对来源时", resources: [{ path: "参考/证据.csv", size: 12, digest: "sha256:fixture" }], scripts: [{ path: "scripts/check.py", size: 8 }], digest: "sha256:fixture" } };
 const personal = { id: "skill:fresh", revision: 1, payload: { title: "我的核对方法", description: "核对", instructions: "Preserve sources.", nativeName: "personal-fresh", digest: "sha256:fresh", resources: [], prepared: true }, createdAt: "", updatedAt: "", deletedAt: null };
-function open() { return render(<MemoryRouter initialEntries={["/app/extensions/skills"]}><Routes><Route path="/app/extensions/skills" element={<SkillsPage />} /><Route path="/app/extensions/skills/:id" element={<p>新技能详情</p>} /></Routes></MemoryRouter>); }
+function open() { return render(<MemoryRouter initialEntries={["/app/extensions/skills"]}><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>); }
 /** The page's one primary action: 「新建技能」, then 「导入」 in its menu. */
 async function openImport(user: ReturnType<typeof userEvent.setup>) { await user.click(await screen.findByRole("button", { name: "新建技能" })); await user.click(screen.getByRole("menuitem", { name: "导入" })); }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
@@ -169,7 +169,7 @@ it("previews native skill content and scripts before the explicit import action"
   await user.click(screen.getByRole("button", { name: "确认导入" }));
   await waitFor(() => expect(api.importPersonalSkill).toHaveBeenCalledWith("upload:fixture", "我的检查方法"));
   // The visible result: the new skill is open at its own address.
-  await screen.findByText("新技能详情");
+  expect(await screen.findByRole("dialog", { name: "我的核对方法" })).toBeInTheDocument();
 });
 it("a failed preview creates no skill and a changed file invalidates the earlier preview", async () => {
   api.uploadPersonalSkill.mockResolvedValue({ resourceId: "upload:fixture" }); api.previewPersonalSkillImport.mockResolvedValue(filePreview);
