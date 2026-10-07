@@ -124,7 +124,7 @@ export function MemoryHubPage() {
   const vcrOn = useVcrFeature() === "on";
   const projectsKey = projects.map((project) => project.id).join("\u0000");
   const geoIds = useGeoProjectIds(geoOn, projectsKey);
-  const vcrIds = useVcrProjectIds(vcrOn, projectsKey);
+  const { ids: vcrIds } = useVcrProjectIds(vcrOn, projectsKey);
   const projectName = (id: string | null) => (id ? projects.find((project) => project.id === id)?.name ?? null : null);
   const knownProjects = useMemo(() => new Set(projects.map((project) => project.id)), [projects]);
 

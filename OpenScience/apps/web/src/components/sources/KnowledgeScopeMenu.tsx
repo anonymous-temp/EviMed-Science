@@ -27,10 +27,11 @@ export function KnowledgeScopeMenu({ scope, onChange }: { scope: SourceScope; on
   const geoOn = useGeoFeature() === "on";
   const vcrOn = useVcrFeature() === "on";
   const geoIds = useGeoProjectIds(geoOn, projectsKey);
-  const vcrIds = useVcrProjectIds(vcrOn, projectsKey);
+  // A draft study (nobody has spoken in it yet) is not a place documents are filed; it is left out like the sidebar leaves it out.
+  const { ids: vcrIds, drafts: vcrDrafts } = useVcrProjectIds(vcrOn, projectsKey);
   const entries = useMemo(() => {
     const own = projects.filter((project) => !geoIds.has(project.id) && !vcrIds.has(project.id));
-    const studies = projects.filter((project) => vcrIds.has(project.id));
+    const studies = projects.filter((project) => vcrIds.has(project.id) && !vcrDrafts.has(project.id));
     const communication = projects.filter((project) => geoIds.has(project.id));
     const chosen = scope.kind === "project" ? scope.projectId : null;
     const group = (heading: string, list: typeof projects): MenuEntry[] => list.length === 0 ? [] : [
@@ -44,7 +45,7 @@ export function KnowledgeScopeMenu({ scope, onChange }: { scope: SourceScope; on
       "separator" as const,
       { label: SHARED_SCOPE_NAME, checked: scope.kind === "shared", onSelect: () => onChange({ kind: "shared" }) },
     ] satisfies MenuEntry[];
-  }, [projects, geoIds, vcrIds, scope, onChange]);
+  }, [projects, geoIds, vcrIds, vcrDrafts, scope, onChange]);
   const name = scope.kind === "shared" ? SHARED_SCOPE_NAME : projects.find((project) => project.id === scope.projectId)?.name ?? "当前项目";
   const Icon = scope.kind === "shared" ? Library : vcrIds.has(scope.projectId) ? UsersRound : geoIds.has(scope.projectId) ? Radar : FolderOpen;
   return (
