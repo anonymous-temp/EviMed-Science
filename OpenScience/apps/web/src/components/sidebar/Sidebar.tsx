@@ -63,7 +63,7 @@ const NAV: NavItem[] = [
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
-  { to: "/app/extensions/plugins", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
+  { to: "/app/extensions/skills", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
 ];
 
 /**
@@ -173,7 +173,7 @@ export function Sidebar() {
               to={item.to}
               icon={item.icon}
               label={item.label}
-              active={item.to === "/app/extensions/plugins" ? location.pathname.startsWith("/app/extensions") : location.pathname.startsWith(item.to)}
+              active={item.to === "/app/extensions/skills" ? location.pathname.startsWith("/app/extensions") : location.pathname.startsWith(item.to)}
               freshState={item.to === "/app/chat" ? () => ({ runtimeUiIntent: newRuntimeUiIntent() }) : undefined}
             />
           ))}

@@ -120,6 +120,13 @@ test("each operation is judged by the ability of the roles held, and a refusal n
   // edit: settings and the producer.
   assert.equal((await call("editor", "PATCH", `/api/geo/projects/${id}`, { producer: { kind: "enterprise", name: "某某制药" } })).status, 200);
   assert.deepEqual(forbidden(await call("viewer", "PATCH", `/api/geo/projects/${id}`, { tier: "3" })), [403, "geo_member_forbidden"]);
+  // The name: an editor renames the project, which is the owner's project — the owner and every member read the new name, and a viewer cannot.
+  assert.equal((await call("editor", "PATCH", `/api/geo/projects/${id}`, { name: "改过的项目名" })).status, 200);
+  for (const role of ["owner", "editor", "viewer"]) {
+    assert.equal((await call(role, "GET", `/api/geo/projects/${id}`)).body.data.name, "改过的项目名", `${role} reads the new name`);
+  }
+  assert.deepEqual(forbidden(await call("viewer", "PATCH", `/api/geo/projects/${id}`, { name: "不该成功" })), [403, "geo_member_forbidden"]);
+  assert.deepEqual(forbidden(await call("editor", "PATCH", `/api/geo/projects/${id}`, { name: "   " })), [400, "geo_project_name_invalid"]);
   assert.deepEqual(forbidden(await call("reviewer", "POST", `/api/geo/projects/${id}/cards/refresh`, {})), [403, "geo_member_forbidden"]);
   // money, members and deletion: the owner's alone.
   assert.deepEqual(forbidden(await call("editor", "PUT", `/api/geo/projects/${id}/budget`, { totalCny: 1000, dailyCny: 100 })), [403, "geo_member_forbidden"]);

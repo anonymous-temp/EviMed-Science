@@ -1,6 +1,3 @@
-import {CapabilityMap} from "@/components/evolution/CapabilityMap";
-import {Tabs} from "@/components/ui/Tabs";
-import { EvolutionPanel } from '@/components/evolution/EvolutionPanel';
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
@@ -79,7 +76,6 @@ function allowanceText(estimate: WebResearchEstimate | undefined): string | null
  */
 export function CapabilitiesPage() {
   const navigate = useNavigate();
-  const [view,setView] = useState<"tools" | "map">("tools");
   const [agents, setAgents] = useState<WebResearchAgent[]>([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -156,8 +152,6 @@ export function CapabilitiesPage() {
       title="科研工具"
       actions={<SearchInput label="搜索工具" value={query} onChange={(event) => setQuery(event.target.value)} className="w-72" />}
     >
-      <Tabs label="科研工具视图" className="mb-6" items={[{value:"tools",label:"科研工具"},{value:"map",label:"能力地图"}]} value={view} onChange={setView} />
-      {view === "map" ? <CapabilityMap query={query} names={new Map(agents.map(agent=>[agent.id,researchAgentUi(agent).title]))} /> : <>
       {/* Only a balance just read: while it is being read again, or could not be, the one held is not drawn. */}
       {!billing.loading && !billing.error && <SimulatedAllowanceNotice allowance={billing.allowance} className="mb-6" />}
       {categories.length > 1 && (
@@ -190,8 +184,6 @@ export function CapabilitiesPage() {
                 ))}
               </div>
             )}
-      <EvolutionPanel />
-      </>}
     </PageShell>
   );
 }

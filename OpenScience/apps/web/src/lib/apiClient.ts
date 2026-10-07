@@ -418,6 +418,8 @@ export interface WebPluginConfiguration {
   enabled: boolean;
   /** Whatever the plugin's own schema declares; empty for a plugin with no settings. */
   settings: Record<string, number>;
+  /** When this configuration was saved; present on a history row. */
+  recordedAt?: string | null;
 }
 
 export interface WebPluginState {

@@ -54,6 +54,8 @@ import { SkillLibraryArtifacts } from "./skillLibraryArtifacts.mjs";
 import { createSkillLibraryRoutes } from "./skillLibraryRoutes.mjs";
 import { SkillSupply } from "./skillSupplyService.mjs";
 import { NativeSkillCatalogue } from "./nativeSkillCatalogue.mjs";
+import { createPlatformSkillCatalogue } from "./platformSkillCatalogue.mjs";
+import { moduleState } from "./deploymentComposition.mjs";
 import { PersonalSkillRepositoryImport } from "./personalSkillRepositoryImport.mjs";
 import { PersonalSkillTransfer } from "./personalSkillTransfer.mjs";
 import { createPersonalSkillTransferRoutes } from "./personalSkillTransferRoutes.mjs";
@@ -1087,7 +1089,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config });
+  // The engines' readiness is read at request time: the availability service is composed further down.
+  const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config, engines: user => availability.service.engineReadiness(user) });
   const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
     if (!vcr) return null;
     const study = await vcr.store.studyByControlProject(user.id, projectId, client);
@@ -1151,6 +1154,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const skillSupply = new SkillSupply({ config });
   const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
     artifacts: skillArtifacts, supply: skillSupply,
+    // The skills the platform ships, listed and read from the control plane's own packages — no runtime needed.
+    platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir, packAllowed: user => moduleState(config, user, "geo") === "on" }),
     projectAccess: async (user, project) => {
       const current = await store.requireProject(user, project.id);
       if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
@@ -2149,6 +2154,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const project = await store.requireProject(user, projectId);
         return (await researchSessions.list(project))[0]?.sessionId ?? null;
       },
+      // A rename is the project owner's: an editor of the GEO project asks, and the name is written as its owner.
+      rename: async (ownerId, projectId, name) => {
+        const owner = await store.userById(ownerId);
+        if (!owner) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
+        await store.renameProject(owner, projectId, name);
+      },
     },
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
@@ -2607,6 +2618,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService, skillSupply,
     methodValidation: () => loadMethodValidation({ file: config.vcrMethodValidationFile, engine: vcr?.engine }),
     vcrEngine: () => vcr?.engineProbe?.snapshot() ?? null,
+    vcrEngineRefresh: () => vcr?.engineProbe?.refresh?.() ?? Promise.resolve(null),
     mutation: maintenanceMutation,
     canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
     fetchImpl: overrides.availabilityFetch ?? globalThis.fetch,

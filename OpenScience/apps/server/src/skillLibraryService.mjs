@@ -55,8 +55,8 @@ const sourceDocumentId = resourceId => `skill-source:${sha256(resourceId)}`;
 
 /** Personal instructions are account records, never executable authority or a copy of a learned method. */
 export class SkillLibraryService {
-  /** @param {any} database @param {{documents?:any,artifacts?:any,projectAccess?:any,invoke?:any,learnedMethods?:any,nativeCatalogue?:any,repositoryPreview?:any,onRemoved?:any,supply?:import("./skillSupplyService.mjs").SkillSupply|null}} [options] */
-  constructor(database, { documents = new ProductDocuments(database), artifacts = null, projectAccess = null, invoke = null, learnedMethods = null, nativeCatalogue = null, repositoryPreview = null, onRemoved = null, supply = null } = {}) {
+  /** @param {any} database @param {{documents?:any,artifacts?:any,projectAccess?:any,invoke?:any,learnedMethods?:any,nativeCatalogue?:any,platformCatalogue?:ReturnType<typeof import("./platformSkillCatalogue.mjs").createPlatformSkillCatalogue>|null,repositoryPreview?:any,onRemoved?:any,supply?:import("./skillSupplyService.mjs").SkillSupply|null}} [options] */
+  constructor(database, { documents = new ProductDocuments(database), artifacts = null, projectAccess = null, invoke = null, learnedMethods = null, nativeCatalogue = null, platformCatalogue = null, repositoryPreview = null, onRemoved = null, supply = null } = {}) {
     this.database = database;
     this.documents = documents;
     this.artifacts = artifacts;
@@ -64,6 +64,7 @@ export class SkillLibraryService {
     this.dispatchInvocation = invoke;
     this.learnedMethods = learnedMethods;
     this.nativeCatalogue = nativeCatalogue;
+    this.platformCatalogue = platformCatalogue;
     this.repositoryPreview = repositoryPreview;
     this.onRemoved = onRemoved;
     this.supply = supply;
@@ -345,28 +346,61 @@ export class SkillLibraryService {
     return this.withLibraryAccount(user, async client => {
       await this.requireProject(user, project);
       if (!this.nativeCatalogue || !this.artifacts) throw new HttpError(503, 'product_state_unavailable', 'Native skill duplication is unavailable.');
-      const operationId = `skill-copy:${sha256(input.idempotencyKey)}`, requestDigest = sha256(canonicalJson({ projectId: project.id, ...input }));
-      if (client) await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`skill-library-account:${user.id}`]);
-      const existing = await this.documents.get(user.id, 'extension-resource', operationId);
-      if (existing) {
-        if (existing.payload.requestDigest !== requestDigest) throw new HttpError(409, 'product_revision_conflict', 'This copy request already names different content.');
-        return this.get(user, existing.payload.skillId);
-      }
-      const snapshot = await this.nativeCatalogue.read(user, project, { sessionId: input.sessionId, key: input.key, expectedRuntimeGeneration: input.expectedRuntimeGeneration }, true);
-      const archive = await nativeSkillSnapshotArchive(snapshot.skill.entries), uploaded = await this.upload(user, 'tar-gzip', archive);
-      const skillId = `skill:${randomUUID()}`, nativeName = personalSkillName(user.id, skillId, sha256);
-      try {
-        const imported = await this.artifacts.import(user, { resourceId: uploaded.resourceId, skillId, nativeName });
-        const content = writeRequest({ expectedRevision: 0, title: input.title, description: imported.description, instructions: imported.instructions });
-        // The copy knows which built-in it was made from, and the digests that built-in had: an edited copy can later
-        // tell its own edits from the original's changes.
-        const provenance = { source: { kind: "builtin-copy", package: snapshot.skill.name, digest: snapshot.skill.digest }, baseline: contentDigests(imported) };
-        const row = await this.saveContent(user, skillId, content, imported.resources, { ...imported, provenance },
-          () => this.nativeCatalogue.assertCurrent(user, project, input.sessionId, input.expectedRuntimeGeneration));
-        await this.documents.put(user.id, 'extension-resource', operationId, { schemaVersion: 1, kind: 'skill-copy', requestDigest, skillId: row.id }, { expectedRevision: 0, transactionClient: client });
-        return row;
-      } finally { await this.removeUpload(user, uploaded.resourceId); }
+      return this.copyBuiltin(user, client, { idempotencyKey: input.idempotencyKey, title: input.title,
+        requestDigest: sha256(canonicalJson({ projectId: project.id, ...input })),
+        snapshot: async () => (await this.nativeCatalogue.read(user, project, { sessionId: input.sessionId, key: input.key, expectedRuntimeGeneration: input.expectedRuntimeGeneration }, true)).skill,
+        verify: () => this.nativeCatalogue.assertCurrent(user, project, input.sessionId, input.expectedRuntimeGeneration) });
     });
+  }
+  /**
+   * One built-in skill's folder becomes the account's own skill. Shared by the copy of a skill a live session lists and the
+   * copy of one the platform ships (which needs no session): the bytes pass the same archive importer and native validator,
+   * the receipt is one record pointer, and the copy remembers which built-in it was made from and the digests that built-in
+   * had, so an edited copy can later tell its own edits from the original's changes.
+   * @param {any} user @param {any} client @param {{idempotencyKey:string,title:string,requestDigest:string,snapshot:()=>Promise<{name:string,digest:string,entries:any[]}>,verify?:(()=>Promise<void>)|null}} input
+   */
+  async copyBuiltin(user, client, { idempotencyKey, title, requestDigest, snapshot, verify = null }) {
+    const operationId = `skill-copy:${sha256(idempotencyKey)}`;
+    if (client) await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`skill-library-account:${user.id}`]);
+    const existing = await this.documents.get(user.id, 'extension-resource', operationId);
+    if (existing) {
+      if (existing.payload.requestDigest !== requestDigest) throw new HttpError(409, 'product_revision_conflict', 'This copy request already names different content.');
+      return this.get(user, existing.payload.skillId);
+    }
+    const source = await snapshot();
+    const archive = await nativeSkillSnapshotArchive(source.entries), uploaded = await this.upload(user, 'tar-gzip', archive);
+    const skillId = `skill:${randomUUID()}`, nativeName = personalSkillName(user.id, skillId, sha256);
+    try {
+      const imported = await this.artifacts.import(user, { resourceId: uploaded.resourceId, skillId, nativeName });
+      const content = writeRequest({ expectedRevision: 0, title, description: imported.description, instructions: imported.instructions });
+      const provenance = { source: { kind: "builtin-copy", package: source.name, digest: source.digest }, baseline: contentDigests(imported) };
+      const row = await this.saveContent(user, skillId, content, imported.resources, { ...imported, provenance }, verify);
+      await this.documents.put(user.id, 'extension-resource', operationId, { schemaVersion: 1, kind: 'skill-copy', requestDigest, skillId: row.id }, { expectedRevision: 0, transactionClient: client });
+      return row;
+    } finally { await this.removeUpload(user, uploaded.resourceId); }
+  }
+  /** The platform's own skills, from the control plane's packages: no runtime, session or project needed. @param {any} user */
+  async listPlatform(user) {
+    if (!this.platformCatalogue) throw new HttpError(503, 'product_state_unavailable', 'The platform skill list is unavailable.');
+    return this.withLibraryAccount(user, () => this.platformCatalogue.list(user));
+  }
+  /** @param {any} user @param {string} id */
+  async readPlatform(user, id) {
+    if (!this.platformCatalogue) throw new HttpError(503, 'product_state_unavailable', 'The platform skill list is unavailable.');
+    return this.withLibraryAccount(user, () => this.platformCatalogue.read(id, user));
+  }
+  /**
+   * `POST /api/skills/platform/:id/copy`: a platform skill becomes the account's own, to edit. The title is the researcher's
+   * (default: the skill's Chinese name).
+   * @param {any} user @param {string} id @param {any} body
+   */
+  async duplicatePlatform(user, id, body) {
+    const input = exact(body, ['title', 'idempotencyKey']); productId(input.idempotencyKey);
+    if (typeof input.title !== 'string' || !input.title.trim() || Buffer.byteLength(input.title) > 240) throw new HttpError(400, 'extension_contract_invalid', 'Invalid skill title.');
+    if (!this.platformCatalogue || !this.artifacts) throw new HttpError(503, 'product_state_unavailable', 'Skill copying is unavailable.');
+    const catalogue = this.platformCatalogue;
+    return this.withLibraryAccount(user, client => this.copyBuiltin(user, client, { idempotencyKey: input.idempotencyKey, title: input.title,
+      requestDigest: sha256(canonicalJson({ platformSkill: id, title: input.title })), snapshot: () => catalogue.snapshot(id, user) }));
   }
   /** Deleting raw input cannot remove any adopted revision. @param {any} user @param {string} resourceId */
   async removeUpload(user, resourceId) {

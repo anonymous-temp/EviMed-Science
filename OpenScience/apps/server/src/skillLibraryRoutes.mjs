@@ -40,6 +40,12 @@ export function createSkillLibraryRoutes({ store, service, maxJsonBytes, savePro
       const id = rawId ? decode(rawId) : null;
       if (!id && req.method === "GET") return reply(await service.list(user, { cursor: url.searchParams.get("cursor"), limit: 50 }));
       if (!id && req.method === "POST") return reply(await service.create(user, await body()), 201);
+      // The platform's own skills, answered from the control plane's packages (no runtime, session or project): the list, one
+      // skill's words and full text, and a copy of it into the account's own skills. The skill's id is `<origin>:<name>`
+      // (`core:stats-integrity`).
+      if (id === "platform" && !action && req.method === "GET") return reply(await service.listPlatform(user));
+      if (id === "platform" && action && !rawResource && req.method === "GET") return reply(await service.readPlatform(user, decode(action)));
+      if (id === "platform" && action && rawResource === "copy" && req.method === "POST") return reply(await service.duplicatePlatform(user, decode(action), await body()), 201);
       if (id === "uploads" && !action && req.method === "POST") {
         if (req.headers["content-type"] !== "application/octet-stream" || [...url.searchParams.keys()].some(key => key !== "kind")) {
           throw new HttpError(400, "extension_contract_invalid", "Invalid skill upload.");

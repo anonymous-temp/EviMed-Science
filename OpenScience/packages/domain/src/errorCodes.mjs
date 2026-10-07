@@ -1456,6 +1456,7 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_payload_invalid',
   'geo_project_not_found',
   'geo_brand_name_invalid',
+  'geo_project_name_invalid',
   'geo_engines_invalid',
   'geo_coverage_invalid',
   'geo_tier_invalid',
@@ -1659,6 +1660,9 @@ export const CAPSULE_SHARE_ERROR_CODES = Object.freeze([
 export const EXTENSION_ERROR_CODES = Object.freeze([
   'extension_contract_invalid', 'extension_proof_untrusted',
   'extension_proof_stale', 'extension_proof_incomplete', 'extension_access_denied', 'extension_storage_capacity',
+  // The platform's own skills (platformSkillCatalogue.mjs): one that is not in the list, one whose folder this image does not
+  // carry or the platform keeps from being copied, and one whose files could not be read whole.
+  'skill_platform_not_found', 'skill_platform_not_copyable', 'skill_platform_unreadable',
 ])
 
 export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown']);
@@ -1773,6 +1777,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   extension_proof_incomplete: '扩展的兼容核验尚未完成，已有科研任务仍可继续。',
   extension_access_denied: '你没有执行这个扩展操作的权限，请检查项目和连接授权。',
   extension_storage_capacity: '技能存储空间暂时不足，请整理技能文件后重试。',
+  skill_platform_not_found: '平台技能列表里没有这个技能，请刷新后重试。',
+  skill_platform_not_copyable: '这个技能暂时不能复制为我的技能，可以在对话里直接使用它。',
+  skill_platform_unreadable: '这个技能的文件暂时读不全，请稍后重试。',
   vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
   vcr_backup_unhealthy: '恢复备份尚未通过检查。',
   vcr_subject_table_unreadable: '这份受试者数据表现在读不出来；这次匹配只用病历文档和已有事实，其余步骤照常。',

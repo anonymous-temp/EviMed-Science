@@ -23,11 +23,14 @@ export function createEvolutionRoutes({ store, service, decisions, worker, confi
       if (!opportunity || opportunity.payload.projectId !== input.projectId) throw new HttpError(404, 'evolution_opportunity_missing', 'Opportunity not found.');
       sendJson(res, 200, { data: await service.withLock(`adopt:${user.id}:${opportunity.id}`, () => adoptOpportunity(user, input)) }); return true;
     }
+    if (!await isOperator(user)) throw new HttpError(403, 'evolution_operator_required', 'Evolution is available to operators only.');
+    // The capability map is the evolution engine's own model of what the platform can do (task family x capability), not a
+    // researcher's page: operators only, and read-only. It is the weekly map the mission job already saved; opening it
+    // never rebuilds it and never writes a revision (it used to do both on every GET, for every signed-in account).
     if (req.method === 'GET' && url.pathname === '/api/evolution/capability-map') {
       const map = capabilityMap ? await capabilityMap() : null;
       sendJson(res,200,{data:map ? {cells:map.cells.map(cell=>({id:cell.id,capabilityId:cell.capabilityId,version:cell.version,taskFamily:cell.taskFamily,status:cell.status,dependencies:cell.dependencies,demand:cell.demand,newThisMonth:cell.newThisMonth===true})),counts:map.counts,derivedAt:map.derivedAt} : null}); return true;
     }
-    if (!await isOperator(user)) throw new HttpError(403, 'evolution_operator_required', 'Evolution is available to operators only.');
     if (!service || config.evolutionEnabled !== true) throw new HttpError(404, 'evolution_disabled', 'Evolution is disabled.');
     let parts;
     try { parts = url.pathname.slice('/api/evolution'.length).split('/').filter(Boolean).map(decodeURIComponent); }

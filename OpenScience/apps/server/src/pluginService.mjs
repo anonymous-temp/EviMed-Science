@@ -473,7 +473,8 @@ export class PluginService {
     const state = await this.get(owner, project, entry.id);
     if (state.desired.revision === 0) return { items: [] };
     const rows = await this.documents.history(typeof owner === "string" ? owner : owner.id, "plugin", this.documentId(project.id, entry), { limit: 100 });
-    return { items: rows.map(row => revision(row, entry)) };
+    // The date a configuration was saved is what a reader can tell two of them apart by; the revision number is the ledger's.
+    return { items: rows.map(row => ({ ...revision(row, entry), recordedAt: row.recordedAt ?? null })) };
   }
   /** @param {any} owner @param {any} project @param {any} input @param {string} pluginId */
   async rollback(owner, project, input, pluginId = PLUGIN_ID) {

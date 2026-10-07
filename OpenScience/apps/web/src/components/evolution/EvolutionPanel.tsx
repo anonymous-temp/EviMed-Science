@@ -26,8 +26,8 @@ export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dat
   if (!access.enabled || (!projectId && !access.operator)) return null;
   // Beside a dataset's meaning the panel says what the data can use and is silent when it can use nothing yet.
   if (dataset && tools !== null && tools.length === 0 && !error) return null;
-  return <section aria-label="进化工具" className="mt-6 space-y-3">
-    <h2 className="text-body font-semibold text-text">{dataset ? "这份数据可用的工具" : "进化工具"}</h2>
+  return <section aria-label={dataset ? "这份数据可用的工具" : "循证进化"} className="mt-6 space-y-3">
+    <h2 className="text-body font-semibold text-text">{dataset ? "这份数据可用的工具" : "循证进化"}</h2>
     {error && <LoadError message={error} onRetry={() => void load()} />}
     {tools === null ? <FilesSkeleton /> : tools.length === 0 ? !error && <EmptyState title={dataset ? "暂无已匹配的工具" : "暂无新工具"} /> : <ul className="space-y-3">{tools.map(tool => <li key={tool.id} className="rounded-card bg-surface-1 p-4">
       <h3 className="text-ui font-medium text-text">{tool.name ?? tool.description ?? '科研工具'}</h3>

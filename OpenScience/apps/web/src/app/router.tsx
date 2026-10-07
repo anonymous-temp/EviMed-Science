@@ -42,10 +42,7 @@ const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ def
 const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
 const HandoffRoute = lazy(() => import("./routes/HandoffRoute").then((m) => ({ default: m.HandoffRoute })));
-const SkillsPage = lazy(() => import("./extensions/SkillsPage").then((m) => ({ default: m.SkillsPage })));
-const SkillDetailPage = lazy(() => import("./extensions/SkillDetailPage").then((m) => ({ default: m.SkillDetailPage })));
-const PluginsPage = lazy(() => import("./extensions/PluginsPage").then((m) => ({ default: m.PluginsPage })));
-const PluginDetailPage = lazy(() => import("./extensions/PluginDetailPage").then((m) => ({ default: m.PluginDetailPage })));
+const ExtensionsPage = lazy(() => import("./extensions/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
 
 /**
  * One prefix for the workbench, so that everything outside it — the login
@@ -126,11 +123,9 @@ export const routes: RouteObject[] = [
         // deployment whose wallet is simulated. The page answers for itself
         // where the wallet is not: one sentence, not a 404.
         { path: "account/simulated/:page", element: <SimulatedWalletPage /> },
-        { path: "extensions", element: <Navigate to="/app/extensions/plugins" replace /> },
-        { path: "extensions/plugins", element: <PluginsPage /> },
-        { path: "extensions/plugins/:extensionId", element: <PluginDetailPage /> },
-        { path: "extensions/skills", element: <SkillsPage /> },
-        { path: "extensions/skills/:skillId", element: <SkillDetailPage /> },
+        { path: "extensions", element: <Navigate to="/app/extensions/skills" replace /> },
+        // 插件与技能: one element for both tabs and the open item (`skills/:skillId`, `plugins/:extensionId`), so switching tabs keeps what was read.
+        { path: "extensions/:tab/:itemId?", element: <ExtensionsPage /> },
         // Seven destinations, six of them above (2026-09-15 walk, C8). The rows
         // below were top-level pages until then; each is now a view of one of the
         // six, and each keeps its address, because these are in people's

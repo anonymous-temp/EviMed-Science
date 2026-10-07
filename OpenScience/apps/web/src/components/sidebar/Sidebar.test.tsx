@@ -118,6 +118,8 @@ describe("Sidebar navigation", () => {
     const links = within(nav).getAllByRole("link");
     expect(links[links.findIndex(link => link.textContent === "定时任务") + 1]).toHaveAccessibleName("插件与技能");
     expect(screen.getAllByRole("link", { name: "插件与技能" })).toHaveLength(1);
+    // It opens on the first of the page's two tabs, 技能 — the one the page's own action belongs to — and stays lit on the other.
+    expect(screen.getByRole("link", { name: "插件与技能" })).toHaveAttribute("href", "/app/extensions/skills");
   });
 
   // 「前沿动态」 is a row only where `/api/me` offers it to this account; a

@@ -15,7 +15,9 @@
     "./clinical-evidence": "./src/clinicalEvidence.mjs",
     "./entity-keys": "./src/entityKeys.mjs",
     "./method-records": "./src/methodRecords.mjs",
+    "./research-tools": "./src/researchToolDisplay.mjs",
     "./result-provenance": "./src/resultProvenance.mjs",
+    "./skill-display": "./src/skillDisplay.mjs",
     "./skill-packages": "./src/skillPackages.mjs",
     "./package.json": "./package.json"
   },
