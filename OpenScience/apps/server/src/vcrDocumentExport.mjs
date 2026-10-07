@@ -33,7 +33,12 @@ export function canonicalVcrDocument(study, row) {
     const findings = shown.findings.map(finding => `  - ${finding.location ? `${finding.location}：` : ''}${finding.message ?? finding.evidence ?? ''}${finding.fix ? ` 建议：${finding.fix}` : ''}${finding.response ? ` 已说明：${finding.response}` : ''}`).join('\n');
     const failure = shown.status === 'failed' && review.provenance?.error === 'review_configuration_changed'
       ? ' 本次审查因服务配置变化未完成。' : '';
-    return `- ${shown.label}：${shown.state}；${shown.by ?? '身份未返回'}；${shown.at ?? ''}；配置 ${shown.configurationRevision ?? '不适用'}。${shown.note}${failure}${findings ? `\n${findings}` : ''}`;
+    // The page attributes an AI review by its label alone (`presentVcrReview` carries no model name); the exported package is the
+    // study's record, and a record names the model that reviewed and the configuration it ran under.
+    const ai = review.reviewerKind === 'ai';
+    const by = ai ? review.provenance?.model ?? null : shown.by;
+    const configuration = ai ? review.provenance?.configuration?.revision ?? null : null;
+    return `- ${shown.label}：${shown.state}；${by ?? '身份未返回'}；${shown.at ?? ''}；配置 ${configuration ?? '不适用'}。${shown.note}${failure}${findings ? `\n${findings}` : ''}`;
   });
   const use = model.intendedUse ?? model.study.intendedUse ?? study.intendedUse;
   const seal = model.seal ?? {};
