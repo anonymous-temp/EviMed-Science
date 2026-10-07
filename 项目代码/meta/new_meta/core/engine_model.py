@@ -199,6 +199,8 @@ def child_environment(token: str, base_url: str, policy: dict | None = None) -> 
         "EVIMED_MODEL_GATEWAY_POLICY": "high-thinking" if effort in {"high", "max"} else "managed-thinking",
         "LLM_REASONING_EFFORT": effort,
         "LLM_ENABLE_THINKING": "false" if effort == "off" else "true",
+        "EVIMED_JUDGE_GATEWAY_TOKEN": token,
+        "EVIMED_JUDGE_GATEWAY_URL": urllib.parse.urljoin(base_url.rstrip("/") + "/", "/internal/judge/v1/ask"),
         "DEEPSEEK_API_KEY": token,
         "DEEPSEEK_BASE_URL": base_url,
         "LLM_API_KEY": token,
