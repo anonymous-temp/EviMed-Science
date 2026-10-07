@@ -9,6 +9,13 @@ import { createWebApiApp } from "../src/server.mjs";
 // The control plane's migration makes one account of its own, the evidence publisher (`auth_type` platform, flywheel B2, 2026-10-05):
 // the counts below are of people.
 
+/** A listed project without the day it was made, which differs on every run. */
+function withoutCreatedAt(item) {
+  const copy = { ...item };
+  delete copy.createdAt;
+  return copy;
+}
+
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const { Pool } = pg;
 
@@ -100,7 +107,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     const listedFromSecond = (await projectsFromSecond.json()).data;
     // The day a project was made rides along: it is what tells two projects of one name apart.
     for (const item of listedFromSecond) assert.ok(Date.parse(item.createdAt), `${item.id} carries the day it was made`);
-    assert.deepEqual(listedFromSecond.map(({ createdAt, ...item }) => item), [
+    assert.deepEqual(listedFromSecond.map((item) => withoutCreatedAt(item)), [
       { id: "paper1", name: "Paper 1", archivedAt: null, runCount: 0, lastActivityAt: null },
       { id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null },
     ]);
@@ -143,7 +150,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     const bob = await login(second.base, "bob", "abc123");
     assert.equal(bob.response.status, 200);
     const bobProjects = await fetch(`${second.base}/api/projects`, { headers: { Cookie: bob.cookie } });
-    assert.deepEqual((await bobProjects.json()).data.map(({ createdAt, ...item }) => item), [{ id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null }]);
+    assert.deepEqual((await bobProjects.json()).data.map((item) => withoutCreatedAt(item)), [{ id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null }]);
     const bobCannotSeeAlice = await fetch(`${second.base}/api/research-sessions`, {
       headers: { Cookie: bob.cookie, "X-Open-Science-Project": "paper1" },
     });
