@@ -1532,7 +1532,7 @@ describe("循证 GEO in the conversation", () => {
     coverageDays: 90, engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"], status: "active", steps: {},
     headline: { gvi: { value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "not_measurable", dataType: "measured", target: null, trend: [] },
       mention: { value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "not_measurable", dataType: "measured" } },
-    alert: { wrongOurs: 0, safety: 0, text: null }, updatedAt: "2026-09-25T00:00:00Z",
+    alert: { wrongOurs: 0, severe: 0, safety: 0 }, updatedAt: "2026-09-25T00:00:00Z",
   };
 
   async function openGeoConversation(capability = "geo-insight") {

@@ -195,7 +195,7 @@ test("creating a project makes the control-plane project, its GEO row and a boun
   assert.equal(listed.coverageDays, 90);
   assert.deepEqual(listed.headline.gvi, { value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "absent",
     dataType: "measured", reason: null, target: null, trend: [] }, "an unmeasured number is absent, never zero");
-  assert.deepEqual(listed.alert, { wrongOurs: 0, safety: 0, text: null, severity: null });
+  assert.deepEqual(listed.alert, { wrongOurs: 0, severe: 0, safety: 0, severity: null }, "no sentence of an engine rides on the row");
   assert.ok(audits.some((entry) => entry.event === "geo.project.create" && entry.code === created.payload.data.id));
   const unnamed = await call("POST", "/api/geo/projects", { body: {} });
   assert.equal(unnamed.status, 201);
@@ -233,7 +233,7 @@ test("the project page, its tabs and its actions answer in the spec's shapes fro
   assert.equal(map.sets[0].measuredCount, 48);
   assert.ok(map.sets[0].lockedAt);
   assert.equal(map.groups.length, 12);
-  assert.deepEqual(Object.keys(map.groups[0].questions[0]).sort(), ["id", "isMeasured", "kind", "platform", "sourceUrl", "text"]);
+  assert.deepEqual(Object.keys(map.groups[0].questions[0]).sort(), ["answers", "id", "isMeasured", "kind", "platform", "sourceUrl", "text"]);
   const target = map.groups[0].questions[0].id;
   const moved = (await call("POST", `/api/geo/projects/${id}/questions/${target}/unmeasure`, { body: {} })).payload.data;
   assert.equal(moved.version, 2);
@@ -379,6 +379,8 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(diagnosis.failureModes.wrongOurs.snapshotIds, [`s1-${id}`], "a failure mode opens on its answers");
   assert.equal(diagnosis.errors[0].stability, "stable");
   assert.equal(diagnosis.errors[0].snapshotId, `s1-${id}`);
+  assert.equal(diagnosis.errors[0].firstSnapshotId, `s1-${id}`, "where the quoted sentence was first said");
+  assert.deepEqual(diagnosis.errorCounts, { total: 1, open: 1, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 1 });
   assert.deepEqual(diagnosis.noise, { band: 0.04, measuredAt: diagnosis.noise.measuredAt });
   assert.deepEqual(diagnosis.more.map((/** @type {any} */ row) => [row.metricId, row.variant]), [["M-01S", "top1"], ["M-05", null]],
     "headline, NET and NOISE rows are not repeated under 更多; a variant is");
@@ -411,7 +413,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   const page = (await call("GET", `/api/geo/projects/${id}`)).payload.data;
   const [gvi, mention, accuracy, citation] = page.overview.metrics;
   assert.equal(gvi.cell.value, 31.5);
-  assert.deepEqual(gvi.trend, [{ date: "2026-09-24", value: 31.5 }]);
+  assert.deepEqual(gvi.trend, [{ date: "2026-09-24", value: 31.5, n: null }], "a point carries the sample it rests on");
   assert.deepEqual([mention.cell.numerator, mention.cell.denominator], [56, 310], "the plain M-01S, not its top1 variant");
   assert.equal(accuracy.cell.status, "insufficient");
   assert.equal(citation.cell.status, "absent");
@@ -421,8 +423,8 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(page.availableEngines, ["doubao", "deepseek", "kimi"]);
   assert.ok(page.startedAt && Date.parse(page.startedAt) <= Date.now(), "the coverage window's start");
   const row = (await call("GET", "/api/geo/projects")).payload.data.projects.find((/** @type {any} */ entry) => entry.id === id);
-  // The sentence carries its severity: the home row draws the badge red, never the sentence (F-G10).
-  assert.deepEqual(row.alert, { wrongOurs: 1, safety: 1, text: "DeepSeek：把玛仕度肽说成每天注射一次", severity: "S3" });
+  // The row says counts, in its own words (the page); S3 is severe, and the badge carries the worst grade.
+  assert.deepEqual(row.alert, { wrongOurs: 1, severe: 1, safety: 1, severity: "S3" });
   assert.equal(row.headline.gvi.value, 31.5);
   assert.equal(row.headline.mention.denominator, 310);
 

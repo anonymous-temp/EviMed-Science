@@ -93,6 +93,8 @@ const TREND_POINTS = 26;
 const WEEK_ITEMS = 5;
 const WEEK_MS = 7 * 86_400_000;
 const SHA256 = /^[a-f0-9]{64}$/;
+/** What the store mints for a question group's id (`geoStore.mjs`): a format, not language. */
+const GROUP_ID_SHAPE = /^ggr_[0-9a-f]+$/i;
 
 /** @param {number} status @param {string} code @param {string} message */
 const failure = (status, code, message) => new HttpError(status, code, message);
@@ -210,6 +212,9 @@ function errorView(row) {
     action: text(row.action),
     status: String(row.status),
     snapshotId: text(row.last_snapshot_id) ?? text(row.first_snapshot_id),
+    // The statement is the first sentence the error was seen as (one row per fingerprint, later answers repeating the claim in other
+    // words only move `last_snapshot_id`): this is the answer whose text holds it word for word.
+    firstSnapshotId: text(row.first_snapshot_id),
     questionId: text(row.question_id),
     // What the statement contradicts: the claim and its quote (对的是什么 / 依据哪份说明书).
     claimId: text(row.claim_id),
@@ -310,6 +315,8 @@ export class GeoService {
     this.cards = cards;
     this.now = now;
     this.timeZone = String(config.geoTimeZone || "Asia/Shanghai");
+    /** How many error rows 准确与安全 carries at most (`OPEN_SCIENCE_GEO_DIAGNOSIS_ERROR_LIMIT`); the counts beside them are never capped. */
+    this.errorListLimit = Number.isSafeInteger(config.geoDiagnosisErrorLimit) && config.geoDiagnosisErrorLimit > 0 ? config.geoDiagnosisErrorLimit : 300;
     /** @param {string} metricId */
     this.metricName = (metricId) => metricName?.(metricId) ?? /** @type {Record<string, string>} */ (GEO_METRIC_LABELS_ZH)[metricId] ?? null;
     this.counters = { projectsCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, forbidden: 0 };
@@ -423,12 +430,14 @@ export class GeoService {
     return [...byRival].map(([name, points]) => ({ name, points: points.slice(-TREND_POINTS) }));
   }
 
-  /** The chosen tier's target for a metric, project-wide first. @param {Awaited<ReturnType<import("./geoStore.mjs").GeoStore["latestTargets"]>>} targets @param {string} tier @param {string} metricId */
+  /**
+   * The chosen tier's project-wide target for a metric (`pool` all), or null. A pool's own target (P2's mention goal, say) is another
+   * number: it never stands in for the project's — the overview once printed 「目标 12%」 beside a reading of 43% that way.
+   * @param {Awaited<ReturnType<import("./geoStore.mjs").GeoStore["latestTargets"]>>} targets @param {string} tier @param {string} metricId
+   */
   #target(targets, tier, metricId) {
     if (!targets) return null;
-    const rows = targets.rows.filter((row) => row.tier === tier && row.metricId === metricId);
-    const row = rows.find((candidate) => candidate.pool === "all") ?? rows[0];
-    return row?.target ?? null;
+    return targets.rows.find((row) => row.tier === tier && row.metricId === metricId && row.pool === "all")?.target ?? null;
   }
 
   // --- the home list ------------------------------------------------------------------
@@ -452,7 +461,7 @@ export class GeoService {
       projects: projects.map((project, index) => {
         const metrics = latest.get(project.id) ?? new Map();
         const trend = (series.get(project.id)?.get(GEO_VIEW_METRIC_IDS.gvi) ?? []).map((point) => point.value).filter((value) => value != null);
-        const alert = alerts.get(project.id) ?? { wrongOurs: 0, safety: 0, text: null };
+        const alert = alerts.get(project.id) ?? { wrongOurs: 0, severe: 0, safety: 0, severity: null };
         return {
           id: project.id,
           projectId: project.projectId,
@@ -493,34 +502,30 @@ export class GeoService {
   }
 
   /**
-   * 讲错我方 still open and safety stops, per project, with the one sentence
-   * the home row shows in red: the most severe open error, in the engine's name.
-   * @param {string[]} geoIds @returns {Promise<Map<string, { wrongOurs: number, safety: number, text: string | null, severity?: string | null }>>}
+   * 讲错我方 still open, how many of them are severe (S3/S4), and safety stops, per project; `severity` is the worst open grade.
+   * The home row says the counts in its own words — the engine's sentence is read on 总览 and 准确与安全, one click away.
+   * @param {string[]} geoIds @returns {Promise<Map<string, { wrongOurs: number, severe: number, safety: number, severity: string | null }>>}
    */
   async #alerts(geoIds) {
-    /** @type {Map<string, { wrongOurs: number, safety: number, text: string | null, severity?: string | null }>} */
+    /** @type {Map<string, { wrongOurs: number, severe: number, safety: number, severity: string | null }>} */
     const alerts = new Map();
     if (!geoIds.length) return alerts;
     const [errors, worst, safety] = await Promise.all([
-      this.store.query(`SELECT geo_project_id, count(*)::integer AS n FROM evimed_geo.errors
-        WHERE geo_project_id = ANY($1::text[]) AND status <> 'closed' GROUP BY geo_project_id`, [geoIds]),
-      this.store.query(`SELECT DISTINCT ON (geo_project_id) geo_project_id, engine, statement, severity FROM evimed_geo.errors
+      this.store.query(`SELECT geo_project_id, count(*)::integer AS n, count(*) FILTER (WHERE severity = ANY($2::text[]))::integer AS severe
+        FROM evimed_geo.errors WHERE geo_project_id = ANY($1::text[]) AND status <> 'closed' GROUP BY geo_project_id`, [geoIds, [...GEO_URGENT_SEVERITIES]]),
+      this.store.query(`SELECT DISTINCT ON (geo_project_id) geo_project_id, severity FROM evimed_geo.errors
         WHERE geo_project_id = ANY($1::text[]) AND status <> 'closed'
         ORDER BY geo_project_id, severity DESC NULLS LAST, updated_at DESC`, [geoIds]),
       this.store.query(`SELECT geo_project_id, count(*)::integer AS n FROM evimed_geo.articles
         WHERE geo_project_id = ANY($1::text[]) AND safety = 'open' AND status <> 'withdrawn' GROUP BY geo_project_id`, [geoIds]),
     ]);
-    const count = (/** @type {any} */ result) => new Map(result.rows.map((/** @type {any} */ row) => [row.geo_project_id, Number(row.n)]));
+    const count = (/** @type {any} */ result, column = "n") => new Map(result.rows.map((/** @type {any} */ row) => [row.geo_project_id, Number(row[column])]));
     const wrong = count(errors);
+    const severe = count(errors, "severe");
     const stops = count(safety);
-    const sentences = new Map(worst.rows.map((/** @type {any} */ row) => [row.geo_project_id,
-      row.statement ? `${engineLabel(String(row.engine))}：${clip(row.statement, 60)}` : null]));
     const severities = new Map(worst.rows.map((/** @type {any} */ row) => [row.geo_project_id, text(row.severity)]));
     for (const id of geoIds) {
-      // The sentence's severity travels with it: the home row sets the
-      // sentence in body text and lets the severity badge carry the red (F-G10).
-      alerts.set(id, { wrongOurs: wrong.get(id) ?? 0, safety: stops.get(id) ?? 0, text: sentences.get(id) ?? (stops.get(id) ? "有稿件的安全问题待确认" : null),
-        severity: sentences.get(id) ? severities.get(id) ?? null : null });
+      alerts.set(id, { wrongOurs: wrong.get(id) ?? 0, severe: severe.get(id) ?? 0, safety: stops.get(id) ?? 0, severity: severities.get(id) ?? null });
     }
     return alerts;
   }
@@ -600,7 +605,8 @@ export class GeoService {
       key,
       cell: geoCellFromRow(rows.get(metricId)),
       target: this.#target(targets, project.tier, metricId),
-      trend: (points.get(metricId) ?? []).map(({ date, value }) => ({ date, value })),
+      // The sample size travels with each point: a thin round is not a reading, and only the page can tell from it.
+      trend: (points.get(metricId) ?? []).map(({ date, value, n }) => ({ date, value, n })),
     }));
     await this.#attachSnapshotIds(project.id, GEO_OVERVIEW_METRICS.map(({ metricId }, index) => ({ cell: metrics[index].cell, row: rows.get(metricId) })));
     return {
@@ -769,6 +775,7 @@ export class GeoService {
     const chosen = version ?? sets[0]?.version ?? null;
     if (version != null && !sets.some((set) => set.version === version)) throw failure(404, "geo_version_invalid", "No such question set version.");
     const groups = chosen == null ? [] : await this.store.questionMap(project.id, chosen);
+    const answers = await this.#latestAnswers(project, groups.flatMap((group) => group.questions.filter((question) => question.isMeasured).map((question) => question.text)));
     return {
       sets: sets.map(({ version: setVersion, lockedAt, measuredCount }) => ({ version: setVersion, lockedAt, measuredCount })),
       version: chosen,
@@ -778,9 +785,43 @@ export class GeoService {
         questions: group.questions.map((question) => ({
           id: question.id, text: question.text, kind: question.kind, platform: question.platform, sourceUrl: question.sourceUrl,
           isMeasured: question.isMeasured,
+          // Where the question was last answered, one answer per engine, in the project's engine order: a measured question opens
+          // on its answer; one that was never answered has none.
+          answers: question.isMeasured ? answers.get(question.text.trim()) ?? [] : [],
         })),
       })),
     };
+  }
+
+  /**
+   * The latest valid or refusal answer of each engine to each of these question texts, from full measurements. Matched by the
+   * question's text, not its id: taking a question out of measurement writes a new set version whose questions are new rows, and
+   * an id match would lose every answer link after one edit. The engines come in the project's order (the first is where a link
+   * lands); an engine the project no longer lists follows.
+   * @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {string[]} texts
+   * @returns {Promise<Map<string, Array<{ engine: string, snapshotId: string }>>>}
+   */
+  async #latestAnswers(project, texts) {
+    /** @type {Map<string, Array<{ engine: string, snapshotId: string }>>} */
+    const byText = new Map();
+    const wanted = [...new Set(texts.map((value) => value.trim()).filter(Boolean))];
+    if (!wanted.length) return byText;
+    const rows = (await this.store.query(`SELECT DISTINCT ON (btrim(q.text), s.engine) btrim(q.text) AS text, s.engine, s.id
+      FROM evimed_geo.snapshots s JOIN evimed_geo.rounds r ON r.id = s.round_id AND r.kind = ANY($3::text[])
+        JOIN evimed_geo.questions q ON q.id = s.question_id AND q.geo_project_id = s.geo_project_id
+      WHERE s.geo_project_id = $1 AND s.status IN ('valid', 'refusal') AND btrim(q.text) = ANY($2::text[])
+      ORDER BY btrim(q.text), s.engine, s.asked_at DESC NULLS LAST, s.id DESC`, [project.id, wanted, [...GEO_HEADLINE_ROUND_KINDS]])).rows;
+    const order = (/** @type {string} */ engine) => {
+      const index = project.engines.indexOf(engine);
+      return index === -1 ? project.engines.length : index;
+    };
+    for (const row of rows) {
+      const list = byText.get(String(row.text)) ?? [];
+      list.push({ engine: String(row.engine), snapshotId: String(row.id) });
+      byText.set(String(row.text), list);
+    }
+    for (const list of byText.values()) list.sort((left, right) => order(left.engine) - order(right.engine) || left.engine.localeCompare(right.engine));
+    return byText;
   }
 
   /** `POST …/:id/questions/:qid/unmeasure`. @param {{ id: string }} user @param {string} id @param {string} questionId */
@@ -796,6 +837,25 @@ export class GeoService {
     return written;
   }
 
+  /**
+   * How many errors the project has by status, and how many of the live ones are severe (S3/S4) — `count(*)` over the table, so a
+   * project with more errors than the list carries is still counted whole.
+   * @param {string} geoId
+   */
+  async #errorCounts(geoId) {
+    const rows = (await this.store.query(`SELECT status, severity, count(*)::integer AS n FROM evimed_geo.errors WHERE geo_project_id = $1
+      GROUP BY status, severity`, [geoId])).rows;
+    const counts = { total: 0, open: 0, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 0 };
+    for (const row of rows) {
+      const n = Number(row.n);
+      const status = String(row.status);
+      counts.total += n;
+      if (status in counts) counts[/** @type {"open" | "acting" | "awaiting_remeasure" | "closed"} */ (status)] += n;
+      if (status !== "closed" && GEO_URGENT_SEVERITIES.includes(String(row.severity))) counts.severe += n;
+    }
+    return counts;
+  }
+
   /** @param {string} geoId @param {string | null} roundId */
   async #round(geoId, roundId) {
     if (roundId) {
@@ -803,8 +863,10 @@ export class GeoService {
       if (!row) throw failure(404, "geo_round_not_found", "Round not found.");
       return row;
     }
+    // One resolver for "the latest measurement": a finished full round, by when it finished — the same one the sources page reads —
+    // and only when none has finished, the newest one begun.
     return (await this.store.query(`SELECT * FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
-      ORDER BY (status IN ('done', 'partial')) DESC, created_at DESC LIMIT 1`, [geoId, [...DIAGNOSIS_ROUND_KINDS]])).rows[0] ?? null;
+      ORDER BY (status IN ('done', 'partial')) DESC, finished_at DESC NULLS LAST, created_at DESC LIMIT 1`, [geoId, [...DIAGNOSIS_ROUND_KINDS]])).rows[0] ?? null;
   }
 
   /**
@@ -818,8 +880,12 @@ export class GeoService {
     const round = await this.#round(project.id, roundId);
     const rounds = (await this.store.query(`SELECT id, kind, sample_date, created_at FROM evimed_geo.rounds WHERE geo_project_id = $1
       AND kind = ANY($2::text[]) ORDER BY created_at DESC LIMIT 20`, [project.id, [...DIAGNOSIS_ROUND_KINDS]])).rows;
-    const errors = (await this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1
-      ORDER BY (status = 'closed'), severity DESC NULLS LAST, updated_at DESC LIMIT 100`, [project.id])).rows.map(errorView);
+    const [errorRows, errorCounts] = await Promise.all([
+      this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1
+        ORDER BY (status = 'closed'), severity DESC NULLS LAST, updated_at DESC LIMIT $2`, [project.id, this.errorListLimit]),
+      this.#errorCounts(project.id),
+    ]);
+    const errors = errorRows.rows.map(errorView);
     const noiseRow = (await this.store.query(`SELECT value, computed_at FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project'
       AND metric_id = $2 AND variant = $3 ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.noiseBand, NOISE_BAND_OF])).rows[0];
     const engines = round && Array.isArray(round.engines) && round.engines.length ? round.engines.map(String) : project.engines;
@@ -922,6 +988,8 @@ export class GeoService {
       byPool,
       failureModes,
       errors,
+      // Counted over every error of the project, not over the page of rows above: the list is capped, the counts are not.
+      errorCounts,
       noise: noiseRow ? { band: num(noiseRow.value), measuredAt: iso(noiseRow.computed_at) } : null,
       more,
     };
@@ -1089,6 +1157,7 @@ export class GeoService {
     const latestFull = (await this.store.query(`SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
       AND status IN ('done', 'partial') ORDER BY finished_at DESC NULLS LAST, created_at DESC LIMIT 1`, [project.id, [...GEO_HEADLINE_ROUND_KINDS]])).rows[0];
     const linklessEngines = latestFull ? await this.#linklessEngines(String(latestFull.id)) : [];
+    const groupNames = await this.#battlefieldNames(project.id, Array.isArray(battlefield.groups) ? battlefield.groups : []);
     return {
       linklessEngines,
       sources: sources.map((source) => ({
@@ -1101,10 +1170,32 @@ export class GeoService {
         market: source.market ? { price: num(source.market.price ?? source.market.priceCny), resourceId: text(source.market.resourceId) } : null,
       })),
       expectations,
-      battlefield: { groups: Array.isArray(battlefield.groups) ? battlefield.groups : [], reason: text(battlefield.reason) },
+      // `groups` is what the run wrote (a group's id or its name — the orchestrator accepts both); `groupNames` is what a page prints.
+      battlefield: { groups: Array.isArray(battlefield.groups) ? battlefield.groups : [], groupNames, reason: text(battlefield.reason) },
       tiers: [...tiers.values()].sort((left, right) => left.tier.localeCompare(right.tier)),
       chosenTier: project.tier,
     };
+  }
+
+  /**
+   * The names of the main-battlefield question groups. A run writes a group's id (`ggr_…`) or its name; an id is looked up among the
+   * project's groups of any set version (ids are never reused), a name stays as written, and an entry shaped like an id that matches
+   * no group is dropped — a page never prints a bare identifier.
+   * @param {string} geoId @param {unknown[]} entries @returns {Promise<string[]>}
+   */
+  async #battlefieldNames(geoId, entries) {
+    const listed = entries.filter((entry) => typeof entry === "string" && entry.trim()).map((entry) => String(entry).trim());
+    if (!listed.length) return [];
+    const ids = listed.filter((entry) => GROUP_ID_SHAPE.test(entry));
+    /** @type {Map<string, string>} */
+    const names = new Map();
+    if (ids.length) {
+      const rows = (await this.store.query(`SELECT id, name FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND id = ANY($2::text[])`,
+        [geoId, ids])).rows;
+      for (const row of rows) names.set(String(row.id), String(row.name));
+    }
+    const resolved = listed.map((entry) => (GROUP_ID_SHAPE.test(entry) ? names.get(entry) ?? null : entry)).filter((name) => name != null && name !== "");
+    return [...new Set(/** @type {string[]} */ (resolved))];
   }
 
   /** `POST …/:id/tier`. @param {{ id: string }} user @param {string} id @param {string} tier */

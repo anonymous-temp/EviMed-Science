@@ -255,7 +255,8 @@ function Expectations({ geoId, rows }: { geoId: string; rows: GeoSources["expect
 }
 
 function Battlefield({ battlefield }: { battlefield: NonNullable<GeoSources["battlefield"]> }) {
-  const groups = (Array.isArray(battlefield.groups) ? battlefield.groups : []).filter((group) => typeof group === "string" && group);
+  // The names the server resolved; `groups` is what the run wrote (it may be ids).
+  const groups = (Array.isArray(battlefield.groupNames) ? battlefield.groupNames : Array.isArray(battlefield.groups) ? battlefield.groups : []).filter((group) => typeof group === "string" && group);
   return (
     <TabSection title="主战场">
       {groups.length > 0 && <p className="text-ui text-text">{groups.join("、")}</p>}

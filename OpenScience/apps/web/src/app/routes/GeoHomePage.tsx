@@ -124,7 +124,7 @@ function ProjectRow({ project }: { project: GeoProjectSummary }) {
             <>
               {line && " · "}
               {/* The badge carries the red; the sentence is body text (F-G10). */}
-              {project.alert.severity && <SeverityBadge level={project.alert.severity} className="mr-1.5 align-middle" />}
+              {project.alert.severe > 0 && project.alert.severity && <SeverityBadge level={project.alert.severity} className="mr-1.5 align-middle" />}
               <span data-geo-alert="" className="text-text-2">{alert}</span>
             </>
           )}
@@ -151,16 +151,15 @@ function ProjectRow({ project }: { project: GeoProjectSummary }) {
 }
 
 /**
- * The red sentence: what an engine says wrong about our product, or an open
- * safety finding. The server's own sentence when it wrote one.
+ * What is open on the project, in the row's own words: the severe errors first (their badge carries the red), else the errors an
+ * engine still makes, else articles stopped on a safety finding. The engine's sentence is read inside the project.
  */
 function alertText(project: GeoProjectSummary): string | null {
-  if (project.alert.text) return project.alert.text;
-  const parts = [
-    ...(project.alert.safety > 0 ? [`${project.alert.safety} 个安全问题待处理`] : []),
-    ...(project.alert.wrongOurs > 0 ? [`${project.alert.wrongOurs} 条讲错我方待处理`] : []),
-  ];
-  return parts.length ? parts.join(" · ") : null;
+  const { severe, wrongOurs, safety } = project.alert;
+  if (severe > 0) return `${severe} 条严重讲错待处理`;
+  if (wrongOurs > 0) return `${wrongOurs} 条讲错待处理`;
+  if (safety > 0) return `${safety} 篇稿件的安全问题待确认`;
+  return null;
 }
 
 /** “10月1日 – 12月31日 · 第 3 周”, or what a single-step project did. */
