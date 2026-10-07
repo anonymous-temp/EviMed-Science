@@ -609,3 +609,25 @@ test("a lesson the platform's reviewer taught is kept for the handbook, never as
   assert.equal(again.id, kept.id);
   assert.equal(again.revision, kept.revision + 1);
 });
+
+test("each earlier version of a method can be read, and the runs that taught each body are named newest first", async () => {
+  // 「以前的版本 … 查看」: a version is its sentence, its steps in the researcher's language and, with none, its text.
+  const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");
+  const { fixture } = await import("./helpers/handbookFixture.mjs");
+  const f = fixture();
+  const base = { frontmatter: { name: "citation-alignment", description: "Align citations.", whenToUse: "When a report needs a reference list.",
+    metadata: { role: "functional", applies_when: "A report with references.", not_when: "No citations.", derived_from: "run:run_1", evimed_schema: METHOD_SKILL_SCHEMA } },
+  body: "## Purpose\nAlign every citation marker with exactly one reference.\n## When to Use\nWhen a report needs references.\n## Inputs\nThe report.\n## Workflow\n1. Match markers.\n## Verification\n- Every marker has one entry.\n## Constraints\n- Do not invent entries.\n## Output\nA reference list.",
+  provenance: { origin: "inferred", runId: "run_1", sourceProjectId: "meta" } };
+  const created = await f.learning.createCandidate("alice", { ...base, projectId: "meta", display: { title: "引用标记对齐", summary: "每个标记对应一条。" },
+    steps: "1. 对应标记", scope: { applicability: "写需要参考文献的报告时", counterexamples: ["没有引用时"] } });
+  await f.learning.amendMethod("alice", created.id, { expectedRevision: created.revision, ...base,
+    body: `${base.body}\n## Notes\nSecond body.`, provenance: { origin: "inferred", runId: "run_2", sourceProjectId: "meta" }, display: { title: "引用标记对齐", summary: "更新后。" } });
+  const versions = await f.learning.history("alice", created.id);
+  assert.deepEqual(versions.map((item) => [item.version, item.summary]), [[2, "更新后。"], [1, "每个标记对应一条。"]]);
+  assert.equal(versions[1].steps, "1. 对应标记");
+  assert.equal(versions[1].whenToUse, "写需要参考文献的报告时");
+  assert.equal("body" in versions[1], false, "steps are what is read when there are any");
+  assert.ok(versions[0].body.includes("Second body."), "and the text when there are none");
+  assert.deepEqual(await f.learning.sourceRuns("alice", created.id), [{ projectId: "meta", runId: "run_2" }, { projectId: "meta", runId: "run_1" }]);
+});

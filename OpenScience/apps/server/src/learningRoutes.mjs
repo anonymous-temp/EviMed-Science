@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { cleanMethodDisplay, methodScientific, methodSourceChanges, mountedMethodDigest, parseSkillFrontmatter, promotionVerdict, successfulFamilies } from "@evimed/domain";
+import { conversationSources } from "./learningSources.mjs";
 import { bodyVersionOf, effectiveStatusReason, methodRecordFrom, methodScopeOf, methodStepsOf } from "./learningService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -127,9 +128,12 @@ export function methodView(document) {
  * `summary` is the loop's own counts for this account (`learningMetrics.mjs`
  * `learningSummary`): read-only, beside the list, and absent rather than an
  * error when it cannot be read — the list is what the page needs.
+ * `resolveRun` finds the run a lesson was learnt from, live or preserved (`resolveLessonSourceRun`): what 「从哪里学到的」 lists is
+ * read through it and absent when it is not given.
  * @param {{store: any, service: any, maxJsonBytes: number, evaluationUsers?: readonly string[], trialTtlMs?: number,
- *   summary?: ((userId: string) => Promise<any>) | null}} dependencies */
-export function createLearningRoutes({ store, service, maxJsonBytes, evaluationUsers = [], trialTtlMs = 6 * 60 * 60 * 1000, summary = null }) {
+ *   summary?: ((userId: string) => Promise<any>) | null,
+ *   resolveRun?: ((userId: string, projectId: string, runId: string) => Promise<any>) | null}} dependencies */
+export function createLearningRoutes({ store, service, maxJsonBytes, evaluationUsers = [], trialTtlMs = 6 * 60 * 60 * 1000, summary = null, resolveRun = null }) {
   const evaluators = new Set((evaluationUsers ?? []).map((value) => String(value)));
   /** @param {any} req @param {any} res */
   return async (req, res) => {
@@ -197,6 +201,10 @@ export function createLearningRoutes({ store, service, maxJsonBytes, evaluationU
     // counter write or a status change of the same text.
     if (parts.length === 2 && parts[1] === "history" && method === "GET") {
       return reply({ items: await service.history(user.id, parts[0]) });
+    }
+    // 「从哪里学到的」: the conversations that taught it, as links; empty when none can be found.
+    if (parts.length === 2 && parts[1] === "sources" && method === "GET") {
+      return reply({ items: await conversationSources({ resolveRun }, user.id, await service.sourceRuns(user.id, parts[0])) });
     }
     if (parts.length === 0 && method === "POST") {
       // The whole SKILL.md, parsed by the parser the distillation path uses.

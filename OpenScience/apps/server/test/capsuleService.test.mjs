@@ -130,6 +130,8 @@ test("「我的记忆胶囊」 is one capsule per person: made once, in force ac
   const mine = await service.mine(USER);
   assert.equal(mine.capsule.id, first.id);
   assert.deepEqual(mine.entries.map((entry) => entry.payload.content).sort(), ["先查异质性再合并", "队列 500 人"]);
+  // What the researcher forgot is read apart, so 「已忘记的内容」 can list and restore it; another person's note is in neither.
+  assert.deepEqual(mine.forgotten.map((entry) => entry.payload.content), ["旧偏好"]);
   assert.ok(mine.capsules.every((capsule) => capsule.id !== theirs.id));
   assert.equal(mine.entries.find((entry) => entry.id === noted.id).projectId, "project_1");
 });
@@ -320,4 +322,28 @@ test("what a document yielded is recalled in its own project only, and is not li
     derivedFrom: { sourceId: source, projectId: "project_1" } }), { code: "capsule_payload_invalid" });
   await assert.rejects(service.addEntry(USER, capsule.id, { factKind: "project_fact", layer: "sources", content: "x",
     derivedFrom: { sourceId: "not-a-source", projectId: "project_1" } }), { code: "capsule_payload_invalid" });
+});
+
+test("all of a capsule's notes are read, past the first page, newest first, in force and forgotten alike", async () => {
+  // `mine` took the first hundred of a capsule and dropped the rest without a word: the newest note of a researcher with a
+  // hundred and one was not on their page. The double gives one page; this one gives two per read, as the store does when
+  // there are more.
+  const documents = productDocumentsDouble();
+  const paged = Object.assign(Object.create(documents), {
+    async list(/** @type {string} */ userId, /** @type {string} */ kind, /** @type {any} */ options = {}) {
+      const all = (await documents.list(userId, kind, { ...options, limit: 100 })).items;
+      const start = options.cursor ? Number(options.cursor) : 0;
+      return { items: all.slice(start, start + 2), nextCursor: start + 2 < all.length ? String(start + 2) : null };
+    },
+  });
+  const service = new CapsuleService(/** @type {any} */ (paged));
+  const own = await service.ownCapsule(USER, { create: true });
+  for (let index = 1; index <= 5; index += 1) await service.addEntry(USER, own.id, { factKind: "preference", layer: "profile", content: `偏好 ${index}` });
+  const gone = await service.addEntry(USER, own.id, { factKind: "preference", layer: "profile", content: "忘记的偏好" });
+  await service.updateEntry(USER, own.id, gone.id, { status: "retired", expectedRevision: gone.revision });
+
+  const mine = await service.mine(USER);
+  assert.deepEqual(mine.entries.map((entry) => entry.payload.content), ["偏好 5", "偏好 4", "偏好 3", "偏好 2", "偏好 1"]);
+  assert.deepEqual(mine.forgotten.map((entry) => entry.payload.content), ["忘记的偏好"]);
+  assert.deepEqual((await service.mine(USER, { limit: 3 })).entries.map((entry) => entry.payload.content), ["偏好 5", "偏好 4", "偏好 3"], "bounded, newest kept");
 });

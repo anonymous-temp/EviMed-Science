@@ -1,10 +1,12 @@
 /** Consume reviewed lessons as owner-scoped supplements, without claiming a measured benefit. */
 import { createHash } from "node:crypto";
 import { usagePurposeOfRun } from "@evimed/domain";
+import { HandbookLibrary, CAPABILITY_HANDBOOK_RECORD_TYPE } from "./handbookLibrary.mjs";
 import { HANDBOOK_CANDIDATE_RECORD_TYPE } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
 
-export const CAPABILITY_HANDBOOK_RECORD_TYPE = "capability-handbook";
+// The record type lives with the library that reads handbooks back; this module is where it was always imported from.
+export { CAPABILITY_HANDBOOK_RECORD_TYPE };
 export const HANDBOOK_DISPOSITIONS = Object.freeze(["queued", "evaluating", "applied", "rejected", "failed", "stale"]);
 const terminal = new Set(["applied", "rejected", "failed"]);
 /** @param {any} value */
@@ -27,6 +29,7 @@ export class HandbookConsolidation {
     this.onApplied = onApplied;
     this.learning = learning;
     this.documents = learning.documents;
+    this.library = new HandbookLibrary({ learning, now });
     this.jobs = jobs;
     this.registry = registry;
     this.resolveSourceRun = resolveSourceRun;
@@ -101,6 +104,9 @@ export class HandbookConsolidation {
     }
     const id = capabilityHandbookId(capability.id, payload.frontmatter.name);
     const baseline = await this.documents.get(job.userId, "method", id);
+    // 「不再使用」 is the researcher's word on this handbook, and a lesson of the same name must not put it back in force
+    // behind their back; restoring it is theirs to do (`HandbookLibrary.rollback`).
+    if (baseline?.payload?.status === "retired") return this.complete(job, candidate, { ...base, disposition: "rejected", reason: "handbook_retired_by_owner" });
     const binding = { userId: job.userId, capabilityId: capability.id, candidateDigest: payload.contentDigest,
       baselineDigest: baseline?.payload?.contentDigest ?? null, baselineRevision: baseline?.revision ?? 0,
       shippedCapabilityDigest: shippedCapabilityDigest(this.registry, capability.id) };
@@ -134,6 +140,8 @@ export class HandbookConsolidation {
         recordType: CAPABILITY_HANDBOOK_RECORD_TYPE, capabilityId: capability.id, status: "active",
         frontmatter: payload.frontmatter, body: payload.body, ...(payload.files ? { files: payload.files } : {}),
         dependencies: payload.dependencies, contentDigest: payload.contentDigest, display: payload.display,
+        // The steps in the researcher's language travel with the body they render, so the page can show them for this version.
+        ...(payload.displaySteps ? { displaySteps: payload.displaySteps } : {}),
         version: (baseline?.payload?.version ?? 0) + 1, verification, binding, ...(evaluation ? { evaluation } : {}),
         source: { candidateId: candidate.id, candidateDigest: payload.contentDigest, runId: source.id, projectId: payload.provenance.sourceProjectId, sessionId: source.sessionId ?? null },
         previousRevision: baseline?.revision ?? null, observations: [], createdAt: baseline?.payload?.createdAt ?? at, appliedAt: at,
@@ -152,23 +160,10 @@ export class HandbookConsolidation {
     }
   }
 
-  /** Restore a saved body forward by CAS. Observations belong to a version and never cross the restore.
+  /** Restore a saved body forward by CAS; the rules are the library's, which the memory page's route uses as well.
    * @param {string} userId @param {string} id @param {{expectedRevision:number,targetRevision:number}} input */
-  async rollback(userId, id, { expectedRevision, targetRevision }) {
-    const current = await this.documents.get(userId, "method", id);
-    if (current?.payload?.recordType !== CAPABILITY_HANDBOOK_RECORD_TYPE) throw new HttpError(404, "handbook_unavailable", "The handbook is unavailable.");
-    if (!Number.isSafeInteger(targetRevision) || targetRevision < 1 || targetRevision >= current.revision) {
-      throw new HttpError(404, "handbook_revision_unavailable", "That handbook revision is unavailable.");
-    }
-    const history = await this.documents.history(userId, "method", id, { beforeRevision: targetRevision + 1, limit: 1 });
-    const saved = history[0];
-    if (!saved || saved.deletedAt || saved.payload?.recordType !== CAPABILITY_HANDBOOK_RECORD_TYPE
-      || saved.payload.capabilityId !== current.payload.capabilityId) throw new HttpError(404, "handbook_revision_unavailable", "That handbook revision is unavailable.");
-    await this.learning.validateHandbook(userId, saved.payload);
-    return this.documents.put(userId, "method", id, { ...saved.payload, version: current.payload.version + 1,
-      verification: "unmeasured", evaluation: null, observations: [], previousRevision: current.revision,
-      restoredFromRevision: saved.revision, appliedAt: this.now().toISOString(),
-    }, { expectedRevision });
+  rollback(userId, id, input) {
+    return this.library.rollback(userId, id, input);
   }
 
   /** Reuse the maintenance timer. One bounded page per owner per call, resuming after restart from the beginning.

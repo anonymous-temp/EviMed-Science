@@ -1505,6 +1505,16 @@ export class MemoryIntelligence {
                 // names, workspace paths); whether a sentence is about the
                 // machinery is language, and is said here (principle 5).
                 "Do not store anything about how this platform itself works: its tools, gates, submissions, repair rounds, deliverable files, runs, budgets or injected context blocks — nor any file name, field name, column name or identifier out of the work in progress. Those are the system's own operating notes, not knowledge about the researcher or their research; a research finding stays, stated in research terms.",
+                // The write-side half of the 2026-10-07 audit (plan §3.2.7): ten
+                // project facts written from 虚拟临研 conversations were not facts
+                // at all — a conversation's pending state (「待用户提供一句话研究
+                // 问题或上传方案，才能逐条结构化入排条件」) and the platform's own
+                // inventory (「平台现有三份病种知识包：非小细胞肺癌、乳腺癌、2 型
+                // 糖尿病」) — and were recalled into later conversations as if
+                // they were known. What a conversation is waiting for, and what
+                // the platform offers today, are language judgements, so they
+                // are said here and not matched in code (principle 5).
+                "Store only durable facts about the person and about the project: what will still be true once this conversation has ended. Never store the pending state of a conversation — what the assistant is waiting for the user to provide or upload (「待用户提供…」, 「等待上传…」), what it will do next or what is still being compiled — never the platform's own inventory of what it currently offers (「平台现有三份…知识包」, which templates, packages or knowledge bases exist), and never notes about how the work is being carried out.",
                 // English whatever the conversation: `memoryKeyPattern` admits
                 // lowercase ASCII only, and a key that followed the language
                 // would make the same fact two memories for a bilingual user.

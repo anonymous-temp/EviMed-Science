@@ -139,7 +139,10 @@ import { NotificationService, runFinishedInboxItem, runFinishedReachesInbox } fr
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { withdrawProjectDerivedMemory } from "./derivedMemory.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
+import { HandbookLibrary } from "./handbookLibrary.mjs";
+import { createHandbookRoutes } from "./handbookRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
+import { resetLearnedMemory } from "./memoryReset.mjs";
 import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
 import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
@@ -1342,6 +1345,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     trialTtlMs: config.learningTrialTtlMs,
     // Whether the loop is turning for this account, beside its list (§13).
     summary: productDatabase && config.learningEnabled ? (userId) => learningSummary(productDatabase, userId) : null,
+    // 「从哪里学到的」: a lesson's run, live or kept when its project was deleted (`agentRuns` is composed further down; asked per request).
+    resolveRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
+  });
+  // The capability handbooks the platform learned for the account, to read, stop and go back from — the other half of 做法.
+  const handbookLibrary = learningService ? new HandbookLibrary({ learning: learningService }) : null;
+  const handbookRoutes = createHandbookRoutes({
+    store, library: handbookLibrary, maxJsonBytes: config.maxJsonBytes,
+    resolveRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
   });
   // Terminal-hook writes still in flight.
   //
@@ -1534,6 +1545,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }) });
   const memoryRoutes = createMemoryRoutes({
     config, researchMemory, memorySubstrate, memoryIndexWorker, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+    // 「重置记忆」 clears what the page shows: the methods, handbooks and capsule notes live in the product ledger.
+    resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
   /** The accounts an integration key of `ownerId` made for the people behind
@@ -4284,7 +4297,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The timeline and the capsule page's growth line, derived when read from
   // the records, the ledger, the methods and the researcher's own capsules.
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
-    capsules: capsuleService, context });
+    capsules: capsuleService, handbooks: handbookLibrary, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns, lineage: resultLineage,
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
@@ -5378,6 +5391,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
+      if (await handbookRoutes(req, res)) return;
       if (evolution && await evolution.routes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
