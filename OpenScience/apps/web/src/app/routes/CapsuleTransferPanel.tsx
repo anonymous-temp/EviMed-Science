@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { CapsuleSharePanel } from "@/components/capsule/CapsuleSharePanel";
+import { ReceivedShelf } from "@/components/capsule/ReceivedShelf";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { CAPSULE_SCAN_REASONS, capsuleEntryLabel, fromSender } from "@/lib/capsuleText";
+import { Drawer } from "@/components/ui/Drawer";
 import { Input, inputClasses } from "@/components/ui/Input";
+import { Tabs } from "@/components/ui/Tabs";
+import { CAPSULE_SCAN_REASONS, capsuleEntryLabel, fromSender } from "@/lib/capsuleText";
 import { takeDownSnapshot } from "@/lib/capsuleShareClient";
 import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
 import { formatDateTime } from "@/lib/format";
+import { announceMemoryChanged, ensureMyCapsule } from "@/lib/memoryClient";
 import { labelFor } from "@/lib/statusLabel";
 import {
   downloadCapsuleExport, exportCapsule, importCapsule, listCapsuleExports, previewCapsuleExport, previewCapsuleImport,
@@ -22,43 +26,60 @@ function stamp(value: string) {
 }
 
 /**
- * 分享与导入, the body of its drawer: export the researcher's own capsule as
- * an encrypted file, import someone else's, and the snapshots already handed
- * out. No card inside the drawer and no paragraph about how snapshots work
- * (2026-09-23 inventory §1.7): what cannot be taken back is said in the one
- * place it matters, the confirmation of 撤销.
+ * One action at a time with its own error and notice: the busy state that keeps
+ * a second click from racing the first, and a result that is said where the
+ * button is. Both tabs of the drawer use it, each with its own copy.
  */
-export function CapsuleTransferPanel({ capsule, onImported }: { capsule: CapsuleRecord | null; onImported: (capsule: CapsuleRecord) => void }) {
-  const [exportPassword, setExportPassword] = useState("");
-  const [importPassword, setImportPassword] = useState("");
+function useAction() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const perform = async (action: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true); setError(null); setNotice(null);
+    try { await action(); } catch (caught) { if (mounted.current) setError(productErrorMessage(caught)); }
+    finally { if (mounted.current) setBusy(false); }
+  };
+  return { busy, error, notice, setError, setNotice, perform, mounted };
+}
+
+/**
+ * 导出, the first tab of 分享与导入: hand the researcher's own capsule to
+ * someone as an encrypted file, to people of this platform, or as a folder of
+ * methods — and the versions already handed out.
+ *
+ * One column, and each password sits next to the button that needs it
+ * (2026-10-07 plan §3.2 item 7): 更新 used to be disabled by a field a page
+ * above, which read as a click that did nothing. A version that was handed out
+ * is 撤回 in one action with one confirmation that says what happens — it was
+ * two red buttons, 撤销 and 下架并停用副本, side by side, that did different
+ * irreversible things. What cannot be taken back is said in that confirmation,
+ * and nowhere else.
+ */
+export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
+  const [password, setPassword] = useState("");
   const [profile, setProfile] = useState(false);
   const [knowledge, setKnowledge] = useState(false);
-  const [archive, setArchive] = useState("");
-  const [importTitle, setImportTitle] = useState("收到的研究胶囊");
-  const [preview, setPreview] = useState<CapsuleTransferPreview | null>(null);
   /** 「对方会看到什么」 for the scopes chosen; null until read, or when it cannot be. */
   const [outgoing, setOutgoing] = useState<CapsuleExportPreview | null>(null);
   const [history, setHistory] = useState<CapsuleExportSnapshot[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
-  /** The snapshot a researcher asked to revoke, held until they confirm.
-   *  Revoking is permanent — every copy already handed out stops importing —
-   *  and it was one click with no confirmation (2026-09-16 review, U11). */
-  const [revoking, setRevoking] = useState<CapsuleExportSnapshot | null>(null);
-  /** The snapshot an author asked to take down: it also switches off every recipient's copy, so it asks first (flywheel F17). */
-  const [takingDown, setTakingDown] = useState<CapsuleExportSnapshot | null>(null);
-  // Sharing between accounts has its own switch: its panel and the take-down of a share are drawn only where the server says so.
+  /** The version being updated, and the password typed beside its button. */
+  const [updating, setUpdating] = useState<{ id: string; password: string } | null>(null);
+  /** The version a researcher asked to withdraw, held until they confirm. */
+  const [withdrawing, setWithdrawing] = useState<CapsuleExportSnapshot | null>(null);
+  // Sharing between accounts has its own switch: its panel, and the copies a withdrawal also stops, exist only where the server says so.
   const sharing = useCapsuleShareFeature() === "on";
   const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const mounted = useRef(true);
+  const { busy, error, notice, setError, setNotice, perform, mounted } = useAction();
   const capsuleId = capsule?.deletedAt ? null : capsule?.id;
   const currentCapsuleId = useRef(capsuleId);
   currentCapsuleId.current = capsuleId;
+  const scopes = ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])];
 
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     let active = true; setHistory([]); setHistoryCursor(null);
     if (!capsuleId) { setLoading(false); return; }
@@ -66,75 +87,53 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
     void listCapsuleExports(capsuleId).then(page => { if (active) { setHistory(page.items); setHistoryCursor(page.nextCursor); } })
       .catch(caught => { if (active) setError(productErrorMessage(caught)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [capsuleId, refresh]);
+  }, [capsuleId, refresh, setError]);
 
-  // What a pack of the chosen scopes would carry, read before any password is
-  // typed: an account with nothing to share is told so here, not by a refused
-  // export (2026-09-26 audit, M-6).
+  // What a file of the chosen scopes would carry, read before any password is typed: an account with nothing to share is told so
+  // here, not by a refused export (2026-09-26 audit, M-6).
   useEffect(() => {
     let active = true;
     setOutgoing(null);
     if (!capsuleId) return;
-    const scopes = ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])];
     void (async () => {
       try {
-        const result = await previewCapsuleExport(capsuleId, { scopes });
+        const result = await previewCapsuleExport(capsuleId, { scopes: ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])] });
         if (active) setOutgoing(result ?? null);
       } catch { /* the export itself still says why it cannot run */ }
     })();
     return () => { active = false; };
   }, [capsuleId, profile, knowledge, refresh]);
 
-  const perform = async (action: () => Promise<void>) => {
-    if (busy) return; setBusy(true); setError(null); setNotice(null);
-    try { await action(); } catch (caught) { if (mounted.current) setError(productErrorMessage(caught)); }
-    finally { if (mounted.current) setBusy(false); }
-  };
-  const createExport = (supersedes?: string, savedScopes?: string[]) => perform(async () => {
-    if (!capsuleId || !exportPassword) return;
-    const result = await exportCapsule(capsuleId, { password: exportPassword,
-      scopes: savedScopes ?? ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])], ...(supersedes ? { supersedes } : {}) });
+  const createExport = (secret: string, supersedes?: string, savedScopes?: string[]) => perform(async () => {
+    if (!capsuleId || !secret) return;
+    const result = await exportCapsule(capsuleId, { password: secret, scopes: savedScopes ?? scopes, ...(supersedes ? { supersedes } : {}) });
     saveCapsuleDownload(result.archive, result.filename);
-    if (mounted.current) { setExportPassword(""); setRefresh(value => value + 1); setNotice("已下载"); }
+    if (mounted.current) { setPassword(""); setUpdating(null); setRefresh(value => value + 1); setNotice("已下载"); }
   });
 
-  const upgrading = preview?.upgrades ?? null;
-  const status = preview ? [
-    preview.issuerTrust === "verified" ? "已验证" : "未验证",
-    `${preview.entries.length} 条`,
-    ...(preview.hostedStatus === "revoked" ? ["已撤销"] : []),
-    ...(preview.newerSnapshotId ? ["有更新版本"] : []),
-    ...(preview.scan?.dropped.length ? [`会剔除 ${preview.scan.dropped.length} 条`] : []),
-  ].join(" · ") : "";
+  /** 撤回: the version stops being importable here and, where sharing is on, the copies others took stop working. */
+  const withdraw = (snapshot: CapsuleExportSnapshot) => perform(async () => {
+    if (!capsuleId) return;
+    if (snapshot.status !== "revoked") await revokeCapsuleExport(capsuleId, snapshot);
+    const done = sharing ? await takeDownSnapshot(capsuleId, snapshot.id, "") : null;
+    if (mounted.current) {
+      setRefresh(value => value + 1);
+      setNotice(done && done.copies > 0 ? `已撤回，别人收下的 ${done.copies} 份副本已停用` : "已撤回");
+    }
+  });
 
   return <div className="space-y-8">
-    {revoking && <ConfirmDialog
-      title="撤销这份快照？"
-      body={`撤销后它在本服务上不能再被导入，无法恢复；已下载的离线副本无法收回。${stamp(revoking.createdAt)} · ${revoking.entryCount} 条。`}
-      confirmLabel="撤销快照"
-      onCancel={() => setRevoking(null)}
+    {withdrawing && <ConfirmDialog
+      title="撤回这个版本？"
+      body={sharing
+        ? `撤回后它不能再被导入，别人已经收下的副本会停用并收到一条说明，无法恢复；已下载的离线文件无法收回。${stamp(withdrawing.createdAt)} · ${withdrawing.entryCount} 条。`
+        : `撤回后它不能再被导入，无法恢复；已下载的离线文件无法收回。${stamp(withdrawing.createdAt)} · ${withdrawing.entryCount} 条。`}
+      confirmLabel="撤回"
+      onCancel={() => setWithdrawing(null)}
       onConfirm={() => {
-        const snapshot = revoking;
-        const owner = capsuleId;
-        setRevoking(null);
-        // The button that opened this dialog only exists inside `capsuleId &&`,
-        // so `owner` is a string here; narrowing it keeps that true rather than
-        // asserting it.
-        if (!owner) return;
-        void perform(async () => { await revokeCapsuleExport(owner, snapshot); setRefresh(value => value + 1); });
-      }}
-    />}
-    {takingDown && <ConfirmDialog
-      title="下架这份分享？"
-      body="下架后收到的人那份副本会被停用，并收到一条说明；它不能再被收下。对方自己的记忆和对话不受影响。已下载的离线文件无法收回。"
-      confirmLabel="下架并停用副本"
-      onCancel={() => setTakingDown(null)}
-      onConfirm={() => {
-        const snapshot = takingDown;
-        const owner = capsuleId;
-        setTakingDown(null);
-        if (!owner) return;
-        void perform(async () => { const done = await takeDownSnapshot(owner, snapshot.id, ""); setRefresh(value => value + 1); setNotice(`已下架，停用了 ${done.copies} 份副本`); });
+        const snapshot = withdrawing;
+        setWithdrawing(null);
+        void withdraw(snapshot);
       }}
     />}
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 text-ui text-error">
@@ -144,8 +143,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
     {notice && <p role="status" className="text-ui text-text-2">{notice}</p>}
 
     <section className="space-y-3" aria-label="加密导出">
-      <h3 className="text-ui font-semibold text-text">导出</h3>
-      <Input label="导出口令" type="password" autoComplete="new-password" value={exportPassword} disabled={busy || !capsuleId} onChange={event => setExportPassword(event.target.value)} maxLength={1024} />
+      <h3 className="text-ui font-semibold text-text">导出为加密文件</h3>
       <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-ui text-text">
         <legend className="sr-only">包含</legend>
         <span className="text-text-2">包含：工作方式</span>
@@ -166,25 +164,95 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
           </ul>
         </Disclosure>
       ) : null}
-      <Button disabled={busy || !capsuleId || !exportPassword || outgoing?.empty === true} loading={busy} onClick={() => void createExport()}>加密导出</Button>
+      {/* The password and the button that needs it, in one row. */}
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-48 flex-1">
+          <Input label="文件密码" type="password" autoComplete="new-password" value={password} disabled={busy || !capsuleId} onChange={event => setPassword(event.target.value)} maxLength={1024} />
+        </div>
+        <Button disabled={busy || !capsuleId || !password || outgoing?.empty === true} loading={busy} onClick={() => void createExport(password)}>加密导出</Button>
+      </div>
     </section>
 
     {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} />}
 
-    <section className="space-y-3" aria-label="胶囊导入">
-      <h3 className="text-ui font-semibold text-text">导入</h3>
+    {capsuleId && <section className="space-y-2" aria-label="导出的版本">
+      <h3 className="text-ui font-semibold text-text">导出的版本</h3>
+      {loading ? <p role="status" className="text-ui text-text-3">正在读取</p> : history.length === 0 ? <p className="text-ui text-text-3">还没有导出过。</p> : (
+        <ul className="divide-y divide-border">
+          {history.map(snapshot => <li key={snapshot.id} className="space-y-2 py-3">
+            <p className="text-ui text-text">
+              {stamp(snapshot.createdAt)} · {snapshot.entryCount} 条 · {snapshot.scopes.map(scope => labelFor(SCOPE_LABELS, scope, "其他范围")).join("、")}
+              {snapshot.status === "revoked" ? " · 已撤回" : ""}
+            </p>
+            <div className="flex flex-wrap gap-1">
+              <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
+              <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} aria-expanded={updating?.id === snapshot.id}
+                onClick={() => setUpdating(updating?.id === snapshot.id ? null : { id: snapshot.id, password: "" })}>更新</Button>
+              <Button size="sm" variant="text" destructive disabled={busy || (snapshot.status === "revoked" && !sharing)} onClick={() => setWithdrawing(snapshot)}>撤回</Button>
+            </div>
+            {updating?.id === snapshot.id && (
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-48 flex-1">
+                  <Input label="文件密码" type="password" autoComplete="new-password" value={updating.password} disabled={busy} maxLength={1024}
+                    onChange={event => setUpdating({ id: snapshot.id, password: event.target.value })} />
+                </div>
+                <Button disabled={busy || !updating.password} loading={busy} onClick={() => void createExport(updating.password, snapshot.id, snapshot.scopes)}>更新并下载</Button>
+              </div>
+            )}
+          </li>)}
+        </ul>
+      )}
+      {historyCursor && <Button size="sm" variant="secondary" disabled={busy} onClick={() => void perform(async () => { const page = await listCapsuleExports(capsuleId, historyCursor); if (currentCapsuleId.current === capsuleId) { setHistory(items => [...items, ...page.items]); setHistoryCursor(page.nextCursor); } })}>更多</Button>}
+    </section>}
+  </div>;
+}
+
+/**
+ * 导入, the second tab: open a file someone gave the researcher, preview what
+ * it holds and what will not be taken, and take it whole — then what is waiting
+ * to be taken and what was taken.
+ *
+ * A file made for this account opens with no password. What the automatic check
+ * will leave out is part of what is previewed, entry by entry, with its reason
+ * in the researcher's words: 「不会带上」.
+ */
+export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecord) => void }) {
+  const [password, setPassword] = useState("");
+  const [archive, setArchive] = useState("");
+  const [title, setTitle] = useState("收到的研究胶囊");
+  const [preview, setPreview] = useState<CapsuleTransferPreview | null>(null);
+  const { busy, error, notice, setError, setNotice, perform, mounted } = useAction();
+
+  const upgrading = preview?.upgrades ?? null;
+  const status = preview ? [
+    preview.issuerTrust === "verified" ? "已验证" : "来源未验证",
+    `${preview.entries.length} 条`,
+    ...(preview.hostedStatus === "revoked" ? ["已撤回"] : []),
+    ...(preview.newerSnapshotId ? ["有更新版本"] : []),
+    ...(preview.scan?.dropped.length ? [`不会带上 ${preview.scan.dropped.length} 条`] : []),
+  ].join(" · ") : "";
+
+  return <div className="space-y-8">
+    {error && <p role="alert" className="text-ui text-error">{error}</p>}
+    {notice && <p role="status" className="text-ui text-text-2">{notice}</p>}
+
+    <section className="space-y-3" aria-label="导入文件">
       <label className="block space-y-2 text-ui font-medium text-text">选择胶囊文件<input type="file" accept=".evimedcap" className={inputClasses({ className: "font-normal" })} disabled={busy} onChange={event => {
         const file = event.target.files?.[0]; setArchive(""); setPreview(null);
         if (!file) return;
-        if (!file.name.endsWith(".evimedcap") || file.size > 2 * 1024 * 1024) { setError("请选择不超过 2 MiB 的 .evimedcap 文件。"); return; }
+        if (!file.name.endsWith(".evimedcap") || file.size > 2 * 1024 * 1024) { setError("请选择不超过 2 MiB 的胶囊文件。"); return; }
         void perform(async () => { const content = await file.text(); if (mounted.current) setArchive(content); });
       }} /></label>
-      <Input label="导入口令" type="password" autoComplete="off" disabled={busy} maxLength={1024} value={importPassword} onChange={event => { setImportPassword(event.target.value); setPreview(null); }} />
-      {/* A pack sealed for this account opens without a password. */}
-      <Button variant="secondary" disabled={busy || !archive} onClick={() => void perform(async () => {
-        const result = await previewCapsuleImport({ archive, ...(importPassword ? { password: importPassword } : {}) });
-        if (mounted.current) { setPreview(result); if (result?.card?.title) setImportTitle(result.card.title); }
-      })}>解密并预览</Button>
+      {/* A file made for this account opens without a password. */}
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-48 flex-1">
+          <Input label="文件密码" type="password" autoComplete="off" disabled={busy} maxLength={1024} value={password} onChange={event => { setPassword(event.target.value); setPreview(null); }} />
+        </div>
+        <Button variant="secondary" disabled={busy || !archive} onClick={() => void perform(async () => {
+          const result = await previewCapsuleImport({ archive, ...(password ? { password } : {}) });
+          if (mounted.current) { setPreview(result); if (result?.card?.title) setTitle(result.card.title); }
+        })}>预览</Button>
+      </div>
       {preview && <div className="space-y-3 pt-2">
         {/* The card its sender signed: what it is, who sent it, what it holds. */}
         {preview.card && <div className="space-y-1">
@@ -197,49 +265,60 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
           会更新你已收下的“{upgrading.title}”：{preview.card?.changelog ?? `新增 ${upgrading.added} 条、移除 ${upgrading.removed} 条`}
         </p>}
         <p className="text-ui text-text">{status}</p>
-        {/* Whole-pack trust (plan §3.3 #4): what the scan would drop is part
-            of what is previewed, entry by entry. */}
         <ul className="space-y-1">
           {preview.entries.map(entry => {
             const dropped = preview.scan?.dropped.find(item => item.id === entry.id);
             return <li key={entry.id}>
-              <Disclosure summary={`${capsuleEntryLabel(entry.factKind)}${dropped ? ` · 会被剔除：${CAPSULE_SCAN_REASONS[dropped.code] ?? "没有通过自动检查"}` : ""}`}>
+              <Disclosure summary={`${capsuleEntryLabel(entry.factKind)}${dropped ? ` · 不会带上：${CAPSULE_SCAN_REASONS[dropped.code] ?? "没有通过自动检查"}` : ""}`}>
                 <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{entry.content}</p>
                 {dropped?.source === "model" && dropped.reason && <p className="mt-1 text-caption text-text-3">{dropped.reason}</p>}
               </Disclosure>
             </li>;
           })}
         </ul>
-        {!upgrading && <Input label="收下后的胶囊名称" value={importTitle} disabled={busy} maxLength={150} onChange={event => setImportTitle(event.target.value)} />}
-        <Button disabled={busy || !preview.canImport || (!upgrading && !importTitle.trim())} onClick={() => void perform(async () => {
-          const result = await importCapsule({ archive, ...(importPassword ? { password: importPassword } : {}), expectedDigest: preview.archiveSha256, confirmed: true,
-            ...(upgrading ? {} : { title: importTitle.trim() }) });
+        {!upgrading && <Input label="收下后的胶囊名称" value={title} disabled={busy} maxLength={150} onChange={event => setTitle(event.target.value)} />}
+        <Button disabled={busy || !preview.canImport || (!upgrading && !title.trim())} onClick={() => void perform(async () => {
+          const result = await importCapsule({ archive, ...(password ? { password } : {}), expectedDigest: preview.archiveSha256, confirmed: true,
+            ...(upgrading ? {} : { title: title.trim() }) });
           if (mounted.current) {
-            setPreview(null); setArchive(""); setImportPassword("");
+            setPreview(null); setArchive(""); setPassword("");
             setNotice(upgrading ? `已更新“${result.payload.title}”` : `已收下“${result.payload.title}”`); onImported(result);
           }
         })}>{upgrading ? "更新这个胶囊" : "收下这个胶囊"}</Button>
       </div>}
     </section>
 
-    {capsuleId && <Disclosure summary="导出记录" summaryClassName="font-semibold text-text">
-      {loading ? <p role="status" className="text-ui text-text-3">正在读取</p> : history.length === 0 ? <p className="text-ui text-text-3">还没有导出过。</p> : (
-        <ul className="divide-y divide-border">
-          {history.map(snapshot => <li key={snapshot.id} className="space-y-1 py-3">
-            <p className="text-ui text-text">
-              {stamp(snapshot.createdAt)} · {snapshot.entryCount} 条 · {snapshot.scopes.map(scope => labelFor(SCOPE_LABELS, scope, "其他范围")).join("、")}
-              {snapshot.status === "revoked" ? " · 已撤销" : ""}
-            </p>
-            <div className="flex flex-wrap gap-1">
-              <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
-              <Button size="sm" variant="text" disabled={busy || !exportPassword} onClick={() => void createExport(snapshot.id, snapshot.scopes)}>更新快照</Button>
-              <Button size="sm" variant="text" destructive disabled={busy || snapshot.status === "revoked"} onClick={() => setRevoking(snapshot)}>撤销此快照</Button>
-              {sharing && <Button size="sm" variant="text" destructive disabled={busy} onClick={() => setTakingDown(snapshot)}>下架并停用副本</Button>}
-            </div>
-          </li>)}
-        </ul>
-      )}
-      {historyCursor && <Button size="sm" variant="secondary" className="mt-2" disabled={busy} onClick={() => void perform(async () => { const page = await listCapsuleExports(capsuleId, historyCursor); if (currentCapsuleId.current === capsuleId) { setHistory(items => [...items, ...page.items]); setHistoryCursor(page.nextCursor); } })}>更多导出记录</Button>}
-    </Disclosure>}
+    <ReceivedShelf />
   </div>;
+}
+
+type ShareTab = "export" | "import";
+
+/**
+ * 「分享与导入」, the drawer from the memory page's 「⋯」: two tabs, 导出 and
+ * 导入, each one column (2026-10-07 plan §3.2 item 7) — five to seven sections
+ * stacked in one scroll was the page's second page. Every function it had is in
+ * one of them.
+ *
+ * The researcher's own capsule is made when this opens, not when the memory
+ * page does: reading the page used to write (2026-10-07 walk, D-P2-8). The
+ * import tab does not need it, so a capsule that cannot be made costs the
+ * export and nothing else.
+ */
+export function ShareDrawer({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const [tab, setTab] = useState<ShareTab>("export");
+  const [capsule, setCapsule] = useState<CapsuleRecord | null>(null);
+  useEffect(() => {
+    let active = true;
+    void ensureMyCapsule().then((own) => { if (active) setCapsule(own); }, () => { /* export waits; import still works */ });
+    return () => { active = false; };
+  }, []);
+  return (
+    <Drawer title="分享与导入" onClose={onClose}>
+      <div className="space-y-6">
+        <Tabs<ShareTab> label="分享与导入" items={[{ value: "export", label: "导出" }, { value: "import", label: "导入" }]} value={tab} onChange={setTab} />
+        {tab === "export" ? <ExportPanel capsule={capsule} /> : <ImportPanel onImported={() => { announceMemoryChanged(); onImported(); }} />}
+      </div>
+    </Drawer>
+  );
 }
