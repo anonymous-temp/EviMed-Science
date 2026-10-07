@@ -370,6 +370,15 @@ test("medical acronyms remain prose while actual internal source labels are stil
   assert.equal(internal.backOfficeHits.length, 2);
 });
 
+test("「已交付」 as a status label is the back office; inside a sentence of content it is not", () => {
+  for (const text of ["已交付 · 有结论未逐字核对", "状态：已交付", "已交付"]) {
+    assert.equal(measureControls([{ tag: "p", height: 24, text }]).backOfficeHits.length, 1, text);
+  }
+  for (const text of ["修订已交付报告后重系引证与数值", "报告已交付给课题组"]) {
+    assert.deepEqual(measureControls([{ tag: "p", height: 24, text }]).backOfficeHits, [], text);
+  }
+});
+
 test("CSS chart marks are drawing strokes while chart frames and ordinary borders still count", () => {
   const stroke = (color, flags) => ({ tag: "span", height: 12, width: 12, ...flags,
     style: { borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: color } });

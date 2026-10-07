@@ -127,10 +127,13 @@ const LEAKS = [
 /**
  * The back office a page no longer describes (2026-09-23 plan §4, checklist
  * item 8). A closed list of the product's own phrases, not a pattern over
- * open prose: each is something this code base used to print.
+ * open prose: each is something this code base used to print. 「已交付」 is the
+ * status label standing on its own; inside a run of Chinese text it is a word of
+ * the researcher's content (a lesson titled 「修订已交付报告后重系引证与数值」
+ * failed the 2026-10-07 walk of the memory page).
  */
 export const BACK_OFFICE = [
-  /已交付/, /核对\s*\d+\s*条/, /已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /\d+月\d+日\s*起生效/, /缓存命中/, /tok\/s/,
+  /(?<!\p{Script=Han})已交付(?!\p{Script=Han})/u, /核对\s*\d+\s*条/, /已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /\d+月\d+日\s*起生效/, /缓存命中/, /tok\/s/,
   /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /openFDA (药品召回|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
 ];
 

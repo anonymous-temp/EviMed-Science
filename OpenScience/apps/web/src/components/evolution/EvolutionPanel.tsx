@@ -8,7 +8,6 @@ import { Disclosure } from '@/components/ui/Disclosure';
 import { EmptyState } from '@/components/cards/EmptyState';
 import { FilesSkeleton } from '@/components/cards/Skeletons';
 import { LoadError } from '@/components/cards/LoadError';
-import { Link } from 'react-router';
 
 const VALIDATION: Record<string, string> = { V0: '已构建', V1: '仅模拟验证', V2: '已复现已发表算例', V3: '已复现已发表研究', V4: '已用于真实研究' };
 const DATA: Record<string, string> = { D0: '等待数据来源', D1: '模拟数据', D2: '公开数据', D3: '用户数据已匹配', D4: '真实与外部数据' };
@@ -38,6 +37,6 @@ export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dat
       {tool.dataRequirements && <Disclosure summary="数据要求"><Button variant="text" size="sm" onClick={() => downloadEvolutionRequirements(tool)}>下载数据要求</Button><Button variant="text" size="sm" onClick={() => downloadEvolutionTemplate(tool)}>下载表格模板</Button></Disclosure>}
       {access.operator && tool.artifactDigest && <Disclosure summary="版本"><p className="break-all font-mono text-caption text-text-3">{tool.artifactDigest}</p></Disclosure>}
     </li>)}</ul>}
-    {!projectId && access.operator && <><Disclosure summary="研发计划"><ul className="space-y-2">{dossiers.map(row => <li key={row.id} className="text-ui text-text-2">{row.payload.title ?? row.payload.goal ?? '研发计划'}</li>)}</ul>{dossiers.length === 0 && <EmptyState title="暂无研发计划" />}</Disclosure><Link to="/app/inbox" className="text-ui text-accent">查看裁决</Link></>}
+    {!projectId && access.operator && <Disclosure summary="研发计划"><ul className="space-y-2">{dossiers.map(row => <li key={row.id} className="text-ui text-text-2">{row.payload.title ?? row.payload.goal ?? '研发计划'}</li>)}</ul>{dossiers.length === 0 && <EmptyState title="暂无研发计划" />}</Disclosure>}
   </section>;
 }
