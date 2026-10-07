@@ -1,0 +1,764 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-07",
+  "branch": "codex/jev-judge-integration-20261006",
+  "baseCommit": "c1f02c3cccb28da9d3ad71c0c42627852af1decf",
+  "status": "implementation-and-partial-calibration-complete-not-a-full-release-acceptance",
+  "productionModified": false,
+  "merged": false,
+  "newQualifiedSites": [
+    "J2",
+    "J4"
+  ],
+  "model": "jev-1.13.0",
+  "policy": "New uncalibrated or changed-fingerprint sites preserve their original paths. Calibration does not withhold research delivery. Threshold recommendations are exploratory; they do not rewrite production pins.",
+  "sites": {
+    "J1": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "pairs": 120,
+        "deleted": 9,
+        "falseDeletions": 0,
+        "deletePrecision": 1,
+        "deletePrecisionLower95": 0.7168711644368865,
+        "relatedPairs": 60,
+        "falseDeletionRateUpper95": 0.04870291331009746,
+        "retainedUnrelated": 51,
+        "baselineCompared": 8,
+        "baselineAgreement": 0,
+        "baselineCorrect": 8
+      },
+      "missing": [
+        "Only 9 confident deletions, exact lower95 precision 0.7169; insufficient deletion precision evidence.",
+        "Original thinking-enabled Flash baseline completed 8 of 120 pairs; larger batches exceeded the 15 second deadline."
+      ]
+    },
+    "J2": {
+      "implementation": "wired",
+      "qualification": "calibrated",
+      "threshold": 0.8,
+      "promptFingerprint": "dea336f70b74908d7138e7b029908f7d39396287bcafea4baf064e7cbc592e8a",
+      "calibratedAt": "2026-10-07T00:57:28.907Z",
+      "measured": 99,
+      "settled": 70,
+      "correct": 70,
+      "lower95": 0.9581066559331114,
+      "resultSha256": "7e93ba14d6e43dad03cd83c467e9e7df17f1f28361ff2626f28acdc858e97a4f",
+      "observations": "100 authored scenarios, 51 project choices; 99 returned valid judgements, 70 settled with no incorrect settlement. One provider failure preserved safe behavior. Original Flash was correct on 89/100; settled-answer agreement66 / 70.",
+      "baselineAgreement": 0.9428571428571428
+    },
+    "J3": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 135,
+        "measured": 135,
+        "settled": 84,
+        "correct": 76,
+        "lower95": 0.8347164210516738,
+        "agreement": 0.9047619047619048,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 135,
+        "finalCorrect": 126,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [],
+        "status": "measured-not-release-certified",
+        "finalTotal": 135,
+        "finalLower95": 0.8865503814412181,
+        "baselineFinalCorrect": 123,
+        "baselineFinalAccuracy": 0.9111111111111111,
+        "noninferiorityTarget": 0.8911111111111111,
+        "titleToPaper": {
+          "cases": 50,
+          "falseSpecialists": 0,
+          "baselineFalseSpecialists": 0
+        }
+      },
+      "missing": [
+        "Critical false-specialist checks pass, but final accuracy lower95 does not meet the observed original-classifier accuracy minus 0.02.",
+        "Legacy labels from an 11-capability catalog conflict with current named meta/bibliometric/off-label deliverables; labels were preserved, not retargeted to improve scores."
+      ]
+    },
+    "J4": {
+      "implementation": "wired",
+      "qualification": "calibrated",
+      "threshold": 0.7,
+      "promptFingerprint": "3aeb08fdf2ecdc61f68011cc10548b4599d6ba00e2b010d75c1abea872200695",
+      "calibratedAt": "2026-10-07T00:58:29.077Z",
+      "measured": 140,
+      "settled": 127,
+      "correct": 127,
+      "lower95": 0.9766875895717869,
+      "resultSha256": "9a9c44523254c93d7952d1dcaedb93c7fecb65f97cd9f9a68b21afe20abae6bd",
+      "observations": "140 labelled lines, including 35 preserved lines from real statistical and bibliometric reports; 127 settled / 127 correct. Sentences share report groups, so line-level confidence bounds are not independent-report generalization."
+    },
+    "J5": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 10,
+        "measured": 9,
+        "settled": 0,
+        "correct": 0,
+        "lower95": 0,
+        "agreement": null,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 5,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J6": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 100,
+        "measured": 99,
+        "settled": 21,
+        "correct": 15,
+        "lower95": 0.5126112083011307,
+        "agreement": 0.7142857142857143,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 11,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J7": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Researcher-confirmed document-type labels over all 22 choices have not been collected."
+      ]
+    },
+    "J8": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.9,
+      "missing": [
+        "CONSORT-TM Methods annotations do not establish a full-manuscript criterion pass; no full-manuscript false-pass comparison against thinking-enabled Flash."
+      ]
+    },
+    "J9": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 14,
+        "measured": 9,
+        "settled": 9,
+        "correct": 9,
+        "lower95": 0.7168711644368865,
+        "agreement": 1,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J10": {
+      "implementation": "implemented-through-J17-ranking-only-per-plan-4.6",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Shared J17 ranking calibration remains unqualified; no independent capability assignment is introduced."
+      ]
+    },
+    "J11": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
+      ]
+    },
+    "J12": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
+      ]
+    },
+    "J13": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "J14": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "J15": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 90,
+        "measured": 90,
+        "settled": 62,
+        "correct": 61,
+        "lower95": 0.9257578410169836,
+        "agreement": 0.9838709677419355,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J16": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
+      ]
+    },
+    "J17": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "J18": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 34,
+        "measured": 34,
+        "settled": 31,
+        "correct": 31,
+        "lower95": 0.9078859400526763,
+        "agreement": 1,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J19": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 13,
+        "measured": 13,
+        "settled": 12,
+        "correct": 12,
+        "lower95": 0.7790778080544442,
+        "agreement": 1,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J20": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 20,
+        "measured": 20,
+        "settled": 20,
+        "correct": 20,
+        "lower95": 0.8608916593317348,
+        "agreement": 1,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J21": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "J22": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "meta-evidence-role": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "peer-review-checklist": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    }
+  },
+  "privateEvidence": {
+    "intent-calibration-v3.json": {
+      "file": "probes/2026-10-06-jev-integration/intent-calibration-v3.json",
+      "sha256": "7e93ba14d6e43dad03cd83c467e9e7df17f1f28361ff2626f28acdc858e97a4f"
+    },
+    "routing-calibration-v3.json": {
+      "file": "probes/2026-10-06-jev-integration/routing-calibration-v3.json",
+      "sha256": "c5e328b9a5739cf0759657f13fb238e90acc75cd8a080b5c5a879d288275cd7e"
+    },
+    "register-calibration-v3.json": {
+      "file": "probes/2026-10-06-jev-integration/register-calibration-v3.json",
+      "sha256": "9a9c44523254c93d7952d1dcaedb93c7fecb65f97cd9f9a68b21afe20abae6bd"
+    },
+    "secondary-sites-calibration.json": {
+      "file": "probes/2026-10-06-jev-integration/secondary-sites-calibration.json",
+      "sha256": "38faa43c392c5b3c244a733db6880cc61680a253b5a843fc09db205ecc9baac9"
+    },
+    "J1-120-method-pairs.json": {
+      "file": "probes/2026-10-06-jev-integration/J1-120-method-pairs.json",
+      "sha256": "d74834d2b59dcf684c35a37054530e5bcc58d653b059824926e211e17fec8b68"
+    },
+    "latency-production-host.json": {
+      "file": "probes/2026-10-06-jev-integration/latency-production-host.json",
+      "sha256": "876c7f5bce41bf769d57187488d26ae4e4488eca007c7a46910f6f3ffd6d49b6"
+    },
+    "routing-final-replay-v2.json": {
+      "file": "probes/2026-10-06-jev-integration/routing-final-replay-v2.json",
+      "sha256": "eac07d0e013832789b53a20a71a6497f74bd0bb07acbe4c0dc512fef3f868997"
+    },
+    "manifest.json": {
+      "file": "acceptance/jev-runtime-20261007/manifest.json",
+      "sha256": "786582276d305d3f3d2ceca47995944ce642d404a1433141bda62daef4c272b3"
+    },
+    "report-register-results.json": {
+      "file": "acceptance/jev-runtime-20261007/report-register-results.json",
+      "sha256": "2f8af19a4675e2e4fe5a359bb853b31585dc13b3141d97fe4dbd3c9dda9dba76"
+    },
+    "engine-builds/results.json": {
+      "file": "acceptance/jev-runtime-20261007/engine-builds/results.json",
+      "sha256": "21861a3afcff1a46b49867d6eb24c934645c00dbd0210376ea2a43ce31242e22"
+    }
+  },
+  "releaseRequirements": [
+    "Refresh the deployment tool-probe evidence: current capability audit references 40 tools while this source registry has 54; 13 have never been probed and source identity is absent.",
+    "Build the production runtime and engine images, generate the release manifest from their actual IDs, and run deployment acceptance after team review.",
+    "Observe each released batch for seven days; inspect per-site settled/escalated/fallback ratios and first three days of per-account learning spend.",
+    "Collect the missing human-reviewed and full-manuscript reference labels before qualifying remaining sites; weak incumbent labels and synthetic smoke controls are not independent acceptance."
+  ],
+  "frontierSnapshot": {
+    "sha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+    "screeningRows": 26812,
+    "eventItemRows": 12868,
+    "eventLinks": 41,
+    "eventRevisions": 246,
+    "operatorMergeSplitLabels": 0,
+    "access": "read-only production transaction; private compressed snapshot retained outside Git"
+  },
+  "runtimeVerification": {
+    "kernel": "0.1.7-rc.2",
+    "model": "deepseek-flash",
+    "duplicateLogs": {
+      "inputCharacters": 33024,
+      "outputCharacters": 69,
+      "repetitionsPreserved": 1000,
+      "scientificRowsPreserved": 1000
+    },
+    "screening": {
+      "requested": 4,
+      "included": 2,
+      "excluded": 1,
+      "unclear": 1,
+      "failed": 0,
+      "scope": "Authentic publication subset plus explicitly labelled title-only and damaged-record controls, not a full 119 record rerun."
+    },
+    "reportRegister": {
+      "actualNativeReplyNotices": 0,
+      "injectedPositiveNotices": 1,
+      "terminalRunAndArtifactUnchanged": true
+    },
+    "limits": [
+      "Composed classifier-to-native trajectory, not full hosted browser/admission acceptance.",
+      "Supplement was sent after the prior native turn settled, not overlapping correction.",
+      "Routing template subsequently changed; current template is covered by 135 live classifier cases but not a new complete native trajectory."
+    ]
+  },
+  "engineBuilds": {
+    "count": 6,
+    "checks": [
+      "shared-client import",
+      "source compilation"
+    ],
+    "scope": "Offline source delta builds against cached bases; not full dependency installation or production activation.",
+    "temporaryImagesRemoved": true
+  },
+  "laterEvolution2Points": {
+    "status": "deferred-with-own-phase",
+    "reason": "Plan section4.5 schedules these with Evolution2, not as an independent feature release."
+  },
+  "integratedMainCommit": "93564fd7fa864dcb5c1d6c04d7cdda1a981b50a7",
+  "mainIntegration": {
+    "status": "implemented-and-regression-verified",
+    "preserved": [
+      "Evidence flywheel publication and privacy gates",
+      "Existing routing and model output ceilings",
+      "Platform/account budget ownership",
+      "Unqualified site fallback"
+    ],
+    "addedCallers": {
+      "J13": "Reorder a complete authorized prefix; retain every candidate and meter against the runtime project or subscribed project.",
+      "J14": "Resolve exact titles first; compare public topic candidates outside vote transactions; keep account/project attribution, quota checks, related links and durable model costs.",
+      "J17": "Rank preserved publication leads before bounded scout admission, retain all papers, preserve durable queue order and atomically enforce the daily scout limit."
+    },
+    "sourceCommit": "59977aa968b0acfc07e567e5a76a4d34399aa4dd"
+  },
+  "validationBeforeMainIntegration": {
+    "typechecks": "All five final project typechecks passed serially.",
+    "webBuild": "build:web passed.",
+    "mcp": "902 research tests (1 skipped) and 9 memory tests passed.",
+    "server": "7251 tests:6029 passed,1214 skipped,8 initial failures. All8 were corrected and their full affected files passed focused reruns; no failure was skipped or hidden.",
+    "web": "2253passed in broad run;12resource-pressure failures passed in serial191test rerun.",
+    "audits": "Source secrets, dependency vulnerabilities, hosted compliance, SaaS alignment, manifests/skill digests passed. Capability live-probe evidence audit remains red as listed above.",
+    "finalAdditionalChecks": "Focused domain regression, calibration-pin binding, report advisory behavior, evaluator final dispatch, shared client builds and regenerated tool graph checks passed. Final server ESLint/typecheck passed."
+  },
+  "validation": {
+    "typechecks": "Server, web, domain, harness-port and socket typechecks passed after main integration.",
+    "webBuild": "Hosted build:web passed; existing bundle-size advisory remains.",
+    "mcp": {
+      "researchTests": 925,
+      "researchSkipped": 1,
+      "memoryTests": 9,
+      "failed": 0
+    },
+    "server": {
+      "tests": 8254,
+      "passed": 6533,
+      "environmentSkipped": 1720,
+      "initialFailures": 1,
+      "correctedFailures": 1,
+      "correction": "Classified the new runtime measurement as immutable kernel provenance; all 9 tests in pinInventory.test.mjs passed on rerun."
+    },
+    "web": {
+      "passed": 2456,
+      "skipped": 0,
+      "failed": 0,
+      "workers": 1
+    },
+    "audits": "Source credential, dependency, hosted compliance (78 checks), SaaS alignment, capability manifests, curated digests, skill package generation, vocabulary and tool graphs passed. Capability execution audit still requires new live probes.",
+    "liveDeploymentManifest": "Not generated in this source-only worktree; real release image IDs are required.",
+    "databaseFocused": "Jev accounting, J13/J14 context and durable billing, related-topic links and race handling, J17 actual queue leases and concurrent daily-cap admission passed against isolated PostgreSQL.",
+    "packages": {
+      "domain": {
+        "passed": 965
+      },
+      "harnessPort": {
+        "passed": 281,
+        "skipped": 1
+      },
+      "socket": {
+        "passed": 244
+      },
+      "contracts": {
+        "passed": 49,
+        "skipped": 5
+      }
+    },
+    "pythonEngines": "Shared gateway client 6 tests and five focused engine suites 19 tests passed, including the merged MetaAgent concurrency changes. Prior six source-delta image proofs remain separately scoped.",
+    "privateEvidence": {
+      "directory": "/home/coder/workspace/EviMedScience/.evimed-local/acceptance/jev-main-20261007",
+      "logs": [
+        {
+          "file": "jev-main-alignment.log",
+          "sha256": "235e60a5fce4d62cca058c99fc81a81e220398634cf8108b0ef07e2f15c8d261"
+        },
+        {
+          "file": "jev-main-calibration-tests.log",
+          "sha256": "908955268f031e8e3fd50b0005e1d1ad49da3b09b384f7a7b8920fa503e76d68"
+        },
+        {
+          "file": "jev-main-callers-test.log",
+          "sha256": "7104d9d523cc6c68f115d318cca2716dd2d3d6e6af7946ccd3dc7ffe0375914b"
+        },
+        {
+          "file": "jev-main-capabilities-check.log",
+          "sha256": "4b236f641431de4bec80fd3ffb280286577a2d76e657e2317ff09ddab7e6a38b"
+        },
+        {
+          "file": "jev-main-capability-audit.log",
+          "sha256": "24523603e3d3d6a66eaacb664905d03b4fde798673bcc62f3a820ea628d59351"
+        },
+        {
+          "file": "jev-main-compliance.log",
+          "sha256": "f09bf8c6c0d09c6cd25a33b82ae4300567dcd715d95e52e37f551a2b78608e83"
+        },
+        {
+          "file": "jev-main-contract-tests.log",
+          "sha256": "2cfc8cd45ee4f8c7d48f7eaa15554125abcd5bd15302e4bb0396178eb9008e8c"
+        },
+        {
+          "file": "jev-main-deps-audit.log",
+          "sha256": "8c4296c9fb9ec70350c1c009e9241e207714cb6caa7a4b7e9a2852032538b459"
+        },
+        {
+          "file": "jev-main-domain-tests.log",
+          "sha256": "4adbb3be814d8306c471d2dde1c11a1c837633356ae7cc2c08ca74ec840d4d5e"
+        },
+        {
+          "file": "jev-main-domain-types.log",
+          "sha256": "bc8bf11714572d7229bc05a037550c969c350837ad693ae27dcdc2ac250d33e2"
+        },
+        {
+          "file": "jev-main-engine-0-tests.log",
+          "sha256": "e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce"
+        },
+        {
+          "file": "jev-main-engine-1-tests.log",
+          "sha256": "e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce"
+        },
+        {
+          "file": "jev-main-engine-2-tests.log",
+          "sha256": "cebd5743c0d9eb93a1165ac7e37022653d9648ecf17f279d96198e296e5b847e"
+        },
+        {
+          "file": "jev-main-engine-3-tests.log",
+          "sha256": "e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce"
+        },
+        {
+          "file": "jev-main-engine-4-tests.log",
+          "sha256": "46ed5af953003012495ef7e1c0be34922d201dca3ac1240cf5d96882ee28f9b6"
+        },
+        {
+          "file": "jev-main-engine-5-tests.log",
+          "sha256": "e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce"
+        },
+        {
+          "file": "jev-main-engine-client-tests.log",
+          "sha256": "91e7b4890ab4a0498335c8aec919273178aae69a01085aca3337f4c4994afd12"
+        },
+        {
+          "file": "jev-main-engine-pytest-0.log",
+          "sha256": "6e514f548d54b4bfcf5b5b9ebbc9eda7a4465159fd676f9a0d7204a38f131695"
+        },
+        {
+          "file": "jev-main-engine-pytest-1.log",
+          "sha256": "31828c509be55e5a52483b47e57695ed1bd5ea4051c8d4aa4c2f210884258f03"
+        },
+        {
+          "file": "jev-main-engine-pytest-2.log",
+          "sha256": "43ec4ff48b785e79e230f384b450cb1c5705f89efdbe6842c353b50d08e35179"
+        },
+        {
+          "file": "jev-main-engine-pytest-3.log",
+          "sha256": "3f29774cc91bf6ce0030e56e099ddac4abf0e2636043dd94d4cbf57c5a919efa"
+        },
+        {
+          "file": "jev-main-engine-pytest-4.log",
+          "sha256": "99a24796443a1d07f66a424f8116a06a2079063af758e7d3c87801c191ad2ecd"
+        },
+        {
+          "file": "jev-main-full-server.log",
+          "sha256": "0da154328b233328da1948b2c11a8fcbb5fa0e3e2898f23b61989694cc2d0305"
+        },
+        {
+          "file": "jev-main-integration.log",
+          "sha256": "a0cda6f97b0a4faec44f20183c91f21b8b10a29110c0970fa08605bc2fb33061"
+        },
+        {
+          "file": "jev-main-ledger-tests.log",
+          "sha256": "ae9278a8e2e26052ec2fa48f50edfa6ff1d5324db09583de3699e04b6b520d41"
+        },
+        {
+          "file": "jev-main-lint.log",
+          "sha256": "b92e15904798cd711ddef92af1f1bb4c086fe958801dcd1395a7c0da90b5b891"
+        },
+        {
+          "file": "jev-main-mcp-tests.log",
+          "sha256": "9717667ec3c86d97b8fc6d7557b8e2c107d423946f7d5f961c05c969df7170ad"
+        },
+        {
+          "file": "jev-main-pin-inventory.log",
+          "sha256": "17da64f459e85950173fdd5f1283c0b47333bcd7b7092ed2e3da2421cc61a8df"
+        },
+        {
+          "file": "jev-main-pin-tests.log",
+          "sha256": "117b6f21092e025f53612c654b174655b64ff8aa9ab4684410246a745c339be9"
+        },
+        {
+          "file": "jev-main-port-tests.log",
+          "sha256": "83f71ecfc9faa7640d9297a197675c345611d82eaa26618d09f0b3ad47a647b4"
+        },
+        {
+          "file": "jev-main-port-types.log",
+          "sha256": "473d7519527a3bf0e766e5bb8e318748c092a13064b7baf4a7e76140493d68f3"
+        },
+        {
+          "file": "jev-main-secrets.log",
+          "sha256": "a9bf365c161649dd40dcaacdcc3ef4ca785dba919d86155d93aa2fe38a1973b1"
+        },
+        {
+          "file": "jev-main-server-lint-final.log",
+          "sha256": "605a9d07c34b13742fe3149a0d733cc5369c3a4c32e0646ed3ce8d87a21c2f59"
+        },
+        {
+          "file": "jev-main-server-types-final.log",
+          "sha256": "2523d8d635848e176e01366c6198b6207b810628547b14d256818f30e77c17f8"
+        },
+        {
+          "file": "jev-main-server-types.log",
+          "sha256": "95342d8fbdda9ce74b3393935924e5cce6c6bcaabce06edffb9b7ba3b0e9d951"
+        },
+        {
+          "file": "jev-main-skill-digests.log",
+          "sha256": "5a8452a7619427e06efb8f1e331c96853898efb812e1bcaeae5bbac16a1c601d"
+        },
+        {
+          "file": "jev-main-skill-packages.log",
+          "sha256": "d14fa5973e3a826a03f9b321acdd80121891c651d21d3be4740ef9fb9afd7d9d"
+        },
+        {
+          "file": "jev-main-socket-tests.log",
+          "sha256": "152a1161d25399fca19189b0a7d39fccee6f9dab4b4d3530de8dea81a08a42ae"
+        },
+        {
+          "file": "jev-main-socket-types.log",
+          "sha256": "6507d0161ed212b820ba91535871f0b0f2cd664d3e7abba63b2a8958b3d31205"
+        },
+        {
+          "file": "jev-main-toolgraph-check.log",
+          "sha256": "6158a033b1b35e080d66a112a6a98e9faee90f725d05fb3b6779b1adf907b378"
+        },
+        {
+          "file": "jev-main-toolgraph-tests.log",
+          "sha256": "3b5b8cbff843f58614e526532bc14ab9cb91ada0f405adcf8f0658a1ca981b41"
+        },
+        {
+          "file": "jev-main-web-build.log",
+          "sha256": "131ba4976e0689f0fc71e84451a86bba9f779b5a203d382cc876b126bee1736c"
+        },
+        {
+          "file": "jev-main-web-tests.log",
+          "sha256": "77d9162d2a5b05c7a4fb054202bafa8190a34bb6006389fa6cb2d544cc6283f6"
+        },
+        {
+          "file": "jev-main-web-types.log",
+          "sha256": "c9ba408a6da3ab950f2a6bf865c48ceb8702ac000d212adaddae9fc7e0a1082b"
+        },
+        {
+          "file": "jev-scout-real-pg-ordering.log",
+          "sha256": "4d43391e98f789ec2199c8cffbce63b313f03fea829a3d44bba9201ebda93cab"
+        },
+        {
+          "file": "jev-evidence-integration-final.log",
+          "sha256": "4d1e05eff376081e58f1fd6a583e8d101add9f4e5a5b1ec0c386225f43d0f65b"
+        },
+        {
+          "file": "jev-evidence-judge-final.log",
+          "sha256": "0cbe1e60a780956bcdfc0a4a1316e3e6f8d8f3481cb9f73c7ff45062b226cdf0"
+        },
+        {
+          "file": "jev-evidence-gateway-final.log",
+          "sha256": "418013e6582ddddf07fd6baabd2a7dbd5d452676529421c9bbf3c33177728a85"
+        },
+        {
+          "file": "jev-evidence-public-final.log",
+          "sha256": "cd1f6a2575ddcea56104baf2f8a511b59ea4dad06530be12b25a0285aa939ec8"
+        }
+      ],
+      "note": "Retains both initial failures/setup errors and their final corrected reruns; a green summary never overwrites an initial failed attempt."
+    }
+  }
+}

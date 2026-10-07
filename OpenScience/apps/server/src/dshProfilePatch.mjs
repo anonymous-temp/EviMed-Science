@@ -605,6 +605,7 @@ function presetRows(input) {
  * plugin settings), and a second path to the same switch would disagree with it.
  */
 export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
+  "evimed-duplicate-lines": "EVIMED_DUPLICATE_LINES_ENABLED",
   "evimed-guidance": "EVIMED_GUIDANCE_ENABLED",
   "evimed-run-policy": "EVIMED_RUN_POLICY_ENABLED",
   "evimed-evidence": "EVIMED_EVIDENCE_ENABLED",

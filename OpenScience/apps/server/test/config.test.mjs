@@ -567,10 +567,11 @@ test("the agent run monitor outlasts a systematic review by default", () => {
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-monitor" }).agentRunMonitorTimeoutMs, 24 * 60 * 60_000);
 });
 
-test("no learning or source-understanding money cap and no learning window by default", () => {
+test("learning has a daily budget while source-understanding remains uncapped by default", () => {
   const config = loadConfig({ dataDir: "/tmp/os-config-budgets" });
   assert.equal(config.learningWindow, "", "a lesson is distilled whenever its run has finished");
-  for (const key of ["learningRunLimitCny", "learningDailyLimitCny", "learningWeeklyLimitCny",
+  assert.equal(config.learningDailyLimitCny, 10, "method consolidation shares the learning daily budget");
+  for (const key of ["learningRunLimitCny", "learningWeeklyLimitCny",
     "sourceUnderstandingRunLimitCny", "sourceUnderstandingDailyLimitCny", "sourceUnderstandingWeeklyLimitCny",
     "userRunSpendLimit", "userDailySpendLimit", "userWeeklySpendLimit"]) {
     assert.equal(config[key], 0, `${key} is no cap`);

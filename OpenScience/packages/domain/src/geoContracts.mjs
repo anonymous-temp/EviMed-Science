@@ -224,7 +224,7 @@ export function geoProseNotices(input, prose) {
     if (!body) continue
     const leak = runtimeLeakageLine(body)
     if (leak) {
-      issues.push(finding('runtime_leakage', `${path} line ${leak.line} names the machinery (matched "${leak.match}"): ${leak.text}`, { path, line: leak.line, check: checkIdOf(runtimeLeakageLine) }))
+      issues.push(finding('runtime_leakage', `${path} line ${leak.line} names an internal runtime identifier (matched "${leak.match}"): ${leak.text}`, { path, line: leak.line, check: checkIdOf(runtimeLeakageLine) }))
     }
     for (const message of citationIntegrityIssues(body)) {
       issues.push(finding('citation_integrity', `${path}: ${message}`, { path, check: checkIdOf(citationIntegrityIssues) }))

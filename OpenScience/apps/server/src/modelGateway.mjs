@@ -1305,7 +1305,7 @@ const CONTROL_PLANE_NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREA
  *
  * @param {{ config: any, usageLedger: any, fetchImpl?: typeof fetch }} deps
  * @param {{ userId: string, projectId: string, runId?: string | null, purpose?: string, body: any,
- *           signal?: AbortSignal, at?: Date, limits?: { daily?: number, weekly?: number, run?: number } }} call
+ *           signal?: AbortSignal, at?: Date, limits?: { daily?: number, weekly?: number, moduleDaily?: number, run?: number }, operation?:string, taskId?:string, module?:string }} call
  * @returns {Promise<any>} the provider's parsed JSON response
  */
 export async function callModelForControlPlane({ config, usageLedger, fetchImpl = fetch }, call) {
@@ -1331,6 +1331,9 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
     reservation = await usageLedger.reserveModel({
       id: randomUUID(), userId: call.userId, projectId: call.projectId, model: body.model,
       runId: call.runId ?? null, purpose: call.purpose,
+      operation: call.operation, taskId: call.taskId, module: call.module,
+      moduleLimit: call.purpose === "learning" ? Number(call.limits?.moduleDaily ?? config.learningDailyLimitCny ?? 10) : Number(call.limits?.moduleDaily ?? 0),
+      budgetPurpose: call.purpose,
       priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency,
       requestFingerprint: createHash("sha256").update(encodedBody).digest("hex"),
       estimatedCost: estimate.cost,

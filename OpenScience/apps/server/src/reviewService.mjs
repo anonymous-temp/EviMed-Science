@@ -287,13 +287,13 @@ export function editorSystemPrompt({ safety, pass }) {
 export class ReviewService {
   /**
    * @param {{
-   *   config: Record<string, any>, database: any, jobs?: any, usageLedger?: any, runtimeManager?: any, store: any,
+   *   config: Record<string, any>, database: any, jobs?: any, usageLedger?: any, judgeService?: any, runtimeManager?: any, store: any,
    *   agentRegistry?: Promise<any> | any, attributeRun?: (input: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
    *   notifications?: any, imService?: any, webReader?: any, fetchImpl?: typeof fetch, referenceResolver?: any,
    *   report?: (code: string, detail?: string) => void, now?: () => Date, retryDelayMs?: number, evolutionSignals?:any,
    * }} deps
    */
-  constructor({ config, database, jobs = null, usageLedger = null, runtimeManager = null, store, agentRegistry = null, attributeRun = async () => null,
+  constructor({ config, database, jobs = null, usageLedger = null, judgeService = null, runtimeManager = null, store, agentRegistry = null, attributeRun = async () => null,
     notifications = null, imService = null, webReader = null, fetchImpl = globalThis.fetch, referenceResolver = null, report = () => {}, now = () => new Date(),
     retryDelayMs = EDITOR_RETRY_DELAY_MS, evolutionSignals = null }) {
     this.config = config;
@@ -303,6 +303,7 @@ export class ReviewService {
     this.jobs = jobs ?? (database ? new ProductJobs(database) : null);
     this.studyReviews = new StudyReviews(this);
     this.usageLedger = usageLedger;
+    this.judgeService = judgeService;
     this.runtimeManager = runtimeManager;
     this.store = store;
     this.agentRegistry = agentRegistry;
@@ -963,9 +964,9 @@ export class ReviewService {
         threshold: Number(this.config.reviewJevSupportConfidence),
         jevLimits: this.config,
         jev: this.jevEnabled
-          ? (request) => callJev({ ...ledger, retryDelayMs: Math.min(this.retryDelayMs, JEV_RETRY_DELAY_MS) }, {
-            userId: row.user_id, projectId: row.project_id, runId: row.run_id, purpose: "review", ...request,
-          })
+          ? async (request) => { if(this.judgeService){const result=await this.judgeService.judge('reply-check',request.state,{userId:row.user_id,projectId:row.project_id,runId:row.run_id});if(!result.answers)throw new Error(result.code);return result;} return callJev({ ...ledger, retryDelayMs: Math.min(this.retryDelayMs, JEV_RETRY_DELAY_MS) }, {
+            userId: row.user_id, projectId: row.project_id, runId: row.run_id, purpose: "review", operation: "reply-check", ...request,
+          }); }
           : null,
         reviewer: ({ sentences: rest, references: restReferences }) => callReviewModel(ledger, {
           userId: row.user_id, projectId: row.project_id, runId: row.run_id,

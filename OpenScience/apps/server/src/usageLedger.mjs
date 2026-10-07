@@ -243,6 +243,7 @@ function record(row) {
     purpose: row.purpose ?? "other",
     evolutionMissionId: row.evolution_mission_id ?? null,
     evolutionModule: row.evolution_module ?? null,
+    operation: row.operation ?? null, taskId: row.task_id ?? null, module: row.module ?? null,
     model: row.model,
     priceVersion: row.price_version,
     currency: row.currency,
@@ -276,6 +277,12 @@ export class UsageLedger {
     this.lateAttribution = { sweeps: 0, calls: 0 };
   }
 
+  /** Provider cost only, grouped by registered operation; never customer charges. */
+  async byOperation() {
+    await migrateUsageLedger(this.database);
+    const result=await this.database.query(`SELECT operation,count(*)::int AS requests,coalesce(sum(actual_cost) FILTER(WHERE status='settled'),0)::float AS cost_cny FROM evimed_usage.model_requests WHERE operation IS NOT NULL GROUP BY operation`);
+    return result.rows.map(row=>({operation:row.operation,requests:Number(row.requests),costCny:Number(row.cost_cny)}));
+  }
   async health() {
     await migrateUsageLedger(this.database);
     // Expired reservations are reported next to the uncertain count so a
@@ -295,7 +302,7 @@ export class UsageLedger {
     };
   }
 
-  /** @param {{id:string,userId:string,projectId:string,runId?:string|null,sessionId?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number}} input */
+  /** @param {{id:string,userId:string,projectId:string,runId?:string|null,sessionId?:string|null,operation?:string|null,taskId?:string|null,module?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number,moduleLimit?:number,budgetPurpose?:string}} input */
   async reserveModel(input) {
     const now = input.now ?? new Date();
     const ttlMs = input.ttlMs ?? 30 * 60_000;
@@ -307,6 +314,7 @@ export class UsageLedger {
       // run: it is what lets `attributeSession` name the run afterwards.
       sessionId: input.runId == null && input.sessionId != null ? text(input.sessionId, "session", 200) : null,
       purpose: usagePurpose(input.purpose),
+      operation: input.operation==null?null:text(input.operation,"operation",64), taskId: input.taskId==null?null:text(input.taskId,"task id",128), module: input.module==null?null:text(input.module,"module",64),
       model: text(input.model, "model"), priceVersion: text(input.priceVersion, "price version"), currency: text(input.currency, "currency", 12),
       requestFingerprint: text(input.requestFingerprint, "request fingerprint", 64), estimatedCost: money(input.estimatedCost, "estimated cost"),
       dailyLimit: money(input.dailyLimit ?? 0, "daily limit"), weeklyLimit: money(input.weeklyLimit ?? 0, "weekly limit"),
@@ -327,6 +335,7 @@ export class UsageLedger {
           && existing.rows[0].purpose === values.purpose
           && (existing.rows[0].evolution_mission_id??null) === attribution.missionId
           && (existing.rows[0].evolution_module??null) === attribution.moduleId
+          && (existing.rows[0].operation??null) === values.operation && (existing.rows[0].task_id??null) === values.taskId && (existing.rows[0].module??null) === values.module
           && existing.rows[0].price_version === values.priceVersion && existing.rows[0].currency === values.currency
           && Number(existing.rows[0].reserved_cost) === values.estimatedCost
           && existing.rows[0].status === "reserved"
@@ -334,6 +343,13 @@ export class UsageLedger {
           && existing.rows[0].reservation_active === true;
         if (!same) throw new HttpError(409, "usage_reservation_conflict", "The request id already names another reservation.");
         return record(existing.rows[0]);
+      }
+      if(Number(input.moduleLimit)>0) {
+        const budgetPurpose=usagePurpose(input.budgetPurpose??input.purpose);
+        const budgetUser = budgetPurpose === "learning" ? values.userId : null;
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`evimed-usage:module:${budgetPurpose}:${budgetUser??'all'}`]);
+        const budget=await client.query(`SELECT coalesce(sum(CASE WHEN status='settled' THEN actual_cost WHEN ${openCostPredicate(openCostWindows.day,"$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS committed FROM evimed_usage.model_requests WHERE purpose=$1 AND ($3::text IS NULL OR user_id=$3) AND created_at >= $2::timestamptz - interval '${openCostWindows.day}'`,[budgetPurpose,values.now,budgetUser]);
+        if(Number(budget.rows[0]?.committed??0)+values.estimatedCost>Number(input.moduleLimit))throw new HttpError(402,'usage_module_budget_exceeded','The module daily budget is exhausted.');
       }
       const totals = await client.query(`SELECT
         ${SPEND_WINDOW_SUMS},
@@ -362,10 +378,11 @@ export class UsageLedger {
           { window: "mission", limit: missionBudget.limit, committed: missionBudget.committed, requested: values.estimatedCost, currency: "CNY" });
       }
       const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
-        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at,purpose,session_id,evolution_mission_id,evolution_module)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at,purpose,session_id,evolution_mission_id,evolution_module,operation,task_id,module)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
-        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now, values.purpose, values.sessionId, attribution.missionId, attribution.moduleId]);
+        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now, values.purpose, values.sessionId, attribution.missionId, attribution.moduleId,
+        values.operation, values.taskId, values.module]);
       return record(inserted.rows[0]);
     });
   }
@@ -446,13 +463,14 @@ export class UsageLedger {
    * every summary and report includes it. Idempotent on `id` for the same
    * fingerprint, so a report retried after a lost answer lands once; a
    * different report under the same id is a conflict.
-   * @param {{id:string,userId:string,projectId:string,runId?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,usage:{cacheHitTokens:number,cacheMissTokens:number,completionTokens:number},actualCost:number,priced:boolean,providerRequestId?:string|null,now?:Date}} input
+   * @param {{id:string,userId:string,projectId:string,runId?:string|null,purpose?:string|null,operation?:string|null,taskId?:string|null,module?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,usage:{cacheHitTokens:number,cacheMissTokens:number,completionTokens:number},actualCost:number,priced:boolean,providerRequestId?:string|null,now?:Date}} input
    */
   async recordSettled(input) {
     const values = {
       id: productId(input.id), userId: productId(input.userId, "user"), projectId: productId(input.projectId, "project"),
       runId: input.runId == null ? null : productId(input.runId, "run"),
       purpose: usagePurpose(input.purpose),
+      operation: input.operation==null?null:text(input.operation,"operation",64), taskId: input.taskId==null?null:text(input.taskId,"task id",128), module: input.module==null?null:text(input.module,"module",64),
       model: text(input.model, "model"), priceVersion: text(input.priceVersion, "price version"), currency: text(input.currency, "currency", 12),
       requestFingerprint: text(input.requestFingerprint, "request fingerprint", 64),
       actualCost: money(input.actualCost, "actual cost"),
@@ -479,11 +497,12 @@ export class UsageLedger {
       // cost is the settled one and the reservation expired as it was made.
       const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
         (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,actual_cost,priced,
-          cache_hit_tokens,cache_miss_tokens,output_tokens,provider_request_id,reservation_expires_at,created_at,settled_at,purpose,evolution_mission_id,evolution_module)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'settled',$9,$9,$10,$11,$12,$13,$14,$15,$15,clock_timestamp(),$16,$17,$18) RETURNING *`,
+          cache_hit_tokens,cache_miss_tokens,output_tokens,provider_request_id,reservation_expires_at,created_at,settled_at,purpose,evolution_mission_id,evolution_module,operation,task_id,module)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'settled',$9,$9,$10,$11,$12,$13,$14,$15,$15,clock_timestamp(),$16,$17,$18,$19,$20,$21) RETURNING *`,
       [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
         values.requestFingerprint, values.actualCost, input.priced, values.cacheHitTokens, values.cacheMissTokens,
-        values.completionTokens, values.providerRequestId, values.now, values.purpose, attribution.missionId, attribution.moduleId]);
+        values.completionTokens, values.providerRequestId, values.now, values.purpose, attribution.missionId, attribution.moduleId,
+        values.operation, values.taskId, values.module]);
       return record(inserted.rows[0]);
     });
   }

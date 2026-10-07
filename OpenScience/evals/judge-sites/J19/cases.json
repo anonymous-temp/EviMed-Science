@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "site": "J19",
+  "cases": [
+    {
+      "id": "explicit-design-01",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Randomized parallel-group trial",
+        "abstract": "Adults were assigned to drug or placebo using a computer-generated random sequence. Outcomes were compared by randomized arm.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "RCT"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-02",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Randomized crossover trial",
+        "abstract": "Participants were randomly assigned to the order of two treatments, with a washout interval between treatment periods.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "RCT"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-03",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Prospective cohort study of blood pressure",
+        "abstract": "Investigators observed naturally occurring treatment exposures over five years; no treatment was assigned.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "observational"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-04",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Retrospective case-control study",
+        "abstract": "Cases with myocardial infarction and controls without infarction were selected, and their prior exposures were compared.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "observational"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-05",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Cross-sectional survey of sleep duration",
+        "abstract": "A population sample completed a single survey; exposures and outcomes were measured at the same visit.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "observational"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-06",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Narrative review of renal pharmacology",
+        "abstract": "This article summarizes mechanisms and discusses published evidence. It does not perform quantitative pooling.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "review"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-07",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Systematic review without meta-analysis",
+        "abstract": "Databases were searched systematically and eligible studies were narratively summarized because their outcomes could not be pooled.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "review"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-08",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Meta-analysis of randomized trials",
+        "abstract": "Trial risk ratios were quantitatively pooled using a random-effects model and heterogeneity was assessed.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "meta-analysis"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-09",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Individual participant data meta-analysis",
+        "abstract": "Individual participant datasets from multiple trials were combined and a prespecified pooled treatment effect was estimated.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "meta-analysis"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-10",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "A single patient with drug-induced hepatitis",
+        "abstract": "The clinical history, workup and recovery of one patient following drug withdrawal are described.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "case-report"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-11",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "A rare adverse event in one patient",
+        "abstract": "This report describes one patient who developed a rare reaction, including the chronological clinical course.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "case-report"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-12",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "Mouse experiment of liver fibrosis",
+        "abstract": "Mice were allocated to experimental groups; no human participants were studied.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "other"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-design-13",
+      "source": "authored:independent explicit design definition, 2026-10-06",
+      "labelBasis": "Human-authored unambiguous design description; synthetic easy cases only, not a production error-rate estimate.",
+      "input": {
+        "title": "In vitro study of receptor binding",
+        "abstract": "Cultured cells were exposed to graded drug concentrations and receptor binding was measured.",
+        "publicationTypes": []
+      },
+      "expected": {
+        "studyType": "other"
+      },
+      "releaseEligible": false
+    }
+  ]
+}

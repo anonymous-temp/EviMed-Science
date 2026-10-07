@@ -707,10 +707,13 @@ test("the open-vocabulary prose patterns are frozen at their current count", asy
   // one added is `CJK_INTERVAL`, 「至」 between two numerals — the interval
   // every Chinese report writes, which the numeric checks split into two
   // endpoints no quote offers. A number format, not a judgment about prose.
+  // 80 since the J4 migration: the open register and evidence-access prose
+  // patterns moved to an advisory post-delivery judge. Closed tool/path names
+  // remain deterministic; clinical safety expressions are unchanged.
   assert.equal(
     prose.length,
-    82,
-    `open-vocabulary prose patterns moved from 82 to ${prose.length}. `
+    80,
+    `open-vocabulary prose patterns moved from 80 to ${prose.length}. `
       + "Adding one is frozen (principle #5): put medicine/scenario rules in clinical-safety-rules.json, "
       + "write an eval case, or hand the judgement to the reviewer. "
       + "Removing them is the direction of travel — lower this number and say which rule moved where.",

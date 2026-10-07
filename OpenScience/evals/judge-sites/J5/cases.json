@@ -1,0 +1,5519 @@
+{
+  "schemaVersion": 1,
+  "site": "J5",
+  "provenance": {
+    "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+    "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+    "containsUserData": false
+  },
+  "coverage": {
+    "cases": 10,
+    "items": 105,
+    "releaseEligible": 5,
+    "incumbentOnly": 5,
+    "gaps": [
+      "Snapshot has no full original screening verdict or source lane configuration.",
+      "Negative-category incidents do not identify a unique positive category.",
+      "Incumbent partial labels cannot calibrate release thresholds."
+    ]
+  },
+  "cases": [
+    {
+      "id": "snapshot-screen-batch-1",
+      "source": [
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 1,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 2,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 3,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 9,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 10,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 12,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 13,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 14,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 16,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 17,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 18,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 20,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 21,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 22,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 24,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 32,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 34,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 174,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 349,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 357,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        }
+      ],
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "sourceAllowedCategoriesUnknown": true,
+      "unknownExpectedFields": [
+        "roundup",
+        "isNews except not-news",
+        "isMedical except not-medical"
+      ],
+      "input": {
+        "items": [
+          {
+            "id": "1",
+            "title": "中共中央办公厅 国务院办公厅印发《关于分类推进高校改革的意见》",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "2",
+            "title": "国务院办公厅转发文化和旅游部等部门《关于促进房车消费的若干措施》的通知",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "3",
+            "title": "国务院办公厅关于进一步加强烟花爆竹全链条安全监管的意见",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "9",
+            "title": "UKRI Space Lab hosts first UK PM and Head of NATO meeting",
+            "summary": "NATO UKRI Chief Executive Professor Sir Ian Chapman and STFC Executive Chair Professor Michele Dougherty welcomed the UK’s PM Andy Burnham and NATO chief Mark Rutte to Harwell. STFC",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "10",
+            "title": "Ofgem Strategic Innovation Fund round five discovery C7",
+            "summary": "Organisations can apply for a share of up to £30 million exclusive of VAT, for collaborative discovery phase projects that meet the round five challenges. This funding is from the Ofgem Strategic Innovation Fund. Innovate UK",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "12",
+            "title": "Long-term cultural and sporting events legacy",
+            "summary": "Apply for funding to research the long-term impact and legacy of major sporting and cultural events in the UK, focusing on running a live experimental evaluation of a major event that fills gaps in existing methodologies. You must be based at a UK research organisation eligible for AHRC funding. AHRC",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "13",
+            "title": "Attendance and engagement at UK sporting, cultural and heritage sites",
+            "summary": "Apply for funding to research the development of novel data-intensive approaches for capturing engagement data from unticketed cultural, heritage, and sporting events, activities and locations, demonstrated through a deployable tool in at least one DCMS sector. You must be based at a UK research organisation eligible for AHRC funding. AHRC",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "14",
+            "title": "Commercialising Knowledge Assets Fund (CKAF) Winter",
+            "summary": "UK registered government research organisations can apply for grants from £50,000 up to £250,000 to move viable public sector knowledge assets towards commercial readiness. This funding is provided by the Government Office for Technology Transfer. Innovate UK",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "16",
+            "title": "Economic Statistics Centre of Excellence 2027-2030 – invite only",
+            "summary": "This funding opportunity is designed to support the Economic Statistics Centre of Excellence’s (ESCoE) high-quality research to improve economic measurement, enhance the production of key statistics, and address challenges related to economic measurement over a three-year period. ESRC",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "17",
+            "title": "Battery innovation: concept development round three",
+            "summary": "UK registered businesses can apply for a share of up to £25 million to support innovation in battery grade material technologies for electrification. This funding is from the battery innovation programme. Innovate UK",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "18",
+            "title": "Battery innovation: feasibility studies round three",
+            "summary": "UK registered businesses can apply for a share of up to £25 million to support innovation in battery grade material technologies for electrification. This funding is from the battery innovation programme. Innovate UK",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "20",
+            "title": "NQS Mission 2: Components, systems and architectures",
+            "summary": "Apply for funding to advance research supporting the UK National Quantum Strategy Mission 2, strengthening UK leadership in quantum networking and communications and the future quantum internet. You must be based at a UK research organisation eligible for EPSRC funding. EPSRC STFC",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "21",
+            "title": "UKRI Enabling AI adoption across science and engineering",
+            "summary": "Apply for funding for ambitious and exploratory projects bringing together AI and domain expertise. Projects will have the potential to unlock new opportunities for applying AI to research challenges in priority science and engineering disciplines. You must be based at a UK research organisation eligible for UKRI funding. UKRI-wide",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "22",
+            "title": "NQS Mission 2 Coordination Network",
+            "summary": "Apply for funding to establish a national coordination network supporting the UK National Quantum Strategy Mission 2. The network will connect researchers, industry partners and network operators to advance quantum communications. You must be based at a UK research organisation eligible for EPSRC funding. EPSRC STFC",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "24",
+            "title": "Engineering Biology Collaborative R&D: Round 3",
+            "summary": "UK registered businesses can apply for a share of up to £8.5 million to develop and scale Engineering Biology platforms, products and services. This funding is part of UKRI’s Engineering Biology Programme. Innovate UK",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "32",
+            "title": "中国疾控中心（中国预科院）党委召开理论学习中心组集体（扩大）学习会",
+            "summary": "9月14日上午，中心（院）党委召开理论学习中心组集体（扩大）学习会，深入学习贯彻习近平党建思想和习近平总书记关于基层工作方法的重要论述。中心（院）党委书记、副主任（副院长）张国新主持会议并作总结讲话，中心（院）领导班子成员和部分处室、直属单位党组织负责同志围绕学习主题作交流发言。会议强调，要深刻把握习近平党建思想的重大意义、精髓要义、实践基础和理论渊源，深入领会“十四个坚持”的科学内涵，自觉用习近...",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "34",
+            "title": "商务部等5部门关于调整《向特定国家（地区）出口易制毒化学品管理目录》的公告",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "174",
+            "title": "Sixth veterinary big data stakeholder forum, European Medicines Agency, Amsterdam, the Netherlands, from 10 November 2026, 09:00 (CET) to 10 November 2026, 17:30 (CET)",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "349",
+            "title": "Offline: The emptiness of the quantified self",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "357",
+            "title": "The Accra Reset must turn sovereignty into country power",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedPartial": {
+        "items": [
+          {
+            "id": "1",
+            "isMedical": false
+          },
+          {
+            "id": "2",
+            "isMedical": false
+          },
+          {
+            "id": "3",
+            "isMedical": false
+          },
+          {
+            "id": "9",
+            "isMedical": false
+          },
+          {
+            "id": "10",
+            "isMedical": false
+          },
+          {
+            "id": "12",
+            "isMedical": false
+          },
+          {
+            "id": "13",
+            "isMedical": false
+          },
+          {
+            "id": "14",
+            "isMedical": false
+          },
+          {
+            "id": "16",
+            "isMedical": false
+          },
+          {
+            "id": "17",
+            "isMedical": false
+          },
+          {
+            "id": "18",
+            "isMedical": false
+          },
+          {
+            "id": "20",
+            "isMedical": false
+          },
+          {
+            "id": "21",
+            "isMedical": false
+          },
+          {
+            "id": "22",
+            "isMedical": false
+          },
+          {
+            "id": "24",
+            "isMedical": false
+          },
+          {
+            "id": "32",
+            "isMedical": false
+          },
+          {
+            "id": "34",
+            "isMedical": false
+          },
+          {
+            "id": "174",
+            "isMedical": false
+          },
+          {
+            "id": "349",
+            "isMedical": false
+          },
+          {
+            "id": "357",
+            "isMedical": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "snapshot-screen-batch-2",
+      "source": [
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 767,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 1045,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 1058,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 1063,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 1065,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 26,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 27,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 28,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 29,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 30,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 31,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 33,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 43,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 62,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 63,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 67,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 128,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 129,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 131,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 133,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        }
+      ],
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "sourceAllowedCategoriesUnknown": true,
+      "unknownExpectedFields": [
+        "roundup",
+        "isNews except not-news",
+        "isMedical except not-medical"
+      ],
+      "input": {
+        "items": [
+          {
+            "id": "767",
+            "title": "Comparing the preservation effects of various treatments on mangoes: systematic review and network-meta-analysis.",
+            "summary": "BACKGROUND: Consumers' awareness of the nutritional value and quality of fruits is constantly improving, yet postharvest decay and nutrient loss problems seriously affect the taste and commercial value of the fruits. In order to explore effective preservation methods, a network-meta-analysis was conducted based on the Bayesian random-effects model in this study to systematically evaluate 24 fresh-keeping treatments. The study focused on ten quality indicators and four physiological metabolic indicators after storage for 7 ± 1 day. The treatment effects were quantified using standardized mean differences (SMD), and the effects were ranked using the surface under the cumulative ranking curve area (SUCRA). RESULTS: Different preservation methods had specific advantages for multiple physiological/quality indicators of mangoes, and biogenic materials and nano-composite materials demonstrated good application prospects in mango preservation. Among them, sodium alginate (SA) and carboxymethyl cellulose (CMC), ε-polylysine hydrochloride (ε-PLLH) complex are the most effective in inhibiting the degradation of titratable acid (TA), but these treatment methods cannot inhibit the activity of the peroxidase (POD). The zinc-carbon quantum dots-polyvinyl alcohol (Zn-CQDs-PVA) film had the best effect on the accumulation of total soluble solids (TSS), and 400 μg mL-1 carvacrol treatment ranked first in maintaining fruit firmness. 1-Methylcyclopropene (1-MCP) treatment could significantly inhibit malondialdehyde (MDA) accumulation, reduce respiratory rate, and delay the postharvest senescence process of mangoes. CONCLUSION: There are multiple preservation methods for mangoes that can achieve overall preservation effects. Therefore, in commercial production, specific preservation targets such as maintaining appearance quality, preserving nutrients, and regulating physiological metabolism can be targeted to select preservation methods. © 2026 Society of Chemical Industry.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "1045",
+            "title": "Stained glass: the registrar bringing surgical dexterity to stained glass making",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "1058",
+            "title": "EU social media ban: Commission announces restrictions for under-13s",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "1063",
+            "title": "John Campbell Anderson",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "1065",
+            "title": "Gunnar Reiman",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "26",
+            "title": "2026年慢性病防控大会成功召开",
+            "summary": "9月18日，2026年慢性病防控大会在江苏南京召开。大会由中华预防医学会、中国疾病预防控制中心共同主办，中华预防医学会慢性病预防与控制分会承办。会议以“十五五开局新征程、同防共管向新行”为主题，旨在搭建慢性病防控领域高水平交流合作平台，集中展示最新研究成果与实践经验，探讨优化策略，凝聚共识，共谋未来发展。2026慢性病防控大会现场国家卫生健康委副主任、国家疾控局局长、中国工程院院士沈洪兵，全国人大教科文卫...",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "27",
+            "title": "亚太地区卫生应急领导者研讨会在京召开",
+            "summary": "2026年9月16日至18日，亚太地区卫生应急领导者研讨会在北京召开。会议由中国疾控中心、国家级公共卫生机构国际联盟（IANPHI）和世界卫生组织西太平洋区域办事处共同主办，来自亚太地区20余个国家和地区的公共卫生机构代表50余人出席。会议聚焦国家和地方层面应急韧性建设，旨在通过同行交流，推动各国公共卫生领导者在突发公共卫生事件中发挥更大作用。开幕式上，中国疾控中心副主任李群表示，公共卫生风险无国界，公共卫生应急...",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "28",
+            "title": "王健伟主任（院长）会见亚太地区卫生应急领导者代表团",
+            "summary": "2026年9月18日，由来自国家级公共卫生机构国际联盟（IANPHI）、世界卫生组织西太平洋区域办事处以及亚太地区公共卫生机构代表等30余人组成的亚太地区卫生应急领导者代表团到访中国疾控中心（中国预科院）。中心（院）主任（院长）王健伟出席会见。座谈会上，王健伟主任（院长）对代表团来访表示欢迎。他表示，中国已构建覆盖国家、省、市、县的四级疾控网络，中心（院）通过技术指导、协调联动、人员培训和监测网络建设，与各级...",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "29",
+            "title": "王健伟主任（院长）会见沙特公共卫生署代理首席执行官阿尔加姆迪博士",
+            "summary": "2026年9月18日，中国疾控中心（中国预科院）主任（院长）王健伟在昌平园区会见沙特公共卫生署代理首席执行官里亚德·阿尔加姆迪博士一行。王健伟主任（院长）对阿尔加姆迪博士的到访表示欢迎，并与对方就机构间未来合作方向交换了意见。王健伟主任（院长）表示，当前公共卫生领域面临着诸多共同挑战，这要求各国公共卫生机构加强协作。中国疾控中心（中国预科院）与沙特公共卫生署在公共卫生领域各有优势，双方在合作方面存在巨...",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "30",
+            "title": "2026年疾控机构健康宣教能力提升培训班在西安成功举办",
+            "summary": "2026年9月16-17日，2026年疾控机构健康宣教能力提升培训班在西安市成功举办。中国疾控中心（中国预科院）党委副书记周宇辉，陕西省卫生健康委党组成员、副主任，省疾控局党组书记、局长，省疾控中心党委书记彭飞出席培训班并讲话。各省级和计划单列市疾控中心、中心（院）总部和直属单位健康宣教相关工作同志近120人参加培训。 周宇辉副书记强调，要深学笃行习近平总书记关于卫生健康工作的重要论述和健康中国重要战略思想，贯...",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "31",
+            "title": "西班牙卡洛斯三世卫生研究所代表团访问中国疾控中心",
+            "summary": "2026年9月17日，中国疾控中心（中国预科院）李群副主任（副院长）会见来访的西班牙卡洛斯三世卫生研究所（ISCIII）主任玛丽娜·波扬·桑塔马里亚博士一行。传染病所、病毒病所、教育处、实验室处、应急中心、传染病处及外事处等相关部门负责同志和专家参加会见。李群副主任（副院长）对玛丽娜·波扬·桑塔马里亚主任一行的到访表示欢迎。他指出，公共卫生是国际合作最具共识、最富成效的领域。中国疾控中心（中国预科院）承担疾...",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "33",
+            "title": "王健伟主任（院长）会见美国疾控中心新任在华项目负责人米安德博士",
+            "summary": "2026年9月14日，中国疾控中心（中国预科院）主任（院长）王健伟在昌平园区会见美国疾控中心新任在华项目负责人亚历山大・詹姆斯・米安德博士一行。王健伟主任（院长）对米安德博士来华履新表示欢迎。王健伟主任（院长）表示，中美疾控中心合作历史悠久、成果丰硕，是两国公共卫生领域交流合作的重要平台。中心（院）高度重视与美方合作伙伴关系，愿同美方加强技术沟通与交流，推动双方合作稳步发展。米安德博士强调，美国疾控中...",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "43",
+            "title": "Results of Pharmacist Registration Examinations June 2026 announced",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "62",
+            "title": "Questions and answers on post approval change management protocols for veterinary medicinal products",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "63",
+            "title": "Concept paper on the revision of the CVMP guideline on the summary of product characteristics (SPC) for veterinary medicinal products containing antimicrobial substances (EMA/CVMP/383441/2005-Rev.1 Corr.1)",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "67",
+            "title": "Postcard from the field: Supporting outbreak preparedness in South Sudan - two EPIET fellows in the field",
+            "summary": "In July and August, two fellows from ECDC’s long-standing European Programme for Intervention Epidemiology Training (EPIET) were deployed to South Sudan through the EU Health Task Force (EUHTF) and WHO’s Global Outbreak Alert and Response Network (GOARN), to support the country’s Ebola preparedness and strengthen surveillance.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "128",
+            "title": "Drugs@FDA Data Files",
+            "summary": "Drugs@FDA Downloadable Data File in ZIP format, Data Definitions, and Entity Relationship Diagram (ERD)",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "129",
+            "title": "Acetaminophen",
+            "summary": "This is a consumer webpage focused on the safe use of over-the-counter acetaminophen-containing products.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "131",
+            "title": "Search List of Extended Use Dates to Assist with Drug Shortages",
+            "summary": "This is to update and consolidate the extended use date information posted previously to assist with drug shortage (6/15/17 to present).",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "133",
+            "title": "Upcoming EL-PFDD Meetings",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedPartial": {
+        "items": [
+          {
+            "id": "767",
+            "isMedical": false
+          },
+          {
+            "id": "1045",
+            "isMedical": false
+          },
+          {
+            "id": "1058",
+            "isMedical": false
+          },
+          {
+            "id": "1063",
+            "isMedical": false
+          },
+          {
+            "id": "1065",
+            "isMedical": false
+          },
+          {
+            "id": "26",
+            "isNews": false
+          },
+          {
+            "id": "27",
+            "isNews": false
+          },
+          {
+            "id": "28",
+            "isNews": false
+          },
+          {
+            "id": "29",
+            "isNews": false
+          },
+          {
+            "id": "30",
+            "isNews": false
+          },
+          {
+            "id": "31",
+            "isNews": false
+          },
+          {
+            "id": "33",
+            "isNews": false
+          },
+          {
+            "id": "43",
+            "isNews": false
+          },
+          {
+            "id": "62",
+            "isNews": false
+          },
+          {
+            "id": "63",
+            "isNews": false
+          },
+          {
+            "id": "67",
+            "isNews": false
+          },
+          {
+            "id": "128",
+            "isNews": false
+          },
+          {
+            "id": "129",
+            "isNews": false
+          },
+          {
+            "id": "131",
+            "isNews": false
+          },
+          {
+            "id": "133",
+            "isNews": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "snapshot-screen-batch-3",
+      "source": [
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 134,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 135,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 137,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 140,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 141,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 142,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 144,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 145,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 146,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 147,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 4,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 5,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 6,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 7,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 8,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 11,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 15,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 19,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 23,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 25,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        }
+      ],
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "sourceAllowedCategoriesUnknown": true,
+      "unknownExpectedFields": [
+        "roundup",
+        "isNews except not-news",
+        "isMedical except not-medical"
+      ],
+      "input": {
+        "items": [
+          {
+            "id": "134",
+            "title": "Condition-Specific Meeting Reports and Other Information Related to Patients' Experience",
+            "summary": "This webpage provides links to certain publicly available external reports and resources relating to patient experience data. The patient community, patient advocates, researchers, drug developers, and federal agencies may find these materials useful.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "135",
+            "title": "Generic Drug Facilities, Sites and Organization Lists",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "137",
+            "title": "Patient Listening Session Summaries",
+            "summary": "Patient Listening Session summaries are published after each session to share a high-level summary of the discussion. The Public Engagement Staff draft summaries for FDA-requested sessions and the patient community requester drafts summaries for Patient-led sessions.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "140",
+            "title": "FDA Roundup: June 18, 2024",
+            "summary": "The U.S. Food and Drug Administration is providing an at-a-glance summary of news from around the agency.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "141",
+            "title": "FDA Roundup: July 26, 2024",
+            "summary": "The U.S. Food and Drug Administration is providing an at-a-glance summary of news from around the agency.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "142",
+            "title": "Generic Drug User Fee Amendments",
+            "summary": "This page features news and information for industry and stakeholders about GDUFA, its fee structure, payment methods, and related information.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "144",
+            "title": "Generic Drugs: Questions & Answers",
+            "summary": "A generic drug is a medication created to be the same as an already marketed brand-name drug in dosage form, safety, strength, route of administration, quality, performance characteristics, and intended use.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "145",
+            "title": "Generic Drugs",
+            "summary": "Understanding generic drugs: Consumer-friendly information on the safe and effective use of generic drugs. Learn about the generic drug approval process, why generic drugs are usually less expensive, and other interesting facts and figures.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "146",
+            "title": "What's New Related to Drugs",
+            "summary": "Want to know what's new on drugs from FDA? This page provides quick links to the latest on a variety of topics including: drug approvals, safety warnings, drug shortages, etc.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "147",
+            "title": "Oncology (Cancer)/Hematologic Malignancies Approval Notifications",
+            "summary": "FDA does not issue approval announcements for every approval or drug label update that occurs in oncology and hematology. Please refer to Drugs@FDA for the latest approvals and prescribing information for specific products.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "4",
+            "title": "[医薬]「副作用が疑われる症例報告に関する情報」に2026年5月分の情報を追加しました",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "5",
+            "title": "[医薬]添付文書改訂相談に基づく添付文書改訂（医薬品）を掲載しました",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "6",
+            "title": "UKHSA and University of Oxford scientists uncover genetic changes in the bacteria causing severe Kent meningococcal disease outbreak",
+            "summary": "Scientists used genome sequencing to identify genetic changes that may explain the severity of the Kent meningococcal disease outbreak earlier this year.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "7",
+            "title": "Salmonella outbreak update",
+            "summary": "UKHSA, alongside the Food Standards Agency and other public health partners, continues to investigate an outbreak of Salmonella in the UK.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "8",
+            "title": "New programme to address violence against women and girls",
+            "summary": "A new programme will support local projects to prevent violence and abuse against women and girls. UKRI",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "11",
+            "title": "Centres of Excellence for Regulatory Science and Innovation",
+            "summary": "Apply for funding to establish a Centre of Excellence for Regulatory Science and Innovation (CERSI) to address strategic regulatory science priorities through sustained programmes of research. You must be based at a UK research organisation eligible for Medical Research Council (MRC) funding. MRC",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "15",
+            "title": "Gambling harms research grants",
+            "summary": "Apply for funding that deepens understanding or supports solutions for the prevention and treatment of gambling-related harms. To lead an application, you must be based at a research organisation eligible for UKRI funding. AHRC MRC ESRC UKRI-wide",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "19",
+            "title": "Longitudinal population studies strategic prioritisation exercise",
+            "summary": "Submit information about your longitudinal population study (LPS) to help Medical Research Council (MRC) plan for future investments in LPS infrastructure. You must be based at a UK research organisation eligible for MRC funding. Your LPS must have a primary focus on enabling biomedical research. MRC",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "23",
+            "title": "Bioinformatics and Biological Resources Fund (26BBR)",
+            "summary": "Apply for funding to implement, improve or consolidate bioinformatics or biological resources in support of UK bioscience, helping to drive forwards progress in bioscience research and innovation. You must be based at a UK research organisation eligible for BBSRC funding. BBSRC",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "25",
+            "title": "“打破壁垒与推动创新：全球卫生转型中的消除热带病监测体系” 2026年消除热带病监...",
+            "summary": "9月21日，2026年消除热带病监测响应体系研讨会在上海开幕。会议由中国疾病预防控制中心寄生虫病预防控制所（国家热带病研究中心）、瑞士热带与公共卫生研究所和《贫困所致传染病》杂志共同举办，主题为“打破壁垒与推动创新：全球卫生转型中的消除热带病监测响应体系”。国家疾控局卫生免疫司副司长陈朝，上海市卫生健康委副主任、疾控局局长张浩，中国疾控中心党委常委、副主任李群，瑞士联邦驻上海总领事馆总领事萨沙·巴赫曼...",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedPartial": {
+        "items": [
+          {
+            "id": "134",
+            "isNews": false
+          },
+          {
+            "id": "135",
+            "isNews": false
+          },
+          {
+            "id": "137",
+            "isNews": false
+          },
+          {
+            "id": "140",
+            "isNews": false
+          },
+          {
+            "id": "141",
+            "isNews": false
+          },
+          {
+            "id": "142",
+            "isNews": false
+          },
+          {
+            "id": "144",
+            "isNews": false
+          },
+          {
+            "id": "145",
+            "isNews": false
+          },
+          {
+            "id": "146",
+            "isNews": false
+          },
+          {
+            "id": "147",
+            "isNews": false
+          },
+          {
+            "id": "4",
+            "category": "safety",
+            "specialties": [
+              "pharmacy"
+            ]
+          },
+          {
+            "id": "5",
+            "category": "safety",
+            "specialties": [
+              "pharmacy"
+            ]
+          },
+          {
+            "id": "6",
+            "category": "public-health",
+            "specialties": [
+              "infectious-disease",
+              "public-health"
+            ]
+          },
+          {
+            "id": "7",
+            "category": "public-health",
+            "specialties": [
+              "infectious-disease",
+              "public-health"
+            ]
+          },
+          {
+            "id": "8",
+            "category": "research",
+            "specialties": [
+              "public-health"
+            ]
+          },
+          {
+            "id": "11",
+            "category": "research",
+            "specialties": []
+          },
+          {
+            "id": "15",
+            "category": "research",
+            "specialties": [
+              "psychiatry",
+              "public-health"
+            ]
+          },
+          {
+            "id": "19",
+            "category": "research",
+            "specialties": [
+              "public-health"
+            ]
+          },
+          {
+            "id": "23",
+            "category": "research",
+            "specialties": []
+          },
+          {
+            "id": "25",
+            "category": "public-health",
+            "specialties": [
+              "public-health",
+              "infectious-disease"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "snapshot-screen-batch-4",
+      "source": [
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 35,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 36,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 37,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 38,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 39,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 40,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 41,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 42,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 44,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 45,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 46,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 47,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 48,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 49,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 50,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 51,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 52,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 53,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 54,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 55,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        }
+      ],
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "sourceAllowedCategoriesUnknown": true,
+      "unknownExpectedFields": [
+        "roundup",
+        "isNews except not-news",
+        "isMedical except not-medical"
+      ],
+      "input": {
+        "items": [
+          {
+            "id": "35",
+            "title": "国家药监局关于注销八珍丸等12个药品注册证书的公告（2026年第92号）",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "36",
+            "title": "2026年9月18日中药品种保护受理公示",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "37",
+            "title": "国家药监局 海关总署关于在北京口岸开展进口药品通关电子化试点工作有关事项的公告（2026年第91号）",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "38",
+            "title": "国家药监局关于发布仿制药参比制剂目录（第一百零九批）的通告（2026年第32号）",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "39",
+            "title": "国家药监局关于批准注册243个医疗器械产品的公告（2026年8月）（2026年第90号）",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "40",
+            "title": "CHP investigates imported Mpox case",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "41",
+            "title": "CHP investigates probable case of botulism",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "42",
+            "title": "DH announces latest situation regarding Legionnaires' disease cases",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "44",
+            "title": "DH reminds public to take precautions against heat-related illnesses during very hot weather",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "45",
+            "title": "DH reminds public to take precautions against heat-related illnesses during very hot weather",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "46",
+            "title": "No health without oral health",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "47",
+            "title": "CHP investigates confirmed Mpox case",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "48",
+            "title": "DH reminds public to take precautions against heat-related illnesses during very hot weather",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "49",
+            "title": "WHO welcomes strong health commitments at the 2026 BRICS Summit",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "50",
+            "title": "New WHO report calls for stronger ethics oversight of AI-related health research",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "51",
+            "title": "WHO launches new primary health care course to strengthen health systems globally",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "52",
+            "title": "Member States advance negotiations on pathogen access and benefit-sharing ahead of UN General Assembly meeting on pandemics",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "53",
+            "title": "One in four doctors nearing retirement age as WHO warns of global health workforce gap",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "54",
+            "title": "New brief highlights gaps and recommendations for improving violence data on women",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "55",
+            "title": "Patient safety at the heart of forthcoming WHO asthma guidelines",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedPartial": {
+        "items": [
+          {
+            "id": "35",
+            "category": "regulatory",
+            "specialties": [
+              "pharmacy"
+            ]
+          },
+          {
+            "id": "36",
+            "category": "regulatory",
+            "specialties": [
+              "tcm",
+              "pharmacy"
+            ]
+          },
+          {
+            "id": "37",
+            "category": "regulatory",
+            "specialties": [
+              "pharmacy",
+              "public-health"
+            ]
+          },
+          {
+            "id": "38",
+            "category": "regulatory",
+            "specialties": [
+              "pharmacy"
+            ]
+          },
+          {
+            "id": "39",
+            "category": "regulatory",
+            "specialties": []
+          },
+          {
+            "id": "40",
+            "category": "public-health",
+            "specialties": [
+              "infectious-disease",
+              "public-health"
+            ]
+          },
+          {
+            "id": "41",
+            "category": "public-health",
+            "specialties": [
+              "infectious-disease",
+              "neurology",
+              "public-health"
+            ]
+          },
+          {
+            "id": "42",
+            "category": "public-health",
+            "specialties": [
+              "public-health",
+              "infectious-disease"
+            ]
+          },
+          {
+            "id": "44",
+            "category": "public-health",
+            "specialties": [
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "45",
+            "category": "public-health",
+            "specialties": [
+              "public-health",
+              "general-practice",
+              "critical-care"
+            ]
+          },
+          {
+            "id": "46",
+            "category": "public-health",
+            "specialties": [
+              "public-health"
+            ]
+          },
+          {
+            "id": "47",
+            "category": "public-health",
+            "specialties": [
+              "infectious-disease",
+              "public-health"
+            ]
+          },
+          {
+            "id": "48",
+            "category": "public-health",
+            "specialties": [
+              "public-health",
+              "general-practice",
+              "critical-care"
+            ]
+          },
+          {
+            "id": "49",
+            "category": "guideline",
+            "specialties": [
+              "public-health",
+              "infectious-disease"
+            ]
+          },
+          {
+            "id": "50",
+            "category": "guideline",
+            "specialties": [
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "51",
+            "category": "guideline",
+            "specialties": [
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "52",
+            "category": "guideline",
+            "specialties": [
+              "infectious-disease",
+              "public-health"
+            ]
+          },
+          {
+            "id": "53",
+            "category": "guideline",
+            "specialties": [
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "54",
+            "category": "guideline",
+            "specialties": [
+              "public-health",
+              "obstetrics-gynecology",
+              "psychiatry"
+            ]
+          },
+          {
+            "id": "55",
+            "category": "guideline",
+            "specialties": [
+              "respiratory",
+              "general-practice",
+              "public-health"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "snapshot-screen-batch-5",
+      "source": [
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 56,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 57,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 58,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 59,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 60,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 61,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 64,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 66,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 68,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 69,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 70,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 71,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 72,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 73,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 74,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 75,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 77,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 78,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 79,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        },
+        {
+          "corpus": "frontier-a0-20261006",
+          "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+          "kind": "screening",
+          "id": 80,
+          "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+        }
+      ],
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "sourceAllowedCategoriesUnknown": true,
+      "unknownExpectedFields": [
+        "roundup",
+        "isNews except not-news",
+        "isMedical except not-medical"
+      ],
+      "input": {
+        "items": [
+          {
+            "id": "56",
+            "title": "WHO calls for more research into traditional medicine to meet growing health needs",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "57",
+            "title": "New strategy to build a healthier market for childhood cancer medicines",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "58",
+            "title": "ICH M13B guideline on bioequivalence for immediate-release solid oral dosage forms - additional strengths biowaiver - Step 5",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "59",
+            "title": "Draft guideline on user safety for pharmaceutical veterinary medicinal products - Revision 2",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "60",
+            "title": "Draft guideline on user safety of topically administered veterinary medicinal products - Revision 1",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "61",
+            "title": "Draft reflection paper on the clinical investigation of medicinal products for the treatment of systemic sclerosis",
+            "summary": "",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "64",
+            "title": "Communicable disease threats report, 12-18 September, week 38",
+            "summary": "This issue of the ECDC Communicable Disease Threats Report (CDTR) covers the period 12-18 September, and includes updates on Ebola, malaria, botulism, avian influenza A(H9N2), influenza A(H5), respiratory virus epidemiology in the EU/.EEA, West Nile virus infections, chikungunya, dengue, Crimean-Congo haemorrhagic fever, Vibrio, measles, and expert deployments.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "66",
+            "title": "ECDC deploys experts to DRC to increase support amidst ongoing Ebola outbreak",
+            "summary": "With the Ebola disease situation in the Democratic Republic of the Congo (DRC) still critical, the European Centre for Disease Prevention and Control (ECDC) is deploying experts to DRC to increase support at the epicentre of the outbreak.",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "68",
+            "title": "融合多模态影像的脑/肝脏肿瘤智能精准放疗关键技术研究",
+            "summary": "疾病：脑肿瘤、肝脏肿瘤。 研究类型：观察性研究。 分期：其它。 样本量：300。 状态：尚未开始。 申办方：首都医科大学附属北京友谊医院。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "69",
+            "title": "肺癌患者放疗后心血管不良事件的因果推断和时序预测模型构建",
+            "summary": "疾病：放疗后主要心血管不良事件。 研究类型：观察性研究。 分期：其它。 样本量：500。 状态：正在进行。 申办方：中国人民解放军陆军军医大学第一附属医院。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "70",
+            "title": "莱博雷生对失眠高觉醒亚型及共病心血管风险的疗效研究",
+            "summary": "疾病：失眠。 研究类型：干预性研究。 分期：其它。 样本量：110。 状态：尚未开始。 申办方：四川大学华西医院。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "71",
+            "title": "碎片化运动与中等强度持续训练对正常体重肥胖年轻女性心血管功能的影响",
+            "summary": "疾病：正常体重肥胖。 研究类型：干预性研究。 分期：其它。 样本量：60。 状态：尚未开始。 申办方：北京体育大学。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "72",
+            "title": "代谢与炎症风险评分在慢性心力衰竭患者多维共病表型评估与预后风险预测中的应用价值",
+            "summary": "疾病：慢性心力衰竭；心血管代谢共病；呼吸困难、水肿、乏力等症状。 研究类型：观察性研究。 分期：其它。 样本量：3600。 状态：正在进行。 申办方：河南科技大学第一附属医院。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "73",
+            "title": "心血管病患者呼吸道感染相关疫苗接种障碍综合干预方案构建及应用",
+            "summary": "疾病：心血管疾病。 研究类型：干预性研究。 分期：探索性研究/预试验。 样本量：204。 状态：尚未开始。 申办方：南京医科大学。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "74",
+            "title": "不同糖尿病类型患者外周血免疫细胞亚群特征的横断面观察性研究",
+            "summary": "疾病：糖尿病。 研究类型：观察性研究。 分期：其它。 样本量：15。 状态：正在进行。 申办方：江苏省人民医院（南京医科大学第一附属医院）。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "75",
+            "title": "老年 2 型糖尿病患者久坐行为对睡眠障碍的影响：孤独感的中介作用",
+            "summary": "疾病：2 型糖尿病、睡眠障碍、久坐行为、孤独情绪。 研究类型：观察性研究。 分期：其它。 样本量：200。 状态：尚未开始。 申办方：西南医科大学附属医院。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "77",
+            "title": "神经性眼痛平台",
+            "summary": "疾病：神经性眼痛。 研究类型：观察性研究。 分期：探索性研究/预试验。 样本量：200。 状态：尚未开始。 申办方：温州医科大学附属眼视光医院。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "78",
+            "title": "经皮神经电刺激治疗神经病理性疼痛的有效性和安全性研究",
+            "summary": "疾病：神经病理性疼痛。 研究类型：干预性研究。 分期：探索性研究/预试验。 样本量：90。 状态：尚未开始。 申办方：浙江医院。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "79",
+            "title": "神经免疫病预后预测标志物及不同治疗方案对预后影响的前瞻性登记研究",
+            "summary": "疾病：重症肌无力（MG）; 慢性炎性脱髓鞘性神经根神经病（CIDP）; 视神经脊髓炎谱系疾病（NMOSD）;多发性硬化（MS）; 其他神经免疫疾病患者。。 研究类型：观察性研究。 分期：其它。 样本量：300。 状态：正在进行。 申办方：南京市第一医院。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "80",
+            "title": "视觉反馈 VR 神经肌肉热身对 CAI 大学生踝关节功能及平衡能力的急性影响",
+            "summary": "疾病：慢性踝关节不稳。 研究类型：干预性研究。 分期：其它。 样本量：30。 状态：结束。 申办方：北京体育大学。",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedPartial": {
+        "items": [
+          {
+            "id": "56",
+            "category": "guideline",
+            "specialties": [
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          {
+            "id": "57",
+            "category": "guideline",
+            "specialties": [
+              "oncology",
+              "pediatrics",
+              "pharmacy"
+            ]
+          },
+          {
+            "id": "58",
+            "category": "regulatory",
+            "specialties": [
+              "pharmacy"
+            ]
+          },
+          {
+            "id": "59",
+            "category": "regulatory",
+            "specialties": []
+          },
+          {
+            "id": "60",
+            "category": "regulatory",
+            "specialties": [
+              "public-health"
+            ]
+          },
+          {
+            "id": "61",
+            "category": "regulatory",
+            "specialties": [
+              "rheumatology"
+            ]
+          },
+          {
+            "id": "64",
+            "category": "regulatory",
+            "specialties": [
+              "infectious-disease",
+              "public-health"
+            ]
+          },
+          {
+            "id": "66",
+            "category": "regulatory",
+            "specialties": [
+              "infectious-disease",
+              "public-health"
+            ]
+          },
+          {
+            "id": "68",
+            "category": "pipeline",
+            "specialties": [
+              "oncology",
+              "radiology"
+            ]
+          },
+          {
+            "id": "69",
+            "category": "pipeline",
+            "specialties": [
+              "oncology",
+              "cardiology"
+            ]
+          },
+          {
+            "id": "70",
+            "category": "pipeline",
+            "specialties": [
+              "psychiatry",
+              "cardiology"
+            ]
+          },
+          {
+            "id": "71",
+            "category": "pipeline",
+            "specialties": [
+              "cardiology",
+              "endocrinology",
+              "public-health"
+            ]
+          },
+          {
+            "id": "72",
+            "category": "pipeline",
+            "specialties": [
+              "cardiology",
+              "endocrinology"
+            ]
+          },
+          {
+            "id": "73",
+            "category": "pipeline",
+            "specialties": [
+              "cardiology",
+              "public-health"
+            ]
+          },
+          {
+            "id": "74",
+            "category": "pipeline",
+            "specialties": [
+              "endocrinology"
+            ]
+          },
+          {
+            "id": "75",
+            "category": "pipeline",
+            "specialties": [
+              "endocrinology",
+              "geriatrics",
+              "psychiatry"
+            ]
+          },
+          {
+            "id": "77",
+            "category": "pipeline",
+            "specialties": [
+              "neurology"
+            ]
+          },
+          {
+            "id": "78",
+            "category": "pipeline",
+            "specialties": [
+              "neurology"
+            ]
+          },
+          {
+            "id": "79",
+            "category": "pipeline",
+            "specialties": [
+              "neurology"
+            ]
+          },
+          {
+            "id": "80",
+            "category": "pipeline",
+            "specialties": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "incident-food-recall-flour",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "food-recall-flour",
+        "publicId": "13fc0093a7641909"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "items": [
+          {
+            "id": "1",
+            "title": "GF Blends Recalls Truly AIP All Purpose Flour and Bread Mix, and EAT G.A.N.G.S.T.E.R. Flat Bread Pizza Mix Due to Potential Undeclared Wheat Gluten",
+            "summary": "GF Blends is recalling Truly AIP All Purpose Flour and Bread Mix and EAT G.A.N.G.S.T.E.R. Flat Bread Pizza Mix listed below due to potential undeclared wheat gluten. People who have celiac disease or a severe gluten intolerance run the risk of adverse health effects or allergic reactions if they con",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedNot": {
+        "items": [
+          {
+            "id": "1",
+            "category": [
+              "safety"
+            ]
+          }
+        ]
+      },
+      "rationale": "a food allergen recall is public health, not drug safety (F3)"
+    },
+    {
+      "id": "incident-food-recall-chips",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "food-recall-chips",
+        "publicId": "b137f41ef9109931"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "items": [
+          {
+            "id": "1",
+            "title": "Saratoga Potato Chips Issues Allergy Alert on Undeclared Soy in J. HIGGS Loaded Bacon and Cheddar Potato Chips",
+            "summary": "Saratoga Potato Chips of Fort Wayne, IN, is recalling two Best if USED BY codes of 7.75-ounce packages of J. HIGGS Loaded Bacon and Cheddar Potato Chips because they may contain undeclared soy allergen. People who have an allergy or severe sensitivity to soy run the risk of serious or life-threateni",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedNot": {
+        "items": [
+          {
+            "id": "1",
+            "category": [
+              "safety"
+            ]
+          }
+        ]
+      },
+      "rationale": "F3"
+    },
+    {
+      "id": "incident-food-recall-dessert",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "food-recall-dessert",
+        "publicId": "886997bb9c320ae5"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "items": [
+          {
+            "id": "1",
+            "title": "So Delicious Dairy Free® Issues Voluntary Recall of Salted Caramel Cluster Non-Dairy Frozen Dessert Pints Due to Potential Presence of Foreign Material",
+            "summary": "WHITE PLAINS, N.Y. and LOUISVILLE, Colo., September 15, 2026 – Danone USA is issuing a voluntary recall of So Delicious Dairy Free® Salted Caramel Cluster Non-Dairy Frozen Dessert pints with best-by dates on and before April 3, 2028 due to the potential presence of foreign materials, such as small",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedNot": {
+        "items": [
+          {
+            "id": "1",
+            "category": [
+              "safety"
+            ]
+          }
+        ]
+      },
+      "rationale": "F3"
+    },
+    {
+      "id": "incident-food-recall-pasta",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "food-recall-pasta",
+        "publicId": "d1cd85f72fcc2f24"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "items": [
+          {
+            "id": "1",
+            "title": "Gias Foods, Inc. Recalls Bettergoods Authentic Italian Lemon Alfredo Fettuccine Because of Possible Health Risk",
+            "summary": "Gias Foods of New York, NY is recalling 2 Lots of bettergoods Authentic Italian Lemon Alfredo Fettuccine, because it has the potential to be contaminated with Listeria monocytogenes, an organism which can cause serious and sometimes fatal infections in young children, frail or elderly people, and ot",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedNot": {
+        "items": [
+          {
+            "id": "1",
+            "category": [
+              "safety"
+            ]
+          }
+        ]
+      },
+      "rationale": "F3"
+    },
+    {
+      "id": "incident-toxic-supplement-recall",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "toxic-supplement-recall",
+        "publicId": "dd13ae20616cc68d"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "items": [
+          {
+            "id": "1",
+            "title": "Global Mix Inc. Recalls Niwali Tejocote Capsules and Niwali Tejocote Pieces Because of Possible Health Risk",
+            "summary": "Global Mix Inc. of Middle Village, New York, is recalling niwali Tejocote Capsules (90 capsules, Herbal Supplement) and niwali Tejocote Pieces (90 Day Supply, Herbal Supplement) because FDA analysis has determined that the products appear to be Thevetia peruviana, or yellow oleander. All parts of th",
+            "allowedCategories": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ],
+            "allowedSpecialties": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          }
+        ]
+      },
+      "expectedNot": {
+        "items": [
+          {
+            "id": "1"
+          }
+        ]
+      },
+      "rationale": "a supplement with a poisonous ingredient is a drug-safety notice"
+    }
+  ]
+}

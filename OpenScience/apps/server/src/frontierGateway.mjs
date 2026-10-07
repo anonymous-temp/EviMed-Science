@@ -241,14 +241,14 @@ async function search(service, user, request) {
 /**
  * The cards of a query, or what it says when it could not read them: never a throw, because the items are an
  * answer without them.
- * @param {{ search: (user: { id: string }, request: { q: string, limit: number }) => Promise<{ cards: any[], more: boolean }> } | null} cards
- * @param {{ id: string }} user @param {ReturnType<typeof validatedRequest>} request @param {(code: string) => void} report
+ * @param {{ search: (user: { id: string }, request: { q: string, limit: number }, context?:any) => Promise<{ cards: any[], more: boolean }> } | null} cards
+ * @param {{ id: string }} user @param {ReturnType<typeof validatedRequest>} request @param {(code: string) => void} report @param {any} context
  */
-async function cardPart(cards, user, request, report) {
+async function cardPart(cards, user, request, report, context) {
   if (!cards) return {};
   if (request.q == null || request.lane || request.specialty) return { cards: [], cardsMore: false };
   try {
-    const found = await cards.search(user, { q: request.q, limit: Math.min(CARD_SEARCH_MAX, request.limit) });
+    const found = await cards.search(user, { q: request.q, limit: Math.min(CARD_SEARCH_MAX, request.limit) }, context);
     return { cards: found.cards, cardsMore: found.more === true };
   } catch (error) {
     report(typeof /** @type {any} */ (error)?.code === "string" && /^[A-Za-z0-9_]{1,64}$/.test(/** @type {any} */ (error).code) ? /** @type {any} */ (error).code : "cards_unavailable");
@@ -319,7 +319,7 @@ export function createFrontierGatewayHandler(config, runtimeManager, { service, 
       // written after any such cutoff, and may be about the very paper being evaluated.
       const cardsForRun = cards && !(evaluationIsolation && await evaluationIsolation.isEvaluation(identity)) ? cards : null;
       const result = await Promise.race([
-        Promise.all([search(service, user, request), cardPart(cardsForRun, user, request, report)]).then(([items, found]) => ({ ...items, ...found })),
+        Promise.all([search(service, user, request), cardPart(cardsForRun, user, request, report, { projectId: identity.projectId, runId: identity.runId ?? null })]).then(([items, found]) => ({ ...items, ...found })),
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(gatewayError(504, "frontier_search_timeout", "Frontier search timed out.")), budgetMs);
           timer.unref?.();

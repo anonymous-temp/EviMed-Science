@@ -901,13 +901,14 @@ export class FrontierEditor {
   /**
    * @param {Record<string, any>} config
    * @param {{ usageLedger?: any, owner?: { userId: string, projectId: string } | null,
-   *           policies?: any, callModel?: typeof callModelForControlPlane, fetchImpl?: typeof fetch }} [options]
+   *           policies?: any, judgeService?: any, callModel?: typeof callModelForControlPlane, fetchImpl?: typeof fetch }} [options]
    *   `owner` is the operator account's internal `evimed-frontier` project;
    *   it may be assigned later (`editor.owner = …`), once the worker has
    *   created the project.
    */
-  constructor(config, { usageLedger = null, owner = null, policies = createModuleEvolutionPolicies(), callModel = callModelForControlPlane, fetchImpl = globalThis.fetch } = {}) {
+  constructor(config, { usageLedger = null, owner = null, policies = createModuleEvolutionPolicies(), callModel = callModelForControlPlane, fetchImpl = globalThis.fetch, judgeService = null } = {}) {
     this.policies = policies;
+    this.judgeService = judgeService;
     this.config = config ?? {};
     this.usageLedger = usageLedger;
     /** @type {{ userId: string, projectId: string } | null} */
@@ -1092,6 +1093,30 @@ export class FrontierEditor {
           lanes: entry.allowedLanes,
         })),
       };
+      const baseline = async () => {
+        const answer = await this.#call([
+          { role: "system", content: FRONTIER_SCREEN_INSTRUCTIONS },
+          { role: "user", content: JSON.stringify(payload) },
+        ], SCREEN_MAX_TOKENS, SCREEN_TIMEOUT_MS);
+        const verified = validateScreen(group, answer);
+        if (!verified) throw new Error("frontier_screen_invalid");
+        return { value: { items: group.map((entry, index) => {
+          const verdict = verified.get(entry.key);
+          return { id: String(index + 1), isMedical: verdict.medical, isNews: verdict.news,
+            category: verdict.lane, specialties: verdict.specialties, roundup: verdict.digest };
+        }) } };
+      };
+      if (this.judgeService && this.owner) {
+        try {
+          const result = await this.judgeService.judge("J5", { items: group.map((entry, index) => ({ id: String(index + 1), title: clip(entry.title, 400), summary: clip(entry.excerpt ?? "", FRONTIER_SCREEN_EXCERPT_CHARS), allowedCategories: entry.allowedLanes, allowedSpecialties: [...FRONTIER_SPECIALTIES] })) }, { ...this.owner, limits: { daily: 0, weekly: 0 }, module: "frontier", baseline });
+          if (['settled', 'escalated'].includes(result?.outcome) && Array.isArray(result.value?.items)) {
+            const value = { items: result.value.items.map((/** @type {any} */ item) => ({ id: item.id, medical: item.isMedical, news: item.isNews, lane: item.category, specialties: item.specialties, digest: item.roundup,
+              language: isChineseTitle(group[Number(item.id) - 1]?.title ?? "") ? "zh" : /[\u3040-\u30ff]/u.test(group[Number(item.id) - 1]?.title ?? "") ? "ja" : /[a-z]/i.test(group[Number(item.id) - 1]?.title ?? "") ? "en" : "und" })) };
+            const verified = validateScreen(group, value);
+            if (verified) return verified;
+          }
+        } catch { /* The existing Flash screen is the explicit fallback. */ }
+      }
       const answer = await this.#call([
         { role: "system", content: policy.policy.screenInstructions },
         { role: "user", content: JSON.stringify(payload) },
@@ -1356,9 +1381,28 @@ export class FrontierEditor {
    * @param {{ report: FrontierSameEventReport, candidates: FrontierSameEventReport[] }} input
    * @returns {Promise<{ verdicts: Array<"yes" | "related" | "no"> | null, error: string | null, attempts: number }>}
    */
-  async judgeSameEvent({ report, candidates }) {
+  async judgeSameEvent({ report, candidates }, useJudge = true) {
     const earlier = (candidates ?? []).slice(0, FRONTIER_SAME_EVENT_CANDIDATES);
     if (!earlier.length) return { verdicts: [], error: null, attempts: 0 };
+    if (this.judgeService && useJudge) {
+      /** @type {Array<"yes" | "related" | "no">} */
+      const verdicts = [];
+      for (const candidate of earlier) {
+        try {
+          const result = await this.judgeService.judge("J6", { left: { title: report.titleZh ?? report.titleRaw, summary: report.summaryZh ?? "", publishedAt: report.publishedAt, doi: report.doi, pmid: report.pmid, registryIds: report.registryIds }, right: { title: candidate.titleZh ?? candidate.titleRaw, summary: candidate.summaryZh ?? "", publishedAt: candidate.publishedAt, doi: candidate.doi, pmid: candidate.pmid, registryIds: candidate.registryIds } }, { ...this.owner, limits: { daily: 0, weekly: 0 }, module: "frontier", baseline: async () => {
+            const old = await this.judgeSameEvent({ report, candidates: [candidate] }, false);
+            if (!old.verdicts) throw new Error(old.error ?? "frontier_same_event_invalid");
+            return { value: { relation: old.verdicts[0] === "yes" ? "same" : old.verdicts[0] === "related" ? "related" : "different" } };
+          } });
+          if (["judge_disabled", "judge_unconfigured", "judge_uncalibrated", "judge_calibration_mismatch"].includes(result?.code)) {
+            return this.judgeSameEvent({ report, candidates: earlier }, false);
+          }
+          const relation = ['settled', 'escalated'].includes(result?.outcome) ? result.value?.relation : null;
+          verdicts.push(relation === "same" ? "yes" : relation === "related" ? "related" : "no");
+        } catch { verdicts.push("no"); }
+      }
+      return { verdicts, error: null, attempts: earlier.length };
+    }
     const messages = [
       { role: "system", content: FRONTIER_SAME_EVENT_INSTRUCTIONS },
       { role: "user", content: buildSameEventInput({ report, candidates: earlier }, { timeZone: this.timeZone }) },

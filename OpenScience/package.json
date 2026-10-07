@@ -29,7 +29,7 @@
     "report:context-fidelity": "python3 evals/context-fidelity/report.py",
     "eval:geo-gate-coverage": "python3 evals/geo-gate-coverage/run_gate_coverage.py --package ${GEO_SKILLS_PACKAGE:?set GEO_SKILLS_PACKAGE to the unpacked geo-skills root}",
     "test:server": "pnpm --filter @ai4s/server test",
-    "test:web": "pnpm tokens:check && pnpm test:tokens && pnpm lint:tokens && pnpm typecheck:tokens && pnpm test:mcp && pnpm test:acceptance-ledger && pnpm test:eval-briefs && pnpm test:specialist-driver && pnpm test:release-audit && pnpm test:phi-masking && pnpm test:ops && pnpm test:packages && pnpm test:server && pnpm lint:server && pnpm lint:domain && pnpm lint:port && pnpm lint:socket && pnpm typecheck:domain && pnpm typecheck:port && pnpm typecheck:socket && pnpm typecheck:server && pnpm typecheck && pnpm test",
+    "test:web": "pnpm tokens:check && pnpm test:tokens && pnpm lint:tokens && pnpm typecheck:tokens && pnpm test:mcp && pnpm test:acceptance-ledger && pnpm test:eval-briefs && pnpm test:specialist-driver && pnpm test:release-audit && pnpm test:judge-sites && pnpm test:phi-masking && pnpm test:ops && pnpm test:packages && pnpm test:server && pnpm lint:server && pnpm lint:domain && pnpm lint:port && pnpm lint:socket && pnpm typecheck:domain && pnpm typecheck:port && pnpm typecheck:socket && pnpm typecheck:server && pnpm typecheck && pnpm test",
     "test:web:e2e": "pnpm --filter @ai4s/server test:e2e",
     "walk:ui": "node scripts/ops/ui-walk.mjs",
     "audit:hosted-compliance": "node scripts/ops/audit-hosted-compliance.mjs",
@@ -121,7 +121,10 @@
     "lint:tokens": "pnpm --filter @evimed/design-tokens lint",
     "typecheck:tokens": "pnpm --filter @evimed/design-tokens typecheck",
     "gallery:shot": "node scripts/ops/gallery-shot.mjs",
-    "gallery:check": "node scripts/ops/gallery-shot.mjs --check"
+    "gallery:check": "node scripts/ops/gallery-shot.mjs --check",
+    "eval:judge-sites": "node evals/judge-sites/run.mjs",
+    "eval:routing": "node evals/routing/run.mjs",
+    "test:judge-sites": "node --test evals/judge-sites/*.test.mjs"
   },
   "engines": {
     "node": ">=22.22.0"

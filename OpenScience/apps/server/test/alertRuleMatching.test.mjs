@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 /** `increase(metric{labels}[range])` or `rate(…)`, and whether a `sum(` opens right before it. */
-const TERM = /(sum\s*\(\s*)?(?:increase|rate)\(\s*([a-z_:][a-z0-9_:]*)\{([^}]*)\}\[[^\]]+\]\s*\)/g;
+const TERM = /(sum\s*(?:by\s*\([^)]*\)\s*)?\(\s*)?(?:increase|rate)\(\s*([a-z_:][a-z0-9_:]*)\{([^}]*)\}\[[^\]]+\]\s*\)/g;
 
 /**
  * The terms of an expression that are compared across label values without
@@ -42,6 +42,7 @@ test("the matcher sees the defect it exists for", () => {
   // The 2026-09-23 expression, verbatim: it could never fire.
   const shipped = "increase(open_science_review_reply_checks_total{outcome=\"failed\"}[1h]) >= 3 and increase(open_science_review_reply_checks_total{outcome=\"failed\"}[1h]) > increase(open_science_review_reply_checks_total{outcome=\"done\"}[1h])";
   assert.deepEqual(unmatchedComparisons(shipped), ["open_science_review_reply_checks_total"]);
+  assert.deepEqual(unmatchedComparisons('sum by (site) (increase(x_total{outcome="failed"}[1h])) > sum by (site) (increase(x_total{outcome="answered"}[1h]))'), []);
   assert.deepEqual(unmatchedComparisons("sum(increase(x_total{outcome=\"failed\"}[1h])) > sum(increase(x_total{outcome=\"done\"}[1h]))"), []);
   assert.deepEqual(unmatchedComparisons("increase(x_total{a=\"1\"}[1h]) / ignoring(a) increase(x_total{a=\"2\"}[1h])"), []);
 });
@@ -56,5 +57,5 @@ test("no alert compares a counter's series across label values without aggregati
   }
   assert.ok(scanned >= 10, `only ${scanned} counter terms were read; the scan is wrong, not the rules`);
   const review = rules.groups.find((/** @type {any} */ group) => group.name === "evimed-review");
-  assert.ok(review?.rules.some((/** @type {any} */ rule) => rule.alert === "ReviewJevFailing"), "the reviewer group carries the first pass's alert");
+  assert.ok(review?.rules.some((/** @type {any} */ rule) => rule.alert === "JevFailing"), "the reviewer group carries the first pass's alert");
 });

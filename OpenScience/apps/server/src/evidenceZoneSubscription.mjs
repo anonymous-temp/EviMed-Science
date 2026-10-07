@@ -1,3 +1,4 @@
+import { rankEvidenceCards } from "./evidenceJudgeRanking.mjs";
 import { evidenceCardIdentifiers, verifyEvidenceCardClaims } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
@@ -140,10 +141,10 @@ export function createEvidenceLinkStates(database) {
 
 export class EvidenceZoneSubscriptions {
   /**
-   * @param {{ database: any, documents: import('./productStore.mjs').ProductDocuments, enabled?: boolean, maxPerProject?: number, maxItems?: number }} options
+   * @param {{ database: any, documents: import('./productStore.mjs').ProductDocuments, enabled?: boolean, maxPerProject?: number, maxItems?: number, judgeService?: any }} options
    */
-  constructor({ database, documents, enabled = false, maxPerProject = 5, maxItems = 6 }) {
-    this.database = database; this.documents = documents;
+  constructor({ database, documents, enabled = false, maxPerProject = 5, maxItems = 6, judgeService = null }) {
+    this.database = database; this.documents = documents; this.judgeService = judgeService;
     this.enabled = enabled; this.maxPerProject = maxPerProject; this.maxItems = maxItems;
     /** Verification per (card, revision): the claims with their marks and the sources a recall names. @type {Map<string, any>} */
     this.cache = new Map();
@@ -274,9 +275,10 @@ export class EvidenceZoneSubscriptions {
       .map((/** @type {any} */ row) => ({ row, score: termScore(terms, [row.title, row.summary, row.question, row.answer, row.claims_text].join(" ")) }))
       .filter((entry) => entry.score >= need)
       .sort((left, right) => right.score - left.score)
-      .slice(0, Math.max(1, Math.min(limit, this.maxItems)));
+      .slice(0, this.judgeService ? 15 : Math.max(1, Math.min(limit, this.maxItems)));
     const items = [];
-    for (const { row } of ranked) items.push(await this.#indexItem(row));
+    const ordered = await rankEvidenceCards(ranked.map(entry => entry.row), query, this.judgeService, { userId, projectId });
+    for (const row of ordered.slice(0, Math.max(1, Math.min(limit, this.maxItems)))) items.push(await this.#indexItem(row));
     if (items.length) recordSubscriptionEvent("recalled");
     return items;
   }

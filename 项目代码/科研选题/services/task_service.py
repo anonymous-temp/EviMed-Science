@@ -3,6 +3,16 @@
 实现分阶段动态分析架构
 新增：输入校验、检索鲁棒性、降级策略、ES集成
 """
+
+try:
+    from evimed_judge import ask as judge_ask, ask_async as judge_ask_async
+except ImportError:
+    def judge_ask(*args, **kwargs):
+        return None
+
+    async def judge_ask_async(*args, **kwargs):
+        return None
+
 import asyncio
 import json
 import re
@@ -404,7 +414,9 @@ class TaskService:
             if adult_scoped and cls._is_pediatric_dominant(record):
                 continue
             if all(any((" " + term + " ") in haystack for term in group) for group in required_groups):
-                relevant.append(record)
+                judgment = judge_ask("J15", {"topic": raw_query, "title": fields[0], "abstract": fields[1]}) if raw_query else None
+                if not isinstance(judgment, dict) or judgment.get("relation") != "unrelated":
+                    relevant.append(record)
 
         logger.info(
             "[检索] PICO相关性门控保留 %d/%d 篇（%d个必需概念组）",

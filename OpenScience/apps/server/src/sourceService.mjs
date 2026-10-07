@@ -482,9 +482,10 @@ export class SourceService {
    * one is labelled, `ResultImpactService.reconcileReplacement`). It records and never decides: whatever it does or fails
    * to do leaves the registration exactly as it is.
    * @param {any} documents @param {any} jobs
-   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any}} options */
-  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, report = () => {}, evolutionSignals = null } = {}) {
+   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any}} options */
+  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, report = () => {}, evolutionSignals = null, judgeService = null } = {}) {
     if (!documents || !jobs) throw new TypeError("SourceService requires product documents and jobs.");
+    this.judgeService = judgeService;
     this.documents = documents;
     this.jobs = jobs;
     this.extractorVersion = text(extractorVersion, "extractor version", 80);
@@ -668,8 +669,23 @@ export class SourceService {
   /** The parser snapshot is immutable across retries and process recovery.
    * Pending capture records are not published source units or knowledge claims. */
   async freezeCapture(job, parsed) {
+    // Ask outside the source transaction; the locked generation is rechecked before applying.
+    const snapshot = this.judgeService ? await this.withSourceLease(job, async source => source) : null;
+    let classification = null;
+    if (snapshot && !snapshot.payload.override && snapshot.payload.analysis?.generation !== snapshot.payload.generation
+      && /\.(?:pdf|docx?|odt|rtf|md|txt|html?|epub)$/i.test(snapshot.payload.paths?.[0] ?? "")) {
+      try {
+        const result = await this.judgeService.judge("J7", { filename: snapshot.payload.paths?.[0] ?? "", text: String(parsed.text ?? "").slice(0, 1500), types: [...SOURCE_TYPES] }, { userId: job.userId, projectId: job.projectId, taskId: job.id, module: "source", regexBaseline: { docType: snapshot.payload.docType } });
+        if (['settled', 'escalated'].includes(result?.outcome) && SOURCE_TYPES.includes(result.value?.docType)) classification = result.value.docType;
+      } catch { /* Extension-based classification is the explicit fallback. */ }
+    }
     return this.withSourceLease(job, async (source, client) => {
       if (source.payload.analysis?.generation === source.payload.generation) return this.loadCapture(job.userId, source, client);
+      if (classification && snapshot?.payload.generation === source.payload.generation && !source.payload.override) {
+        const depth = ["research-protocol", "grant-proposal", "peer-review"].includes(classification) ? "deep" : "structured";
+        source = { ...source, payload: { ...source.payload, docType: classification, depth: SOURCE_DEPTHS.indexOf(depth) > SOURCE_DEPTHS.indexOf(source.payload.depth) ? depth : source.payload.depth,
+          typeClassification: { origin: "judge", generation: source.payload.generation } } };
+      }
       const input = normalizeSourceText({ sourceId: source.id, generation: source.payload.generation,
         docType: source.payload.docType, depth: source.payload.depth, text: parsed.text });
       // The parser's page offsets are into its own text; the capture's text has

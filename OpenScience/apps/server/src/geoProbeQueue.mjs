@@ -62,7 +62,7 @@
 import { GEO_METRICS, geoConstant } from "@evimed/domain";
 import { GEO_PROBE_ALLOWED_PROVIDERS, probeUpstream } from "./geoProbeGateway.mjs";
 import { citationRows } from "./geoParse.mjs";
-import { classifyProbeAnswer, isRetriableRawStatus } from "./geoSanity.mjs";
+import { classifyProbeAnswer, classifyProbeAnswerWithJudge, isRetriableRawStatus } from "./geoSanity.mjs";
 import { storeGeoScreenshot } from "./geoScreenshots.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
@@ -375,6 +375,7 @@ const engineLabel = (engine) => /** @type {Record<string, { display_name: string
 /**
  * @typedef {object} GeoMeasureDeps
  * @property {import("./geoMeasureStore.mjs").GeoMeasureStore} store
+ * @property {any} [judgeService]
  * @property {Record<string, any>} config
  * @property {() => Date} [now]
  * @property {GeoMeasureState} [state]
@@ -677,7 +678,18 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     }
     state.retriable.delete(job.id);
   }
-  const verdict = classifyProbeAnswer({ rawStatus: row.status === "ok" ? "ok" : (rawStatus || "failed"), answer: row.answer });
+  const sanityInput = { rawStatus: row.status === "ok" ? "ok" : (rawStatus || "failed"), answer: row.answer };
+  let verdict = classifyProbeAnswer(sanityInput);
+  if (deps.judgeService) {
+    try {
+      const project = await store.project(job.geoProjectId);
+      if (project?.userId === job.userId && project.projectId) {
+        verdict = await classifyProbeAnswerWithJudge(sanityInput, deps.judgeService, {
+          userId: job.userId, projectId: project.projectId, taskId: job.id, module: "geo",
+        });
+      }
+    } catch { /* Missing or changed ownership keeps the original sanity verdict. */ }
+  }
 
   /** @type {string[]} */
   const warnings = [];

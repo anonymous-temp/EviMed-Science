@@ -114,8 +114,8 @@ export class EvolutionService {
     return result;
   }
 
-  /** @param {any} event */
-  async ingestEvent(event) {
+  /** @param {any} event @param {{runAfter?:Date}} [options] */
+  async ingestEvent(event, { runAfter = this.now() } = {}) {
     if (!event.id || !event.type) throw new HttpError(400, 'evolution_event_invalid', 'An event needs its identity and type.');
     // Tenant payloads stay in tenant-owned event records; the shared lead is separately reduced to closed codes.
     const id = `evolution-event-${evolutionKey([event.id, event.type, event.userId ?? null])}`;
@@ -124,7 +124,7 @@ export class EvolutionService {
       const prior=await this.get(id,owner);
       return prior??this.save('event',id,{...event,createdAt:this.now().toISOString(),status:'queued'},null,owner);
     });
-    if(saved.payload.status==='queued')await this.enqueue('event',{eventId:id,eventOwnerId:owner},id);
+    if(saved.payload.status==='queued')await this.enqueue('event',{eventId:id,eventOwnerId:owner},id,runAfter);
     return saved;
   }
   /** Recover a persisted lead/event whose enqueue was interrupted, without reading tenant prose. */

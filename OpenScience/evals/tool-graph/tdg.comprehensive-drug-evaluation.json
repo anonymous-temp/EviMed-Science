@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "comprehensive-drug-evaluation",
-  "version": "sha256:d3104cc0edbdf2532142b10883975aabc2d9ca94102097970e9a330f2174af4e",
+  "version": "sha256:dc2c75dbbf1459df38ad105d2ba1e2bbfa0fa997fd026c8e7a4f03abcddbaf4a",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1379,7 +1379,7 @@
     {
       "name": "mcp__evimed__evidence_deduplicate",
       "source": "mcp",
-      "description": "Deduplicate evidence records by DOI, PMID, URL, then normalized title.",
+      "description": "Deduplicate exact evidence records by DOI, PMID, URL, then normalized title; annotate suspected same-trial publications without merging them.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1399,6 +1399,10 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 2048
+                },
+                "abstract": {
+                  "type": "string",
+                  "maxLength": 20000
                 },
                 "doi": {
                   "type": "string",

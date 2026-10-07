@@ -315,3 +315,13 @@ test("an evaluation run, frozen at a date, is not shown cards written since", as
   assert.equal("cards" in answer.body.data, false);
   assert.equal(cards.calls.length, 0);
 });
+
+test('card judging receives the active runtime project and rejects caller-supplied attribution', async t => {
+  const calls = [];
+  const cards = { search: async (user, request, context) => { calls.push({ user, request, context }); return { cards: [], more: false }; } };
+  const { call } = await withGateway(t, { cards });
+  assert.equal((await call({ q: 'stroke' })).status, 200);
+  assert.deepEqual(calls[0].context, { projectId: 'project-1', runId: null });
+  assert.equal((await call({ q: 'stroke', projectId: 'another-tenant' })).status, 400);
+  assert.equal(calls.length, 1);
+});

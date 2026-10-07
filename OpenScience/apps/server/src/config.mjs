@@ -1221,6 +1221,17 @@ function reviewJevSettings(overrides, keyPresent) {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000) {
     throw new Error(`OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS must be a whole number from 1000 to 120000, got ${JSON.stringify(timeoutValue)}.`);
   }
+  for(const [site,policy] of Object.entries(pin.sites??{})) {
+    if(!/^J([1-9]|1[0-9]|2[0-2])$/.test(site)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(site))throw new Error('Unknown registered Jev policy pin.');
+    if(!(Number(policy.threshold)>0&&Number(policy.threshold)<=1)||!['uncalibrated','calibrated'].includes(policy.calibration))throw new Error('Invalid registered Jev threshold or calibration pin.');
+    if(policy.calibration==='calibrated'&&!/^[a-f0-9]{64}$/.test(policy.promptFingerprint??''))throw new Error('A calibrated Jev policy needs its measured prompt fingerprint.');
+  }
+  const disabled = String(overrides.jevDisabledSites ?? process.env.OPEN_SCIENCE_JEV_DISABLED_SITES ?? '').split(',').map(value=>value.trim()).filter(Boolean);
+  if(disabled.some(id=>!/^J([1-9]|1[0-9]|2[0-2])$/.test(id)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(id)))throw new Error('OPEN_SCIENCE_JEV_DISABLED_SITES contains an unknown site.');
+  const onlineTimeout=Number(overrides.jevOnlineTimeoutMs ?? process.env.OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS ?? 3000);
+  const concurrency=Number(overrides.jevBackgroundConcurrency ?? process.env.OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY ?? 4);
+  if(!Number.isSafeInteger(onlineTimeout)||onlineTimeout<100||onlineTimeout>3000)throw new Error('OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS must be from 100 to 3000.');
+  if(!Number.isSafeInteger(concurrency)||concurrency<1||concurrency>32)throw new Error('OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY must be from 1 to 32.');
   return {
     reviewJevEnabled: overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent),
     reviewJevModel: model,
@@ -1229,6 +1240,11 @@ function reviewJevSettings(overrides, keyPresent) {
     reviewJevMaxRequestTokens: maxRequestTokens,
     reviewJevMaxStateTokens: maxStateTokens,
     reviewJevTimeoutMs: timeoutMs,
+    jevEnabled: overrides.jevEnabled ?? keyPresent,
+    jevDisabledSites: disabled,
+    jevOnlineTimeoutMs: onlineTimeout,
+    jevBackgroundConcurrency: concurrency,
+    jevSites: pin.sites ?? {},
   };
 }
 
@@ -2700,7 +2716,7 @@ export function loadConfig(overrides = {}) {
     // The learning loop's own caps, counted over `learning` spend only
     // (`boundedRunBudget.mjs`). Zero means no cap, the default.
     learningDailyLimitCny: Number(overrides.learningDailyLimitCny
-      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 0),
+      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 10),
     learningWeeklyLimitCny: Number(overrides.learningWeeklyLimitCny
       ?? process.env.OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY ?? 0),
     learningRunLimitCny: Number(overrides.learningRunLimitCny

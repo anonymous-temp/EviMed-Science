@@ -8,7 +8,8 @@
 //   asked, how often or how recently decides it, and there is no way to pay for a place. Ties go to the request that was filed first.
 // - **Filing is seconding.** The filer's own vote is the request's first. A title that folds to the same words as one already on the
 //   list (NFKC, whitespace collapsed, case folded — a format fold, not a reading) is that request, and filing it again is a vote for it:
-//   one topic is one row however many people typed it.
+//   one topic is one row however many people typed it. Optional J14 can reuse a semantically identical request; related topics
+//   keep separate requests and votes, with a bidirectional public link. An uncertain or unavailable decision keeps the title fold.
 // - **One account cannot flood the list.** A signed-in account makes at most `OPEN_SCIENCE_EVIDENCE_TOPIC_REQUESTS_PER_DAY` new votes
 //   (filing or seconding) in a day. Voting again for something already voted for costs nothing and changes nothing. The count is taken
 //   under a per-account lock so two parallel requests cannot both pass it.
@@ -17,6 +18,7 @@
 // - **User-written titles are plain text.** A title is 4 to 200 characters with no control character, and every page that shows it
 //   escapes it; the public list page is `noindex` because any account may put a line on it.
 
+import { queryTerms } from "./evidenceZoneSubscription.mjs";
 import { randomUUID } from "node:crypto";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
@@ -49,8 +51,12 @@ export function normalizeTopicTitle(value) {
 }
 
 /** @param {any} row */
+const relatedIdsSql = `(SELECT COALESCE(array_agg(CASE WHEN l.left_id=r.id THEN l.right_id ELSE l.left_id END ORDER BY l.left_id,l.right_id), ARRAY[]::text[])
+  FROM evimed_frontier.evidence_topic_request_links l WHERE l.left_id=r.id OR l.right_id=r.id)`;
+
 const requestView = (row) => ({
   id: String(row.id), title: String(row.title), zoneId: row.zone_title ? String(row.zone_id) : null, zoneTitle: row.zone_title ?? null,
+  relatedRequestIds: Array.isArray(row.related_request_ids) ? row.related_request_ids.map(String) : [],
   requesters: Number(row.requesters), createdAt: new Date(row.created_at).toISOString(),
 });
 
@@ -64,7 +70,7 @@ export async function topicRequestCounts(database, { limit = 50 } = {}) {
   if (!Number.isSafeInteger(size) || size < 1 || size > EVIDENCE_TOPIC_REQUEST_LIST_MAX) throw new TypeError(`limit is a whole number from 1 to ${EVIDENCE_TOPIC_REQUEST_LIST_MAX}.`);
   await migrateEvidenceZones(database);
   const rows = (await database.query(
-    `SELECT r.id, r.title, r.zone_id, r.created_at, count(v.user_id)::integer AS requesters, z.title AS zone_title
+    `SELECT r.id, r.title, r.zone_id, r.created_at, count(v.user_id)::integer AS requesters, z.title AS zone_title, ${relatedIdsSql} AS related_request_ids
      FROM evimed_frontier.evidence_topic_requests r JOIN evimed_frontier.evidence_topic_request_votes v ON v.request_id = r.id
        LEFT JOIN evimed_frontier.evidence_zones z ON z.id = r.zone_id AND ${evidencePublicPredicate("zones")}
      GROUP BY r.id, z.title ORDER BY requesters DESC, r.created_at ASC, r.id ASC LIMIT $1`, [size])).rows;
@@ -72,9 +78,9 @@ export async function topicRequestCounts(database, { limit = 50 } = {}) {
 }
 
 /**
- * @param {{ database: any, config: { evidenceTopicRequestsPerDay?: number } }} options
+ * @param {{ database: any, config: { evidenceTopicRequestsPerDay?: number }, judgeService?: any, judgeContext?:(user:{id:string})=>Promise<{userId:string,projectId:string}> }} options
  */
-export function createEvidenceTopicRequests({ database, config }) {
+export function createEvidenceTopicRequests({ database, config, judgeService = null, judgeContext = null }) {
   const counters = { filed: 0, seconded: 0, alreadySeconded: 0, refusedLimit: 0, refusedInvalid: 0 };
   const perDay = () => Number(config.evidenceTopicRequestsPerDay ?? 5);
 
@@ -87,7 +93,7 @@ export function createEvidenceTopicRequests({ database, config }) {
   /** @param {any} client @param {string} requestId */
   async function viewOf(client, requestId) {
     const row = (await client.query(
-      `SELECT r.id, r.title, r.zone_id, r.created_at, (SELECT count(*)::integer FROM evimed_frontier.evidence_topic_request_votes v WHERE v.request_id = r.id) AS requesters, z.title AS zone_title
+      `SELECT r.id, r.title, r.zone_id, r.created_at, (SELECT count(*)::integer FROM evimed_frontier.evidence_topic_request_votes v WHERE v.request_id = r.id) AS requesters, z.title AS zone_title, ${relatedIdsSql} AS related_request_ids
        FROM evimed_frontier.evidence_topic_requests r LEFT JOIN evimed_frontier.evidence_zones z ON z.id = r.zone_id AND ${evidencePublicPredicate("zones")} WHERE r.id = $1`, [requestId])).rows[0];
     return requestView(row);
   }
@@ -125,26 +131,79 @@ export function createEvidenceTopicRequests({ database, config }) {
         throw error;
       }
       await migrateEvidenceZones(database);
-      return database.transaction(async (/** @type {any} */ client) => {
-        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evidence-topic-request:${user.id}`]);
-        if (body.zoneId != null) {
-          const zone = (await client.query(`SELECT 1 FROM evimed_frontier.evidence_zones z WHERE z.id = $1 AND ${evidencePublicPredicate("zones")}`, [body.zoneId])).rowCount;
-          if (!zone) { counters.refusedInvalid += 1; throw invalid("zoneId names a published zone that is open to the internet."); }
+      const key = title.toLowerCase();
+      // Reject known invalid targets and quota refusals before optional paid work.
+      if (body.zoneId != null && !(await database.query(`SELECT 1 FROM evimed_frontier.evidence_zones z WHERE z.id=$1 AND ${evidencePublicPredicate("zones")}`, [body.zoneId])).rowCount)
+        { counters.refusedInvalid++; throw invalid("zoneId names a published zone that is open to the internet."); }
+      const deadlineMs = Date.now() + 8000;
+      const retry = Symbol("topic-request-snapshot-changed");
+      for (let attempt = 0; ; attempt++) {
+        const exact = (await database.query("SELECT id FROM evimed_frontier.evidence_topic_requests WHERE title_key=$1", [key])).rows[0];
+        if (await usedToday(database, user.id) >= perDay()) {
+          const had = exact && (await database.query("SELECT 1 FROM evimed_frontier.evidence_topic_request_votes WHERE request_id=$1 AND user_id=$2", [exact.id, user.id])).rowCount;
+          if (!had) { counters.refusedLimit++; throw new HttpError(429, "evidence_topic_request_limit", "Too many topic requests today.", { retryAfterSeconds: 3600 }); }
         }
-        const key = title.toLowerCase();
-        const existing = (await client.query("SELECT id FROM evimed_frontier.evidence_topic_requests WHERE title_key = $1", [key])).rows[0];
-        let requestId = existing?.id;
-        const created = !requestId;
-        if (!requestId) {
-          // The request is made only once the account's ceiling has passed: the vote below would refuse it, and a refusal rolls this back.
-          requestId = `tr_${randomUUID().replaceAll("-", "")}`;
-          const inserted = await client.query(
-            "INSERT INTO evimed_frontier.evidence_topic_requests(id, title, title_key, zone_id) VALUES($1, $2, $3, $4) ON CONFLICT (title_key) DO NOTHING RETURNING id", [requestId, title, key, body.zoneId ?? null]);
-          if (!inserted.rowCount) requestId = (await client.query("SELECT id FROM evimed_frontier.evidence_topic_requests WHERE title_key = $1", [key])).rows[0].id;
+        let snapshotCount = null, same = null;
+        const related = [];
+        if (!exact && judgeService && attempt < 3 && Date.now() < deadlineMs) {
+          snapshotCount = Number((await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.evidence_topic_requests")).rows[0].n);
+          // A bounded lexical shortlist, with recent requests as the stable tie-breaker.
+          // Every title here is already public; no account or zone draft enters the model.
+          const candidates = (await database.query(`SELECT id,title FROM evimed_frontier.evidence_topic_requests
+            ORDER BY (SELECT count(*) FROM unnest($1::text[]) t WHERE strpos(lower(title),t)>0) DESC,created_at DESC,id ASC LIMIT 15`, [queryTerms(title)])).rows;
+          let context = null;
+          if (candidates.length && judgeContext) {
+            try { context = await judgeContext(user); } catch { /* Keep exact-title filing when attribution is unavailable. */ }
+          }
+          if (context?.userId !== user.id || !context?.projectId) context = null;
+          for (const candidate of context ? candidates : []) {
+            if (Date.now() >= deadlineMs) break;
+            let decision;
+            try { decision = await judgeService.judge("J14", { left: title, right: candidate.title }, { ...context, module: "learning", deadlineMs }); }
+            catch { continue; }
+            if (["judge_disabled", "judge_unconfigured", "judge_uncalibrated", "judge_calibration_mismatch"].includes(decision?.code)) break;
+            if (decision?.outcome !== "settled") continue;
+            if (decision.value?.relation === "same") { same = candidate; break; }
+            if (decision.value?.relation === "related") related.push(candidate);
+          }
         }
-        const outcome = await vote(client, user.id, requestId, created);
-        return { request: await viewOf(client, requestId), filed: created, ...outcome };
-      });
+        // Only the short mutation holds locks. In particular, paid ledger rows never
+        // join the vote transaction and survive a later quota refusal or rollback.
+        const result = await database.transaction(async (/** @type {any} */ client) => {
+          await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evidence-topic-request:${user.id}`]);
+          if (judgeService) await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["evidence-topic-request:semantic"]);
+          if (body.zoneId != null) {
+            const zone = (await client.query(`SELECT 1 FROM evimed_frontier.evidence_zones z WHERE z.id=$1 AND ${evidencePublicPredicate("zones")}`, [body.zoneId])).rowCount;
+            if (!zone) { counters.refusedInvalid++; throw invalid("zoneId names a published zone that is open to the internet."); }
+          }
+          const existing = (await client.query("SELECT id FROM evimed_frontier.evidence_topic_requests WHERE title_key=$1", [key])).rows[0];
+          let requestId = existing?.id;
+          if (!requestId && snapshotCount !== null) {
+            const currentCount = Number((await client.query("SELECT count(*)::integer AS n FROM evimed_frontier.evidence_topic_requests")).rows[0].n);
+            if (currentCount !== snapshotCount) return retry;
+          }
+          if (!requestId && same && (await client.query("SELECT 1 FROM evimed_frontier.evidence_topic_requests WHERE id=$1 AND title=$2", [same.id, same.title])).rowCount) requestId = same.id;
+          let created = !requestId;
+          if (!requestId) {
+            requestId = `tr_${randomUUID().replaceAll("-", "")}`;
+            const inserted = await client.query(
+              "INSERT INTO evimed_frontier.evidence_topic_requests(id,title,title_key,zone_id) VALUES($1,$2,$3,$4) ON CONFLICT(title_key) DO NOTHING RETURNING id", [requestId, title, key, body.zoneId ?? null]);
+            if (!inserted.rowCount) { requestId = (await client.query("SELECT id FROM evimed_frontier.evidence_topic_requests WHERE title_key=$1", [key])).rows[0].id; created = false; }
+          }
+          const outcome = await vote(client, user.id, requestId, created);
+          for (const candidate of related) {
+            if (candidate.id === requestId) continue;
+            // Recheck model-visible identity before persisting a link.
+            if (!(await client.query("SELECT 1 FROM evimed_frontier.evidence_topic_requests WHERE id=$1 AND title=$2", [candidate.id, candidate.title])).rowCount) continue;
+            const [left, right] = [String(requestId), String(candidate.id)].sort();
+            await client.query("INSERT INTO evimed_frontier.evidence_topic_request_links(left_id,right_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [left, right]);
+          }
+          return { request: await viewOf(client, requestId), filed: created, ...outcome };
+        });
+        if (result !== retry) return result;
+        // Re-evaluate changed candidates outside locks, within the same total
+        // deadline. Exhaustion keeps the original exact-title fallback.
+      }
     },
 
     /**

@@ -6,6 +6,16 @@
 请求体: {"query": "检索词"}
 接口会自动拆分 PICO 并返回文献列表。
 """
+
+try:
+    from evimed_judge import ask as judge_ask, ask_async as judge_ask_async
+except ImportError:
+    def judge_ask(*args, **kwargs):
+        return None
+
+    async def judge_ask_async(*args, **kwargs):
+        return None
+
 import asyncio
 import logging
 import re
@@ -91,6 +101,14 @@ def _normalize_study_design(
     if raw in _STANDARD_DESIGNS:
         return raw
 
+    key = raw.strip().lower()
+    authoritative = _PUBTYPE_TO_DESIGN.get(key)
+    if authoritative:
+        return authoritative
+    judgment = judge_ask("J19", {"title": title, "abstract": abstract, "publicationTypes": [raw]})
+    labels = {"RCT": "RCT", "meta-analysis": "Meta-analysis", "review": "Review", "case-report": "Case Report"}
+    if isinstance(judgment, dict) and isinstance(judgment.get("studyType"), str) and judgment.get("studyType") in labels:
+        return labels[judgment["studyType"]]
     key = raw.strip().lower()
 
     # 精确匹配

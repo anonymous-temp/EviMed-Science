@@ -739,15 +739,15 @@ test("the router limits an address per minute: a page gets 429 with Retry-After 
   assert.deepEqual(evidencePublicMetricFamilies(null), []);
 });
 
-test("the migration is idempotent on a database that already holds earlier evidence data, and creates the three tables", options, async () => {
+test("the migration is idempotent on a database that already holds earlier evidence data, and creates the public request tables", options, async () => {
   const zone = await userZone(alice, { title: "Alice's zone" });
   await userCard(alice, zone, cardInput("Card"));
-  await db.query("DROP TABLE evimed_frontier.evidence_topic_request_votes; DROP TABLE evimed_frontier.evidence_topic_requests; DROP TABLE evimed_frontier.evidence_page_reads;");
+  await db.query("DROP TABLE evimed_frontier.evidence_topic_request_links; DROP TABLE evimed_frontier.evidence_topic_request_votes; DROP TABLE evimed_frontier.evidence_topic_requests; DROP TABLE evimed_frontier.evidence_page_reads;");
   await db.query(EVIDENCE_ZONE_SQL);
   await db.query(EVIDENCE_ZONE_SQL);
   await migrateEvidenceZones(db);
   const tables = (await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema='evimed_frontier' AND table_name LIKE 'evidence_%' ORDER BY table_name")).rows.map((row) => row.table_name);
-  for (const table of ["evidence_page_reads", "evidence_topic_requests", "evidence_topic_request_votes"]) assert.ok(tables.includes(table), table);
+  for (const table of ["evidence_page_reads", "evidence_topic_requests", "evidence_topic_request_votes", "evidence_topic_request_links"]) assert.ok(tables.includes(table), table);
   assert.equal(Number((await db.query("SELECT count(*) AS n FROM evimed_frontier.evidence_cards")).rows[0].n), 1, "the earlier data is untouched");
   // The topic-request key is the folded title, so two spellings of one title cannot both be rows.
   await db.query("INSERT INTO evimed_frontier.evidence_topic_requests(id,title,title_key) VALUES('tr_a','One title','one title')");

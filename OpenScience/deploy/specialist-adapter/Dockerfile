@@ -79,6 +79,7 @@ RUN set -eux; \
     rm -rf /tmp/adapter-requirements.txt /tmp/agent-requirements
 
 COPY ${AGENT_DIR} /agent
+COPY 项目代码/evimed_judge.py /agent/evimed_judge.py
 
 # The agent's own installer is the single source of truth for the R environment,
 # and it verifies every package loads and that the TwoSampleMR pin survived

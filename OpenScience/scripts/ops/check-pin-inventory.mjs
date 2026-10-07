@@ -63,6 +63,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/evals\/judge-sites\/release-readiness\.json$/,
+    why: "the runtime proof records the exact kernel used for isolated acceptance; upgrading must not re-date that measurement",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/evals\/method-quality\/(reports|results)\//,
     why: "an evaluation report records the kernel a measurement was taken on; re-dating it claims the number came from a version that never produced it",
   },

@@ -1,0 +1,1626 @@
+{
+  "schemaVersion": 1,
+  "site": "J3",
+  "cases": [
+    {
+      "id": "routing-1",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "分析奥希替尼的 FAERS 药物警戒信号"
+      },
+      "expected": {
+        "agentId": "adr-analysis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-2",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析"
+      },
+      "expected": {
+        "agentId": "bibliometric-analysis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-3",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "综合评价达格列净治疗慢性肾病的临床价值"
+      },
+      "expected": {
+        "agentId": "comprehensive-drug-evaluation"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-4",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "为院内目录做候选药品遴选评分"
+      },
+      "expected": {
+        "agentId": "drug-selection"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-5",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "用孟德尔随机化分析 BMI 对冠心病的因果作用"
+      },
+      "expected": {
+        "agentId": "mendelian-randomization"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-6",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "开展降压药对卒中结局的 meta 分析"
+      },
+      "expected": {
+        "agentId": "meta-analysis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-7",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "评估某药超说明书用于儿童感染的证据"
+      },
+      "expected": {
+        "agentId": "off-label-analysis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-8",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请对我上传的临床试验论文做同行评审"
+      },
+      "expected": {
+        "agentId": "peer-review"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-9",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "为 ICU 抗菌药精准给药设计科研选题"
+      },
+      "expected": {
+        "agentId": "research-topic-selection"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-10",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "我手上这份住院数据集能支撑哪些研究课题"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-11",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "胸口突然发闷发紧，是心绞痛还是胃病？请结合速效救心丸生成一份证据报告"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-12",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价。交付：一篇面向临床医师与药师的中文学术论文。"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-13",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "胸口突然发闷发紧，请就速效救心丸的证据写一篇学术论文"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-14",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "速效救心丸的证据评价，输出一份论文"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-15",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "这篇论文说速效救心丸能长期服用，是真的吗？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-16",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "速效救心丸长期吃安全吗"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-17",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "学术论文一般怎么组织结构？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-18",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请评估速效救心丸的临床证据并出一份报告"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-19",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "Suxiao Jiuxin Wan evidence report"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-20",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "冠心病二级预防的循证用药报告"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-21",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请把阿立哌唑血药浓度的证据整理好，并给我写出所有的分析结果和报告"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-22",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请输出一份阿立哌唑血药浓度的分析报告"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-23",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我形成关于抗精神病药 TDM 的综述"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-24",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "完成一份回顾性研究的可行性报告"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-25",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请你基于上传的数据集，来分析能做哪些科学性研究……并给我写出所有的分析结果和报告"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-26",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "我手上有一份住院数据，能做什么研究？"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-27",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "这份数据集能支撑哪些课题"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-28",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "评估我上传的数据集的研究可行性"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-29",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "profile my uploaded dataset and tell me what research it can support"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-30",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "这份住院 TDM 数据集能不能支撑一个个体化用药的预测模型？"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-31",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "用我上传的数据集建一个剂量预测模型可行吗"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-32",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "assess the feasibility of a dose prediction model on my uploaded dataset"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-33",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "基于我上传的这份住院数据集做一次完整的科研选题分析，判断它能支撑哪些课题"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-34",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "对我的数据集做 meta 分析"
+      },
+      "expected": {
+        "agentId": "meta-analysis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-35",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "速效救心丸疗效证据分析"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-36",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "分析急性胸痛的鉴别诊断思路"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-37",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "二甲双胍的临床疗效研究进展如何"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-38",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我把这一句话润色得更自然"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-39",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "速效救心丸一次吃几粒"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-40",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "二甲双胍的安全性怎么样？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-41",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请出具一份阿托伐他汀横纹肌溶解的药物安全性信号分析报告，基于 openFDA 计算 ROR 与 PRR"
+      },
+      "expected": {
+        "agentId": "adr-analysis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-42",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我做不良事件信号监测"
+      },
+      "expected": {
+        "agentId": "adr-analysis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-43",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "run a disproportionality analysis on this drug"
+      },
+      "expected": {
+        "agentId": "adr-analysis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-44",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "上传的 20260803TDM.xlsx 是住院治疗药物监测数据抽取，请出一份分析报告，每个题目配一个小综述和研究方案"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-45",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "针对我上传的数据集做选题分析，并给出证据综述与文献检索范围"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-46",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "profile the uploaded hospital dataset and give each topic a mini-review of the evidence"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-47",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "胸口发闷，请结合速效救心丸生成一份临床证据报告"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-48",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "事件的昼夜分布优先采用大样本前瞻队列、注册登记及其 meta 分析，并说明混杂控制方式"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "discussing"
+    },
+    {
+      "id": "routing-49",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "现有网络 meta 分析或其他间接比较在传递性、一致性上表现如何"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "discussing"
+    },
+    {
+      "id": "routing-50",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "有无毒理学研究、不良反应监测记录或可定位的病例报告作为支撑"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "discussing"
+    },
+    {
+      "id": "routing-51",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "国内外指南索引（含胸痛评估、医疗机构用药与超说明书用药相关规范文件）及临床试验注册库"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "discussing"
+    },
+    {
+      "id": "routing-52",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "中文全文数据库（CNKI、万方等）无法访问，中文文献仅能通过国际数据库的收录部分获得"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "discussing"
+    },
+    {
+      "id": "routing-53",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "证据不足时结论须相应降级表述：现有资料只能\"提示\"某种关联"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "discussing"
+    },
+    {
+      "id": "routing-54",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "我上传了一份住院数据，能做哪些科学性研究？"
+      },
+      "expected": {
+        "agentId": "dataset-research-scoping"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-55",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我做一篇论文审稿"
+      },
+      "expected": {
+        "agentId": "peer-review"
+      },
+      "tag": "regression"
+    },
+    {
+      "id": "routing-56",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "二甲双胍治疗2型糖尿病的主要作用机制是什么？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-57",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "质子泵抑制剂（如奥美拉唑）是如何发挥抑酸作用的？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-58",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "循证医学中的GRADE分级是什么？它如何评价证据质量？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-59",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "普通肝素和低分子肝素有什么区别？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-60",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "奥希替尼（osimertinib）的作用靶点是什么？主要用于哪类患者？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-61",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "布地奈德吸入剂治疗哮喘的作用机制是什么？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-62",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "什么是药物半衰期？它对临床用药有什么意义？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-63",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "SSRI类抗抑郁药（如舍曲林）的起效机制和起效时间特点是什么？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-64",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "ACEI类药物（如贝那普利）为什么可能引起血肌酐升高？何时需要警惕？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-65",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "What is the mechanism of action of SGLT2 inhibitors, and why do they increase the risk of genital mycotic infections?"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:direct"
+    },
+    {
+      "id": "routing-66",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "2型糖尿病患者合并动脉粥样硬化性心血管疾病时，SGLT2抑制剂和DPP-4抑制剂应如何选择？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-67",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "长期服用质子泵抑制剂有哪些已证实和仅属关联的安全性问题？临床应如何权衡？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-68",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "PD-1抑制剂单药对比含铂化疗一线治疗PD-L1高表达晚期非小细胞肺癌，疗效如何？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-69",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "非瓣膜性房颤患者抗凝应选NOAC还是华法林？各自的适用场景是什么？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-70",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "二甲双胍引起乳酸酸中毒的风险到底有多大？肾功能不全患者能否使用？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-71",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "速效救心丸可以长期服用吗？冠心病患者日常应如何正确使用？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-72",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "donanemab在中国开展的III期临床试验目前登记的设计、主要终点和样本量是什么？有没有已公布的中国人群结果？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-73",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "降糖新药「格列美净」的III期临床试验结果怎么样？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-74",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "碳青霉烯耐药肺炎克雷伯菌（CRKP）感染目前有哪些有证据支持的治疗选择？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-75",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "确诊类风湿关节炎后，应先用甲氨蝶呤还是直接使用生物制剂？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-76",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "SGLT2抑制剂用于慢性肾脏病患者能延缓肾功能恶化吗？证据强度如何？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-77",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "慢阻肺（COPD）频繁急性加重患者，三联吸入治疗相比双联治疗是否更值得用？"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "open-domain:synthesis"
+    },
+    {
+      "id": "routing-78",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请帮我生成一份关于SGLT2抑制剂治疗心力衰竭的系统综述与Meta分析报告，要求包含文献检索策略、纳入研究和森林图结果解读。"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "open-domain:report"
+    },
+    {
+      "id": "routing-79",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请出具一份布洛芬胃肠道安全性的循证评价报告。"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "open-domain:report"
+    },
+    {
+      "id": "routing-80",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "写一份GLP-1受体激动剂用于肥胖症减重的循证综合评价报告，包括疗效、安全性和指南推荐意见。"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "open-domain:report"
+    },
+    {
+      "id": "routing-81",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请生成一份肿瘤免疫检查点抑制剂近五年研究进展与文献计量分析报告。"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "open-domain:report"
+    },
+    {
+      "id": "routing-82",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "帮我写一份ICU重症患者抗菌药物精准用药的研究进展报告。"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "open-domain:report"
+    },
+    {
+      "id": "routing-83",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请生成一份他汀类药物用于心血管疾病一级预防的Meta分析报告，重点讨论获益与风险的权衡。"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "open-domain:report"
+    },
+    {
+      "id": "routing-84",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "写一份二甲双胍抗肿瘤潜力的循证评估报告，说明目前证据到了什么程度。"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "open-domain:report"
+    },
+    {
+      "id": "routing-85",
+      "source": "2026-09-21-routing-regressions",
+      "labelBasis": "curated",
+      "input": {
+        "question": "请出具一份利妥昔单抗超说明书用药（如免疫性血小板减少症、肾病综合征）的循证评价报告。"
+      },
+      "expected": {
+        "agentId": "clinical-evidence-synthesis"
+      },
+      "tag": "open-domain:report"
+    },
+    {
+      "id": "paper-001",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Empagliflozin in Patients with Chronic Kidney Disease.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-002",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Five-Year Survival Outcomes From the PACIFIC Trial: Durvalumab After Chemoradiotherapy in Stage III Non-Small-Cell Lung Cancer.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-003",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Long-Term Outcomes With Nivolumab Plus Ipilimumab or Nivolumab Alone Versus Ipilimumab in Patients With Advanced Melanoma.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-004",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Five-Year Outcomes With Pembrolizumab Versus Chemotherapy for Metastatic Non-Small-Cell Lung Cancer With PD-L1 Tumor Proportion Score ≥ 50.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-005",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Cardiovascular and kidney outcomes with finerenone in patients with type 2 diabetes and chronic kidney disease: the FIDELITY pooled analysis.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-006",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Global burden of bacterial antimicrobial resistance in 2019: a systematic analysis.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-007",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Global, regional, and national burden of 12 mental disorders in 204 countries and territories, 1990-2019: a systematic analysis for the Global Burden of Disease Study 2019.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-008",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Global prevalence and burden of depressive and anxiety disorders in 204 countries and territories in 2020 due to the COVID-19 pandemic.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-009",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Age at onset of mental disorders worldwide: large-scale meta-analysis of 192 epidemiological studies.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-010",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《The global epidemiology of nonalcoholic fatty liver disease (NAFLD) and nonalcoholic steatohepatitis (NASH): a systematic review.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-011",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《High-coverage whole-genome sequencing of the expanded 1000 Genomes Project cohort including 602 trios.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-012",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Clinical features and management of human monkeypox: a retrospective observational study in the UK.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-013",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Associations of healthy lifestyle and socioeconomic status with mortality and incident cardiovascular disease: two prospective cohort studies.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-014",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《An introduction to inverse probability of treatment weighting in observational research.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-015",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Clinical presentation and virological assessment of confirmed human monkeypox virus cases in Spain: a prospective observational cohort study.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-016",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Diagnostic accuracy of non-invasive tests for advanced fibrosis in patients with NAFLD: an individual patient data meta-analysis.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-017",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Receiver operating characteristic curve analysis in diagnostic accuracy studies: A guide to interpreting the area under the curve value.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-018",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Developing a prediction model to estimate the true burden of respiratory syncytial virus (RSV) in hospitalised children in Western Australia.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-019",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Risk prediction of covid-19 related death and hospital admission in adults after covid-19 vaccination: national prospective cohort study.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-020",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Movie-watching outperforms rest for functional connectivity-based prediction of behavior.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-021",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-022",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《New challenges in human monkeypox outside Africa: A review and case report from Italy.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-023",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression-Case Report.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-024",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Case report: Transplantation of human induced pluripotent stem cell-derived cardiomyocyte patches for ischemic cardiomyopathy.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-025",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Case Report: VEXAS Syndrome: From Mild Symptoms to Life-Threatening Macrophage Activation Syndrome.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-026",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Estimation of the global prevalence of dementia in 2019 and forecasted prevalence in 2050: an analysis for the Global Burden of Disease Study 2019.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-027",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Global incidence, prevalence, years lived with disability (YLDs), disability-adjusted life-years (DALYs), and healthy life expectancy (HALE) for 371 diseases and injuries in 204 countries and territories and 811 subnational locations, 1990-2021: a systematic analysis for the Global Burden of Disease Study 2021.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-028",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Global, regional, and national burden of diabetes from 1990 to 2021, with projections of prevalence to 2050: a systematic analysis for the Global Burden of Disease Study 2021.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-029",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Worldwide trends in hypertension prevalence and progress in treatment and control from 1990 to 2019: a pooled analysis of 1201 population-representative studies with 104 million participants.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-030",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Cancer statistics, 2025.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-031",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《The REporting of A Disproportionality Analysis for DrUg Safety Signal Detection Using Individual Case Safety Reports in PharmacoVigilance (READUS-PV): Explanation and Elaboration.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-032",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Real-World Evidence: A Primer.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-033",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Psychiatric disorders associated with immune checkpoint inhibitors: a pharmacovigilance analysis of the FDA Adverse Event Reporting System (FAERS) database.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-034",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-035",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《The effect of methotrexate and targeted immunosuppression on humoral and cellular immune responses to the COVID-19 vaccine BNT162b2: a cohort study.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-036",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Integrated analysis of multimodal single-cell data.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-037",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Inference and analysis of cell-cell communication using CellChat.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-038",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《The STRING database in 2023: protein-protein association networks and functional enrichment analyses for any sequenced genome of interest.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-039",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Large-scale cis- and trans-eQTL analyses identify thousands of genetic loci and polygenic scores that regulate blood gene expression.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-040",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《A single-cell type transcriptomics map of human tissues.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-041",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Text Data Augmentation for Deep Learning.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-042",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《CARD 2023: expanded curation, support for machine learning, and resistome prediction at the Comprehensive Antibiotic Resistance Database.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-043",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Robust deep learning-based protein sequence design using ProteinMPNN.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-044",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《DeepEMhancer: a deep learning solution for cryo-EM volume post-processing.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-045",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Review of deep learning: concepts, CNN architectures, challenges, applications, future directions.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-046",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《clusterProfiler 4.0: A universal enrichment tool for interpreting omics data.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-047",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《Interactive Tree Of Life (iTOL) v5: an online tool for phylogenetic tree display and annotation.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-048",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《YaHS: yet another Hi-C scaffolding tool.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-049",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《The updated Consolidated Framework for Implementation Research based on user feedback.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    },
+    {
+      "id": "paper-050",
+      "source": "title-to-paper/corpus-v3",
+      "labelBasis": "owner-specified-routing",
+      "input": {
+        "question": "请以已发表论文题目《MitoHiFi: a python pipeline for mitochondrial genome assembly from PacBio high fidelity reads.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。"
+      },
+      "expected": {
+        "agentId": "none"
+      },
+      "tag": "title-to-paper"
+    }
+  ]
+}

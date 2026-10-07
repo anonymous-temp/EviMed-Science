@@ -203,6 +203,12 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_topic_request_votes (
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(), PRIMARY KEY(request_id,user_id)
 );
 CREATE INDEX IF NOT EXISTS evidence_topic_request_votes_user_idx ON evimed_frontier.evidence_topic_request_votes(user_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_topic_request_links (
+ left_id text NOT NULL REFERENCES evimed_frontier.evidence_topic_requests(id) ON DELETE CASCADE,
+ right_id text NOT NULL REFERENCES evimed_frontier.evidence_topic_requests(id) ON DELETE CASCADE,
+ relation text NOT NULL DEFAULT 'related' CHECK(relation='related'),
+ PRIMARY KEY(left_id,right_id), CHECK(left_id<right_id)
+);
 -- A source with no public address keeps none of its text (2026-10-06 review): a researcher's own uploaded document could reach a card as a
 -- source's retained text, and a card is readable by others. The writers no longer store it (EvidenceZoneService); this takes it off the
 -- rows an earlier release wrote, cards and the revision snapshots that copy them, and says the source is no longer full text. Idempotent:

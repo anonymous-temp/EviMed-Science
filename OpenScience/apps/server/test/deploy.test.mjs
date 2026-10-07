@@ -673,8 +673,8 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(webService, /cap_drop:\s*\n\s+- ALL/);
   assert.match(webService, /read_only:\s+true/);
   assert.match(webService, /\/tmp:rw,nosuid,nodev,noexec,size=\$\{OPEN_SCIENCE_WEB_TMPFS_SIZE:-128m\}/);
-  assert.match(metaService, /context:\s+\.\.\/\.\.\/\.\.\/项目代码\/meta/);
-  assert.match(metaService, /dockerfile:\s+Dockerfile\.evimed/);
+  assert.match(metaService, /context:\s+\.\.\/\.\.\/\.\.\s*$/m);
+  assert.match(metaService, /dockerfile:\s+项目代码\/meta\/Dockerfile\.evimed/);
   assert.match(metaService, /EVIMED_WORKLOAD_SIGNING_SECRET_FILE:\s+\/run\/secrets\/evimed-workload-signing-key/);
   assert.match(metaService, /LLM_API_KEY_FILE:\s+\/run\/secrets\/deepseek-api-key/);
   assert.match(metaService, /LLM_MODEL:\s+deepseek-flash/);

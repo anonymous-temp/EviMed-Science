@@ -1,3 +1,4 @@
+import {jevTransport} from './jevTransport.mjs';
 /**
  * TypeSafe's Jev, called by the control plane: typed questions over a text
  * state, answered with probabilities, metered.
@@ -156,11 +157,11 @@ async function boundedText(response) {
  * @param {{
  *   userId: string, projectId: string, runId?: string | null, purpose?: string,
  *   state: unknown, questions: Record<string, unknown>,
- *   timeoutMs?: number, signal?: AbortSignal, at?: Date,
+ *   timeoutMs?: number, signal?: AbortSignal, at?: Date, limits?: any, operation?: string, taskId?: string, module?: string,
  * }} call
  * @returns {Promise<{ answers: Record<string, any>, model: string, usage: { inputTokens: number, outputTokens: number }, cost: number, priced: boolean, ms: number, attempts: number }>}
  */
-export async function callJev({ config, usageLedger = null, fetchImpl = fetch, retryDelayMs = JEV_RETRY_DELAY_MS }, call) {
+export async function callJev({ config, usageLedger = null, fetchImpl = jevTransport.fetch, retryDelayMs = JEV_RETRY_DELAY_MS }, call) {
   const apiKey = String(config.typesafeApiKey ?? "");
   if (!apiKey) throw new JevError("jev_unconfigured", "No TypeSafe key is configured.");
   const model = String(config.reviewJevModel ?? "");
@@ -177,6 +178,7 @@ export async function callJev({ config, usageLedger = null, fetchImpl = fetch, r
   } catch (error) {
     if (!(error instanceof JevError) || !error.retryable || call.signal?.aborted) throw error;
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(retryDelayMs) || 0)));
+    if (call.signal?.aborted) throw new JevError("jev_cancelled", "The Jev request was cancelled.");
     return { ...(await once()), attempts: 2 };
   }
 }
@@ -208,12 +210,15 @@ async function askOnce({ config, usageLedger, fetchImpl }, call) {
     reservation = await usageLedger.reserveModel({
       id: randomUUID(), userId: call.userId, projectId: call.projectId, model: call.model,
       runId: call.runId ?? null, purpose: call.purpose ?? "review",
+      operation: call.operation, taskId: call.taskId, module: call.module,
       priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency || "CNY",
       requestFingerprint: createHash("sha256").update(payload).digest("hex"),
       estimatedCost: estimate.cost,
-      dailyLimit: Number(config.userDailySpendLimit) || 0,
-      weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
-      runLimit: 0,
+      dailyLimit: Number(call.limits?.daily ?? config.userDailySpendLimit) || 0,
+      weeklyLimit: Number(call.limits?.weekly ?? config.userWeeklySpendLimit) || 0,
+      runLimit: Number(call.limits?.run) || 0,
+      moduleLimit: call.purpose === "learning" ? Number(config.learningDailyLimitCny??10) : Number(call.limits?.moduleDaily??0),
+      budgetPurpose: call.purpose,
       now: at,
     });
     uncertainCost = estimate.cost;
@@ -223,6 +228,7 @@ async function askOnce({ config, usageLedger, fetchImpl }, call) {
   const deadline = setTimeout(() => controller.abort(new JevError("jev_timeout", `Jev did not answer within ${Math.round(timeoutMs / 1000)} s.`)), timeoutMs);
   const onOuterAbort = () => controller.abort(call.signal?.reason ?? new JevError("jev_cancelled", "The Jev request was cancelled."));
   call.signal?.addEventListener?.("abort", onOuterAbort, { once: true });
+  if (call.signal?.aborted) onOuterAbort();
   const started = Date.now();
   // Sent unless the network says it never left (NEVER_SENT): a deadline that
   // fires while the answer is awaited has a request on the wire.
@@ -232,6 +238,7 @@ async function askOnce({ config, usageLedger, fetchImpl }, call) {
     let response;
     let text;
     try {
+      if(controller.signal.aborted){dispatched=false;throw new JevError("jev_cancelled","The Jev request was cancelled.");}
       response = await fetchImpl(`${call.apiBase}/systemone`, {
         method: "POST",
         headers: { accept: "application/json", authorization: `Bearer ${call.apiKey}`, "content-type": "application/json" },

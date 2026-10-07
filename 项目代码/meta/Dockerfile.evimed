@@ -35,10 +35,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # this image's Python (OpenScience/scripts/ops/compile-engine-locks.sh); it is
 # installed first, so `pip install .` finds each one satisfied and adds only
 # the package itself.
-COPY requirements.txt requirements.loc[k] pyproject.toml README.md ./
-COPY new_meta ./new_meta
-COPY validation ./validation
-COPY docs/benchmarks ./docs/benchmarks
+COPY 项目代码/meta/requirements.txt 项目代码/meta/requirements.loc[k] 项目代码/meta/pyproject.toml 项目代码/meta/README.md ./
+COPY 项目代码/meta/new_meta ./new_meta
+COPY 项目代码/evimed_judge.py /app/evimed_judge.py
+COPY 项目代码/meta/validation ./validation
+COPY 项目代码/meta/docs/benchmarks ./docs/benchmarks
 RUN set -eux; \
     if [ -f requirements.lock ]; then pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r requirements.lock; fi; \
     pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir .

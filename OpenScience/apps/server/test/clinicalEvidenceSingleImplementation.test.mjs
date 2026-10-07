@@ -202,24 +202,9 @@ test("whatever the server gate rejects, the preflight already caught", async () 
       },
     },
     {
-      label: "the runtime's own nouns for artifacts, access levels and its environment",
+      label: "an internal preserved-source path",
       break: (input) => {
-        input.reportText = input.reportText.replace(
-          "## 讨论\n",
-          "## 讨论\n该来源的访问层级为摘要，全文未能经本环境取得，相关工件已保存。\n",
-        );
-      },
-    },
-    {
-      // The other half of the runtime's Chinese vocabulary: one retrieval pass
-      // and the container it ran in. A methods section describes a search, not
-      // the pass that performed it.
-      label: "the runtime's nouns for one retrieval pass and its search environment",
-      break: (input) => {
-        input.reportText = input.reportText.replace(
-          "## 讨论\n",
-          "## 讨论\n本轮检索未覆盖中文数据库，检索环境仅可访问公开摘要。\n",
-        );
+        input.reportText = input.reportText.replace("## 讨论\n", "## 讨论\n来源为 .evimed-sources/paper.txt。\n");
       },
     },
     {

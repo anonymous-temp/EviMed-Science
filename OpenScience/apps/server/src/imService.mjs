@@ -311,14 +311,14 @@ function boundAccountLine(config, user) {
 export class ImService {
   /**
    * @param {{ config: Record<string, any>, database: any, credentials: any, notifications: any,
-   *   users: any, agentRuns: any, runtimeManager: any, usageLedger?: any,
+   *   users: any, agentRuns: any, runtimeManager: any, usageLedger?: any, judgeService?: any,
    *   dispatchRun: (input: { user: any, project: any, sessionId: string, dispatchId: string, text: string }) => Promise<any>,
    *   steerRun: (input: { user: any, project: any, runId: string, text: string }) => Promise<any>,
    *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<void>,
    *   loadSdk?: () => Promise<any>, fetchImpl?: typeof fetch, classifier?: any, store?: ChannelStore,
    *   now?: () => number, write?: (line: string) => void, pushProvider?: any, frontierDeliveryPolicy?: ((item:any) => Promise<boolean>) | null }} dependencies
    */
-  constructor({ config, database, credentials, notifications, users, agentRuns, runtimeManager, usageLedger = null,
+  constructor({ config, database, credentials, notifications, users, agentRuns, runtimeManager, usageLedger = null, judgeService = null,
     dispatchRun, steerRun, audit = async () => {}, loadSdk = loadFeishuSdk, fetchImpl = globalThis.fetch,
     classifier = null, store = null, now = Date.now, write = (line) => { process.stderr.write(line); }, pushProvider = null, frontierDeliveryPolicy = null }) {
     this.config = config;
@@ -337,7 +337,7 @@ export class ImService {
     this.write = write;
     this.workerId = `im-${randomUUID()}`;
     this.scrubber = new SecretScrubber();
-    this.classifier = classifier ?? new ChannelIntentClassifier(config, { usageLedger, fetchImpl });
+    this.classifier = classifier ?? new ChannelIntentClassifier(config, { usageLedger, judgeService, fetchImpl });
     this.feishu = createFeishuChannel({
       loadSdk, store: this.store, credentials, scrubber: this.scrubber, now,
       inbound: { accept: (input) => this.acceptInbound({ ...input, channel: "feishu" }) },
@@ -1386,19 +1386,19 @@ export class ImService {
  * the inbox is not touched.
  *
  * @param {{ config: Record<string, any>, database: any, credentials: any, notifications: any, users: any, agentRuns: any,
- *   runtimeManager: any, usageLedger?: any, maxJsonBytes: number,
+ *   runtimeManager: any, usageLedger?: any, judgeService?: any, maxJsonBytes: number,
  *   dispatchRun: (input: any) => Promise<any>, steerRun: (input: any) => Promise<any>,
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<void>,
  *   loadSdk?: () => Promise<any>, fetchImpl?: typeof fetch, frontierDeliveryPolicy?: ((item:any) => Promise<boolean>) | null }} dependencies
  */
 export function createImModule({ config, database, credentials, notifications, users, agentRuns, runtimeManager,
-  usageLedger = null, maxJsonBytes, dispatchRun, steerRun, audit = async () => {}, loadSdk, fetchImpl, frontierDeliveryPolicy = null }) {
+  usageLedger = null, judgeService = null, maxJsonBytes, dispatchRun, steerRun, audit = async () => {}, loadSdk, fetchImpl, frontierDeliveryPolicy = null }) {
   const deviceTokens = database ? new DeviceTokenStore(database) : null;
   const authenticateDevice = createDeviceAuthentication({
     config, tokens: deviceTokens, userById: (id) => users.userById(id),
   });
   const service = database && credentials
-    ? new ImService({ config, database, credentials, notifications, users, agentRuns, runtimeManager, usageLedger,
+    ? new ImService({ config, database, credentials, notifications, users, agentRuns, runtimeManager, usageLedger, judgeService,
       dispatchRun, steerRun, audit, loadSdk, fetchImpl, frontierDeliveryPolicy })
     : null;
   // The inbox learns about channels only when the module is on: off, it

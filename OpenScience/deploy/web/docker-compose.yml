@@ -711,7 +711,10 @@ services:
       # config.mjs's defaults. The controller gets none of it — no runtime
       # ever talks to Jev.
       OPEN_SCIENCE_REVIEW_JEV_ENABLED:
-      OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS:
+      OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS: ${OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS:-15000}
+      OPEN_SCIENCE_JEV_DISABLED_SITES: ${OPEN_SCIENCE_JEV_DISABLED_SITES:-}
+      OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS: ${OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS:-3000}
+      OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY: ${OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY:-4}
       OPEN_SCIENCE_TYPESAFE_API_KEY_FILE: /run/secrets/typesafe-api-key
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: ${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN:-}
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE: ${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE:-}
@@ -1227,8 +1230,8 @@ services:
   evimed-meta-agent:
     image: ${EVIMED_META_AGENT_IMAGE:-evimed-meta-agent:0.9.0}
     build:
-      context: ../../../项目代码/meta
-      dockerfile: Dockerfile.evimed
+      context: ../../..
+      dockerfile: 项目代码/meta/Dockerfile.evimed
       args:
         APP_VERSION: ${EVIMED_META_AGENT_VERSION:-0.9.0}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}

@@ -1,0 +1,3445 @@
+{
+  "schemaVersion": 1,
+  "site": "J6",
+  "provenance": {
+    "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+    "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+    "containsUserData": false
+  },
+  "coverage": {
+    "cases": 100,
+    "items": 100,
+    "releaseEligible": 11,
+    "incumbentOnly": 89,
+    "gaps": [
+      "Snapshot memberships provide positive incumbent labels, not independently reviewed semantic negatives.",
+      "Identifier controls are deterministic and do not establish difficult semantic accuracy.",
+      "No live Jev results have been collected."
+    ]
+  },
+  "cases": [
+    {
+      "id": "incident-ema-opinions-two-medicines-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "ema-opinions-two-medicines"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "EMA对Sogroya给出正面意见",
+          "summary": "",
+          "publishedAt": "2026-09-18T10:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "EMA对Anzupgo给出正面意见",
+          "summary": "",
+          "publishedAt": "2026-09-18T10:05:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "rationale": "Sogroya and Anzupgo: two products' CHMP opinions (F1)"
+    },
+    {
+      "id": "incident-ema-opinions-cosentyx-pradaxa-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "ema-opinions-cosentyx-pradaxa"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "EMA对Pradaxa给出正面意见",
+          "summary": "",
+          "publishedAt": "2026-09-18T10:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "EMA对Cosentyx给出正面意见",
+          "summary": "",
+          "publishedAt": "2026-09-18T10:05:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "rationale": "F1"
+    },
+    {
+      "id": "incident-ema-epar-two-biosimilars-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "ema-epar-two-biosimilars"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "Steqeyma（ustekinumab）欧洲公共评估报告更新至第10版",
+          "summary": "",
+          "publishedAt": "2026-09-18T14:38:08+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Wezenla（ustekinumab）欧洲公共评估报告更新至第10版",
+          "summary": "",
+          "publishedAt": "2026-09-16T14:58:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "rationale": "two ustekinumab biosimilars' routine EPAR revisions (F1)"
+    },
+    {
+      "id": "incident-chp-two-mpox-cases-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "chp-two-mpox-cases"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "香港卫生防护中心调查一例输入性猴痘病例",
+          "summary": "",
+          "publishedAt": "2026-09-20T16:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "香港卫生防护中心调查确诊猴痘病例",
+          "summary": "",
+          "publishedAt": "2026-09-18T16:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "rationale": "two cases two days apart (F1)"
+    },
+    {
+      "id": "incident-nejm-trial-and-its-editorial-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "nejm-trial-and-its-editorial"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "高危腺瘤切除后结肠镜监测：更多未必更好",
+          "summary": "",
+          "publishedAt": "2026-09-16T21:00:16+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "高危腺瘤切除后结肠镜监测间隔5年不劣于3年",
+          "summary": "这项在欧洲8国开展的非劣效性试验纳入10,799例高危腺瘤患者，随机接受息肉切除后5年或3年首次结肠镜监测。5年随访时结直肠癌累积发生率分别为0.77%和0.82%，差异-0.05个百分点，99.12%置信区间上限0.68，达到非劣效标准。",
+          "publishedAt": "2026-09-16T21:00:16+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      },
+      "rationale": "an editorial on the trial joins its event as background (F9)"
+    },
+    {
+      "id": "incident-nejm-blinatumomab-editorial-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "nejm-blinatumomab-editorial"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "Blinatumomab 成为急性淋巴细胞白血病新的标准治疗",
+          "summary": "",
+          "publishedAt": "2026-09-16T21:00:16+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "贝林妥欧单抗替代化疗改善儿童高危B细胞急淋无事件生存",
+          "summary": "768例合格患儿中709例随机分组，贝林妥欧单抗组358例、化疗组351例。中位随访2.9年时，4年无事件生存率分别为83.0%与70.3%，治疗相关感染发生率分别为23.9%与69.4%。",
+          "publishedAt": "2026-09-16T21:00:16+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      },
+      "rationale": "the same pair the vector joined, now the model's call"
+    },
+    {
+      "id": "incident-ema-sodium-oxybate-referral-and-news-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "ema-sodium-oxybate-referral-and-news"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "EMA：羟丁酸钠用于酒精依赖的获益仍大于风险",
+          "summary": "",
+          "publishedAt": "2026-09-18T10:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "EMA对含羟丁酸钠口服溶液用于酒精依赖的转介程序发布CHMP意见",
+          "summary": "",
+          "publishedAt": "2026-09-18T10:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      },
+      "rationale": "one CHMP referral outcome, its procedure page and its press release"
+    },
+    {
+      "id": "incident-cochrane-review-and-news-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "cochrane-review-and-news"
+      },
+      "labelBasis": "incident-review",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "Cochrane 综述：米非司酮紧急避孕效果优于左炔诺孕酮",
+          "summary": "该综述纳入 87 项随机对照试验、约 3.6 万名育龄女性，多数研究在中国开展。与左炔诺孕酮相比，低剂量（低于 25 mg）和中剂量（25-50 mg）米非司酮均能预防更多妊娠且总体副作用更少；与铜宫内节育器比较的证据仅来自 2 项试验，尚不足以得出结论。",
+          "publishedAt": "2026-09-21T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Cochrane 系统综述：米非司酮用于紧急避孕优于左炔诺孕酮",
+          "summary": "纳入 87 项研究、约 3.6 万名受试者，其中 79 项在中国开展。与左炔诺孕酮相比，中剂量与低剂量米非司酮均减少妊娠，但延迟月经风险升高；与 Yuzpe 方案相比妊娠减少更明显。",
+          "publishedAt": "2026-09-21T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      },
+      "rationale": "one Cochrane review, its PubMed record and its press release"
+    },
+    {
+      "id": "incident-synthetic-trial-distinct-milestones-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "synthetic-trial-distinct-milestones"
+      },
+      "labelBasis": "authored-regression-control",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "Synthetic trial A terminated",
+          "summary": "",
+          "publishedAt": "2026-09-22T00:00:00Z",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT09999999"
+          ]
+        },
+        "right": {
+          "title": "Synthetic trial A first registered",
+          "summary": "",
+          "publishedAt": "2020-01-01T00:00:00Z",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT09999999"
+          ]
+        }
+      },
+      "expectedAny": {
+        "relation": [
+          "related",
+          "different"
+        ]
+      },
+      "rationale": "Authored control, not a published clinical claim: one registry identifier does not equate registration and termination."
+    },
+    {
+      "id": "incident-synthetic-organization-different-drugs-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "synthetic-organization-different-drugs"
+      },
+      "labelBasis": "authored-regression-control",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "Company Q receives approval for Drug A",
+          "summary": "Synthetic fixture: the decision concerns Drug A for indication A.",
+          "publishedAt": "2026-09-22T00:00:00Z",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Company Q ends the Drug B program",
+          "summary": "Synthetic fixture: Drug B is a different molecule studied for indication B.",
+          "publishedAt": "2026-09-22T00:00:00Z",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expectedAny": {
+        "relation": [
+          "different",
+          "related"
+        ]
+      },
+      "rationale": "Authored control: cross-publisher stories sharing a company concern different drugs and decisions."
+    },
+    {
+      "id": "incident-synthetic-exact-paper-press-coverage-1",
+      "source": {
+        "corpus": "frontier-editing/cases.json",
+        "id": "synthetic-exact-paper-press-coverage"
+      },
+      "labelBasis": "authored-regression-control",
+      "releaseEligible": true,
+      "input": {
+        "left": {
+          "title": "Trial A paper reports its primary endpoint",
+          "summary": "Synthetic fixture: coverage of the exact paper 10.1000/synthetic-trial-a, published today, with no new trial milestone.",
+          "publishedAt": "2026-09-22T00:00:00Z",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT08888888"
+          ]
+        },
+        "right": {
+          "title": "Primary endpoint results from Trial A",
+          "summary": "",
+          "publishedAt": "2026-09-22T00:00:00Z",
+          "doi": "10.1000/synthetic-trial-a",
+          "pmid": null,
+          "registryIds": [
+            "NCT08888888"
+          ]
+        }
+      },
+      "expected": {
+        "relation": "same"
+      },
+      "rationale": "Authored positive control: the press coverage explicitly describes the identical paper and readout."
+    },
+    {
+      "id": "link-5-4",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "5:4",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Sodium Chloride Flush Recall: Spectra Medical Removes Sodium Chloride Injection USP Ampules",
+          "summary": "美国食品药品监督管理局将此次召回列为最严重级别，涉事产品为 Huons Co., Ltd. 生产的 0.9% 氯化钠注射液 USP 10mL 安瓿，因生产设施检查发现质量问题，无菌性受损时可能引发全身炎症反应、感染、微血栓和器官衰竭。截至 7 月 6 日，未报告相关严重伤害或死亡。",
+          "publishedAt": "2026-09-18T04:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Convenience Kit Correction: AVID Medical Issues Correction for Kits Containing Huons Sodium Chloride Ampules",
+          "summary": "因 Huons 氯化钠注射液 0.9% 10 mL 冲洗安瓿存在质量与无菌保证问题被召回，AVID Medical 对含该安瓿的便捷手术包发布更正，要求使用前取出并丢弃该安瓿，其余组件可继续使用。美国食品药品监督管理局将此列为最严重级别召回。",
+          "publishedAt": "2026-09-21T04:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-1986-2736",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "1986:2736",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "STAT+: What a vote on Grail’s cancer detection test could mean for the company, patients, and regulators",
+          "summary": "美国食品药品监督管理局在顾问委员会会议前公布的文件显示，该机构可能对Galleri多癌种早期检测血检持积极态度。该检测已作为实验室诊断项目提供，若获批准，预计有助于获得Medicare及其他保险支付方的报销。",
+          "publishedAt": "2026-09-21T17:58:51+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Performance and safety of a multi-cancer early detection test: the PATHFINDER 2 study",
+          "summary": "前瞻性干预研究纳入35,878名50岁及以上无癌症临床怀疑者，随访12个月。癌症检出率0.54%，阳性预测值60.3%，特异性99.64%，筛查185人检出1例癌症；阳性后0.6%接受有创操作，90.5%为非手术操作。",
+          "publishedAt": "2026-09-22T21:01:49+00:00",
+          "doi": "10.1038/s41591-026-04618-w",
+          "pmid": null,
+          "registryIds": [
+            "NCT05155605"
+          ]
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-3600-1128",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "3600:1128",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Filovirus collaborative open research consortium research priorities for the ongoing Bundibugyo virus disease outbreak",
+          "summary": "Bundibugyo病毒是研究最少的Orthoebolavirus之一，尚无获批疫苗或治疗。文件通过世界卫生组织流行病研发蓝图提出10项研究优先事项，涵盖疾病特征、社区参与、诊断、临床管理、治疗、疫苗和暴露后预防，并给出暴发即时、持续和暴发后阶段的实施框架。",
+          "publishedAt": "2026-09-21T10:54:26+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "A deadly ebola relative is surging after years in the shadows",
+          "summary": "刚果民主共和国和乌干达的本迪布焦病毒疫情已超过以往两次暴发。Sullivan 在《新英格兰医学杂志》综述中指出，检测延迟、无获批疫苗与治疗药物，以及只针对常见病原体的防范策略，是当前的主要短板。",
+          "publishedAt": "2026-09-20T02:26:36+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-3699-3718",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "3699:3718",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Merck’s return to ophthalmology snags first success",
+          "summary": "默克2024年以13亿美元预付款收购EyeBio，此次在关键试验中取得疗效成功，但分析师对安全性结果提出质疑。相关数据尚未正式发表。",
+          "publishedAt": "2026-09-24T12:14:05+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Merck sees pivotal victory for $3B eye disease prospect",
+          "summary": "Brunello试验显示，remigromig两个剂量在第52周最佳矫正视力变化上均非劣于雷珠单抗，但增殖性糖尿病视网膜病变、玻璃体出血及因不良事件停药率更高。数据尚未正式发表，默沙东将与监管机构讨论。",
+          "publishedAt": "2026-09-24T13:14:34.364+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-3780-2970",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "3780:2970",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "A Clinical Study of Sotatercept (MK-7962) in People With Combined Postcapillary and Precapillary Pulmonary Hypertension and Heart Failure With Preserved Ejection Fraction (MK-7962-041)",
+          "summary": "",
+          "publishedAt": "2026-09-24T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT07839585"
+          ]
+        },
+        "right": {
+          "title": "Results posted: A Study of Sotatercept for the Treatment of Cpc-PH Due to HFpEF (MK-7962-007/A011-16)",
+          "summary": "该2期双盲随机安慰剂对照研究纳入165例射血分数保留的心力衰竭相关毛细血管前性肺高压成人患者，主要终点为肺血管阻力自基线的变化，关键次要终点为6分钟步行距离，比较索特西普与安慰剂的疗效与安全性。",
+          "publishedAt": "2026-09-23T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT04945460"
+          ]
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-3899-4",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "3899:4",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Convenience Kit Correction: Becton Dickinson Issues Correction for Kits and Procedure Trays Containing Recalled Sodium Chloride Ampules",
+          "summary": "美国食品药品监督管理局将 BD 便利包和操作托盘内 Huons 氯化钠安瓿的更正定为最严重级别召回。涉事安瓿为包内唯一受影响组件，其余组件可继续使用；截至 7 月 29 日未报告相关严重伤害或死亡。",
+          "publishedAt": "2026-09-24T04:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Convenience Kit Correction: AVID Medical Issues Correction for Kits Containing Huons Sodium Chloride Ampules",
+          "summary": "因 Huons 氯化钠注射液 0.9% 10 mL 冲洗安瓿存在质量与无菌保证问题被召回，AVID Medical 对含该安瓿的便捷手术包发布更正，要求使用前取出并丢弃该安瓿，其余组件可继续使用。美国食品药品监督管理局将此列为最严重级别召回。",
+          "publishedAt": "2026-09-21T04:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-3899-5",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "3899:5",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Convenience Kit Correction: Becton Dickinson Issues Correction for Kits and Procedure Trays Containing Recalled Sodium Chloride Ampules",
+          "summary": "美国食品药品监督管理局将 BD 便利包和操作托盘内 Huons 氯化钠安瓿的更正定为最严重级别召回。涉事安瓿为包内唯一受影响组件，其余组件可继续使用；截至 7 月 29 日未报告相关严重伤害或死亡。",
+          "publishedAt": "2026-09-24T04:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Sodium Chloride Flush Recall: Spectra Medical Removes Sodium Chloride Injection USP Ampules",
+          "summary": "美国食品药品监督管理局将此次召回列为最严重级别，涉事产品为 Huons Co., Ltd. 生产的 0.9% 氯化钠注射液 USP 10mL 安瓿，因生产设施检查发现质量问题，无菌性受损时可能引发全身炎症反应、感染、微血栓和器官衰竭。截至 7 月 6 日，未报告相关严重伤害或死亡。",
+          "publishedAt": "2026-09-18T04:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-3937-2709",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "3937:2709",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "CDC greenlights COVID vaccines for vulnerable children after nearly 1-month delay",
+          "summary": "美国食品药品监督管理局批准更新版新冠疫苗后，美国疾病控制与预防中心延迟近1个月才允许各州通过儿童疫苗计划订购免费疫苗。该计划覆盖半数以上美国儿童，公共卫生人士认为延迟使低收入儿童面临更高风险。",
+          "publishedAt": "2026-09-24T18:40:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "CDC inaction delays COVID shots for low-income children",
+          "summary": "美国疾病控制与预防中心已批准更新版新冠疫苗，但尚未开放儿童疫苗计划（VFC）的订购流程，多个州确认低收入儿童无法获得免费疫苗，而私人保险儿童已可接种。",
+          "publishedAt": "2026-09-22T21:29:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-5073-267",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "5073:267",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Nirsevimab resistance in respiratory syncytial virus-B: virological signal without meaningful clinical impact",
+          "summary": "",
+          "publishedAt": "2026-09-16T03:23:32+00:00",
+          "doi": "10.1016/j.lanmic.2026.101529",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Mutational constraints on RSV F and its neutralization by antibodies",
+          "summary": "研究建立双价IgG结合缓冲模型，解释尼塞韦单抗对B亚型效力较低、耐药更常见的原因；并用假病毒深度突变扫描测量F蛋白几乎全部突变对细胞入侵及尼塞韦单抗、clesrovimab等抗体中和的影响，据此实现耐药实时监测，显示耐药株目前仍罕见。",
+          "publishedAt": "2026-09-16T15:04:48+00:00",
+          "doi": "10.1038/s41586-026-11030-4",
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-5428-6412",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "5428:6412",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Merck licenses a KRAS G12D inhibitor for $400M upfront",
+          "summary": "这是企业授权交易消息，默克以4亿美元预付款引进一款KRAS G12D抑制剂，交易细节尚未公开，数据尚未发表。",
+          "publishedAt": "2026-09-28T14:00:16+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "4亿美元首付款！思璞锐与默沙东达成合作",
+          "summary": "上海思璞锐医药与默沙东就临床前分子胶型KRAS G12D（ON）抑制剂SPR2015达成全球独家授权协议，首付款4亿美元，交易潜在总价值最高可达21.3亿美元，已完成交割。该资产尚未进入人体临床试验，其真实价值仍需后续临床验证。",
+          "publishedAt": "2026-09-29T10:45:17+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-5463-5469",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "5463:5469",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Fractionated radiosurgery reduces cancer recurrence after surgery for large brain metastases, trial finds",
+          "summary": "A071801 随机 3 期试验显示，大体积脑转移术后 3 至 5 次分次放疗较单次放疗提高 1 年术区无复发率（87% 对 81%），中位总生存延长 9 个月，两组不良反应无显著差异。结果在 ASTRO 全会报告，尚未见论文发表。",
+          "publishedAt": "2026-09-28T15:00:49+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Fractionated radiosurgery reduces cancer recurrence after surgery for large brain metastases",
+          "summary": "这是首个直接比较术后单次与分次立体定向放疗的随机III期试验，分次组1年手术部位无复发率为87%，单次组为81%，中位总生存分别为29个月与20个月，两组不良反应无显著差异。结果提示3至5次分次方案可作为大体积脑转移术后的标准治疗选择。",
+          "publishedAt": "2026-09-28T15:00:06+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-5518-5514",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "5518:5514",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "A Phase III Study to Evaluate the Efficacy and Safety of Petrelintide in Participants With Overweight or Obesity and Type 2 Diabetes",
+          "summary": "这是一项新登记的 III 期研究，计划入组 600 例超重或肥胖合并 2 型糖尿病受试者，比较 petrelintide 与安慰剂在控制饮食和增加运动基础上的疗效与安全性。研究结果尚未公布。",
+          "publishedAt": "2026-09-28T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT07843485"
+          ]
+        },
+        "right": {
+          "title": "A Phase III Study to Evaluate the Efficacy and Safety of Petrelintide in Participants With Overweight or Obesity and Established Cardiovascular Disease",
+          "summary": "这是一项在超重或肥胖且已确诊心血管疾病的受试者中开展的 III 期研究，比较 petrelintide 与安慰剂在配合限热量饮食和增加体力活动下的减重疗效与安全性，计划入组 2500 例。该研究针对合并心血管疾病这一高风险人群，其结果可能影响此类患者的体重管理策略。",
+          "publishedAt": "2026-09-28T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT07843472"
+          ]
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-5518-6918",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "5518:6918",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "A Phase III Study to Evaluate the Efficacy and Safety of Petrelintide in Participants With Overweight or Obesity and Type 2 Diabetes",
+          "summary": "这是一项新登记的 III 期研究，计划入组 600 例超重或肥胖合并 2 型糖尿病受试者，比较 petrelintide 与安慰剂在控制饮食和增加运动基础上的疗效与安全性。研究结果尚未公布。",
+          "publishedAt": "2026-09-28T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT07843485"
+          ]
+        },
+        "right": {
+          "title": "Petrelintide produces double-digit weight loss with fewer side effects",
+          "summary": "研究将在欧洲糖尿病研究协会年会报告并已发表于 The Lancet Diabetes & Endocrinology，每周注射 petrelintide 可使受试者体重下降超过 10%，幅度总体低于现有 GLP-1 受体激动剂，但副作用明显更少。",
+          "publishedAt": "2026-09-30T03:17:09+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-5687-5856",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "5687:5856",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Unexpected Cognitive Improvement Emerges in Hearing Aid Trial",
+          "summary": "上海交通大学医学院团队在 JAMA Neurology 报告 CHOICE 试验结果：助听器未降低轻度认知障碍合并听力损失者的痴呆转化率，但认知改善率在干预组为 15.34%、对照组为 2.36%。主要终点因转化率低于预期而把握度不足，次要终点结果需重复验证。",
+          "publishedAt": "2026-09-28T21:22:14+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "研究证实：佩戴助听器可逆转老年轻度认知障碍",
+          "summary": "上海第九人民医院吴皓团队牵头的随机对照研究显示，伴中度至重度听力损失的轻度认知障碍老人验配助听器两年内认知恢复正常比例为15.34%，对照组为2.36%，风险比5.94；两组痴呆发生率差异未达统计学显著。",
+          "publishedAt": "2026-09-29T05:34:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-5971-6411",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "5971:6411",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Novo to spend $300M upfront to license Hengrui's weekly oral weight loss drug",
+          "summary": "诺和诺德与恒瑞达成协议，引进一款临床前GLP-1/GIP受体激动剂，有望每周给药一次。这是诺和诺德今年第4笔减重领域合作，数据尚未发表。",
+          "publishedAt": "2026-09-29T11:04:17+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "3亿美元首付款！恒瑞与诺和达成合作",
+          "summary": "恒瑞与诺和就GLP-1/GIP双受体激动剂HRS-1596达成独家许可协议，诺和获中国大陆、香港、澳门及台湾以外地区的开发、生产和商业化权利。潜在总交易额最高可达26亿美元，含3亿美元首付款及里程碑付款。该药有望每周一次口服给药，已在中国获准开展体重管理和2型糖尿病Ⅰ期临床试验。",
+          "publishedAt": "2026-09-29T10:45:17+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-6039-5948",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "6039:5948",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "SEMAFORCRANIO : Multicenter, Double-blind, Parallel, Randomized Controlled Trial of the Efficacy of Semaglutide in Hypothalamic Obesity Secondary to Craniopharyngioma in Children Aged 12 to 17 Years",
+          "summary": "这是一项多中心、双盲、平行随机对照试验，计划入组50例12至17岁颅咽管瘤继发下丘脑性肥胖患儿，比较司美格鲁肽每周注射与安慰剂的疗效。该研究针对目前缺乏有效干预的颅咽管瘤术后肥胖这一临床难题，结果尚未公布。",
+          "publishedAt": "2026-09-29T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT07845994"
+          ]
+        },
+        "right": {
+          "title": "Semaglutide for Treating Paediatric Craniopharyngioma-Related Obesity: A Multicentre Case Series.",
+          "summary": "多中心回顾性研究纳入20例18岁以下颅咽管瘤相关肥胖患者，超说明书使用司美格鲁肽。治疗1年后BMI下降2.5 kg/m2，40%患者BMI下降10%以上，30%出现轻度胃肠道不良反应。提示或可逆转体重增长，尚需前瞻性研究验证。",
+          "publishedAt": "2026-09-28T00:00:00+00:00",
+          "doi": "10.1111/dom.71403",
+          "pmid": "42806285",
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-6350-7436",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "6350:7436",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "#EASD26: Lilly's triple-G allows 60% of patients to drop below obesity threshold",
+          "summary": "礼来在欧洲糖尿病研究协会年会上报告，三重激动剂 retatrutide 用于合并肥胖与2型糖尿病的患者，约1年半后体重最多下降18.8%，60%的患者降至肥胖阈值以下。数据尚未以论文形式发表。",
+          "publishedAt": "2026-09-29T22:01:10+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "“迄今最强效减肥药”：礼来 Lilly 公布三受体激动剂 Retatrutide 研究结果",
+          "summary": "",
+          "publishedAt": "2026-09-30T06:07:14+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-6530-6171",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "6530:6171",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Update - Glucagon-like peptide-1 receptor agonists (dulaglutide, liraglutide, semaglutide, tirzepatide) and acute persistent visual loss",
+          "summary": "监测期内Medsafe与CARM共收到4份与度拉糖肽、司美格鲁肽、利拉鲁肽相关的眼部疾病报告，含1例NAION、2例白内障和1例一过性视物模糊。GLP-1药品说明书已更新，将NAION列为上市后报告的不良反应；按获批适应证使用时获益仍大于风险。",
+          "publishedAt": "2026-09-29T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Non-Arteritic Anterior Ischaemic Optic Neuropathy Associated with Semaglutide use.",
+          "summary": "一例有血管危险因素的70余岁女性，出现左眼进行性视力障碍3天，检查示左眼相对性传入性瞳孔缺陷及下方象限视野缺损，诊断为非动脉炎性前部缺血性视神经病变。患者此前按处方使用司美格鲁肽6个月，停药后视力部分改善。作者提示二者可能存在关联，因果关系尚未证实，提醒临床用药监测。",
+          "publishedAt": "2026-09-28T00:00:00+00:00",
+          "doi": null,
+          "pmid": "42808150",
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-6832-3262",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "6832:3262",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Making medical AI benchmarks clinically interpretable: the case of mental health.",
+          "summary": "研究从HealthBench的5000段多轮健康对话中识别出332段心理健康对话，经人工复核验证后分层随机抽取500段分析，发现心理健康领域得分与总体得分相差-0.034至+0.047，且各亚领域占比不均。作者主张基准测试应报告分领域结果与失败模式。",
+          "publishedAt": "2026-09-28T00:00:00+00:00",
+          "doi": "10.1136/bmjment-2026-302921",
+          "pmid": "42805769",
+          "registryIds": []
+        },
+        "right": {
+          "title": "Introducing MentalHealthBench",
+          "summary": "该基准由专家参与构建，用于评估 AI 在贴近真实场景的心理健康对话中，回答是否有帮助且安全。",
+          "publishedAt": "2026-09-23T10:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-6900-9044",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "6900:9044",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Here’s how much insurers are cutting Medicare Advantage plans for 2027",
+          "summary": "美国联邦医疗保险和医疗补助服务中心数据显示，保险公司为改善利润率连续第2年削减计划数量，2027年全国MA计划从5,553个微降至5,532个，但主要保险公司普遍减少计划并提高自付费用上限。预计MA参保人数将降至3,400万，减少约200万。",
+          "publishedAt": "2026-09-29T16:04:05+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Insurers say their 2027 Medicare Advantage offerings preserve benefits. The data tells a different story",
+          "summary": "",
+          "publishedAt": "2026-10-01T13:11:11+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-7366-7367",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "7366:7367",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "关于发布2026年度国家自然科学基金专项项目——“介入式脑机接口跨尺度解析与智能调...",
+          "summary": "国家自然科学基金委员会发布2026年度专项项目“介入式脑机接口跨尺度解析与智能调控”申请指南，指南已通过科学基金网络信息系统发布，依托单位和申请人可登录系统在“项目管理-项目指南”模块查看。相关方向研究者可据此准备申报。",
+          "publishedAt": "2026-09-30T07:53:47.199+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "关于发布2026年度国家自然科学基金专项项目——“表观基因组调控机制与干预策略”申...",
+          "summary": "国家自然科学基金委员会发布2026年度专项项目“表观基因组调控机制与干预策略”申请指南，指南已在科学基金网络信息系统发布，依托单位和申请人可登录该系统在“项目管理-项目指南”模块查看。相关研究者可据此准备申报。",
+          "publishedAt": "2026-09-30T07:53:47.199+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-7370-7368",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "7370:7368",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Prevention and management of heat-related illness at mass gatherings: developing evidence-based communication...",
+          "summary": "该文件为大型体育赛事及宗教、文化等集会提供标准化的循证沟通信息，用于预防热相关疾病与损伤，支持组织者在热风险升高时及早行动并加强现场准备与响应。",
+          "publishedAt": "2026-09-30T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Prevention and management of heat-related illness at mass gatherings: systematic reviews",
+          "summary": "报告汇总3项系统评价，评估结构性、技术与行为干预在大型集会中预防热相关疾病、减轻热应激的效果。随着极端高温频次与强度上升，人群密集、户外活动时间长等因素会放大风险，该证据可供活动医疗保障与卫生系统应对参考。",
+          "publishedAt": "2026-09-30T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-7549-3276",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "7549:3276",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "EASD 2026 | Ecnoglutide Demonstrates Favorable Safety Profile in Adolescents with Obesity",
+          "summary": "这是埃诺格鲁肽在中国肥胖青少年中开展的1b期随机双盲安慰剂对照研究，结果在2026年欧洲糖尿病研究协会年会以口头报告形式公布。研究显示其安全性和耐受性良好，未出现药物相关严重不良事件，药代动力学特征与成人一致，并显著降低BMI和体重。数据尚未经同行评议发表。",
+          "publishedAt": "2026-09-30T11:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "A Study of Ecnoglutide Injection in Overweight or Obese Chinese Adolescents",
+          "summary": "该3期试验拟入组192例中国超重或肥胖青少年，随机接受埃诺格鲁肽注射液或等体积安慰剂，评估安全性与有效性。",
+          "publishedAt": "2026-09-23T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT07836270"
+          ]
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-7551-4263",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "7551:4263",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "CHP investigates case of human infection of rat Hepatitis E virus epidemiologically linked to previously reported case",
+          "summary": "香港卫生防护中心调查1例大鼠戊型肝炎病毒感染，患者为上周公布病例的家属，2例存在流行病学关联。该80岁女性无症状，血液样本检测阳性，中心认为较可能在有关餐厅感染。此为今年录得的第4例大鼠戊型肝炎病例。",
+          "publishedAt": "2026-09-30T11:28:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "CHP investigates case of human infection of rat Hepatitis E virus (with photos)",
+          "summary": "",
+          "publishedAt": "2026-09-24T16:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-7567-4263",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "7567:4263",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "CHP investigates case of human infection of rat Hepatitis E virus epidemiologically linked to previously reported case",
+          "summary": "",
+          "publishedAt": "2026-09-29T16:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "CHP investigates case of human infection of rat Hepatitis E virus (with photos)",
+          "summary": "",
+          "publishedAt": "2026-09-24T16:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-8314-8828",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "8314:8828",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Giredestrant plus Everolimus in Advanced Breast Cancer.",
+          "summary": "这项3期随机试验纳入373例CDK4/6抑制剂治疗后进展的ER阳性、HER2阴性晚期乳腺癌患者，比较口服giredestrant联合依维莫司与标准内分泌治疗联合依维莫司。ESR1突变患者中位无进展生存期为10.0个月对5.5个月，总人群为8.8个月对5.5个月。",
+          "publishedAt": "2026-09-30T00:00:00+00:00",
+          "doi": "10.1056/nejmoa2602457",
+          "pmid": "42814929",
+          "registryIds": [
+            "NCT05306340"
+          ]
+        },
+        "right": {
+          "title": "5 FDA decisions to watch in the fourth quarter of 2026",
+          "summary": "罗氏口服选择性雌激素受体降解剂giredestrant在乳腺癌辅助治疗和转移性疾病的2项审批决定预计分别于11月30日和12月18日公布。辅助治疗研究中，giredestrant联合激素治疗较单用激素治疗使术后复发或死亡延迟30%。",
+          "publishedAt": "2026-10-01T13:04:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-8581-5732",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "8581:5732",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Garetosmab for preventing heterotopic ossification and flare ups associated with fibrodysplasia ossificans progressiva [ID3772]",
+          "summary": "英国 NICE 就 garetosmab 用于预防进行性骨化性纤维发育不良相关异位骨化及急性发作启动指南制定，目前处于范围界定阶段，意见征询截止 2026 年 10 月 28 日。该评估将决定这一药物能否在英国纳入常规诊疗。",
+          "publishedAt": "2026-10-01T03:17:39.403+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Efficacy and safety of garetosmab, an activin A-blocking antibody, in fibrodysplasia ossificans progressiva (OPTIMA): a randomised, double-blind, placebo-controlled, phase 3 trial",
+          "summary": "OPTIMA 是在 16 个国家和地区 18 个中心开展的随机双盲安慰剂对照 3 期试验，纳入 63 例成人 FOP 患者。56 周时 garetosmab 组新发异位骨病灶数显著少于安慰剂组，安全性总体可耐受，支持其作为 FOP 疾病修饰治疗的潜在价值。",
+          "publishedAt": "2026-09-28T23:01:08+00:00",
+          "doi": "10.1016/s0140-6736(26)01599-0",
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-8930-5838",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "8930:5838",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Updated Meta-Analysis of Left Atrial Appendage Closure Versus Oral Anticoagulation to Prevent Stroke in Atrial Fibrillation",
+          "summary": "该系统评价与Meta分析纳入6项随机对照试验、7028例非瓣膜性房颤患者，比较左心耳封堵与口服抗凝。两组总体卒中率相似，封堵组缺血性卒中更多、非手术出血更少。提示封堵更适合出血风险标准至中度的抗凝适用患者，而非作为口服抗凝的等效替代。",
+          "publishedAt": "2026-10-01T09:00:11+00:00",
+          "doi": "10.1161/strokeaha.126.057089",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Left Atrial Appendage Occlusion—Is the Case Now Closed?",
+          "summary": "",
+          "publishedAt": "2026-09-28T15:30:38+00:00",
+          "doi": "10.1001/jamaneurol.2026.3292",
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-9657-9658",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "9657:9658",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Samfara completa la adquisición de Chr. Olesen Synthesis, fabricante danés de APIs sujetos a control",
+          "summary": "",
+          "publishedAt": "2026-10-02T06:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Samfara completes acquisition of Chr. Olesen Synthesis, Danish manufacturer of controlled-substance APIs",
+          "summary": "欧洲生命科学投资机构 Samfara 宣布完成对 Chr. Olesen Synthesis 的收购，交易金额未披露。后者位于哥本哈根附近，生产原料药及高级中间体，专注管制物质，尤其是用于治疗阿片类药物使用障碍的丁丙诺啡和用于 ADHD 的 lisdexamfetamine。",
+          "publishedAt": "2026-10-02T06:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-9657-9659",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "9657:9659",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Samfara completa la adquisición de Chr. Olesen Synthesis, fabricante danés de APIs sujetos a control",
+          "summary": "",
+          "publishedAt": "2026-10-02T06:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Samfara schließt die Übernahme von Chr. Olesen Synthesis, einem dänischen Hersteller von Wirkstoffen, die als kontrollierte Substanzen gelten, ab",
+          "summary": "",
+          "publishedAt": "2026-10-02T06:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-9683-4800",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "9683:4800",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "TEMPO-2 Trial Shows Promise for Tavapadon in Newly Diagnosed Parkinson’s Disease",
+          "summary": "3 期 TEMPO-2 试验纳入 304 例早期帕金森病患者，灵活剂量 tavapadon 组第 26 周 MDS-UPDRS 第 II、III 部分合并评分较安慰剂改善 9.1 分，嗜睡和冲动控制障碍发生率低。该药已获美国食品药品监督管理局批准，为左旋多巴之外的新选择。",
+          "publishedAt": "2026-10-02T06:39:22.186+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "AbbVie's next-gen dopamine therapy for Parkinson's gets FDA approval",
+          "summary": "美国食品药品监督管理局批准艾伯维的tavapadon，这是一种多巴胺激动剂，用于帕金森病，预期可提供与既往同类药物相当的症状缓解，但副作用更少。该药商品名为Juvmo。",
+          "publishedAt": "2026-09-26T16:01:44+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-9686-9855",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "9686:9855",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "PhytoHealth CEO Angel Lee Recognized for Driving the Advancement of World's First Prescription Drug for Cancer-Related Fatigue",
+          "summary": "PhytoHealth 首席执行官 Angel Lee 入选台湾第 27 届十大杰出女青年，表彰其在推进 PG2® 冻干注射剂（全球首个获批用于中重度癌因性疲乏的处方药）及植物药开发方面的贡献。该药已纳入台湾健保，用于符合条件的乳腺癌患者，公司正寻求国际合作推进全球开发。",
+          "publishedAt": "2026-10-02T08:11:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Angel Lee, PDG de PhytoHealth, récompensé pour sa contribution au développement du premier médicament sur ordonnance au monde destiné à traiter la fatigue liée au cancer",
+          "summary": "该新闻稿介绍，PhytoHealth首席执行官因推动PG2®开发获台湾地区奖项。PG2®为源自黄芪的植物新药，用于中重度癌因性疲乏，已在台湾地区用于乳腺癌患者并获健保覆盖。相关临床数据尚未在本文中发表。",
+          "publishedAt": "2026-10-02T09:48:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-9949-5408",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "9949:5408",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "An Ebola treatment center was burned down as the death toll in Congo passes 4,000",
+          "summary": "刚果东部埃博拉疫情自宣布以来已记录8,300例病例、4,018人死亡，至少50名医务人员死亡。一处收治感染者的中转中心被烧毁，19,000名营地人员逃离；移动实验室将检测时间从72小时缩短至6小时。",
+          "publishedAt": "2026-10-02T12:13:04+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Congo's Ebola outbreak tops 8,000 confirmed cases as disease remains out of control",
+          "summary": "刚果由罕见 Bundibugyo 病毒引起的疫情已确诊 8,067 例、死亡 3,901 例，波及 7 个省的 63 个卫生区，医护人员短缺并出现罢工。该病毒尚无已知治疗或疫苗，提示输入性风险监测与防控准备仍需加强。",
+          "publishedAt": "2026-09-28T13:06:16+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-10013-6527",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "10013:6527",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "First Etomidate Vaporiser Pod Importer Sentenced to Three Years' Jail and Five Strokes of the Cane",
+          "summary": "新加坡HSA通报，一名39岁男子因依据《滥用毒品法》进口含依托咪酯的电子烟弹，被判监禁3年及鞭刑5下，为该国首例此类定罪。查获的210个烟弹中208个经实验室检测含依托咪酯。",
+          "publishedAt": "2026-10-02T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "HSA Charges 33-year-old and 18-year-old Male for Alleged Importation and Possession for Purpose of Supply of Etomidate Vaporiser Pods",
+          "summary": "新加坡卫生科学局分别就涉嫌进口600个依托咪酯电子烟弹和涉嫌持有12个依托咪酯电子烟弹用于供应起诉两名男子，涉案物质依《1993年烟草与电子烟管制法》列为特定精神活性物质。提示依托咪酯滥用及非法流通风险，临床需关注其滥用与管制动态。",
+          "publishedAt": "2026-09-30T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-10710-10894",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "10710:10894",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "SIBIONICS and PharmaSens Explore New Horizons for Automated Insulin Delivery at EASD 2026",
+          "summary": "",
+          "publishedAt": "2026-10-04T03:09:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "SIBIONICS et PharmaSens explorent de nouvelles perspectives pour l'administration automatisée d'insuline lors du congrès de l'EASD 2026",
+          "summary": "EASD 2026上，SiBionics与PharmaSens公布SMART02可行性研究：葡萄糖与胰岛素同装置整合时，推注后暂时性干扰不常见，主要见于10单位及以上剂量，概率为20%至25%，信号平均约20分钟后恢复。该实验性装置尚未获批上市。",
+          "publishedAt": "2026-10-05T00:47:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-10710-10900",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "10710:10900",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "SIBIONICS and PharmaSens Explore New Horizons for Automated Insulin Delivery at EASD 2026",
+          "summary": "",
+          "publishedAt": "2026-10-04T03:09:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "SIBIONICS und PharmaSens erkunden auf der EASD 2026 neue Horizonte für die automatisierte Insulinabgabe",
+          "summary": "两家公司在欧洲糖尿病研究协会2026年会议上介绍SMART02可行性研究，评估将连续葡萄糖监测、胰岛素输注与自动血糖控制算法整合于单一贴片设备的早期原型。推注后传感器信号短暂受扰少见，主要见于10单位及以上剂量，平均约20分钟后完全恢复。该设备尚在研发中，未在任何市场获批。",
+          "publishedAt": "2026-10-05T02:54:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-11015-8297",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "11015:8297",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Comparative efficacy and safety of pharmacological regimens for Mycobacterium avium complex pulmonary disease and bacteremia: a systematic review with separate network meta-analyses.",
+          "summary": "该系统评价对MAC肺病与MAC菌血症分别做贝叶斯网络Meta分析，纳入26项研究、3,574例受试者。MAC肺病中阿米卡星脂质体吸入混悬液联合指南治疗成功率优于单用指南治疗，但不良事件增加；MAC菌血症中指南治疗成功率排名最高。",
+          "publishedAt": "2026-10-04T00:00:00+00:00",
+          "doi": "10.1016/j.jinf.2026.106871",
+          "pmid": "42830175",
+          "registryIds": []
+        },
+        "right": {
+          "title": "Amikacin Liposome Inhalation Suspension in Newly Diagnosed Mycobacterium avium Complex Lung Disease: A Phase 3b, Double-blind, Randomized Clinical Trial (ENCORE)",
+          "summary": "ENCORE试验纳入425例未开始抗生素治疗的新诊断鸟分枝杆菌复合体肺病患者，在阿奇霉素和乙胺丁醇基础上加用阿米卡星脂质体吸入混悬液。治疗组第13个月呼吸道症状评分改善更明显，培养转阴率82.4%对55.6%，未发现新的安全性信号。",
+          "publishedAt": "2026-09-30T12:03:22+00:00",
+          "doi": "10.1093/ajrccm/aamag530",
+          "pmid": null,
+          "registryIds": [
+            "NCT04677569"
+          ]
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-11127-11162",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "11127:11162",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "2026 诺贝尔奖生理学或医学奖揭晓：三学者凭借“光控离子通道和光遗传学”领域发现获表彰",
+          "summary": "",
+          "publishedAt": "2026-10-05T09:36:33+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Nobel Prize awarded for revealing inner workings of the brain",
+          "summary": "美国精神病学家和神经学家 Karl Deisseroth 与德国同事 Peter Hegemann、Georg Nagel 因光遗传学研究获奖。该技术通过光控制神经回路，已用于尝试恢复视网膜色素变性患者的部分视力。",
+          "publishedAt": "2026-10-05T11:04:37+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-11313-10077",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "11313:10077",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "MNA: Brigham Nurses File 4th Unfair Labor Practice Charge Against the Hospital as Nurses Prepare for October 14th Indefinite Strike and MGB Refuses to Negotiate a Fair Contract to Protect Patient Care",
+          "summary": "马萨诸塞州护士协会代表约4,000名布莱根和妇女医院护士，就院方未经协商更改岗位职责提出第4项联邦不公平劳动指控，并定于10月14日早7时开始无限期罢工。护士以2,986票对215票授权罢工，要求限制依赖临时护士、可负担医保、生活成本加薪及跨单元调配补贴。",
+          "publishedAt": "2026-10-05T15:14:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "MNA: Brigham Nurses Schedule Largest Open-Ended Nurse Strike in MA History to Begin October 14 as MGB Billionaires Refuse to Negotiate a Fair Contract to Protect Patient Care",
+          "summary": "因与Mass General Brigham的合同谈判破裂，4,000名布莱根和妇女医院护士提交10天通知，计划于10月14日发起无限期罢工。护士方要求限制临时护士使用、可负担的医保和与生活成本匹配的加薪。",
+          "publishedAt": "2026-10-02T15:55:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-11430-12216",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "11430:12216",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "AbbVie and Genmab Announce Epcoritamab in Combination with R-CHOP Demonstrates Significant Improvement in Progression-Free Survival versus R-CHOP in Patients with Newly Diagnosed Diffuse Large B-Cell Lymphoma",
+          "summary": "3期EPCORE DLBCL-2研究显示，皮下注射epcoritamab联合R-CHOP较单用R-CHOP在初诊DLBCL（IPI 2-5分）中显著改善PFS，疾病进展或死亡风险降低51%。该联合方案尚未获批，两家公司将与全球监管机构沟通。",
+          "publishedAt": "2026-10-05T18:54:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "AbbVie, Genmab trot out first-line DLBCL win for Epkinly in challenge to Polivy",
+          "summary": "AbbVie 与 Genmab 称其 T 细胞衔接器 Epkinly 在一线弥漫大B细胞淋巴瘤后期试验中达到终点，为与罗氏抗体偶联药物 Polivy 的市场竞争铺路。原文未披露具体疗效数据。",
+          "publishedAt": "2026-10-06T11:05:14+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "link-11765-11488",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-link",
+        "id": "11765:11488",
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Pharmacologic Treatments for Female Menopausal Vasomotor Symptoms: A Systematic Review and Meta-analysis for the American College of Physicians.",
+          "summary": "该系统评价纳入90项随机试验，评估多种药物对绝经期血管舒缩症状的获益、危害、患者价值观与成本效果。雌激素（联合或不联合孕激素）、CE/BZA及奥昔布宁可降低症状频率与严重程度，多数比较的证据确定性为低至中等，危害数据有限。",
+          "publishedAt": "2026-10-06T00:00:00+00:00",
+          "doi": "10.7326/annals-26-00943",
+          "pmid": "42832800",
+          "registryIds": []
+        },
+        "right": {
+          "title": "New Guideline Recommends Hormone Therapy First for Menopausal Symptoms",
+          "summary": "美国内科医师学会发布新临床指南，基于系统评价与Meta分析，将绝经激素治疗列为血管舒缩症状一线方案，SNRIs为二线，SSRIs、加巴喷丁及NK受体拮抗剂为三线。",
+          "publishedAt": "2026-10-05T21:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "related"
+      }
+    },
+    {
+      "id": "membership-5-4281",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4281,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Otsuka ICU Medical LLC Issues Voluntary Nationwide Recall of 0.9% Sodium Chloride Injection, USP Due To a Product Mix-up with 10 mEq Potassium Chloride Injection",
+          "summary": "涉事批号 1042188 的外包装标注为 0.9% 氯化钠注射液，内装产品可能为 10 mEq 氯化钾注射液。高浓度氯化钾误注可致神经肌肉功能障碍、心律失常甚至心脏骤停死亡，早产儿、慢性肠外营养、心律失常史、肾功能不全及服用保钾利尿剂者风险最高。",
+          "publishedAt": "2026-09-21T04:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Otsuka JV recalls one lot of sodium chloride over labeling issue",
+          "summary": "大冢ICU Medical 自愿召回1批0.9%氯化钠静脉注射液，原因是标签可能混淆。该召回提示临床和药房需核对涉事批次，防范用药差错。",
+          "publishedAt": "2026-09-24T14:16:51.362+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-11-111",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 111,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 21,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "National Patient Safety Alert: Patient hoists and slings (all types): risk of death and serious harm from falls (NatPSA/2026/005/MHRA)",
+          "summary": "2015年1月1日至2025年12月31日期间，英国药品和保健品监管局收到22例患者转运过程中发生死亡事件的报告，自2015年以来平均每年2例死亡。问题不限于任何制造商、型号或照护场所，要求相关机构在2027年9月16日前完成5项整改。",
+          "publishedAt": "2026-09-16T11:01:57+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "MHRA sets out steps to prevent avoidable harm from patient hoists",
+          "summary": "该警报针对患者吊具与吊带使用中的可避免伤害，要求每次转运前完成使用前检查、确认吊具与吊带兼容、确认连接牢固、保留维护记录并保证人员培训到位。相关严重事件与特定厂家或型号无关，涉及医院、护理院及居家场景。",
+          "publishedAt": "2026-09-16T12:11:41+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-32-84",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 84,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 30,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Draft guideline on user safety for pharmaceutical veterinary medicinal products - Revision 2",
+          "summary": "该条目为欧洲药品管理局科学指南页面的兽药使用者安全指南修订草案，正文内容为服务器暂时不可用的多语言提示，未提供指南具体内容。",
+          "publishedAt": "2026-09-18T12:10:57+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "User safety for pharmaceutical veterinary medicinal products - Scientific guideline",
+          "summary": "该修订草案取代此前版本，针对兽药上市许可申请及变更申请中的使用者安全风险评估提供指导，征求意见期至2026年12月31日。",
+          "publishedAt": "2026-09-18T12:20:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-36-3926",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3926,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 33,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Ebola disease outbreak in the Democratic Republic of the Congo",
+          "summary": "截至9月19日数据，刚果（金）累计报告7 672例确诊病例、3 699例死亡，886例住院隔离，1 879人康复。较前次报告新增58例确诊和23例死亡，伊图里省疫情最重。欧洲疾病预防控制中心建模显示输入欧盟/欧洲经济区的风险仍极低。",
+          "publishedAt": "2026-09-21T15:36:21+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Congo Is Running Short of Health Workers as Ebola Remains Out of Control, WHO Says",
+          "summary": "世界卫生组织称，刚果埃博拉疫情已扩散至7个省，累计确诊7,773例、死亡3,759例。北基伍省3周内病例激增73%，治疗中心因人手不足难以运转；5岁以下儿童病死率超过60%。",
+          "publishedAt": "2026-09-23T21:37:18+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-38-72",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 72,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 35,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Meeting highlights from the Committee for Medicinal Products for Human Use (CHMP) 14-17 September 2026",
+          "summary": "会议还给出生物类似药、仿制药的正面意见，并公布舒芬太尼/氯胺酮等品种的复审启动、复审结果及部分申请的撤回情况。",
+          "publishedAt": "2026-09-18T10:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Summary of opinion: Abiraterone Mylan, 17/09/2026 Positive",
+          "summary": "2026年9月17日，欧洲药品管理局人用药品委员会采纳正面意见，建议修改阿比特龙仿制药 Abiraterone Mylan 的上市许可条款：变更1项现有适应症并新增2项适应症，均与泼尼松或泼尼松龙联用。",
+          "publishedAt": "2026-09-18T10:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-42-56",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 56,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 38,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "FDA Actions to Accelerate and Modernize Early and Late-Stage Clinical Development",
+          "summary": "该机构启动加速新药临床试验申请试点项目，申请截止2026年10月30日；同时更新一期临床试验化学制造与控制网页、设立一期联络中心，并发布基于定量系统药理学的首次人体试验起始剂量选择指南草案。",
+          "publishedAt": "2026-09-21T12:57:28+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "FDA Expedited Investigational New Drug (IND) Pilot Program",
+          "summary": "该试点隶属HHS Operation TrialBlazer，由具备专业能力的第三方机构（QRI）为申办方提供药理毒理、临床及CMC建议，美国食品药品监督管理局按滚动方式审评IND各部分，以缩短首次人体试验启动时间。参与自愿，监管标准不变。",
+          "publishedAt": "2026-09-18T19:55:26+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-45-2761",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 2761,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 44,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Human medicines European public assessment report (EPAR): Frehemgo, denecimig, Status: Opinion",
+          "summary": "2026年9月17日，欧洲药品管理局人用药品委员会采纳正面意见，建议批准Frehemgo用于血友病A患者出血事件的常规预防。该药活性成分为denecimig，为活化凝血因子VIII模拟物，申请人Novo Nordisk A/S，可用于所有年龄组。",
+          "publishedAt": "2026-09-18T10:05:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "CHMP backs Novo’s hemophilia A drug and seven other medicines",
+          "summary": "欧洲药品管理局人用药品委员会建议批准诺和诺德的血友病A预防性药物，同时推荐批准另外7款新药和11项标签扩展。",
+          "publishedAt": "2026-09-18T16:51:03+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-115-1467",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 1467,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 101,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "UKHSA and University of Oxford scientists uncover genetic changes in the bacteria causing severe Kent meningococcal disease outbreak",
+          "summary": "2026年3月坎特伯雷一家夜总会相关疫情中，1周内21人确诊侵袭性脑膜炎球菌病，9人需重症监护，2人死亡。测序显示疫情菌株通过水平基因转移获得其他无害细菌的DNA，改变了与人体细胞的相互作用。",
+          "publishedAt": "2026-09-22T08:30:02+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Scientists discover why Kent meningitis outbreak was so severe",
+          "summary": "调查显示，引发疫情的细菌通过水平基因转移获得其他细菌的遗传物质，形成新的变异株，在夜店人群中传播并导致重症。专家强调现有MenB疫苗对该变异株有效。",
+          "publishedAt": "2026-09-22T12:24:50.33+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-248-334",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 334,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 228,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "AI bioweapons: Anthropic claims scientists used Claude AI tool for dangerous research",
+          "summary": "",
+          "publishedAt": "2026-09-16T11:10:11+00:00",
+          "doi": "10.1136/bmj-2026-100871",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Alarming report on AI and bioweapons divides scientists",
+          "summary": "Anthropic 称研究人员可能曾利用 Claude 从事病毒与毒素相关的不当工作。该报告在科学界引发争议。",
+          "publishedAt": "2026-09-17T18:02:51+00:00",
+          "doi": "10.1126/science.aem4440",
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-258-1473",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 1473,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 234,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Breast cancer: Life extending drug is now available on NHS in England",
+          "summary": "",
+          "publishedAt": "2026-09-17T14:35:16+00:00",
+          "doi": "10.1136/bmj-2026-100896",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "New hope for breast cancer patients as life-extending drug now on NHS in England",
+          "summary": "该药用于 HER2 低表达不可治愈乳腺癌，平均可延长近 7 个月生存，部分患者可多活 3 年。此前因性价比被拒，英格兰每年约 1,000 名患者将因此受益。",
+          "publishedAt": "2026-09-17T13:32:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-250-2367",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 2367,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 236,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Tobacco Use Treatment: Synopsis of the 2026 U.S. Department of Veterans Affairs and U.S. Department of Defense Clinical Practice Guideline",
+          "summary": "该指南由多学科工作组基于2014年1月1日至2024年12月10日的系统综述制定，共32条推荐、覆盖10个主题领域。推荐伐尼克兰优于其他单药治疗，联合尼古丁替代治疗优于单药，并建议将安非他酮缓释剂使用延长至12周以上。",
+          "publishedAt": "2026-09-21T21:00:16+00:00",
+          "doi": "10.7326/annals-26-01499",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Varenicline and combination nicotine replacement therapy deemed preferred treatments for tobacco use",
+          "summary": "该指南基于2014至2024年研究制定，共32条推荐，涵盖戒烟药物、咨询方法与治疗策略，强调对合并精神疾病患者药物治疗的安全性与有效性。",
+          "publishedAt": "2026-09-22T13:40:01+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-455-3422",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3422,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 429,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "湖南省动物致伤后狂犬病与破伤风一体化预防处置临床专家共识",
+          "summary": "该共识由湖南省人民医院牵头制定，拟统一湖南省动物致伤门诊和预防接种相关机构的一站式双病感染风险评估、伤口处置、联合主动免疫、联合被动免疫、特殊人群管理及随访质控标准。目前处于审核阶段。",
+          "publishedAt": "2026-09-21T03:41:08+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "PREPARE-2026CN2379"
+          ]
+        },
+        "right": {
+          "title": "动物致伤后狂犬病与破伤风一体化预防处置临床专家共识",
+          "summary": "湖南省人民医院与中山大学附属第八医院牵头制定，统一动物致伤门诊及预防接种机构的一站式双病感染风险评估、伤口处置、联合主动免疫、联合被动免疫、特殊人群管理及随访质控标准。该共识已在国际实践指南注册与透明化平台注册，目前处于评审阶段。",
+          "publishedAt": "2026-09-23T04:33:59+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-483-1565",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 1565,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 436,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Gabapentin Use in Medicaid After Descheduling",
+          "summary": "这项横断面研究分析密歇根州医疗补助参保者中，加巴喷丁取消管制与其使用情况之间的关联。",
+          "publishedAt": "2026-09-21T15:30:48+00:00",
+          "doi": "10.1001/jamanetworkopen.2026.35059",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Gabapentin Use Rose as Restrictions Fell, Study Shows",
+          "summary": "一项横断面研究显示，2024年5月密歇根州将加巴喷丁移出州管制物质目录后，医疗补助参保者中该药每1,000人配药量即刻增加4.00张处方（95% CI 2.33-5.67），研究期间加巴喷丁配药量始终高于普瑞巴林。",
+          "publishedAt": "2026-09-21T15:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-882-7199",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 7199,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 691,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "How safe and effective is mifepristone when used for emergency contraception?",
+          "summary": "共纳入 87 项研究、约 3.6 万名女性，多数在中国开展。与左炔诺孕酮相比，中剂量米非司酮（25 mg 至 50 mg）妊娠数更少，但月经推迟风险增加；与 Yuzpe 法相比妊娠数也更少。",
+          "publishedAt": "2026-09-21T00:00:00+00:00",
+          "doi": "10.1002/14651858.cd016275-english",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Effectiveness, safety and acceptability of mifepristone compared with other interventions in reproductive-age women using emergency contraception for the prevention of pregnancy: a systematic review and meta-analysis.",
+          "summary": "该系统评价纳入87项随机对照试验，比较米非司酮与其他紧急避孕方法。米非司酮较Yuzpe方案及低、中剂量左炔诺孕酮降低妊娠风险，恶心呕吐更少，但月经延迟风险增加；与铜宫内节育器的比较证据尚不明确。",
+          "publishedAt": "2026-09-23T00:00:00+00:00",
+          "doi": "10.1136/bmjsrh-2026-203328",
+          "pmid": "42778306",
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-1434-2767",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 2767,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1073,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Beacon eye gene therapy hits mark in late-stage study",
+          "summary": "",
+          "publishedAt": "2026-09-21T18:59:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Beacon says gene therapy succeeds in key trial of rare eye disease XLRP",
+          "summary": "Beacon Therapeutics 称其基因疗法 laru-zova 治疗 X 连锁视网膜色素变性（XLRP）的关键试验取得阳性结果。此前 Johnson & Johnson、Biogen 等大型药企在该遗传性眼病上均未成功。",
+          "publishedAt": "2026-09-21T06:00:58+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-1435-1484",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 1484,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1074,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Novo talks up drug launches in effort to win back investors",
+          "summary": "诺和诺德在伦敦资本市场日公布战略规划，拟在2030年前推出超过5款「多重重磅产品」，并预计到2035年现有管线年销售额超过230亿美元。公司同时面临司美格鲁肽专利到期、减重市场被礼来超越及股价下跌等压力。",
+          "publishedAt": "2026-09-21T16:30:17+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "StockWatch: Novo’s 2030 Strategy Underwhelms Investors at Capital Markets Day",
+          "summary": "公司在资本市场日提出到2030年每年推出超过5款多适应症重磅药物，并计划2035年实现超过1500亿丹麦克朗的风险调整管线销售额；司美格鲁肽2032年美国专利到期被列为核心挑战。当日哥本哈根股价下跌近8%。",
+          "publishedAt": "2026-09-21T20:41:36+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT06534411",
+            "NCT06388187",
+            "NCT05878938",
+            "NCT06706076",
+            "NCT05376150"
+          ]
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-1436-1492",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 1492,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1075,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Telix buys ITM in bid to create a ‘radiopharmaceutical powerhouse’",
+          "summary": "交易首付 16.5 亿美元，若 ITM-11 达到审批和销售目标可再付 7 亿美元。合并后 Telix 股东持股约 76.3%，预计在 2026 财年末完成。",
+          "publishedAt": "2026-09-21T11:49:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Telix locks in radioisotope supply",
+          "summary": "ITM Radiopharma 曾尝试转型为药物开发企业，此次被 Telix 以全股票方式收购，交易核心为其镥-177 供应网络。",
+          "publishedAt": "2026-09-21T11:48:02+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-1493-3372",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3372,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1110,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Lilly takes a swipe at Astra's SERD claim",
+          "summary": "Inluriyo与CDK4/6抑制剂Verzenio联合用于二线ER阳性HER2阴性乳腺癌，此前已有单药获批。",
+          "publishedAt": "2026-09-21T11:19:21+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "FDA approval: INLURIYO — NDA218881 SUPPL-1 (Efficacy)",
+          "summary": "申办方为 ELI LILLY AND CO.，产品为 INLURIYO 口服片剂 imlunestrant tosylate，规格折算为 200MG 碱基，审评优先级为标准审评。",
+          "publishedAt": "2026-09-18T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-1487-1539",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 1539,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1119,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "STAT+: Members of Congress push back on plan to create a commission of political appointees to review NIH grants",
+          "summary": "有消息称，白宫计划通过行政令设立一个由政治任命人员组成的委员会，对所有美国国立卫生研究院拨款进行审核，且需一致同意方可放行。多名国会议员对此表示强烈反对。",
+          "publishedAt": "2026-09-21T22:17:21+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Trump reportedly to form health funding board that could veto ‘woke’ initiatives",
+          "summary": "该行政令拟设立外部委员会审批美国国立卫生研究院的科研拨款，委员会须一致同意方可放行，成员包括白宫管理与预算办公室主任及该院院长。此举打破按科学价值评审的惯例，研究人员已提起集体诉讼。",
+          "publishedAt": "2026-09-20T21:53:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-1621-5157",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 5157,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1633,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "2 Minute Medicine Rewind September 21, 2026",
+          "summary": "这项覆盖7家三级儿科医院的大型病例对照研究显示，在有症状的呼吸道合胞病毒（RSV）感染婴儿中，接受尼塞韦单抗者重症疾病负担与ICU就诊显著减少。",
+          "publishedAt": "2026-09-21T10:00:17+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Nirsevimab (Beyfortus) may reduce severe respiratory syncytial virus infections among infants",
+          "summary": "这是一项在7家三级儿科医院开展的检测阴性病例对照研究，评估2024至2025年RSV流行季尼塞韦单抗的真实世界效果。调整后对实验室确诊RSV病的有效性为78%，对ICU入住的有效性为97%，提示该单抗可减轻婴儿重症负担。",
+          "publishedAt": "2026-09-25T22:01:20+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-2335-4155",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4155,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1775,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "52万人群数据模拟降低Lp(a)的心血管预防获益：诺华未达显著性，安进、礼来呈积极信号",
+          "summary": "研究基于522,494人的真实世界数据构建模拟亚队列，模拟Lp(a)HORIZON、ACCLAIM-Lp(a)和OCEAN(a)试验人群。诺华对应模拟未达统计学显著性，安进、礼来对应模拟达到统计学显著性；诺华pelacarsen的Ⅲ期Lp(a)HORIZON试验已证实未达主要终点。",
+          "publishedAt": "2026-09-18T08:55:28+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": [
+            "NCT05581303",
+            "NCT06292013"
+          ]
+        },
+        "right": {
+          "title": "Opinion: STAT+: A moment of reckoning for preventive cardiology and the precision medicine revolution",
+          "summary": "Novartis公布pelacarsen的3期试验Lp(a) HORIZON顶线结果，该药成功降低脂蛋白(a)水平，但未减少心血管事件；数周前Novo Nordisk的ziltivekimab在3期试验ZEUS中同样影响了生物学靶点却未改善临床结局。",
+          "publishedAt": "2026-09-24T08:30:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-2385-2883",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 2883,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1932,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Empower Clinic Services, LLC dba Empower Pharmacy - 738238 - 09/18/2026",
+          "summary": "美国FDA于2025年11月3日至14日检查该公司设施，认定其配制的替尔泊肽/烟酰胺、司美格鲁肽/维生素B12等产品属于已获批产品的实质复制品，且存在严重生产缺陷。",
+          "publishedAt": "2026-09-22T13:20:12+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Compounder Empower receives FDA warning letter over GLP-1s",
+          "summary": "美国食品药品监督管理局向休斯顿配药企业 Empower Pharmacy 发出警告信，涉及其 GLP-1 减重治疗药物。这是该公司在不到 2 年内收到的第 3 封警告信。",
+          "publishedAt": "2026-09-22T18:47:51+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-2411-2752",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 2752,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1965,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Amgen’s Horizon-acquired fusion protein eases Sjögren's severity in ph. 3 win",
+          "summary": "该在研药物用于自身免疫性疾病干燥综合征，3期试验取得阳性结果。该管线来自安进收购的Horizon Therapeutics，此前推进不顺。",
+          "publishedAt": "2026-09-22T15:14:35.972+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Amgen's Phase 3 Sjögren's win; Novartis' $900M radioligand deal",
+          "summary": "Ionis与Otsuka宣布其合作药物候选ulefnersen在特定类型ALS的3期试验中取得阳性结果，具体数据尚未披露。",
+          "publishedAt": "2026-09-22T15:29:54+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-1422-1559",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 1559,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 1986,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "STAT+: What a vote on Grail’s cancer detection test could mean for the company, patients, and regulators",
+          "summary": "美国食品药品监督管理局在顾问委员会会议前公布的文件显示，该机构可能对Galleri多癌种早期检测血检持积极态度。该检测已作为实验室诊断项目提供，若获批准，预计有助于获得Medicare及其他保险支付方的报销。",
+          "publishedAt": "2026-09-21T17:58:51+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "FDA Staff Find No Major Concerns With Galleri Multicancer Early Detection Test",
+          "summary": "",
+          "publishedAt": "2026-09-21T21:40:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-1503-3366",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3366,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2006,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Bayer’s Kerendia (finerenone) Receives FDA Approval as the First New Treatment in 30 Years for Adults with Chronic Kidney Disease (CKD) and Type 1 Diabetes",
+          "summary": "美国食品药品监督管理局批准非奈利酮用于降低尿白蛋白与肌酐比值，据称可降低持续估算肾小球滤过率下降的风险。",
+          "publishedAt": "2026-09-17T20:09:01+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "FDA approval: KERENDIA — NDA215341 SUPPL-11 (Efficacy)",
+          "summary": "拜耳提交的非奈利酮口服片剂补充申请获美国食品药品监督管理局批准，审评优先级为优先审评，涉及10mg、20mg、40mg规格。",
+          "publishedAt": "2026-09-16T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-2745-2747",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 2747,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2386,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Viking shares surge on updated obesity drug data",
+          "summary": "2期试验中180例肥胖受试者先接受每周注射VK2735，21周后改为每两周或每月1次维持注射12周，平均维持减重幅度82%至97%。公司称胃肠道不良反应频率在维持期无显著差异，3期试验已全部入组。",
+          "publishedAt": "2026-09-22T16:10:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Viking touts once-a-month weight loss maintenance data",
+          "summary": "Viking Therapeutics称，换用每月一次给药方案的患者在12周后体重未明显反弹，支持降低给药频率的潜力。数据尚未发表。",
+          "publishedAt": "2026-09-22T15:07:05+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-2756-3353",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3353,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2478,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "FDA approves ataxia-telangiectasia drug; Alkermes reports ADHD data",
+          "summary": "美国食品药品监督管理局批准了私营生物技术公司 IntraBio 的 Aqneursa，用于治疗这种罕见遗传病。该消息同时汇总了 Biokin、百时美施贵宝、Grünenthal 和强生的动态。",
+          "publishedAt": "2026-09-21T15:30:28+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "FDA approval: AQNEURSA — NDA219132 SUPPL-2 (Efficacy)",
+          "summary": "申办方为 INTRABIO，产品为左乙酰亮氨酸口服混悬液，规格 1GM/PACKET，审评优先级为 PRIORITY。",
+          "publishedAt": "2026-09-18T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-2907-3107",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3107,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2542,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "FDA approval: IBTROZI — NDA219713 SUPPL-4 (Efficacy)",
+          "summary": "该补充申请由 NUVATION 申办，产品为他雷替尼己二酸盐胶囊，规格按碱基计 200MG，审评优先级为标准审评。",
+          "publishedAt": "2026-09-16T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Nuvation Bio Announces FDA Approval of Supplemental New Drug Application for Ibtrozi (taletrectinib) with Updated Duration of Response in TKI-Naïve Advanced ROS1-Positive Non-Small Cell Lung Cancer",
+          "summary": "Nuvation Bio 宣布，美国食品药品监督管理局已批准他雷替尼的补充新药申请，并更新了TKI初治晚期ROS1阳性非小细胞肺癌的缓解持续时间数据。",
+          "publishedAt": "2026-09-16T21:09:27+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3111-3460",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3460,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2734,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Efficacy and safety of alternative benznidazole and nifurtimox regimens for adults with chronic Trypanosoma cruzi infection (TESEO): an open-label, randomised, non-inferiority phase 2b trial",
+          "summary": "",
+          "publishedAt": "2026-09-22T22:54:00+00:00",
+          "doi": "10.1016/s1473-3099(26)00436-6",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "A shorter, better-tolerated treatment for Chagas disease is possible",
+          "summary": "2b期TESEO试验纳入450例玻利维亚成人，比较苯硝唑与硝呋替莫6种方案。苯硝唑30天组药物相关不良事件37%，标准60天组60%；治疗3年后30天组94%的受试者血中寄生虫仍不可检出，达到非劣效标准。",
+          "publishedAt": "2026-09-23T14:40:01+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3144-3462",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3462,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2736,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Performance and safety of a multi-cancer early detection test: the PATHFINDER 2 study",
+          "summary": "前瞻性干预研究纳入35,878名50岁及以上无癌症临床怀疑者，随访12个月。癌症检出率0.54%，阳性预测值60.3%，特异性99.64%，筛查185人检出1例癌症；阳性后0.6%接受有创操作，90.5%为非手术操作。",
+          "publishedAt": "2026-09-22T21:01:49+00:00",
+          "doi": "10.1038/s41591-026-04618-w",
+          "pmid": null,
+          "registryIds": [
+            "NCT05155605"
+          ]
+        },
+        "right": {
+          "title": "PATHFINDER 2 findings advance multi-cancer early detection blood testing",
+          "summary": "该研究纳入 35,878 名 50 岁及以上成人，Galleri 加入乳腺癌、结直肠癌、宫颈癌和肺癌常规筛查后，筛查检出癌症数提高 6.5 倍；阳性预测值 60.3%，特异性 99.64%。结果发表于 Nature Medicine，并将在美国食品药品监督管理局顾问委员会会议上报告。",
+          "publishedAt": "2026-09-23T14:20:01+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3257-3318",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3318,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2864,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Roche’s phase 3 win tees up fight with Novartis for blockbuster kidney disease market",
+          "summary": "罗氏公布sefaxersen在肾病领域的3期试验阳性结果，将与监管机构讨论申报上市路径。该药由Ionis合作开发，被视为潜在重磅品种。",
+          "publishedAt": "2026-09-23T07:59:36.134+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Roche kidney drug's Phase 3 win sets up path to accelerated approval",
+          "summary": "罗氏公布3期试验中期结果，向已有多款获批药物的肾病市场靠近。诺华、Calliditas、Travere、Otsuka和Vera已有获批药物。",
+          "publishedAt": "2026-09-23T10:18:53+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3302-3337",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3337,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2904,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Drug delivery system slowly releases pain-relieving nerve block over weeks",
+          "summary": "波士顿儿童医院团队发现，由多双键不饱和磷脂形成的多室脂质体可极缓慢释放亲水性药物，包裹河豚毒素后在大鼠腿部神经旁注射，麻醉持续2至3周，注射部位及全身未见毒性。",
+          "publishedAt": "2026-09-23T09:00:07+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Ultra-slow release of hydrophilic drugs via multilamellar–multivesicular liposomes formed by unsaturated phospholipids",
+          "summary": "研究比较相同链长、不同不饱和度磷脂制备的脂质体，DOPC 脂质体包封率约为饱和类似物的 3 倍，初始释放低 11 倍，7 天释放低 4 倍，并形成多层和多囊结构。载河豚毒素脂质体在大鼠坐骨神经阻滞模型中产生 2 至 3 周阻滞且无全身毒性。",
+          "publishedAt": "2026-09-23T09:02:38+00:00",
+          "doi": "10.1038/s41551-026-01793-6",
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3340-3595",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3595,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2933,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "UKHSA expands wastewater surveillance to strengthen ‘early warning system’ for dangerous pathogens",
+          "summary": "英国综合安全基金投入 300 万英镑，支持 UKHSA 将污水与环境监测扩展至医院污水点和交通枢纽等高人流场所，新项目 PRISM 采用病原体不可知策略，同一份样本可同时服务公共卫生监测、生物安全和耐药监测。",
+          "publishedAt": "2026-09-23T11:00:02+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Wastewater surveillance: UKHSA expands programme to detect major health threats",
+          "summary": "",
+          "publishedAt": "2026-09-23T17:30:15+00:00",
+          "doi": "10.1136/bmj-2026-100950",
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3378-4083",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4083,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 2964,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "WHO expands safe options for contraception",
+          "summary": "新指南建议复方口服避孕药可延长使用至6个月或连续使用至1年，皮下埋植剂可用至5年，并推荐米非司酮10–50 mg作为紧急避孕新选择；同时不建议将含炔雌醇环醚的口服避孕药纳入国家避孕规划。",
+          "publishedAt": "2026-09-23T08:40:26+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "WHO guidelines on expanding contraceptive options",
+          "summary": "该指南针对此前未纳入世界卫生组织避孕使用医学资格标准或与选用实践建议不同的方法与用法，基于系统评价和专家评估给出推荐，涉及奥美洛昔芬、含炔雌醚复方口服避孕药、米非司酮用于紧急避孕，以及复方口服避孕药的连续或延长使用和依托孕烯释放植入剂的延长使用。",
+          "publishedAt": "2026-09-23T09:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3466-3496",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3496,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3046,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Enveda reaps $311M series E to feed ambition to become a ‘household name’",
+          "summary": "",
+          "publishedAt": "2026-09-23T15:14:35.074+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Enveda raises its third megaround for I&I and weight maintenance drug candidates",
+          "summary": "这家总部位于科罗拉多和印度的初创公司利用全球植物与微生物化学构建研发管线，此次为其第 3 轮大额融资。",
+          "publishedAt": "2026-09-23T15:21:54+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3522-3523",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 3523,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3093,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Tenecteplase Before Thrombectomy at 4.5 to 24 Hours for Basilar Artery Occlusion",
+          "summary": "",
+          "publishedAt": "2026-09-23T15:30:40+00:00",
+          "doi": "10.1001/jama.2026.15601",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Tenecteplase Before Thrombectomy at 4.5 to 24 Hours for Basilar Artery Occlusion",
+          "summary": "这项在中国40家卒中中心开展的随机试验纳入330例发病4.5至24小时的基底动脉闭塞患者，替奈普酶联合血管内取栓组与单纯取栓组90天功能独立比例均为30%，症状性颅内出血与死亡率相近。",
+          "publishedAt": "2026-09-23T15:30:39+00:00",
+          "doi": "10.1001/jama.2026.15496",
+          "pmid": null,
+          "registryIds": [
+            "NCT05701956"
+          ]
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3593-4465",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4465,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3157,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "‘It’s actually very radical’: NIH debuts tool to help scientists navigate biomedical database",
+          "summary": "美国国立卫生研究院下属国家医学图书馆发布一款新工具的试点版本，旨在帮助科学家更快地在馆藏科学论文数字资源中找到相关研究。",
+          "publishedAt": "2026-09-23T18:14:35.904+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "NIH details $170 million biomedical research reproducibility effort",
+          "summary": "美国国立卫生研究院院长宣布将投入1.7亿美元用于提升科学发现的可靠性，具体措施包括开发文献检索工具等。该计划若落地，可能影响科研资助与成果评价方式。",
+          "publishedAt": "2026-09-24T02:00:00+00:00",
+          "doi": "10.1126/science.zc2xj7o",
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3709-4087",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4087,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3258,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "FDA approves lirafugratinib for previously treated, unresectable, locally advanced or metastatic cholangiocarcinoma",
+          "summary": "该激酶抑制剂用于既往接受过治疗、携带FGFR2基因融合或其他重排的不可切除局部晚期或转移性胆管癌成人患者。单臂REFOCUS试验显示客观缓解率46%，中位缓解持续时间11.8个月。",
+          "publishedAt": "2026-09-23T19:34:34+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "FDA Approves Lyrfigtu (lirafugratinib) for the Treatment of Cholangiocarcinoma with FGFR2 Fusion or Other Rearrangement",
+          "summary": "Elevar Therapeutics宣布，美国食品药品监督管理局已批准Lyrfigtu（lirafugratinib）用于治疗携带FGFR2融合或其他重排的胆管癌。该消息为企业新闻稿，具体数据尚未发表。",
+          "publishedAt": "2026-09-23T23:09:52+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3912-4432",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4432,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3448,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Early Alert: Heart Pump Controller Issue from Abiomed",
+          "summary": "Abiomed 因回顾性审查发现部分 Impella 控制器需硬件、固件或软件更新，正召回相关产品。截至 2026 年 9 月 8 日，未报告相关严重伤害或死亡。等待服务期间医院库存可继续使用。",
+          "publishedAt": "2026-09-23T04:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Heart Pump Controller Recall: Abiomed Removes Automated Impella Controllers",
+          "summary": "因 purge cassette 识别失败可致机械循环支持延迟，Abiomed 全球召回该控制器，美国食品药品监督管理局列为最严重级别。已报告 37 例严重伤害和 3 例死亡。等待更换期间院内库存可继续使用，报警时先重新插入 purge disc，无效则换备用控制器。",
+          "publishedAt": "2026-09-24T04:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3921-4151",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4151,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3455,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "STAT+: Nominee to lead FDA aims to speed up medical research, combat China’s rise",
+          "summary": "特朗普提名的美国食品药品监督管理局局长人选Heidi Overton在参议院听证会开场陈述中表示，将推动该机构提速增效，继续推进Operation Trialblazer以加快临床试验流程。其表态反映美国监管层对生物技术领域竞争格局的关注，后续政策走向值得国内研发与监管领域关注。",
+          "publishedAt": "2026-09-23T22:14:37+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "STAT+: How a young doctor rose from rural New Mexico to FDA commissioner nominee",
+          "summary": "STAT 报道，Heidi Overton 获提名为美国食品药品监督管理局局长人选，若获确认将成为该机构史上最年轻的负责人。她拥有医学学位和乡村行医背景，其政策取向可能影响美国药品审评与监管走向。",
+          "publishedAt": "2026-09-24T08:30:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-3975-4285",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4285,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3492,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "不挨饿也能长寿的“开关”找到了",
+          "summary": "湖南师范大学翟宗昭团队联合湖南大学、中国科学院上海营养与健康研究所，在果蝇中发现氨基酸感应诱导因子Lsp2，关闭Lsp2可降低核糖体蛋白翻译并延长寿命，雌性果蝇中位寿命延长14%至28%，且运动、生殖和抗应激性表现正常。相关成果以背靠背形式与日本理化学研究所团队同日在《自然》发表。",
+          "publishedAt": "2026-09-24T00:38:02+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "不挨饿也能长寿的“开关”找到了",
+          "summary": "湖南师范大学翟宗昭团队联合湖南大学、中国科学院上海营养与健康研究所，在果蝇体内发现氨基酸感应诱导因子Lsp2，关闭Lsp2可降低核糖体蛋白翻译并延长寿命，雌性果蝇中位寿命延长14%至28%，且运动、生殖和抗应激性正常。研究提示衰老或不必仅靠限制饮食来延缓。",
+          "publishedAt": "2026-09-24T13:59:30+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-4060-4062",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4062,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3495,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Anito-cel for Multiple Myeloma",
+          "summary": "",
+          "publishedAt": "2026-09-23T21:00:31+00:00",
+          "doi": "10.1056/nejme2609181",
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Phase 1 Study of Anito-cel, a d -Domain BCMA CAR T Cell for Refractory or Recurrent Myeloma",
+          "summary": "1期研究评估靶向 BCMA 的 CAR T 细胞疗法 anito-cel 用于复发难治多发性骨髓瘤，38例可评估患者全部缓解，79%达完全缓解，中位随访38.1个月时中位无进展生存期30.2个月，3级及以上细胞因子释放综合征和 ICANS 少见。",
+          "publishedAt": "2026-09-23T21:00:31+00:00",
+          "doi": "10.1056/nejmoa2603527",
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-4064-5653",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 5653,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3528,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "最大规模人脑基因表达图谱探析发育衰老、退化和疾病",
+          "summary": "《自然》及其系列期刊集中发表多篇神经科学论文，基于美国 PsychAD 项目 1494 名已故供体的逾 630 万例基因表达谱，构建人体前额叶皮层已知最大规模基因表达图谱，揭示不同生命阶段的基因表达转变及多种脑疾病间的相似性。该资源有望推动神经精神与神经退行性疾病相关基因的发现。",
+          "publishedAt": "2026-09-24T03:28:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "前额叶皮层脑区最大基因图谱问世",
+          "summary": "3 篇发表于《自然》的论文分析了 1494 名已故捐赠者大脑的逾 630 万例基因表达谱，其中一篇覆盖 284 名捐赠者的 130 万例表达谱，显示基因表达随年龄变化，并发现不同痴呆症与帕金森病之间的表达变化相似性较强。该图谱为研究神经退行性与神经精神疾病的机制提供了资源。",
+          "publishedAt": "2026-09-28T09:22:44+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-4102-4103",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4103,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3591,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Clinical requirements for medicines intended for the treatment of sickle cell disease",
+          "summary": "该草案由欧洲药品管理局人用药品委员会发布，就镰状细胞病治疗药物的临床开发总体原则提供指导，重点针对确证性3期试验的安全性和有效性，作为获益风险评估的主要依据。征求意见期开放至2027年1月31日，对国内开展相关药物研发和试验设计有参考价值。",
+          "publishedAt": "2026-09-24T06:59:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Draft guideline on the clinical requirements for medicines intended for the treatment of sickle cell disease",
+          "summary": "",
+          "publishedAt": "2026-09-24T06:53:57+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-4104-4105",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4105,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3592,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Clinical requirements for medicines intended for the treatment of thalassaemia",
+          "summary": "该草案针对α和β地中海贫血治疗药物的临床开发，重点为确证性3期试验的安全性和有效性，作为获益风险评估的主要依据。征求意见期至2027年1月31日，尚未定稿。",
+          "publishedAt": "2026-09-24T06:53:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Draft guideline on the clinical requirements for medicines intended for the treatment of thalassaemia",
+          "summary": "",
+          "publishedAt": "2026-09-24T06:49:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-4140-4464",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4464,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3639,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "New tool helps researchers spot problematic trials before they distort evidence",
+          "summary": "该工具由曼彻斯特大学、Cochrane 协作网和科罗拉多大学等 40 余家机构共同开发，通过 4 个领域 21 项结构化检查评估随机对照试验数据的可信度，成果发表于 BMJ。研究团队建议系统评价作者、指南制定者和出版方采用，以降低问题试验对证据和推荐意见的干扰。",
+          "publishedAt": "2026-09-24T09:30:01+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "New tool helps researchers spot problematic trials before they distort evidence",
+          "summary": "该工具由曼彻斯特大学、Cochrane 协作网和科罗拉多大学等机构合作开发，通过 4 个领域的 21 项结构化检查评估随机对照试验的可信度，已在 Cochrane 系统评价中获得认可。它帮助系统评价作者和指南制定者在纳入研究前识别问题试验，避免证据被扭曲。",
+          "publishedAt": "2026-09-24T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-4146-4169",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 4169,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3646,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Kyverna ‘resetting conversation’ with 1-year miv-cel data as autoimmune CAR-T peers hit safety snags",
+          "summary": "Kyverna公布miv-cel在僵人综合征和全身型重症肌无力的长期数据，单次给药后疗效可持续至12个月，未出现高级别细胞因子释放综合征、ICANS或IEC-HS。公司计划将1年数据纳入美国食品药品监督管理局滚动提交，若获批将成为首个用于自身免疫病的CAR-T疗法。",
+          "publishedAt": "2026-09-24T10:14:32.819+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Kyverna says long-term data bolster FDA submission for rare autoimmune CAR-T",
+          "summary": "Kyverna Therapeutics公布针对僵人综合征患者的1年积极结果，该病在美国约影响6,000名患者，可致疼痛性肌肉痉挛和僵硬。公司称这些数据支持其向美国食品药品监督管理局提交申请，具体数据尚未发表。",
+          "publishedAt": "2026-09-24T10:02:50+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    },
+    {
+      "id": "membership-4201-7805",
+      "source": {
+        "corpus": "frontier-a0-20261006",
+        "snapshotSha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+        "kind": "event-item",
+        "id": 7805,
+        "capturedAt": "2026-10-06T14:26:55.520177+00:00",
+        "eventId": 3699,
+        "joinedBy": "model"
+      },
+      "labelBasis": "incumbent-model",
+      "releaseEligible": false,
+      "input": {
+        "left": {
+          "title": "Merck’s return to ophthalmology snags first success",
+          "summary": "默克2024年以13亿美元预付款收购EyeBio，此次在关键试验中取得疗效成功，但分析师对安全性结果提出质疑。相关数据尚未正式发表。",
+          "publishedAt": "2026-09-24T12:14:05+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        },
+        "right": {
+          "title": "Merck’s Remigromig, a Tri-specific Agonist of the Wingless-related Integration Site (Wnt) Pathway, Met Primary Endpoint in the Pivotal Phase 2b/3 BRUNELLO Study of Adults with Diabetic Macular Edema",
+          "summary": "BRUNELLO研究纳入984例糖尿病性黄斑水肿患者，remigromig两个剂量组第52周最佳矫正视力较基线变化均非劣于雷珠单抗，总体耐受性良好，但视网膜增殖性病变、玻璃体出血及因不良事件停药的比例高于雷珠单抗组。顶线结果尚未发表，完整数据将在学术会议公布并与监管机构讨论。",
+          "publishedAt": "2026-09-24T00:00:00+00:00",
+          "doi": null,
+          "pmid": null,
+          "registryIds": []
+        }
+      },
+      "expected": {
+        "relation": "same"
+      }
+    }
+  ]
+}

@@ -1737,8 +1737,19 @@ async function checkCredentialHostVariablesAgree() {
 //
 // Derived from the agents' own source, not from a list, so an agent that
 // starts reading a new credential fails here rather than in production.
+/** A task token is injected by the admitted worker, never a static compose secret.
+ * @param {string} modelSource @param {string} workerSource */
+export function judgeTaskCredentialWired(modelSource, workerSource) {
+  return /"EVIMED_JUDGE_GATEWAY_TOKEN":\s*token/.test(modelSource)
+    && /environment\.update\(engine_model\.child_environment\(gateway_token, gateway_base/.test(workerSource)
+    && /gateway_token\s*=\s*environment\.pop\(engine_model\.TOKEN_ENV/.test(workerSource);
+}
+
 async function checkSpecialistAgentCredentialsWired() {
   const compose = await read("deploy/web/docker-compose.yml");
+  const taskJudgeWired = judgeTaskCredentialWired(
+    await read("deploy/specialist-adapter/evimed_specialist_adapter/engine_model.py"),
+    await read("deploy/specialist-adapter/evimed_specialist_adapter/service.py"));
   // The Python agent trees live beside OpenScience, one level above repoRoot.
   const agentRoot = path.resolve(repoRoot, "..");
   // Split into service blocks first, then read each one.
@@ -1766,7 +1777,8 @@ async function checkSpecialistAgentCredentialsWired() {
     // from the repo root, while `meta` has its own Dockerfile and names the
     // tree as its build `context`. Reading only the first silently skipped it.
     const dir = /AGENT_DIR:\s*(\S+)/.exec(block)?.[1]
-      ?? /context:\s*\.\.\/\.\.\/\.\.\/(\S+)/.exec(block)?.[1];
+      ?? /context:\s*\.\.\/\.\.\/\.\.\/(\S+)/.exec(block)?.[1]
+      ?? (/context:\s*\.\.\/\.\.\/\.\.\s*$/m.test(block) ? /dockerfile:\s*(\S+)\/Dockerfile(?:[.\w-]*)/.exec(block)?.[1] : null);
     if (dir) agentDirs.set(service, dir);
   }
   // Every specialist service compose defines must be reachable, or this check
@@ -1793,12 +1805,13 @@ async function checkSpecialistAgentCredentialsWired() {
       continue; // the archived Python trees are untracked; absent is not a failure
     }
     for (const name of names) {
+      if (name === "EVIMED_JUDGE_GATEWAY_TOKEN" && taskJudgeWired) continue;
       if (!passed.has(name) && !passed.has(`${name}_FILE`)) missing.push(`${service}: ${name}`);
     }
   }
 
   if (missing.length === 0) {
-    pass("specialist_agent_credentials_wired", "Every credential a specialist agent reads is passed to it by compose.");
+    pass("specialist_agent_credentials_wired", "Every credential a specialist agent reads is supplied by compose or the admitted task-token worker.");
   } else {
     fail(
       "specialist_agent_credentials_unwired",

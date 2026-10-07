@@ -2,6 +2,9 @@ import { GeoJudge } from './geoJudge.mjs';
 import { createModuleEvolutionPolicies } from './moduleEvolutionPolicies.mjs';
 import { createPublishedResultExtractor } from './publishedResultExtraction.mjs';
 import { evolutionSourceRequestManifest } from './evolutionSourceRequests.mjs';
+import { jevTransport } from "./jevTransport.mjs";
+import { createJudgeService } from './judgeService.mjs';
+import { createJudgeGatewayHandler, JUDGE_GATEWAY_PATH } from './judgeGateway.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
@@ -100,7 +103,7 @@ import { createLearningRuntime } from "./learningRuntime.mjs";
 import { EVALUATION_JUDGE_LIMITS, evaluateLearnedMethod } from "./learningEvaluation.mjs";
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
-import { MethodConsolidation } from "./methodConsolidation.mjs";
+import { MethodConsolidation, createMethodScreenBaseline } from "./methodConsolidation.mjs";
 import { HandbookConsolidation } from "./handbookConsolidation.mjs";
 import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
 import { createOwnedHandbookSelector, createOwnedResearchContext, remainingHandbookPromptBytes } from "./ownedResearchContext.mjs";
@@ -1180,6 +1183,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // `overrides.usageLedger` is for tests that need the ledger's interface
   // without a database, as `researchMemory` and `connectorCredentials` are.
   const usageLedger = overrides.usageLedger ?? (productDatabase ? new UsageLedger(productDatabase) : null);
+  const judgeService = overrides.judgeService ?? createJudgeService({config,usageLedger,database:productDatabase,fetchImpl:overrides.jevFetch});
+  const judgeGatewayHandler = createJudgeGatewayHandler({config,judgeService,runtimeManager:{assertActiveModelGatewayToken: token => runtimeManager.assertActiveModelGatewayToken(token)}});
   const notificationService = productDatabase ? new NotificationService(productDatabase) : null;
   const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
   // Alertmanager's deliveries, into the operators' inbox (alertReceiver.mjs).
@@ -1513,7 +1518,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       perDay: config.capsuleShareDeliveriesPerDay, report: code => { void securityAudit(config, "capsule.share", "failed", { code }).catch(() => {}); } }) : null;
   // A project's evidence-zone subscriptions (F18): off with the switch, and read only for the project that subscribed.
   const zoneSubscriptions = productDatabase && productDocuments
-    ? new EvidenceZoneSubscriptions({ database: productDatabase, documents: productDocuments, enabled: config.evidenceZoneSubscriptionEnabled,
+    ? new EvidenceZoneSubscriptions({ judgeService, database: productDatabase, documents: productDocuments, enabled: config.evidenceZoneSubscriptionEnabled,
       maxPerProject: config.evidenceZoneSubscriptionMaxPerProject, maxItems: config.evidenceZoneSubscriptionMaxItems }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes,
     sharing: capsuleSharing, links: capsuleShareLinks, subscriptions: zoneSubscriptions, isOperator: user => config.operatorUsers.includes(user.id),
@@ -1541,6 +1546,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // A file that arrives with new bytes for one the project already held is a source change: what rests on the old
   // document is labelled and told (N15). `resultImpacts` is composed below; the hook runs only after boot.
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs, { evolutionSignals,
+    judgeService,
     afterReplace: event => resultImpacts?.reconcileReplacement(event.userId, event) ?? Promise.resolve(null),
     report: code => { void securityAudit(config, "source.replacement", "failed", { code }).catch(() => {}); },
   }) : null;
@@ -1807,7 +1813,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }, { fetchImpl: overrides.kbEmbeddingFetch ?? globalThis.fetch });
     const ingest = new FrontierIngest({ database: productDatabase, plugin: client, vocabulary,
       dimension: config.kbEmbeddingDimension, pollMs: config.knowledgePluginPollMs });
-    const editor = new FrontierEditor(config, { usageLedger, policies:evolutionModulePolicies, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
+    const editor = new FrontierEditor(config, { judgeService, usageLedger, policies:evolutionModulePolicies, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
     const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges, policies:evolutionModulePolicies, evolution:{observe:async event=>evolution?.loops.observe(event)},
       glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-") });
     // One implementation of "today's spend": the pipeline's, which it gates on.
@@ -1913,7 +1919,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // its module is made, and until then (or without it) the section answers nothing and is not rendered.
   /** @type {{ questionBank: ((query: { month: string }) => Promise<any>) | null, predictionCalibration: (() => Promise<any>) | null }} */
   const evidenceMetricSections = { questionBank: null, predictionCalibration: null };
-  const evidenceTopicRequests = evidencePublicOn ? createEvidenceTopicRequests({ database: productDatabase, config }) : null;
+  const evidenceTopicRequests = evidencePublicOn ? createEvidenceTopicRequests({ judgeService, judgeContext: user => ensureEvidenceProject(store, user.id), database: productDatabase, config }) : null;
   const evidencePublicRoutes = createEvidencePublicRoutes({
     config: evidencePublicOn ? config : { ...config, evidencePublicWebEnabled: false }, database: evidencePublicOn ? productDatabase : null,
     simulations: overrides.evidenceSimulations ?? evidenceSimulations, requests: evidenceTopicRequests,
@@ -2497,6 +2503,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     audit: (event, status, details) => securityAudit(config, event, status, details),
   });
   const specialistClassifier = new SpecialistClassifier(config, {
+    judgeService,
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
     usageLedger,
   });
@@ -2831,7 +2838,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let review = null;
   if (config.reviewEnabled && productDatabase) {
     const service = new ReviewService({ evolutionSignals,
-      config, database: productDatabase, jobs: productJobs, usageLedger, runtimeManager, store, agentRegistry,
+      config, database: productDatabase, jobs: productJobs, usageLedger, judgeService, runtimeManager, store, agentRegistry,
       attributeRun: (input) => attributeRun(input),
       notifications: notificationService,
       imService: { sendRunCorrection: (userId, projectId, runId, text) => im?.service?.sendRunCorrection?.(userId, projectId, runId, text) },
@@ -2947,6 +2954,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   verification: ReturnType<typeof createEvidenceSourceVerification> } | null} */
   let evidencePublish = null;
   agentRuns = new AgentRunStore(researchSessions, {
+    judgeService,
     agentRegistry,
     // The evidence card a conversation was started from (「用这张卡继续研究」), recorded on its run and counted as a citation.
     originCardOf: (project, session) => evidencePublish?.origins.originCardOf(project, session) ?? Promise.resolve(null),
@@ -3698,6 +3706,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       onApplied: (applied) => platformHandbooks?.consider(applied),
     }));
     const consolidation = new MethodConsolidation({
+      judgeService,
+      screenBaseline: createMethodScreenBaseline({ config, usageLedger }),
       handbookConsolidation: { run: async (input) => (await handbookConsolidation).run(input) },
       platformTools: async () => evolution ? evolution.service.availableTools({}) : [],
       dispatch: dispatchLearningRun,
@@ -4236,7 +4246,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   // IM: Feishu, the channel port and the own-app reservations (imService.mjs).
   const im = createImModule({
-    config, database: productDatabase, credentials: connectorCredentials, notifications: notificationService,
+    judgeService,    config, database: productDatabase, credentials: connectorCredentials, notifications: notificationService,
     users: store, agentRuns, runtimeManager, usageLedger, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     dispatchRun: ({ user, project, sessionId, dispatchId, text }) => dispatchChannelRun(user, project, sessionId, dispatchId, text),
@@ -4406,7 +4416,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     evaluationIsolation,
     service: frontier?.service ?? null,
     // Published evidence cards ride beside the items, as an index only (flywheel F12).
-    cards: frontier ? createEvidenceCardSearch({ database: productDatabase, entityVocabulary, sourceChanges }) : null,
+    cards: frontier ? createEvidenceCardSearch({ judgeService, database: productDatabase, entityVocabulary, sourceChanges }) : null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
   // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the
@@ -4441,6 +4451,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return { markdown: String(await readFileNoFollow(project.workspaceDir, file, "utf8")) };
     };
     const marketDeps = {
+      judgeService,
+      catalogueJudgeContext: () => ensureEvidenceProject(store),
       store: new GeoMarketStore(productDatabase), market: marketClient, webReader, articleBody, config, timeZone: geoTimeZone,
       notify: (/** @type {any} */ event) => notifier.textChanged(event),
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
@@ -4448,6 +4460,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     /** @type {GeoOrchestrator | null} */
     let orchestrator = null;
     const measureDeps = {
+      judgeService,
       store: new GeoMeasureStore(productDatabase, {policies:evolutionModulePolicies}), config, usageLedger, inclusion, state: geoMeasureState(),
       evolution:{communication:{offer:input=>/** @type {any} */ (evolutionLeadSources)?.communication?.offer(input)}},
       notify: (/** @type {any} */ event) => notifier.measurement(event),
@@ -4765,7 +4778,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     loadReplay: (run,id) => productDocuments?.get(run.userId,'result-replay',id).catch(()=>null)??Promise.resolve(null),
     hasCorrection: async (run,id) => { if(!resultCorrections)return true; const {items=[]}=await resultCorrections.read(run.userId,run.projectId,id); return items.length>0; },
   });
-  evolution = createEvolution({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
+  evolution = createEvolution({ judgeService, config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
     usageLedger, notifications: notificationService, registry: agentRegistry, runtimeManager, researchSessions, agentRuns,
     evaluationIsolation, sourceService, autopilot: autopilotService, dataSemantics, resolvePositiveEvidence,
     observeHandbookOutcome: input => platformHandbooks?.observeTool(input), controller: overrides.evolutionController ?? new RuntimeControllerClient(config),
@@ -5251,6 +5264,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         ? connectorCredentialGatewayHandler
       : pathname === ENGINE_USAGE_PATH
         ? engineUsageHandler
+      : pathname === JUDGE_GATEWAY_PATH
+        ? judgeGatewayHandler
       : pathname === ENGINE_MODEL_TOKEN_PATH
         ? engineModelTokenHandler
         : pathname === WEB_SEARCH_GATEWAY_PATH
@@ -5415,6 +5430,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       if (pathname === "/api/ops/metrics" && (req.method === "GET" || req.method === "HEAD")) {
         await sendOperatorMetrics(req, res, {
+          judgeService,
           config,
           store,
           taskManager,
@@ -7504,6 +7520,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await frontier?.worker.close();
       await evidenceProgramme?.worker?.close();
       await review?.worker.close();
+      await judgeService.close();
+      jevTransport.close();
       await geo?.worker?.close?.();
       await vcr?.worker?.close?.();
       await documentExportWorker?.close();
@@ -8305,7 +8323,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
+async function operatorMetricsText({ judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8794,6 +8812,12 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       "counter", { value: Number(store.expiredSessionsPurged) || 0 });
   }
 
+  const judgeRows=judgeService?.metrics()??[];
+  addMetric(lines,'open_science_jev_decisions_total','Registered Jev decisions by site.','counter',judgeRows.filter(row=>['settled','escalated','fallback'].includes(row.outcome)).map(row=>({value:row.value,labels:{site:row.site,outcome:row.outcome}})));
+  addMetric(lines,'open_science_jev_requests_total','Registered Jev calls by site.','counter',(judgeService?.requestMetrics()??[]).map(row=>({value:row.value,labels:{site:row.site,outcome:row.outcome}})));
+  const driftRows=await judgeService?.driftMetrics().catch(()=>[])??[];
+  addMetric(lines,'open_science_jev_drift_below_baseline_seven_days','Seven consecutive observed UTC days below calibrated baseline.','gauge',driftRows.map(row=>({value:row.belowBaselineSevenDays?1:0,labels:{site:row.site}})));
+  addMetric(lines,'open_science_jev_baseline_agreement','Observed agreement against trusted baseline; absent samples are omitted.','gauge',driftRows.filter(row=>row.agreement!==null).map(row=>({value:row.agreement,labels:{site:row.site}})));
   return `${lines.join("\n")}\n`;
 }
 
@@ -8933,6 +8957,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     // the platform that cannot be reached is a warning on a green check.
     frontier: await readinessCheck(async () => frontierReadiness({ config, frontier, database: productDatabase })),
     // The independent reviewer: red only for its own invariants (reviewService.mjs).
+    jev: {required:false, ok:true, ...createJudgeService({config}).status()},
     review: await readinessCheck(async () => (review ? review.service.readiness() : config.reviewEnabled
       ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
       : { required: false, enabled: false })),

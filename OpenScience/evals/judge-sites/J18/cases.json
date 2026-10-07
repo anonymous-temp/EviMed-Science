@@ -1,0 +1,652 @@
+{
+  "schemaVersion": 1,
+  "site": "J18",
+  "cases": [
+    {
+      "id": "s00",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[6] x [8] both name trial DAPA-CKD in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Rationale and protocol of the Dapagliflozin And Prevention of Adverse outcomes in Chronic Kidney Disease (DAPA-CKD) randomized controlled trial.",
+          "abstract": "BACKGROUND: Recent cardiovascular outcome trials have shown that sodium-glucose co-transporter 2 (SGLT2) inhibitors slow the progression of chronic kidney disease (CKD) in patients with type 2 diabetes at high cardiovascular risk. Whether these benefits extend to CKD patients without type 2 diabetes or cardiovascular disease is unknown. The Dapagli"
+        },
+        "right": {
+          "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+          "abstract": "BACKGROUND: Patients with chronic kidney disease have a high risk of adverse kidney and cardiovascular outcomes. The effect of dapagliflozin in patients with chronic kidney disease, with or without type 2 diabetes, is not known. METHODS: We randomly assigned 4304 participants with an estimated glomerular filtration rate (GFR) of 25 to 75 ml per min"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s01",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[8] x [85] both name trial DAPA-CKD in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+          "abstract": "BACKGROUND: Patients with chronic kidney disease have a high risk of adverse kidney and cardiovascular outcomes. The effect of dapagliflozin in patients with chronic kidney disease, with or without type 2 diabetes, is not known. METHODS: We randomly assigned 4304 participants with an estimated glomerular filtration rate (GFR) of 25 to 75 ml per min"
+        },
+        "right": {
+          "title": "The dapagliflozin and prevention of adverse outcomes in chronic kidney disease (DAPA-CKD) trial: baseline characteristics.",
+          "abstract": "BACKGROUND: The Dapagliflozin and Prevention of Adverse outcomes in Chronic Kidney Disease (DAPA-CKD; NCT03036150) trial was designed to assess the effect of the sodium-glucose co-transporter 2 (SGLT2) inhibitor dapagliflozin on kidney and cardiovascular events in participants with CKD with and without type 2 diabetes (T2D). This analysis reports t"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s02",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[83] x [84] both name trial DAPA-CKD in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effects of dapagliflozin on mortality in patients with chronic kidney disease: a pre-specified analysis from the DAPA-CKD randomized controlled trial.",
+          "abstract": "AIMS: Mortality rates from chronic kidney disease (CKD) have increased in the last decade. In this pre-specified analysis of the DAPA-CKD trial, we determined the effects of dapagliflozin on cardiovascular and non-cardiovascular causes of death. METHODS AND RESULTS: DAPA-CKD was an international, randomized, placebo-controlled trial with a median o"
+        },
+        "right": {
+          "title": "Effect of dapagliflozin on the rate of decline in kidney function in patients with chronic kidney disease with and without type 2 diabetes: a prespecified analysis from the DAPA-CKD trial.",
+          "abstract": "BACKGROUND: Dapagliflozin reduced the risk of kidney failure in patients with chronic kidney disease with and without type 2 diabetes in the DAPA-CKD trial. In this pre-specified analysis, we assessed the effect of dapagliflozin on the rate of change in estimated glomerular filtration rate (eGFR)-ie, the eGFR slope. METHODS: DAPA-CKD was a randomis"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s03",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[137] x [12] both name trial DAPA-CKD in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "A pre-specified analysis of the DAPA-CKD trial demonstrates the effects of dapagliflozin on major adverse kidney events in patients with IgA nephropathy.",
+          "abstract": "Immunoglobulin A (IgA) nephropathy is a common form of glomerulonephritis, which despite use of renin-angiotensin-aldosterone-system blockers and immunosuppressants, often progresses to kidney failure. In the Dapagliflozin and Prevention of Adverse Outcomes in Chronic Kidney Disease trial, dapagliflozin reduced the risk of kidney failure and prolon"
+        },
+        "right": {
+          "title": "Effects of dapagliflozin on major adverse kidney and cardiovascular events in patients with diabetic and non-diabetic chronic kidney disease: a prespecified analysis from the DAPA-CKD trial.",
+          "abstract": "BACKGROUND: Dapagliflozin reduces the risk of kidney failure and heart failure in patients with chronic kidney disease. We aimed to investigate the effects of dapagliflozin on kidney, cardiovascular, and mortality outcomes according to presence or absence of type 2 diabetes and according to underlying cause of chronic kidney disease, reported as di"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s04",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[14] x [84] both name trial DAPA-CKD in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effect of dapagliflozin on urinary albumin excretion in patients with chronic kidney disease with and without type 2 diabetes: a prespecified analysis from the DAPA-CKD trial.",
+          "abstract": "BACKGROUND: Reductions in albuminuria are associated with a subsequent lower risk of kidney failure in patients with chronic kidney disease. The SGLT2 inhibitor dapagliflozin significantly reduced albuminuria in patients with type 2 diabetes and normal or near-normal kidney function. Whether this effect persists in patients with chronic kidney dise"
+        },
+        "right": {
+          "title": "Effect of dapagliflozin on the rate of decline in kidney function in patients with chronic kidney disease with and without type 2 diabetes: a prespecified analysis from the DAPA-CKD trial.",
+          "abstract": "BACKGROUND: Dapagliflozin reduced the risk of kidney failure in patients with chronic kidney disease with and without type 2 diabetes in the DAPA-CKD trial. In this pre-specified analysis, we assessed the effect of dapagliflozin on the rate of change in estimated glomerular filtration rate (eGFR)-ie, the eGFR slope. METHODS: DAPA-CKD was a randomis"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s05",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[6] x [85] both name trial DAPA-CKD in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Rationale and protocol of the Dapagliflozin And Prevention of Adverse outcomes in Chronic Kidney Disease (DAPA-CKD) randomized controlled trial.",
+          "abstract": "BACKGROUND: Recent cardiovascular outcome trials have shown that sodium-glucose co-transporter 2 (SGLT2) inhibitors slow the progression of chronic kidney disease (CKD) in patients with type 2 diabetes at high cardiovascular risk. Whether these benefits extend to CKD patients without type 2 diabetes or cardiovascular disease is unknown. The Dapagli"
+        },
+        "right": {
+          "title": "The dapagliflozin and prevention of adverse outcomes in chronic kidney disease (DAPA-CKD) trial: baseline characteristics.",
+          "abstract": "BACKGROUND: The Dapagliflozin and Prevention of Adverse outcomes in Chronic Kidney Disease (DAPA-CKD; NCT03036150) trial was designed to assess the effect of the sodium-glucose co-transporter 2 (SGLT2) inhibitor dapagliflozin on kidney and cardiovascular events in participants with CKD with and without type 2 diabetes (T2D). This analysis reports t"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s06",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[9] x [13] both name trial EMPA-KIDNEY in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+          "abstract": "BACKGROUND: In the EMPA-KIDNEY trial, empagliflozin, a sodium-glucose cotransporter 2 (SGLT2) inhibitor, had positive cardiorenal effects in patients with chronic kidney disease who were at risk for disease progression. Post-trial follow-up was designed to assess how the effects of empagliflozin would evolve after the discontinuation of the trial d"
+        },
+        "right": {
+          "title": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the empa-kidney trial.",
+          "abstract": "BACKGROUND: Sodium-glucose co-transporter-2 (SGLT2) inhibitors reduce progression of chronic kidney disease and the risk of cardiovascular morbidity and mortality in a wide range of patients. However, their effects on kidney disease progression in some patients with chronic kidney disease are unclear because few clinical kidney outcomes occurred am"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s07",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[57] x [58] both name trial EMPA-KIDNEY in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Empagliflozin lowers serum uric acid in chronic kidney disease: exploratory analyses from the EMPA-KIDNEY trial.",
+          "abstract": "BACKGROUND: Hyperuricaemia and gout are common in chronic kidney disease (CKD). We aimed to assess the effects of sodium-glucose co-transporter-2 (SGLT2) inhibition on uric acid (urate) and gout in patients with CKD. METHODS: The EMPA-KIDNEY trial randomised 6609 patients with CKD to receive either empagliflozin 10 mg daily or matching placebo over"
+        },
+        "right": {
+          "title": "Empagliflozin Reduces Risk of Hospitalization in Patients With Chronic Kidney Disease in the EMPA-KIDNEY Trial.",
+          "abstract": "PURPOSE: Chronic kidney disease (CKD) increases hospitalization risk. In the randomized, phase III, EMPA-KIDNEY trial, empagliflozin significantly reduced risk of all-cause hospitalizations (ACH; first and recurrent) vs placebo. This post hoc analysis of the EMPA-KIDNEY trial examines the burden of ACH in CKD and the effects of empagliflozin on ACH"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s08",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[82] x [176] both name trial EMPA-KIDNEY in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effects of empagliflozin in patients with chronic kidney disease from Japan: exploratory analyses from EMPA-KIDNEY.",
+          "abstract": "BACKGROUND: EMPA-KIDNEY assessed the effects of empagliflozin 10 mg once daily vs. placebo in 6609 patients with chronic kidney disease (CKD) at risk of progression, including 612 participants from Japan. METHODS: Eligibility required an estimated glomerular filtration rate (eGFR) of ≥ 20 < 45; or ≥ 45 < 90 ml/min/1.73m RESULTS: Japanese participan"
+        },
+        "right": {
+          "title": "Frailty, Multimorbidity, and Polypharmacy: Exploratory Analyses of the Effects of Empagliflozin from the EMPA-KIDNEY Trial.",
+          "abstract": "BACKGROUND: Sodium-glucose cotransporter-2 inhibitors are recommended treatment for adults with CKD, but uncertainty exists regarding their use in patients with frailty and/or multimorbidity, among whom polypharmacy is common. We derived a multivariable logistic regression model to predict hospitalization (reflecting frailty) and assessed empaglifl"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s09",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[13] x [163] both name trial EMPA-KIDNEY in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the empa-kidney trial.",
+          "abstract": "BACKGROUND: Sodium-glucose co-transporter-2 (SGLT2) inhibitors reduce progression of chronic kidney disease and the risk of cardiovascular morbidity and mortality in a wide range of patients. However, their effects on kidney disease progression in some patients with chronic kidney disease are unclear because few clinical kidney outcomes occurred am"
+        },
+        "right": {
+          "title": "Effects of Empagliflozin on Urine Biomarkers in EMPA-KIDNEY.",
+          "abstract": "RATIONALE & OBJECTIVE: Sodium/glucose cotransporter 2 (SGLT2) inhibitors substantially slow progression of chronic kidney disease and reduce the risk of acute kidney injury, but their effects on kidney physiology are incompletely understood. This study assessed the effects of empagliflozin on a comprehensive set of urinary tubular and glomerular bi"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s10",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[148] x [70] both name trial CREDENCE in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Canagliflozin and Renal Outcomes in Type 2 Diabetes and Nephropathy.",
+          "abstract": "BACKGROUND: Type 2 diabetes mellitus is the leading cause of kidney failure worldwide, but few effective long-term treatments are available. In cardiovascular trials of inhibitors of sodium-glucose cotransporter 2 (SGLT2), exploratory results have suggested that such drugs may improve renal outcomes in patients with type 2 diabetes. METHODS: In thi"
+        },
+        "right": {
+          "title": "Cardiorenal Biomarkers, Canagliflozin, and Outcomes in Diabetic Kidney Disease: The CREDENCE Trial.",
+          "abstract": "BACKGROUND: People with type 2 diabetes and albuminuria are at an elevated risk for cardiac and renal events. The optimal biomarkers to aid disease prediction and to understand the benefits of sodium-glucose cotransporter-2 inhibition remain unclear. METHODS: Among 2627 study participants in the CREDENCE trial (Canagliflozin and Renal Events in Dia"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s11",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[151] x [164] both name trial CREDENCE in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Cardiorenal protective effects of canagliflozin in CREDENCE according to glucose lowering.",
+          "abstract": "INTRODUCTION: Relationships between glycemic-lowering effects of sodium glucose co-transporter 2 inhibitors and impact on kidney and cardiovascular outcomes are uncertain. RESEARCH DESIGN AND METHODS: We analyzed 4395 individuals with prebaseline and postbaseline hemoglobin A1c (HbA1c) randomized to canagliflozin (n=2193) or placebo (n=2202) in The"
+        },
+        "right": {
+          "title": "Canagliflozin and iron metabolism in the CREDENCE trial.",
+          "abstract": "BACKGROUND: Studies in patients with heart failure have indicated that sodium-glucose cotransporter 2 (SGLT2) inhibitors increase iron use and enhance erythropoiesis. In this post hoc analysis of the Canagliflozin and Renal Endpoints in Diabetes with Established Nephropathy Clinical Evaluation (CREDENCE) trial, we evaluated the effects of canaglifl"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s12",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[178] x [146] both name trial CREDENCE in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effects of SGLT2 inhibition on insulin use in CKD and type 2 diabetes: insights from the CREDENCE trial.",
+          "abstract": "BACKGROUND: Insulin is a mainstay treatment for diabetes, but its use is associated with weight gain and hypoglycaemia. Data on the effects of sodium-glucose co-transporter 2 (SGLT2) inhibitors on insulin use in people with chronic kidney disease (CKD) are limited. METHODS: We conducted a post hoc analysis of the Canagliflozin and Renal Events in D"
+        },
+        "right": {
+          "title": "Role of Glycosuria in SGLT2 Inhibitor-Induced Cardiorenal Protection: A Mechanistic Analysis of the CREDENCE Trial.",
+          "abstract": "SGLT2 inhibitors have been shown to provide pronounced reductions in cardiorenal outcomes, including cardiovascular death, heart failure, and renal failure. The mechanisms underlying these benefits remain uncertain. We hypothesized that the effects could be attributed to the elevated glycosuria induced by these drugs. Urine concentrations of glucos"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s13",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[22] x [156] both name trial CREDENCE in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Kidney and Cardiovascular Effects of Canagliflozin According to Age and Sex: A Post Hoc Analysis of the CREDENCE Randomized Clinical Trial.",
+          "abstract": "RATIONALE & OBJECTIVE: It is unclear whether the effect of canagliflozin on adverse kidney and cardiovascular events in those with diabetic kidney disease varies by age and sex. We assessed the effects of canagliflozin among age group categories and between sexes in the Canagliflozin and Renal Endpoints in Diabetes with Established Nephropathy Clin"
+        },
+        "right": {
+          "title": "Mediators between canagliflozin and renoprotection vary depending on patient characteristics: Insights from the CREDENCE trial.",
+          "abstract": "AIM: To identify the mediators between canagliflozin and renoprotection in patients with type 2 diabetes at a high risk of end-stage kidney disease (ESKD). METHODS: In this post hoc analysis of the CREDENCE trial, the effect of canagliflozin on potential mediators (42 biomarkers) at 52 weeks and the association between changes in mediators and rena"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "s14",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[193] x [189] both name trial CANVAS in title/abstract",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Canagliflozin and renal outcomes in type 2 diabetes: results from the CANVAS Program randomised clinical trials.",
+          "abstract": "BACKGROUND: In the Canagliflozin Cardiovascular Assessment Study (CANVAS) Program, canagliflozin reduced the rates of major adverse cardiovascular events and the results suggested a renal benefit in patients with type 2 diabetes who were at high risk for cardiovascular events, compared with those treated with placebo. Here we report the results of "
+        },
+        "right": {
+          "title": "Endotrophin is a risk marker of complications in CANagliflozin cardioVascular Assessment Study (CANVAS): a randomized controlled trial",
+          "abstract": "BACKGROUND: Enhanced de-novo collagen type VI (COL VI) formation has been associated with kidney and cardiovascular fibrosis. We hypothesized that endotrophin (ETP), a product specifically generated during collagen type VI formation, may be prognostic for heart failure (HF), cardiovascular death (CVD), kidney endpoints, and all-cause mortality in p"
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d00",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[8] x [0] different named trials, same drug (dapagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+          "abstract": "BACKGROUND: Patients with chronic kidney disease have a high risk of adverse kidney and cardiovascular outcomes. The effect of dapagliflozin in patients with chronic kidney disease, with or without type 2 diabetes, is not known. METHODS: We randomly assigned 4304 participants with an estimated glomerular filtration rate (GFR) of 25 to 75 ml per min"
+        },
+        "right": {
+          "title": "Effects of the SGLT2 inhibitor dapagliflozin on proteinuria in non-diabetic patients with chronic kidney disease (DIAMOND): a randomised, double-blind, crossover trial.",
+          "abstract": "BACKGROUND: SGLT2 inhibition decreases albuminuria and reduces the risk of kidney disease progression in patients with type 2 diabetes. These benefits are unlikely to be mediated by improvements in glycaemic control alone. Therefore, we aimed to examine the kidney effects of the SGLT2 inhibitor dapagliflozin in patients with proteinuric kidney dise"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d01",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[8] x [174] different named trials, same drug (dapagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+          "abstract": "BACKGROUND: Patients with chronic kidney disease have a high risk of adverse kidney and cardiovascular outcomes. The effect of dapagliflozin in patients with chronic kidney disease, with or without type 2 diabetes, is not known. METHODS: We randomly assigned 4304 participants with an estimated glomerular filtration rate (GFR) of 25 to 75 ml per min"
+        },
+        "right": {
+          "title": "Design, rationale, and baseline characteristics of the dapagliflozin in haemodialysis (DAPA-HD) trial.",
+          "abstract": "INTRODUCTION: Sodium-glucose co-transporter 2 inhibitors (SGLT2i) reduce cardiovascular events across a wide range of kidney function, including advanced stages of chronic kidney disease, but evidence for their efficacy in patients with kidney failure on haemodialysis is lacking. The underlying mechanisms remain incompletely understood, and whether"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d02",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[85] x [87] different named trials, same drug (dapagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "The dapagliflozin and prevention of adverse outcomes in chronic kidney disease (DAPA-CKD) trial: baseline characteristics.",
+          "abstract": "BACKGROUND: The Dapagliflozin and Prevention of Adverse outcomes in Chronic Kidney Disease (DAPA-CKD; NCT03036150) trial was designed to assess the effect of the sodium-glucose co-transporter 2 (SGLT2) inhibitor dapagliflozin on kidney and cardiovascular events in participants with CKD with and without type 2 diabetes (T2D). This analysis reports t"
+        },
+        "right": {
+          "title": "Rationale and design of the Renal Lifecycle trial assessing the effect of dapagliflozin on cardiorenal outcomes in severe chronic kidney disease.",
+          "abstract": "BACKGROUND: Several clinical trials have shown beneficial effects of sodium-glucose co-transporter 2 (SGLT2) inhibitors on kidney disease progression and cardiovascular morbidity and mortality in patients with chronic kidney disease (CKD) with and without type 2 diabetes mellitus. However, some subgroups of patients with CKD have been excluded from"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d03",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[83] x [119] different named trials, same drug (dapagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effects of dapagliflozin on mortality in patients with chronic kidney disease: a pre-specified analysis from the DAPA-CKD randomized controlled trial.",
+          "abstract": "AIMS: Mortality rates from chronic kidney disease (CKD) have increased in the last decade. In this pre-specified analysis of the DAPA-CKD trial, we determined the effects of dapagliflozin on cardiovascular and non-cardiovascular causes of death. METHODS AND RESULTS: DAPA-CKD was an international, randomized, placebo-controlled trial with a median o"
+        },
+        "right": {
+          "title": "The Effect of Dapagliflozin on Albuminuria in DECLARE-TIMI 58.",
+          "abstract": "OBJECTIVE: Sodium-glucose cotransporter 2 inhibitors (SGLT2i) improve albuminuria in patients with high cardiorenal risk. We report albuminuria change in the Dapagliflozin Effect on Cardiovascular Events (DECLARE-TIMI 58) cardiovascular outcome trial, which included populations with lower cardiorenal risk. RESEARCH DESIGN AND METHODS: DECLARE-TIMI "
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d04",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[84] x [149] different named trials, same drug (dapagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effect of dapagliflozin on the rate of decline in kidney function in patients with chronic kidney disease with and without type 2 diabetes: a prespecified analysis from the DAPA-CKD trial.",
+          "abstract": "BACKGROUND: Dapagliflozin reduced the risk of kidney failure in patients with chronic kidney disease with and without type 2 diabetes in the DAPA-CKD trial. In this pre-specified analysis, we assessed the effect of dapagliflozin on the rate of change in estimated glomerular filtration rate (eGFR)-ie, the eGFR slope. METHODS: DAPA-CKD was a randomis"
+        },
+        "right": {
+          "title": "Galectin-3 and kidney function in type 2 diabetes treated with dapagliflozin: Analysis from DECLARE-TIMI 58.",
+          "abstract": "BACKGROUND: Galectin-3 (Gal-3) is a circulating biomarker of fibrosis, with higher levels being associated with an increased risk of progression of heart failure and kidney disease. Patients with type 2 diabetes mellitus (T2DM) are at increased risk of both. METHODS: DECLARE-TIMI 58 was a randomized, placebo-controlled trial of dapagliflozin in pat"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d05",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[87] x [174] different named trials, same drug (dapagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Rationale and design of the Renal Lifecycle trial assessing the effect of dapagliflozin on cardiorenal outcomes in severe chronic kidney disease.",
+          "abstract": "BACKGROUND: Several clinical trials have shown beneficial effects of sodium-glucose co-transporter 2 (SGLT2) inhibitors on kidney disease progression and cardiovascular morbidity and mortality in patients with chronic kidney disease (CKD) with and without type 2 diabetes mellitus. However, some subgroups of patients with CKD have been excluded from"
+        },
+        "right": {
+          "title": "Design, rationale, and baseline characteristics of the dapagliflozin in haemodialysis (DAPA-HD) trial.",
+          "abstract": "INTRODUCTION: Sodium-glucose co-transporter 2 inhibitors (SGLT2i) reduce cardiovascular events across a wide range of kidney function, including advanced stages of chronic kidney disease, but evidence for their efficacy in patients with kidney failure on haemodialysis is lacking. The underlying mechanisms remain incompletely understood, and whether"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d06",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[12] x [0] different named trials, same drug (dapagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effects of dapagliflozin on major adverse kidney and cardiovascular events in patients with diabetic and non-diabetic chronic kidney disease: a prespecified analysis from the DAPA-CKD trial.",
+          "abstract": "BACKGROUND: Dapagliflozin reduces the risk of kidney failure and heart failure in patients with chronic kidney disease. We aimed to investigate the effects of dapagliflozin on kidney, cardiovascular, and mortality outcomes according to presence or absence of type 2 diabetes and according to underlying cause of chronic kidney disease, reported as di"
+        },
+        "right": {
+          "title": "Effects of the SGLT2 inhibitor dapagliflozin on proteinuria in non-diabetic patients with chronic kidney disease (DIAMOND): a randomised, double-blind, crossover trial.",
+          "abstract": "BACKGROUND: SGLT2 inhibition decreases albuminuria and reduces the risk of kidney disease progression in patients with type 2 diabetes. These benefits are unlikely to be mediated by improvements in glycaemic control alone. Therefore, we aimed to examine the kidney effects of the SGLT2 inhibitor dapagliflozin in patients with proteinuric kidney dise"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d07",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[9] x [53] different named trials, same drug (empagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+          "abstract": "BACKGROUND: In the EMPA-KIDNEY trial, empagliflozin, a sodium-glucose cotransporter 2 (SGLT2) inhibitor, had positive cardiorenal effects in patients with chronic kidney disease who were at risk for disease progression. Post-trial follow-up was designed to assess how the effects of empagliflozin would evolve after the discontinuation of the trial d"
+        },
+        "right": {
+          "title": "COmbinatioN effect of FInerenone anD EmpaglifloziN in participants with chronic kidney disease and type 2 diabetes using a UACR Endpoint (CONFIDENCE) trial: baseline clinical characteristics.",
+          "abstract": "BACKGROUND: Finerenone, a selective nonsteroidal mineralocorticoid receptor antagonist, and sodium-glucose cotransporter 2 inhibitors (SGLT2is) both reduce chronic kidney disease (CKD) progression and improve kidney/cardiovascular (CV) outcomes. The CONFIDENCE (COmbinatioN effect of FInerenone anD EmpaglifloziN in participants with chronic kidney d"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d08",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[58] x [23] different named trials, same drug (empagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Empagliflozin Reduces Risk of Hospitalization in Patients With Chronic Kidney Disease in the EMPA-KIDNEY Trial.",
+          "abstract": "PURPOSE: Chronic kidney disease (CKD) increases hospitalization risk. In the randomized, phase III, EMPA-KIDNEY trial, empagliflozin significantly reduced risk of all-cause hospitalizations (ACH; first and recurrent) vs placebo. This post hoc analysis of the EMPA-KIDNEY trial examines the burden of ACH in CKD and the effects of empagliflozin on ACH"
+        },
+        "right": {
+          "title": "Effects of empagliflozin on the urinary albumin-to-creatinine ratio in patients with type 2 diabetes and established cardiovascular disease: an exploratory analysis from the EMPA-REG OUTCOME randomised, placebo-controlled trial.",
+          "abstract": "BACKGROUND: In a pooled analysis of short-term trials, short-term treatment with the sodium-glucose co-transporter-2 (SGLT2) inhibitor empagliflozin reduced albuminuria in patients with type 2 diabetes and prevalent albuminuria. In this exploratory analysis of the EMPA-REG OUTCOME trial, we report the short-term and long-term effects of empaglifloz"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d09",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[82] x [173] different named trials, same drug (empagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effects of empagliflozin in patients with chronic kidney disease from Japan: exploratory analyses from EMPA-KIDNEY.",
+          "abstract": "BACKGROUND: EMPA-KIDNEY assessed the effects of empagliflozin 10 mg once daily vs. placebo in 6609 patients with chronic kidney disease (CKD) at risk of progression, including 612 participants from Japan. METHODS: Eligibility required an estimated glomerular filtration rate (eGFR) of ≥ 20 < 45; or ≥ 45 < 90 ml/min/1.73m RESULTS: Japanese participan"
+        },
+        "right": {
+          "title": "Risk of Hyperkalemia With Empagliflozin, Finerenone, or Both: Secondary Analysis of the CONFIDENCE Randomized Trial.",
+          "abstract": "BACKGROUND: Hyperkalemia is common with renin-angiotensin system inhibitor (RASi) therapy, frequently leading to treatment interruption and potentially curtailing cardiovascular and kidney benefits. Sodium-glucose cotransporter 2 inhibitors might mitigate the risk of hyperkalemia with RASis. OBJECTIVES: This prespecified secondary analysis of the C"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d10",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[13] x [16] different named trials, same drug (empagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the empa-kidney trial.",
+          "abstract": "BACKGROUND: Sodium-glucose co-transporter-2 (SGLT2) inhibitors reduce progression of chronic kidney disease and the risk of cardiovascular morbidity and mortality in a wide range of patients. However, their effects on kidney disease progression in some patients with chronic kidney disease are unclear because few clinical kidney outcomes occurred am"
+        },
+        "right": {
+          "title": "Empagliflozin and Progression of Kidney Disease in Type 2 Diabetes.",
+          "abstract": "BACKGROUND: Diabetes confers an increased risk of adverse cardiovascular and renal events. In the EMPA-REG OUTCOME trial, empagliflozin, a sodium-glucose cotransporter 2 inhibitor, reduced the risk of major adverse cardiovascular events in patients with type 2 diabetes at high risk for cardiovascular events. We wanted to determine the long-term ren"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d11",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[148] x [193] different named trials, same drug (canagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Canagliflozin and Renal Outcomes in Type 2 Diabetes and Nephropathy.",
+          "abstract": "BACKGROUND: Type 2 diabetes mellitus is the leading cause of kidney failure worldwide, but few effective long-term treatments are available. In cardiovascular trials of inhibitors of sodium-glucose cotransporter 2 (SGLT2), exploratory results have suggested that such drugs may improve renal outcomes in patients with type 2 diabetes. METHODS: In thi"
+        },
+        "right": {
+          "title": "Canagliflozin and renal outcomes in type 2 diabetes: results from the CANVAS Program randomised clinical trials.",
+          "abstract": "BACKGROUND: In the Canagliflozin Cardiovascular Assessment Study (CANVAS) Program, canagliflozin reduced the rates of major adverse cardiovascular events and the results suggested a renal benefit in patients with type 2 diabetes who were at high risk for cardiovascular events, compared with those treated with placebo. Here we report the results of "
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d12",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[164] x [189] different named trials, same drug (canagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Canagliflozin and iron metabolism in the CREDENCE trial.",
+          "abstract": "BACKGROUND: Studies in patients with heart failure have indicated that sodium-glucose cotransporter 2 (SGLT2) inhibitors increase iron use and enhance erythropoiesis. In this post hoc analysis of the Canagliflozin and Renal Endpoints in Diabetes with Established Nephropathy Clinical Evaluation (CREDENCE) trial, we evaluated the effects of canaglifl"
+        },
+        "right": {
+          "title": "Endotrophin is a risk marker of complications in CANagliflozin cardioVascular Assessment Study (CANVAS): a randomized controlled trial",
+          "abstract": "BACKGROUND: Enhanced de-novo collagen type VI (COL VI) formation has been associated with kidney and cardiovascular fibrosis. We hypothesized that endotrophin (ETP), a product specifically generated during collagen type VI formation, may be prognostic for heart failure (HF), cardiovascular death (CVD), kidney endpoints, and all-cause mortality in p"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d13",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[70] x [101] different named trials, same drug (canagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Cardiorenal Biomarkers, Canagliflozin, and Outcomes in Diabetic Kidney Disease: The CREDENCE Trial.",
+          "abstract": "BACKGROUND: People with type 2 diabetes and albuminuria are at an elevated risk for cardiac and renal events. The optimal biomarkers to aid disease prediction and to understand the benefits of sodium-glucose cotransporter-2 inhibition remain unclear. METHODS: Among 2627 study participants in the CREDENCE trial (Canagliflozin and Renal Events in Dia"
+        },
+        "right": {
+          "title": "Rationale, design and baseline characteristics of the CANagliflozin cardioVascular Assessment Study–Renal ( CANVAS‐R ): A randomized, placebo‐controlled trial",
+          "abstract": "Aims The primary aim of the CANagliflozin cardioVascular Assessment Study‐Renal (CANVAS‐R) is to determine whether the favourable effects of inhibition of the sodium glucose co‐transporter 2 ( SGLT2 ) on blood glucose, blood pressure and body weight are accompanied by protection against adverse renal outcomes. Materials and methods CANVAS‐R is a pr"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "d14",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[68] x [179] different named trials, same drug (sotagliflozin)",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Sotagliflozin in Patients with Diabetes and Chronic Kidney Disease.",
+          "abstract": "BACKGROUND: The efficacy and safety of sodium-glucose cotransporter 2 inhibitors such as sotagliflozin in preventing cardiovascular events in patients with diabetes with chronic kidney disease with or without albuminuria have not been well studied. METHODS: We conducted a multicenter, double-blind trial in which patients with type 2 diabetes mellit"
+        },
+        "right": {
+          "title": "Effect of Sotagliflozin on Cardiovascular Events in Participants With Type 2 Diabetes Post Worsening Heart Failure (SOLOIST-WHF Trial)",
+          "abstract": "Primary Objective:\n\nTo compare the effect of sotagliflozin to placebo on the total occurrences of cardiovascular (CV) death, hospitalization for heart failure (HHF), and urgent visit for heart failure (HF) in hemodynamically stable participants after admission for worsening heart failure (WHF)\n\nSecondary Objectives:\n\nTo compare the effects of sotag"
+        }
+      },
+      "expected": {
+        "relation": "different"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "u00",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[8] against a synthetic variant of itself",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+          "abstract": "BACKGROUND: Patients with chronic kidney disease have a high risk of adverse kidney and cardiovascular outcomes. The effect of dapagliflozin in patients with chronic kidney disease, with or without type 2 diabetes, is not known. METHODS: We randomly assigned 4304 participants with an estimated glomerular filtration rate (GFR) of 25 to 75 ml per min"
+        },
+        "right": {
+          "title": "dapagliflozin in patients with chronic kidney disease",
+          "abstract": ""
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "u01",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[148] against a synthetic variant of itself",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Canagliflozin and Renal Outcomes in Type 2 Diabetes and Nephropathy.",
+          "abstract": "BACKGROUND: Type 2 diabetes mellitus is the leading cause of kidney failure worldwide, but few effective long-term treatments are available. In cardiovascular trials of inhibitors of sodium-glucose cotransporter 2 (SGLT2), exploratory results have suggested that such drugs may improve renal outcomes in patients with type 2 diabetes. METHODS: In thi"
+        },
+        "right": {
+          "title": "canagliflozin and renal outcomes in type 2 diabetes and nephropathy",
+          "abstract": ""
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "u02",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[193] against a synthetic variant of itself",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "Canagliflozin and renal outcomes in type 2 diabetes: results from the CANVAS Program randomised clinical trials.",
+          "abstract": "BACKGROUND: In the Canagliflozin Cardiovascular Assessment Study (CANVAS) Program, canagliflozin reduced the rates of major adverse cardiovascular events and the results suggested a renal benefit in patients with type 2 diabetes who were at high risk for cardiovascular events, compared with those treated with placebo. Here we report the results of "
+        },
+        "right": {
+          "title": "canagliflozin and renal outcomes in type 2 diabetes results from the canvas program randomised clinical trials",
+          "abstract": ""
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "u03",
+      "source": "preserved:2026-10-06-jev-batch3/corpora/e4.json; search_results.json[85] against a synthetic variant of itself",
+      "labelBasis": "authored-weak (trial membership read from the title/abstract names); 34 easy trial-name-based pairs, not an independent difficult deduplication benchmark",
+      "input": {
+        "left": {
+          "title": "The dapagliflozin and prevention of adverse outcomes in chronic kidney disease (DAPA-CKD) trial: baseline characteristics.",
+          "abstract": "BACKGROUND: The Dapagliflozin and Prevention of Adverse outcomes in Chronic Kidney Disease (DAPA-CKD; NCT03036150) trial was designed to assess the effect of the sodium-glucose co-transporter 2 (SGLT2) inhibitor dapagliflozin on kidney and cardiovascular events in participants with CKD with and without type 2 diabetes (T2D). This analysis reports t"
+        },
+        "right": {
+          "title": "the dapagliflozin and prevention of adverse outcomes in chronic kidney disease dapackd trial baseline characteristics",
+          "abstract": ""
+        }
+      },
+      "expected": {
+        "relation": "same_trial"
+      },
+      "releaseEligible": false
+    }
+  ]
+}

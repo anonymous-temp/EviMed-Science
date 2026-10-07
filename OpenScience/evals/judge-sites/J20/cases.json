@@ -1,0 +1,1466 @@
+{
+  "schemaVersion": 1,
+  "site": "J20",
+  "cases": [
+    {
+      "id": "explicit-adr-01",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Persistent ringing sound in the ears",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "tinnitus"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-02",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Blood visible in urine",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "haematuria"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-03",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Difficulty breathing",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "dyspnoea"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-04",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Involuntary rhythmic shaking of the hands",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "tremor"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-05",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Difficulty passing hard stools",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "constipation"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-06",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Repeated loose watery stools",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "diarrhoea"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-07",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "An abnormally rapid heartbeat",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "tachycardia"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-08",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "An abnormally slow heartbeat",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "bradycardia"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-09",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Complete loss of the sense of smell",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "anosmia"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-10",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Complete loss of the sense of taste",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "ageusia"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-11",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Excessive sweating",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "hyperhidrosis"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-12",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Abnormally high blood glucose",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "hyperglycaemia"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-13",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Abnormally low blood glucose",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "hypoglycaemia"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-14",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Double vision",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "diplopia"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "explicit-adr-15",
+      "source": "authored:independent explicit symptom definition, 2026-10-06",
+      "labelBasis": "Human-authored explicit clinical term definition; synthetic vocabulary selection only. Does not validate openFDA availability or actual engine fallback eligibility.",
+      "input": {
+        "term": "Uncontrolled bleeding from the nose",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": "epistaxis"
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "absent-candidate-01",
+      "source": "authored:negative candidate membership control, 2026-10-06",
+      "labelBasis": "The exact semantically equivalent term is absent from the candidate list; synthetic safety control, not release calibration.",
+      "input": {
+        "term": "Persistent ringing sound in the ears",
+        "candidates": [
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": null
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "absent-candidate-02",
+      "source": "authored:negative candidate membership control, 2026-10-06",
+      "labelBasis": "The exact semantically equivalent term is absent from the candidate list; synthetic safety control, not release calibration.",
+      "input": {
+        "term": "Blood visible in urine",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": null
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "absent-candidate-03",
+      "source": "authored:negative candidate membership control, 2026-10-06",
+      "labelBasis": "The exact semantically equivalent term is absent from the candidate list; synthetic safety control, not release calibration.",
+      "input": {
+        "term": "Difficulty breathing",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": null
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "absent-candidate-04",
+      "source": "authored:negative candidate membership control, 2026-10-06",
+      "labelBasis": "The exact semantically equivalent term is absent from the candidate list; synthetic safety control, not release calibration.",
+      "input": {
+        "term": "Involuntary rhythmic shaking of the hands",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "constipation",
+            "label": "constipation"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": null
+      },
+      "releaseEligible": false
+    },
+    {
+      "id": "absent-candidate-05",
+      "source": "authored:negative candidate membership control, 2026-10-06",
+      "labelBasis": "The exact semantically equivalent term is absent from the candidate list; synthetic safety control, not release calibration.",
+      "input": {
+        "term": "Difficulty passing hard stools",
+        "candidates": [
+          {
+            "id": "tinnitus",
+            "label": "tinnitus"
+          },
+          {
+            "id": "haematuria",
+            "label": "haematuria"
+          },
+          {
+            "id": "dyspnoea",
+            "label": "dyspnoea"
+          },
+          {
+            "id": "tremor",
+            "label": "tremor"
+          },
+          {
+            "id": "diarrhoea",
+            "label": "diarrhoea"
+          },
+          {
+            "id": "tachycardia",
+            "label": "tachycardia"
+          },
+          {
+            "id": "bradycardia",
+            "label": "bradycardia"
+          },
+          {
+            "id": "anosmia",
+            "label": "anosmia"
+          },
+          {
+            "id": "ageusia",
+            "label": "ageusia"
+          },
+          {
+            "id": "hyperhidrosis",
+            "label": "hyperhidrosis"
+          },
+          {
+            "id": "hyperglycaemia",
+            "label": "hyperglycaemia"
+          },
+          {
+            "id": "hypoglycaemia",
+            "label": "hypoglycaemia"
+          },
+          {
+            "id": "diplopia",
+            "label": "diplopia"
+          },
+          {
+            "id": "epistaxis",
+            "label": "epistaxis"
+          }
+        ]
+      },
+      "expected": {
+        "termId": null
+      },
+      "releaseEligible": false
+    }
+  ]
+}

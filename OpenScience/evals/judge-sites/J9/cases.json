@@ -1,0 +1,5130 @@
+{
+  "schemaVersion": 1,
+  "site": "J9",
+  "cases": [
+    {
+      "id": "gwas-0",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "body mass index",
+        "candidates": [
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029014",
+            "trait": "Lung cancer",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-25",
+            "trait": "Alcoholic drinks per week",
+            "sample_size": 941280,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018977",
+            "trait": "Urate levels",
+            "sample_size": 457690,
+            "year": 2019,
+            "population": "Trans-ancestry"
+          },
+          {
+            "id": "ukb-d-30880_irnt",
+            "trait": "Urate",
+            "sample_size": 344000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1055",
+            "trait": "Serum urate",
+            "sample_size": 110347,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-57",
+            "trait": "Uric acid",
+            "sample_size": 109029,
+            "year": 2019,
+            "population": "East Asian"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ieu-b-40",
+        "ukb-b-19953",
+        "ieu-a-2"
+      ]
+    },
+    {
+      "id": "gwas-1",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "coronary heart disease",
+        "candidates": [
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029014",
+            "trait": "Lung cancer",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-25",
+            "trait": "Alcoholic drinks per week",
+            "sample_size": 941280,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018977",
+            "trait": "Urate levels",
+            "sample_size": 457690,
+            "year": 2019,
+            "population": "Trans-ancestry"
+          },
+          {
+            "id": "ukb-d-30880_irnt",
+            "trait": "Urate",
+            "sample_size": 344000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1055",
+            "trait": "Serum urate",
+            "sample_size": 110347,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-57",
+            "trait": "Uric acid",
+            "sample_size": 109029,
+            "year": 2019,
+            "population": "East Asian"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ebi-a-GCST005195",
+        "ieu-a-7",
+        "ukb-d-I9_CHD",
+        "finn-b-I9_CHD"
+      ]
+    },
+    {
+      "id": "gwas-2",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "type 2 diabetes",
+        "candidates": [
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029014",
+            "trait": "Lung cancer",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-25",
+            "trait": "Alcoholic drinks per week",
+            "sample_size": 941280,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018977",
+            "trait": "Urate levels",
+            "sample_size": 457690,
+            "year": 2019,
+            "population": "Trans-ancestry"
+          },
+          {
+            "id": "ukb-d-30880_irnt",
+            "trait": "Urate",
+            "sample_size": 344000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1055",
+            "trait": "Serum urate",
+            "sample_size": 110347,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-57",
+            "trait": "Uric acid",
+            "sample_size": 109029,
+            "year": 2019,
+            "population": "East Asian"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ebi-a-GCST006867",
+        "finn-b-E4_DM2",
+        "ieu-a-26"
+      ]
+    },
+    {
+      "id": "gwas-3",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "LDL cholesterol",
+        "candidates": [
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029014",
+            "trait": "Lung cancer",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-25",
+            "trait": "Alcoholic drinks per week",
+            "sample_size": 941280,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018977",
+            "trait": "Urate levels",
+            "sample_size": 457690,
+            "year": 2019,
+            "population": "Trans-ancestry"
+          },
+          {
+            "id": "ukb-d-30880_irnt",
+            "trait": "Urate",
+            "sample_size": 344000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1055",
+            "trait": "Serum urate",
+            "sample_size": 110347,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-57",
+            "trait": "Uric acid",
+            "sample_size": 109029,
+            "year": 2019,
+            "population": "East Asian"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ieu-b-110",
+        "ebi-a-GCST90239658",
+        "ukb-d-30780_irnt",
+        "ieu-a-300"
+      ]
+    },
+    {
+      "id": "gwas-4",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "systolic blood pressure",
+        "candidates": [
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "Systolic blood pressure",
+            "sample_size": 136597,
+            "year": 2018,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029014",
+            "trait": "Lung cancer",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-25",
+            "trait": "Alcoholic drinks per week",
+            "sample_size": 941280,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018977",
+            "trait": "Urate levels",
+            "sample_size": 457690,
+            "year": 2019,
+            "population": "Trans-ancestry"
+          },
+          {
+            "id": "ukb-d-30880_irnt",
+            "trait": "Urate",
+            "sample_size": 344000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1055",
+            "trait": "Serum urate",
+            "sample_size": 110347,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-57",
+            "trait": "Uric acid",
+            "sample_size": 109029,
+            "year": 2019,
+            "population": "East Asian"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ieu-b-38",
+        "ukb-b-20175"
+      ]
+    },
+    {
+      "id": "gwas-5",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "smoking initiation",
+        "candidates": [
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029014",
+            "trait": "Lung cancer",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-25",
+            "trait": "Alcoholic drinks per week",
+            "sample_size": 941280,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018977",
+            "trait": "Urate levels",
+            "sample_size": 457690,
+            "year": 2019,
+            "population": "Trans-ancestry"
+          },
+          {
+            "id": "ukb-d-30880_irnt",
+            "trait": "Urate",
+            "sample_size": 344000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1055",
+            "trait": "Serum urate",
+            "sample_size": 110347,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-57",
+            "trait": "Uric acid",
+            "sample_size": 109029,
+            "year": 2019,
+            "population": "East Asian"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ieu-b-4877",
+        "ukb-b-2134"
+      ]
+    },
+    {
+      "id": "gwas-6",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "serum urate",
+        "candidates": [
+          {
+            "id": "ebi-a-GCST90018977",
+            "trait": "Urate levels",
+            "sample_size": 457690,
+            "year": 2019,
+            "population": "Trans-ancestry"
+          },
+          {
+            "id": "ukb-d-30880_irnt",
+            "trait": "Urate",
+            "sample_size": 344000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1055",
+            "trait": "Serum urate",
+            "sample_size": 110347,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-57",
+            "trait": "Uric acid",
+            "sample_size": 109029,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "finn-b-M13_GOUT",
+            "trait": "Gout",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-12765",
+            "trait": "Diagnoses - main ICD10: M10 Gout",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1054",
+            "trait": "Estimated glomerular filtration rate (creatinine)",
+            "sample_size": 133413,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ebi-a-GCST90018977",
+        "ukb-d-30880_irnt",
+        "ieu-a-1055"
+      ]
+    },
+    {
+      "id": "gwas-7",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "major depressive disorder",
+        "candidates": [
+          {
+            "id": "ieu-b-102",
+            "trait": "Major depression",
+            "sample_size": 500199,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1188",
+            "trait": "Major depressive disorder",
+            "sample_size": 18759,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-12064",
+            "trait": "Seen doctor (GP) for nerves, anxiety, tension or depression",
+            "sample_size": 462631,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-d-20126",
+            "trait": "Bipolar and major depression status",
+            "sample_size": 118000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-F5_DEPRESSIO",
+            "trait": "Depression",
+            "sample_size": 215644,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-41",
+            "trait": "Bipolar disorder",
+            "sample_size": 51710,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "Depression",
+            "sample_size": 30000,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ieu-b-102",
+        "finn-b-F5_DEPRESSIO",
+        "ieu-a-1188"
+      ]
+    },
+    {
+      "id": "gwas-8",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "25-hydroxyvitamin D",
+        "candidates": [
+          {
+            "id": "ebi-a-GCST90000615",
+            "trait": "25 hydroxyvitamin D level",
+            "sample_size": 417580,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-? ",
+            "trait": "Vitamin D (SUNLIGHT consortium)",
+            "sample_size": 79366,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-d-30890_irnt",
+            "trait": "Vitamin D",
+            "sample_size": 330000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-? ",
+            "trait": "Vitamin D supplement use",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_VIT_D_DEF",
+            "trait": "Vitamin D deficiency",
+            "sample_size": 218000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-? ",
+            "trait": "Calcium",
+            "sample_size": 61079,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ebi-a-GCST90000615",
+        "ukb-d-30890_irnt",
+        "ieu-a-? "
+      ]
+    },
+    {
+      "id": "gwas-9",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "Alzheimer's disease",
+        "candidates": [
+          {
+            "id": "ebi-a-GCST90027158",
+            "trait": "Alzheimer's disease",
+            "sample_size": 487511,
+            "year": 2022,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-2",
+            "trait": "Alzheimer's disease",
+            "sample_size": 63926,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-297",
+            "trait": "Alzheimer's disease",
+            "sample_size": 54162,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14699",
+            "trait": "Illnesses of father: Alzheimer's disease/dementia",
+            "sample_size": 401000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-G6_ALZHEIMER",
+            "trait": "Alzheimer's disease",
+            "sample_size": 218000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-? ",
+            "trait": "Parkinson's disease",
+            "sample_size": 108990,
+            "year": 2014,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ebi-a-GCST90027158",
+        "ieu-b-2",
+        "finn-b-G6_ALZHEIMER",
+        "ieu-a-297"
+      ]
+    },
+    {
+      "id": "gwas-10",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "inflammatory bowel disease",
+        "candidates": [
+          {
+            "id": "ebi-a-GCST004131",
+            "trait": "Inflammatory bowel disease",
+            "sample_size": 59957,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-31",
+            "trait": "Inflammatory bowel disease",
+            "sample_size": 34652,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-30",
+            "trait": "Crohn's disease",
+            "sample_size": 20883,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-32",
+            "trait": "Ulcerative colitis",
+            "sample_size": 27432,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-K11_IBD",
+            "trait": "Inflammatory bowel disease",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-? ",
+            "trait": "Diagnoses - main ICD10: K51 Ulcerative colitis",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90? ",
+            "trait": "Inflammatory bowel disease",
+            "sample_size": 40000,
+            "year": 2023,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ebi-a-GCST004131",
+        "finn-b-K11_IBD",
+        "ieu-a-31"
+      ]
+    },
+    {
+      "id": "gwas-11",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "C-reactive protein",
+        "candidates": [
+          {
+            "id": "ebi-a-GCST90029070",
+            "trait": "C-reactive protein levels",
+            "sample_size": 575531,
+            "year": 2022,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-35",
+            "trait": "C-Reactive protein level",
+            "sample_size": 204402,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-d-30710_irnt",
+            "trait": "C-reactive protein",
+            "sample_size": 343524,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-a-? ",
+            "trait": "Interleukin-6 levels",
+            "sample_size": 8293,
+            "year": 2013,
+            "population": "European"
+          },
+          {
+            "id": "prot-a-670",
+            "trait": "C-reactive protein (SomaLogic)",
+            "sample_size": 3301,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029014",
+            "trait": "Lung cancer",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ebi-a-GCST90029070",
+        "ukb-d-30710_irnt",
+        "ieu-b-35"
+      ]
+    },
+    {
+      "id": "gwas-12",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "sleep duration",
+        "candidates": [
+          {
+            "id": "ebi-a-GCST007561",
+            "trait": "Sleep duration",
+            "sample_size": 446118,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-4424",
+            "trait": "Sleep duration",
+            "sample_size": 460099,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-4956",
+            "trait": "Sleeplessness / insomnia",
+            "sample_size": 462341,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-? ",
+            "trait": "Chronotype (morning person)",
+            "sample_size": 449734,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-F5_INSOMNIA",
+            "trait": "Insomnia",
+            "sample_size": 200000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST011? ",
+            "trait": "Short sleep duration (<7h, binary)",
+            "sample_size": 411934,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ebi-a-GCST007561",
+        "ukb-b-4424"
+      ]
+    },
+    {
+      "id": "gwas-13",
+      "source": "2026-09-21-curated-gwas-catalogue",
+      "labelBasis": "curated-approximate-catalogue",
+      "releaseEligible": false,
+      "input": {
+        "trait": "glycated haemoglobin (HbA1c)",
+        "candidates": [
+          {
+            "id": "ukb-d-30750_irnt",
+            "trait": "Glycated haemoglobin (HbA1c)",
+            "sample_size": 344182,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90002244",
+            "trait": "Glycated hemoglobin levels",
+            "sample_size": 389889,
+            "year": 2021,
+            "population": "Trans-ancestry"
+          },
+          {
+            "id": "ieu-b-104",
+            "trait": "HbA1c",
+            "sample_size": 146806,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-113",
+            "trait": "Fasting glucose",
+            "sample_size": 200622,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST006867",
+            "trait": "Type 2 diabetes",
+            "sample_size": 655666,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-26",
+            "trait": "HbA1c",
+            "sample_size": 42790,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-? ",
+            "trait": "Diabetes diagnosed by doctor",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-40",
+            "trait": "Body mass index",
+            "sample_size": 681275,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-19953",
+            "trait": "Body mass index (BMI)",
+            "sample_size": 461460,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-2",
+            "trait": "Body mass index",
+            "sample_size": 339224,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-1",
+            "trait": "Body mass index",
+            "sample_size": 158284,
+            "year": 2017,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-4650",
+            "trait": "Body fat percentage",
+            "sample_size": 454633,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-61",
+            "trait": "Waist circumference",
+            "sample_size": 232101,
+            "year": 2015,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-1096",
+            "trait": "Childhood body mass index",
+            "sample_size": 35668,
+            "year": 2016,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029007",
+            "trait": "Obesity (ICD-10 E66)",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST005195",
+            "trait": "Coronary artery disease",
+            "sample_size": 547261,
+            "year": 2017,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-7",
+            "trait": "Coronary heart disease",
+            "sample_size": 184305,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "ieu-a-9",
+            "trait": "Myocardial infarction",
+            "sample_size": 171875,
+            "year": 2015,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-159",
+            "trait": "Coronary artery disease",
+            "sample_size": 212453,
+            "year": 2020,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-d-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 361194,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_CHD",
+            "trait": "Major coronary heart disease event",
+            "sample_size": 218792,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14395",
+            "trait": "Diagnoses - main ICD10: I25 Chronic ischaemic heart disease",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000001",
+            "trait": "Cardiovascular disease (any)",
+            "sample_size": 999999,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-26",
+            "trait": "Type 2 diabetes",
+            "sample_size": 69033,
+            "year": 2012,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-153",
+            "trait": "Type 2 diabetes",
+            "sample_size": 191764,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ukb-b-13806",
+            "trait": "Non-cancer illness code, self-reported: diabetes",
+            "sample_size": 462933,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST007517",
+            "trait": "Type 1 diabetes",
+            "sample_size": 24840,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-E4_DM2",
+            "trait": "Type 2 diabetes",
+            "sample_size": 215654,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90018926",
+            "trait": "Type 2 diabetes",
+            "sample_size": 490089,
+            "year": 2021,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-110",
+            "trait": "LDL cholesterol",
+            "sample_size": 440546,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-300",
+            "trait": "LDL cholesterol",
+            "sample_size": 173082,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "bbj-a-52",
+            "trait": "LDL cholesterol",
+            "sample_size": 72866,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-109",
+            "trait": "HDL cholesterol",
+            "sample_size": 403943,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-302",
+            "trait": "Total cholesterol",
+            "sample_size": 187365,
+            "year": 2013,
+            "population": "Mixed"
+          },
+          {
+            "id": "ukb-d-30780_irnt",
+            "trait": "LDL direct",
+            "sample_size": 343621,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-111",
+            "trait": "Triglycerides",
+            "sample_size": 441016,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90239658",
+            "trait": "LDL cholesterol levels",
+            "sample_size": 1320016,
+            "year": 2021,
+            "population": "Multi-ancestry"
+          },
+          {
+            "id": "ieu-b-38",
+            "trait": "Systolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-20175",
+            "trait": "Systolic blood pressure, automated reading",
+            "sample_size": 436419,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "bbj-a-? ",
+            "trait": "C-reactive protein",
+            "sample_size": 75391,
+            "year": 2019,
+            "population": "East Asian"
+          },
+          {
+            "id": "ieu-b-39",
+            "trait": "Diastolic blood pressure",
+            "sample_size": 757601,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90000062",
+            "trait": "Hypertension",
+            "sample_size": 458554,
+            "year": 2020,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-14177",
+            "trait": "Pulse rate, automated reading",
+            "sample_size": 460000,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "finn-b-I9_HYPTENS",
+            "trait": "Hypertension",
+            "sample_size": 218754,
+            "year": 2021,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-4877",
+            "trait": "Smoking initiation",
+            "sample_size": 1232091,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-2134",
+            "trait": "Ever smoked",
+            "sample_size": 461066,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-b-142",
+            "trait": "Lifetime smoking index",
+            "sample_size": 462690,
+            "year": 2019,
+            "population": "European"
+          },
+          {
+            "id": "ukb-b-5779",
+            "trait": "Current tobacco smoking",
+            "sample_size": 462434,
+            "year": 2018,
+            "population": "European"
+          },
+          {
+            "id": "ieu-a-961",
+            "trait": "Cigarettes per day",
+            "sample_size": 74053,
+            "year": 2010,
+            "population": "European"
+          },
+          {
+            "id": "ebi-a-GCST90029014",
+            "trait": "Lung cancer",
+            "sample_size": 400000,
+            "year": 2021,
+            "population": "European"
+          }
+        ]
+      },
+      "acceptableIds": [
+        "ukb-d-30750_irnt",
+        "ebi-a-GCST90002244",
+        "ieu-b-104"
+      ]
+    }
+  ]
+}

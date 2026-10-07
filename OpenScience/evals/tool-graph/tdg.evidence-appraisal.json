@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evidence-appraisal",
-  "version": "sha256:31b8ed502a82e98b86a45b96dce0c407ef45140f041fdfaf382d65dd81adf588",
+  "version": "sha256:5a0887a948114e9a1171e5badbc2ae203195f89eb3451401ae3039ee5f39af39",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -846,7 +846,7 @@
     {
       "name": "mcp__evimed__evidence_deduplicate",
       "source": "mcp",
-      "description": "Deduplicate evidence records by DOI, PMID, URL, then normalized title.",
+      "description": "Deduplicate exact evidence records by DOI, PMID, URL, then normalized title; annotate suspected same-trial publications without merging them.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -866,6 +866,10 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 2048
+                },
+                "abstract": {
+                  "type": "string",
+                  "maxLength": 20000
                 },
                 "doi": {
                   "type": "string",

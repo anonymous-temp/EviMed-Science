@@ -219,7 +219,7 @@
           },
           "annotations": {
             "summary": "The production host has under 1 GB of memory available.",
-            "description": "The OOM killer is about to choose a victim, and it chooses by size — the runtime containers and Postgres are the largest things here. Stop whatever is building before it picks for you."
+            "description": "The OOM killer is about to choose a victim, and it chooses by size \u2014 the runtime containers and Postgres are the largest things here. Stop whatever is building before it picks for you."
           }
         }
       ]
@@ -325,7 +325,7 @@
           },
           "annotations": {
             "summary": "Under 85% of the frontier edits pass the number check first time",
-            "description": "More than 15% of the day's first edit answers carried a number the source does not have (plan 10.5.8's 复核一次通过率); edit_first_pass_failures_total names the other fields sent back."
+            "description": "More than 15% of the day's first edit answers carried a number the source does not have (plan 10.5.8's \u590d\u6838\u4e00\u6b21\u901a\u8fc7\u7387); edit_first_pass_failures_total names the other fields sent back."
           }
         },
         {
@@ -449,8 +449,8 @@
             "severity": "critical"
           },
           "annotations": {
-            "summary": "模型服务商 {{ $labels.provider }} 余额已用尽：对它的每一次调用都会失败，直到充值为止",
-            "description": "过去 10 分钟内 {{ $labels.provider }} 以「余额不足」拒绝了调用（DeepSeek 为 HTTP 402；DashScope 的欠费应答 400 Arrearage 也计在 402 下）。deepseek：所有研究运行、前沿动态、路由、标题与记忆提取都会失败；dashscope：独立审查、重排序与嵌入会失败；typesafe：回复核查全部改由审查模型判断。充值后下一次调用即恢复，无需重启；处置见运维手册 ModelProviderBalanceExhausted。"
+            "summary": "\u6a21\u578b\u670d\u52a1\u5546 {{ $labels.provider }} \u4f59\u989d\u5df2\u7528\u5c3d\uff1a\u5bf9\u5b83\u7684\u6bcf\u4e00\u6b21\u8c03\u7528\u90fd\u4f1a\u5931\u8d25\uff0c\u76f4\u5230\u5145\u503c\u4e3a\u6b62",
+            "description": "\u8fc7\u53bb 10 \u5206\u949f\u5185 {{ $labels.provider }} \u4ee5\u300c\u4f59\u989d\u4e0d\u8db3\u300d\u62d2\u7edd\u4e86\u8c03\u7528\uff08DeepSeek \u4e3a HTTP 402\uff1bDashScope \u7684\u6b20\u8d39\u5e94\u7b54 400 Arrearage \u4e5f\u8ba1\u5728 402 \u4e0b\uff09\u3002deepseek\uff1a\u6240\u6709\u7814\u7a76\u8fd0\u884c\u3001\u524d\u6cbf\u52a8\u6001\u3001\u8def\u7531\u3001\u6807\u9898\u4e0e\u8bb0\u5fc6\u63d0\u53d6\u90fd\u4f1a\u5931\u8d25\uff1bdashscope\uff1a\u72ec\u7acb\u5ba1\u67e5\u3001\u91cd\u6392\u5e8f\u4e0e\u5d4c\u5165\u4f1a\u5931\u8d25\uff1btypesafe\uff1a\u56de\u590d\u6838\u67e5\u5168\u90e8\u6539\u7531\u5ba1\u67e5\u6a21\u578b\u5224\u65ad\u3002\u5145\u503c\u540e\u4e0b\u4e00\u6b21\u8c03\u7528\u5373\u6062\u590d\uff0c\u65e0\u9700\u91cd\u542f\uff1b\u5904\u7f6e\u89c1\u8fd0\u7ef4\u624b\u518c ModelProviderBalanceExhausted\u3002"
           }
         }
       ]
@@ -483,15 +483,15 @@
           }
         },
         {
-          "alert": "ReviewJevFailing",
-          "expr": "sum(increase(open_science_review_jev_requests_total{outcome=\"failed\"}[1h])) >= 3 and sum(increase(open_science_review_jev_requests_total{outcome=\"failed\"}[1h])) > (sum(increase(open_science_review_jev_requests_total{outcome=\"answered\"}[1h])) or vector(0))",
+          "alert": "JevFailing",
+          "expr": "sum by (site) (increase(open_science_jev_requests_total{outcome=\"failed\"}[1h])) >= 3 and sum by (site) (increase(open_science_jev_requests_total{outcome=\"failed\"}[1h])) > sum by (site) (increase(open_science_jev_requests_total{outcome=\"answered\"}[1h]))",
           "for": "15m",
           "labels": {
             "severity": "warning"
           },
           "annotations": {
-            "summary": "Jev, the reply check's first pass, fails more often than it answers",
-            "description": "Reply checks go on: the reviewer model judges every sentence, as before Jev, at its own price and pace. open_science_review_jev_failures_total{code} names why — the TypeSafe key, the account's credit, rate limits, or the pinned version withdrawn; see the runbook's reviewer section."
+            "summary": "A registered Jev site is falling back repeatedly",
+            "description": "Inspect its site state and control-plane provider refusals; fallback preserves the original path."
           }
         },
         {
@@ -504,6 +504,18 @@
           "annotations": {
             "summary": "An answer's medicine claim was contradicted by its own cited source",
             "description": "The researcher has been told in the inbox and, for a chat-started run, in the chat. Worth a look at the conversation: the reply check is in evimed_review.reply_checks."
+          }
+        },
+        {
+          "alert": "JevCalibrationDrift",
+          "expr": "open_science_jev_drift_below_baseline_seven_days == 1",
+          "for": "0m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Jev agreement stayed below its calibrated baseline for seven UTC days",
+            "description": "Review the model and prompt fingerprint before changing this site threshold."
           }
         }
       ]
@@ -519,8 +531,8 @@
             "severity": "critical"
           },
           "annotations": {
-            "summary": "数据源 {{ $labels.source }} 的部署密钥已配置却读不到：对它的每一次请求都被拒绝",
-            "description": "网关因凭据缺失拒绝了 {{ $labels.source }} 的请求，而部署为它配置过密钥文件或变量——文件权限、属组、符号链接或路径不对（/api/ready 的 publicSourceCredentials 写着具体错误码）。运行不会报错，只会悄悄改用别的来源：2026-09-22 起 EviMed 文献接口的密钥文件因属组权限读不到，三天里 325 次文献检索退回 PubMed，没有任何告警。修好文件后重启 web 容器即恢复。"
+            "summary": "\u6570\u636e\u6e90 {{ $labels.source }} \u7684\u90e8\u7f72\u5bc6\u94a5\u5df2\u914d\u7f6e\u5374\u8bfb\u4e0d\u5230\uff1a\u5bf9\u5b83\u7684\u6bcf\u4e00\u6b21\u8bf7\u6c42\u90fd\u88ab\u62d2\u7edd",
+            "description": "\u7f51\u5173\u56e0\u51ed\u636e\u7f3a\u5931\u62d2\u7edd\u4e86 {{ $labels.source }} \u7684\u8bf7\u6c42\uff0c\u800c\u90e8\u7f72\u4e3a\u5b83\u914d\u7f6e\u8fc7\u5bc6\u94a5\u6587\u4ef6\u6216\u53d8\u91cf\u2014\u2014\u6587\u4ef6\u6743\u9650\u3001\u5c5e\u7ec4\u3001\u7b26\u53f7\u94fe\u63a5\u6216\u8def\u5f84\u4e0d\u5bf9\uff08/api/ready \u7684 publicSourceCredentials \u5199\u7740\u5177\u4f53\u9519\u8bef\u7801\uff09\u3002\u8fd0\u884c\u4e0d\u4f1a\u62a5\u9519\uff0c\u53ea\u4f1a\u6084\u6084\u6539\u7528\u522b\u7684\u6765\u6e90\uff1a2026-09-22 \u8d77 EviMed \u6587\u732e\u63a5\u53e3\u7684\u5bc6\u94a5\u6587\u4ef6\u56e0\u5c5e\u7ec4\u6743\u9650\u8bfb\u4e0d\u5230\uff0c\u4e09\u5929\u91cc 325 \u6b21\u6587\u732e\u68c0\u7d22\u9000\u56de PubMed\uff0c\u6ca1\u6709\u4efb\u4f55\u544a\u8b66\u3002\u4fee\u597d\u6587\u4ef6\u540e\u91cd\u542f web \u5bb9\u5668\u5373\u6062\u590d\u3002"
           }
         },
         {
@@ -531,8 +543,8 @@
             "severity": "warning"
           },
           "annotations": {
-            "summary": "EviMed 自有证据接口在过去一小时被网关拒绝 {{ $value }} 次（没有可用的密钥）",
-            "description": "文献、指南、试验、专利、说明书检索都会先问 EviMed 接口，被拒后退回 PubMed 等公共源，并向模型说明该源未配置，报告质量可能下降而运行照常成功；部署没有密钥时，研究者可在「设置 → 数据源」自己添加。检查部署的 OPEN_SCIENCE_EVIMED_API_KEY_FILE（0440、属组与知识源插件共用）与 /api/ready 的 publicSourceCredentials；本部署若有意不接 EviMed 接口、由研究者自带密钥，静默此告警。"
+            "summary": "EviMed \u81ea\u6709\u8bc1\u636e\u63a5\u53e3\u5728\u8fc7\u53bb\u4e00\u5c0f\u65f6\u88ab\u7f51\u5173\u62d2\u7edd {{ $value }} \u6b21\uff08\u6ca1\u6709\u53ef\u7528\u7684\u5bc6\u94a5\uff09",
+            "description": "\u6587\u732e\u3001\u6307\u5357\u3001\u8bd5\u9a8c\u3001\u4e13\u5229\u3001\u8bf4\u660e\u4e66\u68c0\u7d22\u90fd\u4f1a\u5148\u95ee EviMed \u63a5\u53e3\uff0c\u88ab\u62d2\u540e\u9000\u56de PubMed \u7b49\u516c\u5171\u6e90\uff0c\u5e76\u5411\u6a21\u578b\u8bf4\u660e\u8be5\u6e90\u672a\u914d\u7f6e\uff0c\u62a5\u544a\u8d28\u91cf\u53ef\u80fd\u4e0b\u964d\u800c\u8fd0\u884c\u7167\u5e38\u6210\u529f\uff1b\u90e8\u7f72\u6ca1\u6709\u5bc6\u94a5\u65f6\uff0c\u7814\u7a76\u8005\u53ef\u5728\u300c\u8bbe\u7f6e \u2192 \u6570\u636e\u6e90\u300d\u81ea\u5df1\u6dfb\u52a0\u3002\u68c0\u67e5\u90e8\u7f72\u7684 OPEN_SCIENCE_EVIMED_API_KEY_FILE\uff080440\u3001\u5c5e\u7ec4\u4e0e\u77e5\u8bc6\u6e90\u63d2\u4ef6\u5171\u7528\uff09\u4e0e /api/ready \u7684 publicSourceCredentials\uff1b\u672c\u90e8\u7f72\u82e5\u6709\u610f\u4e0d\u63a5 EviMed \u63a5\u53e3\u3001\u7531\u7814\u7a76\u8005\u81ea\u5e26\u5bc6\u94a5\uff0c\u9759\u9ed8\u6b64\u544a\u8b66\u3002"
           }
         }
       ]
@@ -590,7 +602,7 @@
           },
           "annotations": {
             "summary": "The recall reranker fails more often than it succeeds",
-            "description": "Recall still answers: the reranker fails open and the index's vector order stands, so nothing visible breaks. open_science_memory_rerank_total{code} names why — the DashScope key file, the account's balance, a timeout, or the pinned rerank model withdrawn; see the runbook row MemoryRerankFailing."
+            "description": "Recall still answers: the reranker fails open and the index's vector order stands, so nothing visible breaks. open_science_memory_rerank_total{code} names why \u2014 the DashScope key file, the account's balance, a timeout, or the pinned rerank model withdrawn; see the runbook row MemoryRerankFailing."
           }
         }
       ]

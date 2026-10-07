@@ -8,7 +8,6 @@ import test from "node:test";
 import { digestDirectory } from "../src/releaseManifest.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const ai4sRoot = path.join(repoRoot, "runtime/skills/external/ai4s-skills");
 const curatedRoot = path.join(repoRoot, "runtime/skills/curated-scientific");
 const coreRoot = path.join(repoRoot, "runtime/skills/core");
 const officeRoot = path.join(repoRoot, "runtime/skills/office");
@@ -52,26 +51,18 @@ async function assertReferencedFilesExist(skillDir, packRoot = null) {
   }
 }
 
-test("the complete first-party AI4S research loop is bundled with measured-result safeguards", async () => {
-  assert.deepEqual(await directories(ai4sRoot), [
-    "ai4s-agent",
-    "experiment-suite",
-    "integrity-auditor",
-    "literature-survey",
-    "mindmap-render",
-    "paper-writer",
-    "research-explorer",
-  ]);
-  for (const skill of await directories(ai4sRoot)) {
-    await assertReferencedFilesExist(path.join(ai4sRoot, skill), ai4sRoot);
+test("both production images bundle the admitted skill roots without external reference packs", async () => {
+  // The old assertion read an untracked AI4S reference snapshot which neither
+  // production image copies. Verify what a clean checkout actually ships;
+  // the curated delivery contracts below still check executable safeguards.
+  for (const filename of ["Dockerfile", "Dockerfile.agentbay"]) {
+    const source = await readFile(path.join(repoRoot, "deploy/runtime-dsh", filename), "utf8");
+    for (const root of ["core", "community", "curated-scientific", "office"]) {
+      assert.ok(source.includes(`COPY runtime/skills/${root} `), `${filename} must copy ${root}`);
+      assert.ok((await directories(path.join(repoRoot, "runtime/skills", root))).length > 0);
+    }
+    assert.doesNotMatch(source, /COPY\s+runtime\/skills\/external(?:\/|\s)/);
   }
-  const experiment = await readFile(path.join(ai4sRoot, "experiment-suite/SKILL.md"), "utf8");
-  const paper = await readFile(path.join(ai4sRoot, "paper-writer/SKILL.md"), "utf8");
-  assert.match(experiment, /Measured mode is the default/);
-  assert.match(experiment, /never treat it as publication evidence/);
-  assert.match(paper, /simulated inputs require an explicit dry-run request/);
-  assert.match(paper, /cannot support a submission-ready claim/);
-  await assertNoSymlinks(ai4sRoot);
 });
 
 test("the curated scientific inventory contains only audited or EviMed-rehabilitated skills", async () => {

@@ -263,7 +263,7 @@ function proseHygieneIssues(input, proseFiles) {
     if (leak) {
       // The matched term is the actionable part: the line excerpt alone sent a
       // run through three rewrites of everything but the two words that tripped it.
-      issues.push(issue('runtime_leakage', `${path} line ${leak.line} names the retrieval machinery (matched "${leak.match}"): ${leak.text}`, { path, line: leak.line, check: checkIdOf(runtimeLeakageLine) }))
+      issues.push(issue('runtime_leakage', `${path} line ${leak.line} names an internal runtime identifier (matched "${leak.match}"): ${leak.text}`, { path, line: leak.line, check: checkIdOf(runtimeLeakageLine) }))
     }
     for (const citationIssue of citationIntegrityIssues(body)) {
       issues.push(issue('citation_integrity', `${path}: ${citationIssue}`, { path, check: checkIdOf(citationIntegrityIssues) }))

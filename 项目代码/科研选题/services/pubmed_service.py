@@ -2,6 +2,16 @@
 PubMed NCBI E-utilities API 检索服务 V5.0
 支持LLM驱动的多子查询并行检索
 """
+
+try:
+    from evimed_judge import ask as judge_ask, ask_async as judge_ask_async
+except ImportError:
+    def judge_ask(*args, **kwargs):
+        return None
+
+    async def judge_ask_async(*args, **kwargs):
+        return None
+
 import asyncio
 import aiohttp
 import xml.etree.ElementTree as ET
@@ -633,6 +643,11 @@ class PubMedSearchService:
             return 'Case Report'
         elif any('comparative study' in t for t in type_texts):
             return 'Comparative Study'
+
+        judgment = judge_ask("J19", {"title": title or "", "abstract": abstract or "", "publicationTypes": type_texts})
+        labels = {"RCT": "RCT", "meta-analysis": "Meta-analysis", "review": "Review", "case-report": "Case Report"}
+        if isinstance(judgment, dict) and isinstance(judgment.get("studyType"), str) and judgment.get("studyType") in labels:
+            return labels[judgment["studyType"]]
 
         # 2. 基于MeSH Terms识别
         has_animals = 'animals' in mesh_terms_lower

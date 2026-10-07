@@ -433,6 +433,20 @@ test('actual imported engine units appear as method cases, never complete resear
  assert.equal(summary.lines[0].includes('完整研究'),false);
 });
 
+test('J12 proposes only semantically same tools with actual overlapping cases, retaining lexical fallback', async () => {
+  for (const relation of ['same', 'related', 'different', 'fallback']) {
+    const f = fixture();
+    const maintenance = new EvolutionMaintenance({ service: f.service, judgeService: { judge: async site => { assert.equal(site, 'J12'); return relation === 'fallback' ? { outcome: 'fallback' } : { outcome: 'settled', value: { relation } }; } } });
+    for (const id of ['one', 'two']) await f.service.registerTool({ id, track: 'M', artifactDigest: id, name: 'Cohort model', description: 'Cohort model', holdoutCases: [{ id: 'reference', sha256: 'immutable' }] });
+    f.advance(31 * 86400000);
+    const result = await maintenance.monthly();
+    const reviews = await Promise.all(result.payload.reviews.map(id => f.service.get(id)));
+    assert.equal(reviews.some(row => row.payload.kind === 'merge'), ['same', 'fallback'].includes(relation));
+    assert.equal((await f.service.get('one')).payload.status, 'active');
+    assert.equal((await f.service.get('two')).payload.status, 'active');
+  }
+});
+
 test('one failing wake is recorded on its own wait and never stops the waits behind it', async () => {
   const f=fixture();f.service.callbacks.waiterOwners=async()=>['alice','bob'];
   const seen=[];

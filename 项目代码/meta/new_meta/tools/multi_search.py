@@ -5,6 +5,16 @@ for searching multiple databases. Uses free APIs (no subscription needed).
 """
 from __future__ import annotations
 
+try:
+    from evimed_judge import ask as judge_ask, ask_async as judge_ask_async
+except ImportError:
+    def judge_ask(*args, **kwargs):
+        return None
+
+    async def judge_ask_async(*args, **kwargs):
+        return None
+
+
 import logging
 import os
 import re
@@ -296,7 +306,39 @@ def aggregate_search(
         f"Aggregate search: {len(unique)} unique papers from "
         f"{len(all_papers)} raw records across {len(source_counts)} sources"
     )
+    _annotate_trial_pairs(unique)
     return unique, source_counts
+
+
+def _annotate_trial_pairs(papers: list[dict]) -> None:
+    """Bounded candidate annotations only; a judge never merges publications."""
+    checked = 0
+    stop_words = {"a", "an", "the", "of", "in", "and", "or", "for", "with", "to", "from", "by", "on",
+                  "trial", "study", "randomized", "randomised", "controlled", "patients", "results", "analysis"}
+    def title_words(paper):
+        return {word.strip(".,:;()[]") for word in str(paper.get("title") or "").casefold().split()} - stop_words
+    for index, left in enumerate(papers):
+        words = title_words(left)
+        if len(words) < 2:
+            continue
+        for right in papers[index + 1:]:
+            other = title_words(right)
+            if len(words & other) < 2:
+                continue
+            if checked >= 40:
+                for paper in papers:
+                    paper["trial_linkage_review"] = {
+                        "status": "incomplete", "candidate_pairs_reviewed": checked,
+                        "notice": "同一试验关联核对已达到40对上限，剩余候选未核对；记录均保留，不应据此认定试验相互独立。",
+                    }
+                logger.warning("Trial linkage annotation stopped at the 40-pair limit; all publications retained")
+                return
+            checked += 1
+            judgment = judge_ask("J18", {"left": {"title": left.get("title") or "", "abstract": left.get("abstract") or ""},
+                                        "right": {"title": right.get("title") or "", "abstract": right.get("abstract") or ""}})
+            if isinstance(judgment, dict) and judgment.get("relation") == "same_trial":
+                left.setdefault("suspected_same_trial", []).append(right.get("doi") or right.get("pmid") or right.get("title"))
+                right.setdefault("suspected_same_trial", []).append(left.get("doi") or left.get("pmid") or left.get("title"))
 
 
 def _deduplicate_by_doi_pmid_title(papers: list[dict]) -> list[dict]:

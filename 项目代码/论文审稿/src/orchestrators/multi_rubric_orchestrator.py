@@ -6,6 +6,12 @@ from typing import List, Dict
 from ..schemas.document_ir import DocumentIR, StudyProfile, EvidenceMap
 from ..schemas.rubric import BlockReviewResult, RubricBlock
 from ..utils.rubric_loader import RubricLoader
+try:
+    from evimed_judge import ask as judge_ask
+except ImportError:
+    def judge_ask(*args, **kwargs):
+        return None
+
 from ..agents.methodology_reviewer import MethodologyReviewerAgent
 from ..services.llm_gateway import LLMGateway
 
@@ -110,6 +116,16 @@ class MultiRubricOrchestrator:
         for study_type in study_types:
             # 精确匹配
             rubrics = self.RUBRIC_PRIORITY.get(study_type)
+
+            if rubrics is None:
+                allowed = {item for values in self.RUBRIC_PRIORITY.values() for item in values}
+                judgment = judge_ask("peer-review-checklist", {
+                    "studyType": study_type,
+                    "checklists": [{"id": item, "description": item.replace("_", " ")} for item in sorted(allowed)],
+                })
+                ids = judgment.get("checklistIds") if isinstance(judgment, dict) else None
+                if isinstance(ids, list) and ids and all(isinstance(item, str) and item in allowed for item in ids):
+                    rubrics = list(dict.fromkeys(ids))[:4]
 
             # 模糊匹配：关键词包含
             if rubrics is None:

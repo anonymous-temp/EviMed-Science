@@ -86,6 +86,7 @@ function consolidation(options) {
       dispatch: async (request) => { dispatched.push(request); return { runId: "r1", sessionId: "s1", dispatchId: request.dispatchId }; },
       readResult: options.readResult ?? (async () => ({ status: "succeeded", output: {} })),
       learning: options.learning,
+      judgeService: options.judgeService ?? null,
       jobs: options.jobs ?? null,
       audit: options.audit ?? null,
       ...(options.platformTools ? { platformTools: options.platformTools } : {}),
@@ -140,8 +141,8 @@ test("a rewrite that drops a verification item is refused, and the refusal is an
     readResult: async (identity) => ({
       status: "succeeded",
       output: identity.dispatchId.includes("build")
-        ? { methods: [{ id: "m1", skill: renderMethodSkill(frontmatter("resolve-claim-span"), shrunk) }] }
-        : { relations: [], assignments: [{ ASSIGNMENT: "g1", relationType: "subset", SKILLS: ["m1", "m2"] }] },
+        ? { revisions: [{ methodId: "m1", operation: "amend", assignment: "g1", baseDigest: items[0].payload.contentDigest, skill: renderMethodSkill(frontmatter("resolve-claim-span"), shrunk) }] }
+        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"] }] },
     }),
   });
   await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
@@ -161,8 +162,8 @@ test("a rewrite that only grows the checks is accepted", async () => {
     readResult: async (identity) => ({
       status: "succeeded",
       output: identity.dispatchId.includes("build")
-        ? { methods: [{ id: "m1", skill: renderMethodSkill(frontmatter("resolve-claim-span"), grown) }] }
-        : { relations: [], assignments: [{ ASSIGNMENT: "g1", relationType: "subset", SKILLS: ["m1", "m2"] }] },
+        ? { revisions: [{ methodId: "m1", operation: "amend", assignment: "g1", baseDigest: items[0].payload.contentDigest, skill: renderMethodSkill(frontmatter("resolve-claim-span"), grown) }] }
+        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"] }] },
     }),
   });
   await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
@@ -175,7 +176,7 @@ test("a single candidate pair skips the screen, because screening one pair costs
   const learning = fakeLearning([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor")]);
   const { instance, dispatched } = consolidation({
     learning,
-    readResult: async () => ({ status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", relationType: "merge", SKILLS: ["m1", "m2"] }] } }),
+    readResult: async () => ({ status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "merge", SKILLS: ["m1", "m2"] }] } }),
   });
   await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
   assert.equal(dispatched.length, 2, "decide then build, with no screen in front of them");
@@ -184,7 +185,7 @@ test("a single candidate pair skips the screen, because screening one pair costs
   assert.deepEqual(new Set(dispatched.map((call) => call.contractKind)), new Set(["method-relations"]));
   // The decide step sees the bodies; the build step sees the assignments it may not change.
   assert.ok(dispatched[0].input.methods.every((entry) => typeof entry.body === "string"));
-  assert.deepEqual(dispatched[1].input.assignments, [{ ASSIGNMENT: "g1", relationType: "merge", SKILLS: ["m1", "m2"] }]);
+  assert.deepEqual(dispatched[1].input.assignments, [{ ASSIGNMENT: "g1", RELATION_TYPE: "merge", SKILLS: ["m1", "m2"] }]);
 });
 
 test("with the evolution module off the relation brief is byte for byte the one built before it existed", async () => {
@@ -212,7 +213,7 @@ test("with the module on, the relation brief names the tools declared for the gr
   assert.ok(!JSON.stringify(platformTools).includes("secret"));
 });
 
-test("the three model steps run as separate bounded runs, in order, with the capability's own actions", async () => {
+test("the semantic screen precedes the two bounded capability runs", async () => {
   // SCREEN was specified from the start — `candidatePairs` says in its own
   // docstring that it is not the screen, "the model does that" — and nothing
   // called it, so a lexical token overlap decided what got grouped, reasoned
@@ -224,18 +225,19 @@ test("the three model steps run as separate bounded runs, in order, with the cap
   ]);
   const { instance, dispatched } = consolidation({
     learning,
+    judgeService: { judge: async () => ({ outcome: "settled", value: { pairs: [{ id: "1", relation: "unrelated" }, { id: "2", relation: "unrelated" }] } }) },
     readResult: async (identity) => (String(identity.dispatchId ?? "").includes("screen")
       ? { status: "succeeded", output: { pairs: [{ a: "m1", b: "m2" }] } }
-      : { status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", relationType: "merge", SKILLS: ["m1", "m2"] }] } }),
+      : { status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "merge", SKILLS: ["m1", "m2"] }] } }),
   });
   const result = await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
-  assert.deepEqual(dispatched.map((call) => call.input.action), ["screen", "decide", "build"]);
+  assert.deepEqual(dispatched.map((call) => call.input.action), ["decide", "build"]);
   assert.deepEqual(new Set(dispatched.map((call) => call.capabilityId)), new Set(["method-relations"]));
 
   // The screen kept one of the three pairs, so only that pair was grouped.
   assert.equal(result.screened, true);
   assert.equal(result.screenDropped, 2);
-  assert.deepEqual(dispatched[1].input.methods.map((entry) => entry.id).sort(), ["m1", "m2"],
+  assert.deepEqual(dispatched[0].input.methods.map((entry) => entry.id).sort(), ["m1", "m2"],
     "the pairs the screen dropped never reached the expensive step");
 });
 
@@ -326,30 +328,18 @@ test("a screen answer may only thin the shortlist it was given", () => {
   assert.deepEqual(screenedPairs(shortlist, { pairs: [{ a: "m9", b: "m8" }, { a: "m1", b: "m9" }] }), []);
 });
 
-test("the screen runs once for the whole shortlist, and sees names rather than bodies", async () => {
-  /** @type {any[]} */
-  const dispatched = [];
-  const consolidation = new MethodConsolidation({
-    learning: { async listMethods() { return { items: [] }; } },
-    dispatch: async (input) => { dispatched.push(input); return { runId: "run_screen", sessionId: "s" }; },
-    readResult: async () => ({ status: "succeeded", output: { pairs: [{ a: "m1", b: "m2" }] } }),
-    jobs: { async enqueue() { return { id: "j" }; } },
-  });
-  const methods = ["m1", "m2", "m3"].map((id) => ({
-    id,
-    payload: { frontmatter: { name: id, description: `about ${id}` }, body: "SECRET BODY", contentDigest: `sha256:${"0".repeat(64)}` },
-  }));
+test("the control-plane screen sees only descriptions and preserves omitted pairs", async () => {
+  const calls = [];
+  const consolidation = new MethodConsolidation({ learning: {}, dispatch: async () => { throw new Error("No runtime screen"); }, readResult: async () => null,
+    judgeService: { judge: async (...args) => { calls.push(args); return { outcome: "settled", value: { pairs: [{ id: "0", relation: "unrelated" }] } }; } } });
+  const methods = ["m1", "m2", "m3"].map(id => ({ id, payload: { frontmatter: { name: id, description: id }, body: "PRIVATE BODY" } }));
   const pairs = [{ a: "m1", b: "m2", overlap: 4 }, { a: "m1", b: "m3", overlap: 3 }];
-  const screened = await consolidation.screenPairs({ userId: "u1", projectId: "p1" }, pairs, methods);
-
-  assert.equal(dispatched.length, 1, "one run for the shortlist; a screen per pair costs more than it saves");
-  assert.equal(dispatched[0].input.action, "screen");
-  assert.equal(dispatched[0].input.pairs.length, 2);
-  assert.ok(!JSON.stringify(dispatched[0].input).includes("SECRET BODY"),
-    "the cheap step must stay cheap; bodies are DECIDE's to read");
-  assert.deepEqual(screened.pairs.map((pair) => [pair.a, pair.b]), [["m1", "m2"]]);
-  assert.equal(screened.screened, true);
-  assert.equal(screened.dropped, 1);
+  const result = await consolidation.screenPairs({ userId: "u1", projectId: "p1" }, pairs, methods);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], "J1");
+  assert.ok(!JSON.stringify(calls).includes("PRIVATE BODY"));
+  assert.deepEqual(result.pairs, [pairs[1]]);
+  assert.equal(result.dropped, 1);
 });
 
 test("a screen that could not run leaves the shortlist alone rather than emptying it", async () => {
@@ -421,21 +411,21 @@ test("a step whose run is still working is waited for, not counted as having no 
       const seen = (reads.get(identity.dispatchId) ?? 0) + 1;
       reads.set(identity.dispatchId, seen);
       if (seen < 3) return { status: seen === 1 ? "pending" : "running" };
-      return { status: "succeeded", output: { relations: [{ source: "m1", target: "m2", type: "shared_part", reason: "Both resolve a span." }] } };
+      return { status: "succeeded", output: { assignments: [{ ASSIGNMENT: "A1", SKILLS: ["m1", "m2"], RELATION_TYPE: "shared_part", REASON: "Both resolve a span." }] } };
     },
     pollMs: 7,
     wait: async (ms) => { waits.push(ms); },
     now: () => new Date("2026-09-21T00:00:00.000Z"),
   });
   const result = await consolidation.integrate({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "integrate", methodId: "m1" } } });
-  assert.equal(result.relations, 1, "the answer that arrived on the third look was applied");
+  assert.equal(result.relations, 2, "the answer that arrived on the third look was applied");
   assert.deepEqual([...reads.values()], [3]);
   assert.deepEqual(waits, [7, 7]);
 });
 
 test("a step that cannot start defers the pass instead of finishing it without the step", async () => {
   const learning = fakeLearning([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor"), doc("m3", "resolve-claim-quote")]);
-  for (const busyAt of ["screen", "decide", "build"]) {
+  for (const busyAt of ["decide", "build"]) {
     const consolidation = new MethodConsolidation({
       learning,
       dispatch: async (request) => {
@@ -444,7 +434,7 @@ test("a step that cannot start defers the pass instead of finishing it without t
       },
       readResult: async (identity) => (String(identity.dispatchId).includes("screen")
         ? { status: "succeeded", output: { pairs: [{ a: "m1", b: "m2" }] } }
-        : { status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", relationType: "merge", SKILLS: ["m1", "m2"] }] } }),
+        : { status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "merge", SKILLS: ["m1", "m2"] }] } }),
       wait: async () => {},
     });
     await assert.rejects(consolidation.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } }),
@@ -515,4 +505,55 @@ test("a method whose steps are not in the reader's language, or render another b
   await consolidation.sleep({ job: { id: "job_2", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
   assert.deepEqual(asked.sort(), ["m1", "m2"]);
   assert.ok(written.every((entry) => entry.display.steps === "1. 先锚定\n2. 再改写"));
+});
+
+test("Chinese method descriptions propose overlapping adjacent bigrams", () => {
+  const items = [doc("a", "风险评估"), doc("b", "风险评价"), doc("c", "患者招募")].map(item => ({ ...item, payload: { ...item.payload, frontmatter: { name: item.payload.frontmatter.name, description: "" } } }));
+  assert.deepEqual(candidatePairs(items).map(pair => [pair.a, pair.b]), [["a", "b"]]);
+});
+
+test("the method-relations contract screen selects groups using actual artifact keys", () => {
+  const pairs = [{ a: "a", b: "b", overlap: 2 }, { a: "a", b: "c", overlap: 2 }];
+  assert.deepEqual(screenedPairs(pairs, { schemaVersion: 1, action: "screen", screened: { selected: [{ group: "g1", methods: ["a", "b"], reason: "Shared task" }], rejected: [{ method: "c", reason: "Different" }] } }), [pairs[0]]);
+});
+
+test("J1 preserves the unjudged tail and falls back without dispatching a runtime", async () => {
+  const pairs = Array.from({ length: 45 }, (_, index) => ({ a: "a", b: String(index), overlap: 2 }));
+  const service = new MethodConsolidation({ learning: {}, dispatch: async () => { throw new Error("Runtime forbidden"); }, readResult: async () => null,
+    judgeService: { judge: async (site, input) => { assert.equal(input.pairs.length, 40); return { outcome: "settled", value: { pairs: input.pairs.map(pair => ({ id: pair.id, relation: "unrelated" })) } }; } } });
+  assert.deepEqual((await service.screenPairs({ userId: "u" }, pairs, [])).pairs, pairs.slice(40));
+  service.judgeService = { judge: async () => ({ outcome: "fallback", value: null }) };
+  assert.deepEqual((await service.screenPairs({ userId: "u" }, pairs, [])).pairs, pairs);
+});
+
+test("canonical creation keeps approved originals usable until already-recorded independent evidence passes", async () => {
+  const source = doc("source", "source-method", { status: "approved" });
+  const canonicalId = "method:learned:canonical-method";
+  const assignments = [{ ASSIGNMENT: "A1", SKILLS: ["source", "other"], RELATION_TYPE: "merge", REASON: "Identical methods" }];
+  const members = [source, doc("other", "other-method")];
+  const rows = new Map(members.map(member => [member.id, member]));
+  const retirements = [];
+  const learning = { listMethods: async () => ({ items: [...rows.values()] }), getMethod: async (user, id) => {
+    if (!rows.has(id)) throw Object.assign(new Error("Missing"), { code: "method_not_found" }); return rows.get(id);
+  }, createCandidate: async (user, input) => {
+    const canonical = doc(canonicalId, input.frontmatter.name, { ...input, status: "approved" }); rows.set(canonicalId, canonical); return canonical;
+  }, retire: async (user, id, input) => { retirements.push({ id, input }); rows.get(id).payload.status = "retired"; return rows.get(id); } };
+  const output = { schemaVersion: 1, action: "build", assignments, revisions: [
+    { assignment: "A1", methodId: canonicalId, name: "canonical-method", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("canonical-method"), SECTIONS()) },
+    { assignment: "A1", methodId: source.id, name: "source-method", operation: "retire", baseDigest: source.payload.contentDigest, supersededBy: canonicalId },
+  ] };
+  const service = new MethodConsolidation({ learning, dispatch: async request => ({ runId: "run", sessionId: "session", dispatchId: request.dispatchId }), readResult: async () => ({ status: "succeeded", output }) });
+  const result = await service.buildGroup({ id: "job", userId: "user", projectId: "project" }, members, { assignments });
+  assert.equal(result.applied, 1);
+  assert.equal(retirements.length, 0);
+  assert.equal(rows.get("source").payload.status, "approved");
+  assert.equal(rows.get(canonicalId).payload.provenance.pendingRetirements.length, 1);
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), []);
+  const canonical = rows.get(canonicalId);
+  canonical.payload.learning.evaluations = [{ verdict: "better", candidateDigest: "different", baselineDigest: "baseline", report: {} }];
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), []);
+  canonical.payload.learning.evaluations.push({ verdict: "non_inferior", candidateDigest: canonical.payload.contentDigest, baselineDigest: "baseline", report: { independentlyRecorded: true } });
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), ["source"]);
+  assert.equal(retirements[0].input.link.supersededBy, canonicalId);
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), []);
 });

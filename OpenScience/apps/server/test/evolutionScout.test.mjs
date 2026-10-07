@@ -67,3 +67,19 @@ test("an already completed scout can recover missing structural fields once with
   assert.equal(dossier.eligibility.eligible, true); assert.equal(dossier.rankingFeatures.literature24Months, 12);
   assert.deepEqual(dossier.waitingAgendaIds, []);
 });
+
+test('J11 semantic coverage recognizes an existing method without allowing invented inventory IDs', async () => {
+  for (const matchedId of ['existing-method', 'invented-method', null]) {
+    const rows = new Map();
+    const tools = [{ id: 'existing-tool', payload: { methodId: 'existing-method', status: 'active', name: 'Equivalent method', description: 'Reusable estimator' } }];
+    const service = { now: () => new Date('2026-10-04T12:00:00Z'), owner: async () => 'operator', get: async id => rows.get(id), list: async () => [], tools: async () => tools, callbacks: {},
+      save: async (_kind, id, payload) => { const row = { id, payload }; rows.set(id, row); return row; }, addDossier: async payload => service.save('dossier', payload.id, { ...payload, status: 'planned' }),
+      dossiers: async () => [...rows.values()].filter(row => row.payload.methodId), queueBuild: async () => {} };
+    const scout = createEvolutionScout({ config: { evolutionDependencyAllowlist: [] }, service, registry: Promise.resolve({ list: () => [] }), decisions: { propose: async () => {} },
+      runs: { execute: async () => ({ run: { id: 'scout-run' }, output: { methodId: 'alias-method', goal: 'Reusable estimator', track: 'M', capabilityIds: ['statistical-analysis'], feasibility: { implementationMissing: true }, rankingFeatures: { literatureQuery: 'estimator' } } }) },
+      references: async () => ({ ok: true, publicInputCount: 2, publishedReferenceCount: 2, independentImplementation: true }), fetchImpl: async () => new Response(JSON.stringify({ hitCount: 12, resultList: { result: [] } })),
+      judgeService: { judge: async (site, input) => { assert.equal(site, 'J11'); assert.ok(input.methods.some(item => item.id === 'existing-method')); return { outcome: 'settled', value: { methodId: matchedId } }; } } });
+    const result = await scout.scout({}, { job: { id: 'job' } });
+    assert.equal(rows.get(result.dossierId).payload.rankingFeatures.coverageGap, matchedId !== 'existing-method');
+  }
+});

@@ -69,7 +69,7 @@ export async function measureEvolutionLiterature(card, { now, fetchImpl = fetch,
 
 /** Research cards are plans. Only the independent evaluator may promote their implementation.
  * @param {any} dependencies */
-export function createEvolutionScout({ config, service, runs, registry, decisions, references = async () => ({ ok: false }), normalizeFeatures = null, fetchImpl = fetch }) {
+export function createEvolutionScout({ config, service, runs, registry, decisions, references = async () => ({ ok: false }), normalizeFeatures = null, judgeService = null, fetchImpl = fetch }) {
   return {
     async scout(payload, { job, signal }) {
       let lead = payload.leadId ? await service.get(payload.leadId) : null;
@@ -118,7 +118,15 @@ export function createEvolutionScout({ config, service, runs, registry, decision
         signal?.throwIfAborted(); demand ??= { verified: false, reason: "source-unavailable" };
         reference ??= { ok: false, resourceCode: error?.code ?? "independent-reference-unavailable" };
       }
-      const covered = Object.hasOwn(METHOD_RECORDS, methodId) || tools.some(row => row.payload.methodId === methodId && row.payload.status !== "retired");
+      let semanticCovered = false;
+      if (judgeService) {
+        const methods = [...Object.entries(METHOD_RECORDS).map(([recordId, record]) => ({ id: recordId, name: record.title ?? recordId, description: record.estimand ?? "" })), ...tools.filter(row => row.payload.status !== "retired").map(row => ({ id: row.payload.methodId ?? row.id, name: row.payload.name ?? "", description: row.payload.description ?? "" }))];
+        try {
+          const result = await judgeService.judge("J11", { method: { id: methodId, name: card.goal, description: card.methodTuple?.method ?? card.goal }, methods }, { userId: await service.owner(), projectId: "evimed-evolution", module: "evolution" });
+          semanticCovered = ['settled', 'escalated'].includes(result?.outcome) && typeof result.value?.methodId === "string" && methods.some(item => item.id === result.value.methodId);
+        } catch { /* Exact inventory identity remains the fallback. */ }
+      }
+      const covered = semanticCovered || Object.hasOwn(METHOD_RECORDS, methodId) || tools.some(row => row.payload.methodId === methodId && row.payload.status !== "retired");
       const rankingFeatures = { literature24Months: demand.verified ? demand.count : 0, literatureQuery: demand.query,
         runtimeFailures: failures.filter(row => row.payload.methodId === methodId).length,
         waitingAgendas: await service.callbacks?.waitingAgendaCount?.(card.capabilityIds ?? []) ?? 0,

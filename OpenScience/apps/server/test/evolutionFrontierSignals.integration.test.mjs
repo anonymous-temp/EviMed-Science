@@ -7,6 +7,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
+import { migrateProductStore } from "../src/productPersistence.mjs";
 import { EvolutionService } from "../src/evolutionService.mjs";
 import { EvolutionFrontierSignals, EvolutionIntegration, EVOLUTION_FRONTIER_LOOKBACK_MS } from "../src/evolutionIntegration.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -23,6 +24,7 @@ before(async () => {
   isolated = await createGeoTestDatabase(databaseUrl, "evofeed");
   database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 6, databaseConnectionTimeoutMs: 2000 });
   await migrateFrontier(database, { dimension: 1024 });
+  await migrateProductStore(database);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Evolution operator','development')", [owner]);
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,'evimed-evolution','Evolution',1048576)", [owner]);
   await insertSource(database, "nejm");
@@ -46,6 +48,37 @@ async function published(title, { at = NOW, reasons = ["published"], op = "upser
   return item;
 }
 const events = async () => (await service.list("event")).map((row) => row.payload).filter((event) => event.type === "frontier-publication");
+
+test('ranked scout leases retain ordering after the admitted-work floor', options, async () => {
+  await database.query('DELETE FROM evimed_product.jobs WHERE user_id=$1', [owner]);
+  const floor = new Date(NOW.getTime() + 600_000);
+  await service.enqueue('build', { dossierId: 'ranking-floor' }, 'build:ranking-floor', floor);
+  const rankedIntegration = new EvolutionIntegration({ service, autopilot: {}, judgeService: { judge: async (_site, input) => ({
+    outcome: 'settled', value: { relevance: Number(input.title.split(' ').at(-1)) / 10 } }) } });
+  const ranked = await rankedIntegration.rankPublications([1, 2, 3].map(n => ({ id: `ranked:${n}`,
+    paper: { id: `ranked-paper-${n}`, identity: `ranked:${n}`, title: `Method ${n}` } })));
+  for (const event of ranked) await rankedIntegration.scoutPublication(event);
+  const found = (await database.query("SELECT id,payload,run_after FROM evimed_product.jobs WHERE user_id=$1 AND kind='evolution-scout' ORDER BY run_after,id", [owner])).rows;
+  assert.deepEqual(found.map(row => row.payload.paper.id), ['ranked-paper-3', 'ranked-paper-2']);
+  assert.deepEqual(found.map(row => new Date(row.run_after).getTime()), [floor.getTime(), floor.getTime() + 1]);
+  // ID order deliberately disagrees with relevance: a collapsed timestamp would fail this lease assertion.
+  for (const [index, row] of found.entries()) await database.query('UPDATE evimed_product.jobs SET id=$2 WHERE id=$1',
+    [row.id, index === 0 ? 'ffffffffffffffffffffffffffffff01' : '00000000000000000000000000000001']);
+  await database.query("UPDATE evimed_product.jobs SET run_after=run_after+(statement_timestamp()-$2::timestamptz-interval '1 minute') WHERE user_id=$1 AND kind='evolution-scout'", [owner, floor]);
+  const first = await jobs.claim(['evolution-scout'], 'ranked-scout-worker');
+  const second = await jobs.claim(['evolution-scout'], 'ranked-scout-worker');
+  assert.equal(first.payload.paper.id, 'ranked-paper-3');
+  assert.equal(second.payload.paper.id, 'ranked-paper-2');
+});
+
+test('concurrent scout admissions atomically retain the configured daily cap', options, async () => {
+  await database.query('DELETE FROM evimed_product.jobs WHERE user_id=$1', [owner]);
+  const attempts = await Promise.all(Array.from({ length: 12 }, (_, index) => integration.scoutPublication({
+    id: `concurrent:${index}`, paper: { id: `concurrent-paper-${index}`, identity: `concurrent:${index}`, title: `Paper ${index}` } })));
+  const count = Number((await database.query("SELECT count(*) AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='evolution-scout'", [owner])).rows[0].count);
+  assert.equal(count, service.config.evolutionMaxPaperScoutsPerDay);
+  assert.equal(attempts.filter(result => result.reason === 'daily-cap').length, 12 - count);
+});
 
 test("the first look at a feed that already holds items starts at its present and publishes none of them", options, async () => {
   for (let index = 0; index < 30; index++) await published(`Before the module ${index}`, { at: new Date(NOW.getTime() - 3600_000) });

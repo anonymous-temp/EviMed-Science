@@ -103,7 +103,10 @@ while IFS='|' read -r service variable fallback agent extra; do
       [[ "$mr_plink_version" =~ ^[0-9A-Za-z.+:~_-]+$ ]] || { echo 'invalid MR PLINK package pin' >&2; exit 1; }
       printf 'RUN apt-get update && apt-get install -y --no-install-recommends plink1.9=%s && plink1.9 --version && rm -rf /var/lib/apt/lists/*\n' "$mr_plink_version"
     fi
-    if [ "$agent" != "-" ]; then printf 'COPY %s /agent\n' "$agent"; fi
+    if [ "$agent" != "-" ]; then
+      printf 'COPY %s /agent\n' "$agent"
+      printf 'COPY 项目代码/evimed_judge.py /agent/evimed_judge.py\n'
+    fi
     printf 'COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter /adapter/evimed_specialist_adapter\n'
     # Re-pin the adapter manifest for the package this delta ships, as the full
     # build does. A stale pin no longer refuses a job (on 2026-09-27 it answered
@@ -158,11 +161,11 @@ docker image inspect "$base" > /dev/null || { echo "evimed-meta-agent: running i
 same_inputs "$base" /app 项目代码/meta \
   || { echo "evimed-meta-agent: requirements.txt differs from the running image's; build it in full"; exit 1; }
 target=$(next_tag "$base")
-printf 'FROM %s\nCOPY new_meta /app/new_meta\n' "$base" > /tmp/engine-delta-evimed-meta-agent.Dockerfile
+printf 'FROM %s\nCOPY 项目代码/meta/new_meta /app/new_meta\nCOPY 项目代码/evimed_judge.py /app/evimed_judge.py\n' "$base" > /tmp/engine-delta-evimed-meta-agent.Dockerfile
 if lock_differs "$base" /app 项目代码/meta; then
-  printf 'COPY requirements.lock /app/requirements.lock\nRUN pip install --index-url %s --no-cache-dir -r /app/requirements.lock\n' "$PIP_INDEX_URL" >> /tmp/engine-delta-evimed-meta-agent.Dockerfile
+  printf 'COPY 项目代码/meta/requirements.lock /app/requirements.lock\nRUN pip install --index-url %s --no-cache-dir -r /app/requirements.lock\n' "$PIP_INDEX_URL" >> /tmp/engine-delta-evimed-meta-agent.Dockerfile
 fi
-docker build -q -f /tmp/engine-delta-evimed-meta-agent.Dockerfile -t "$target" 项目代码/meta > /dev/null
+docker build -q -f /tmp/engine-delta-evimed-meta-agent.Dockerfile -t "$target" . > /dev/null
 set_env EVIMED_META_AGENT_IMAGE "$target"
 echo "evimed-meta-agent: ${base} -> ${target} ($(docker image inspect -f '{{.Id}}' "$target" | cut -c1-19))"
 echo "=== engine images point at ${NEW}; the switch recreates their services ==="

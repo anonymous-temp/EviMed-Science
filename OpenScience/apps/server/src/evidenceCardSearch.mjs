@@ -18,7 +18,7 @@
 // - **How a card is found.** By identifier or entity keys first — the vocabulary tags the query (`keysForText`: a
 //   DOI, a PMID, a registry number, a drug, a disease, a trial) and a card carries its own keys (`entity_keys`) —
 //   then by the words of the query in the card's title, summary, question and answer. A name the glossary does not
-//   hold is only a word; no model reads the query and nothing here guesses what it means.
+//   hold is only a word. Optional J13 reranks the first fifteen visible matches; it cannot create or remove a candidate.
 // - **What leaves.** The projection is fixed. A source's text (`documentText`, a retained excerpt) never leaves:
 //   a source is its title, address and identifiers, which is what a run needs to read the original itself.
 // - **The currency label is said only when something was checked.** `currencyLabel` answers "current" for a card
@@ -27,6 +27,7 @@
 
 import { currencyLabel, evidenceCardIdentifiers, evidenceOriginalityIsPrimary, verifyEvidenceCardClaims } from "@evimed/domain";
 import { splitKeys } from "@evimed/domain/entity-keys";
+import { rankEvidenceCards } from "./evidenceJudgeRanking.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 /** Cards one search returns at most: an index entry is a pointer, and the run has other tools for the rest. */
@@ -119,19 +120,20 @@ async function cardCurrency(sourceChanges, sources) {
 
 /**
  * @param {{ database: any, entityVocabulary?: { keysForText: (input: { texts: string[] }) => Promise<string[]> } | null,
- *           sourceChanges?: any }} dependencies
+ *           sourceChanges?: any, judgeService?: any }} dependencies
  *   `entityVocabulary` tags the query with keys, `sourceChanges` supplies the currency label; either may be absent.
  */
-export function createEvidenceCardSearch({ database, entityVocabulary = null, sourceChanges = null }) {
+export function createEvidenceCardSearch({ database, entityVocabulary = null, sourceChanges = null, judgeService = null }) {
   const counters = { searches: 0, found: 0, failures: 0 };
   return {
     /**
      * Published cards that match a query, by shared keys first and by its words after.
      * @param {{ id: string }} _user the runtime's account: every account sees the same published cards, so it only names the reader
      * @param {{ q: string, limit?: number }} request
+     * @param {{projectId?:string,runId?:string|null}} [context]
      * @returns {Promise<{ cards: ReturnType<typeof projectedCard>[], more: boolean }>}
      */
-    async search(_user, { q, limit = CARD_SEARCH_MAX }) {
+    async search(_user, { q, limit = CARD_SEARCH_MAX }, context = {}) {
       counters.searches += 1;
       const size = Math.max(1, Math.min(CARD_SEARCH_MAX, Math.trunc(Number(limit)) || CARD_SEARCH_MAX));
       try {
@@ -150,8 +152,9 @@ export function createEvidenceCardSearch({ database, entityVocabulary = null, so
             WHERE c.state = 'published' AND z.state = 'published' AND c.withdrawn IS NULL) matched
           WHERE shared_identifiers > 0 OR shared_entities > 0 OR term_hits > 0
           ORDER BY shared_identifiers DESC, shared_entities DESC, term_hits DESC, updated_at DESC, id
-          LIMIT $4`, [identifierKeys, entityKeys, terms, size + 1])).rows ?? [];
-        const kept = rows.slice(0, size);
+          LIMIT $4`, [identifierKeys, entityKeys, terms, judgeService ? 16 : size + 1])).rows ?? [];
+        const ranked = await rankEvidenceCards(rows.slice(0, 15), q, judgeService, { userId: _user.id, projectId: context.projectId, runId: context.runId });
+        const kept = ranked.slice(0, size);
         const cards = [];
         for (const row of kept) {
           const currency = await cardCurrency(sourceChanges, Array.isArray(row.sources) ? row.sources : []).catch(() => null);

@@ -161,7 +161,7 @@ export function evolutionRetrievalScore(cases, selections) {
 /** Maintenance uses actual invocation outcomes, not reads of a skill file. */
 export class EvolutionMaintenance {
   /** @param {any} dependencies */
-  constructor({ service, callbacks = {} }) { this.service = service; this.callbacks = callbacks; }
+  constructor({ service, callbacks = {}, judgeService = null }) { this.service = service; this.callbacks = callbacks; this.judgeService = judgeService; }
   /** A strict optimistic write: a revision conflict is thrown to the retry loop, never absorbed.
    * `telemetry` is the ledger's own kind of write for counters derived from a record rather than a change of it
    * (`ProductDocuments.put`): the revision still moves, no history row is kept and `updated_at` stays, which is how
@@ -534,7 +534,13 @@ export class EvolutionMaintenance {
       const overlap = (a.payload.holdoutCases ?? []).some(item => (b.payload.holdoutCases ?? []).some(other => item.id === other.id && item.sha256 === other.sha256));
       const words = value => new Set(String(value ?? '').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
       const aWords = words(a.payload.description ?? a.payload.name), bWords = words(b.payload.description ?? b.payload.name);
-      const similar = aWords.size > 0 && [...aWords].filter(word => bWords.has(word)).length / new Set([...aWords, ...bWords]).size >= 0.5;
+      let similar = aWords.size > 0 && [...aWords].filter(word => bWords.has(word)).length / new Set([...aWords, ...bWords]).size >= 0.5;
+      if (overlap && a.payload.track === b.payload.track && this.judgeService) {
+        try {
+          const result = await this.judgeService.judge("J12", { left: { name: a.payload.name, description: a.payload.description }, right: { name: b.payload.name, description: b.payload.description } }, { userId: await this.service.owner(), projectId: "evimed-evolution", module: "evolution" });
+          if (['settled', 'escalated'].includes(result?.outcome) && ['same', 'related', 'different'].includes(result.value?.relation)) similar = result.value.relation === "same";
+        } catch { /* Keep the existing lexical fallback; case overlap is still required. */ }
+      }
       if (overlap && similar && a.payload.track === b.payload.track) reviews.push(await this.proposeMaintenance('merge', [a.id, b.id], month,
         '复核相似且算例重叠的科研工具', '这里只提合并研发方向；新版本必须独立通过全部来源算例，原版本先保留为别名。'));
     }

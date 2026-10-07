@@ -1,0 +1,1936 @@
+{
+  "schemaVersion": 1,
+  "site": "J1",
+  "cases": [
+    {
+      "id": "method-batch-0",
+      "source": "2026-09-21-curated-method-pairs",
+      "labelBasis": "curated",
+      "input": {
+        "pairs": [
+          {
+            "id": "p-01",
+            "left": {
+              "name": "random-effects-tau2-estimator-choice",
+              "description": "Chooses the between-study variance estimator for a random-effects meta-analysis — REML by default, Paule-Mandel when the studies are few and small — and reports tau squared with the pooled estimate so the heterogeneity is read at the same time as the effect."
+            },
+            "right": {
+              "name": "heterogeneity-subgroup-exploration",
+              "description": "Explores unexplained heterogeneity in a random-effects meta-analysis through pre-specified subgroups, reports tau squared within each subgroup and the between-subgroup test, and refuses to interpret the overall pooled estimate until that is done."
+            }
+          },
+          {
+            "id": "p-02",
+            "left": {
+              "name": "pubmed-search-string-construction",
+              "description": "Builds a PubMed search string from the question concepts, combining MeSH headings with free-text field tags, and records the record count each concept block returns before the blocks are combined."
+            },
+            "right": {
+              "name": "embase-emtree-search-translation",
+              "description": "Translates a PubMed search string into Embase syntax, mapping MeSH headings onto Emtree terms, and records the record count each concept block returns so the two databases can be compared line by line."
+            }
+          },
+          {
+            "id": "p-03",
+            "left": {
+              "name": "grade-downgrade-for-imprecision",
+              "description": "Downgrades GRADE certainty for imprecision when the confidence interval around the pooled effect crosses the clinical decision threshold or the optimal information size is not met, and records the reason in the summary of findings row."
+            },
+            "right": {
+              "name": "grade-downgrade-for-inconsistency",
+              "description": "Downgrades GRADE certainty for inconsistency when the point estimates diverge and each confidence interval barely overlaps the next, and records the reason in the same summary of findings row rather than in the narrative."
+            }
+          },
+          {
+            "id": "p-04",
+            "left": {
+              "name": "rob2-domain-scoring",
+              "description": "Scores each RoB 2 domain for a randomised trial from the signalling questions, and records the supporting sentence from the report beside every domain judgement so a second appraiser can check it."
+            },
+            "right": {
+              "name": "robins-i-confounding-domain-scoring",
+              "description": "Scores the confounding domain of ROBINS-I for a non-randomised study by listing the prognostic factors the authors adjusted for, and records the supporting sentence from the report beside the domain judgement."
+            }
+          },
+          {
+            "id": "p-05",
+            "left": {
+              "name": "faers-ror-signal-screening",
+              "description": "Screens FAERS drug-event pairs for disproportionality with the reporting odds ratio, requiring at least three cases and the lower bound of the interval above one before a pair is listed as a signal."
+            },
+            "right": {
+              "name": "faers-ebgm-shrinkage-signal-screening",
+              "description": "Screens the same FAERS drug-event pairs with the empirical Bayes geometric mean so sparse cells shrink toward the background rate, and lists a pair only when the lower bound of the interval stays above the agreed threshold."
+            }
+          },
+          {
+            "id": "p-06",
+            "left": {
+              "name": "egger-test-for-funnel-asymmetry",
+              "description": "Tests funnel plot asymmetry with the Egger regression when at least ten studies are pooled, and reports the intercept with its p-value instead of an eyeball reading of the plot."
+            },
+            "right": {
+              "name": "trim-and-fill-adjusted-pooled-estimate",
+              "description": "Recomputes the pooled estimate with trim and fill once funnel plot asymmetry is found, and reports the adjusted estimate beside the original one as a sensitivity result, never as the headline number."
+            }
+          },
+          {
+            "id": "p-07",
+            "left": {
+              "name": "dual-screening-conflict-resolution",
+              "description": "Resolves conflicts between two independent screeners by re-reading the abstract against the eligibility criteria, and sends the record to full text rather than to a third screener when the disagreement is about an outcome the abstract never reports."
+            },
+            "right": {
+              "name": "screening-calibration-pilot-round",
+              "description": "Calibrates two independent screeners on a pilot set of fifty abstracts before full screening, measures their agreement and rewrites the eligibility criteria wherever the disagreement is about wording rather than judgement."
+            }
+          },
+          {
+            "id": "p-08",
+            "left": {
+              "name": "mr-ivw-primary-estimate",
+              "description": "Runs inverse variance weighted Mendelian randomisation as the primary estimate, after harmonising the effect alleles across the two summary statistics and dropping any instrument whose F statistic falls below ten."
+            },
+            "right": {
+              "name": "mr-egger-intercept-pleiotropy-check",
+              "description": "Runs MR-Egger beside the inverse variance weighted estimate and reads its intercept as the directional pleiotropy check, on the same harmonised effect alleles and the same instrument set."
+            }
+          },
+          {
+            "id": "p-09",
+            "left": {
+              "name": "dose-response-spline-modelling",
+              "description": "Fits a restricted cubic spline across the exposure categories with dosresmeta, places the knots at fixed percentiles and reports the curve with the reference dose held at the lowest category."
+            },
+            "right": {
+              "name": "dose-response-linear-trend-test",
+              "description": "Tests the linear trend across the same exposure categories with dosresmeta before any spline is fitted, and reports the per-unit dose estimate together with the departure-from-linearity p-value."
+            }
+          },
+          {
+            "id": "p-10",
+            "left": {
+              "name": "label-indication-extraction",
+              "description": "Extracts the approved indications from a drug label (说明书【适应症】), keeps the population wording verbatim and records the label version and approval date beside every entry."
+            },
+            "right": {
+              "name": "label-contraindication-extraction",
+              "description": "Extracts the contraindications from the same drug label (说明书【禁忌】), keeps the wording verbatim and records the label version and approval date so a later revision can be compared line by line."
+            }
+          },
+          {
+            "id": "p-11",
+            "left": {
+              "name": "nma-node-splitting-inconsistency",
+              "description": "Checks a network meta-analysis for inconsistency by node splitting every closed loop and comparing the direct with the indirect estimate for each treatment comparison."
+            },
+            "right": {
+              "name": "nma-transitivity-assessment",
+              "description": "Assesses transitivity across the same network meta-analysis before pooling, tabulating the effect modifiers of each treatment comparison so the indirect estimate rests on comparable populations."
+            }
+          },
+          {
+            "id": "p-12",
+            "left": {
+              "name": "meddra-preferred-term-standardisation",
+              "description": "Maps verbatim adverse event terms onto MedDRA preferred terms before anything is counted, so the same event reported in three wordings becomes one row of the table."
+            },
+            "right": {
+              "name": "meddra-system-organ-class-rollup",
+              "description": "Rolls the MedDRA preferred terms up to system organ class for the adverse event table, keeping each preferred term row beneath its class rather than replacing it."
+            }
+          },
+          {
+            "id": "p-13",
+            "left": {
+              "name": "leave-one-out-sensitivity",
+              "description": "Re-runs the summary effect with one trial omitted at a time and says whether any single omission moves the interval across the decision threshold."
+            },
+            "right": {
+              "name": "influence-diagnostics-by-study-removal",
+              "description": "Ranks the individual studies whose exclusion shifts the pooled estimate furthest, using Baujat and Cook distance plots, before any sentence about robustness is written."
+            }
+          },
+          {
+            "id": "p-14",
+            "left": {
+              "name": "prisma-flow-reconstruction",
+              "description": "Rebuilds the PRISMA 2020 flow diagram from the search logs when the numbers in a draft no longer add up, tracing every exclusion reason back to the list it came from."
+            },
+            "right": {
+              "name": "screening-stage-tally",
+              "description": "Counts how many records survive each stage — after duplicates are merged, after titles and abstracts, after full text — and carries the difference with its reason into the write-up."
+            }
+          },
+          {
+            "id": "p-15",
+            "left": {
+              "name": "pico-tightening-before-search",
+              "description": "Tightens the PICO frame at the outset: the population narrowed to the one the ask actually names, the comparator made explicit, and the outcome fixed to the one that decides it."
+            },
+            "right": {
+              "name": "narrow-the-request-into-an-answerable-form",
+              "description": "Rewrites a vague clinical ask into something retrievable — who is being treated, what they are given, what it is measured against, and which result settles the matter — then confirms the rewrite with the researcher early enough that changing it costs nothing."
+            }
+          },
+          {
+            "id": "p-16",
+            "left": {
+              "name": "numbers-rendered-from-the-analysis-output",
+              "description": "Writes every figure in the manuscript out of the analysis output file instead of typing it, so a re-run regenerates the text rather than contradicting it."
+            },
+            "right": {
+              "name": "dependent-claim-sweep-after-a-value-changes",
+              "description": "When one value changes, enumerates every place it appears and every conclusion derived from it, re-verifies each of them, and only then treats the edit as finished."
+            }
+          },
+          {
+            "id": "p-17",
+            "left": {
+              "name": "grade-indirectness-for-surrogate-endpoints",
+              "description": "Downgrades certainty for indirectness when the trial measured a surrogate endpoint and the question asks about a patient-important one, and says which endpoint was substituted in the summary row."
+            },
+            "right": {
+              "name": "flag-when-a-laboratory-marker-stands-in-for-an-event",
+              "description": "Marks every conclusion that rests on a blood test value rather than on something the patient would notice, and hedges the recommendation accordingly wherever it appears."
+            }
+          },
+          {
+            "id": "p-18",
+            "left": {
+              "name": "openfda-query-throttling-and-retry",
+              "description": "Paces openFDA queries under the published rate cap and retries a throttled request with exponential backoff, recording the number of attempts beside the counts it returned."
+            },
+            "right": {
+              "name": "keep-the-partial-harvest-when-a-source-goes-down",
+              "description": "When one database stops answering mid-collection, keeps whatever was already gathered, writes down which slice is missing and why, and carries on with the remaining providers instead of starting over."
+            }
+          },
+          {
+            "id": "p-19",
+            "left": {
+              "name": "manuscript-humanize-final-pass",
+              "description": "Runs a final register pass over the draft — cadence, hedging, connective tissue — leaving quotes, figures, citations and claim markers byte identical, and is never run by whoever wrote the draft."
+            },
+            "right": {
+              "name": "strip-first-person-retrieval-diary-from-report-prose",
+              "description": "Removes the sentences that narrate the work — 'I then queried', tool names, file paths, gateway names — out of the delivered document, moving anything worth keeping into the process log."
+            }
+          },
+          {
+            "id": "p-20",
+            "left": {
+              "name": "protocol-registration-before-analysis",
+              "description": "Registers the review protocol with PROSPERO before extraction begins, pinning the eligibility criteria, the primary outcome and the intended analysis so later choices can be told apart from intended ones."
+            },
+            "right": {
+              "name": "record-every-departure-from-the-stated-plan",
+              "description": "Keeps a dated list of each decision the original plan did not foresee, with its reason, and reproduces that list in the limitations instead of quietly absorbing it."
+            }
+          },
+          {
+            "id": "p-21",
+            "left": {
+              "name": "unpaywall-open-access-resolution",
+              "description": "Resolves a DOI through Unpaywall, prefers the publisher copy over any other, and notes which location answered."
+            },
+            "right": {
+              "name": "getting-the-paper-when-only-the-abstract-is-indexed",
+              "description": "When a database returns metadata but no readable body, tries the journal site, then the author repository copy, then an author query, and marks the item unavailable rather than extracting from the summary alone."
+            }
+          },
+          {
+            "id": "p-22",
+            "left": {
+              "name": "i-squared-interpretation-band",
+              "description": "Reads I squared against the band it falls in rather than a single cutoff, and pairs it with the prediction interval before calling a result consistent."
+            },
+            "right": {
+              "name": "decide-whether-combining-the-studies-is-appropriate",
+              "description": "Judges clinical and methodological diversity — populations, dose ranges, follow-up length — and writes a narrative synthesis instead of a single number when the trials plainly answer different questions (临床异质性太大就不合并)."
+            }
+          },
+          {
+            "id": "p-23",
+            "left": {
+              "name": "km-curve-digitisation-for-ipd-reconstruction",
+              "description": "Digitises the survival curve printed in a paper, reconstructs individual patient data with the Guyot algorithm and checks the reconstruction against the numbers at risk in the caption."
+            },
+            "right": {
+              "name": "recover-a-time-to-event-estimate-when-only-a-figure-is-published",
+              "description": "When a trial gives its outcome only as a picture, reads the coordinates off the plot, rebuilds the underlying table of events and their times, and verifies the rebuild with whatever counts the text does print."
+            }
+          },
+          {
+            "id": "p-24",
+            "left": {
+              "name": "capsule-fact-provenance-tagging",
+              "description": "Tags every stored fact with who said it, which run produced it and when, so a later reader can tell machine output from somebody's judgement."
+            },
+            "right": {
+              "name": "never-promote-a-guess-to-a-fact",
+              "description": "Keeps what the researcher stated, what a tool returned and what the model inferred in separate registers, and asks the researcher to confirm before an inference is written down as settled."
+            }
+          },
+          {
+            "id": "p-25",
+            "left": {
+              "name": "sensitivity-analysis-of-the-pooled-estimate",
+              "description": "Re-computes the pooled estimate of the treatment effect under alternative inclusion rules and effect measures, and reports whether the conclusion is sensitive to any single study."
+            },
+            "right": {
+              "name": "diagnostic-sensitivity-and-specificity-from-2x2-tables",
+              "description": "Extracts the 2x2 counts from each accuracy study, computes sensitivity and specificity with exact intervals, and reports the pooled estimate of both in a bivariate model."
+            }
+          },
+          {
+            "id": "p-26",
+            "left": {
+              "name": "nma-sucra-ranking",
+              "description": "Ranks the treatments in a network meta-analysis by SUCRA and reports the rank probabilities beside the effect estimates, never as a standalone league table."
+            },
+            "right": {
+              "name": "coauthorship-network-centrality",
+              "description": "Builds the co-authorship network of a field, ranks the authors by betweenness centrality and reports the top nodes beside their publication counts."
+            }
+          },
+          {
+            "id": "p-27",
+            "left": {
+              "name": "dose-response-meta-analysis",
+              "description": "Pools the exposure-outcome gradient across cohort studies, converting every reported dose into a common unit and recording each conversion factor it used."
+            },
+            "right": {
+              "name": "opioid-dose-conversion-table",
+              "description": "Converts a prescribed opioid dose into oral morphine milligram equivalents from a fixed table, applies the incomplete cross-tolerance reduction, and records the conversion factor used for each drug."
+            }
+          },
+          {
+            "id": "p-28",
+            "left": {
+              "name": "questionnaire-instrument-validation",
+              "description": "Validates a patient-reported questionnaire before it is used as an outcome: internal consistency, test-retest reliability and factor structure, each reported with its own statistic."
+            },
+            "right": {
+              "name": "mr-instrument-strength-check",
+              "description": "Checks that each genetic instrument is strong enough for Mendelian randomisation — an F statistic above ten and the variance explained reported per SNP — before the causal estimate is read."
+            }
+          },
+          {
+            "id": "p-29",
+            "left": {
+              "name": "title-and-abstract-screening-rules",
+              "description": "Sets the screening rules for titles and abstracts: what counts as an eligible population, when a record goes to full text, and which exclusion reason it records for each drop."
+            },
+            "right": {
+              "name": "cancer-screening-recommendation-extraction",
+              "description": "Extracts each cancer screening recommendation from a guideline — the population, the starting age, the interval, the strength — and records the guideline wording for each of them."
+            }
+          },
+          {
+            "id": "p-30",
+            "left": {
+              "name": "search-strategy-peer-review-press",
+              "description": "Peer-reviews a search strategy against the PRESS checklist — spelling, operators, field tags, missing synonyms — and records each correction against the line it belongs to."
+            },
+            "right": {
+              "name": "manuscript-peer-review-checklist-routing",
+              "description": "Peer-reviews a submitted manuscript against the checklist its design calls for (CONSORT, PRISMA, STROBE) and records each unmet item against the section it belongs to."
+            }
+          },
+          {
+            "id": "p-31",
+            "left": {
+              "name": "cocitation-clustering-for-a-field-map",
+              "description": "Builds the co-citation matrix of a field, clusters it and labels each cluster from the reference list of its citing papers, as a map of research fronts for the report background."
+            },
+            "right": {
+              "name": "citation-verification-against-the-named-source",
+              "description": "Verifies that each citation in a report resolves to the reference it names and that the quoted sentence appears in that source verbatim, and marks the claim when it does not."
+            }
+          },
+          {
+            "id": "p-32",
+            "left": {
+              "name": "trial-registry-lookup-for-unreported-outcomes",
+              "description": "Looks each included trial up in ClinicalTrials.gov and the Chinese registry, compares the registered primary outcome against the published one, notes the registration date and records every outcome the registry lists but the paper never reports."
+            },
+            "right": {
+              "name": "registry-based-cohort-construction",
+              "description": "Builds a cohort out of a national health registry and records every design choice it rests on: the index date, the look-back window and the exclusion of prevalent users."
+            }
+          },
+          {
+            "id": "p-33",
+            "left": {
+              "name": "prediction-model-external-validation",
+              "description": "Validates a clinical prediction model in a new cohort — discrimination, calibration slope, calibration in the large — and reports each measure with its interval rather than a single c statistic."
+            },
+            "right": {
+              "name": "population-pk-model-fitting",
+              "description": "Fits a population pharmacokinetic model to sparse concentration data, selects the structural and error models with the objective function value, and reports each parameter estimate with its interval."
+            }
+          },
+          {
+            "id": "p-34",
+            "left": {
+              "name": "washout-from-drug-half-life",
+              "description": "Sets the washout interval of a crossover design from the elimination half life of the drug, takes five half lives as the floor, and records the source and the value it used."
+            },
+            "right": {
+              "name": "citation-half-life-of-a-field",
+              "description": "Computes the citation half life of a field — the median age of the references its papers cite — and records the source and the value beside the annual publication count."
+            }
+          },
+          {
+            "id": "p-35",
+            "left": {
+              "name": "recall-bias-check-in-a-case-control-study",
+              "description": "Checks whether exposure was reported from memory long after the event, records how each control was asked, and says so in the limitations because recall differs between cases and controls and can flip the result."
+            },
+            "right": {
+              "name": "search-recall-against-a-seed-set",
+              "description": "Measures the recall of a search strategy against a seed set of known relevant records, reports precision beside it, and records each term that changed the result."
+            }
+          },
+          {
+            "id": "p-36",
+            "left": {
+              "name": "source-coverage-ledger-completeness",
+              "description": "Checks that every preserved source has a coverage entry, records each section that was read and each that was skipped with a reason, and names the version of the source it read from."
+            },
+            "right": {
+              "name": "reimbursement-coverage-status-extraction",
+              "description": "Extracts each drug reimbursement status from the national list (医保目录: 甲类 / 乙类, with the provincial supplement noted) and records the catalogue version the status was read from."
+            }
+          },
+          {
+            "id": "p-37",
+            "left": {
+              "name": "grant-budget-justification-drafting",
+              "description": "Drafts the budget justification of a funding application, tying every line to a work package and a month, and keeps the personnel effort consistent with the timetable."
+            },
+            "right": {
+              "name": "gwas-summary-statistics-harmonisation",
+              "description": "Aligns two sets of GWAS summary statistics onto one reference build, resolves strand ambiguity for palindromic variants and drops those whose allele frequency cannot settle the strand."
+            }
+          },
+          {
+            "id": "p-38",
+            "left": {
+              "name": "journal-figure-caption-style",
+              "description": "Writes each figure caption so the figure can be read without the body text: what is plotted, in whom, what the bars mean and what the asterisks stand for."
+            },
+            "right": {
+              "name": "drug-storage-condition-extraction",
+              "description": "Extracts the storage conditions from a drug label (说明书【贮藏】: temperature, light, humidity, shelf life) and keeps them with the package specification they belong to."
+            }
+          },
+          {
+            "id": "p-39",
+            "left": {
+              "name": "qualitative-interview-coding-for-thematic-synthesis",
+              "description": "Codes interview transcripts line by line, groups the codes into descriptive themes and keeps an audit trail from every theme back to the utterances beneath it."
+            },
+            "right": {
+              "name": "budget-impact-time-horizon-setting",
+              "description": "Sets the time horizon of a budget impact analysis to the payer planning cycle, states the uptake assumption for each year and keeps the horizon separate from the cost-effectiveness one."
+            }
+          },
+          {
+            "id": "p-40",
+            "left": {
+              "name": "response-to-reviewers-letter-structure",
+              "description": "Answers each reviewer comment in the order it was raised, quotes the comment, states what changed and where, and separates the changes made from the ones declined with a reason."
+            },
+            "right": {
+              "name": "proportional-hazards-assumption-check",
+              "description": "Checks the proportional hazards assumption with scaled Schoenfeld residuals and a log-log plot, and switches to a time-varying coefficient or reports restricted mean survival time when it fails."
+            }
+          }
+        ]
+      },
+      "expected": {
+        "pairs": [
+          {
+            "id": "p-01",
+            "relation": "related"
+          },
+          {
+            "id": "p-02",
+            "relation": "related"
+          },
+          {
+            "id": "p-03",
+            "relation": "related"
+          },
+          {
+            "id": "p-04",
+            "relation": "related"
+          },
+          {
+            "id": "p-05",
+            "relation": "related"
+          },
+          {
+            "id": "p-06",
+            "relation": "related"
+          },
+          {
+            "id": "p-07",
+            "relation": "related"
+          },
+          {
+            "id": "p-08",
+            "relation": "related"
+          },
+          {
+            "id": "p-09",
+            "relation": "related"
+          },
+          {
+            "id": "p-10",
+            "relation": "related"
+          },
+          {
+            "id": "p-11",
+            "relation": "related"
+          },
+          {
+            "id": "p-12",
+            "relation": "related"
+          },
+          {
+            "id": "p-13",
+            "relation": "related"
+          },
+          {
+            "id": "p-14",
+            "relation": "related"
+          },
+          {
+            "id": "p-15",
+            "relation": "related"
+          },
+          {
+            "id": "p-16",
+            "relation": "related"
+          },
+          {
+            "id": "p-17",
+            "relation": "related"
+          },
+          {
+            "id": "p-18",
+            "relation": "related"
+          },
+          {
+            "id": "p-19",
+            "relation": "related"
+          },
+          {
+            "id": "p-20",
+            "relation": "related"
+          },
+          {
+            "id": "p-21",
+            "relation": "related"
+          },
+          {
+            "id": "p-22",
+            "relation": "related"
+          },
+          {
+            "id": "p-23",
+            "relation": "related"
+          },
+          {
+            "id": "p-24",
+            "relation": "related"
+          },
+          {
+            "id": "p-25",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-26",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-27",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-28",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-29",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-30",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-31",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-32",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-33",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-34",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-35",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-36",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-37",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-38",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-39",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-40",
+            "relation": "unrelated"
+          }
+        ]
+      }
+    },
+    {
+      "id": "method-batch-1",
+      "source": "2026-09-21-curated-method-pairs",
+      "labelBasis": "curated",
+      "input": {
+        "pairs": [
+          {
+            "id": "p-41",
+            "left": {
+              "name": "tcm-syndrome-differentiation-mapping",
+              "description": "Maps the syndrome pattern a trial enrolled on (辨证分型: e.g. 气虚血瘀) onto the inclusion criteria as stated, and keeps the original pattern name beside any Western diagnosis it is paired with."
+            },
+            "right": {
+              "name": "colour-vision-safe-figure-palette",
+              "description": "Picks a palette that survives deuteranopia and greyscale printing, distinguishes the series by shape as well as hue, and checks the contrast ratio of every label."
+            }
+          },
+          {
+            "id": "p-42",
+            "left": {
+              "name": "downloaded-pdf-file-naming-convention",
+              "description": "Names every downloaded article first-author, year and short title, keeps the identifier in the file name, and puts one folder per review so a later pass can find what was already fetched."
+            },
+            "right": {
+              "name": "noninferiority-margin-justification",
+              "description": "Justifies the noninferiority margin from the historical superiority of the active control and a stated fraction of it preserved, and fixes the margin before the analysis rather than after."
+            }
+          },
+          {
+            "id": "p-43",
+            "left": {
+              "name": "laboratory-unit-conversion-si",
+              "description": "Converts laboratory values into SI units with the analyte molar mass, keeps the original value beside the converted one, and refuses to convert when the assay is not stated."
+            },
+            "right": {
+              "name": "journal-keyword-selection-for-submission",
+              "description": "Picks submission keywords that are not already in the title, prefers indexed terms the journal lists and keeps the count within the limit the journal sets."
+            }
+          },
+          {
+            "id": "p-44",
+            "left": {
+              "name": "r-session-info-and-package-version-recording",
+              "description": "Records the session information and the exact package versions alongside every analysis output, and re-runs the analysis from that record before the numbers are quoted anywhere."
+            },
+            "right": {
+              "name": "plain-language-summary-for-patients",
+              "description": "Writes the lay summary at a reading age the journal asks for, replaces relative effects with natural frequencies and states what the evidence does not answer."
+            }
+          },
+          {
+            "id": "p-45",
+            "left": {
+              "name": "journal-club-slide-outline",
+              "description": "Lays a journal club deck out as question, design, main result, threats to validity and what it changes on Monday, with one slide each and the effect size on the result slide."
+            },
+            "right": {
+              "name": "pk-blood-sampling-schedule-design",
+              "description": "Designs the blood sampling schedule of a pharmacokinetic study around the expected absorption peak and the elimination phase, and states the tolerance window for every planned draw."
+            }
+          },
+          {
+            "id": "p-46",
+            "left": {
+              "name": "reference-manager-library-folder-structure",
+              "description": "Keeps one reference library per project with a folder per screening stage, syncs the attachment files, and never edits a shared entry in place so the exported list stays stable."
+            },
+            "right": {
+              "name": "placebo-run-in-period-design",
+              "description": "Designs a single-blind placebo run-in to exclude the poorly adherent before randomisation, states its length and the adherence cutoff, and reports how many were excluded by it."
+            }
+          },
+          {
+            "id": "p-47",
+            "left": {
+              "name": "cluster-randomised-icc-inflation",
+              "description": "Inflates the sample size of a cluster randomised trial by the design effect from an assumed intracluster correlation, and states where that correlation came from."
+            },
+            "right": {
+              "name": "chinese-herbal-formula-composition-tabulation",
+              "description": "Tabulates a formula as 君臣佐使 with each herb, its daily amount and the processing method, and keeps the source text of the formula beside the table."
+            }
+          },
+          {
+            "id": "p-48",
+            "left": {
+              "name": "orcid-and-affiliation-consistency-on-submission",
+              "description": "Checks that every author ORCID, affiliation and name order matches the submission system and the title page, and fixes the title page rather than the record when they differ."
+            },
+            "right": {
+              "name": "seasonality-adjustment-in-an-interrupted-time-series",
+              "description": "Adjusts an interrupted time series for seasonality with harmonic terms, checks the residual autocorrelation, and reports the level and slope change with the adjustment in place."
+            }
+          }
+        ]
+      },
+      "expected": {
+        "pairs": [
+          {
+            "id": "p-41",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-42",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-43",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-44",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-45",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-46",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-47",
+            "relation": "unrelated"
+          },
+          {
+            "id": "p-48",
+            "relation": "unrelated"
+          }
+        ]
+      }
+    },
+    {
+      "id": "local-method-batch-0",
+      "source": "2026-10-07-locally-authored-method-pairs",
+      "labelBasis": "locally-authored-closed-workflow-definitions",
+      "independentHoldout": false,
+      "pairGroups": {
+        "local-01-related": "local-method-family-01",
+        "local-01-distinct": "local-method-family-01",
+        "local-02-related": "local-method-family-02",
+        "local-02-distinct": "local-method-family-02",
+        "local-03-related": "local-method-family-03",
+        "local-03-distinct": "local-method-family-03",
+        "local-04-related": "local-method-family-04",
+        "local-04-distinct": "local-method-family-04",
+        "local-05-related": "local-method-family-05",
+        "local-05-distinct": "local-method-family-05",
+        "local-06-related": "local-method-family-06",
+        "local-06-distinct": "local-method-family-06",
+        "local-07-related": "local-method-family-07",
+        "local-07-distinct": "local-method-family-07",
+        "local-08-related": "local-method-family-08",
+        "local-08-distinct": "local-method-family-08",
+        "local-09-related": "local-method-family-09",
+        "local-09-distinct": "local-method-family-09",
+        "local-10-related": "local-method-family-10",
+        "local-10-distinct": "local-method-family-10",
+        "local-11-related": "local-method-family-11",
+        "local-11-distinct": "local-method-family-11",
+        "local-12-related": "local-method-family-12",
+        "local-12-distinct": "local-method-family-12",
+        "local-13-related": "local-method-family-13",
+        "local-13-distinct": "local-method-family-13",
+        "local-14-related": "local-method-family-14",
+        "local-14-distinct": "local-method-family-14",
+        "local-15-related": "local-method-family-15",
+        "local-15-distinct": "local-method-family-15",
+        "local-16-related": "local-method-family-16",
+        "local-16-distinct": "local-method-family-16",
+        "local-17-related": "local-method-family-17",
+        "local-17-distinct": "local-method-family-17",
+        "local-18-related": "local-method-family-18",
+        "local-18-distinct": "local-method-family-18",
+        "local-19-related": "local-method-family-19",
+        "local-19-distinct": "local-method-family-19",
+        "local-20-related": "local-method-family-20",
+        "local-20-distinct": "local-method-family-20"
+      },
+      "input": {
+        "pairs": [
+          {
+            "id": "local-01-related",
+            "left": {
+              "name": "Propensity-score matching 倾向评分匹配",
+              "description": "Estimate treatment propensity and match exposed patients to comparable controls."
+            },
+            "right": {
+              "name": "Matching balance check 匹配后平衡检查",
+              "description": "Check standardized differences after propensity-score matching to describe remaining imbalance."
+            }
+          },
+          {
+            "id": "local-01-distinct",
+            "left": {
+              "name": "Propensity-score matching 倾向评分匹配",
+              "description": "Estimate treatment propensity and match exposed patients to comparable controls."
+            },
+            "right": {
+              "name": "Protein sequence matching 蛋白序列匹配",
+              "description": "Find matching amino-acid sequences in a reference protein collection."
+            }
+          },
+          {
+            "id": "local-02-related",
+            "left": {
+              "name": "RNA sequencing count normalization 转录组归一化",
+              "description": "Normalize gene count columns across sequencing samples before comparing groups."
+            },
+            "right": {
+              "name": "RNA differential-expression contrasts 差异表达对比",
+              "description": "Compare normalized RNA sequencing counts between the prespecified two groups."
+            }
+          },
+          {
+            "id": "local-02-distinct",
+            "left": {
+              "name": "RNA sequencing count normalization 转录组归一化",
+              "description": "Normalize gene count columns across sequencing samples before comparing groups."
+            },
+            "right": {
+              "name": "Medication dose normalization 药物剂量标准化",
+              "description": "Convert prescription doses into a common mass unit before pharmacy stock accounting."
+            }
+          },
+          {
+            "id": "local-03-related",
+            "left": {
+              "name": "Kaplan-Meier digitization 生存曲线数字化",
+              "description": "Read calibrated time and survival coordinates from a preserved published survival figure."
+            },
+            "right": {
+              "name": "Published survival reconstruction 生存数据重建",
+              "description": "Use digitized survival coordinates and numbers at risk to reconstruct approximate event data."
+            }
+          },
+          {
+            "id": "local-03-distinct",
+            "left": {
+              "name": "Kaplan-Meier digitization 生存曲线数字化",
+              "description": "Read calibrated time and survival coordinates from a preserved published survival figure."
+            },
+            "right": {
+              "name": "Digital slide cell segmentation 数字切片分割",
+              "description": "Segment individual cell boundaries from microscope slide images."
+            }
+          },
+          {
+            "id": "local-04-related",
+            "left": {
+              "name": "Trial allocation extraction 随机分配提取",
+              "description": "Extract how trial participants were randomly allocated from the methods section."
+            },
+            "right": {
+              "name": "Trial concealment extraction 分配隐藏提取",
+              "description": "Extract measures used to prevent prediction of the same trial allocation sequence."
+            }
+          },
+          {
+            "id": "local-04-distinct",
+            "left": {
+              "name": "Trial allocation extraction 随机分配提取",
+              "description": "Extract how trial participants were randomly allocated from the methods section."
+            },
+            "right": {
+              "name": "Hospital bed allocation 床位分配",
+              "description": "Assign available beds to admitted patients according to ward capacity."
+            }
+          },
+          {
+            "id": "local-05-related",
+            "left": {
+              "name": "Systematic-review duplicate removal 题录去重",
+              "description": "Identify duplicate bibliographic records across database search exports."
+            },
+            "right": {
+              "name": "Review screening reconciliation 筛选记录核对",
+              "description": "Reconcile unique search records and their eligibility decisions in the review flow."
+            }
+          },
+          {
+            "id": "local-05-distinct",
+            "left": {
+              "name": "Systematic-review duplicate removal 题录去重",
+              "description": "Identify duplicate bibliographic records across database search exports."
+            },
+            "right": {
+              "name": "Duplicate observation detection 重复观测检查",
+              "description": "Detect repeated patient visit rows in a longitudinal research table using subject and date keys."
+            }
+          },
+          {
+            "id": "local-06-related",
+            "left": {
+              "name": "Bibliometric coauthorship 作者合作网络",
+              "description": "Construct a publication coauthorship graph from author and affiliation fields."
+            },
+            "right": {
+              "name": "Bibliometric affiliation disambiguation 机构消歧",
+              "description": "Resolve variant institution names before constructing the publication collaboration graph."
+            }
+          },
+          {
+            "id": "local-06-distinct",
+            "left": {
+              "name": "Bibliometric coauthorship 作者合作网络",
+              "description": "Construct a publication coauthorship graph from author and affiliation fields."
+            },
+            "right": {
+              "name": "Network traffic anomaly detection 网络流量异常",
+              "description": "Detect unexpected packet patterns in hospital router logs."
+            }
+          },
+          {
+            "id": "local-07-related",
+            "left": {
+              "name": "Meta-analysis effect conversion 效应量转换",
+              "description": "Convert extracted study outcomes into a common effect-size representation for pooling."
+            },
+            "right": {
+              "name": "Meta-analysis variance extraction 方差提取",
+              "description": "Obtain uncertainty estimates for those same effect sizes before weighted pooling."
+            }
+          },
+          {
+            "id": "local-07-distinct",
+            "left": {
+              "name": "Meta-analysis effect conversion 效应量转换",
+              "description": "Convert extracted study outcomes into a common effect-size representation for pooling."
+            },
+            "right": {
+              "name": "Pharmacokinetic unit conversion 血药浓度单位转换",
+              "description": "Convert laboratory plasma concentration units before fitting a pharmacokinetic model."
+            }
+          },
+          {
+            "id": "local-08-related",
+            "left": {
+              "name": "Survey item reverse coding 问卷反向计分",
+              "description": "Reverse the prespecified questionnaire items before calculating a scale total."
+            },
+            "right": {
+              "name": "Scale missing-item handling 量表缺项处理",
+              "description": "Apply the scale manual missing-item rule before calculating the same questionnaire total."
+            }
+          },
+          {
+            "id": "local-08-distinct",
+            "left": {
+              "name": "Survey item reverse coding 问卷反向计分",
+              "description": "Reverse the prespecified questionnaire items before calculating a scale total."
+            },
+            "right": {
+              "name": "Reverse protein docking 反向分子对接",
+              "description": "Screen candidate protein structures for binding to a supplied small molecule."
+            }
+          },
+          {
+            "id": "local-09-related",
+            "left": {
+              "name": "Clinical protocol eligibility extraction 入排标准提取",
+              "description": "Extract population inclusion and exclusion rules from a study protocol."
+            },
+            "right": {
+              "name": "Clinical protocol outcome extraction 终点提取",
+              "description": "Extract the primary and secondary outcome definitions from the same study protocol."
+            }
+          },
+          {
+            "id": "local-09-distinct",
+            "left": {
+              "name": "Clinical protocol eligibility extraction 入排标准提取",
+              "description": "Extract population inclusion and exclusion rules from a study protocol."
+            },
+            "right": {
+              "name": "Communication protocol parsing 通信协议解析",
+              "description": "Parse network message headers according to a binary communication protocol."
+            }
+          },
+          {
+            "id": "local-10-related",
+            "left": {
+              "name": "Data dictionary variable mapping 数据字典映射",
+              "description": "Map raw column names to documented research variable definitions."
+            },
+            "right": {
+              "name": "Dataset unit consistency 数据单位一致性",
+              "description": "Check raw measurement units against the same research data dictionary."
+            }
+          },
+          {
+            "id": "local-10-distinct",
+            "left": {
+              "name": "Data dictionary variable mapping 数据字典映射",
+              "description": "Map raw column names to documented research variable definitions."
+            },
+            "right": {
+              "name": "Geographic map projection 地图投影",
+              "description": "Transform geographic coordinates between map projection systems."
+            }
+          },
+          {
+            "id": "local-11-related",
+            "left": {
+              "name": "Evidence quote anchoring 证据引文锚定",
+              "description": "Attach a report claim to a preserved source passage that states its supporting fact."
+            },
+            "right": {
+              "name": "Evidence contradiction annotation 证据矛盾标注",
+              "description": "Mark when another preserved passage conflicts with that same report claim."
+            }
+          },
+          {
+            "id": "local-11-distinct",
+            "left": {
+              "name": "Evidence quote anchoring 证据引文锚定",
+              "description": "Attach a report claim to a preserved source passage that states its supporting fact."
+            },
+            "right": {
+              "name": "DNA anchor primer design 锚定引物设计",
+              "description": "Choose laboratory primer sequences for amplifying a target DNA region."
+            }
+          },
+          {
+            "id": "local-12-related",
+            "left": {
+              "name": "Causal mediation model 中介分析",
+              "description": "Estimate direct and indirect associations through a prespecified mediator in a cohort."
+            },
+            "right": {
+              "name": "Mediation sensitivity assessment 中介敏感性分析",
+              "description": "Assess how mediator-outcome confounding assumptions affect the same mediation estimate."
+            }
+          },
+          {
+            "id": "local-12-distinct",
+            "left": {
+              "name": "Causal mediation model 中介分析",
+              "description": "Estimate direct and indirect associations through a prespecified mediator in a cohort."
+            },
+            "right": {
+              "name": "Conflict mediation coding 冲突调解编码",
+              "description": "Code conversational strategies used by mediators in interviews about workplace disputes."
+            }
+          },
+          {
+            "id": "local-13-related",
+            "left": {
+              "name": "MR allele harmonization 等位基因协调",
+              "description": "Align exposure and outcome summary effect alleles before Mendelian-randomization estimation."
+            },
+            "right": {
+              "name": "MR palindromic variant handling 回文位点处理",
+              "description": "Check ambiguous palindromic allele orientation in the same exposure-outcome harmonization."
+            }
+          },
+          {
+            "id": "local-13-distinct",
+            "left": {
+              "name": "MR allele harmonization 等位基因协调",
+              "description": "Align exposure and outcome summary effect alleles before Mendelian-randomization estimation."
+            },
+            "right": {
+              "name": "Grammar sentence harmonization 文法规范化",
+              "description": "Standardize sentence tense and punctuation in a draft manuscript."
+            }
+          },
+          {
+            "id": "local-14-related",
+            "left": {
+              "name": "Geographic exposure linkage 空间暴露匹配",
+              "description": "Link environmental exposure grids to participant residential coordinates."
+            },
+            "right": {
+              "name": "Geographic exposure aggregation 暴露汇总",
+              "description": "Aggregate linked daily environmental exposures over prespecified cohort time windows."
+            }
+          },
+          {
+            "id": "local-14-distinct",
+            "left": {
+              "name": "Geographic exposure linkage 空间暴露匹配",
+              "description": "Link environmental exposure grids to participant residential coordinates."
+            },
+            "right": {
+              "name": "Protein exposure surface calculation 蛋白表面暴露",
+              "description": "Calculate solvent exposure of amino-acid residues from a protein structure."
+            }
+          },
+          {
+            "id": "local-15-related",
+            "left": {
+              "name": "Regression residual inspection 回归残差检查",
+              "description": "Inspect residual patterns after fitting the prespecified outcome regression."
+            },
+            "right": {
+              "name": "Regression influence inspection 回归影响诊断",
+              "description": "Identify observations that strongly influence that same fitted outcome regression."
+            }
+          },
+          {
+            "id": "local-15-distinct",
+            "left": {
+              "name": "Regression residual inspection 回归残差检查",
+              "description": "Inspect residual patterns after fitting the prespecified outcome regression."
+            },
+            "right": {
+              "name": "Residual drug stock audit 剩余药品盘点",
+              "description": "Count leftover pharmaceutical packages in a warehouse after distribution."
+            }
+          },
+          {
+            "id": "local-16-related",
+            "left": {
+              "name": "Qualitative interview coding 访谈编码",
+              "description": "Assign thematic codes to interview passages in a qualitative study."
+            },
+            "right": {
+              "name": "Qualitative coding reconciliation 编码核对",
+              "description": "Discuss coding disagreements between readers of those same interview passages."
+            }
+          },
+          {
+            "id": "local-16-distinct",
+            "left": {
+              "name": "Qualitative interview coding 访谈编码",
+              "description": "Assign thematic codes to interview passages in a qualitative study."
+            },
+            "right": {
+              "name": "Clinical ICD coding 诊断编码",
+              "description": "Map billing diagnosis descriptions to ICD reimbursement codes."
+            }
+          },
+          {
+            "id": "local-17-related",
+            "left": {
+              "name": "Missing-data pattern summary 缺失模式描述",
+              "description": "Summarize which research variables are missing together across observations."
+            },
+            "right": {
+              "name": "Multiple-imputation model specification 多重插补设定",
+              "description": "Specify predictors and variable types for imputing missing values in that research table."
+            }
+          },
+          {
+            "id": "local-17-distinct",
+            "left": {
+              "name": "Missing-data pattern summary 缺失模式描述",
+              "description": "Summarize which research variables are missing together across observations."
+            },
+            "right": {
+              "name": "Missing reference recovery 缺失文献修复",
+              "description": "Recover absent citation entries in a manuscript bibliography from DOI identifiers."
+            }
+          },
+          {
+            "id": "local-18-related",
+            "left": {
+              "name": "Adverse-event verbatim mapping 不良事件词映射",
+              "description": "Map reported adverse-event phrases to standardized event terms."
+            },
+            "right": {
+              "name": "Adverse-event category aggregation 不良事件分类汇总",
+              "description": "Aggregate those standardized adverse-event terms by their named event categories."
+            }
+          },
+          {
+            "id": "local-18-distinct",
+            "left": {
+              "name": "Adverse-event verbatim mapping 不良事件词映射",
+              "description": "Map reported adverse-event phrases to standardized event terms."
+            },
+            "right": {
+              "name": "Software event log parsing 软件事件解析",
+              "description": "Parse application event logs to detect failed user login attempts."
+            }
+          },
+          {
+            "id": "local-19-related",
+            "left": {
+              "name": "Paper full-text section parsing 论文段落解析",
+              "description": "Identify methods, results and discussion sections in a preserved article."
+            },
+            "right": {
+              "name": "Paper methods extraction 论文方法提取",
+              "description": "Extract the analysis and study-design details from that article methods section."
+            }
+          },
+          {
+            "id": "local-19-distinct",
+            "left": {
+              "name": "Paper full-text section parsing 论文段落解析",
+              "description": "Identify methods, results and discussion sections in a preserved article."
+            },
+            "right": {
+              "name": "Tissue section preparation 组织切片制备",
+              "description": "Prepare thin tissue sections for microscopy in a pathology laboratory."
+            }
+          },
+          {
+            "id": "local-20-related",
+            "left": {
+              "name": "Clinical registry deduplication 注册试验去重",
+              "description": "Identify multiple registry records that describe the same clinical trial."
+            },
+            "right": {
+              "name": "Registry publication linkage 注册试验论文关联",
+              "description": "Link a trial registry record to published reports of that clinical trial."
+            }
+          },
+          {
+            "id": "local-20-distinct",
+            "left": {
+              "name": "Clinical registry deduplication 注册试验去重",
+              "description": "Identify multiple registry records that describe the same clinical trial."
+            },
+            "right": {
+              "name": "Computer registry cleanup 系统注册表清理",
+              "description": "Remove obsolete operating-system configuration entries from a computer registry."
+            }
+          }
+        ]
+      },
+      "expected": {
+        "pairs": [
+          {
+            "id": "local-01-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-01-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-02-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-02-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-03-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-03-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-04-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-04-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-05-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-05-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-06-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-06-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-07-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-07-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-08-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-08-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-09-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-09-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-10-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-10-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-11-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-11-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-12-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-12-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-13-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-13-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-14-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-14-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-15-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-15-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-16-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-16-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-17-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-17-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-18-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-18-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-19-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-19-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-20-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-20-distinct",
+            "relation": "unrelated"
+          }
+        ]
+      }
+    },
+    {
+      "id": "local-method-batch-1",
+      "source": "2026-10-07-locally-authored-method-pairs",
+      "labelBasis": "locally-authored-closed-workflow-definitions",
+      "independentHoldout": false,
+      "pairGroups": {
+        "local-21-related": "local-method-family-21",
+        "local-21-distinct": "local-method-family-21",
+        "local-22-related": "local-method-family-22",
+        "local-22-distinct": "local-method-family-22",
+        "local-23-related": "local-method-family-23",
+        "local-23-distinct": "local-method-family-23",
+        "local-24-related": "local-method-family-24",
+        "local-24-distinct": "local-method-family-24",
+        "local-25-related": "local-method-family-25",
+        "local-25-distinct": "local-method-family-25",
+        "local-26-related": "local-method-family-26",
+        "local-26-distinct": "local-method-family-26",
+        "local-27-related": "local-method-family-27",
+        "local-27-distinct": "local-method-family-27",
+        "local-28-related": "local-method-family-28",
+        "local-28-distinct": "local-method-family-28",
+        "local-29-related": "local-method-family-29",
+        "local-29-distinct": "local-method-family-29",
+        "local-30-related": "local-method-family-30",
+        "local-30-distinct": "local-method-family-30",
+        "local-31-related": "local-method-family-31",
+        "local-31-distinct": "local-method-family-31",
+        "local-32-related": "local-method-family-32",
+        "local-32-distinct": "local-method-family-32",
+        "local-33-related": "local-method-family-33",
+        "local-33-distinct": "local-method-family-33",
+        "local-34-related": "local-method-family-34",
+        "local-34-distinct": "local-method-family-34",
+        "local-35-related": "local-method-family-35",
+        "local-35-distinct": "local-method-family-35",
+        "local-36-related": "local-method-family-36",
+        "local-36-distinct": "local-method-family-36"
+      },
+      "input": {
+        "pairs": [
+          {
+            "id": "local-21-related",
+            "left": {
+              "name": "Diagnostic accuracy extraction 诊断准确性提取",
+              "description": "Extract true-positive and false-positive counts for a diagnostic test study."
+            },
+            "right": {
+              "name": "Diagnostic study threshold extraction 诊断阈值提取",
+              "description": "Record the index-test thresholds associated with those diagnostic accuracy counts."
+            }
+          },
+          {
+            "id": "local-21-distinct",
+            "left": {
+              "name": "Diagnostic accuracy extraction 诊断准确性提取",
+              "description": "Extract true-positive and false-positive counts for a diagnostic test study."
+            },
+            "right": {
+              "name": "Search relevance accuracy scoring 搜索准确性评分",
+              "description": "Score whether search-engine hits match a set of annotated user queries."
+            }
+          },
+          {
+            "id": "local-22-related",
+            "left": {
+              "name": "Grant aims consistency 课题目标一致性",
+              "description": "Compare a grant specific aims with its planned research methods."
+            },
+            "right": {
+              "name": "Grant feasibility review 课题可行性审查",
+              "description": "Check resources and study timelines against those same grant aims."
+            }
+          },
+          {
+            "id": "local-22-distinct",
+            "left": {
+              "name": "Grant aims consistency 课题目标一致性",
+              "description": "Compare a grant specific aims with its planned research methods."
+            },
+            "right": {
+              "name": "Research budget invoice matching 预算发票核对",
+              "description": "Match laboratory purchase invoices to accounting expense categories."
+            }
+          },
+          {
+            "id": "local-23-related",
+            "left": {
+              "name": "Table denominator verification 表格分母核对",
+              "description": "Check that reported subgroup percentages use the stated patient denominators."
+            },
+            "right": {
+              "name": "Report percentage recalculation 报告百分比重算",
+              "description": "Recalculate the same table percentages from its preserved subgroup counts."
+            }
+          },
+          {
+            "id": "local-23-distinct",
+            "left": {
+              "name": "Table denominator verification 表格分母核对",
+              "description": "Check that reported subgroup percentages use the stated patient denominators."
+            },
+            "right": {
+              "name": "Fraction lesson denominator tutoring 分母教学",
+              "description": "Evaluate how school pupils identify denominators in arithmetic exercises."
+            }
+          },
+          {
+            "id": "local-24-related",
+            "left": {
+              "name": "Public-source retrieval preservation 公开来源保存",
+              "description": "Preserve the bytes and bibliographic identity of retrieved public research sources."
+            },
+            "right": {
+              "name": "Preserved-source passage indexing 来源段落索引",
+              "description": "Index passages from those preserved sources for later quote retrieval."
+            }
+          },
+          {
+            "id": "local-24-distinct",
+            "left": {
+              "name": "Public-source retrieval preservation 公开来源保存",
+              "description": "Preserve the bytes and bibliographic identity of retrieved public research sources."
+            },
+            "right": {
+              "name": "Blood specimen preservation 血样保存",
+              "description": "Record laboratory temperature and storage duration for biological blood samples."
+            }
+          },
+          {
+            "id": "local-25-related",
+            "left": {
+              "name": "Two-group expression Welch test 两组表达检验",
+              "description": "Compare preserved expression values between two research groups with Welch tests."
+            },
+            "right": {
+              "name": "Expression multiple-testing adjustment 表达多重检验校正",
+              "description": "Apply Benjamini-Hochberg adjustment to the resulting gene-level test probabilities."
+            }
+          },
+          {
+            "id": "local-25-distinct",
+            "left": {
+              "name": "Two-group expression Welch test 两组表达检验",
+              "description": "Compare preserved expression values between two research groups with Welch tests."
+            },
+            "right": {
+              "name": "Chinese word expression analysis 中文表达分析",
+              "description": "Analyze the rhetorical phrasing used in written patient narratives."
+            }
+          },
+          {
+            "id": "local-26-related",
+            "left": {
+              "name": "Article retraction screening 撤稿筛查",
+              "description": "Check publication status notices for articles considered in an evidence review."
+            },
+            "right": {
+              "name": "Evidence status annotation 证据状态标注",
+              "description": "Label included review sources whose publication notices show retraction or correction."
+            }
+          },
+          {
+            "id": "local-26-distinct",
+            "left": {
+              "name": "Article retraction screening 撤稿筛查",
+              "description": "Check publication status notices for articles considered in an evidence review."
+            },
+            "right": {
+              "name": "Wound edge retraction measurement 创缘回缩",
+              "description": "Measure movement of tissue edges during a wound-healing microscopy experiment."
+            }
+          },
+          {
+            "id": "local-27-related",
+            "left": {
+              "name": "Dose-response exposure extraction 剂量反应暴露提取",
+              "description": "Extract exposure categories and outcome estimates from dose-response studies."
+            },
+            "right": {
+              "name": "Dose-response category harmonization 剂量分类协调",
+              "description": "Align those extracted exposure category units before dose-response modelling."
+            }
+          },
+          {
+            "id": "local-27-distinct",
+            "left": {
+              "name": "Dose-response exposure extraction 剂量反应暴露提取",
+              "description": "Extract exposure categories and outcome estimates from dose-response studies."
+            },
+            "right": {
+              "name": "Radiotherapy dose planning 放疗剂量规划",
+              "description": "Calculate a radiation beam delivery plan from patient imaging."
+            }
+          },
+          {
+            "id": "local-28-related",
+            "left": {
+              "name": "Publication country attribution 发表国家归属",
+              "description": "Attribute publication records to countries using author affiliation data."
+            },
+            "right": {
+              "name": "Bibliometric country collaboration 国家合作分析",
+              "description": "Summarize international collaboration patterns across those publication records."
+            }
+          },
+          {
+            "id": "local-28-distinct",
+            "left": {
+              "name": "Publication country attribution 发表国家归属",
+              "description": "Attribute publication records to countries using author affiliation data."
+            },
+            "right": {
+              "name": "Trial country regulatory review 试验国家法规审查",
+              "description": "Review submission requirements for starting a trial in each target jurisdiction."
+            }
+          },
+          {
+            "id": "local-29-related",
+            "left": {
+              "name": "Random-effects prediction interval 随机效应预测区间",
+              "description": "Compute a prediction interval after pooling study effects in a random-effects review."
+            },
+            "right": {
+              "name": "Random-effects heterogeneity display 异质性展示",
+              "description": "Show study heterogeneity beside the same review pooled effect and prediction interval."
+            }
+          },
+          {
+            "id": "local-29-distinct",
+            "left": {
+              "name": "Random-effects prediction interval 随机效应预测区间",
+              "description": "Compute a prediction interval after pooling study effects in a random-effects review."
+            },
+            "right": {
+              "name": "Random forest clinical prediction 随机森林预测",
+              "description": "Train a tree ensemble to predict patient outcomes from individual clinical features."
+            }
+          },
+          {
+            "id": "local-30-related",
+            "left": {
+              "name": "Trial repeated follow-up extraction 重复随访提取",
+              "description": "Extract reported time points for repeated outcomes from a trial report."
+            },
+            "right": {
+              "name": "Trial follow-up outcome matching 随访结局匹配",
+              "description": "Match each outcome estimate to its extracted trial follow-up time point."
+            }
+          },
+          {
+            "id": "local-30-distinct",
+            "left": {
+              "name": "Trial repeated follow-up extraction 重复随访提取",
+              "description": "Extract reported time points for repeated outcomes from a trial report."
+            },
+            "right": {
+              "name": "Repeated PCR amplification 重复扩增",
+              "description": "Repeat a laboratory amplification procedure to assess assay reproducibility."
+            }
+          },
+          {
+            "id": "local-31-related",
+            "left": {
+              "name": "Study cohort temporal leakage check 队列时间泄漏检查",
+              "description": "Check whether predictive features occur after the outcome they are meant to predict."
+            },
+            "right": {
+              "name": "Cohort prediction index-date alignment 队列索引日协调",
+              "description": "Align feature measurement windows to the prediction index date in that cohort."
+            }
+          },
+          {
+            "id": "local-31-distinct",
+            "left": {
+              "name": "Study cohort temporal leakage check 队列时间泄漏检查",
+              "description": "Check whether predictive features occur after the outcome they are meant to predict."
+            },
+            "right": {
+              "name": "Water leakage detection 漏水检测",
+              "description": "Locate leaking water pipes from pressure readings in hospital infrastructure."
+            }
+          },
+          {
+            "id": "local-32-related",
+            "left": {
+              "name": "Electronic chart abstraction 病历字段抽取",
+              "description": "Extract prespecified clinical fields from deidentified electronic chart text."
+            },
+            "right": {
+              "name": "Chart abstraction agreement 病历抽取一致性",
+              "description": "Compare independent abstractions of those same clinical chart fields."
+            }
+          },
+          {
+            "id": "local-32-distinct",
+            "left": {
+              "name": "Electronic chart abstraction 病历字段抽取",
+              "description": "Extract prespecified clinical fields from deidentified electronic chart text."
+            },
+            "right": {
+              "name": "Manuscript chart typography 图表排版",
+              "description": "Adjust axis label typography and layout in manuscript figures."
+            }
+          },
+          {
+            "id": "local-33-related",
+            "left": {
+              "name": "Instrumental-variable strength check 工具变量强度",
+              "description": "Assess exposure associations for candidate genetic instruments in Mendelian randomization."
+            },
+            "right": {
+              "name": "Instrumental-variable pruning 工具变量筛选",
+              "description": "Retain suitable genetic variants for that same Mendelian-randomization instrument set."
+            }
+          },
+          {
+            "id": "local-33-distinct",
+            "left": {
+              "name": "Instrumental-variable strength check 工具变量强度",
+              "description": "Assess exposure associations for candidate genetic instruments in Mendelian randomization."
+            },
+            "right": {
+              "name": "Surgical instrument sterilization 手术器械灭菌",
+              "description": "Validate sterilization procedures for reusable surgical tools."
+            }
+          },
+          {
+            "id": "local-34-related",
+            "left": {
+              "name": "Clinical evidence certainty wording 证据确定性措辞",
+              "description": "Express a report conclusion in wording consistent with its assessed evidence certainty."
+            },
+            "right": {
+              "name": "Evidence limitations synthesis 证据局限综合",
+              "description": "Summarize the same conclusion limitations from study bias and indirectness."
+            }
+          },
+          {
+            "id": "local-34-distinct",
+            "left": {
+              "name": "Clinical evidence certainty wording 证据确定性措辞",
+              "description": "Express a report conclusion in wording consistent with its assessed evidence certainty."
+            },
+            "right": {
+              "name": "Chemical synthesis reaction wording 化学反应表述",
+              "description": "Extract reaction conditions from synthetic chemistry laboratory notes."
+            }
+          },
+          {
+            "id": "local-35-related",
+            "left": {
+              "name": "Research dataset observation keys 数据观测键",
+              "description": "Define the participant and visit keys that distinguish research observations."
+            },
+            "right": {
+              "name": "Research join cardinality audit 数据连接基数核查",
+              "description": "Check that joining tables on those observation keys preserves the expected row counts."
+            }
+          },
+          {
+            "id": "local-35-distinct",
+            "left": {
+              "name": "Research dataset observation keys 数据观测键",
+              "description": "Define the participant and visit keys that distinguish research observations."
+            },
+            "right": {
+              "name": "Keyboard key response timing 键盘按键计时",
+              "description": "Measure response time between keyboard presses during a usability study."
+            }
+          },
+          {
+            "id": "local-36-related",
+            "left": {
+              "name": "Article funding disclosure extraction 资助声明提取",
+              "description": "Extract funding sources and conflict disclosures from research publications."
+            },
+            "right": {
+              "name": "Evidence sponsorship annotation 资助风险标注",
+              "description": "Annotate funding-related concerns for those same included evidence publications."
+            }
+          },
+          {
+            "id": "local-36-distinct",
+            "left": {
+              "name": "Article funding disclosure extraction 资助声明提取",
+              "description": "Extract funding sources and conflict disclosures from research publications."
+            },
+            "right": {
+              "name": "Drug dispensing funding reconciliation 配药费用核销",
+              "description": "Reconcile paid prescription charges with insurance remittance files."
+            }
+          }
+        ]
+      },
+      "expected": {
+        "pairs": [
+          {
+            "id": "local-21-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-21-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-22-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-22-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-23-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-23-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-24-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-24-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-25-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-25-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-26-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-26-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-27-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-27-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-28-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-28-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-29-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-29-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-30-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-30-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-31-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-31-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-32-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-32-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-33-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-33-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-34-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-34-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-35-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-35-distinct",
+            "relation": "unrelated"
+          },
+          {
+            "id": "local-36-related",
+            "relation": "related"
+          },
+          {
+            "id": "local-36-distinct",
+            "relation": "unrelated"
+          }
+        ]
+      }
+    }
+  ]
+}

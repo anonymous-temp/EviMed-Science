@@ -18,6 +18,16 @@ confirms it the same way. An unconfirmed model answer stays a candidate.
 
 from __future__ import annotations
 
+try:
+    from evimed_judge import ask as judge_ask, ask_async as judge_ask_async
+except ImportError:
+    def judge_ask(*args, **kwargs):
+        return None
+
+    async def judge_ask_async(*args, **kwargs):
+        return None
+
+
 from typing import Protocol
 
 from safety_agent.core.exceptions import NoResults
@@ -135,6 +145,15 @@ async def normalize_adr_async(
     if await confirmed_by_openfda(client, cleaned):
         return _resolved(query or "", cleaned, "openfda-confirmed", 0.9)
 
+    candidates = load_vocabulary().candidates(cleaned, limit=254)[:254]
+    labels = {term: term for term, _score in candidates}
+    if labels:
+        judgment = await judge_ask_async("J20", {"term": query, "candidates": [
+            {"id": term, "label": term} for term in labels
+        ]})
+        chosen = judgment.get("termId") if isinstance(judgment, dict) else None
+        if isinstance(chosen, str) and chosen in labels and await confirmed_by_openfda(client, chosen):
+            return _resolved(query or "", chosen, "judge-openfda-confirmed", 0.9)
     if llm_fallback is None:
         return result
     try:

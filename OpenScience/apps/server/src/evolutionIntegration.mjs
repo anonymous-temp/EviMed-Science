@@ -36,15 +36,16 @@ export function evolutionRunGap(run) { return run?.errorCode === "runtime_tool_e
 
 /** The other modules publish observations through the durable evolution queue. */
 export class EvolutionIntegration {
-  /** @param {{service:any,autopilot:any,report?:(code:string)=>void}} input */
-  constructor({ service, autopilot, report = () => {} }) {
-    this.service = service; this.autopilot = autopilot; this.report = report;
+  /** @param {{service:any,autopilot:any,judgeService?:any,report?:(code:string)=>void}} input */
+  constructor({ service, autopilot, judgeService = null, report = () => {} }) {
+    this.service = service; this.autopilot = autopilot; this.report = report; this.judgeService = judgeService;
     this.counters = { published: 0, failed: 0, scoutsQueued: 0, scoutsSkipped: 0 };
   }
 
-  /** An optional consumer cannot undo the scientific work that emitted its event. @param {any} event */
-  async publish(event) {
-    try { const saved = await this.service.ingestEvent(event); this.counters.published++; return saved; }
+  /** An optional consumer cannot undo the scientific work that emitted its event.
+   * @param {any} event @param {{runAfter?:Date}} [options] */
+  async publish(event, options = {}) {
+    try { const saved = await this.service.ingestEvent(event, options); this.counters.published++; return saved; }
     catch (error) { this.counters.failed++; this.report(error?.code ?? "evolution_event_unavailable"); return null; }
   }
 
@@ -133,6 +134,30 @@ export class EvolutionIntegration {
     }
   }
 
+  /** J17 is the ranking-only interpretation of J10: never assign a capability, drop a paper,
+   * or supply a scientific finding. Any unavailable judgment preserves the batch's FIFO order.
+   * Existing scout admission alone owns the daily count and scheduling behind admitted work.
+   * @param {any[]} events @returns {Promise<any[]>} */
+  async rankPublications(events) {
+    if (!this.judgeService || events.length < 2) return events;
+    const ranked = [];
+    for (const [index, event] of events.entries()) {
+      try {
+        const result = await this.judgeService.judge("J17", {
+          title: String(event.paper?.title ?? "").slice(0, 400),
+          abstract: String(event.paper?.excerpt ?? event.paper?.abstract ?? "").slice(0, 1500),
+        }, { userId: await this.service.owner(), projectId: "evimed-evolution", taskId: event.id,
+          module: "evolution", limits: { daily: 0, weekly: 0, moduleDaily: this.service.config?.evolutionDailyBudgetCny ?? 10 } });
+        const probability = result?.value?.relevance;
+        if (result?.outcome !== "settled" || !Number.isFinite(probability) || probability < 0 || probability > 1) return events;
+        ranked.push({ event: { ...event, scoutRanking: { source: "judge", site: "J17", relevance: probability,
+          model: result.model ?? null, promptFingerprint: result.promptFingerprint ?? null } }, index, probability });
+      } catch { return events; }
+    }
+    return ranked.sort((left, right) => right.probability - left.probability || left.index - right.index)
+      .map((item, slot) => ({ ...item.event, scoutRanking: { ...item.event.scoutRanking, slot } }));
+  }
+
   /**
    * A paper in the feed is a lead for a scouting run, and a run is paid work, so it is bounded three ways: one run
    * per paper however many times the feed changes it, no more than `evolutionMaxPaperScoutsPerDay` in any 24 hours
@@ -146,21 +171,36 @@ export class EvolutionIntegration {
     const paper = event.paper;
     const key = `publication:${digest(paper?.identity ?? paper?.id ?? event.id).slice(0, 32)}`;
     const database = this.service.documents.database;
-    let runAfter = this.service.now();
-    if (database?.query) {
-      const cap = this.service.config?.evolutionMaxPaperScoutsPerDay ?? 8;
-      const state = await database.query(`SELECT count(*) FILTER (WHERE kind='evolution-scout' AND payload->'paper' IS NOT NULL AND created_at>$2)::integer AS scouts,
-          max(run_after) FILTER (WHERE kind IN ('evolution-build','evolution-evaluate') AND status IN ('queued','running')) AS admitted_until
-        FROM evimed_product.jobs WHERE user_id=$1 AND kind IN ('evolution-scout','evolution-build','evolution-evaluate')`,
-      [await this.service.owner(), new Date(runAfter.getTime() - 86_400_000)]);
-      const row = state.rows[0] ?? {};
-      const exists = await database.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND idempotency_key=$2", [await this.service.owner(), `evolution:${key}`]);
-      if (!exists.rows.length && Number(row.scouts ?? 0) >= cap) { this.counters.scoutsSkipped++; return { scouted: false, reason: "daily-cap" }; }
-      const admitted = row.admitted_until ? new Date(row.admitted_until) : null;
-      if (admitted && admitted > runAfter) runAfter = admitted;
+    const admit = async () => {
+      let runAfter = this.service.now();
+      if (database?.query) {
+        const cap = this.service.config?.evolutionMaxPaperScoutsPerDay ?? 8;
+        const state = await database.query(`SELECT count(*) FILTER (WHERE kind='evolution-scout' AND payload->'paper' IS NOT NULL AND created_at>$2)::integer AS scouts,
+            max(run_after) FILTER (WHERE kind IN ('evolution-build','evolution-evaluate') AND status IN ('queued','running')) AS admitted_until
+          FROM evimed_product.jobs WHERE user_id=$1 AND kind IN ('evolution-scout','evolution-build','evolution-evaluate')`,
+        [await this.service.owner(), new Date(runAfter.getTime() - 86_400_000)]);
+        const row = state.rows[0] ?? {};
+        const exists = await database.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND idempotency_key=$2", [await this.service.owner(), `evolution:${key}`]);
+        if (!exists.rows.length && Number(row.scouts ?? 0) >= cap) { this.counters.scoutsSkipped++; return { scouted: false, reason: "daily-cap" }; }
+        const admitted = row.admitted_until ? new Date(row.admitted_until) : null;
+        if (admitted && admitted > runAfter) runAfter = admitted;
+      }
+      const slot = event.scoutRanking?.source === "judge" && event.scoutRanking.site === "J17"
+        && Number.isInteger(event.scoutRanking.slot) && event.scoutRanking.slot >= 0 && event.scoutRanking.slot < 25
+        ? event.scoutRanking.slot : 0;
+      // The admitted-work floor must not collapse all scouts onto one timestamp.
+      runAfter = new Date(runAfter.getTime() + slot);
+      this.counters.scoutsQueued++;
+      return this.service.enqueue("scout", { paper }, key, runAfter);
+    };
+    if (database?.transaction && database.withTransactionClient) {
+      const owner = await this.service.owner();
+      return database.transaction((/** @type {any} */ client) => database.withTransactionClient(client, async () => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-evolution:paper-scout-admission:${owner}`]);
+        return admit();
+      }));
     }
-    this.counters.scoutsQueued++;
-    return this.service.enqueue("scout", { paper }, key, runAfter);
+    return admit();
   }
 
   /** Source contracts do not expose a verified cutoff or prediction; preserve that uncertainty. */
@@ -358,14 +398,29 @@ export class EvolutionFrontierSignals {
       i.identity_key, t.abstract_raw, t.body_excerpt FROM evimed_frontier.item_changes c
       JOIN evimed_frontier.items i ON i.id=c.item_id LEFT JOIN evimed_frontier.item_texts t ON t.item_id=i.id
       WHERE c.seq>$1 AND c.op='upsert' AND c.reason='published' AND i.state='published' ORDER BY c.seq LIMIT 25`, [after]);
-    let sequence = after;
+    const events = [];
     for (const row of found.rows) {
       const paper = { id: String(row.id), title: row.title_raw, url: row.canonical_url,
         publishedAt: row.published_at, identity: row.identity_key,
         excerpt: String(row.abstract_raw ?? row.body_excerpt ?? "").slice(0, 24_000) };
       if (this.resolveProvenance) Object.assign(paper, await this.resolveProvenance(paper));
-      const savedEvent = await this.integration.publish({ id: `frontier:${row.seq}`, type: "frontier-publication", paper, origin: "literature" });
-      if (!savedEvent) break;
+      events.push({ id: `frontier:${row.seq}`, type: "frontier-publication", origin: "literature", paper });
+    }
+    const ordered = await this.integration.rankPublications(events);
+    const persisted = new Set();
+    const rankedAt = this.service.now().getTime();
+    for (const [index, event] of ordered.entries()) {
+      // The lease uses run_after then id, not creation order. Explicit millisecond
+      // slots retain the ranking even when the clock and database timestamps tie.
+      const options = event.scoutRanking?.source === "judge" ? { runAfter: new Date(rankedAt + index) } : {};
+      if (!await this.integration.publish(event, options)) break;
+      persisted.add(event.id);
+    }
+    // Ranked arrival is not cursor order. Checkpoint only the contiguous durable prefix,
+    // so a failure after a high-sequence item can never lose an earlier publication.
+    let sequence = after;
+    for (const row of found.rows) {
+      if (!persisted.has(`frontier:${row.seq}`)) break;
       sequence = Number(row.seq);
     }
     if (sequence > saved) await this.service.save("cursor", id, { sequence }, cursor);

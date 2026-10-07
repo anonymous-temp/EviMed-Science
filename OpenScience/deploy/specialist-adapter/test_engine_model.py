@@ -284,3 +284,9 @@ def test_context_and_policy_reject_non_scalar_protocol_values():
     for value in ([], {}, True, "medium", None):
         with pytest.raises(engine_model.EngineModelUnavailable):
             engine_model.model_policy({"reasoningEffort": value})
+
+
+def test_judge_environment_uses_the_same_scoped_job_credential_and_control_plane_origin():
+    environment = engine_model.child_environment(JOB_TOKEN, GATEWAY)
+    assert environment["EVIMED_JUDGE_GATEWAY_TOKEN"] == JOB_TOKEN
+    assert environment["EVIMED_JUDGE_GATEWAY_URL"] == GATEWAY.split("/internal/model/v1")[0] + "/internal/judge/v1/ask"
