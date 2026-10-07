@@ -45,10 +45,14 @@ test("the real app exposes an account-scoped inbox decision journey", {
     const page = await (await fetch(`${base}/api/inbox?unread=true&limit=1`, { headers })).json();
     assert.equal(page.data.unreadTotal, 1);
     assert.equal(page.data.items[0].severity, "safety");
+    const named = await (await fetch(`${base}/api/inbox?unread=true&severity=safety`, { headers })).json();
+    assert.deepEqual([named.data.items.length, named.data.unreadTotal], [1, 1]);
+    assert.equal((await fetch(`${base}/api/inbox?severity=urgent`, { headers })).status, 400);
     assert.equal((await fetch(`${base}/api/inbox/read-all`, { method: "POST", headers, body: JSON.stringify({ everything: true }) })).status, 400);
     const cleared = await fetch(`${base}/api/inbox/read-all`, { method: "POST", headers, body: "{}" });
-    assert.deepEqual((await cleared.json()).data, { updated: 1 });
-    assert.deepEqual((await (await fetch(`${base}/api/inbox/unread-count`, { headers })).json()).data, { unreadTotal: 0, safetyUnread: 0 });
+    // A sweep leaves the clinical-safety finding unread, and says so.
+    assert.deepEqual((await cleared.json()).data, { updated: 0, safetyKept: 1 });
+    assert.deepEqual((await (await fetch(`${base}/api/inbox/unread-count`, { headers })).json()).data, { unreadTotal: 1, safetyUnread: 1 });
     assert.equal((await fetch(`${base}/api/inbox`)).status, 401);
   } finally {
     if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);

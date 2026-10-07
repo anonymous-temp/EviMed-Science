@@ -57,7 +57,9 @@ export function SourceDrawer({ source, busy, duplicate, onClose, onUse, onRetry,
     catch (failure) { toast.error(`无法下载 ${filename}：${parseFailureMessage(failure, "该文件")}`); }
   };
   return (
-    <Drawer title={source.display.title} onClose={onClose} bare widthClassName="max-w-xl">
+    // The summary reads in a column; the original is a document and wants a page's width (a 576 px pane was narrower than the
+    // half screen the preview had before). A note's original is its editor, which keeps the column.
+    <Drawer title={source.display.title} onClose={onClose} bare widthClassName={tab === "source" && !note ? "max-w-4xl" : "max-w-xl"}>
       <div className="flex h-full flex-col">
         <header className="shrink-0 px-6 pt-5">
           <div className="flex items-start gap-3">

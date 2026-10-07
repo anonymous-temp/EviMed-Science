@@ -183,9 +183,27 @@ test("a 讲错我方 notice's title states the fact", () => {
   assert.equal(wrongOursTitle(project, { engine: "deepseek", statement: "玛仕度肽每天注射一次。" }), "DeepSeek 把玛仕度肽说成每天注射一次");
   assert.equal(wrongOursTitle(project, { engine: "doubao", statement: "mazdutide 是口服药" }), "豆包把mazdutide说成口服药");
   assert.equal(wrongOursTitle(project, { engine: "kimi", statement: "每天一次" }), "Kimi 讲错玛仕度肽：每天一次");
+  // A judge's whole sentence made a six-line title on a phone: the title keeps 36 characters and the sentence moves to the body.
+  const long = "玛仕度肽在国内获批用于治疗成人2型糖尿病并且可以作为口服片剂每天服用一次不需要注射。";
+  const title = wrongOursTitle(project, { engine: "kimi", statement: long });
+  assert.ok([...title].length <= "Kimi 讲错玛仕度肽：".length + 36, title);
+  assert.ok(title.endsWith("…"));
   assert.equal(geoNoticeHref("geo_1/answers/snap_1"), "/app/geo/geo_1/answers/snap_1");
   assert.equal(geoNoticeHref("../evil"), null);
   assert.equal(geoNoticeHref("geo_1/a/b/c"), null);
+});
+
+test("a long 讲错我方 statement is shortened in the title and whole in the body", async () => {
+  /** @type {Array<Record<string, any>>} */
+  const sent = [];
+  const notifications = { async create(/** @type {string} */ _user, /** @type {Record<string, any>} */ input) { sent.push(input); return { id: "1" }; } };
+  const notifier = createGeoNotifier({ notifications, store: { async query() { return { rows: [] }; } }, config: { operatorUsers: [] } });
+  const long = "玛仕度肽在国内获批用于治疗成人2型糖尿病并且可以作为口服片剂每天服用一次不需要注射。";
+  await notifier.wrongOurs(project, { id: "long", engine: "kimi", statement: long, severity: "S3", evidence_quote: "每周一次皮下注射" });
+  await notifier.wrongOurs(project, { id: "short", engine: "kimi", statement: "每天一次", severity: "S3" });
+  assert.equal(sent[0].body, `${long}\n依据：“每周一次皮下注射”`);
+  assert.ok(sent[0].title.endsWith("…"));
+  assert.equal(sent[1].body, "点开看这条回答和依据。", "a statement the title kept whole is not repeated");
 });
 
 test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severities folded per day; operators apart", async () => {

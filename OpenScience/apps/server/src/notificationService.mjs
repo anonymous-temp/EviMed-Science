@@ -534,10 +534,15 @@ export class NotificationService {
     return saved;
   }
 
-  /** @param {string} userId @param {{limit?:number,cursor?:string|null,noticeType?:string|null,unreadOnly?:boolean,unresolvedOnly?:boolean,projectId?:string|null}} options */
-  async list(userId, { limit = 50, cursor = null, noticeType = null, unreadOnly = false, unresolvedOnly = false, projectId = null } = {}) {
+  /**
+   * `severity` narrows the page to one weight (and `unreadTotal` with it): the inbox page asks for its unread clinical-safety
+   * findings by name, because the list is ordered by notice type and a briefing outranks a safety notice that is only `notify`.
+   * Without it the first pages hold the briefings and the class allowed to interrupt sits on pages nobody opens.
+   * @param {string} userId @param {{limit?:number,cursor?:string|null,noticeType?:string|null,severity?:string|null,unreadOnly?:boolean,unresolvedOnly?:boolean,projectId?:string|null}} options */
+  async list(userId, { limit = 50, cursor = null, noticeType = null, severity = null, unreadOnly = false, unresolvedOnly = false, projectId = null } = {}) {
     productInteger(limit, 1, 100);
     if (noticeType != null && !NOTICE_TYPES.includes(noticeType)) throw new HttpError(400, "notification_filter_invalid", "Invalid notice type.");
+    if (severity != null && !INBOX_SEVERITIES.includes(severity)) throw new HttpError(400, "notification_filter_invalid", "Invalid severity.");
     if (typeof unreadOnly !== "boolean" || typeof unresolvedOnly !== "boolean") throw new HttpError(400, "notification_filter_invalid", "Invalid inbox filter.");
     const project = inboxProjectScope(projectId);
     let after = null;
@@ -552,16 +557,17 @@ export class NotificationService {
     const result = await this.database.query(`SELECT * FROM evimed_inbox.notifications WHERE user_id=$1
       AND ($2::text IS NULL OR notice_type=$2) AND (NOT $3::boolean OR read_at IS NULL)
       AND (NOT $4::boolean OR resolved_at IS NULL)
-      AND ($9::text IS NULL OR project_id=$9 OR project_id IS NULL)
+      AND ($9::text IS NULL OR project_id=$9 OR project_id IS NULL) AND ($10::text IS NULL OR severity=$10)
       AND ($5::smallint IS NULL OR priority>$5 OR (priority=$5 AND (created_at,id)<($6::timestamptz,$7::text)))
       ORDER BY priority,created_at DESC,id DESC LIMIT $8`,
-    [productId(userId, "user"), noticeType, unreadOnly, unresolvedOnly, after?.[0] ?? null, after?.[1] ?? null, after?.[2] ?? null, limit + 1, project]);
+    [productId(userId, "user"), noticeType, unreadOnly, unresolvedOnly, after?.[0] ?? null, after?.[1] ?? null, after?.[2] ?? null, limit + 1, project, severity]);
     const items = result.rows.slice(0, limit).map(record);
     const last = items.at(-1);
     // The count of everything unread in the same scope, not this page's
     // length: the page is capped, and a badge that counted the page could
-    // never say more than fifty (B §1c).
-    const { unreadTotal } = await this.unreadCount(userId, { projectId: project });
+    // never say more than fifty (B §1c). Under a severity filter it is the count of that weight, so a heading built from
+    // it and the bell's second number are the same figure.
+    const { unreadTotal } = await this.unreadCount(userId, { projectId: project, severity });
     return { items, nextCursor: result.rows.length > limit && last
       ? Buffer.from(JSON.stringify([last.priority, last.createdAt, last.id])).toString("base64url") : null, unreadTotal };
   }
@@ -573,25 +579,32 @@ export class NotificationService {
    * Scoped like the list: every project of the account unless a project is
    * named, and then that project plus the account-wide items (a user-scoped
    * memory notice belongs to no project and to every one).
-   * @param {string} userId @param {{ projectId?: string | null }} [options]
+   * `severity` narrows both numbers to one weight, for a list page that was asked for one.
+   * @param {string} userId @param {{ projectId?: string | null, severity?: string | null }} [options]
    */
-  async unreadCount(userId, { projectId = null } = {}) {
+  async unreadCount(userId, { projectId = null, severity = null } = {}) {
     const project = inboxProjectScope(projectId);
     await migrateNotifications(this.database);
     const result = await this.database.query(`SELECT count(*)::integer AS unread,
       count(*) FILTER (WHERE severity='safety')::integer AS safety
       FROM evimed_inbox.notifications WHERE user_id=$1 AND read_at IS NULL
-      AND ($2::text IS NULL OR project_id=$2 OR project_id IS NULL)`, [productId(userId, "user"), project]);
+      AND ($2::text IS NULL OR project_id=$2 OR project_id IS NULL) AND ($3::text IS NULL OR severity=$3)`, [productId(userId, "user"), project, severity]);
     return { unreadTotal: Number(result.rows[0]?.unread ?? 0), safetyUnread: Number(result.rows[0]?.safety ?? 0) };
   }
 
   /**
-   * Marks every unread item read, whatever actions it carries (C1).
+   * Marks every unread item read, whatever actions it carries (C1) — except a
+   * clinical-safety finding.
    *
    * No revision precondition, unlike the per-item path: "everything I have
    * not read, I have now seen" is idempotent and does not race with anything
    * a revision would protect. Resolution is untouched — a question marked
    * read is still a question.
+   *
+   * A safety finding is the one class allowed to interrupt, and the page pins
+   * the unread ones precisely so each is opened. One click that read
+   * twenty-seven of them unseen would make the pin decoration; they stay
+   * unread, and `safetyKept` says how many (2026-10-07, 收件箱 audit).
    * @param {string} userId @param {{ projectId?: string | null, noticeType?: string | null }} [options]
    */
   async markAllRead(userId, { projectId = null, noticeType = null } = {}) {
@@ -601,8 +614,11 @@ export class NotificationService {
     const result = await this.database.query(`UPDATE evimed_inbox.notifications
       SET read_at=clock_timestamp(),revision=revision+1,updated_at=clock_timestamp()
       WHERE user_id=$1 AND read_at IS NULL AND ($2::text IS NULL OR project_id=$2 OR project_id IS NULL)
+      AND ($3::text IS NULL OR notice_type=$3) AND severity<>'safety'`, [productId(userId, "user"), project, noticeType]);
+    const kept = await this.database.query(`SELECT count(*)::integer AS kept FROM evimed_inbox.notifications
+      WHERE user_id=$1 AND read_at IS NULL AND severity='safety' AND ($2::text IS NULL OR project_id=$2 OR project_id IS NULL)
       AND ($3::text IS NULL OR notice_type=$3)`, [productId(userId, "user"), project, noticeType]);
-    return { updated: Number(result.rowCount ?? 0) };
+    return { updated: Number(result.rowCount ?? 0), safetyKept: Number(kept.rows[0]?.kept ?? 0) };
   }
 
   /**

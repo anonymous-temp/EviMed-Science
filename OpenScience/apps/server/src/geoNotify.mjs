@@ -77,6 +77,12 @@ export function geoProductName(project) {
 }
 
 /**
+ * The longest statement a 讲错我方 title carries. A title is one line of an inbox row — on a phone, two — so a judge's whole
+ * sentence made it six; the sentence is the notice's body when the title had to shorten it.
+ */
+export const WRONG_OURS_TITLE_STATEMENT_MAX = 36;
+
+/**
  * The title of a 讲错我方 notice: the fact, in the engine's name.
  * 「DeepSeek 把玛仕度肽说成每天注射一次」 when the statement is phrased as the
  * judge phrases a misstatement (「把…说成…」) or begins with the product's
@@ -85,7 +91,7 @@ export function geoProductName(project) {
  */
 export function wrongOursTitle(project, error) {
   const engine = geoEngineLabel(String(error.engine ?? ""));
-  const statement = clip(error.statement, 90).replace(/[。．.!！]+$/, "");
+  const statement = clip(error.statement, WRONG_OURS_TITLE_STATEMENT_MAX).replace(/[。．.!！]+$/, "");
   const gap = /[A-Za-z0-9]$/.test(engine) ? " " : "";
   if (!statement) return `${engine}${gap}讲错了${geoProductName(project)}`;
   if (statement.startsWith("把")) return `${engine}${gap}${statement}`;
@@ -234,7 +240,10 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       const row = normalizedError(error);
       const idempotencyKey = key || `geo:wrong_ours:${row.id}:first`;
       const target = row.snapshotId ? source(project.id, "answers", row.snapshotId) : source(project.id, "diagnosis");
-      const body = row.evidenceQuote ? `依据：“${clip(row.evidenceQuote, 200)}”` : "点开看这条回答和依据。";
+      const evidence = row.evidenceQuote ? `依据：“${clip(row.evidenceQuote, 200)}”` : "点开看这条回答和依据。";
+      // The title shortens a long statement; the whole sentence is then the first line of the body.
+      const whole = clip(row.statement, 200);
+      const body = [...whole.replace(/[。．.!！]+$/, "")].length > WRONG_OURS_TITLE_STATEMENT_MAX ? `${whole}\n${evidence}` : evidence;
       if (GEO_URGENT_SEVERITIES.includes(String(row.severity))) {
         return send(project, "wrong_or_safety", {
           title: wrongOursTitle(project, row), body, severity: "safety", source: target, idempotencyKey,

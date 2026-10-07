@@ -68,8 +68,13 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return value.data as T;
 }
 
-export function listInbox({ unread = false, cursor = null, limit }: { unread?: boolean; cursor?: string | null; limit?: number } = {}) {
+/**
+ * `severity` narrows the page (and its `unreadTotal`) to one weight. The page asks for `safety` by name: the list is ordered by
+ * notice type, so the first pages are briefings and an unread clinical-safety finding can sit on a page nobody opens.
+ */
+export function listInbox({ unread = false, cursor = null, limit, severity }: { unread?: boolean; cursor?: string | null; limit?: number; severity?: InboxSeverity } = {}) {
   const query = new URLSearchParams({ unread: String(unread) });
+  if (severity) query.set("severity", severity);
   if (cursor) query.set("cursor", cursor);
   if (limit != null) query.set("limit", String(limit));
   return request<InboxPageResult>(`/inbox?${query}`);
@@ -94,9 +99,12 @@ export async function fetchInboxUnreadCount(): Promise<InboxUnreadCount> {
   return { unreadTotal, safetyUnread: Math.min(safetyUnread, unreadTotal) };
 }
 
-/** Marks every unread item read, whatever actions it carries. Idempotent. */
+/**
+ * Marks every unread item read, whatever actions it carries, except the clinical-safety findings: those stay unread so each is
+ * opened (`safetyKept` says how many). Idempotent.
+ */
 export function markAllInboxRead() {
-  return request<{ updated: number }>("/inbox/read-all", "POST", {});
+  return request<{ updated: number; safetyKept?: number }>("/inbox/read-all", "POST", {});
 }
 
 /**

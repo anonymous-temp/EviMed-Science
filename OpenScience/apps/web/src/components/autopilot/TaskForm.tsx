@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { AGENDA_DEFAULT_BUDGETS, AGENDA_MIN_EPISODE_BUDGET_CNY } from "@evimed/domain";
 import { createAgenda, getAgenda, startAgenda, updateAgenda, type AgendaRecord, type AgendaSchedule } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
+import { useProjectStore } from "@/lib/projects";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Input, Textarea, Select } from "@/components/ui/Input";
-import { scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, type Recommendation } from "./taskPresentation";
+import { recurrence, scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, zoneName, type Recommendation } from "./taskPresentation";
 
 export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorded, onBusyChange, onCancel }: {
   projectId: string; agenda?: AgendaRecord; recommendation?: Recommendation;
@@ -21,6 +22,7 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
   const [budgets, setBudgets] = useState({ maxEpisodeCny: agenda?.payload.maxEpisodeCny ?? AGENDA_DEFAULT_BUDGETS.maxEpisodeCny, dailyBudgetCny: agenda?.payload.dailyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.dailyBudgetCny, weeklyBudgetCny: agenda?.payload.weeklyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.weeklyBudgetCny });
   const minimum = `¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)}`;
   const episodeTooSmall = budgets.maxEpisodeCny < AGENDA_MIN_EPISODE_BUDGET_CNY;
+  const projectName = useProjectStore(state => state.projects.find(project => project.id === projectId)?.name);
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<AgendaRecord | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -88,6 +90,9 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
       </div></Disclosure>
     </fieldset>
     {error && <p role="alert" className="text-ui text-error">{error}</p>}
+    {/* What saving will set up, in one line, changing as the fields do: where it runs, how often, in which zone, at what cost. */}
+    <p className="text-caption text-text-3">{[projectName ? `在“${projectName}”运行` : "", schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule),
+      validZone ? zoneName(schedule.timeZone) : "", Number.isFinite(budgets.maxEpisodeCny) ? `单次最多 ¥${budgets.maxEpisodeCny}` : ""].filter(Boolean).join(" · ")}</p>
     <div className="flex justify-end gap-2 border-t border-border pt-4"><Button variant="secondary" disabled={saving} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button><Button type="submit" loading={saving} disabled={!valid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button></div>
   </form>;
 }

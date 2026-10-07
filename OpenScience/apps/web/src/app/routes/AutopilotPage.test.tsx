@@ -35,6 +35,13 @@ function render(path = "/app/autopilot?task=agenda-one") { return renderView(<Me
 </Routes></MemoryRouter>); }
 /** A task opens in a drawer on the right, named by the task. */
 const detail = async (title = "心衰证据追踪") => screen.findByRole("dialog", { name: title });
+/** The everyday actions are in the header; pausing, enabling and deleting are behind 「更多」. */
+const choose = async (panel: HTMLElement, name: string) => {
+  await userEvent.click(within(panel).getByRole("button", { name: "更多" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name }));
+};
+/** The task's record of runs, which is where a run's own state is said (the list and the status line say it too). */
+const record = (panel: HTMLElement) => within(within(panel).getByRole("list", { name: "任务记录" }));
 
 describe("scheduled tasks", () => {
   beforeEach(() => {
@@ -53,7 +60,9 @@ describe("scheduled tasks", () => {
     render(); const panel = await detail();
     expect(screen.getByRole("heading", { name: "定时任务", level: 1 })).toBeInTheDocument();
     expect(panel).toHaveTextContent("完整跟进心衰与肾病"); expect(panel).toHaveTextContent("保留原始指令");
-    expect(panel).toHaveTextContent("Asia/Shanghai"); expect(panel).toHaveTextContent("10月3日");
+    expect(panel).toHaveTextContent("中国标准时间"); expect(panel).not.toHaveTextContent("Asia/Shanghai"); expect(panel).toHaveTextContent("10月3日");
+    // How much one run may spend is said with the task, not under the box that sends a message.
+    expect(panel).toHaveTextContent("每周一、周五 07:30 · 中国标准时间 · 单次上限 ¥8");
     expect(panel).toHaveTextContent("已有研究结果"); expect(mocks.markDigestOpened).not.toHaveBeenCalled();
     await userEvent.click(within(panel).getByRole("button", { name: "关闭" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -94,7 +103,7 @@ describe("scheduled tasks", () => {
   });
   it("closes the drawer on Escape, but a confirmation opened from it takes that Escape for itself", async () => {
     render(); const panel = await detail();
-    await userEvent.click(within(panel).getByRole("button", { name: "暂停任务" }));
+    await choose(panel, "暂停任务");
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
@@ -130,7 +139,8 @@ describe("scheduled tasks", () => {
     expect(panel).toHaveTextContent("需要你补充：请补充原始数据表");
     expect(panel).toHaveTextContent("证据更新连续未能运行，已暂停");
     expect(panel).not.toHaveTextContent("文献追踪连续未能运行");
-    expect(within(panel).getByRole("button", { name: "启用任务" })).toBeEnabled();
+    await userEvent.click(within(panel).getByRole("button", { name: "更多" }));
+    expect(await screen.findByRole("menuitem", { name: "启用任务" })).toBeEnabled();
   });
   it("searches tasks and keeps selection in the URL", async () => {
     render("/app/autopilot"); await screen.findByText("心衰证据追踪");
@@ -183,11 +193,11 @@ describe("scheduled tasks", () => {
     expect(await screen.findByText(/任务已被更新/)).toBeInTheDocument(); expect(mocks.getAgenda).toHaveBeenCalledWith(agenda.id);
   });
   it("confirms pause cancellation and archive retention", async () => {
-    render(); await userEvent.click(within(await detail()).getByRole("button", { name: "暂停任务" }));
+    render(); await choose(await detail(), "暂停任务");
     const pause = screen.getByRole("alertdialog"); expect(pause).toHaveTextContent("取消正在进行和排队中的研究");
     expect(mocks.stopAgenda).not.toHaveBeenCalled(); await userEvent.click(within(pause).getByRole("button", { name: "暂停任务" }));
     await waitFor(() => expect(mocks.stopAgenda).toHaveBeenCalledWith(agenda.id, 2));
-    await userEvent.click(within(await detail()).getByRole("button", { name: "删除任务" }));
+    await choose(await detail(), "删除任务");
     const archive = screen.getByRole("alertdialog"); expect(archive).toHaveTextContent("保留历史研究结果");
     await userEvent.click(within(archive).getByRole("button", { name: "删除任务" }));
     await waitFor(() => expect(mocks.archiveAgenda).toHaveBeenCalledWith(agenda.id, 2));
@@ -196,7 +206,7 @@ describe("scheduled tasks", () => {
     mocks.listAgendas.mockResolvedValue({ items: [{ ...agenda, payload: { ...agenda.payload, enabled: false, status: "paused", scheduleState: "paused" } }] });
     render(); const panel = await detail(); expect(within(panel).getByRole("button", { name: "立即运行" })).toBeDisabled();
     expect(within(panel).getByLabelText("针对任务追问")).toBeDisabled(); expect(panel).toHaveTextContent("请先启用任务");
-    expect(mocks.startAgenda).not.toHaveBeenCalled(); await userEvent.click(within(panel).getByRole("button", { name: "启用任务" }));
+    expect(mocks.startAgenda).not.toHaveBeenCalled(); await choose(panel, "启用任务");
     await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, 2));
   });
   it("uses the same request id on retry and a new id for a deliberate new run", async () => {
@@ -250,7 +260,7 @@ describe("scheduled tasks", () => {
     await userEvent.type(within(panel).getByLabelText("针对任务追问"), "补充肾病亚组");
     await userEvent.click(within(panel).getByRole("button", { name: "发送追问" }));
     await waitFor(() => expect(mocks.followUpAgenda).toHaveBeenCalledWith(agenda.id, expect.objectContaining({ note: "补充肾病亚组", requestId: expect.any(String) })));
-    expect(await screen.findByText("排队中")).toBeInTheDocument(); expect(within(panel).getByLabelText("针对任务追问")).toHaveValue("");
+    expect(await record(panel).findByText("排队中")).toBeInTheDocument(); expect(within(panel).getByLabelText("针对任务追问")).toHaveValue("");
   });
   it("retains findings and secured artifact links, tracks actual result opening", async () => {
     mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, payload: { ...episode.payload, artifactRefs: [
@@ -266,7 +276,7 @@ describe("scheduled tasks", () => {
   });
   it("shows resource waits with previous results", async () => {
     mocks.listEpisodes.mockResolvedValue({ items: [episode, { ...episode, id: "wait", payload: { ...episode.payload, runId: null, sessionId: null, status: "queued", resourceDeferrals: { episode: { code: "credits_exhausted", status: "waiting" } } } }] });
-    render(); expect(await screen.findByText("等待余额")).toBeInTheDocument(); expect(screen.getAllByText(/已有研究结果/).length).toBeGreaterThan(0);
+    render(); const panel = await detail(); expect(await record(panel).findByText("等待余额")).toBeInTheDocument(); expect(screen.getAllByText(/已有研究结果/).length).toBeGreaterThan(0);
   });
   // A simulated wallet refuses under its own code, and a run it holds back waits, and reads, exactly as one a real wallet holds back.
   it.each([
@@ -275,7 +285,7 @@ describe("scheduled tasks", () => {
     ["runtime_busy", "waiting", "等待运行资源"], ["runtime_busy", "exhausted", "运行资源暂不可用"],
   ])("says a run held back by %s (%s) is 「%s」", async (code, status, label) => {
     mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, id: "held", payload: { ...episode.payload, runId: null, sessionId: null, status: "queued", resourceDeferrals: { episode: { code, status } } } }] });
-    render(); expect(await screen.findByText(label)).toBeInTheDocument();
+    render(); const panel = await detail(); expect(await record(panel).findByText(label)).toBeInTheDocument();
     for (const other of ["等待余额", "余额不足", "等待运行资源", "运行资源暂不可用"].filter(each => each !== label)) expect(screen.queryByText(other)).not.toBeInTheDocument();
   });
   it("fills a research recommendation with a prompt and weekly schedule", async () => {
@@ -294,7 +304,7 @@ describe("scheduled tasks", () => {
   it("refreshes queued work without a page reload", async () => {
     mocks.listEpisodes.mockResolvedValueOnce({ items: [{ ...episode, payload: { ...episode.payload, status: "queued" } }] }).mockResolvedValueOnce({ items: [{ ...episode, payload: { ...episode.payload, status: "queued" } }] });
     vi.useFakeTimers(); render(); await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(screen.getByText("排队中")).toBeInTheDocument();
+    expect(record(screen.getByRole("dialog")).getByText("排队中")).toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
     vi.useRealTimers(); await waitFor(() => expect(mocks.listEpisodes.mock.calls.length).toBeGreaterThan(2));
   });
@@ -366,7 +376,7 @@ describe("scheduled tasks", () => {
     mocks.listAgendas.mockResolvedValue({ items: [agenda, second] });
     mocks.listEpisodes.mockImplementation((_project: string, id?: string) => Promise.resolve({ items: id === "second" ? [{ ...episode, id: "second-episode", payload: { ...episode.payload, agendaId: "second", claims: [{ id: "second-claim", statement: "第二个任务的结果" }] } }] : [episode] }));
     mocks.stopAgenda.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })); render();
-    await userEvent.click(within(await detail()).getByRole("button", { name: "暂停任务" })); await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "暂停任务" }));
+    await choose(await detail(), "暂停任务"); await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "暂停任务" }));
     await userEvent.click(screen.getByRole("button", { name: "第二个任务" })); expect(await screen.findByText(/第二个任务的结果/)).toBeInTheDocument();
     const count = mocks.listEpisodes.mock.calls.filter(call => call[1] === agenda.id).length;
     await act(async () => { finish({ ...agenda, payload: { ...agenda.payload, enabled: false, status: "paused" } }); });
@@ -378,11 +388,176 @@ describe("scheduled tasks", () => {
     mocks.listEpisodes.mockImplementation((_project: string, id?: string) => Promise.resolve({ items: id === agenda.id
       ? [{ ...episode, payload: { ...episode.payload, status: ++historyReads === 1 ? "queued" : "merged" } }]
       : Array.from({ length: 100 }, (_, index) => ({ ...episode, id: `other-${index}`, payload: { ...episode.payload, agendaId: "other" } })) }));
-    vi.useFakeTimers(); render(); await act(async () => { await vi.advanceTimersByTimeAsync(0); }); expect(screen.getByText("排队中")).toBeInTheDocument();
+    vi.useFakeTimers(); render(); await act(async () => { await vi.advanceTimersByTimeAsync(0); }); expect(record(screen.getByRole("dialog")).getByText("排队中")).toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(6000); }); vi.useRealTimers();
-    expect(historyReads).toBeGreaterThan(1); expect(screen.queryByText("排队中")).not.toBeInTheDocument(); expect(screen.getByText("研究结果")).toBeInTheDocument();
+    expect(historyReads).toBeGreaterThan(1); expect(screen.queryByText("排队中")).not.toBeInTheDocument(); expect(record(screen.getByRole("dialog")).getByText("研究结果")).toBeInTheDocument();
   });
 
+
+  // ——— The list and the drawer read as a researcher's record (2026-10-07 audit, R11 LIFE-1) ———
+  it("says which project the page is for, as plain text next to the title", async () => {
+    useProjectStore.setState({ projects: [{ id: "project-one", name: "我的研究" } as never] });
+    try {
+      render("/app/autopilot");
+      const header = screen.getByRole("heading", { name: "定时任务", level: 1 }).closest("header")!;
+      expect(within(header).getByText("我的研究")).toBeInTheDocument();
+      expect(within(header).queryByRole("combobox")).not.toBeInTheDocument();
+    } finally { useProjectStore.setState({ projects: [] }); }
+  });
+  it("says in each row when it runs next and how its last run came out, or that it has not run", async () => {
+    const quiet = { ...agenda, id: "quiet", payload: { ...agenda.payload, title: "还没运行的任务", schedule: { kind: "daily", timeZone: "Asia/Shanghai", time: "07:00" } } };
+    const failed = { ...agenda, id: "failed", payload: { ...agenda.payload, title: "失败过的任务" } };
+    const running = { ...agenda, id: "running", payload: { ...agenda.payload, title: "正在跑的任务" } };
+    mocks.listAgendas.mockResolvedValue({ items: [agenda, quiet, failed, running] });
+    mocks.listEpisodes.mockResolvedValue({ items: [
+      { ...episode, payload: { ...episode.payload, createdAt: "2026-10-01T00:00:00Z" } },
+      { ...episode, id: "ep-new", payload: { ...episode.payload, createdAt: "2026-10-02T00:00:00Z", scheduledAt: "2026-10-02T00:00:00Z" } },
+      { ...episode, id: "ep-failed", payload: { ...episode.payload, agendaId: "failed", status: "failed", createdAt: "2026-10-02T00:00:00Z", scheduledAt: "2026-10-02T00:00:00Z" } },
+      { ...episode, id: "ep-run", payload: { ...episode.payload, agendaId: "running", status: "running", createdAt: "2026-10-02T00:00:00Z" } },
+    ] });
+    render("/app/autopilot");
+    const rows = (await screen.findByRole("region", { name: "即将执行" })).querySelectorAll("li");
+    const row = (title: string) => [...rows].find(each => each.textContent?.includes(title))!;
+    expect(row("心衰证据追踪")).toHaveTextContent("下次 10月3日 07:30 · 每周一、周五 07:30");
+    expect(row("心衰证据追踪")).toHaveTextContent("上次 10月2日 · 研究结果");
+    expect(row("失败过的任务")).toHaveTextContent("上次 10月2日 · 未完成");
+    expect(row("正在跑的任务")).toHaveTextContent("研究进行中");
+    expect(row("正在跑的任务")).not.toHaveTextContent("上次");
+    expect(row("还没运行的任务")).toHaveTextContent("还没有运行");
+    // Nothing of the engine: no zone identifier, no status word of the ledger.
+    for (const each of rows) expect(each.textContent).not.toMatch(/Asia\/|merged|failed|running/);
+  });
+  it("does not say a task never ran when its runs are only older than the list the page holds", async () => {
+    const older = { ...agenda, id: "older", payload: { ...agenda.payload, title: "很久以前跑过的任务", lastScheduledDate: `${new Date().getFullYear()}-03-04` } };
+    mocks.listAgendas.mockResolvedValue({ items: [older] }); mocks.listEpisodes.mockResolvedValue({ items: [] });
+    render("/app/autopilot");
+    const row = (await screen.findByRole("button", { name: "很久以前跑过的任务" })).closest("li")!;
+    expect(row).toHaveTextContent("上次 3月4日"); expect(row).not.toHaveTextContent("还没有运行");
+  });
+  it("offers a run's documents and keeps its scripts and intermediate files behind one line, nothing deleted", async () => {
+    const ref = (path: string) => ({ projectId: "project-one", runId: "run-one", sessionId: "ses-one", path });
+    mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, payload: { ...episode.payload, artifactRefs: [
+      ref("work/build_final.py"), ref("work/chk2.py"), ref("work/agenda-delta.json"), ref("deliverables/x/clinical-evidence-matrix.json"), ref("deliverables/x/clinical-evidence-report.md"),
+    ] } }] });
+    render(); const panel = await detail();
+    const log = record(panel).getByRole("listitem");
+    const links = within(log).getAllByRole("link").map(link => link.textContent);
+    // The report, then its matrix, then the conversation; the three working files are not among the links offered first.
+    expect(links.slice(0, 3)).toEqual(["证据分析报告", "证据矩阵", "打开运行对话"]);
+    const fold = log.querySelector("details")!;
+    expect(fold).toHaveTextContent("其他文件 3 个");
+    expect(fold).not.toHaveAttribute("open");
+    expect([...fold.querySelectorAll("a")].map(link => link.textContent)).toEqual(["build_final.py", "chk2.py", "agenda-delta.json"]);
+    expect(screen.queryByText("成果文件暂不可用")).not.toBeInTheDocument();
+  });
+  it("keeps saying a run's files are unavailable when only working files exist, and draws no fold when there are none", async () => {
+    const ref = (path: string) => ({ projectId: "project-one", runId: "run-one", sessionId: "ses-one", path });
+    mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, payload: { ...episode.payload, artifactRefs: [ref("work/patch_matrix.py")] } }] });
+    render(); const log = record(await detail()).getByRole("listitem");
+    expect(log).toHaveTextContent("成果文件暂不可用"); expect(log.querySelector("details")).toHaveTextContent("其他文件 1 个");
+    cleanup(); mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, payload: { ...episode.payload, instruction: agenda.payload.prompt, artifactRefs: [ref("reports/result.csv")] } }] });
+    render(); expect((await record(await detail()).findByRole("listitem")).querySelector("details")).toBeNull();
+  });
+  it("repeats the task's instruction behind a line only when a run was handed a different one", async () => {
+    mocks.listEpisodes.mockResolvedValue({ items: [
+      { ...episode, id: "same", payload: { ...episode.payload, createdAt: "2026-09-28T00:00:00Z", instruction: agenda.payload.prompt } },
+      { ...episode, id: "other", payload: { ...episode.payload, createdAt: "2026-09-29T00:00:00Z", instruction: "Previous frozen instruction" } },
+    ] });
+    render(); const panel = await detail();
+    const folds = [...panel.querySelectorAll("details")].filter(each => each.textContent?.includes("这次用的任务指令"));
+    expect(folds).toHaveLength(1); expect(folds[0]).toHaveTextContent("Previous frozen instruction");
+    expect(panel).not.toHaveTextContent("本次运行指令");
+  });
+  it("folds every run but the last two, oldest first, and has the newest on screen when the drawer opens", async () => {
+    const runs = Array.from({ length: 5 }, (_, index) => ({ ...episode, id: `ep-${index}`, payload: { ...episode.payload, createdAt: `2026-09-2${index}T00:00:00Z`, claims: [{ id: `c${index}`, statement: `第 ${index + 1} 次的发现` }] } }));
+    mocks.listEpisodes.mockResolvedValue({ items: [...runs].reverse() });
+    // jsdom has no layout: a scroll height stands in for the content, and the drawer must have gone to the end of it.
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get() { return this.classList.contains("overflow-y-auto") ? 1234 : 0; } });
+    try {
+      render(); const panel = await detail();
+      await within(panel).findByText(/第 5 次的发现/);
+      const earlier = within(panel).getByText("更早的 3 次运行").closest("details")!;
+      expect(earlier).not.toHaveAttribute("open");
+      expect(within(earlier).getAllByText(/次的发现/).map(each => each.textContent)).toEqual(["研究线索：第 1 次的发现", "研究线索：第 2 次的发现", "研究线索：第 3 次的发现"]);
+      expect(record(panel).getAllByText(/次的发现/).map(each => each.textContent)).toEqual(["研究线索：第 4 次的发现", "研究线索：第 5 次的发现"]);
+      const scroller = [...panel.querySelectorAll<HTMLElement>(".overflow-y-auto")].find(each => each.contains(within(panel).getByText("更早的 3 次运行")))!;
+      expect(scroller.scrollTop).toBe(1234);
+    } finally { if (height) Object.defineProperty(HTMLElement.prototype, "scrollHeight", height); else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight; }
+  });
+  it("folds no run when there are two or fewer", async () => {
+    render(); const panel = await detail();
+    await within(panel).findByText(/已有研究结果/);
+    expect(within(panel).queryByText(/更早的/)).not.toBeInTheDocument();
+  });
+  it("holds a long message of the researcher's to four lines with 展开, whole and untranslated", async () => {
+    const pasted = "Repair the retained clinical-evidence-synthesis package. ".repeat(12);
+    mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, payload: { ...episode.payload, trigger: "follow-up", followUpNote: pasted } }] });
+    // jsdom has no layout: the note is taller than the four lines it is given.
+    const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight"); const client = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get() { return this.classList.contains("line-clamp-4") ? 400 : 0; } });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get() { return this.classList.contains("line-clamp-4") ? 96 : 0; } });
+    try {
+      render(); const panel = await detail();
+      const note = await within(panel).findByText(pasted.trim());
+      expect(note).toHaveClass("line-clamp-4");
+      await userEvent.click(within(panel).getByRole("button", { name: "展开" }));
+      expect(note).not.toHaveClass("line-clamp-4");
+      await userEvent.click(within(panel).getByRole("button", { name: "收起" }));
+      expect(note).toHaveClass("line-clamp-4");
+    } finally {
+      if (scroll) Object.defineProperty(HTMLElement.prototype, "scrollHeight", scroll); else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+      if (client) Object.defineProperty(HTMLElement.prototype, "clientHeight", client); else delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+    }
+  });
+  it("offers no 展开 for a message that fits", async () => {
+    mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, payload: { ...episode.payload, trigger: "follow-up", followUpNote: "补充肾病亚组" } }] });
+    render(); const panel = await detail();
+    expect(await within(panel).findByText("补充肾病亚组")).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "展开" })).not.toBeInTheDocument();
+  });
+  it("keeps 编辑任务 and 立即运行 in the header, and puts pausing and deleting behind 更多 with the delete last and red", async () => {
+    render(); const panel = await detail();
+    expect(within(panel).getByRole("button", { name: "编辑任务" })).toBeInTheDocument(); expect(within(panel).getByRole("button", { name: "立即运行" })).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "暂停任务" })).not.toBeInTheDocument(); expect(within(panel).queryByRole("button", { name: "删除任务" })).not.toBeInTheDocument();
+    await userEvent.click(within(panel).getByRole("button", { name: "更多" }));
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map(each => each.textContent)).toEqual(["暂停任务", "删除任务"]);
+    expect(items[1]).toHaveClass("text-danger");
+  });
+  it("closes the 更多 menu on Escape without closing the drawer", async () => {
+    render(); const panel = await detail();
+    await userEvent.click(within(panel).getByRole("button", { name: "更多" })); await screen.findByRole("menu");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "心衰证据追踪" })).toBeInTheDocument();
+  });
+  it("says above the progress how the last run came out, and that the task needs material when it does", async () => {
+    const stopped = { ...agenda, payload: { ...agenda.payload, enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null,
+      plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" } } };
+    mocks.listAgendas.mockResolvedValue({ items: [stopped] }); mocks.getAgenda.mockResolvedValue(stopped);
+    mocks.getResearchState.mockResolvedValue(state({ found: [{ statement: "获益一致", check: "stands", sources: 2, date: "2026-09-28" }] }));
+    render(); const panel = await detail();
+    const progress = (await within(panel).findByText("研究进展")).closest("div")!.parentElement!;
+    expect(progress).toHaveTextContent(/上次 9月29日 \d{2}:\d{2} · 研究结果 · 需要你补充/);
+  });
+  it("holds a long unresolved conclusion to three lines with 展开", async () => {
+    const long = "这是一条很长的待复核结论。".repeat(40);
+    mocks.getResearchState.mockResolvedValue(state({ unresolved: [{ kind: "check_unavailable", text: long }] }));
+    const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight"); const client = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get() { return this.classList.contains("line-clamp-3") ? 300 : 0; } });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get() { return this.classList.contains("line-clamp-3") ? 72 : 0; } });
+    try {
+      render(); const panel = await detail();
+      const item = await within(panel).findByText(new RegExp(`^复核未能进行：${long.slice(0, 8)}`));
+      expect(item).toHaveClass("line-clamp-3");
+      await userEvent.click(within(panel).getByRole("button", { name: "展开" }));
+      expect(item).not.toHaveClass("line-clamp-3");
+    } finally {
+      if (scroll) Object.defineProperty(HTMLElement.prototype, "scrollHeight", scroll); else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+      if (client) Object.defineProperty(HTMLElement.prototype, "clientHeight", client); else delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+    }
+  });
 
   // ——— Question and material to observable research to supplement (plan §11.3 N11) ———
   it("shows what was found, what is unresolved and the material added, from the server's reading of the question", async () => {

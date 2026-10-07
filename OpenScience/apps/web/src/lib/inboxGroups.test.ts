@@ -52,6 +52,16 @@ describe("orderInbox", () => {
     expect(order.rest.map((entry) => entry.id)).toEqual(["a", "s-read", "read"]);
   });
 
+  it("pins what the server found for the class even when the loaded page does not hold it, and never repeats a row", () => {
+    const order = orderInbox(
+      [item({ id: "a", createdAt: todayAt(14) }), item({ id: "s-loaded", severity: "safety", createdAt: todayAt(9) })],
+      [item({ id: "s-far", severity: "safety", createdAt: todayAt(3) }), item({ id: "s-loaded", severity: "safety", createdAt: todayAt(9) }),
+        item({ id: "s-read", severity: "safety", readAt: todayAt(4), createdAt: todayAt(4) })],
+    );
+    expect(order.pinned.map((entry) => entry.id)).toEqual(["s-loaded", "s-far"]);
+    expect(order.rest.map((entry) => entry.id)).toEqual(["a"]);
+  });
+
   it("renders a merged or a digest item as a row like any other: nothing is folded", () => {
     const order = orderInbox([
       item({ id: "c1", title: "阿司匹林一级预防 已完成" }),

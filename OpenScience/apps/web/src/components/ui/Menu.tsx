@@ -94,6 +94,9 @@ export function Menu({
           side="bottom"
           sideOffset={4}
           collisionPadding={8}
+          // The press that dismisses a menu is the menu's alone: a menu opened inside a drawer or a dialog must not hand the same
+          // Escape on to it (the layer listens on the document, and Radix's own listener runs first and does not stop it).
+          onEscapeKeyDown={(event) => event.stopPropagation()}
           onOpenAutoFocus={(event) => {
             // The first item takes focus, as in a menu — not the container.
             event.preventDefault();

@@ -195,11 +195,55 @@ test("the unread count is every unread item, severity is stored, a quiet record 
     const readSafety = await service.markRead(user, safety.id, safety.revision);
     assert.ok(readSafety.readAt);
     assert.equal(readSafety.resolvedAt, null, "reading is not resolving");
-    assert.deepEqual(await service.markAllRead(user, { projectId: "default" }), { updated: 56 }, "the project's items and the account-wide question");
+    assert.deepEqual(await service.markAllRead(user, { projectId: "default" }), { updated: 56, safetyKept: 0 }, "the project's items and the account-wide question");
     assert.deepEqual(await service.unreadCount(user), { unreadTotal: 0, safetyUnread: 0 });
-    assert.deepEqual(await service.markAllRead(user), { updated: 0 }, "idempotent");
+    assert.deepEqual(await service.markAllRead(user), { updated: 0, safetyKept: 0 }, "idempotent");
     assert.equal((await service.get(user, question.id)).resolvedAt, null, "a question marked read is still a question");
     await assert.rejects(service.markAllRead(user, { noticeType: "digest" }), { code: "notification_filter_invalid" });
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [user]);
+  }
+});
+
+// 2026-10-07: 306 unread, 27 of them safety — and the safety ones were notify notices, which the list orders after every
+// briefing, so the first pages held none of them and the pinned section could not find them.
+test("a list can be asked for one severity, so an unread safety finding behind fifty briefings is found; read-all leaves safety unread", options, async () => {
+  const user = `safety_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Safety owner','development')", [user]);
+  try {
+    await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Safety',1048576)", [user]);
+    const safety = [];
+    for (let index = 0; index < 2; index += 1) {
+      safety.push(await service.create(user, { noticeType: "notify", title: `Kimi 讲错 ${index}`, body: "点开看。", projectId: "default", severity: "safety",
+        actions: [{ id: "open", label: "打开" }] }));
+    }
+    // More briefings than a page: they order before every notify notice.
+    for (let index = 0; index < 55; index += 1) {
+      await service.create(user, { noticeType: "review", title: `Briefing ${index}`, body: "3 条重点发现。", projectId: "default",
+        actions: [{ id: "open", label: "查看" }] });
+    }
+    const firstPage = await service.list(user, { unreadOnly: true });
+    assert.equal(firstPage.items.length, 50);
+    assert.equal(firstPage.items.some((item) => item.severity === "safety"), false, "the safety notices are not on the first page");
+    assert.equal(firstPage.unreadTotal, 57);
+
+    const found = await service.list(user, { unreadOnly: true, severity: "safety" });
+    assert.deepEqual(found.items.map((item) => item.id).sort(), safety.map((item) => item.id).sort());
+    assert.equal(found.unreadTotal, 2, "the filtered count, the one the bell calls safetyUnread");
+    assert.equal(found.nextCursor, null);
+    assert.equal((await service.list(user, { unreadOnly: true, severity: "safety", limit: 1 })).nextCursor === null, false, "the filter pages like the list");
+    assert.equal((await service.list(user, { severity: "info" })).items.length, 0);
+    await assert.rejects(service.list(user, { severity: "urgent" }), { code: "notification_filter_invalid" });
+    assert.deepEqual(await service.unreadCount(user, { severity: "safety" }), { unreadTotal: 2, safetyUnread: 2 });
+
+    // A sweep reads the briefings and keeps the findings the page pinned for the reader to open.
+    assert.deepEqual(await service.markAllRead(user), { updated: 55, safetyKept: 2 });
+    assert.deepEqual(await service.unreadCount(user), { unreadTotal: 2, safetyUnread: 2 });
+    assert.deepEqual(await service.markAllRead(user), { updated: 0, safetyKept: 2 }, "idempotent, and the findings are still counted");
+    assert.deepEqual(await service.markAllRead(user, { noticeType: "review" }), { updated: 0, safetyKept: 0 }, "kept findings are counted in the scope of the sweep");
+    // Opening one reads it, as ever.
+    await service.markRead(user, safety[0].id, safety[0].revision);
+    assert.deepEqual(await service.unreadCount(user), { unreadTotal: 1, safetyUnread: 1 });
   } finally {
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [user]);
   }

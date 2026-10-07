@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { IconButton } from "@/components/ui/IconButton";
 import { LoadError } from "@/components/cards/LoadError";
+import { ClampedText } from "./ClampedText";
 import { FOUND_PREFIX, MATERIAL_STATE, needsMaterial, unresolvedText } from "./taskPresentation";
 
 /**
@@ -13,8 +14,10 @@ import { FOUND_PREFIX, MATERIAL_STATE, needsMaterial, unresolvedText } from "./t
  * account of the research. What is asked of the researcher is said once, in the
  * header, by the planner's own words; the button here is the way to give it.
  */
-export function ResearchProgress({ agenda, state, error, busy, onAdd, onPick, onRemove, onRetry }: {
+export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, onPick, onRemove, onRetry }: {
   agenda: AgendaRecord; state: ResearchState | null; error: string | null; busy: boolean;
+  /** How the last run came out (`lastRunLine`): said above the card, so the first thing read is whether the question moved. */
+  lastRun?: string;
   onAdd: () => void; onPick: () => void; onRemove: (sourceId: string) => void; onRetry: () => void;
 }) {
   if (error) return <LoadError message={error} onRetry={onRetry} />;
@@ -22,9 +25,11 @@ export function ResearchProgress({ agenda, state, error, busy, onAdd, onPick, on
   const waiting = needsMaterial(agenda);
   const section = (label: string, items: string[]) => items.length > 0 && <section aria-label={label} className="space-y-1">
     <h3 className="text-caption font-medium text-text-3">{label}</h3>
-    <ul className="space-y-1 text-ui text-text">{items.map(item => <li key={item} className="whitespace-pre-wrap break-words leading-relaxed">{item}</li>)}</ul>
+    <ul className="space-y-1 text-ui text-text">{items.map(item => <li key={item} className="leading-relaxed"><ClampedText text={item} lines={3} /></li>)}</ul>
   </section>;
-  return <Card title="研究进展" className="max-w-body">
+  return <div className="max-w-body space-y-2">
+    {lastRun && <p className="text-caption text-text-3">{lastRun}{waiting && " · 需要你补充"}</p>}
+    <Card title="研究进展">
     <div className="space-y-4">
       {section("已发现", state.found.map(item => `${FOUND_PREFIX[item.check]}${item.statement}`))}
       {section("尚未解决", state.unresolved.map(unresolvedText))}
@@ -42,5 +47,6 @@ export function ResearchProgress({ agenda, state, error, busy, onAdd, onPick, on
         </div>
       </section>
     </div>
-  </Card>;
+    </Card>
+  </div>;
 }
