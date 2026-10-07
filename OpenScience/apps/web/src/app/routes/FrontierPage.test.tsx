@@ -17,8 +17,6 @@ import { Toaster } from "@/components/ui/Toaster";
 import { frontierItem } from "@/components/frontier/__fixtures__/frontierItems";
 import { FrontierPage } from "./FrontierPage";
 
-vi.mock("@/components/frontier/FollowedEvidenceZones", () => ({ FollowedEvidenceZones: () => <section aria-label="关注的证据专区" /> }));
-
 const client = vi.hoisted(() => ({
   useFrontierFeature: vi.fn(),
   listFrontierFollows: vi.fn(),
@@ -43,6 +41,12 @@ const client = vi.hoisted(() => ({
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/frontierClient")>()),
   ...client,
+}));
+// The followed zones the 关注 view reads (the page itself needs only their number).
+const zones = vi.hoisted(() => ({ listEvidenceZones: vi.fn(), listFollowedEvidence: vi.fn() }));
+vi.mock("@/lib/evidenceZoneClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/evidenceZoneClient")>()),
+  ...zones,
 }));
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
@@ -71,7 +75,7 @@ function status(overrides: Partial<FrontierStatus> = {}): FrontierStatus {
 }
 
 function page(items: FrontierItem[], overrides: Partial<FrontierItemsPage> = {}): FrontierItemsPage {
-  return { items, nextCursor: null, version: "1", mode: "list", restarted: false, ...overrides };
+  return { items, nextCursor: null, version: "1", mode: "list", related: false, restarted: false, ...overrides };
 }
 
 function hotEvent(rank: number, overrides: Partial<FrontierHotEvent> = {}): FrontierHotEvent {
@@ -87,6 +91,7 @@ function board(events: FrontierHotEvent[], overrides: Partial<FrontierHotBoard> 
   return { window: "current", takenAt: ago(0.2), since: ago(72.2), events, ...overrides };
 }
 
+const followedZone = { id: "ez_1", title: "房颤抗凝", evidenceCount: 4 };
 const today = frontierItem({ id: "today-1", title: "今天的一条 RCT", timelineAt: new Date(Date.now() - 1000).toISOString(), score: 86, scoreBand: "high" });
 const yesterday = frontierItem({ id: "yesterday-1", title: "昨天的一条指南", timelineAt: beforeMidnight(6) });
 const alert = frontierItem({ id: "alert-1", title: "I 级召回：葡萄糖注射液含不锈钢颗粒", safetyAlert: true, lane: "safety", laneLabel: "药物安全",
@@ -126,6 +131,9 @@ beforeEach(() => {
   useToastStore.setState({ toasts: [] });
   client.useFrontierFeature.mockReturnValue("on");
   client.listFrontierFollows.mockResolvedValue([{ id: "7", kind: "topic", key: "obesity", label: "肥胖研究", muted: false }]);
+  Object.values(zones).forEach((mock) => mock.mockReset());
+  zones.listEvidenceZones.mockResolvedValue({ items: [followedZone], nextCursor: null });
+  zones.listFollowedEvidence.mockResolvedValue({ items: [], nextCursor: null });
   client.fetchFrontierStatus.mockResolvedValue(status());
   feed = async () => page([today, yesterday]);
   alerts = async () => page([alert, alert2, oldAlert]);
@@ -329,6 +337,37 @@ describe("search", () => {
     await userEvent.clear(screen.getByRole("searchbox", { name: "搜索" }));
     await waitFor(() => expect(location()).toBe("/app/frontier"));
     expect(viewTabs().getByRole("tab", { name: "精选" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("says once, above the results, that a search found words nowhere and these are the nearest by meaning", async () => {
+    feed = async (query) => (query.q ? page([today], { mode: "hybrid", related: true }) : page([today]));
+    renderPage("/app/frontier?view=all&q=ui-audit-no-match-20261007");
+    const results = await screen.findByRole("region", { name: "搜索结果" });
+    expect(within(results).getByText("没有找到包含“ui-audit-no-match-20261007”的动态，下面是意思相近的内容")).toBeInTheDocument();
+    expect(within(results).getAllByRole("article")).toHaveLength(1);
+  });
+
+  it("says nothing of the kind about a search that matched its words", async () => {
+    feed = async (query) => (query.q ? page([today], { mode: "keyword", related: false }) : page([today]));
+    renderPage("/app/frontier?view=all&q=%E5%8F%B8%E7%BE%8E");
+    const results = await screen.findByRole("region", { name: "搜索结果" });
+    expect(results).not.toHaveTextContent("意思相近");
+  });
+
+  it("clears the query with the box's ✕ and with Escape, and the view it began in comes back", async () => {
+    // The default `userEvent`: `setup()` would replace the clipboard the 日报 tests below stub.
+    const user = userEvent;
+    renderPage("/app/frontier?view=hot");
+    await user.type(screen.getByRole("searchbox", { name: "搜索" }), "司美");
+    await waitFor(() => expect(location()).toContain("q="));
+    await user.click(screen.getByRole("button", { name: "清除搜索" }));
+    await waitFor(() => expect(location()).toBe("/app/frontier?view=hot"));
+    expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveValue("");
+    expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveFocus();
+    await user.type(screen.getByRole("searchbox", { name: "搜索" }), "司美");
+    await waitFor(() => expect(location()).toContain("q="));
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(location()).toBe("/app/frontier?view=hot"));
   });
 
   it("says in one sentence that nothing matched", async () => {
@@ -690,8 +729,8 @@ describe("日报", () => {
     const sections = screen.getAllByRole("list").filter((list) => list.tagName === "OL");
     expect(sections[0]).toBe(safety);
     expect(within(safety).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/^01I 级召回：葡萄糖注射液含不锈钢颗粒FDA阅读详情·原文/),
-      expect.stringMatching(/^02氯巴占口服混悬液条形码错误英国 MHRA阅读详情·原文/),
+      expect.stringMatching(/^01I 级召回：葡萄糖注射液含不锈钢颗粒FDA详情$/),
+      expect.stringMatching(/^02氯巴占口服混悬液条形码错误英国 MHRA详情$/),
     ]);
     expect(document.body.textContent).not.toMatch(/API|openFDA/);
     for (const list of sections) {
@@ -826,14 +865,83 @@ it("clears an owned follow when the reader changes view", async () => {
 
 it("lists the followed evidence zones as the first group of the feed, under the one control row", async () => {
   renderPage("/app/frontier?view=following");
-  const zones = await screen.findByRole("region", { name: "关注的证据专区" });
+  const group = await screen.findByRole("region", { name: "关注的证据专区" });
   const panel = screen.getByRole("tabpanel");
-  expect(panel).toContainElement(zones);
+  expect(panel).toContainElement(group);
+  expect(within(group).getByRole("link", { name: "房颤抗凝" })).toHaveAttribute("href", "/app/frontier/zones/ez_1");
   // The filters and 「管理关注」 are in the row above, not in a row of their own below it.
   expect(within(panel).queryByRole("button", { name: "管理关注" })).not.toBeInTheDocument();
   expect(within(controlRow()).getByRole("button", { name: "管理关注" })).toBeInTheDocument();
   expect(within(controlRow()).getByRole("button", { name: "全部栏目" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "全部关注" })).not.toBeInTheDocument();
+});
+
+describe("关注 with nothing to show yet", () => {
+  beforeEach(() => {
+    client.listFrontierFollows.mockResolvedValue([]);
+    zones.listEvidenceZones.mockResolvedValue({ items: [], nextCursor: null });
+  });
+
+  it("is one sentence and the way to start — no 「没有结果」, no filters, no second 「管理关注」, and no read of the feed", async () => {
+    renderPage("/app/frontier?view=following");
+    expect(await screen.findByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "添加关注" })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "浏览证据专区" })).toHaveAttribute("href", "/app/frontier/zones");
+    expect(screen.queryByText("没有结果")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "关注的证据专区" })).not.toBeInTheDocument();
+    const row = within(controlRow());
+    expect(row.queryByRole("button", { name: "管理关注" })).not.toBeInTheDocument();
+    expect(row.queryByRole("button", { name: "全部栏目" })).not.toBeInTheDocument();
+    expect(row.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument();
+    expect(feedQueries()).toEqual([]);
+  });
+
+  it("opens 管理关注 from the one button, and shows the first follow's results as soon as it is made", async () => {
+    const user = userEvent.setup();
+    renderPage("/app/frontier?view=following");
+    await user.click(await screen.findByRole("button", { name: "添加关注" }));
+    const drawer = await screen.findByRole("dialog", { name: "管理关注" });
+    client.listFrontierFollows.mockResolvedValue([{ id: "7", kind: "topic", key: "obesity", label: "肥胖研究", muted: false }]);
+    await act(async () => { window.dispatchEvent(new Event("evimed:frontier-follows-changed")); });
+    await waitFor(() => expect(client.listFrontierItems).toHaveBeenCalledWith(expect.objectContaining({ follow: "all", view: "all" })));
+    expect(await screen.findByText("今天的一条 RCT")).toBeInTheDocument();
+    expect(screen.queryByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).not.toBeInTheDocument();
+    expect(within(controlRow()).getByRole("button", { name: "全部栏目" })).toBeInTheDocument();
+    expect(drawer).toBeInTheDocument();
+  });
+
+  it("says that the follows could not be read, rather than that there are none", async () => {
+    client.listFrontierFollows.mockRejectedValue(new WebApiError("down", { status: 502 }));
+    renderPage("/app/frontier?view=following");
+    expect(await screen.findByRole("alert")).toHaveTextContent("服务暂时不可用，请稍后重试。");
+    expect(screen.queryByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).not.toBeInTheDocument();
+    client.listFrontierFollows.mockResolvedValue([]);
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).toBeInTheDocument();
+  });
+});
+
+it("with only zones followed shows the zones and no feed block, no 「没有结果」, no filters — only the way to add a follow", async () => {
+  client.listFrontierFollows.mockResolvedValue([]);
+  renderPage("/app/frontier?view=following");
+  await screen.findByRole("region", { name: "关注的证据专区" });
+  expect(screen.queryByText("没有结果")).not.toBeInTheDocument();
+  expect(feedQueries()).toEqual([]);
+  expect(within(controlRow()).getByRole("button", { name: "管理关注" })).toBeInTheDocument();
+  expect(within(controlRow()).queryByRole("button", { name: "全部栏目" })).not.toBeInTheDocument();
+});
+
+it("says 「关注的内容暂时没有新动态」 — not 「没有结果」 — when what is followed has nothing new", async () => {
+  feed = async () => page([]);
+  renderPage("/app/frontier?view=following");
+  expect(await screen.findByText("关注的内容暂时没有新动态")).toBeInTheDocument();
+  expect(screen.queryByText("没有结果")).not.toBeInTheDocument();
+});
+
+it("keeps 「没有结果」 for a narrowed follow or a filter that excluded everything", async () => {
+  feed = async () => page([]);
+  renderPage("/app/frontier?view=following&follow=7");
+  expect(await screen.findByText("没有结果")).toBeInTheDocument();
 });
 
 it("selects a saved topic into the URL without using private memory", async () => {
@@ -854,10 +962,25 @@ it("a safety deep link loads its item while the ordinary feed remains usable", a
   expect(controlRow().compareDocumentPosition(related) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(within(related).getByRole("listitem").parentElement?.tagName).toBe("UL");
 });
-it("an absent linked item does not hide the ordinary feed", async () => {
+it("a linked item that is gone for good is one grey line over the feed, and 「关闭」 takes it out of the address", async () => {
   client.fetchFrontierItem.mockRejectedValue(new WebApiError("gone", { status: 404, code: "frontier_item_not_found" }));
-  renderPage("/app/frontier?item=gone"); await waitFor(() => expect(client.fetchFrontierItem).toHaveBeenCalledWith("gone"));
-  await screen.findByRole("button", { name: "重试" }); expect(viewTabs().getByRole("tab", { name: "全部" })).toBeEnabled();
+  renderPage("/app/frontier?view=all&item=gone"); await waitFor(() => expect(client.fetchFrontierItem).toHaveBeenCalledWith("gone"));
+  expect(await screen.findByText("这条动态已下架，不再提供。")).toBeInTheDocument();
+  // Not a failure: no red box, nothing to retry, no heading over a list that is not there.
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "相关动态" })).not.toBeInTheDocument();
+  expect(viewTabs().getByRole("tab", { name: "全部" })).toBeEnabled();
+  expect(await screen.findByText("今天的一条 RCT")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "关闭" }));
+  expect(location()).toBe("/app/frontier?view=all");
+  expect(screen.queryByText("这条动态已下架，不再提供。")).not.toBeInTheDocument();
+});
+it("a linked item that could not be read still offers 「重试」", async () => {
+  client.fetchFrontierItem.mockRejectedValueOnce(new WebApiError("down", { status: 502 })).mockResolvedValueOnce(frontierItem({ id: "linked", title: "指定安全公告" }));
+  renderPage("/app/frontier?item=linked");
+  await userEvent.click(await screen.findByRole("button", { name: "重试" }));
+  expect(await screen.findByText("指定安全公告")).toBeInTheDocument();
 });
 it("weekly selection is restored from the URL and an empty archive stays in its own view", async () => {
   client.listFrontierWeeklies.mockResolvedValue([]); client.fetchFrontierWeekly.mockResolvedValue(null);
@@ -872,16 +995,24 @@ it("shows the aggregate following feed before opening its management drawer", as
   await userEvent.click(screen.getByRole("button", { name: "管理关注" }));
   expect(await screen.findByRole("dialog", { name: "管理关注" })).toBeInTheDocument();
 });
-it("lets the reader expand a summary and read details without replacing the original title link", async () => {
-  renderPage();
-  const title = await screen.findByRole("link", { name: "今天的一条 RCT" });
-  const card = title.closest("article")!;
-  const expand = within(card).getByRole("button", { name: "展开摘要" });
-  await userEvent.click(expand);
-  expect(expand).toHaveAttribute("aria-expanded", "true");
-  expect(title).toHaveAttribute("target", "_blank");
-  await userEvent.click(within(card).getByRole("button", { name: "阅读详情" }));
-  expect(await screen.findByRole("dialog", { name: "今天的一条 RCT" })).toBeInTheDocument();
+it("lets the reader expand a cut summary and read details without replacing the original title link", async () => {
+  // jsdom lays nothing out: a summary is cut where the test says its text overflows.
+  const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("line-clamp-3") ? 120 : 60; });
+  const clientHeight = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(60);
+  try {
+    renderPage();
+    const title = await screen.findByRole("link", { name: "今天的一条 RCT" });
+    const card = title.closest("article")!;
+    const expand = within(card).getByRole("button", { name: "展开摘要" });
+    await userEvent.click(expand);
+    expect(expand).toHaveAttribute("aria-expanded", "true");
+    expect(title).toHaveAttribute("target", "_blank");
+    await userEvent.click(within(card).getByRole("button", { name: "详情" }));
+    expect(await screen.findByRole("dialog", { name: "今天的一条 RCT" })).toBeInTheDocument();
+  } finally {
+    scrollHeight.mockRestore();
+    clientHeight.mockRestore();
+  }
 });
 
 it("restores loaded pages and expansion by fetching fresh authenticated content", async () => {

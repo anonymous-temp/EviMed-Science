@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FrontierDaily } from "@/lib/frontierClient";
 import { DailyIssue, type DailyState } from "./DailyView";
 
-vi.mock("./FrontierDetails", () => ({ FrontierDetails: () => null }));
+vi.mock("./FrontierDetails", () => ({ FrontierDetails: () => null, frontierDetailsOffered: () => false }));
 
 const issue = (overrides: Partial<FrontierDaily> = {}): FrontierDaily => ({
   day: "2026-09-22", windowStart: null, windowEnd: null, generatedAt: null, lead: null, sections: [], safety: [], aiMinute: null,

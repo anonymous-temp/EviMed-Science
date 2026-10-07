@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useToastStore } from "@/lib/toast";
 import { Toaster } from "@/components/ui/Toaster";
@@ -217,6 +217,64 @@ describe("its actions", () => {
     expect(handlers.onTag).toHaveBeenLastCalledWith({ kind: "specialty", key: "cardiology", label: "心血管" });
     await userEvent.click(screen.getByRole("button", { name: "#高胆固醇血症" }));
     expect(handlers.onTag).toHaveBeenLastCalledWith({ kind: "term", key: "高胆固醇血症", label: "高胆固醇血症" });
+  });
+});
+
+describe("the card's footer", () => {
+  // jsdom lays nothing out: a summary is cut where the test says its text overflows.
+  const spies: Array<{ mockRestore: () => void }> = [];
+  const cutAt = (overflowing: boolean) => {
+    spies.push(vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(overflowing ? 120 : 60));
+    spies.push(vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(60));
+  };
+  afterEach(() => { spies.splice(0).forEach((spy) => spy.mockRestore()); });
+  /** An item the drawer would add nothing to: a newsroom's report, in the reader's own language, with no abstract or facts. */
+  const plain = (overrides: Record<string, unknown> = {}) => frontierItem({ sourceType: "media", titleZh: null, doi: null, pmid: null, facts: {}, openAccess: null, ...overrides });
+
+  it("offers 「展开摘要」 only where the summary is really cut, and 「收起摘要」 once it is open", async () => {
+    cutAt(true);
+    const handlers = renderCard(plain(), { expanded: false, onExpand: vi.fn() });
+    expect(screen.getByRole("button", { name: "展开摘要" })).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(screen.getByRole("button", { name: "展开摘要" }));
+    expect(handlers.onStar).not.toHaveBeenCalled();
+  });
+
+  it("has no 「展开摘要」 for a summary that fits, but keeps 「收起摘要」 for one that was opened", () => {
+    cutAt(false);
+    const { unmount } = render(<MemoryRouter><ul><FrontierCard item={plain()} onExpand={vi.fn()} onStar={vi.fn()} onHide={vi.fn()} /></ul></MemoryRouter>);
+    expect(screen.queryByRole("button", { name: "展开摘要" })).not.toBeInTheDocument();
+    unmount();
+    render(<MemoryRouter><ul><FrontierCard item={plain()} expanded onExpand={vi.fn()} onStar={vi.fn()} onHide={vi.fn()} /></ul></MemoryRouter>);
+    expect(screen.getByRole("button", { name: "收起摘要" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("says 「详情」 only where the drawer holds something the card does not, and never 「阅读详情」", () => {
+    renderCard(plain());
+    const card = screen.getByRole("article");
+    expect(within(card).queryByRole("button", { name: "详情" })).not.toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: "阅读详情" })).not.toBeInTheDocument();
+    // What it still shows: the star, 「深入研究」 and 「⋯」 (and the details in 「⋯ › 详情」, below).
+    expect(within(card).getByRole("button", { name: "收藏" })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "深入研究" })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "更多操作" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["a paper, which may have an abstract", { sourceType: "journal" }],
+    ["facts the card left out", { facts: { journal: "NEJM", impact_factor: 78.5 } }],
+    ["an original title behind a translated one", { titleRaw: "Original title", titleZh: "译名" }],
+    ["a free full text", { openAccess: { status: "gold", pdfUrl: "https://europepmc.org/articles/PMC1/pdf" } }],
+  ])("offers 「详情」 for %s", async (_name, overrides) => {
+    renderCard(plain(overrides));
+    await userEvent.click(within(screen.getByRole("article")).getByRole("button", { name: "详情" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("keeps the details reachable from 「⋯」 for the item that shows no button", async () => {
+    renderCard(plain());
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "详情" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 });
 

@@ -84,18 +84,37 @@ describe("an event", () => {
     expect(digest).toHaveTextContent("最新缓释脂质体注射剂在大鼠中实现持续 2 至 3 周神经阻滞 · 3 小时前");
   });
 
-  it("puts every report on one timeline, newest first, the parties' own texts as filled dots and no filter", async () => {
+  it("puts the parties' own texts first under 「一手材料」, then the other reports, each newest first, and no filter below ten", async () => {
     renderEvent();
-    const reports = await screen.findByRole("list", { name: "报道" });
-    const rows = within(reports).getAllByRole("listitem");
-    expect(rows.map((row) => row.querySelector("p")?.textContent)).toEqual(["缓释脂质体注射剂在大鼠中实现持续神经阻滞", "一手来源：不饱和磷脂脂质体原文"]);
-    expect(rows[1].querySelector(".bg-accent")).not.toBeNull();
-    expect(rows[0].querySelector(".bg-accent")).toBeNull();
-    expect(rows[1]).toHaveTextContent("自然-生物医学工程·期刊·5 小时前·原文");
-    expect(within(rows[1]).getByRole("link", { name: "原文" })).toHaveAttribute("href", "https://www.nature.com/x");
+    const primary = await screen.findByRole("list", { name: "一手材料" });
+    const others = screen.getByRole("list", { name: "其他报道" });
+    const first = within(primary).getAllByRole("listitem");
+    expect(first.map((row) => row.querySelector("p")?.textContent)).toEqual(["一手来源：不饱和磷脂脂质体原文"]);
+    expect(within(others).getAllByRole("listitem").map((row) => row.querySelector("p")?.textContent)).toEqual(["缓释脂质体注射剂在大鼠中实现持续神经阻滞"]);
+    // 一手材料 is the first thing under 概要.
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+    expect(headings.slice(0, 3)).toEqual(["概要", "一手材料1", "其他报道1"]);
+    expect(first[0].querySelector(".bg-accent")).not.toBeNull();
+    expect(within(others).getByRole("listitem").querySelector(".bg-accent")).toBeNull();
+    expect(first[0]).toHaveTextContent("自然-生物医学工程·期刊·5 小时前·原文");
+    expect(within(first[0]).getByRole("link", { name: "原文" })).toHaveAttribute("href", "https://www.nature.com/x");
+    expect(screen.queryByRole("button", { name: "全部来源" })).not.toBeInTheDocument();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "同类缓释制剂的早先报道" })).toHaveAttribute("href", "/app/frontier/events/ev0");
+  });
+
+  it("says in one line that nobody's own text is among the reports, and 「暂无」 in the column", async () => {
+    const reports = event().items.map((item) => ({ ...item, role: "report" as const }));
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: reports, hasPrimary: false, primary: null }));
+    renderEvent();
+    const heading = await screen.findByRole("heading", { level: 2, name: /^报道\s*2$/ });
+    expect(heading.closest("section")).toHaveTextContent("暂无一手材料，以下均为转述报道。");
+    expect(screen.queryByRole("heading", { name: /一手材料/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /其他报道/ })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "报道" })).getAllByRole("listitem")).toHaveLength(2);
+    const side = screen.getByRole("complementary", { name: "热度与来源" });
+    expect(within(side).getAllByRole("definition").at(-1)).toHaveTextContent("暂无");
   });
 
   it("carries the heat, its trend and where the reports come from in the right column", async () => {
@@ -183,4 +202,44 @@ it("returns to the originating filtered feed rather than resetting its address",
   expect(back).toHaveAttribute("href", "/app/frontier?view=all&lane=safety&q=lipid");
   await userEvent.click(back);
   expect(await screen.findByText("Originating feed")).toBeInTheDocument();
+});
+
+describe("an event with many reports", () => {
+  const many = (count: number) => Array.from({ length: count }, (_, index) => ({
+    ...frontierItem({ id: `m${index}`, title: `第 ${index + 1} 篇报道`, source: { id: `s${index}`, name: `来源 ${index + 1}` },
+      sourceType: index % 3 === 0 ? "journal" : "media", sourceTypeLabel: index % 3 === 0 ? "期刊" : "媒体", timelineAt: ago(index + 1) }),
+    role: index === 0 ? "primary" as const : "report" as const,
+  }));
+
+  it("narrows the reports to one kind of source, and the headings' counts follow", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12) }));
+    renderEvent();
+    await userEvent.click(await screen.findByRole("button", { name: "全部来源" }));
+    expect((await screen.findAllByRole("menuitemradio")).map((entry) => entry.textContent)).toEqual(["全部来源", "期刊", "媒体"]);
+    expect(screen.getByRole("heading", { level: 2, name: /^其他报道\s*11$/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "期刊" }));
+    // 12 reports: journals are 0, 3, 6, 9; the first one is the primary.
+    expect(screen.getByRole("heading", { level: 2, name: /^一手材料\s*1$/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /^其他报道\s*3$/ })).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "其他报道" })).getAllByRole("listitem")).toHaveLength(3);
+    await userEvent.click(screen.getByRole("button", { name: "全部来源：期刊" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "全部来源" }));
+    expect(screen.getByRole("heading", { level: 2, name: /^其他报道\s*11$/ })).toBeInTheDocument();
+  });
+
+  it("hides a group the chosen kind has nothing in, rather than drawing an empty heading", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12) }));
+    renderEvent();
+    await userEvent.click(await screen.findByRole("button", { name: "全部来源" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "媒体" }));
+    expect(screen.queryByRole("heading", { name: /一手材料/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /^其他报道\s*8$/ })).toBeInTheDocument();
+  });
+
+  it("offers no menu when all the reports are of one kind", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12).map((item) => ({ ...item, sourceTypeLabel: "媒体" })) }));
+    renderEvent();
+    await screen.findByRole("heading", { level: 2, name: /^其他报道\s*11$/ });
+    expect(screen.queryByRole("button", { name: "全部来源" })).not.toBeInTheDocument();
+  });
 });

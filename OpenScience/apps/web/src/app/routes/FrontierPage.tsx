@@ -46,7 +46,7 @@ import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { ForYouView, type ForYouState } from "@/components/frontier/ForYouView";
 import { SafetyStrip, recentAlerts, type SafetyAlerts } from "@/components/frontier/SafetyStrip";
 import { SourcesLink } from "@/components/frontier/SourcesList";
-import { FollowedEvidenceZones } from "@/components/frontier/FollowedEvidenceZones";
+import { FollowingView, followControls, useFollowing } from "@/components/frontier/FollowingView";
 import { FrontierFollows } from "@/components/frontier/FrontierFollows";
 import { buttonClasses } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
@@ -123,7 +123,10 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const view = readView(params.get("view"));
   const follow = view === "following" ? params.get("follow") ?? "all" : null;
   const [manageFollows, setManageFollows] = useState(false);
-  const listingView = view === "selected" || view === "all" || (view === "following" && Boolean(follow));
+  // The 关注 feed is asked for only once the reader follows something to put in it (one narrowed follow is its own proof).
+  const following = useFollowing(ready && view === "following");
+  const listingView = view === "selected" || view === "all"
+    || (view === "following" && Boolean(follow) && (follow !== "all" || following.topics.length > 0));
   const q = (params.get("q") ?? "").trim();
   const lane = readKey(params.get("lane"), FRONTIER_LANES);
   const specialty = readKey(params.get("specialty"), FRONTIER_SPECIALTIES);
@@ -133,7 +136,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const hotWindow: FrontierHotWindow = view === "hot" && isHotWindow(hotWindowParam) ? hotWindowParam : "current";
   const byTime = Boolean(q) && params.get("sort") === "time";
   const day = readDay(params.get("day"));
-  const filtered = Boolean(lane || specialty || starred || windowFilter || follow);
+  // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
+  const filtered = Boolean(lane || specialty || starred || windowFilter || (follow && follow !== "all"));
 
   const query = useMemo<FrontierItemsQuery>(() => ({
     view: view === "all" || view === "following" ? "all" : "selected",
@@ -205,7 +209,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
           if (current !== generation.current) return;
           if (next.restarted) { restored = next; restoredPages = 1; break; }
           const known = new Set(restored.items.map((item) => item.id));
-          restored = { ...next, items: [...restored.items, ...next.items.filter((item) => !known.has(item.id))] };
+          restored = { ...next, related: restored.related, items: [...restored.items, ...next.items.filter((item) => !known.has(item.id))] };
           restoredPages += 1;
         }
         pages.current = restoredPages;
@@ -227,7 +231,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         });
         restore.current = undefined;
       } else pages.current = 1;
-      show({ key, exposure: restored.exposure, items: restored.items, nextCursor: restored.nextCursor, version: restored.version, loadedAt: Date.now() });
+      show({ key, exposure: restored.exposure, items: restored.items, nextCursor: restored.nextCursor, version: restored.version, loadedAt: Date.now(), related: restored.related });
     } catch (error) {
       if (current !== generation.current) return;
       if (frontierAbsence(error) === "off") { onOff(); return; }
@@ -262,7 +266,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       if (page.restarted) {
         pages.current = 1;
         // The list changed under the cursor: page one again, in place.
-        show({ key, exposure: page.exposure, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now() });
+        show({ key, exposure: page.exposure, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now(), related: page.related });
         scrollToListTop();
         return;
       }
@@ -292,7 +296,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       const top = listing.items[0] ? Date.parse(listing.items[0].timelineAt) : 0;
       const count = page.items.filter((item) => !known.has(item.id) && Date.parse(item.timelineAt) >= top).length;
       if (count > 0) {
-        setFresh({ count, listing: { key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now() } });
+        setFresh({ count, listing: { key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now(), related: page.related } });
       }
     }, () => { /* a hint, not a read: it is asked again when the list or the version next changes */ });
     return () => { active = false; };
@@ -621,6 +625,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       listing={listing && listing.key === key ? listing : null}
       error={listError}
       fresh={fresh?.count ?? 0}
+      empty={view === "following" ? "关注的内容暂时没有新动态" : undefined}
       firstRun={status ? status.lastPublishedAt === null : true}
       loadingMore={loadingMore}
       renderItem={card}
@@ -654,10 +659,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         return <ForYouView state={forYou} renderItem={(item) => card(item, false)} onRetry={() => setForYouAttempt((value) => value + 1)} />;
       case "following":
         // The followed evidence zones are the first group of the feed, not a block above its filters.
-        return <div className="space-y-8">
-          <FollowedEvidenceZones />
-          {feed}
-        </div>;
+        return <FollowingView state={following} feed={feed} onAdd={() => setManageFollows(true)} />;
       case "all":
         return (
           <>
@@ -688,11 +690,14 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       actions={(
         <>
           <Link to="/app/frontier/zones" className={buttonClasses({ variant: "text" })}>证据专区<ChevronRight size={16} aria-hidden="true" /></Link>
+          {/* On a phone the search shares the row with the link to the zones, instead of standing on a row of its own. */}
           <SearchInput
             label="搜索"
+            className="min-w-0 flex-1 sm:w-64 sm:flex-none"
             value={draft}
             maxLength={200}
             onChange={(event) => setDraft(event.target.value)}
+            onClear={() => setDraft("")}
             onCompositionStart={() => { composing.current = true; }}
             onCompositionEnd={(event) => { composing.current = false; setDraft(event.currentTarget.value); setComposed((value) => value + 1); }}
           />
@@ -707,13 +712,18 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         hotBoard={hot[hotWindow]?.board ?? null}
         hotWindows={Object.values(hot).some((entry) => Boolean(entry?.board?.takenAt))}
         onHotWindow={setHotWindow}
+        follow={followControls(following)}
         narrowedFollow={view === "following" && follow !== "all"}
         onAllFollows={() => setParams((current) => {
           const updated = new URLSearchParams(current); updated.delete("follow"); return updated;
         })}
         onManageFollows={() => setManageFollows(true)}
       />
-      {ready && params.get("item") && <FrontierLinkedItem id={params.get("item")!} />}
+      {ready && params.get("item") && (
+        <FrontierLinkedItem id={params.get("item")!} onClose={() => setParams((current) => {
+          const updated = new URLSearchParams(current); updated.delete("item"); return updated;
+        }, { replace: true })} />
+      )}
       <div role="tabpanel" id="frontier-view" aria-labelledby={`frontier-view-tab-${tab}`} className="mt-5">
         {ready ? main : <FrontierSkeleton />}
       </div>
@@ -725,7 +735,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
             return updated;
           });
           setManageFollows(false);
-        }} onChanged={() => { cache.current.clear(); void loadList(true); }} />
+        }} onChanged={() => { cache.current.clear(); if (listingView) void loadList(true); }} />
       </Drawer>}
     </PageShell></div>
   );

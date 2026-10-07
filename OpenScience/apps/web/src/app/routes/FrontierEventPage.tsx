@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button, buttonClasses } from "@/components/ui/Button";
+import { FilterSelect } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
@@ -53,10 +54,13 @@ const RELATION_WORDS: Readonly<Record<string, string>> = Object.freeze({
 /**
  * One event (plan 2026-09-23 §6.2; mockup m05): the title and one line — how
  * many institutions reported it, when it last moved, its specialty — with
- * 「深入研究」; what is known so far and the latest turn; every report on one
- * timeline, the parties' own texts as filled dots; and on the right the heat,
- * its 72-hour trend, the institutions by kind, the first report and whether
- * first-hand material is among the reports. No card explains itself.
+ * 「深入研究」; what is known so far and the latest turn; the reports, the
+ * parties' own texts first under 「一手材料」 (a paper, a notice, a label) and the
+ * rest as 「其他报道」, newest first — or, where nobody's own text is among them,
+ * one line that says so; from ten reports on a menu narrows them to one kind
+ * of source; and on the right the heat, its 72-hour trend, the institutions
+ * by kind, the first report and whether first-hand material is among the
+ * reports. No card explains itself.
  *
  * Hidden knowledge: an event merged into another keeps its old address — a
  * notification, a star or a Feishu card may carry it — and the server answers
@@ -149,6 +153,11 @@ function EventBody({ event }: { event: FrontierEvent }) {
   const timeline = useMemo(() => [...event.items]
     .sort((a, b) => Date.parse(b.timelineAt) - Date.parse(a.timelineAt)), [event.items]);
   const research = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(eventResearchDraft(event)) } });
+  // From ten reports on, a kind of source narrows the list: the kinds the rows already name, in the order they first appear.
+  const [sourceType, setSourceType] = useState<string | null>(null);
+  const sourceTypes = useMemo(() => [...new Set(timeline.flatMap((item) => (item.sourceTypeLabel ? [item.sourceTypeLabel] : [])))], [timeline]);
+  const visible = sourceType ? timeline.filter((item) => item.sourceTypeLabel === sourceType) : timeline;
+  const firstHand = timeline.some((item) => item.role === "primary");
   const institutions = institutionsLine(event);
   const specialty = event.specialties[0] ?? null;
   const updated = ago(event.lastAt);
@@ -177,12 +186,18 @@ function EventBody({ event }: { event: FrontierEvent }) {
             )}
           </section>
 
-          <section aria-labelledby="event-reports">
-            <h2 id="event-reports" className="text-ui font-semibold text-text">报道</h2>
-            <ol aria-label="报道" className="ml-1 mt-2 border-l border-border">
-              {timeline.map((item) => <TimelineRow key={item.id} item={item} />)}
-            </ol>
-          </section>
+          {timeline.length >= 10 && sourceTypes.length > 1 && (
+            <div>
+              <FilterSelect label="全部来源" allLabel="全部来源" value={sourceType}
+                options={sourceTypes.map((label) => ({ value: label, label }))} onChange={setSourceType} />
+            </div>
+          )}
+          {firstHand ? (
+            <>
+              <ReportGroup id="event-primary" title="一手材料" rows={visible.filter((item) => item.role === "primary")} />
+              <ReportGroup id="event-reports" title="其他报道" rows={visible.filter((item) => item.role !== "primary")} />
+            </>
+          ) : <ReportGroup id="event-reports" title="报道" rows={visible} note="暂无一手材料，以下均为转述报道。" />}
 
           {event.related.length > 0 && (
             <section aria-labelledby="event-related">
@@ -217,6 +232,23 @@ function EventBody({ event }: { event: FrontierEvent }) {
         </aside>
       </div>
     </EventFrame>
+  );
+}
+
+/** A group of reports: its heading and count, the line that explains an absence, then the rows — nothing at all with no rows and no line. */
+function ReportGroup({ id, title, rows, note }: { id: string; title: string; rows: Array<FrontierItem & { role: FrontierEventRole }>; note?: string }) {
+  if (rows.length === 0 && !note) return null;
+  return (
+    <section aria-labelledby={id}>
+      <h2 id={id} className="flex items-baseline gap-2">
+        <span className="text-ui font-semibold text-text">{title}</span>
+        <span className="text-caption tabular-nums text-text-3">{rows.length}</span>
+      </h2>
+      {note && <p className="mt-2 text-ui text-text-3">{note}</p>}
+      <ol aria-label={title} className="ml-1 mt-2 border-l border-border">
+        {rows.map((item) => <TimelineRow key={item.id} item={item} />)}
+      </ol>
+    </section>
   );
 }
 

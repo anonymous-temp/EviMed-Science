@@ -792,12 +792,14 @@ export class FrontierService {
         const more = offset + query.limit < ordered.ids.length;
         page = {
           items, mode: ordered.mode,
+          // The words matched no item, so these are the vector leg's nearest neighbours: the reader is told once.
+          related: ranking.lexical.length === 0 && ordered.ids.length > 0,
           next: more ? encodeCursor({ by: query.by, view: query.view, v: versions.content, f: filterPrint(query), o: offset + query.limit }) : null,
         };
       } else {
         const listed = await this.#transaction((client) => this.#listPage(client, query, user.id, position));
         page = {
-          items: listed.items, mode: "list",
+          items: listed.items, mode: "list", related: false,
           next: listed.next ? encodeCursor({ by: query.by, view: query.view, v: versions.content, f: filterPrint(query), t: listed.next.t, id: listed.next.id }) : null,
         };
       }
@@ -809,7 +811,7 @@ export class FrontierService {
       .filter((item) => query.starred || !item.state.hidden);
     const policy = await this.policies.resolve("frontier", {});
     const exposure = await issueFrontierExposure(this.database, user.id, { surface: "feed", policyRevisionId: policy.revisionId.startsWith("default:") ? `${FRONTIER_EDITOR_VERSION}:threshold:${frontierSelectThreshold(this.config)}` : policy.revisionId, candidateIds: items.map((item) => String(item.id)) });
-    return { status: 200, etag, body: { items, nextCursor: page.next, version: String(versions.content), mode: page.mode, exposure } };
+    return { status: 200, etag, body: { items, nextCursor: page.next, version: String(versions.content), mode: page.mode, related: page.related, exposure } };
   }
 
   /**

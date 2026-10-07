@@ -18,7 +18,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChips";
 import { Menu } from "@/components/ui/Menu";
-import { FrontierDetails } from "./FrontierDetails";
+import { FrontierDetails, frontierDetailsOffered } from "./FrontierDetails";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { EXTERNAL, INLINE_ACTION, dailyMeta, rankLabel, shortDate } from "./frontierText";
 
@@ -78,6 +78,11 @@ function neighbours(issue: FrontierDaily, index: readonly FrontierDailySummary[]
   };
 }
 
+/** 「分类」: the lane's heading to the top of the page, under the issue's header; the address does not change. */
+function goToLane(id: string) {
+  document.getElementById(`daily-${id}`)?.scrollIntoView({ block: "start" });
+}
+
 /** 「复制」: the issue exactly as the server composed it, for a department chat. */
 async function copyMarkdown(markdown: string) {
   try {
@@ -90,13 +95,19 @@ async function copyMarkdown(markdown: string) {
 
 /**
  * 日报 (plan 2026-09-23 §6.2; research B §8 #28): the day, how many items and
- * how long they take to read, 「复制」 and 「往期 ▾」; the lead story; the
+ * how long they take to read, 「复制」, 「分类 ▾」 and 「往期 ▾」; the lead story; the
  * safety alerts first, in red; one section per lane that has anything; the AI
  * minute; 「前一日 / 后一日」. Every row is a fixed number column and then its
  * title, so all the titles of the issue start on one line — the source's name
  * is the grey line under the summary, never a block before the title.
+ *
+ * The header stays at the top of the page while the issue scrolls — an issue is
+ * 20 items of about seven minutes, a week's 70 — so the date, 「分类」 (the lanes
+ * with their counts, each one tap from its heading), 「往期」 and 「复制」 are
+ * never a long scroll away. `laneLimit` shows that many rows of each lane and
+ * 「展开其余 N 条」 for the rest: the weekly's way to be read in a few minutes.
  */
-export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean }) {
+export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean; laneLimit?: number }) {
   const origin = useFrontierOrigin();
   const rangeLabel = (day: string) => {
     const last = new Date(`${day}T00:00:00Z`);
@@ -111,15 +122,24 @@ export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState
   const { previous, next } = neighbours(issue, state.index);
   const archive = state.index.slice(0, ARCHIVE_SHOWN);
   const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
+  const lanes = [
+    ...(issue.safety.length > 0 ? [{ id: "safety", title: "安全警示", count: issue.safety.length }] : []),
+    ...issue.sections.map((section) => ({ id: section.lane, title: section.laneLabel || "其他", count: section.items.length })),
+  ];
   return (
     <article aria-labelledby="frontier-daily-title">
-      <header className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <header className="sticky top-0 z-sticky flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-bg py-2">
         <h2 id="frontier-daily-title" className="text-body font-semibold leading-6 text-text">{weekly ? rangeLabel(issue.day) : shortDate(issue.day)}</h2>
         <span className="text-caption tabular-nums text-text-3">{dailyMeta(issue)}</span>
         <span className="ml-auto flex items-center gap-1">
           <Button variant="text" disabled={!issue.markdown} onClick={() => void copyMarkdown(issue.markdown)}>
             <Copy size={16} aria-hidden="true" />复制
           </Button>
+          {lanes.length >= 3 && (
+            <Menu label="分类" items={lanes.map((lane) => ({ label: `${lane.title} ${lane.count}`, onSelect: () => goToLane(lane.id) }))}>
+              <FilterChip menu>分类</FilterChip>
+            </Menu>
+          )}
           {archive.length > 0 && (
             <Menu label="往期" items={archive.map((entry) => ({ label: weekly ? rangeLabel(entry.day) : shortDate(entry.day), checked: entry.day === issue.day, onSelect: () => onDay(entry.day) }))}>
               <FilterChip menu>往期</FilterChip>
@@ -149,8 +169,8 @@ export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState
         </section>
       )}
 
-      {issue.safety.length > 0 && <DailySection id="safety" title="安全警示" items={issue.safety} safety />}
-      {issue.sections.map((section) => <DailySection key={section.lane} id={section.lane} title={section.laneLabel || "其他"} items={section.items} />)}
+      {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety`} id="safety" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
+      {issue.sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
 
       {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}
 
@@ -203,25 +223,33 @@ function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
   );
 }
 
-/** One lane of the issue, or its safety alerts: a heading and its count, then numbered rows. */
-function DailySection({ id, title, items, safety = false }: { id: string; title: string; items: FrontierItem[]; safety?: boolean }) {
+/**
+ * One lane of the issue, or its safety alerts: a heading and its count, then numbered rows — all of
+ * them, or the first `limit` and 「展开其余 N 条」, which opens the rest where it stands.
+ */
+function DailySection({ id, title, items, safety = false, limit }: { id: string; title: string; items: FrontierItem[]; safety?: boolean; limit?: number }) {
+  const [all, setAll] = useState(false);
+  const shown = limit !== undefined && !all ? items.slice(0, limit) : items;
+  const rest = items.length - shown.length;
   return (
     <section aria-labelledby={`daily-${id}`} className="mt-8">
-      <h3 id={`daily-${id}`} className="flex items-baseline gap-2">
+      <h3 id={`daily-${id}`} className="flex scroll-mt-24 items-baseline gap-2">
         <span className={cn("text-ui font-semibold", safety ? "text-danger-strong" : "text-text")}>{title}</span>
         <span className="text-caption tabular-nums text-text-3">{items.length}</span>
       </h3>
       <ol aria-label={title} className="mt-1">
-        {items.map((item, index) => <DailyRow key={item.id} item={item} number={index + 1} safety={safety} />)}
+        {shown.map((item, index) => <DailyRow key={item.id} item={item} number={index + 1} safety={safety} />)}
       </ol>
+      {rest > 0 && <Button variant="text" size="sm" className="-ml-2 mt-1" onClick={() => setAll(true)}>展开其余 {rest} 条</Button>}
     </section>
   );
 }
 
 /**
- * A row: 「01」, the title, the summary in at most three lines (a safety notice has its title
- * and no more), and a grey line naming the institution — FDA, 英国 MHRA, never
- * the interface it was read through — with 「原文 ↗」.
+ * A row: 「01」, the title — the way to the original, as on the feed's card — the summary in at
+ * most three lines (a safety notice has its title and no more), and a grey line naming the
+ * institution — FDA, 英国 MHRA, never the interface it was read through — with 「详情」 where the
+ * drawer holds more than the row does.
  */
 function DailyRow({ item, number, safety }: { item: FrontierItem; number: number; safety: boolean }) {
   const [details, setDetails] = useState(false);
@@ -233,12 +261,8 @@ function DailyRow({ item, number, safety }: { item: FrontierItem; number: number
         {!safety && item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
         <div className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
           <span className="min-w-0 truncate">{item.source.name}</span>
-          {/* The feed card's own look for this action, and its neighbour 原文's: a sized button here was the page's tenth kind of control. */}
-          <button type="button" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">阅读详情</span></button>
-          <span aria-hidden="true">·</span>
-          <a href={item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1 px-1 text-accent")}>
-            <span className="text-caption">原文<span aria-hidden="true"> ↗</span></span>
-          </a>
+          {/* The feed card's own look for this action: a sized button here was the page's tenth kind of control. */}
+          {frontierDetailsOffered(item) && <button type="button" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">详情</span></button>}
         </div>
       </div>
       {details && <FrontierDetails item={item} onClose={() => setDetails(false)} />}

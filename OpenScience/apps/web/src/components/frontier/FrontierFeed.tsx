@@ -16,6 +16,8 @@ export interface Listing {
   nextCursor: string | null;
   version: string | null;
   loadedAt: number;
+  /** A search whose words matched nothing: the items are the nearest by meaning. */
+  related?: boolean;
 }
 
 /** 「有 N 条新的」 says 「N+」 from a full page on. */
@@ -29,12 +31,15 @@ export const FEED_PAGE_SIZE = 30;
  * relevance or time order, so they are not cut into days.
  */
 export function FeedList({
-  view, q, filtered, listing, error, fresh, firstRun, loadingMore, renderItem,
+  view, q, filtered, empty, listing, error, fresh, firstRun, loadingMore, renderItem,
   onRetry, onFresh, onMore, onAll,
 }: {
   view: "selected" | "all";
   q: string;
+  /** A filter or one narrowed follow is set: an empty list means it excluded everything. */
   filtered: boolean;
+  /** What an empty list says when nothing excluded anything (the 关注 view: nothing new). */
+  empty?: string;
   listing: Listing | null;
   error: string | null;
   fresh: number;
@@ -67,10 +72,12 @@ export function FeedList({
       {listing.items.length === 0 ? (
         q ? <EmptyState icon={Search} title={`没有找到和“${q}”相关的动态`} />
           : filtered ? <EmptyState icon={Filter} title="没有结果" />
-            : firstRun || view === "all" ? <EmptyState icon={Newspaper} title="暂无内容" />
-              : <EmptyState icon={Newspaper} title="暂无精选" action={<Button variant="secondary" onClick={onAll}>看全部</Button>} />
+            : empty ? <EmptyState icon={Newspaper} title={empty} />
+              : firstRun || view === "all" ? <EmptyState icon={Newspaper} title="暂无内容" />
+                : <EmptyState icon={Newspaper} title="暂无精选" action={<Button variant="secondary" onClick={onAll}>看全部</Button>} />
       ) : q ? (
         <section aria-label="搜索结果">
+          {listing.related && <p className="mb-2 text-ui text-text-3">没有找到包含“{q}”的动态，下面是意思相近的内容</p>}
           <ul>{listing.items.map((item) => renderItem(item, false))}</ul>
         </section>
       ) : days.map((group, index) => {
