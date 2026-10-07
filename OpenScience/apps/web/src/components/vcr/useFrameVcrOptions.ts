@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
-import { getVcrHome, getVcrStudy, patchVcrStudy, type VcrStudy } from "@/lib/vcrClient";
+import { getVcrStudyOfProject, patchVcrStudy, type VcrFrameStudy, type VcrStudy } from "@/lib/vcrClient";
 import { VCR_CAPABILITIES } from "@evimed/domain";
 import type { FrameVcrOptions, VcrStart } from "./frameVcrOptions";
 
@@ -15,8 +15,10 @@ const builders = () => import("./frameVcrOptions");
  *
  * When the conversation on screen is bound to one of the module's
  * capabilities, the shell finds the study the tab's project is (a study is an
- * ordinary project plus a study row) and tells the frame what to draw beside
- * the chip: 起点, 预期用途 and the single-task starters. A change the reader
+ * ordinary project plus a study row — read by the project, because a study
+ * nobody has spoken in yet is a draft and is not on the home list) and tells
+ * the frame what to draw beside the chip: 起点, 预期用途 and the single-task
+ * starters. A change the reader
  * makes there comes back as `vcr-options` and is written to the study with
  * `PATCH`; the frame is then told what the study now holds — read back from the
  * server, not assumed — so a refused write puts the old value back rather than
@@ -42,7 +44,7 @@ export function useFrameVcrOptions({
   enabled: boolean;
   post: (payload: FrameVcrOptions | { sessionId: string | null; clear: true }) => void;
 }) {
-  const found = useRef<{ sessionId: string; study: VcrStudy | null } | null>(null);
+  const found = useRef<{ sessionId: string; study: VcrFrameStudy | null } | null>(null);
   const vcr = Boolean(capabilityId && (VCR_CAPABILITIES as readonly string[]).includes(capabilityId));
 
   useEffect(() => {
@@ -54,12 +56,10 @@ export function useFrameVcrOptions({
     }
     let live = true;
     void Promise.all([
-      getVcrHome()
-        .then((home) => home.studies.find((entry) => entry.projectId === projectId) ?? null)
-        .then((summary) => (summary ? getVcrStudy(summary.id) : null))
-        // The module refusing, or the list not answering: the chip keeps its
-        // starters and has nothing to write options to.
-        .catch(() => null),
+      // By the project, not through the home list: the list leaves out a draft, and the draft is exactly the study 「新建研究」 has
+      // just opened this conversation for. A project that is no study, the module refusing, or a read that fails: the chip keeps its
+      // starters and has nothing to write options to.
+      getVcrStudyOfProject(projectId).catch(() => null),
       builders(),
     ])
       .then(([study, { frameVcrOptions }]) => {
@@ -86,7 +86,7 @@ export function useFrameVcrOptions({
       // start is the study's own `requested` flags, and the frame should show
       // what they are rather than what was asked for.
       void patchVcrStudy(study.id, patch)
-        .then(() => getVcrStudy(study.id))
+        .then(() => getVcrStudyOfProject(projectId))
         .then(
           (next) => {
             if (found.current === current) found.current = { ...current, study: next };
@@ -98,5 +98,5 @@ export function useFrameVcrOptions({
           },
         );
     }, () => {});
-  }, [post]);
+  }, [post, projectId]);
 }

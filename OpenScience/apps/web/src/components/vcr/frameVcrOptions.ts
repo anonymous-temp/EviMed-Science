@@ -13,7 +13,7 @@
  * sources are read and registered on 定义与证据.
  */
 import { VCR_ACTIONS, VCR_INTENDED_USES, VCR_INTENDED_USE_LABELS_ZH } from "@evimed/domain";
-import type { VcrAction, VcrIntendedUse, VcrStepKey, VcrStudy } from "@/lib/vcrClient";
+import type { VcrAction, VcrFrameStudy, VcrIntendedUse, VcrStepKey } from "@/lib/vcrClient";
 
 /** Where a study starts: everything, or one of the four workspaces. */
 export type VcrStart = "auto" | VcrAction;
@@ -66,7 +66,7 @@ const ACTION_STEPS: Readonly<Record<VcrAction, VcrStepKey>> = Object.freeze({
  * step that one of the four actions asks for is that action; anything else —
  * all seven, or none yet — is 自动.
  */
-export function startOf(study: Pick<VcrStudy, "steps">): VcrStart {
+export function startOf(study: Pick<VcrFrameStudy, "steps">): VcrStart {
   const requested = Object.entries(study.steps).filter(([, step]) => step?.requested === true).map(([key]) => key);
   if (requested.length !== 1) return "auto";
   return (VCR_ACTIONS as readonly VcrAction[]).find((action) => ACTION_STEPS[action] === requested[0]) ?? "auto";
@@ -83,7 +83,7 @@ export function isIntendedUse(value: unknown): value is VcrIntendedUse {
 }
 
 /** The chip's options for a conversation, from its study — or, with none, the starters alone. */
-export function frameVcrOptions(sessionId: string, study: VcrStudy | null): FrameVcrOptions {
+export function frameVcrOptions(sessionId: string, study: VcrFrameStudy | null): FrameVcrOptions {
   const labels = VCR_INTENDED_USE_LABELS_ZH as Record<string, string>;
   return {
     sessionId,

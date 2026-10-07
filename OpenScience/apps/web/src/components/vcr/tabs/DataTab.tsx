@@ -16,9 +16,11 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { safeLink } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { FilterChips } from "@/components/ui/FilterChips";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { FilterSelect } from "@/components/ui/FilterChips";
+import { List, ListRow } from "@/components/ui/ListRow";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Tag } from "@/components/ui/Tag";
@@ -38,8 +40,7 @@ import { vcrTabPath } from "../vcrTabs";
 
 type Filter = "all" | "key" | "ai_set" | "reviewed" | "changed";
 
-const FILTER_LABELS: ReadonlyArray<{ value: Filter; label: string }> = Object.freeze([
-  { value: "all", label: "全部" },
+const FILTER_LABELS: ReadonlyArray<{ value: Exclude<Filter, "all">; label: string }> = Object.freeze([
   { value: "key", label: "关键假设" },
   { value: "ai_set", label: "AI 设定" },
   { value: "reviewed", label: "已复核" },
@@ -102,12 +103,21 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
   // 数据接入 is the tab's own work, not an evidence card: it is there whenever the
   // plane is (or, above T0, whenever it should be), whatever the evidence side holds.
   const intake = readVcrIntake(data.intake);
-  const intakePanel = intake.available || (data.intake != null && study.tier !== "T0")
-    // Freezing a snapshot can move what the study's data support: the header re-reads, so its offer to move up appears with no further step.
-    ? <IntakePanel studyId={studyId} intake={intake} onChanged={() => { reload(); onStudyChanged?.(); }} />
-    : null;
   // A tier that allows real data puts the intake first: the definition below it is matched against what it holds.
   const realData = study.tier !== "T0";
+  // Freezing a snapshot can move what the study's data support: the header re-reads, so its offer to move up appears with no further step.
+  const changed = () => { reload(); onStudyChanged?.(); };
+  // A study whose tier takes no real data has no use for the intake's form until somebody has data to bring: it is one folded line at the
+  // end of the tab, open when a source is already registered. At a tier that takes real data it is the tab's first section.
+  const intakePanel = intake.available || (data.intake != null && realData)
+    ? (realData
+      ? <IntakePanel studyId={studyId} intake={intake} onChanged={changed} />
+      : (
+        <Disclosure summary={intake.sources.length > 0 ? `数据接入 · ${intake.sources.length} 个数据源` : "数据接入"} defaultOpen={intake.sources.length > 0}>
+          <IntakePanel bare studyId={studyId} intake={intake} onChanged={changed} />
+        </Disclosure>
+      ))
+    : null;
   const defined = hasDefinition(study);
   const pack = (
     <VcrKnowledgeSection
@@ -160,44 +170,42 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
               </div>
             )}
           >
-            <FilterChips
-              label="假设卡"
-              options={FILTER_LABELS.map((option) => ({ ...option, ...(option.value === "all" ? {} : { count: count(option.value) }) }))}
-              value={filter}
-              onChange={setFilter}
-              className="mb-3"
-            />
-            <ul className="flex flex-col gap-1">
+            {/* A filter earns its place with a list long enough to need one; it is one chip that opens a menu, not a row of five. */}
+            {data.assumptions.length > 3 && (
+              <FilterSelect
+                label="筛选"
+                allLabel="全部"
+                options={FILTER_LABELS.map((option) => ({ ...option, label: `${option.label} ${count(option.value)}` }))}
+                value={filter === "all" ? null : filter}
+                onChange={(next) => setFilter(next ?? "all")}
+              />
+            )}
+            <List label="假设卡" className={cn(data.assumptions.length > 3 && "mt-2")}>
               {shown.map((assumption) => (
-                <li key={assumption.id}>
-                  <button
-                    type="button"
-                    data-vcr-assumption={assumption.id}
-                    aria-current={selected?.id === assumption.id ? "true" : undefined}
-                    onClick={() => open(assumption)}
-                    className={cn(
-                      "w-full rounded px-2.5 py-2 text-left outline-none hover:bg-surface-1",
-                      selected?.id === assumption.id && "bg-accent-soft",
-                    )}
-                  >
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span className="min-w-0 truncate text-ui text-text">{assumption.name}</span>
-                      <span className="shrink-0 text-ui font-medium tabular-nums text-text">
-                        {valueText(assumption.value)}
-                        {assumption.value.unit && <span className="ml-0.5 font-normal text-text-3">{assumption.value.unit}</span>}
-                      </span>
+                <ListRow
+                  key={assumption.id}
+                  title={assumption.name}
+                  onOpen={() => open(assumption)}
+                  expanded={selected?.id === assumption.id}
+                  titleProps={{ "data-vcr-assumption": assumption.id, "aria-current": selected?.id === assumption.id ? "true" : undefined }}
+                  className={cn(selected?.id === assumption.id && "bg-accent-soft")}
+                  trailing={(
+                    <span className="text-ui font-medium tabular-nums text-text">
+                      {valueText(assumption.value)}
+                      {assumption.value.unit && <span className="ml-0.5 font-normal text-text-3">{assumption.value.unit}</span>}
                     </span>
-                    <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                  )}
+                  meta={(
+                    <span className="flex flex-wrap items-center gap-1.5">
                       <SourceTag source={assumption.value.source} />
                       {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
-                      {assumption.summary && <span className="min-w-0 truncate text-caption text-text-3">{assumption.summary}</span>}
-                      <span className="flex-1" />
                       <ReviewChip state={assumption.value.review} />
+                      {assumption.summary && <span className="min-w-0 truncate text-caption text-text-3">{assumption.summary}</span>}
                     </span>
-                  </button>
-                </li>
+                  )}
+                />
               ))}
-            </ul>
+            </List>
           </Card>
 
           {selected && (
@@ -315,8 +323,8 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
           {assumption.isKey && <Tag>关键假设</Tag>}
           {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
           <span className="flex-1" />
-          {mode === "read" && mayEdit && <Button size="sm" variant="secondary" onClick={() => setMode("edit")}>改这张卡</Button>}
-          {mode === "read" && maySign && <Button size="sm" variant="secondary" onClick={() => setMode("sign")}>签注复核</Button>}
+          {mode === "read" && mayEdit && <Button size="sm" variant="text" onClick={() => setMode("edit")}>改这张卡</Button>}
+          {mode === "read" && maySign && <Button size="sm" variant="text" onClick={() => setMode("sign")}>签注复核</Button>}
         </div>
       )}
     >
@@ -366,7 +374,7 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
             {/* Only an http(s) address becomes a link: the quote's source is
                 data, and data is never trusted to be a safe href. */}
             {quoteLink && (
-              <a href={quoteLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-link hover:underline">
+              <a href={quoteLink} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm", className: "text-link" })}>
                 打开原文
                 <ExternalLink size={16} aria-hidden="true" />
               </a>

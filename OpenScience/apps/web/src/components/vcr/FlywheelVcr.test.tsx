@@ -44,7 +44,8 @@ describe("the data tab (F23, F24)", () => {
     expect(news).toHaveTextContent("新的结果");
     expect(news).toHaveTextContent("Final overall survival of NCT09900001");
     expect(news).toHaveTextContent("分析计划已经冻结：新版本放在冻结的版本旁边，研究仍按冻结的版本计算。");
-    expect(container.querySelector(`[data-vcr-assumption='${card.id}']`)).toHaveTextContent("有新证据");
+    // The row's own line carries the label (the title is the card's name).
+    expect(container.querySelector(`[data-vcr-assumption='${card.id}']`)?.closest("li")).toHaveTextContent("有新证据");
     expect(screen.getByText("冻结后新增，不影响已冻结的计划")).toBeInTheDocument();
   });
 
@@ -116,14 +117,19 @@ describe("发布到模拟研究", () => {
 });
 
 describe("登记预测", () => {
+  /** The trial tab's 「登记预测」 button, pressed: the registry is in a drawer, not under the results. */
+  const openDrawer = async () => {
+    await screen.findByRole("table", { name: "方案的对比" });
+    await userEvent.click(within(document.querySelector("[data-vcr-conclusion]") as HTMLElement).getByRole("button", { name: "登记预测" }));
+    return screen.findByRole("dialog", { name: "登记预测" });
+  };
+
   it("files a scenario's prediction with a design, a measure, a trial and an endpoint — never a number — and only for the lead on a deployment that has the registry", async () => {
     const lead = ev201({ features: { simulations: false, predictions: true, platformPacks: false } });
     draw(<TrialTab studyId={STUDY_ID} study={lead} />);
-    const card = await waitFor(() => {
-      const node = document.querySelector("[data-vcr-file-prediction]");
-      if (!node) throw new Error("no card");
-      return node as HTMLElement;
-    });
+    const drawer = await openDrawer();
+    await userEvent.click(within(drawer).getByRole("tab", { name: "新登记" }));
+    const card = drawer.querySelector("[data-vcr-file-prediction]") as HTMLElement;
     await userEvent.type(within(card).getByLabelText("试验登记号"), "NCT02296125");
     await userEvent.type(within(card).getByLabelText("主要终点"), "PFS");
     await userEvent.selectOptions(within(card).getByLabelText("预测的指标"), "assurance");
@@ -134,15 +140,17 @@ describe("登记预测", () => {
     expect(body).toMatchObject({ registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(assurance)" });
   });
 
-  it("is not on the page without the registry, or for a reader who is not the lead", async () => {
+  it("has no form without the registry, or for a reader who is not the lead — the drawer is the list of what was registered", async () => {
     const off = ev201({ features: { simulations: false, predictions: false, platformPacks: false } });
-    const { unmount } = draw(<TrialTab studyId={STUDY_ID} study={off} />);
-    await screen.findByRole("table", { name: "方案的对比" });
-    expect(document.querySelector("[data-vcr-file-prediction]")).toBeNull();
-    unmount();
+    const first = draw(<TrialTab studyId={STUDY_ID} study={off} />);
+    let drawer = await openDrawer();
+    expect(drawer.querySelector("[data-vcr-file-prediction]")).toBeNull();
+    expect(within(drawer).queryByRole("tab", { name: "新登记" })).toBeNull();
+    first.unmount();
     const member = ev201({ features: { simulations: false, predictions: true, platformPacks: false }, abilities: ["read", "write"] });
     draw(<TrialTab studyId={STUDY_ID} study={member} />);
-    await screen.findByRole("table", { name: "方案的对比" });
-    expect(document.querySelector("[data-vcr-file-prediction]")).toBeNull();
+    drawer = await openDrawer();
+    expect(drawer.querySelector("[data-vcr-file-prediction]")).toBeNull();
+    expect(within(drawer).queryByRole("tab", { name: "新登记" })).toBeNull();
   });
 });

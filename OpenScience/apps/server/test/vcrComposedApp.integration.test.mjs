@@ -175,6 +175,8 @@ function requests(target, ids) {
   const S = `/api/vcr/studies/${target.id}`;
   return {
     "GET /studies/:id": async () => ["GET", S, undefined],
+    // The study a project belongs to (the conversation frame's chip): the same read ability as the page, found by the project.
+    "GET /studies/of-project/:project": async () => ["GET", `/api/vcr/studies/of-project/${target.projectId}`, undefined],
     "GET /studies/:id/:tab": async () => ["GET", `${S}/overview`, undefined],
     "GET /studies/:id/runs": async () => ["GET", `${S}/runs`, undefined],
     "GET /studies/:id/cards": async () => ["GET", `${S}/cards?kind=criteria`, undefined],
@@ -293,6 +295,28 @@ test("CS-45 every route, driven through the real server as the owner and as each
     assert.equal(answer.status, 404, `${method} ${route}: ${answer.text.slice(0, 100)}`);
     assert.equal(answer.body.code, "vcr_study_not_found");
   }
+});
+
+test("the study a project belongs to is found by the project — a draft nobody has spoken in too — with what the chip needs and nothing of the page", options, async () => {
+  const made = await call("owner", "POST", "/api/vcr/studies", {});
+  assert.equal(made.status, 201, made.text);
+  assert.equal(made.body.data.status, "draft");
+  // The home list leaves the untouched draft out: that is why the frame cannot find its study there.
+  const listed = await call("owner", "GET", "/api/vcr/studies");
+  assert.ok(!listed.body.data.studies.some((entry) => entry.id === made.body.data.id));
+  assert.ok(listed.body.data.draftProjectIds.includes(made.body.data.projectId));
+  const found = await call("owner", "GET", `/api/vcr/studies/of-project/${made.body.data.projectId}`);
+  assert.equal(found.status, 200, found.text);
+  assert.deepEqual(Object.keys(found.body.data).sort(), ["abilities", "id", "intendedUse", "projectId", "status", "steps"]);
+  assert.equal(found.body.data.id, made.body.data.id);
+  assert.equal(found.body.data.status, "draft");
+  assert.ok(found.body.data.abilities.includes("write") && found.body.data.abilities.includes("manage_study"));
+  assert.ok(Object.values(found.body.data.steps).every((step) => typeof step.requested === "boolean"));
+  // A project that is no study, and somebody else's study, are the same 404.
+  assert.equal((await call("owner", "GET", "/api/vcr/studies/of-project/prj_none")).body.code, "vcr_study_not_found");
+  assert.equal((await call("stranger", "GET", `/api/vcr/studies/of-project/${made.body.data.projectId}`)).body.code, "vcr_study_not_found");
+  // This file's accounts may hold twenty projects and the rest of it needs them: deleting a study keeps its project, so the project is deleted too.
+  assert.equal((await call("owner", "DELETE", `/api/projects/${made.body.data.projectId}`, { confirm: made.body.data.projectId })).status, 200);
 });
 
 test("CS-1 what the routes write reaches the module's own tables, under the session's account", options, async () => {

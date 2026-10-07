@@ -23,7 +23,9 @@
  *     section than its budget says (SECTION_SHAPES_BY_PAGE; rule 1), and
  *     clicking the first row of each of its lists shows a drawer, a new page
  *     or an opened row — a row that looks clickable does something where the
- *     reader is looking (rule 6);
+ *     reader is looking (rule 6); a row whose title is a link to an outside
+ *     address in a new tab (a feed headline) declares what it opens and is
+ *     not silent for the browser reporting no popup;
  *   - at 390 px nothing overflows horizontally;
  *   - at the desktop width, the style budget of §7: at most 8 kinds of
  *     control (9 on the frontier feed, whose headlines are links; 10 on a
@@ -32,7 +34,8 @@
  *     data page) and 3 kinds of border (6 on a GEO project's tabs, the
  *     measured number — see GEO_BUDGET), with each kind of control named in
  *     the report by its first example; the title and the page
- *     body's blocks start on one left edge; within a list, every row's title
+ *     body's blocks — the way back over the title, and the body that follows
+ *     the header — start on one left edge; within a list, every row's title
  *     (`[data-row-title]`) starts on one left edge;
  *   - no page is replaced by the router's English error page, and a lazy page
  *     whose chunk is gone (the state an open tab is in after a release) keeps
@@ -222,8 +225,11 @@ export const VCR_TABS_WALK = [
 const EXTENSION_BUDGET = { controls: 9, borders: 5 };
 export const BUDGET_BY_PAGE = {
   frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
-  // The zones' home is a frontier page: the same rail and tabs, measured at nine.
-  "frontier-zones": FRONTIER_BUDGET,
+  // The zones' home is a frontier page: the same rail and tabs, measured at nine. It also draws four kinds of border where the feed
+  // draws two — the tab row's hairline and the selected tab's underline, the rule between zones, and the frame of the topic request's
+  // field — the measured number of the first live walk of R10 (2026-10-07), not a wish: the field is the page's one input, and the
+  // other three are the tabs' and the list's own. A fifth is a new kind of border, which is what this budget is for.
+  "frontier-zones": { ...FRONTIER_BUDGET, borders: 4 },
   "extensions-plugins": EXTENSION_BUDGET, "extensions-skills": EXTENSION_BUDGET,
   geo: DATA_BUDGET,
   ...Object.fromEntries(GEO_TABS.map(([name]) => [name, GEO_BUDGET])),
@@ -395,12 +401,19 @@ export function rowClickFindings(name, rows) {
 /**
  * Whether a click on a row changed what the reader sees: a dialog that was not
  * there, another address, a new tab, or more opened rows on the page.
+ *
+ * `external` is a row whose title is a link to an outside address that opens in
+ * a new tab (a feed headline, a daily-brief item): the row declares what it
+ * opens, and it is not counted as silent because the walk's browser reported no
+ * popup — the first live walk of R10 failed both frontier pages on it, while the
+ * link was a real one (2026-10-07).
  * @param {{ dialog: boolean, path: string, expanded: number }} before
  * @param {{ dialog: boolean, path: string, expanded: number }} after
  * @param {number} popups tabs the click opened
+ * @param {boolean} [external] whether the row's title is a link that opens an outside address in a new tab
  */
-export function rowClickShown(before, after, popups) {
-  return (after.dialog && !before.dialog) || after.path !== before.path || popups > 0 || after.expanded > before.expanded;
+export function rowClickShown(before, after, popups, external = false) {
+  return (after.dialog && !before.dialog) || after.path !== before.path || popups > 0 || after.expanded > before.expanded || external;
 }
 
 function required(name) {
@@ -513,13 +526,20 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
     return look;
   });
 
-  // One left edge: the title and the page body's top-level blocks, and within
-  // a list every row's title.
+  // One left edge: the title, what stands over it (the way back, 「‹ 虚拟临床研究」)
+  // and the page body's top-level blocks, and within a list every row's title.
+  // The body is what follows the header: a page with a way back has a block
+  // before it, and taking "the first child that is not the header" measured that
+  // block as the body — so the seven tabs of a study were never measured at
+  // all, only their back link (2026-10-07 R10.1).
   const title = document.querySelector("main h1, h1");
   const header = title?.closest("header") ?? null;
   const column = header?.parentElement ?? null;
-  const body = column ? [...column.children].find((child) => child !== header) : null;
-  const blocks = [title, ...(body ? [...body.children] : [])].filter((el) => el && visible(el));
+  const siblings = column ? [...column.children] : [];
+  const at = header ? siblings.indexOf(header) : -1;
+  const lead = at > 0 ? siblings.slice(0, at) : [];
+  const body = at >= 0 ? siblings[at + 1] ?? null : null;
+  const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(body ? [...body.children] : [])].filter((el) => el && visible(el));
   const pageLefts = [...new Set(blocks.map((el) => Math.round(el.getBoundingClientRect().left)))];
   const rowTitleLefts = [];
   for (const list of document.querySelectorAll("ul, ol")) {
@@ -601,7 +621,8 @@ export function routeReady() {
  * The first row of each list on the page, found, clicked and read again, in the
  * page (`page.evaluate`, so it reads nothing from this module). `["targets"]`
  * names the lists whose first row is a control; `["click", i]` clicks the
- * i-th; `["state"]` reports what is on screen: whether a dialog is open, the
+ * i-th; `["external", i]` says whether the i-th opens an outside address in a
+ * new tab; `["state"]` reports what is on screen: whether a dialog is open, the
  * address, and how many rows are open in place. A row whose title is not a
  * control — a list of results, not a place to go — is not a target.
  */
@@ -628,6 +649,10 @@ export function rowProbe([action, index = 0]) {
     targets.push({ control, label: (list.getAttribute("aria-label") || title.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40) });
   }
   if (action === "targets") return targets.map(({ label }) => label);
+  if (action === "external") {
+    const control = targets[index]?.control;
+    return Boolean(control && control.tagName === "A" && control.getAttribute("target") === "_blank" && /^https?:\/\//i.test(control.getAttribute("href") ?? ""));
+  }
   const target = targets[index];
   if (!target) return false;
   target.control.click();
@@ -758,11 +783,12 @@ async function main() {
                 await page.waitForTimeout(1_500);
               }
               const before = await page.evaluate(rowProbe, ["state"]);
+              const external = await page.evaluate(rowProbe, ["external", index]);
               popups = 0;
               await page.evaluate(rowProbe, ["click", index]);
               await page.waitForTimeout(1_500);
               const after = await page.evaluate(rowProbe, ["state"]);
-              rows.push({ label: labels[index], shown: rowClickShown(before, after, popups) });
+              rows.push({ label: labels[index], shown: rowClickShown(before, after, popups, external === true) });
             }
             report.pages[current].rowClicks = rows;
             failures.push(...rowClickFindings(name, rows));

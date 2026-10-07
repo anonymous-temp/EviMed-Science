@@ -203,7 +203,7 @@ export function VcrStepFailed({ studyId, study, step, partial }: {
         <span className="text-ui font-normal text-text-3">{stepLabel(step)}</span>
       </h3>
       {note && <p className="mt-1 text-ui text-text-2">{note}</p>}
-      {partial && <PartialResultNote done={partial.done} missing={partial.missing} className="mt-3" />}
+      {partial && <PartialResultNote sentence={partial.sentence} className="mt-3" />}
       {study.abilities.includes("run") && (
         <div className="mt-3">
           <Button variant="secondary" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>
@@ -302,17 +302,33 @@ export function NotEstimableCard({
 }
 
 /**
- * 部分结果: a computation that failed part-way keeps what it finished
- * (principle 19). What is on screen is named, and so is what is missing —
- * never a silent gap, and never a retry that starts from the beginning.
+ * 部分结果: a computation that stopped part-way keeps what it finished (principle 19), and says so in **one line**, in Chinese —
+ * how far it got, why it stopped, and that what is below is what was done (「这次模拟算完了 18,000 / 20,000 次重复就到了计算时间上限，下面是已完成部分的结果。」).
+ * The sentence is the server's, written from the result's own record; the engine's English note and a second box saying the same
+ * thing are what this replaces (2026-10-07). 「续算」 is offered when the reader may run the step: it goes on from where it stopped.
  */
-export function PartialResultNote({ done, missing, className }: { done: string; missing: string; className?: string }) {
+export function PartialResultNote({ sentence, resume, className }: {
+  sentence: string;
+  /** The step this result belongs to, when the reader may continue it. */
+  resume?: { studyId: string; study: VcrStudy; step: VcrStepKey };
+  className?: string;
+}) {
   return (
-    <p data-vcr-partial="" role="status" className={cn("rounded border border-border bg-surface-1 px-3 py-2 text-caption text-text-2", className)}>
-      <span className="font-medium text-text">已完成的部分保留：</span>
-      {done}
-      <span className="text-text-3">{`；未完成：${missing}`}</span>
+    <p data-vcr-partial="" role="status" className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 rounded bg-surface-2 px-3 py-2 text-ui text-text-2", className)}>
+      <span className="min-w-0 flex-1">{sentence}</span>
+      {resume && <ResumeStep {...resume} />}
     </p>
+  );
+}
+
+/** 「续算」: the step asked for again — the failed marks are cleared and the computation goes on from its checkpoint — and the conversation opens at it. */
+function ResumeStep({ studyId, study, step }: { studyId: string; study: VcrStudy; step: VcrStepKey }) {
+  const { run, busy } = useVcrRun(study);
+  const status = study.steps[step]?.status;
+  // A step already running or queued is going on by itself, and a reader who may not run steps is not offered a button that is refused.
+  if (!study.abilities.includes("run") || status === "running" || status === "queued") return null;
+  return (
+    <Button size="sm" variant="text" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>续算</Button>
   );
 }
 

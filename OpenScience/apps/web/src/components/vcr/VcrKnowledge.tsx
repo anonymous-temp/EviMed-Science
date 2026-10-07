@@ -95,11 +95,13 @@ export function VcrKnowledgeSection({ studyId, knowledge, canWrite, onChanged }:
 }) {
   if (!knowledge) return null;
   const { pack, definitions } = knowledge;
-  if (!pack && definitions.length === 0 && !canWrite) return null;
+  // Nothing bound and nothing used: the section is the catalogue's choice and nothing else, so it exists only for a writer and only when
+  // the catalogue has a pack to choose (`BindPackSection`). A heading over 「这个研究还没有病种定义包」 is a title over an empty box.
+  if (!pack && definitions.length === 0) return canWrite ? <BindPackSection studyId={studyId} onChanged={onChanged} /> : null;
   return (
     <VcrSection title="病种定义包">
       <div data-vcr-knowledge="" className="flex flex-col gap-4">
-        {pack ? <PackRow studyId={studyId} pack={pack} onChanged={onChanged} /> : <BindPack studyId={studyId} canWrite={canWrite} onChanged={onChanged} />}
+        {pack && <PackRow studyId={studyId} pack={pack} onChanged={onChanged} />}
         {definitions.length > 0 && (
           <ul className="divide-y divide-faint">
             {definitions.map((definition) => (
@@ -211,16 +213,14 @@ function PlatformRequest({ studyId, request, onChanged }: { studyId: string; req
   );
 }
 
-/** The catalogue, for a study that has no pack yet. */
-function BindPack({ studyId, canWrite, onChanged }: { studyId: string; canWrite: boolean; onChanged: () => void }) {
+/** The catalogue, for a study that has no pack yet: a section only when there is a pack in it to choose. */
+function BindPackSection({ studyId, onChanged }: { studyId: string; onChanged: () => void }) {
   const { state } = useVcrLoad("vcr:packs", () => getVcrPacks());
   const [choice, setChoice] = useState("");
   const [busy, setBusy] = useState(false);
   const holding = useRef(false);
   const selectId = useId();
-  if (!canWrite) return <p className="text-ui text-text-3">这个研究还没有病种定义包。</p>;
-  if (state.kind !== "ready") return <p className="text-ui text-text-3">这个研究还没有病种定义包。</p>;
-  if (state.data.length === 0) return <p className="text-ui text-text-3">这个研究还没有病种定义包。</p>;
+  if (state.kind !== "ready" || state.data.length === 0) return null;
   const bind = () => {
     if (!choice || holding.current) return;
     holding.current = true;
@@ -231,15 +231,19 @@ function BindPack({ studyId, canWrite, onChanged }: { studyId: string; canWrite:
       .finally(() => { holding.current = false; setBusy(false); });
   };
   return (
-    <div data-vcr-bind-pack="" className="flex flex-wrap items-end gap-3">
-      <div className="min-w-48">
-        <Select id={selectId} label="选用病种定义包" value={choice} onChange={(event) => setChoice(event.target.value)}>
-          <option value="">请选择</option>
-          {state.data.map((pack) => <option key={`${pack.origin}-${pack.id}`} value={pack.id}>{`${packName(pack)}${pack.status === "ai-draft" ? "（AI 草拟）" : ""}`}</option>)}
-        </Select>
+    <VcrSection title="病种定义包">
+      <div data-vcr-knowledge="">
+        <div data-vcr-bind-pack="" className="flex flex-wrap items-end gap-3">
+          <div className="min-w-48">
+            <Select id={selectId} label="选用病种定义包" value={choice} onChange={(event) => setChoice(event.target.value)}>
+              <option value="">请选择</option>
+              {state.data.map((pack) => <option key={`${pack.origin}-${pack.id}`} value={pack.id}>{`${packName(pack)}${pack.status === "ai-draft" ? "（AI 草拟）" : ""}`}</option>)}
+            </Select>
+          </div>
+          <Button variant="secondary" loading={busy} disabled={!choice} onClick={bind}>绑定</Button>
+        </div>
       </div>
-      <Button variant="secondary" loading={busy} disabled={!choice} onClick={bind}>绑定</Button>
-    </div>
+    </VcrSection>
   );
 }
 
@@ -253,15 +257,20 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
   studyId: string; knowledge: VcrKnowledge | null | undefined; canWrite: boolean; canRun: boolean; onChanged: () => void;
 }) {
   const [saving, setSaving] = useState<string | null>(null);
+  // Read here, once, for the section's own sake: whether there is a library definition to use decides whether the section has anything
+  // in it. A section that held a heading and no control was the 「定义库」 of every study whose account had saved nothing.
+  const { state: library } = useVcrLoad("vcr:library", () => getVcrLibrary());
   if (!knowledge) return null;
   const used = knowledge.definitions;
   const comparable = used.filter((definition, index) => definition.versions >= 2 && used.findIndex((other) => other.definitionId === definition.definitionId) === index);
-  const nothing = knowledge.savable.length === 0 && used.length === 0 && knowledge.comparisons.length === 0;
-  if (nothing && !canWrite) return null;
+  const saveable = canWrite && knowledge.savable.length > 0;
+  const usable = canWrite && library.kind === "ready" && library.data.length > 0 ? library.data : null;
+  const comparing = canRun && comparable.length > 0;
+  if (!saveable && !usable && !comparing && knowledge.comparisons.length === 0) return null;
   return (
     <VcrSection title="定义库">
       <div data-vcr-definitions="" className="flex flex-col gap-4">
-        {canWrite && knowledge.savable.length > 0 && (
+        {saveable && (
           <ul className="divide-y divide-faint">
             {knowledge.savable.map((population) => (
               <li key={population.populationId} className="flex items-center justify-between gap-3 py-2">
@@ -271,8 +280,8 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
             ))}
           </ul>
         )}
-        {canWrite && <UseDefinition studyId={studyId} onChanged={onChanged} />}
-        {canRun && comparable.length > 0 && <CompareVersions studyId={studyId} definitions={comparable} onChanged={onChanged} />}
+        {usable && <UseDefinition studyId={studyId} library={usable} onChanged={onChanged} />}
+        {comparing && <CompareVersions studyId={studyId} definitions={comparable} onChanged={onChanged} />}
         {knowledge.comparisons.map((comparison) => (
           <ComparisonCard key={comparison.id} comparison={comparison} name={used.find((definition) => definition.definitionId === comparison.definitionId)?.name ?? "人群定义"} />
         ))}
@@ -332,16 +341,14 @@ function SaveDefinitionDrawer({ studyId, populationId, suggested, onClose, onSav
 }
 
 /** Pick a library definition (and a version) and define this study's population from it. */
-function UseDefinition({ studyId, onChanged }: { studyId: string; onChanged: () => void }) {
-  const { state } = useVcrLoad("vcr:library", () => getVcrLibrary());
+function UseDefinition({ studyId, library, onChanged }: { studyId: string; library: readonly VcrLibraryEntry[]; onChanged: () => void }) {
   const [definitionId, setDefinitionId] = useState("");
   const [version, setVersion] = useState("");
   const [busy, setBusy] = useState(false);
   const holding = useRef(false);
   const definitionSelect = useId();
   const versionSelect = useId();
-  if (state.kind !== "ready" || state.data.length === 0) return null;
-  const entry = state.data.find((item) => item.id === definitionId) ?? null;
+  const entry = library.find((item) => item.id === definitionId) ?? null;
   const use = () => {
     if (!entry || holding.current) return;
     holding.current = true;
@@ -363,7 +370,7 @@ function UseDefinition({ studyId, onChanged }: { studyId: string; onChanged: () 
       <div className="min-w-48">
         <Select id={definitionSelect} label="用定义库里的定义" value={definitionId} onChange={(event) => { setDefinitionId(event.target.value); setVersion(""); }}>
           <option value="">请选择</option>
-          {state.data.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          {library.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </Select>
       </div>
       {entry && entry.versions > 1 && (

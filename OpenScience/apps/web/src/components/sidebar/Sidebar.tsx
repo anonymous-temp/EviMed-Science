@@ -97,6 +97,21 @@ function navRows({ frontier, vcr, geo }: { frontier: boolean; vcr: boolean; geo:
   ]);
 }
 
+/**
+ * Which destination is current. The rows match by prefix, and a conversation is `/app/chat/:sessionId` whatever project it is in — which
+ * made 「新对话」 current in a study's conversation, and in a GEO project's. A conversation in a module's project belongs to the module:
+ * its row is the current one there (`projectModule` is only ever set where the account is offered the module, so no row is marked that
+ * is not on screen).
+ */
+export function isCurrent(to: string, pathname: string, projectModule: "geo" | "vcr" | null): boolean {
+  if (to === "/app/extensions/skills") return pathname.startsWith("/app/extensions");
+  const chatting = pathname.startsWith("/app/chat");
+  if (to === "/app/chat") return chatting && projectModule === null;
+  if (to === VCR_NAV.to) return pathname.startsWith(to) || (chatting && projectModule === "vcr");
+  if (to === GEO_NAV.to) return pathname.startsWith(to) || (chatting && projectModule === "geo");
+  return pathname.startsWith(to);
+}
+
 export function Sidebar() {
   const location = useLocation();
   const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } = useUiStore();
@@ -109,6 +124,8 @@ export function Sidebar() {
   // A computation the researcher asked for ends while they are elsewhere in the same study: a toast says so, with the way to the result.
   useVcrFinishedToasts(vcr);
   const geo = useGeoFeature() === "on";
+  // The module the tab's project belongs to, told by the project list below (a study or a GEO project, a draft included).
+  const [projectModule, setProjectModule] = useState<"geo" | "vcr" | null>(null);
   const [accountName, setAccountName] = useState("");
   useEffect(() => {
     let live = true;
@@ -176,7 +193,7 @@ export function Sidebar() {
               to={item.to}
               icon={item.icon}
               label={item.label}
-              active={item.to === "/app/extensions/skills" ? location.pathname.startsWith("/app/extensions") : location.pathname.startsWith(item.to)}
+              active={isCurrent(item.to, location.pathname, projectModule)}
               freshState={item.to === "/app/chat" ? () => ({ runtimeUiIntent: newRuntimeUiIntent() }) : undefined}
             />
           ))}
@@ -186,7 +203,7 @@ export function Sidebar() {
           * project a group, its conversations inside, any of them one click
           * away and opened in place. It replaced a project dropdown here and a
           * list of the current project's recent work below the rows above. */}
-        <ProjectBrowser geo={geo} vcr={vcr} />
+        <ProjectBrowser geo={geo} vcr={vcr} onCurrentModule={setProjectModule} />
 
         {/* One footer row: who is signed in, and the gear to 设置 (2026-09-23
           * plan §5.2). The count of data sources without a credential used to

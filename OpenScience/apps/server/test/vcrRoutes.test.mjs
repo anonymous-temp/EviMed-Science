@@ -85,6 +85,11 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
   const vcrStore = {
     async rolesOf(/** @type {string} */ _studyId, /** @type {string} */ userId) { calls.push(["vcr.rolesOf", userId]); return roles[userId] ?? []; },
     async members() { calls.push(["vcr.members"]); return [{ userId: OWNER, role: "lead" }]; },
+    async studyByControlProject(/** @type {string} */ userId, /** @type {string} */ projectId) {
+      calls.push(["vcr.ofProject", userId, projectId]);
+      const member = userId === study.userId || (roles[userId] ?? []).length > 0;
+      return projectId === study.projectId && member ? study : null;
+    },
     async saveAssumption(/** @type {any} */ input) { calls.push(["vcr.assumption", input.key, input.reviewState]); return { id: "asm_1", version: 4, ...input }; },
     // The study's one assessment record, as the module's store reads it: the run wrote version 1.
     async modelAssessments() {
@@ -180,11 +185,32 @@ test("a 虚拟临床研究 path's metric label folds every id, so a dashboard ro
     ["/api/vcr/studies/std_abc/referrals", "/api/vcr/studies/:id/referrals"],
     ["/api/vcr/studies/std_abc/referrals/ref_1/contact", "/api/vcr/studies/:id/referrals/:item/contact"],
     ["/api/vcr/studies/std_abc/referrals/ref_1/transition", "/api/vcr/studies/:id/referrals/:item/transition"],
+    ["/api/vcr/studies/of-project/prj_abc", "/api/vcr/studies/of-project/:project"],
     ["/api/vcr/studies/std_abc/whatever-this-is", "/api/vcr/studies/:id/:route"],
     ["/api/vcr/models", "/api/vcr/models"],
     ["/api/vcr/precedents", "/api/vcr/precedents"],
     ["/api/vcr/other", "/api/vcr/:route"],
   ]) assert.equal(vcrRoutePattern(path), label, path);
+});
+
+test("the study a project belongs to is read by the project: what the chip needs, from the study's own row, to whoever may read the study", async () => {
+  const { calls, routes, as } = fixture({ roles: { member: ["viewer"] } });
+  const found = response();
+  await routes(request("GET", "/api/vcr/studies/of-project/prj_1"), found);
+  assert.equal(found.status, 200);
+  assert.deepEqual(Object.keys(found.json().data).sort(), ["abilities", "id", "intendedUse", "projectId", "status", "steps"]);
+  assert.deepEqual([found.json().data.id, found.json().data.projectId, found.json().data.status], ["std_1", "prj_1", "active"]);
+  assert.ok(found.json().data.abilities.includes("write") && found.json().data.abilities.includes("manage_study"), "the lead may set where it starts and what it is for");
+  assert.ok(calls.some((call) => call[0] === "vcr.ofProject" && call[1] === OWNER && call[2] === "prj_1"));
+  // A reader reads it, with the abilities their role holds; a project that is no study and a stranger's are the same 404.
+  as("member");
+  const read = response();
+  await routes(request("GET", "/api/vcr/studies/of-project/prj_1"), read);
+  assert.ok(!read.json().data.abilities.includes("manage_study") && !read.json().data.abilities.includes("run"));
+  await assert.rejects(routes(request("GET", "/api/vcr/studies/of-project/prj_none"), response()), { status: 404, code: "vcr_study_not_found" });
+  as("stranger");
+  await assert.rejects(routes(request("GET", "/api/vcr/studies/of-project/prj_1"), response()), { status: 404, code: "vcr_study_not_found" });
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/of-project/prj_1", {}), response()), { status: 404, code: "not_found" });
 });
 
 test("the CSRF check is repeated, a path id is held to its shape, and creation without its hook is a named 503", async () => {
@@ -406,6 +432,7 @@ test("the study lead holds review_any: it countersigns every kind, which no othe
  */
 const REQUESTS = {
   "GET /studies/:id": ["GET", "/api/vcr/studies/std_1", undefined],
+  "GET /studies/of-project/:project": ["GET", "/api/vcr/studies/of-project/prj_1", undefined],
   "GET /studies/:id/:tab": ["GET", "/api/vcr/studies/std_1/overview", undefined],
   "GET /studies/:id/runs": ["GET", "/api/vcr/studies/std_1/runs", undefined],
   "GET /studies/:id/cards": ["GET", "/api/vcr/studies/std_1/cards?kind=population", undefined],

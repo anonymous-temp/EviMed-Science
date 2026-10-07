@@ -150,6 +150,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
  */
 export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id": ["read"],
+  "GET /studies/of-project/:project": ["read"],
   "GET /studies/:id/:tab": ["read"],
   "GET /studies/:id/runs": ["read"],
   "GET /studies/:id/cards": ["read"],
@@ -235,6 +236,7 @@ export function vcrRoutePattern(pathname) {
   if (parts[0] !== "studies") return "/api/vcr/:route";
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
+  if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
   const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
@@ -631,6 +633,29 @@ export function createVcrRoutes(dependencies) {
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
+    /** What a set of roles may do on a study: the roles' abilities, and `manage_study` for the lead's own (the second human stop). @param {string[]} roles */
+    const abilitiesFor = (roles) => {
+      const abilities = new Set(abilitiesOfRoles(roles));
+      if (roles.some((role) => roleHolds(role, "manage_study"))) abilities.add("manage_study");
+      return [...abilities].sort();
+    };
+
+    // The study a project belongs to, for the conversation frame: a conversation knows its project and not its study, and a study nobody
+    // has spoken in yet is a draft, which the home list leaves out — so the frame cannot find the study that 「新建研究」 has just made
+    // by reading the list. Only what the frame's chip needs (where the study starts, what it is for, what this caller may change), from
+    // the study's own row: the page's heavy reading of a study is not what a chip waits for.
+    if (parts.length === 3 && parts[1] === "of-project") {
+      if (method !== "GET") throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
+      const found = await data().studyByControlProject(String(user.id), parts[2]);
+      if (!found) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
+      const { study, roles } = await authorize(found.id, "read");
+      return reply({
+        id: study.id, projectId: study.projectId, status: study.status, intendedUse: study.intendedUse,
+        steps: Object.fromEntries(Object.entries(study.steps ?? {}).map(([step, entry]) => [step, { status: entry.status, requested: entry.requested === true }])),
+        abilities: abilitiesFor(roles),
+      });
+    }
+
     const id = parts[1];
     if (parts.length === 2) {
       if (method === "GET") {
@@ -641,14 +666,11 @@ export function createVcrRoutes(dependencies) {
         const sessionId = conversationSessionId
           ?? await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null)
           ?? await dependencies.projects?.latestSessionId?.(user, view.projectId).catch(() => null) ?? null;
-        const abilities = new Set(abilitiesOfRoles(roles));
-        if (roles.some((role) => roleHolds(role, "manage_study"))) abilities.add("manage_study");
-        // What this caller may do, from the roles it holds now: the page reads
-        // it to show only the actions that will not be refused.
+        // What this caller may do, from the roles it holds now: the page reads it to show only the actions that will not be refused.
         // What this deployment offers on the page besides the module's own: each is a switch the page reads to show or hide one action.
         const features = { simulations: Boolean(config.vcrPublicSimulationsEnabled && hooks.publications), predictions: Boolean(hooks.predictions),
           platformPacks: Boolean(config.vcrPlatformPacksEnabled && hooks.knowledge) };
-        return reply({ ...view, sessionId, roles, abilities: [...abilities].sort(), features });
+        return reply({ ...view, sessionId, roles, abilities: abilitiesFor(roles), features });
       }
       if (method === "PATCH") {
         const body = await bodyOf(req, maxJsonBytes, ["name", "question", "action", "dataTier", "intendedUse", "status"]);

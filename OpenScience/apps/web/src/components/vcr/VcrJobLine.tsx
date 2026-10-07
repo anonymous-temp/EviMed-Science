@@ -30,7 +30,9 @@ export function VcrJobLine({ studyId, study, onBudget, onChanged }: {
   const lead = live.find((job) => job.state === "running") ?? live[0] ?? null;
   const behind = lead ? live.length - 1 : 0;
   // A failure the same computation has since got past (a later job of the same name succeeded; the list is newest first) is history.
-  const failed = study.jobs.filter((job, index) => job.state === "failed"
+  // A computation that stopped part-way and kept its result (`error.partial`) is told on the tab that shows that result, in one
+  // sentence over it: the line here said it a second time, in a second box.
+  const failed = study.jobs.filter((job, index) => job.state === "failed" && job.error?.partial !== true
     && !study.jobs.slice(0, index).some((later) => later.label === job.label && later.state === "succeeded"));
   const waiting = jobsAwaitingBudget(study.jobs);
   const awaiting = study.budget?.awaitingBudget ?? 0;

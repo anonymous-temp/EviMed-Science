@@ -619,7 +619,9 @@ describe("数据与证据 — which card is open", () => {
   it("filters 关键假设 on the cards the designs rest on", async () => {
     drawTab(<DataTab studyId={STUDY_ID} study={study()} />, dataPath());
     await screen.findByRole("heading", { name: "对照组中位 PFS" });
-    await userEvent.click(screen.getByRole("button", { name: /关键假设/ }));
+    // One chip that opens a menu, not a row of five.
+    await userEvent.click(screen.getByRole("button", { name: "筛选" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: /关键假设/ }));
     const listed = [...document.querySelectorAll("[data-vcr-assumption]")].map((node) => node.getAttribute("data-vcr-assumption"));
     expect(listed).toEqual(["asm_1", "asm_2"]);
   });

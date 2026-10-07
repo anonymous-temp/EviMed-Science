@@ -43,6 +43,17 @@ test("every page the budget table names is a page the walk visits", () => {
   assert.equal(pageFindings("files", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
 });
 
+test("the evidence zones' home may draw the four kinds of border it was measured at, the daily nine controls — and no more", () => {
+  const zones = (overrides) => pageFindings("frontier-zones", "desktop", clean({ controlKinds: 8, colorKinds: 5, ...overrides }), []).failures;
+  assert.deepEqual(zones({ borderKinds: 4 }), []);
+  assert.deepEqual(zones({ borderKinds: 5 }), ["frontier-zones@desktop: 5 kinds of border (budget 4)"]);
+  // The feed's own pages keep the reading page's three.
+  assert.deepEqual(pageFindings("frontier", "desktop", clean({ controlKinds: 8, borderKinds: 4 }), []).failures, ["frontier@desktop: 4 kinds of border (budget 3)"]);
+  const daily = (controlKinds) => pageFindings("frontier-daily", "desktop", clean({ controlKinds }), []).failures;
+  assert.deepEqual(daily(9), []);
+  assert.deepEqual(daily(10), ["frontier-daily@desktop: 10 kinds of control (budget 9)"]);
+});
+
 test("every page the router serves at a fixed address is walked, or says why it is not", async () => {
   // The extension centre's two pages and the evidence zones' home shipped
   // without the walk ever opening them (found 2026-10-03): the route list is
@@ -421,6 +432,46 @@ test("a row click shows something when it opens a drawer, goes to a page, opens 
     ["files@desktop: clicking the first row of the list “笔记” showed nothing — no drawer, no page, no opened row"]);
 });
 
+test("the page's blocks are the title, what stands over it and the body that follows the header — not the first block that is not the header", () => {
+  // A page with a way back has a block before its header (PageShell's `back`). The walk used to take that block for the body, so
+  // the way back was all it measured of the seven tabs of a study: its box began 10 px outside the column and the tabs were never read.
+  const column = (back, ...body) => node("body", {}, [node("main", {}, [node("div", {}, [
+    node("div", { left: 296 }, [back]),
+    node("header", { left: 296 }, [node("h1", { text: "研究", left: 296 })]),
+    node("div", { left: 296 }, body),
+  ])])]);
+  const lefts = (back, ...body) => inPage(column(back, ...body), () => measure([[], [], []])).pageLefts;
+  assert.deepEqual(lefts(node("a", { text: "返回", left: 296 }), node("div", { left: 296 }), node("p", { text: "一句话", left: 296 })), [296]);
+  // The back link that sticks out of the column is one left edge too many…
+  assert.deepEqual(lefts(node("a", { text: "返回", left: 286 }), node("div", { left: 296 })), [296, 286]);
+  // …and so is a block of the body, which is measured now.
+  assert.deepEqual(lefts(node("a", { text: "返回", left: 296 }), node("div", { left: 296 }), node("div", { left: 306 })), [296, 306]);
+  // A page with no way back is measured as before: the title and the body's blocks.
+  assert.deepEqual(inPage(page(header(), node("p", { text: "正文", left: 0 })), () => measure([[], [], []])).pageLefts, [0]);
+});
+
+test("a row whose title is a link to an outside address in a new tab declares what it opens; a button or a relative link does not", () => {
+  const link = (attrs) => node("li", {}, [node("a", { attrs: { "data-row-title": "", ...attrs }, text: "一条新闻" })]);
+  const lists = page(
+    header(),
+    node("ul", { attrs: { "aria-label": "外链" } }, [link({ href: "https://www.fda.gov/x", target: "_blank" })]),
+    node("ul", { attrs: { "aria-label": "站内" } }, [link({ href: "/app/frontier/e1" })]),
+    node("ul", { attrs: { "aria-label": "按钮" } }, [row("一行")]),
+    node("ul", { attrs: { "aria-label": "相对" } }, [link({ href: "x.html", target: "_blank" })]),
+  );
+  inPage(lists, () => {
+    assert.deepEqual(rowProbe(["targets"]), ["外链", "站内", "按钮", "相对"]);
+    assert.deepEqual([0, 1, 2, 3].map((index) => rowProbe(["external", index])), [true, false, false, false]);
+    // Asking is not clicking.
+    assert.equal(descendants(lists).find((el) => el.text === "一条新闻").clicks, 0);
+  });
+  const closed = { dialog: false, path: "/app/frontier", expanded: 0 };
+  // The browser reported no popup, and the row is still not silent: its link is a real one.
+  assert.equal(rowClickShown(closed, closed, 0, true), true);
+  assert.equal(rowClickShown(closed, closed, 0, false), false);
+  assert.equal(rowClickShown(closed, closed, 0), false);
+});
+
 /**
  * A stand-in for playwright-core: every page load fires the shell's runtime
  * warm-up through the context's routes, and everything the walk did is
@@ -470,7 +521,9 @@ function context() {
           const [action] = arg;
           if (action === "targets") return process.env.FAKE_ROWS === "two" ? ["第一张清单", "第二张清单"] : ["资料清单"];
           if (action === "state") return { dialog: dialogOpen, path: new URL(url).pathname, expanded: 0 };
-          dialogOpen = process.env.FAKE_ROWS !== "dead";
+          // FAKE_ROWS=external: the row's title is a link to an outside address; the browser reports no popup, and the row is not silent.
+          if (action === "external") return process.env.FAKE_ROWS === "external";
+          dialogOpen = process.env.FAKE_ROWS !== "dead" && process.env.FAKE_ROWS !== "external";
           log({ rowClick: new URL(url).pathname, index: arg[1] });
           return true;
         }
@@ -623,6 +676,12 @@ test("a row that shows nothing when clicked fails the page it is on", async () =
     assert.ok(report.failures.includes(`${name}@desktop: clicking the first row of the list “资料清单” showed nothing — no drawer, no page, no opened row`), name);
   }
   assert.equal(report.failures.length, ROW_CLICK_PAGES.size);
+});
+
+test("a row that is a link to an outside address is not a row that shows nothing, even when the browser reports no new tab", async () => {
+  const { code, stdout, stderr, report } = await walk({ FAKE_ROWS: "external" });
+  assert.equal(code, 0, stdout + stderr);
+  assert.deepEqual(report.pages["frontier@desktop"].rowClicks, [{ label: "资料清单", shown: true }]);
 });
 
 test("with two lists on a page the walk loads the page again before the second click", async () => {

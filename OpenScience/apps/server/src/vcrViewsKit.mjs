@@ -37,7 +37,7 @@
 
 import {
   VCR_COUNT_KEYS, VCR_INTERVAL_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_PERFORMANCE_MEASURE_LABELS_ZH,
-  VCR_STALE_REASON_LABELS_ZH, VCR_VALUE_SOURCES,
+  VCR_STALE_REASON_LABELS_ZH, VCR_VALUE_SOURCES, knownErrorCodeMessage,
 } from "@evimed/domain";
 
 /** @param {unknown} value */
@@ -57,6 +57,54 @@ export const numeric = (value) => {
 };
 /** @param {unknown} value @returns {string | null} */
 export const text = (value) => (typeof value === "string" && value.trim() ? value : null);
+
+// --- what a page says about a computation that did not finish -----------------------------
+
+/** What a failed computation says when nothing sayable was recorded for it: that the part which finished is kept is the one thing always true. */
+export const VCR_FAILED_SENTENCE = "这项计算没有完成，已算出的部分保留。";
+
+const HAN = /\p{Script=Han}/u;
+
+/**
+ * A recorded sentence as a page may print it: Chinese, or nothing.
+ *
+ * The record keeps what the engine said — a job's error is the domain's sentence for the code with the engine's own detail after it
+ * (「…作为有限结果保留。（The CPU budget ran out before every replicate ran…）」), and a stopped engine's code in brackets — and that is right
+ * for the record and wrong for a researcher: an engine's English note is not a sentence of the product (2026-10-07 live walk, the trial tab
+ * printed it beside a Chinese box saying the same thing). So the page reads the sentence with a trailing bracketed group that holds no
+ * Chinese removed, and a sentence with no Chinese left says nothing. A closed script test on a bracketed tail, not a reading of prose.
+ * @param {unknown} message @returns {string | null}
+ */
+export function vcrPageSentence(message) {
+  const sentence = String(message ?? "").trim();
+  const opens = new Set(["（", "("]);
+  const closes = new Set(["）", ")"]);
+  // The earliest bracket whose group runs to the end of the sentence, balanced (the engine's detail may hold brackets of its own).
+  for (let at = 0; at < sentence.length; at += 1) {
+    if (!opens.has(sentence[at])) continue;
+    let depth = 0;
+    let closedAt = -1;
+    for (let index = at; index < sentence.length; index += 1) {
+      if (opens.has(sentence[index])) depth += 1;
+      else if (closes.has(sentence[index])) { depth -= 1; if (depth === 0) { closedAt = index; break; } }
+    }
+    if (closedAt === sentence.length - 1 && !HAN.test(sentence.slice(at))) {
+      const kept = sentence.slice(0, at).trim();
+      return HAN.test(kept) ? kept : null;
+    }
+  }
+  return HAN.test(sentence) ? sentence : null;
+}
+
+/**
+ * What a page says about a job (or a step) that did not finish, from its recorded error: the Chinese part of what was recorded, else
+ * the domain's sentence for its code, else that the finished part is kept. Never the engine's own words, and never a code.
+ * @param {unknown} error `{ code, message }` as a job row holds it
+ */
+export function vcrFailureSentence(error) {
+  const recorded = object(error);
+  return vcrPageSentence(recorded.message) ?? knownErrorCodeMessage(String(recorded.code ?? "")) ?? VCR_FAILED_SENTENCE;
+}
 
 // --- people ------------------------------------------------------------------------
 

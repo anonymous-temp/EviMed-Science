@@ -52,32 +52,35 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
       : <VcrStepPending studyId={studyId} study={study} step="patients" />;
   }
   const twin = data.twin ?? (data.model?.twinLabel ? { label: data.model.twinLabel, reason: data.model.twinReason ?? null } : null);
+  // A chart is drawn only when it has a series to draw; a card whose plot is empty is a title over an empty box.
+  const trajectories = data.trajectories && data.trajectories.series.length > 0 ? data.trajectories : null;
+  const panels = data.panels.filter((panel) => (panel.rows?.length ?? 0) > 0 || (panel.series?.length ?? 0) > 0);
 
   return (
     <div className="flex flex-col gap-6">
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
-        : data.partial && <PartialResultNote done={data.partial.done} missing={data.partial.missing} />}
+        : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "patients" }} />}
 
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">
           {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
 
-          {(data.trajectories || data.example) && (
+          {(trajectories || data.example) && (
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-              {data.trajectories && (
+              {trajectories && (
                 <ChartCard
                   title="两种情景下的推演，以及个体之间的差异"
-                  legend={<VcrSeriesLegend series={data.trajectories.series} />}
-                  footnote={data.trajectories.series.some((series) => (series.individuals ?? []).length > 0)
+                  legend={<VcrSeriesLegend series={trajectories.series} />}
+                  footnote={trajectories.series.some((series) => (series.individuals ?? []).length > 0)
                     ? "细线是个体轨迹，不是观察记录。"
                     : undefined}
                 >
                   <VcrTrajectoryChart
-                    series={data.trajectories.series}
-                    xLabels={data.trajectories.ticks}
-                    xLabel={data.trajectories.xLabel}
-                    yLabel={data.trajectories.yLabel}
+                    series={trajectories.series}
+                    xLabels={trajectories.ticks}
+                    xLabel={trajectories.xLabel}
+                    yLabel={trajectories.yLabel}
                   />
                 </ChartCard>
               )}
@@ -86,9 +89,9 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
             </div>
           )}
 
-          {(data.panels.length > 0 || (data.sensitivity && data.sensitivity.rows.length > 0)) && (
+          {(panels.length > 0 || (data.sensitivity && data.sensitivity.rows.length > 0)) && (
             <div className="grid gap-4 lg:grid-cols-3">
-              {data.panels.map((panel) => (
+              {panels.map((panel) => (
                 <Card key={panel.key} title={panel.title}>
                   {panel.note && <p className="mb-3"><Tag>{panel.note}</Tag></p>}
                   {panel.rows && panel.rows.length > 0 && (

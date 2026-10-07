@@ -51,6 +51,7 @@ export function ListRow({
   menu,
   unread = false,
   muted = false,
+  titleProps,
   className,
 }: {
   title: ReactNode;
@@ -87,6 +88,8 @@ export function ListRow({
   unread?: boolean;
   /** Read or inactive: the title steps down to the secondary colour. */
   muted?: boolean;
+  /** A `data-*` hook or `aria-current` on the title control — what a test or a master/detail page addresses a row by. */
+  titleProps?: { [attribute: `data-${string}`]: string | undefined; "aria-current"?: "true" | "page" | undefined };
   className?: string;
 }) {
   // The global focus ring stays on the title itself; the stretched pseudo
@@ -99,13 +102,13 @@ export function ListRow({
   // `data-row-title` is what the release walk measures: every title in a
   // list must start on one left edge (scripts/ops/ui-walk.mjs).
   const heading = to ? (
-    <Link to={to} onClick={onOpen} data-row-title className={cn(titleClass, stretched)}>{title}</Link>
+    <Link to={to} onClick={onOpen} data-row-title className={cn(titleClass, stretched)} {...titleProps}>{title}</Link>
   ) : href ? (
-    <a href={href} target="_blank" rel="noreferrer" onClick={onOpen} data-row-title className={cn(titleClass, stretched)}>{title}</a>
+    <a href={href} target="_blank" rel="noreferrer" onClick={onOpen} data-row-title className={cn(titleClass, stretched)} {...titleProps}>{title}</a>
   ) : onOpen ? (
-    <button type="button" onClick={onOpen} aria-expanded={expanded} data-row-title className={cn(titleClass, stretched)}>{title}</button>
+    <button type="button" onClick={onOpen} aria-expanded={expanded} data-row-title className={cn(titleClass, stretched)} {...titleProps}>{title}</button>
   ) : (
-    <span data-row-title className={titleClass}>{title}</span>
+    <span data-row-title className={titleClass} {...titleProps}>{title}</span>
   );
   const interactive = Boolean(to || href || onOpen);
   return (

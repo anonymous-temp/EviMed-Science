@@ -142,6 +142,39 @@ describe("where the data intake is", () => {
   });
 });
 
+describe("the data intake at a tier that takes no real data", () => {
+  const intakeWith = (sources: number) => {
+    const raw = fixture("ev201/data.json");
+    raw.intake = { ...fixture("intake/data-none.json").intake };
+    if (sources > 0) raw.intake = { ...fixture("intake/data-sealed.json").intake };
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/data`]: raw });
+  };
+
+  it("is one folded line at the end — its form is not on the page — until somebody opens it", async () => {
+    intakeWith(0);
+    draw(<DataTab studyId={STUDY_ID} study={study()} />);
+    await ready();
+    const fold = screen.getByText("数据接入").closest("details") as HTMLDetailsElement;
+    expect(fold).not.toBeNull();
+    expect(fold.open).toBe(false);
+    // No second heading of its own: the line is the heading.
+    expect(screen.queryByRole("heading", { name: "数据接入" })).toBeNull();
+    await userEvent.click(within(fold).getByText("数据接入"));
+    expect(fold.open).toBe(true);
+    expect(within(fold).getByText(/还没有数据源。登记一个/)).toBeInTheDocument();
+    expect(within(fold).getByLabelText("名称")).toBeInTheDocument();
+  });
+
+  it("is open, and says how many sources it holds, when a source is already registered", async () => {
+    intakeWith(1);
+    draw(<DataTab studyId={STUDY_ID} study={study()} />);
+    await ready();
+    const fold = screen.getByText(/^数据接入 · \d+ 个数据源$/).closest("details") as HTMLDetailsElement;
+    expect(fold.open).toBe(true);
+    expect(fold.querySelector("[data-vcr-source]")).not.toBeNull();
+  });
+});
+
 describe("a card's own words", () => {
   it("shows no version number beside a card or a review — the date says when", async () => {
     draw(<DataTab studyId={STUDY_ID} study={study()} />);

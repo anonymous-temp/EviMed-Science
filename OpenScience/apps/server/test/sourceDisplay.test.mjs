@@ -31,6 +31,19 @@ test("what a document says shows once it is understood, and never the parser's o
   assert.equal(sourceDisplayOf(row({ outputs, currentUnderstandingId: "understanding:x:g1" })).gist, "AAP 2026 儿童尿路感染诊断与管理指南。");
 });
 
+test("a document whose type is the format's own — or was reset to it — reads 「文档」 on its row and in its drawer, never 「论文」", () => {
+  // The first pass of a PDF, an override to 「文档」, and a type nobody knows: the same word, from the one vocabulary.
+  for (const payload of [{ docType: "document" }, { docType: "document", override: { docType: "document", reason: "不是论文", at: "2026-10-07T00:00:00.000Z" } }, { docType: "other" }, {}]) {
+    const shown = sourceDisplayOf(row(payload));
+    assert.equal(shown.typeShort, "文档", JSON.stringify(payload));
+    assert.equal(shown.kind, "document");
+    assert.doesNotMatch(`${shown.typeLabel}${shown.typeShort}`, /论文/);
+  }
+  assert.equal(sourceDisplayOf(row({ docType: "document" })).typeLabel, "文档");
+  // 「论文」 is what a published paper is, once somebody has said so.
+  assert.equal(sourceDisplayOf(row({ docType: "published-paper" })).typeShort, "论文");
+});
+
 test("a row carries the type, the chip, where it came from and the facts a meta line states", () => {
   const paper = sourceDisplayOf(row({ docType: "review-guideline", analysis: { pageCount: 18 }, fingerprint: { size: 2_200_000 } }));
   assert.deepEqual([paper.typeLabel, paper.typeShort, paper.kind, paper.origin, paper.pages, paper.size, paper.format],

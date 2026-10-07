@@ -131,7 +131,11 @@ export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState
       {issue.lead && (
         <section aria-label="头条" className="mt-5">
           <h3 className="max-w-measure-body text-title font-semibold text-text">{issue.lead.item.title}</h3>
-          <a href={issue.lead.item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "mt-1 text-caption text-accent")}>{issue.lead.item.source.name} · 原文 ↗</a>
+          {/* The feed card's own look for a link of this kind: the size is the inner span's, so the link itself is the page's one 28 px
+              inline action. A 12 px link was the daily's tenth kind of control. */}
+          <a href={issue.lead.item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1 mt-1 px-1 text-accent")}>
+            <span className="text-caption">{issue.lead.item.source.name} · 原文 ↗</span>
+          </a>
           {(leadText || issue.lead.event) && (
             <p className="mt-2 max-w-measure text-ui text-text-2">
               {leadText}
@@ -177,7 +181,9 @@ function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
       <h3 id="daily-followed-zones" className="text-ui font-semibold text-text">你关注的专区</h3>
       {zones.map((zone) => (
         <div key={zone.zoneId} className="mt-2">
-          <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}`} className={cn(INLINE_ACTION, "text-caption text-text-3 hover:text-accent")}>{zone.zoneTitle}</Link>
+          <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}`} className={cn(INLINE_ACTION, "-ml-1 px-1 text-text-3 hover:text-accent")}>
+            <span className="text-caption">{zone.zoneTitle}</span>
+          </Link>
           <ul aria-label={zone.zoneTitle}>
             {zone.cards.map((card) => (
               <li key={card.id} className="flex gap-2 border-b border-border py-3">
