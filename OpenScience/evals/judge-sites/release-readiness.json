@@ -492,7 +492,7 @@
   },
   "integratedMainCommit": "93564fd7fa864dcb5c1d6c04d7cdda1a981b50a7",
   "mainIntegration": {
-    "status": "regression-in-progress",
+    "status": "implemented-and-regression-verified",
     "preserved": [
       "Evidence flywheel publication and privacy gates",
       "Existing routing and model output ceilings",
@@ -503,7 +503,8 @@
       "J13": "Reorder a complete authorized prefix; retain every candidate and meter against the runtime project or subscribed project.",
       "J14": "Resolve exact titles first; compare public topic candidates outside vote transactions; keep account/project attribution, quota checks, related links and durable model costs.",
       "J17": "Rank preserved publication leads before bounded scout admission, retain all papers, preserve durable queue order and atomically enforce the daily scout limit."
-    }
+    },
+    "sourceCommit": "59977aa968b0acfc07e567e5a76a4d34399aa4dd"
   },
   "validationBeforeMainIntegration": {
     "typechecks": "All five final project typechecks passed serially.",
@@ -523,10 +524,241 @@
       "memoryTests": 9,
       "failed": 0
     },
-    "server": "Full bounded-concurrency suite in progress; a new provenance inventory entry was corrected and all 9 inventory tests passed.",
-    "web": "Pending the main-integrated full web suite.",
+    "server": {
+      "tests": 8254,
+      "passed": 6533,
+      "environmentSkipped": 1720,
+      "initialFailures": 1,
+      "correctedFailures": 1,
+      "correction": "Classified the new runtime measurement as immutable kernel provenance; all 9 tests in pinInventory.test.mjs passed on rerun."
+    },
+    "web": {
+      "passed": 2456,
+      "skipped": 0,
+      "failed": 0,
+      "workers": 1
+    },
     "audits": "Source credential, dependency, hosted compliance (78 checks), SaaS alignment, capability manifests, curated digests, skill package generation, vocabulary and tool graphs passed. Capability execution audit still requires new live probes.",
     "liveDeploymentManifest": "Not generated in this source-only worktree; real release image IDs are required.",
-    "databaseFocused": "Jev accounting, J13/J14 context and durable billing, related-topic links and race handling, J17 actual queue leases and concurrent daily-cap admission passed against isolated PostgreSQL."
+    "databaseFocused": "Jev accounting, J13/J14 context and durable billing, related-topic links and race handling, J17 actual queue leases and concurrent daily-cap admission passed against isolated PostgreSQL.",
+    "packages": {
+      "domain": {
+        "passed": 965
+      },
+      "harnessPort": {
+        "passed": 281,
+        "skipped": 1
+      },
+      "socket": {
+        "passed": 244
+      },
+      "contracts": {
+        "passed": 49,
+        "skipped": 5
+      }
+    },
+    "pythonEngines": "Shared gateway client 6 tests and five focused engine suites 19 tests passed, including the merged MetaAgent concurrency changes. Prior six source-delta image proofs remain separately scoped.",
+    "privateEvidence": {
+      "directory": "/home/coder/workspace/EviMedScience/.evimed-local/acceptance/jev-main-20261007",
+      "logs": [
+        {
+          "file": "jev-main-alignment.log",
+          "sha256": "235e60a5fce4d62cca058c99fc81a81e220398634cf8108b0ef07e2f15c8d261"
+        },
+        {
+          "file": "jev-main-calibration-tests.log",
+          "sha256": "908955268f031e8e3fd50b0005e1d1ad49da3b09b384f7a7b8920fa503e76d68"
+        },
+        {
+          "file": "jev-main-callers-test.log",
+          "sha256": "7104d9d523cc6c68f115d318cca2716dd2d3d6e6af7946ccd3dc7ffe0375914b"
+        },
+        {
+          "file": "jev-main-capabilities-check.log",
+          "sha256": "4b236f641431de4bec80fd3ffb280286577a2d76e657e2317ff09ddab7e6a38b"
+        },
+        {
+          "file": "jev-main-capability-audit.log",
+          "sha256": "24523603e3d3d6a66eaacb664905d03b4fde798673bcc62f3a820ea628d59351"
+        },
+        {
+          "file": "jev-main-compliance.log",
+          "sha256": "f09bf8c6c0d09c6cd25a33b82ae4300567dcd715d95e52e37f551a2b78608e83"
+        },
+        {
+          "file": "jev-main-contract-tests.log",
+          "sha256": "2cfc8cd45ee4f8c7d48f7eaa15554125abcd5bd15302e4bb0396178eb9008e8c"
+        },
+        {
+          "file": "jev-main-deps-audit.log",
+          "sha256": "8c4296c9fb9ec70350c1c009e9241e207714cb6caa7a4b7e9a2852032538b459"
+        },
+        {
+          "file": "jev-main-domain-tests.log",
+          "sha256": "4adbb3be814d8306c471d2dde1c11a1c837633356ae7cc2c08ca74ec840d4d5e"
+        },
+        {
+          "file": "jev-main-domain-types.log",
+          "sha256": "bc8bf11714572d7229bc05a037550c969c350837ad693ae27dcdc2ac250d33e2"
+        },
+        {
+          "file": "jev-main-engine-0-tests.log",
+          "sha256": "e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce"
+        },
+        {
+          "file": "jev-main-engine-1-tests.log",
+          "sha256": "e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce"
+        },
+        {
+          "file": "jev-main-engine-2-tests.log",
+          "sha256": "cebd5743c0d9eb93a1165ac7e37022653d9648ecf17f279d96198e296e5b847e"
+        },
+        {
+          "file": "jev-main-engine-3-tests.log",
+          "sha256": "e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce"
+        },
+        {
+          "file": "jev-main-engine-4-tests.log",
+          "sha256": "46ed5af953003012495ef7e1c0be34922d201dca3ac1240cf5d96882ee28f9b6"
+        },
+        {
+          "file": "jev-main-engine-5-tests.log",
+          "sha256": "e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce"
+        },
+        {
+          "file": "jev-main-engine-client-tests.log",
+          "sha256": "91e7b4890ab4a0498335c8aec919273178aae69a01085aca3337f4c4994afd12"
+        },
+        {
+          "file": "jev-main-engine-pytest-0.log",
+          "sha256": "6e514f548d54b4bfcf5b5b9ebbc9eda7a4465159fd676f9a0d7204a38f131695"
+        },
+        {
+          "file": "jev-main-engine-pytest-1.log",
+          "sha256": "31828c509be55e5a52483b47e57695ed1bd5ea4051c8d4aa4c2f210884258f03"
+        },
+        {
+          "file": "jev-main-engine-pytest-2.log",
+          "sha256": "43ec4ff48b785e79e230f384b450cb1c5705f89efdbe6842c353b50d08e35179"
+        },
+        {
+          "file": "jev-main-engine-pytest-3.log",
+          "sha256": "3f29774cc91bf6ce0030e56e099ddac4abf0e2636043dd94d4cbf57c5a919efa"
+        },
+        {
+          "file": "jev-main-engine-pytest-4.log",
+          "sha256": "99a24796443a1d07f66a424f8116a06a2079063af758e7d3c87801c191ad2ecd"
+        },
+        {
+          "file": "jev-main-full-server.log",
+          "sha256": "0da154328b233328da1948b2c11a8fcbb5fa0e3e2898f23b61989694cc2d0305"
+        },
+        {
+          "file": "jev-main-integration.log",
+          "sha256": "a0cda6f97b0a4faec44f20183c91f21b8b10a29110c0970fa08605bc2fb33061"
+        },
+        {
+          "file": "jev-main-ledger-tests.log",
+          "sha256": "ae9278a8e2e26052ec2fa48f50edfa6ff1d5324db09583de3699e04b6b520d41"
+        },
+        {
+          "file": "jev-main-lint.log",
+          "sha256": "b92e15904798cd711ddef92af1f1bb4c086fe958801dcd1395a7c0da90b5b891"
+        },
+        {
+          "file": "jev-main-mcp-tests.log",
+          "sha256": "9717667ec3c86d97b8fc6d7557b8e2c107d423946f7d5f961c05c969df7170ad"
+        },
+        {
+          "file": "jev-main-pin-inventory.log",
+          "sha256": "17da64f459e85950173fdd5f1283c0b47333bcd7b7092ed2e3da2421cc61a8df"
+        },
+        {
+          "file": "jev-main-pin-tests.log",
+          "sha256": "117b6f21092e025f53612c654b174655b64ff8aa9ab4684410246a745c339be9"
+        },
+        {
+          "file": "jev-main-port-tests.log",
+          "sha256": "83f71ecfc9faa7640d9297a197675c345611d82eaa26618d09f0b3ad47a647b4"
+        },
+        {
+          "file": "jev-main-port-types.log",
+          "sha256": "473d7519527a3bf0e766e5bb8e318748c092a13064b7baf4a7e76140493d68f3"
+        },
+        {
+          "file": "jev-main-secrets.log",
+          "sha256": "a9bf365c161649dd40dcaacdcc3ef4ca785dba919d86155d93aa2fe38a1973b1"
+        },
+        {
+          "file": "jev-main-server-lint-final.log",
+          "sha256": "605a9d07c34b13742fe3149a0d733cc5369c3a4c32e0646ed3ce8d87a21c2f59"
+        },
+        {
+          "file": "jev-main-server-types-final.log",
+          "sha256": "2523d8d635848e176e01366c6198b6207b810628547b14d256818f30e77c17f8"
+        },
+        {
+          "file": "jev-main-server-types.log",
+          "sha256": "95342d8fbdda9ce74b3393935924e5cce6c6bcaabce06edffb9b7ba3b0e9d951"
+        },
+        {
+          "file": "jev-main-skill-digests.log",
+          "sha256": "5a8452a7619427e06efb8f1e331c96853898efb812e1bcaeae5bbac16a1c601d"
+        },
+        {
+          "file": "jev-main-skill-packages.log",
+          "sha256": "d14fa5973e3a826a03f9b321acdd80121891c651d21d3be4740ef9fb9afd7d9d"
+        },
+        {
+          "file": "jev-main-socket-tests.log",
+          "sha256": "152a1161d25399fca19189b0a7d39fccee6f9dab4b4d3530de8dea81a08a42ae"
+        },
+        {
+          "file": "jev-main-socket-types.log",
+          "sha256": "6507d0161ed212b820ba91535871f0b0f2cd664d3e7abba63b2a8958b3d31205"
+        },
+        {
+          "file": "jev-main-toolgraph-check.log",
+          "sha256": "6158a033b1b35e080d66a112a6a98e9faee90f725d05fb3b6779b1adf907b378"
+        },
+        {
+          "file": "jev-main-toolgraph-tests.log",
+          "sha256": "3b5b8cbff843f58614e526532bc14ab9cb91ada0f405adcf8f0658a1ca981b41"
+        },
+        {
+          "file": "jev-main-web-build.log",
+          "sha256": "131ba4976e0689f0fc71e84451a86bba9f779b5a203d382cc876b126bee1736c"
+        },
+        {
+          "file": "jev-main-web-tests.log",
+          "sha256": "77d9162d2a5b05c7a4fb054202bafa8190a34bb6006389fa6cb2d544cc6283f6"
+        },
+        {
+          "file": "jev-main-web-types.log",
+          "sha256": "c9ba408a6da3ab950f2a6bf865c48ceb8702ac000d212adaddae9fc7e0a1082b"
+        },
+        {
+          "file": "jev-scout-real-pg-ordering.log",
+          "sha256": "4d43391e98f789ec2199c8cffbce63b313f03fea829a3d44bba9201ebda93cab"
+        },
+        {
+          "file": "jev-evidence-integration-final.log",
+          "sha256": "4d1e05eff376081e58f1fd6a583e8d101add9f4e5a5b1ec0c386225f43d0f65b"
+        },
+        {
+          "file": "jev-evidence-judge-final.log",
+          "sha256": "0cbe1e60a780956bcdfc0a4a1316e3e6f8d8f3481cb9f73c7ff45062b226cdf0"
+        },
+        {
+          "file": "jev-evidence-gateway-final.log",
+          "sha256": "418013e6582ddddf07fd6baabd2a7dbd5d452676529421c9bbf3c33177728a85"
+        },
+        {
+          "file": "jev-evidence-public-final.log",
+          "sha256": "cd1f6a2575ddcea56104baf2f8a511b59ea4dad06530be12b25a0285aa939ec8"
+        }
+      ],
+      "note": "Retains both initial failures/setup errors and their final corrected reruns; a green summary never overwrites an initial failed attempt."
+    }
   }
 }
