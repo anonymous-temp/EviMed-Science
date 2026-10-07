@@ -194,6 +194,9 @@ function requests(target, ids) {
     "POST /studies/:id/decisions": async () => ["POST", `${S}/decisions`, { question: "选哪个设计", chosen: { design: "B" }, rationale: "功效更高" }],
     "POST /studies/:id/export": async () => ["POST", `${S}/export`, { kind: "study_package" }],
     "GET /studies/:id/export/:export": async () => ["GET", `${S}/export/${ids.exportId}`, undefined],
+    // The generated records as a file: the study holds no such result, so a reader is answered 404 by name, and a role that reads no page 403.
+    "GET /studies/:id/records/:result.csv": async () => ["GET", `${S}/records/res_none.csv`, undefined],
+    "GET /studies/:id/records/:result.quality.json": async () => ["GET", `${S}/records/res_none.quality.json`, undefined],
     // 模拟研究: the lead alone. A study package is not a report the column takes, so the lead's request is answered 400 by name.
     "GET /studies/:id/publications": async () => ["GET", `${S}/publications`, undefined],
     "POST /studies/:id/predictions": async () => ["POST", `${S}/predictions`, { scenarioId: "scn_none", registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(power)" }],

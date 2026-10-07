@@ -732,6 +732,10 @@ test("every kind of object a computation can be for is named the same way; a com
     assert.equal(queued.at(-1).detail.resultKind, resultKind);
     assert.deepEqual(queued.at(-1).detail.supersedes, supersedes);
   }
+  // What a generated table is kept for — the next computation and the researcher's download: the queue stores it in the data plane.
+  assert.deepEqual(queued.find((job) => job.kind === "generate_population").detail.keepTables, ["population"]);
+  assert.deepEqual(queued.find((job) => job.kind === "generate_patients").detail.keepTables, ["virtual-patients"]);
+  assert.equal(queued.find((job) => job.kind === "design_grid").detail.keepTables, undefined);
   // A literature population is not the scenario population: the job's kind has to be the population's.
   const literature = await start({ kind: "literature_population", scenario: {} });
   assert.equal(literature.json().code, "vcr_simulate_subject_required");

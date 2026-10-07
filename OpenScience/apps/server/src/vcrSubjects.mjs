@@ -54,6 +54,15 @@ export const VCR_SUBJECT_TABS = Object.freeze(/** @type {Record<string, string>}
   population: "population", patient_set: "patients", comparator: "comparator", trial_scenario: "trial", design_grid: "trial",
 }));
 
+/**
+ * The tables of a generated population or virtual patients a computation is asked to keep in the data plane: what the next job reads
+ * and what the researcher downloads (`vcrRecords.mjs`). The programme names the same ones for the objects it queues itself.
+ */
+export const VCR_KEPT_TABLES = Object.freeze(/** @type {Record<string, readonly string[]>} */ ({
+  generate_population: ["population"], literature_population: ["population"], synthesize_population: ["synthetic-population"],
+  generate_patients: ["virtual-patients"], generate_patients_continuous: ["virtual-patients"], generate_patients_binary: ["virtual-patients"],
+}));
+
 /** The population `kind` each population job computes: a job for another kind is not about this population. */
 const POPULATION_KIND_OF_JOB = Object.freeze(/** @type {Record<string, string>} */ ({
   build_cohort: "real", generate_population: "scenario", literature_population: "literature", synthesize_population: "empirical_synthetic",
@@ -234,6 +243,7 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
     detail: {
       subjectId: String(row.id), resultKind: objectKind, node: lineageNode(/** @type {any} */ (nodeKind), String(row.id), Number(row.version)),
       step: STEP_OF[objectKind], ...(stage ? { stage } : {}), supersedes: await vcrObjectLine(store, study.id, objectKind, row),
+      ...(VCR_KEPT_TABLES[kind] ? { keepTables: [...VCR_KEPT_TABLES[kind]] } : {}),
     },
   };
 }

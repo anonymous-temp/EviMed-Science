@@ -12,7 +12,10 @@
 // (review CS-1). The same routes are driven through the real server against
 // PostgreSQL in `vcrComposedApp.integration.test.mjs`.
 import assert from "node:assert/strict";
-import { Readable } from "node:stream";
+import { writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { VCR_MEMBER_ROLES, roleAllows } from "@evimed/domain";
@@ -26,14 +29,22 @@ function request(method, url, body) {
   return Object.assign(req, { method, url, headers: { "content-type": "application/json" } });
 }
 
+/** The response of a route: the status and the body, and — for the one route that streams a file — a stream. */
 function response() {
-  return {
-    status: 0, body: "",
+  /** @type {Buffer[]} */
+  const chunks = [];
+  const res = Object.assign(new Writable({ write(chunk, _encoding, done) { chunks.push(Buffer.from(chunk)); done(); } }), {
+    status: 0,
     writeHead(/** @type {number} */ status) { this.status = status; return this; },
-    end(/** @type {string} */ chunk = "") { this.body = String(chunk); },
     json() { return JSON.parse(this.body); },
-  };
+  });
+  Object.defineProperty(res, "body", { get: () => Buffer.concat(chunks).toString("utf8") });
+  return /** @type {typeof res & { body: string }} */ (res);
 }
+
+/** The table the generated-records double streams. */
+const RECORDS_FILE = path.join(os.tmpdir(), `vcr-routes-records-${process.pid}.csv`);
+writeFileSync(RECORDS_FILE, "a,b\n");
 
 const config = { vcrEnabled: true, vcrAudience: "all", operatorUsers: [], vcrPreviewUsers: [], vcrPublicSimulationsEnabled: true, vcrPlatformPacksEnabled: true };
 const OWNER = "owner";
@@ -418,6 +429,8 @@ const REQUESTS = {
   "POST /studies/:id/decisions": ["POST", "/api/vcr/studies/std_1/decisions", { question: "q" }],
   "POST /studies/:id/export": ["POST", "/api/vcr/studies/std_1/export", { kind: "study_package" }],
   "GET /studies/:id/export/:export": ["GET", "/api/vcr/studies/std_1/export/exp_1", undefined],
+  "GET /studies/:id/records/:result.csv": ["GET", "/api/vcr/studies/std_1/records/res_1.csv", undefined],
+  "GET /studies/:id/records/:result.quality.json": ["GET", "/api/vcr/studies/std_1/records/res_1.quality.json", undefined],
   "GET /studies/:id/publications": ["GET", "/api/vcr/studies/std_1/publications", undefined],
   "POST /studies/:id/publications": ["POST", "/api/vcr/studies/std_1/publications", { exportId: "exp_1", title: "EV-201 模拟", summary: "" }],
   "POST /studies/:id/predictions": ["POST", "/api/vcr/studies/std_1/predictions", { scenarioId: "scn_1", registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(power)" }],
@@ -457,6 +470,9 @@ function composedHooks() {
     orchestrator: { runStep: ok, recomputeAfterChange: ok },
     jobs: { enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
     exporter: { requestExport: ok },
+    // The generated records as a file: a header and a table to stream, and the audit line (`vcrRecords.mjs` has its own tests).
+    records: { csv: async () => ({ filename: "synthetic-population", header: "# 合成数据，不是真实患者。\n", file: RECORDS_FILE, bytes: 4, method: "population.scenario", qualityFile: null }),
+      quality: async () => ({ filename: "synthetic-population.quality.json", body: "{}\n" }), audit: async () => {} },
     // The public 「模拟研究」 column: the lead's publish and withdraw.
     predictions: { file: async () => ({ filed: true, existing: false }) },
     publications: { forStudy: async () => [], publish: async () => ({ id: "sim_1", exportKind: "simulation_report", existing: false }), withdraw: async () => ({ id: "sim_1" }) },
@@ -715,7 +731,9 @@ test("every code these routes emit is one this module declares", async () => {
     "vcr_publication_not_found", "vcr_publication_not_ready", "vcr_publication_patient_data", "vcr_pack_not_curated",
     "vcr_prediction_number_refused", "vcr_prediction_scenario_not_found", "vcr_prediction_not_from_engine", "vcr_prediction_unreadable",
     // raised by the orchestrator's 「让 AI 做」 on a study nothing has been said about, and by the subject resolver of a computation
-    "vcr_definition_missing", "vcr_simulate_subject_required", "vcr_simulate_subject_unknown"];
+    "vcr_definition_missing", "vcr_simulate_subject_required", "vcr_simulate_subject_unknown",
+    // raised by the generated-records module behind the file route (`vcrRecords.mjs`)
+    "vcr_records_not_found", "vcr_records_not_synthetic", "vcr_records_quality_missing", "vcr_records_unavailable"];
   for (const code of fromElsewhere) assert.ok(VCR_ROUTE_ERROR_CODES.includes(code), code);
   const neverEmitted = VCR_ROUTE_ERROR_CODES.filter((code) => !literals.has(code) && !fromElsewhere.includes(code));
   assert.deepEqual(neverEmitted, [], `declared but never emitted: ${neverEmitted.join(", ")}`);

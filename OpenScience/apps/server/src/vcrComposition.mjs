@@ -89,6 +89,7 @@ import { VcrService } from "./vcrService.mjs";
 import { createVcrPublications, createVcrPublicSimulations } from "./vcrPublications.mjs";
 import { createVcrFrontierEvents } from "./vcrFrontierEvents.mjs";
 import { createVcrPredictions } from "./vcrPredictions.mjs";
+import { createVcrRecords } from "./vcrRecords.mjs";
 import { VcrStore } from "./vcrStore.mjs";
 import { createChictrAdapter, createTrialRegistryClient } from "./trialRegistryClient.mjs";
 import { createVcrImporter } from "./vcrImport.mjs";
@@ -1025,8 +1026,10 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   if (frontierEvents) service.attach({ frontierEvents });
   // Filing a prediction with the learning package's registry (flywheel F25): absent without one.
   const predictions = createVcrPredictions({ store, registry: predictionRegistry });
+  // The generated records as a file (R10): read from the data plane, held to the hash the result recorded, synthetic rows only.
+  const records = createVcrRecords({ store, config });
   composed = {
-    publications, simulations, frontierEvents, predictions,
+    publications, simulations, frontierEvents, predictions, records,
     store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },

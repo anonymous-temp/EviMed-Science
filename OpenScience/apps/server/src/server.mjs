@@ -2426,6 +2426,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     get exporter() { return vcr?.exporter ?? null; },
     get publications() { return vcr?.publications ?? null; },
     get predictions() { return vcr?.predictions ?? null; },
+    // The generated records as a file (`vcrRecords.mjs`).
+    get records() { return vcr?.records ?? null; },
     get members() { return vcr?.members ?? null; },
     // The referral ledger's acts, the first human stop among them
     // (`vcrContact.mjs`) — not the store, which has no `contactReferral`.

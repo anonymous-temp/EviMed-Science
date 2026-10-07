@@ -1001,7 +1001,8 @@ export function vcrBuildStages(item, context) {
     const jobKind = vcrJobKindFor("population", row);
     const kind = String(row.kind);
     return finish([stage(jobKind, { ...object(row.definition) }, {
-      bindAll: false, keepTables: kind === "scenario" || kind === "literature" ? ["population"] : [],
+      // Kept in the data plane: what the next step reads, and what the researcher downloads of a generated table.
+      bindAll: false, keepTables: kind === "scenario" || kind === "literature" ? ["population"] : kind === "empirical_synthetic" ? ["synthetic-population"] : [],
     })]);
   }
 
