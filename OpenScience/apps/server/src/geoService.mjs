@@ -689,7 +689,7 @@ export class GeoService {
   async #week(project) {
     const since = new Date(this.now().getTime() - WEEK_MS).toISOString();
     const [errors, stops, changed, rounds, publishable, published] = await Promise.all([
-      this.store.query(`SELECT id, engine, statement, severity, last_snapshot_id, created_at FROM evimed_geo.errors
+      this.store.query(`SELECT id, engine, statement, severity, first_snapshot_id, last_snapshot_id, created_at FROM evimed_geo.errors
         WHERE geo_project_id = $1 AND status <> 'closed' AND created_at >= $2 ORDER BY severity DESC NULLS LAST, created_at DESC LIMIT 3`, [project.id, since]),
       this.store.query(`SELECT id, title, updated_at FROM evimed_geo.articles WHERE geo_project_id = $1 AND safety = 'open' AND status <> 'withdrawn'
         ORDER BY updated_at DESC LIMIT 2`, [project.id]),
@@ -709,7 +709,9 @@ export class GeoService {
     const items = [];
     for (const row of errors.rows) {
       items.push({ kind: "wrong_ours", text: `${spacedLabel(String(row.engine))}讲错：${clip(row.statement, 60)}`, tab: "diagnosis",
-        ref: { errorId: String(row.id), ...(row.last_snapshot_id ? { snapshotId: String(row.last_snapshot_id) } : {}) }, at: iso(row.created_at) });
+        // The line quotes the sentence the error was first seen as: it opens the answer that holds that sentence.
+        ref: { errorId: String(row.id), ...(row.first_snapshot_id || row.last_snapshot_id ? { snapshotId: String(row.first_snapshot_id ?? row.last_snapshot_id) } : {}) },
+        at: iso(row.created_at) });
     }
     for (const row of stops.rows) {
       items.push({ kind: "safety", text: `“${clip(row.title ?? "稿件", 30)}”有安全问题待确认`, tab: "content", ref: { articleId: String(row.id) },

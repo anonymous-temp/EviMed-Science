@@ -197,3 +197,19 @@ test("a point of a trend says how many answers it rests on", options, async () =
   const page = await service.projectView(USER, project.id);
   assert.deepEqual(page.overview.metrics[0].trend, [{ date: "2026-09-24", value: 44, n: 310 }]);
 });
+
+test("a 本周 line about an error opens the answer that holds the sentence it quotes", options, async () => {
+  const { project } = await seededProject();
+  const question = (await store.questionMap(project.id, 1))[0].questions[0];
+  await insertRound(`rw-${project.id}`, project.id, "baseline", { finishedAt: new Date().toISOString() });
+  await insertSnapshot(`sf-${project.id}`, project.id, `rw-${project.id}`, question.id, "deepseek", "valid", new Date(Date.now() - 86_400_000).toISOString());
+  await insertSnapshot(`sl-${project.id}`, project.id, `rw-${project.id}`, question.id, "deepseek", "valid", new Date().toISOString());
+  await database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status,
+      first_snapshot_id, last_snapshot_id) VALUES ($1, $2, $3, 'fp-w', 'deepseek', $4, '每天注射一次', 'number', 'S3', 'open', $5, $6)`,
+  [`ew-${project.id}`, ALICE, project.id, question.id, `sf-${project.id}`, `sl-${project.id}`]);
+  const page = await service.projectView(USER, project.id);
+  const line = page.overview.week.find((item) => item.kind === "wrong_ours");
+  assert.equal(line?.ref?.snapshotId, `sf-${project.id}`);
+  const error = (await service.diagnosis(USER, project.id)).errors[0];
+  assert.deepEqual([error.firstSnapshotId, error.snapshotId], [`sf-${project.id}`, `sl-${project.id}`]);
+});
