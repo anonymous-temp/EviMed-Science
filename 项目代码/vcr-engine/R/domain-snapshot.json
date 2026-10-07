@@ -179,7 +179,7 @@
       ]
     },
     "design.simulate": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -187,17 +187,43 @@
       ],
       "crossChecks": [
         "design.analytic",
-        "independent beta-binomial variance"
+        "independent beta-binomial variance",
+        "exact non-central t power of the one-sample test",
+        "independent normal approximation of the one-sample log-rank score"
       ],
       "modelTier": "scenario",
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
         "two_arm_fixed",
         "group_sequential"
+      ],
+      "legacyReleases": [
+        {
+          "version": "1.1.0",
+          "support": {
+            "two_arm_fixed": [
+              "continuous",
+              "binary",
+              "time_to_event"
+            ],
+            "group_sequential": [
+              "time_to_event"
+            ],
+            "single_arm": [
+              "binary"
+            ],
+            "single_arm_external": [
+              "binary"
+            ],
+            "simon_two_stage": [
+              "binary"
+            ]
+          }
+        }
       ]
     },
     "design.grid": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -209,19 +235,48 @@
       "legacyDesigns": [
         "two_arm_fixed",
         "group_sequential"
+      ],
+      "legacyReleases": [
+        {
+          "version": "1.1.0",
+          "support": {
+            "two_arm_fixed": [
+              "continuous",
+              "binary",
+              "time_to_event"
+            ],
+            "group_sequential": [
+              "time_to_event"
+            ],
+            "single_arm": [
+              "binary"
+            ],
+            "single_arm_external": [
+              "binary"
+            ],
+            "simon_two_stage": [
+              "binary"
+            ]
+          }
+        }
       ]
     },
     "design.assurance": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
         "time_to_event"
       ],
       "crossChecks": [
-        "O'Hagan 2005"
+        "O'Hagan 2005",
+        "independent Monte Carlo of the sequential design under the design prior"
       ],
-      "modelTier": "scenario"
+      "modelTier": "scenario",
+      "legacyVersion": "1.0.0",
+      "legacyDesigns": [
+        "two_arm_fixed"
+      ]
     },
     "design.procova": {
       "version": "1.0.0",
@@ -336,6 +391,17 @@
         "survival::coxph and survfit(newdata)"
       ],
       "modelTier": "data"
+    },
+    "patients.longitudinal": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous"
+      ],
+      "crossChecks": [
+        "nlme::lme on the output table",
+        "closed-form model-implied mean and variance"
+      ],
+      "modelTier": "scenario"
     }
   },
   "jobMethods": {
@@ -369,7 +435,8 @@
     "covariate_set_comparator": "comparator.covariate_sets",
     "negative_control_comparator": "comparator.negative_control",
     "tipping_point": "comparator.tipping_point",
-    "prognostic_adjustment_comparator": "comparator.prognostic_adjustment"
+    "prognostic_adjustment_comparator": "comparator.prognostic_adjustment",
+    "generate_patients_longitudinal": "patients.longitudinal"
   },
   "patientLevelJobKinds": [
     "profile_snapshot",
@@ -1463,12 +1530,20 @@
               "gt": -1,
               "lt": 1,
               "default": 0,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "continuous"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm"
+                  ]
+                }
+              ]
             },
             "controlRate": {
               "t": "number",
@@ -1792,12 +1867,20 @@
               "gt": -1,
               "lt": 1,
               "default": 0,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "continuous"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm"
+                  ]
+                }
+              ]
             },
             "controlRate": {
               "t": "number",
@@ -2121,12 +2204,20 @@
               "gt": -1,
               "lt": 1,
               "default": 0,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "continuous"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm"
+                  ]
+                }
+              ]
             },
             "controlRate": {
               "t": "number",
@@ -2380,6 +2471,121 @@
               "time_to_event"
             ]
           }
+        }
+      }
+    },
+    "patients.longitudinal": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "nTreat": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 0,
+              "max": 1000000
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "visits": {
+          "t": "array",
+          "items": {
+            "t": "number",
+            "min": 0,
+            "unit": "time units"
+          },
+          "min": 2,
+          "max": 50,
+          "increasing": true,
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "effect": {
+              "t": "number",
+              "unit": "outcome units per time unit",
+              "req": true
+            },
+            "intercept": {
+              "t": "number",
+              "default": 0,
+              "unit": "outcome units"
+            },
+            "slope": {
+              "t": "number",
+              "default": 0,
+              "unit": "outcome units per time unit"
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units"
+            },
+            "randomEffects": {
+              "t": "object",
+              "fields": {
+                "sdIntercept": {
+                  "t": "number",
+                  "min": 0,
+                  "default": 0,
+                  "unit": "outcome units"
+                },
+                "sdSlope": {
+                  "t": "number",
+                  "min": 0,
+                  "default": 0,
+                  "unit": "outcome units per time unit"
+                },
+                "correlation": {
+                  "t": "number",
+                  "gt": -1,
+                  "lt": 1,
+                  "default": 0
+                }
+              }
+            },
+            "covariateEffects": {
+              "t": "map",
+              "values": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 100
+            }
+          },
+          "req": true
+        },
+        "dropoutPerVisit": {
+          "t": "number",
+          "min": 0,
+          "lt": 1,
+          "default": 0,
+          "unit": "probability of leaving before each follow-up visit"
         }
       }
     },
@@ -4446,12 +4652,20 @@
               "gt": -1,
               "lt": 1,
               "default": 0,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "continuous"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm"
+                  ]
+                }
+              ]
             },
             "controlRate": {
               "t": "number",
@@ -4640,26 +4854,42 @@
               "t": "number",
               "min": 0,
               "max": 1,
-              "when": {
-                "path": "design.kind",
-                "in": [
-                  "single_arm",
-                  "simon_two_stage"
-                ]
-              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "single_arm",
+                    "simon_two_stage"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ],
               "req": true
             },
             "responseRate": {
               "t": "number",
               "min": 0,
               "max": 1,
-              "when": {
-                "path": "design.kind",
-                "in": [
-                  "single_arm",
-                  "simon_two_stage"
-                ]
-              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "single_arm",
+                    "simon_two_stage"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ],
               "req": true
             },
             "alternativeRate": {
@@ -4673,6 +4903,25 @@
                 ]
               },
               "req": true
+            },
+            "benchmark": {
+              "t": "number",
+              "default": 0,
+              "unit": "outcome units",
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "single_arm"
+                  ]
+                }
+              ]
             },
             "controlRates": {
               "t": "array",
@@ -4762,7 +5011,10 @@
                 "rmst",
                 "exact_binomial",
                 "simon_boundary",
-                "stratified_risk_difference"
+                "stratified_risk_difference",
+                "one_sample_t",
+                "one_sample_z",
+                "one_sample_logrank"
               ],
               "reqWhen": {
                 "path": "design.kind",
@@ -4772,6 +5024,18 @@
                   "simon_two_stage"
                 ]
               }
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "unit": "outcome units",
+              "when": {
+                "path": "analysis.method",
+                "in": [
+                  "one_sample_z"
+                ]
+              },
+              "req": true
             },
             "alternative": {
               "t": "string",
@@ -5204,12 +5468,20 @@
               "gt": -1,
               "lt": 1,
               "default": 0,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "continuous"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm"
+                  ]
+                }
+              ]
             },
             "controlRate": {
               "t": "number",
@@ -5398,26 +5670,42 @@
               "t": "number",
               "min": 0,
               "max": 1,
-              "when": {
-                "path": "design.kind",
-                "in": [
-                  "single_arm",
-                  "simon_two_stage"
-                ]
-              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "single_arm",
+                    "simon_two_stage"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ],
               "req": true
             },
             "responseRate": {
               "t": "number",
               "min": 0,
               "max": 1,
-              "when": {
-                "path": "design.kind",
-                "in": [
-                  "single_arm",
-                  "simon_two_stage"
-                ]
-              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "single_arm",
+                    "simon_two_stage"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ],
               "req": true
             },
             "alternativeRate": {
@@ -5431,6 +5719,25 @@
                 ]
               },
               "req": true
+            },
+            "benchmark": {
+              "t": "number",
+              "default": 0,
+              "unit": "outcome units",
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "single_arm"
+                  ]
+                }
+              ]
             },
             "controlRates": {
               "t": "array",
@@ -5520,7 +5827,10 @@
                 "rmst",
                 "exact_binomial",
                 "simon_boundary",
-                "stratified_risk_difference"
+                "stratified_risk_difference",
+                "one_sample_t",
+                "one_sample_z",
+                "one_sample_logrank"
               ],
               "reqWhen": {
                 "path": "design.kind",
@@ -5530,6 +5840,18 @@
                   "simon_two_stage"
                 ]
               }
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "unit": "outcome units",
+              "when": {
+                "path": "analysis.method",
+                "in": [
+                  "one_sample_z"
+                ]
+              },
+              "req": true
             },
             "alternative": {
               "t": "string",
@@ -6003,6 +6325,18 @@
         "design": {
           "t": "object",
           "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "single_arm",
+                "single_arm_external",
+                "two_arm_fixed",
+                "group_sequential",
+                "simon_two_stage"
+              ],
+              "badValueCode": "design_unknown",
+              "default": "two_arm_fixed"
+            },
             "allocation": {
               "t": "number",
               "gt": 0,
@@ -6040,6 +6374,39 @@
                 "path": "endpoint.type",
                 "notIn": [
                   "time_to_event"
+                ]
+              }
+            },
+            "informationRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 20,
+              "increasing": true,
+              "last": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "group_sequential"
+                ]
+              },
+              "req": true
+            },
+            "spending": {
+              "t": "string",
+              "values": [
+                "obrien_fleming",
+                "pocock"
+              ],
+              "default": "obrien_fleming",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "group_sequential"
                 ]
               }
             }
@@ -7039,7 +7406,9 @@
     },
     "design.simulate": {
       "single_arm": [
-        "binary"
+        "binary",
+        "continuous",
+        "time_to_event"
       ],
       "single_arm_external": [
         "binary"
@@ -7058,7 +7427,9 @@
     },
     "design.grid": {
       "single_arm": [
-        "binary"
+        "binary",
+        "continuous",
+        "time_to_event"
       ],
       "single_arm_external": [
         "binary"
@@ -7079,6 +7450,9 @@
       "two_arm_fixed": [
         "continuous",
         "binary",
+        "time_to_event"
+      ],
+      "group_sequential": [
         "time_to_event"
       ]
     },
@@ -7158,7 +7532,8 @@
     "covariate_set_comparator",
     "negative_control_comparator",
     "tipping_point",
-    "prognostic_adjustment_comparator"
+    "prognostic_adjustment_comparator",
+    "generate_patients_longitudinal"
   ],
   "endpointTypes": [
     "continuous",

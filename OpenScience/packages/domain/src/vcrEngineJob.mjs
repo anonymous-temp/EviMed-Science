@@ -64,6 +64,19 @@ const frozen = (list) => Object.freeze([...list])
 export const VCR_ENGINE_PROTOCOL_VERSION = 1
 
 /**
+ * What `design.simulate` and `design.grid` implemented at 1.1.0, design by endpoint: single-arm trials of a mean and of a survival
+ * time came after it (1.2.0, 2026-10-07). A job recorded at 1.1.0 stays valid when it asks for nothing the 1.1.0 build did not do,
+ * and a single-arm continuous job labelled 1.1.0 is refused: a design is never labelled with a version that did not have it.
+ */
+const SIMULATE_RELEASES = Object.freeze([Object.freeze({
+  version: '1.1.0',
+  support: Object.freeze({
+    two_arm_fixed: frozen(['continuous', 'binary', 'time_to_event']), group_sequential: frozen(['time_to_event']),
+    single_arm: frozen(['binary']), single_arm_external: frozen(['binary']), simon_two_stage: frozen(['binary']),
+  }),
+})])
+
+/**
  * The methods the engine publishes, each with the version its numbers were
  * validated at (plan §11.4, §12.4). `crossChecks` names the independent
  * implementation or reference software the numeric cases compare against.
@@ -92,9 +105,9 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
   'comparator.map_prior': { version: '1.0.0', endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
   'design.analytic': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
-  'design.simulate': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance']), modelTier: 'scenario' },
-  'design.grid': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
-  'design.assurance': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(["O'Hagan 2005"]), modelTier: 'scenario' },
+  'design.simulate': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
+  'design.grid': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
+  'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(["O'Hagan 2005", 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['EMA 2022 qualification opinion']), modelTier: 'scenario' },
   'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Anisimov & Fedorov 2007']), modelTier: 'scenario' },
   'matching.evaluate': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Kleene truth table']), modelTier: null },
@@ -109,6 +122,9 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.tipping_point': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['stats::fisher.test and stats::binom.test', 'closed-form worst case (censoring as event)', 'Jackson et al. 2014']), modelTier: 'data' },
   'comparator.prognostic_adjustment': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['FDA 2023 covariate-adjustment guidance, Table 1', 'M-estimation sandwich by numerical Jacobians', 'survival::coxph and survfit(newdata)']), modelTier: 'data' },
   // --- end robustness methods ---
+  // --- longitudinal virtual patients (2026-10-07, plan 5.2): a linear mixed model of a continuous trajectory ---
+  'patients.longitudinal': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['nlme::lme on the output table', 'closed-form model-implied mean and variance']), modelTier: 'scenario' },
+  // --- end longitudinal ---
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -153,6 +169,7 @@ export const VCR_JOB_METHODS = Object.freeze({
   tipping_point: 'comparator.tipping_point',
   prognostic_adjustment_comparator: 'comparator.prognostic_adjustment',
   // --- end robustness methods ---
+  generate_patients_longitudinal: 'patients.longitudinal',
 })
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
@@ -648,14 +665,25 @@ export function validateEngineJob(job) {
   return frozen(issues)
 }
 
-/** Replay prior supported designs under their recorded version; never label new designs as old. @param {any} job */
+/**
+ * Replay prior supported designs under their recorded version; never label new designs as old. Two kinds of record: the oldest
+ * (`legacyVersion`) is by design, and a later release (`legacyReleases`) is by design and endpoint.
+ * @param {any} job
+ */
 function legacyDesignVersionMatches(job) {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
-  if (!spec?.legacyVersion || job.methodVersion !== spec.legacyVersion) return false
+  if (!spec) return false
   const base = job.scenario?.design?.kind
   const kinds = job.method === 'design.grid' && Array.isArray(job.scenario?.designs)
     ? job.scenario.designs.map((/** @type {any} */ design) => design.kind ?? base) : [base]
-  return kinds.length > 0 && kinds.every((/** @type {string} */ kind) => !VCR_TRIAL_DESIGNS.includes(kind) || spec.legacyDesigns.includes(kind))
+  if (kinds.length === 0) return false
+  if (spec.legacyVersion && job.methodVersion === spec.legacyVersion) {
+    return kinds.every((/** @type {string} */ kind) => !VCR_TRIAL_DESIGNS.includes(kind) || spec.legacyDesigns.includes(kind))
+  }
+  const release = (spec.legacyReleases ?? []).find((/** @type {any} */ entry) => entry.version === job.methodVersion)
+  if (!release) return false
+  const endpoint = job.scenario?.endpoint?.type
+  return kinds.every((/** @type {string} */ kind) => !VCR_TRIAL_DESIGNS.includes(kind) || (release.support[kind] ?? []).includes(endpoint))
 }
 
 // ---------------------------------------------------------------------------

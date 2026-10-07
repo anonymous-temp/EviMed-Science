@@ -72,6 +72,7 @@ vcr_engine_handlers <- function() list(
   "patients.continuous" = vcr_job_generate_patients,
   "patients.binary" = vcr_job_generate_patients,
   "patients.time_to_event" = vcr_job_generate_patients,
+  "patients.longitudinal" = vcr_job_generate_patients_longitudinal,
   "evidence.pool" = vcr_job_pool_evidence,
   "evidence.reconstruct_km" = vcr_job_reconstruct_km,
   "comparator.entropy_balance" = vcr_job_weight_comparator,
@@ -101,6 +102,14 @@ vcr_engine_handlers <- function() list(
 # --- robustness methods: modules sourced after the core list (their own files) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "negative_control", "tipping_point", "prognostic_adjustment")
 # --- end robustness methods ---
+
+# --- longitudinal virtual patients (2026-10-07): the linear mixed model's generator, in its own file ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "longitudinal")
+# --- end longitudinal ---
+
+# --- single-arm trials of a mean and of a survival time against a benchmark (2026-10-07) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "single_arm")
+# --- end single arm ---
 
 #' Startup self-check: the local registry and the domain must agree, exactly.
 vcr_engine_self_check <- function() {
@@ -160,7 +169,7 @@ vcr_engine_health <- function() {
 vcr_default_measure_source <- function(method) {
   switch(as.character(method),
     "population.scenario" = , "population.literature" = , "population.synthpop" = , "population.quality" = ,
-    "patients.continuous" = , "patients.binary" = , "patients.time_to_event" = , "design.simulate" = , "design.grid" = "synthetic",
+    "patients.continuous" = , "patients.binary" = , "patients.time_to_event" = , "patients.longitudinal" = , "design.simulate" = , "design.grid" = "synthetic",
     "evidence.pool" = , "comparator.map_prior" = "aggregate",
     "evidence.reconstruct_km" = "reconstructed",
     "calculated")
@@ -1664,6 +1673,9 @@ vcr_job_assurance <- function(job, ...) {
   pmean <- vcr_scalar(prior$mean, NULL); psd <- vcr_scalar(prior$sd, NULL)
   if (is.null(pmean) || is.null(psd) || !(psd > 0)) vcr_abort("scenario_value_invalid", "scenario.designPrior", "A design prior has a mean and a positive sd.")
   n1 <- vcr_scalar(sc$design$nTreat, NULL); n0 <- vcr_scalar(sc$design$nControl, n1)
+  if (identical(as.character(sc[["design"]][["kind"]] %||% "two_arm_fixed"), "group_sequential")) {
+    return(.vcr_job_assurance_group_sequential(job, prior, basis, kind, e, alpha, sided, pmean, psd))
+  }
   # A lognormal prior on a hazard ratio is a normal prior on log(HR) with the
   # same two numbers, so for a time-to-event endpoint the two kinds agree; on
   # the other endpoints the effect is not a ratio and only `normal` applies.
@@ -1686,6 +1698,42 @@ vcr_job_assurance <- function(job, ...) {
        diagnostics = list(designPrior = prior, priorBasis = basis, priorKind = kind,
                           priorMassOutsideUnitInterval = out$priorMassOutsideUnitInterval,
                           note = "Assurance integrates power over the design prior; it is not a trial-success prediction score."))
+}
+
+#' The assurance of a group-sequential design: the power of the whole sequential procedure under the design prior (the headline,
+#' by quadrature), what share of it is an early stop at each look, and the same number by simulation with its Monte-Carlo error.
+.vcr_job_assurance_group_sequential <- function(job, prior, basis, kind, e, alpha, sided, pmean, psd) {
+  sc <- job[["scenario"]]; d <- sc[["design"]]
+  if (!identical(e, "time_to_event")) {
+    vcr_abort("design_not_supported", "scenario.endpoint.type", "The assurance of a group-sequential design is computed for a time-to-event endpoint.")
+  }
+  rates <- vcr_num(d[["informationRates"]])
+  if (length(rates) < 2L) vcr_abort("scenario_field_missing", "scenario.design.informationRates", "A group-sequential design lists at least two information rates.")
+  events <- .vcr_need(d[["events"]], "scenario.design.events", "A group-sequential assurance states the design's maximum number of events.")
+  allocation <- vcr_scalar(d[["allocation"]], 0.5)
+  spending <- as.character(d[["spending"]] %||% "obrien_fleming")
+  design <- vcr_group_sequential(rates, alpha / sided, spending, nodes = VCR_ASSURANCE_BOUNDARY_NODES)
+  out <- vcr_assurance_group_sequential(design, pmean, psd, events, allocation, sided)
+  reps <- as.integer(min(vcr_scalar(job[["replicates"]], 20000L), vcr_max_replicates()))
+  set.seed(job[["seed"]], kind = VCR_RNG_KIND)
+  sim <- vcr_assurance_group_sequential_simulated(design, pmean, psd, events, allocation, sided, reps)
+  diff <- sim$assurance - out$assurance
+  within <- abs(diff) <= 3 * sim$mcse
+  list(status = "succeeded",
+       measures = list(vcr_measure("assurance", out$assurance, source = "calculated"),
+                       vcr_measure("power_at_prior_mean", out$power, source = "calculated"),
+                       vcr_measure("assurance_simulated", sim$assurance, simulated = TRUE, mcse = sim$mcse, source = "synthetic",
+                                   interval = vcr_interval("monte_carlo", max(0, sim$assurance - 1.96 * sim$mcse), min(1, sim$assurance + 1.96 * sim$mcse)))),
+       counts = vcr_counts(),
+       diagnostics = list(designPrior = prior, priorBasis = basis, priorKind = kind, replicatesCompleted = reps,
+                          groupSequential = list(
+                            informationRates = rates, spending = spending, criticalValues = design$criticalValues, cumulativeAlphaSpent = design$cumulativeAlphaSpent,
+                            looks = lapply(seq_along(rates), function(k) list(look = k, informationFraction = rates[k], criticalValue = design$criticalValues[k],
+                                                                              assuranceAtLook = out$byLook[k], powerAtPriorMeanAtLook = out$powerByLook[k]))),
+                          crossCheck = list(name = "assurance", analytic = out$assurance, simulated = sim$assurance, mcse = sim$mcse, difference = diff,
+                                            differenceInMcse = if (sim$mcse > 0) diff / sim$mcse else NA_real_, withinThreeMcse = within,
+                                            basis = "quadrature over the design prior against the sequential trial simulated under draws from it"),
+                          note = "Assurance of a group-sequential design is the probability, averaged over the design prior, that the trial crosses an efficacy boundary at any look; it is not a trial-success prediction score."))
 }
 
 vcr_job_procova <- function(job, ...) {

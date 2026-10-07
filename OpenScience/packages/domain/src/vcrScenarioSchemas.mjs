@@ -111,6 +111,9 @@ const TIME_TO_EVENT = is('endpoint.type', 'time_to_event')
 const SINGLE_BINARY = is('design.kind', 'single_arm', 'simon_two_stage')
 const SINGLE_EXTERNAL = is('design.kind', 'single_arm_external')
 const TWO_ARM_BINARY = [BINARY, isNot('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage')]
+/** The binary single-arm and Simon designs state their rates; a single-arm trial of a mean or a survival time states an effect over its benchmark. */
+const SINGLE_BINARY_ENDPOINT = [SINGLE_BINARY, BINARY]
+const SINGLE_CONTINUOUS = [CONTINUOUS, is('design.kind', 'single_arm')]
 const BINARY_RATE = { min: 0, max: 1 }
 const SINGLE_SIZE = integer({ min: 1, max: 10000 })
 const EXTERNAL_MODEL = object({
@@ -211,7 +214,8 @@ const truthFields = ({ binaryWhen = BINARY, simulated = true, generator = false,
   ...(simulated && !generator ? { null: boolean() } : {}),
   effect: req(gated(number({ unit: 'outcome units' }), CONTINUOUS)),
   sd: gated(number({ gt: 0, default: 1, unit: 'outcome units' }), CONTINUOUS),
-  ...(simulated ? { baselineCorrelation: gated(number({ gt: -1, lt: 1, default: 0 }), CONTINUOUS) } : {}),
+  // two-arm only: a single-arm trial has no baseline covariate to correlate the outcome with
+  ...(simulated ? { baselineCorrelation: gated(number({ gt: -1, lt: 1, default: 0 }), [CONTINUOUS, isNot('design.kind', 'single_arm')]) } : {}),
   controlRate: req(gated(number({ ...PROBABILITY }), binaryWhen)),
   treatmentRate: gated(number({ ...PROBABILITY }), binaryWhen),
   riskDifference: gated(number({ gt: -1, lt: 1 }), binaryWhen),
@@ -253,7 +257,9 @@ const SIMULATED_ACCRUAL = gated({
 }, TIME_TO_EVENT)
 
 const SIMULATED_ANALYSIS = object({
-  method: string({ values: ['ttest', 'ancova', 'risk_difference', 'logistic', 'logrank', 'rmst', 'exact_binomial', 'simon_boundary', 'stratified_risk_difference'], reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') }),
+  method: string({ values: ['ttest', 'ancova', 'risk_difference', 'logistic', 'logrank', 'rmst', 'exact_binomial', 'simon_boundary', 'stratified_risk_difference', 'one_sample_t', 'one_sample_z', 'one_sample_logrank'], reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') }),
+  // the standard deviation a one-sample z analysis takes as known (it need not be the generator's)
+  sd: req(gated(number({ gt: 0, unit: 'outcome units' }), is('analysis.method', 'one_sample_z'))),
   alternative: req(gated(string({ values: ['greater', 'less', 'two.sided'] }), is('design.kind', 'single_arm'))),
   estimand: req(gated(string({ values: ['ATT'] }), SINGLE_EXTERNAL)),
   alpha: ALPHA,
@@ -277,9 +283,11 @@ const SIMULATE_FIELDS = {
   design: req(object(SIMULATED_DESIGN_FIELDS)),
   endpoint: req(ENDPOINT()),
   truth: req(object(truthFields({ binaryWhen: TWO_ARM_BINARY, extra: {
-    nullRate: req(gated(number(BINARY_RATE), SINGLE_BINARY)),
-    responseRate: req(gated(number(BINARY_RATE), SINGLE_BINARY)),
+    nullRate: req(gated(number(BINARY_RATE), SINGLE_BINARY_ENDPOINT)),
+    responseRate: req(gated(number(BINARY_RATE), SINGLE_BINARY_ENDPOINT)),
     alternativeRate: req(gated(number(BINARY_RATE), is('design.kind', 'simon_two_stage'))),
+    // the fixed historical mean a single-arm trial of a continuous endpoint is compared with (the trial's mean is benchmark + effect)
+    benchmark: gated(number({ default: 0, unit: 'outcome units' }), SINGLE_CONTINUOUS),
     controlRates: req(gated(array(number(BINARY_RATE), { min: 2, max: 2 }), SINGLE_EXTERNAL)),
     treatmentRates: req(gated(array(number(BINARY_RATE), { min: 2, max: 2 }), SINGLE_EXTERNAL)),
   } }), { exactlyOne: truthGroups(TWO_ARM_BINARY) })),
@@ -456,6 +464,32 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   'patients.continuous': object(patientsFields()),
   'patients.binary': object(patientsFields()),
   'patients.time_to_event': object(patientsFields()),
+
+  // Virtual patients with a continuous trajectory (plan 5.2): the linear mixed model
+  //   y_ij = (b0 + u0_i) + (b1 + u1_i) t_j + delta z_i t_j + beta' x_i + e_ij
+  // `intercept` is b0, `slope` b1, `effect` delta (the treatment changes the rate of change, so the arms start alike), `sd` the
+  // residual, `randomEffects` the SDs of u0 and u1 and their correlation (a covariance the model cannot make non-positive-definite),
+  // `visits` the schedule and `dropoutPerVisit` the probability of leaving before each follow-up visit (missing completely at
+  // random, monotone). The effect is required, as in every generator: a typo must not read as "no effect". Covariate effects take
+  // their covariates from a stored population and are refused without one.
+  'patients.longitudinal': object({
+    design: req(object({ nTreat: req(integer({ min: 1, max: 1_000_000 })), nControl: integer({ min: 0, max: 1_000_000 }) })),
+    endpoint: req(ENDPOINT()),
+    visits: req(array(number({ min: 0, unit: 'time units' }), { min: 2, max: 50, increasing: true })),
+    truth: req(object({
+      effect: req(number({ unit: 'outcome units per time unit' })),
+      intercept: number({ default: 0, unit: 'outcome units' }),
+      slope: number({ default: 0, unit: 'outcome units per time unit' }),
+      sd: number({ gt: 0, default: 1, unit: 'outcome units' }),
+      randomEffects: object({
+        sdIntercept: number({ min: 0, default: 0, unit: 'outcome units' }),
+        sdSlope: number({ min: 0, default: 0, unit: 'outcome units per time unit' }),
+        correlation: number({ gt: -1, lt: 1, default: 0 }),
+      }),
+      covariateEffects: COVARIATE_EFFECTS,
+    })),
+    dropoutPerVisit: number({ min: 0, lt: 1, default: 0, unit: 'probability of leaving before each follow-up visit' }),
+  }),
 
   'evidence.pool': object({
     studies: req(array(object({
@@ -703,10 +737,15 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
 
   'design.assurance': object({
     design: req(object({
+      // two-arm fixed unless it says group_sequential: the assurance of a group-sequential design is the probability, under the
+      // design prior, that it crosses a boundary at any look (the events are the design's maximum, the information rates its looks)
+      kind: string({ values: [...VCR_TRIAL_DESIGNS], badValueCode: 'design_unknown', default: 'two_arm_fixed' }),
       allocation: number({ ...PROBABILITY, default: 0.5 }),
       events: req(gated(integer({ min: 1 }), TIME_TO_EVENT)),
       nTreat: req(gated(integer({ min: 1, max: 1_000_000 }), isNot('endpoint.type', 'time_to_event'))),
       nControl: gated(integer({ min: 1, max: 1_000_000 }), isNot('endpoint.type', 'time_to_event')),
+      informationRates: req(gated(array(number({ gt: 0, max: 1 }), { min: 2, max: 20, increasing: true, last: 1 }), is('design.kind', 'group_sequential'))),
+      spending: gated(string({ values: [...VCR_SPENDING_FUNCTIONS], default: 'obrien_fleming' }), is('design.kind', 'group_sequential')),
     })),
     endpoint: req(ENDPOINT()),
     // The design prior is the assumption card's own distribution: on the
@@ -839,17 +878,18 @@ export const VCR_DESIGN_SUPPORT = deepFreeze({
     single_arm: Object.freeze(['binary']),
   }),
   'design.simulate': Object.freeze({
-    single_arm: Object.freeze(['binary']), single_arm_external: Object.freeze(['binary']), simon_two_stage: Object.freeze(['binary']),
+    single_arm: Object.freeze(['binary', 'continuous', 'time_to_event']), single_arm_external: Object.freeze(['binary']), simon_two_stage: Object.freeze(['binary']),
     two_arm_fixed: Object.freeze(['continuous', 'binary', 'time_to_event']),
     group_sequential: Object.freeze(['time_to_event']),
   }),
   'design.grid': Object.freeze({
-    single_arm: Object.freeze(['binary']), single_arm_external: Object.freeze(['binary']), simon_two_stage: Object.freeze(['binary']),
+    single_arm: Object.freeze(['binary', 'continuous', 'time_to_event']), single_arm_external: Object.freeze(['binary']), simon_two_stage: Object.freeze(['binary']),
     two_arm_fixed: Object.freeze(['continuous', 'binary', 'time_to_event']),
     group_sequential: Object.freeze(['time_to_event']),
   }),
   'design.assurance': Object.freeze({
     two_arm_fixed: Object.freeze(['continuous', 'binary', 'time_to_event']),
+    group_sequential: Object.freeze(['time_to_event']),
   }),
   'design.procova': Object.freeze({
     two_arm_fixed: Object.freeze(['continuous']),
@@ -874,6 +914,13 @@ export function vcrIsNullScenario(scenario) {
   const truth = scenario?.truth
   if (!truth || typeof truth !== 'object' || Array.isArray(truth)) return false
   const kind = scenario?.design?.kind
+  // A single-arm trial of a mean or a survival time states its effect against the benchmark, and its null is that effect (0, or a hazard
+  // ratio of 1) whatever a label says: like the single-arm laws below, a contradictory `truth.null` is refused by validation, never obeyed.
+  // The response-rate comparison is the binary single-arm and Simon designs'.
+  if (kind === 'single_arm' && ['continuous', 'time_to_event'].includes(scenario?.endpoint?.type)) {
+    if (scenario.endpoint.type === 'continuous') return Number.isFinite(truth.effect) && Math.abs(truth.effect) < 1e-12
+    return Number.isFinite(truth.hazardRatio) && truth.hazardRatio > 0 && Math.abs(Math.log(truth.hazardRatio)) < 1e-12
+  }
   if (kind === 'single_arm' || kind === 'simon_two_stage') return Number.isFinite(truth.responseRate) && Number.isFinite(truth.nullRate) && Math.abs(truth.responseRate - truth.nullRate) < 1e-12
   if (kind === 'single_arm_external' && Array.isArray(truth.controlRates) && Array.isArray(truth.treatmentRates)) {
     const q = scenario?.external?.targetPrevalence
@@ -1198,7 +1245,11 @@ function checkGrid(schema, scenario, ctx) {
  * check below reads them, and so does the help a model is given (`vcrScenarioHelp.mjs`): one table, not a sentence kept beside it.
  */
 export const VCR_TWO_ARM_ANALYSIS_METHODS = deepFreeze({ continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst'] })
-export const VCR_SINGLE_ARM_ANALYSIS_METHODS = deepFreeze({ single_arm: 'exact_binomial', single_arm_external: 'stratified_risk_difference', simon_two_stage: 'simon_boundary' })
+export const VCR_SINGLE_ARM_ANALYSIS_METHODS = deepFreeze({
+  single_arm: { binary: ['exact_binomial'], continuous: ['one_sample_t', 'one_sample_z'], time_to_event: ['one_sample_logrank'] },
+  single_arm_external: { binary: ['stratified_risk_difference'] },
+  simon_two_stage: { binary: ['simon_boundary'] },
+})
 
 /** Coupled design fields, mirrored by protocol.R. @param {any} scenario @param {string} path @param {WalkContext} ctx */
 function checkDesignSemantics(scenario, path, ctx) {
@@ -1210,9 +1261,10 @@ function checkDesignSemantics(scenario, path, ctx) {
     if (method && !(methods[/** @type {string} */ (scenario.endpoint?.type)] ?? []).includes(method)) bad('analysis.method', 'The analysis must match the endpoint.')
     return
   }
-  if (scenario.endpoint?.type !== 'binary') bad('endpoint.type', 'This single-arm implementation requires a binary endpoint.')
-  const methods = /** @type {Record<string, string>} */ (VCR_SINGLE_ARM_ANALYSIS_METHODS)
-  if (method && method !== methods[/** @type {string} */ (kind)]) bad('analysis.method', 'The analysis must match the declared single-arm design.')
+  // the analyses a single-arm design runs, by endpoint: the external-control and Simon designs are binary-endpoint designs only
+  const allowed = /** @type {Record<string, Record<string, readonly string[]>>} */ (VCR_SINGLE_ARM_ANALYSIS_METHODS)[kind]?.[/** @type {string} */ (scenario.endpoint?.type)]
+  if (!allowed) bad('endpoint.type', kind === 'single_arm' ? 'A single-arm design is simulated for a binary, continuous or time-to-event endpoint.' : 'This single-arm implementation requires a binary endpoint.')
+  else if (method && !allowed.includes(method)) bad('analysis.method', 'The analysis must match the declared single-arm design.')
   const sided = scenario.analysis?.sided ?? 1
   if (sided === 1 && Number.isFinite(scenario.analysis?.alpha) && scenario.analysis.alpha >= 0.5) bad('analysis.alpha', 'A one-sided analysis uses alpha below one half.')
   if (kind === 'single_arm' && sided !== (scenario.analysis?.alternative === 'two.sided' ? 2 : 1)) bad('analysis.sided', 'Sidedness must agree with the exact binomial alternative.')

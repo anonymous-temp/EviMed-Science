@@ -55,6 +55,8 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/vcr-engine-jobs.json", import.meta.url), "utf8"));
 // the robustness methods keep their parity jobs in a file of their own (read by vcrRobustness.test.mjs and the engine case N40a)
 const robustnessFixture = JSON.parse(readFileSync(new URL("./fixtures/vcr-engine-jobs-robustness.json", import.meta.url), "utf8"));
+// so do the 2026-10-07 extensions (longitudinal patients, the group-sequential assurance, single-arm means and survival times)
+const extensionFixture = JSON.parse(readFileSync(new URL("./fixtures/vcr-engine-jobs-extensions.json", import.meta.url), "utf8"));
 /** @param {readonly { code: string, field: string }[]} issues */
 const keys = (issues) => issues.map((issue) => `${issue.code}@${issue.field}`).sort();
 const validJob = () => clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "design.simulate").job);
@@ -63,7 +65,7 @@ const validJob = () => clone(fixture.valid.find((/** @type {any} */ item) => ite
 
 test("every valid job of the fixture validates clean, and the walk proves it walked", () => {
   assert.ok(fixture.valid.length >= 30, `only ${fixture.valid.length} valid jobs`);
-  const methods = new Set([...fixture.valid, ...robustnessFixture.valid].map((/** @type {any} */ item) => item.job.method));
+  const methods = new Set([...fixture.valid, ...robustnessFixture.valid, ...extensionFixture.valid].map((/** @type {any} */ item) => item.job.method));
   assert.deepEqual([...methods].sort(), [...VCR_ENGINE_METHOD_IDS].sort(), "every method has at least one valid job");
   for (const item of fixture.valid) assert.deepEqual(validateEngineJob(item.job), [], item.name);
 });
@@ -151,10 +153,13 @@ test("the design table names real designs, endpoints and methods, and nothing th
       for (const endpoint of endpoints) assert.ok(VCR_ENDPOINT_TYPES.includes(endpoint), `${method}: ${endpoint}`);
     }
   }
-  // These designs have distinct binary implementations, never two-arm fallbacks.
-  for (const design of ["single_arm", "single_arm_external", "simon_two_stage"]) {
-    assert.deepEqual(VCR_DESIGN_SUPPORT["design.simulate"][/** @type {'single_arm' | 'single_arm_external' | 'simon_two_stage'} */ (design)], ["binary"], design);
+  // These designs have distinct implementations, never two-arm fallbacks: the external-control and Simon designs are binary-endpoint
+  // designs, the plain single-arm design also has a one-sample test of a mean and of a survival time against its benchmark.
+  for (const design of ["single_arm_external", "simon_two_stage"]) {
+    assert.deepEqual(VCR_DESIGN_SUPPORT["design.simulate"][/** @type {'single_arm_external' | 'simon_two_stage'} */ (design)], ["binary"], design);
   }
+  assert.deepEqual(VCR_DESIGN_SUPPORT["design.simulate"].single_arm, ["binary", "continuous", "time_to_event"]);
+  assert.deepEqual(VCR_DESIGN_SUPPORT["design.grid"].single_arm, VCR_DESIGN_SUPPORT["design.simulate"].single_arm, "the grid runs the simulation's designs");
   assert.deepEqual(VCR_DESIGN_SUPPORT["design.simulate"].group_sequential, ["time_to_event"]);
 });
 
@@ -213,7 +218,7 @@ test("thresholds are presets, not scenario keys: a scenario cannot loosen the ru
 
 test("a design × endpoint the engine does not implement is refused for what it is, per grid cell too", () => {
   const job = validJob();
-  job.scenario.design.kind = "single_arm";
+  job.scenario.design.kind = "single_arm_external";
   assert.ok(keys(validateEngineJob(job)).includes("design_not_supported@scenario.design.kind"));
   const grid = clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "design.grid").job);
   grid.scenario.designs[0] = { kind: "simon_two_stage" };

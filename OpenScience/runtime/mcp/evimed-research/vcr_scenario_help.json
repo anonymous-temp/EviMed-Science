@@ -32,7 +32,8 @@
     "covariate_set_comparator": {"method":"comparator.covariate_sets"},
     "negative_control_comparator": {"method":"comparator.negative_control"},
     "tipping_point": {"method":"comparator.tipping_point"},
-    "prognostic_adjustment_comparator": {"method":"comparator.prognostic_adjustment"}
+    "prognostic_adjustment_comparator": {"method":"comparator.prognostic_adjustment"},
+    "generate_patients_longitudinal": {"method":"patients.longitudinal"}
   },
   "methods": {
     "profile.snapshot": {"endpoints":[],"rows":[],"examples":[{"label":"nothing to state: the snapshot is the input","scenario":{}}]},
@@ -299,7 +300,14 @@
         {"path":"truth","type":"object","required":true},
         {"path":"truth.effect","type":"number","unit":"outcome units","required":true,"when":[{"path":"endpoint.type","in":["continuous"]}]},
         {"path":"truth.sd","type":"number","gt":0,"unit":"outcome units","default":1,"when":[{"path":"endpoint.type","in":["continuous"]}]},
-        {"path":"truth.baselineCorrelation","type":"number","gt":-1,"lt":1,"default":0,"when":[{"path":"endpoint.type","in":["continuous"]}]},
+        {
+          "path": "truth.baselineCorrelation",
+          "type": "number",
+          "gt": -1,
+          "lt": 1,
+          "default": 0,
+          "when": [{"path":"endpoint.type","in":["continuous"]},{"path":"design.kind","notIn":["single_arm"]}]
+        },
         {"path":"truth.controlRate","type":"number","gt":0,"lt":1,"required":true,"when":[{"path":"endpoint.type","in":["binary"]}]},
         {"path":"truth.treatmentRate","type":"number","gt":0,"lt":1,"when":[{"path":"endpoint.type","in":["binary"]}]},
         {"path":"truth.riskDifference","type":"number","gt":-1,"lt":1,"when":[{"path":"endpoint.type","in":["binary"]}]},
@@ -445,7 +453,14 @@
         {"path":"truth","type":"object","required":true},
         {"path":"truth.effect","type":"number","unit":"outcome units","required":true,"when":[{"path":"endpoint.type","in":["continuous"]}]},
         {"path":"truth.sd","type":"number","gt":0,"unit":"outcome units","default":1,"when":[{"path":"endpoint.type","in":["continuous"]}]},
-        {"path":"truth.baselineCorrelation","type":"number","gt":-1,"lt":1,"default":0,"when":[{"path":"endpoint.type","in":["continuous"]}]},
+        {
+          "path": "truth.baselineCorrelation",
+          "type": "number",
+          "gt": -1,
+          "lt": 1,
+          "default": 0,
+          "when": [{"path":"endpoint.type","in":["continuous"]},{"path":"design.kind","notIn":["single_arm"]}]
+        },
         {"path":"truth.controlRate","type":"number","gt":0,"lt":1,"required":true,"when":[{"path":"endpoint.type","in":["binary"]}]},
         {"path":"truth.treatmentRate","type":"number","gt":0,"lt":1,"when":[{"path":"endpoint.type","in":["binary"]}]},
         {"path":"truth.riskDifference","type":"number","gt":-1,"lt":1,"when":[{"path":"endpoint.type","in":["binary"]}]},
@@ -591,7 +606,14 @@
         {"path":"truth","type":"object","required":true},
         {"path":"truth.effect","type":"number","unit":"outcome units","required":true,"when":[{"path":"endpoint.type","in":["continuous"]}]},
         {"path":"truth.sd","type":"number","gt":0,"unit":"outcome units","default":1,"when":[{"path":"endpoint.type","in":["continuous"]}]},
-        {"path":"truth.baselineCorrelation","type":"number","gt":-1,"lt":1,"default":0,"when":[{"path":"endpoint.type","in":["continuous"]}]},
+        {
+          "path": "truth.baselineCorrelation",
+          "type": "number",
+          "gt": -1,
+          "lt": 1,
+          "default": 0,
+          "when": [{"path":"endpoint.type","in":["continuous"]},{"path":"design.kind","notIn":["single_arm"]}]
+        },
         {"path":"truth.controlRate","type":"number","gt":0,"lt":1,"required":true,"when":[{"path":"endpoint.type","in":["binary"]}]},
         {"path":"truth.treatmentRate","type":"number","gt":0,"lt":1,"when":[{"path":"endpoint.type","in":["binary"]}]},
         {"path":"truth.riskDifference","type":"number","gt":-1,"lt":1,"when":[{"path":"endpoint.type","in":["binary"]}]},
@@ -1144,16 +1166,17 @@
     "design.simulate": {
       "endpoints": ["continuous","binary","time_to_event"],
       "designs": {
-        "single_arm": ["binary"],
+        "single_arm": ["binary","continuous","time_to_event"],
         "single_arm_external": ["binary"],
         "simon_two_stage": ["binary"],
         "two_arm_fixed": ["continuous","binary","time_to_event"],
         "group_sequential": ["time_to_event"]
       },
       "notes": [
-        "design.kind × endpoint.type this method implements: single_arm (binary); single_arm_external (binary); simon_two_stage (binary); two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported).",
+        "design.kind × endpoint.type this method implements: single_arm (binary|continuous|time_to_event); single_arm_external (binary); simon_two_stage (binary); two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported).",
         "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst.",
-        "A single-arm design runs one analysis: single_arm exact_binomial; single_arm_external stratified_risk_difference; simon_two_stage simon_boundary; the endpoint must be binary."
+        "A single-arm design runs the analysis of its endpoint: single_arm binary exact_binomial, continuous one_sample_t|one_sample_z, time_to_event one_sample_logrank; single_arm_external binary stratified_risk_difference; simon_two_stage binary simon_boundary.",
+        "A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial's hazard over the benchmark's) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark's) and greater is harm."
       ],
       "rows": [
         {"path":"design","type":"object","required":true},
@@ -1194,7 +1217,14 @@
         {"path":"truth.null","type":"boolean"},
         {"path":"truth.effect","type":"number","unit":"outcome units","required":true,"when":[{"path":"endpoint.type","in":["continuous"]}]},
         {"path":"truth.sd","type":"number","gt":0,"unit":"outcome units","default":1,"when":[{"path":"endpoint.type","in":["continuous"]}]},
-        {"path":"truth.baselineCorrelation","type":"number","gt":-1,"lt":1,"default":0,"when":[{"path":"endpoint.type","in":["continuous"]}]},
+        {
+          "path": "truth.baselineCorrelation",
+          "type": "number",
+          "gt": -1,
+          "lt": 1,
+          "default": 0,
+          "when": [{"path":"endpoint.type","in":["continuous"]},{"path":"design.kind","notIn":["single_arm"]}]
+        },
         {
           "path": "truth.controlRate",
           "type": "number",
@@ -1290,9 +1320,30 @@
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
         },
-        {"path":"truth.nullRate","type":"number","min":0,"max":1,"required":true,"when":[{"path":"design.kind","in":["single_arm","simon_two_stage"]}]},
-        {"path":"truth.responseRate","type":"number","min":0,"max":1,"required":true,"when":[{"path":"design.kind","in":["single_arm","simon_two_stage"]}]},
+        {
+          "path": "truth.nullRate",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "required": true,
+          "when": [{"path":"design.kind","in":["single_arm","simon_two_stage"]},{"path":"endpoint.type","in":["binary"]}]
+        },
+        {
+          "path": "truth.responseRate",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "required": true,
+          "when": [{"path":"design.kind","in":["single_arm","simon_two_stage"]},{"path":"endpoint.type","in":["binary"]}]
+        },
         {"path":"truth.alternativeRate","type":"number","min":0,"max":1,"required":true,"when":[{"path":"design.kind","in":["simon_two_stage"]}]},
+        {
+          "path": "truth.benchmark",
+          "type": "number",
+          "unit": "outcome units",
+          "default": 0,
+          "when": [{"path":"endpoint.type","in":["continuous"]},{"path":"design.kind","in":["single_arm"]}]
+        },
         {
           "path": "truth.controlRates",
           "type": "list",
@@ -1313,9 +1364,31 @@
         {
           "path": "analysis.method",
           "type": "string",
-          "values": ["ttest","ancova","risk_difference","logistic","logrank","rmst","exact_binomial","simon_boundary","stratified_risk_difference"],
+          "values": [
+            "ttest",
+            "ancova",
+            "risk_difference",
+            "logistic",
+            "logrank",
+            "rmst",
+            "exact_binomial",
+            "simon_boundary",
+            "stratified_risk_difference",
+            "one_sample_t",
+            "one_sample_z",
+            "one_sample_logrank"
+          ],
           "requiredWhen": [{"path":"design.kind","in":["single_arm","single_arm_external","simon_two_stage"]}],
           "within": "analysis"
+        },
+        {
+          "path": "analysis.sd",
+          "type": "number",
+          "gt": 0,
+          "unit": "outcome units",
+          "required": true,
+          "within": "analysis",
+          "when": [{"path":"analysis.method","in":["one_sample_z"]}]
         },
         {
           "path": "analysis.alternative",
@@ -1448,13 +1521,34 @@
             "truth": {"controlRate":0.3,"treatmentRate":0.5},
             "analysis": {"method":"logistic"}
           }
+        },
+        {
+          "label": "single arm, continuous: 40 patients against a historical mean of 50, one-sample t",
+          "scenario": {
+            "design": {"kind":"single_arm","n":40},
+            "endpoint": {"type":"continuous"},
+            "truth": {"benchmark":50,"effect":5,"sd":12},
+            "analysis": {"method":"one_sample_t","alternative":"greater","sided":1,"alpha":0.025},
+            "performance": ["power","bias"]
+          }
+        },
+        {
+          "label": "single arm, time to event: 60 patients against a benchmark median of 12, one-sample log-rank",
+          "scenario": {
+            "design": {"kind":"single_arm","n":60},
+            "endpoint": {"type":"time_to_event"},
+            "truth": {"controlMedian":12,"hazardRatio":0.65},
+            "accrual": {"kind":"uniform","duration":12,"followup":12,"dropoutAnnual":0.05},
+            "analysis": {"method":"one_sample_logrank","alternative":"less","sided":1,"alpha":0.025},
+            "performance": ["power","bias"]
+          }
         }
       ]
     },
     "design.grid": {
       "endpoints": ["continuous","binary","time_to_event"],
       "designs": {
-        "single_arm": ["binary"],
+        "single_arm": ["binary","continuous","time_to_event"],
         "single_arm_external": ["binary"],
         "simon_two_stage": ["binary"],
         "two_arm_fixed": ["continuous","binary","time_to_event"],
@@ -1462,9 +1556,10 @@
       },
       "gridCells": 400,
       "notes": [
-        "design.kind × endpoint.type this method implements: single_arm (binary); single_arm_external (binary); simon_two_stage (binary); two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported).",
+        "design.kind × endpoint.type this method implements: single_arm (binary|continuous|time_to_event); single_arm_external (binary); simon_two_stage (binary); two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported).",
         "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst.",
-        "A single-arm design runs one analysis: single_arm exact_binomial; single_arm_external stratified_risk_difference; simon_two_stage simon_boundary; the endpoint must be binary."
+        "A single-arm design runs the analysis of its endpoint: single_arm binary exact_binomial, continuous one_sample_t|one_sample_z, time_to_event one_sample_logrank; single_arm_external binary stratified_risk_difference; simon_two_stage binary simon_boundary.",
+        "A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial's hazard over the benchmark's) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark's) and greater is harm."
       ],
       "rows": [
         {"path":"design","type":"object","required":true},
@@ -1505,7 +1600,14 @@
         {"path":"truth.null","type":"boolean"},
         {"path":"truth.effect","type":"number","unit":"outcome units","required":true,"when":[{"path":"endpoint.type","in":["continuous"]}]},
         {"path":"truth.sd","type":"number","gt":0,"unit":"outcome units","default":1,"when":[{"path":"endpoint.type","in":["continuous"]}]},
-        {"path":"truth.baselineCorrelation","type":"number","gt":-1,"lt":1,"default":0,"when":[{"path":"endpoint.type","in":["continuous"]}]},
+        {
+          "path": "truth.baselineCorrelation",
+          "type": "number",
+          "gt": -1,
+          "lt": 1,
+          "default": 0,
+          "when": [{"path":"endpoint.type","in":["continuous"]},{"path":"design.kind","notIn":["single_arm"]}]
+        },
         {
           "path": "truth.controlRate",
           "type": "number",
@@ -1601,9 +1703,30 @@
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
         },
-        {"path":"truth.nullRate","type":"number","min":0,"max":1,"required":true,"when":[{"path":"design.kind","in":["single_arm","simon_two_stage"]}]},
-        {"path":"truth.responseRate","type":"number","min":0,"max":1,"required":true,"when":[{"path":"design.kind","in":["single_arm","simon_two_stage"]}]},
+        {
+          "path": "truth.nullRate",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "required": true,
+          "when": [{"path":"design.kind","in":["single_arm","simon_two_stage"]},{"path":"endpoint.type","in":["binary"]}]
+        },
+        {
+          "path": "truth.responseRate",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "required": true,
+          "when": [{"path":"design.kind","in":["single_arm","simon_two_stage"]},{"path":"endpoint.type","in":["binary"]}]
+        },
         {"path":"truth.alternativeRate","type":"number","min":0,"max":1,"required":true,"when":[{"path":"design.kind","in":["simon_two_stage"]}]},
+        {
+          "path": "truth.benchmark",
+          "type": "number",
+          "unit": "outcome units",
+          "default": 0,
+          "when": [{"path":"endpoint.type","in":["continuous"]},{"path":"design.kind","in":["single_arm"]}]
+        },
         {
           "path": "truth.controlRates",
           "type": "list",
@@ -1624,9 +1747,31 @@
         {
           "path": "analysis.method",
           "type": "string",
-          "values": ["ttest","ancova","risk_difference","logistic","logrank","rmst","exact_binomial","simon_boundary","stratified_risk_difference"],
+          "values": [
+            "ttest",
+            "ancova",
+            "risk_difference",
+            "logistic",
+            "logrank",
+            "rmst",
+            "exact_binomial",
+            "simon_boundary",
+            "stratified_risk_difference",
+            "one_sample_t",
+            "one_sample_z",
+            "one_sample_logrank"
+          ],
           "requiredWhen": [{"path":"design.kind","in":["single_arm","single_arm_external","simon_two_stage"]}],
           "within": "analysis"
+        },
+        {
+          "path": "analysis.sd",
+          "type": "number",
+          "gt": 0,
+          "unit": "outcome units",
+          "required": true,
+          "within": "analysis",
+          "when": [{"path":"analysis.method","in":["one_sample_z"]}]
         },
         {
           "path": "analysis.alternative",
@@ -1834,14 +1979,39 @@
     },
     "design.assurance": {
       "endpoints": ["continuous","binary","time_to_event"],
-      "designs": {"two_arm_fixed":["continuous","binary","time_to_event"]},
-      "notes": ["design.kind × endpoint.type this method implements: two_arm_fixed (continuous|binary|time_to_event). Any other pairing is refused (design_not_supported)."],
+      "designs": {"two_arm_fixed":["continuous","binary","time_to_event"],"group_sequential":["time_to_event"]},
+      "notes": [
+        "design.kind × endpoint.type this method implements: two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported)."
+      ],
       "rows": [
         {"path":"design","type":"object","required":true},
+        {
+          "path": "design.kind",
+          "type": "string",
+          "values": ["single_arm","single_arm_external","two_arm_fixed","group_sequential","simon_two_stage"],
+          "default": "two_arm_fixed"
+        },
         {"path":"design.allocation","type":"number","gt":0,"lt":1,"default":0.5},
         {"path":"design.events","type":"integer","min":1,"required":true,"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
         {"path":"design.nTreat","type":"integer","min":1,"max":1000000,"required":true,"when":[{"path":"endpoint.type","notIn":["time_to_event"]}]},
         {"path":"design.nControl","type":"integer","min":1,"max":1000000,"when":[{"path":"endpoint.type","notIn":["time_to_event"]}]},
+        {
+          "path": "design.informationRates",
+          "type": "list",
+          "count": {"min":2,"max":20},
+          "items": {"type":"number","max":1,"gt":0},
+          "increasing": true,
+          "last": 1,
+          "required": true,
+          "when": [{"path":"design.kind","in":["group_sequential"]}]
+        },
+        {
+          "path": "design.spending",
+          "type": "string",
+          "values": ["obrien_fleming","pocock"],
+          "default": "obrien_fleming",
+          "when": [{"path":"design.kind","in":["group_sequential"]}]
+        },
         {"path":"endpoint","type":"object","required":true},
         {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true},
         {"path":"designPrior","type":"object","required":true},
@@ -1868,6 +2038,15 @@
         {
           "label": "assurance for a time-to-event design with a prior on the log hazard ratio",
           "scenario": {"design":{"allocation":0.5,"events":300},"endpoint":{"type":"time_to_event"},"designPrior":{"mean":-0.3,"sd":0.15},"analysis":{"alpha":0.025,"sided":1}}
+        },
+        {
+          "label": "assurance of a group-sequential design: three looks, O'Brien-Fleming spending, 300 events at the end",
+          "scenario": {
+            "design": {"kind":"group_sequential","allocation":0.5,"events":300,"informationRates":[0.4,0.7,1],"spending":"obrien_fleming"},
+            "endpoint": {"type":"time_to_event"},
+            "designPrior": {"mean":-0.3,"sd":0.15},
+            "analysis": {"alpha":0.025,"sided":1}
+          }
         }
       ]
     },
@@ -2306,6 +2485,40 @@
         {
           "label": "binary endpoint with a prognostic score column",
           "scenario": {"endpoint":{"type":"binary"},"prognosticScoreColumn":"prognostic_score","treatmentColumn":"arm","outcomeColumn":"response","covariates":["age","stratum"]}
+        }
+      ]
+    },
+    "patients.longitudinal": {
+      "endpoints": ["continuous"],
+      "rows": [
+        {"path":"design","type":"object","required":true},
+        {"path":"design.nTreat","type":"integer","min":1,"max":1000000,"required":true},
+        {"path":"design.nControl","type":"integer","min":0,"max":1000000},
+        {"path":"endpoint","type":"object","required":true},
+        {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true},
+        {"path":"visits","type":"list","count":{"min":2,"max":50},"items":{"type":"number","min":0,"unit":"time units"},"increasing":true,"required":true},
+        {"path":"truth","type":"object","required":true},
+        {"path":"truth.effect","type":"number","unit":"outcome units per time unit","required":true},
+        {"path":"truth.intercept","type":"number","unit":"outcome units","default":0},
+        {"path":"truth.slope","type":"number","unit":"outcome units per time unit","default":0},
+        {"path":"truth.sd","type":"number","gt":0,"unit":"outcome units","default":1},
+        {"path":"truth.randomEffects","type":"object"},
+        {"path":"truth.randomEffects.sdIntercept","type":"number","min":0,"unit":"outcome units","default":0,"within":"truth.randomEffects"},
+        {"path":"truth.randomEffects.sdSlope","type":"number","min":0,"unit":"outcome units per time unit","default":0,"within":"truth.randomEffects"},
+        {"path":"truth.randomEffects.correlation","type":"number","gt":-1,"lt":1,"default":0,"within":"truth.randomEffects"},
+        {"path":"truth.covariateEffects","type":"map","of":{"type":"number"},"count":{"min":1,"max":100}},
+        {"path":"dropoutPerVisit","type":"number","min":0,"lt":1,"unit":"probability of leaving before each follow-up visit","default":0}
+      ],
+      "examples": [
+        {
+          "label": "a continuous trajectory over five visits, random intercept and slope, 10% leaving per visit",
+          "scenario": {
+            "design": {"nTreat":150,"nControl":150},
+            "endpoint": {"type":"continuous"},
+            "visits": [0,3,6,9,12],
+            "truth": {"intercept":50,"slope":-0.4,"effect":-0.2,"sd":3,"randomEffects":{"sdIntercept":6,"sdSlope":0.3,"correlation":-0.2}},
+            "dropoutPerVisit": 0.1
+          }
         }
       ]
     }
