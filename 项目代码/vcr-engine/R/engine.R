@@ -593,6 +593,8 @@ vcr_job_generate_population <- function(job, output_dir = NULL, ...) {
   spread <- if (!is.null(pop$parameterTable) && nrow(pop$parameterTable)) {
     stats::aggregate(value ~ variable + parameter, pop$parameterTable, stats::sd)
   } else NULL
+  # what the population page draws: the generated table described variable by variable, beside what the scenario declared
+  stated <- .vcr_declared_scenario(sc[["population"]])
   list(status = "succeeded",
        measures = list(vcr_measure("generated_records", pop$n, source = "synthetic"),
                        vcr_measure("constraint_violations", viol, source = "synthetic")),
@@ -603,6 +605,7 @@ vcr_job_generate_population <- function(job, output_dir = NULL, ...) {
                           constraintViolations = pop$constraintViolations,
                           constraintEnforcement = pop$constraintEnforcement,
                           missingReasons = pop$missingReasons,
+                          profile = tryCatch(vcr_population_profile(pop$data, stated$declared, stated$labels), error = function(e) NULL),
                           valueSource = pop$valueSource, modelTier = pop$modelTier),
        tables = .vcr_tables_of(list(vcr_write_table(pop$data, "population", output_dir),
                                     if (!is.null(pop$parameterTable)) vcr_write_table(pop$parameterTable, "population-parameters", output_dir))))
@@ -624,7 +627,11 @@ vcr_job_population_literature <- function(job, output_dir = NULL, ...) {
                           correlationSource = pop$correlationSource, modelTier = pop$modelTier,
                           valueSource = "synthetic", columnSources = as.list(pop$columnSources),
                           correlationSensitivity = pop$correlationSensitivity,
-                          constraintEnforcement = pop$constraintEnforcement),
+                          constraintEnforcement = pop$constraintEnforcement,
+                          profile = tryCatch({
+                            stated <- .vcr_declared_literature(sc[["baselineTable"]])
+                            vcr_population_profile(pop$data, stated$declared, stated$labels, stated$orders)
+                          }, error = function(e) NULL)),
        tables = .vcr_tables_of(list(vcr_write_table(pop$data, "population", output_dir))))
 }
 
@@ -690,6 +697,8 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
                           inferenceLabel = syn$inferenceLabel, holdoutRows = if (is.null(holdout)) 0L else nrow(holdout),
                           rareLevelsMerged = syn$rareLevelsMerged, rareLevelFloor = syn$rareLevelFloor,
                           valueSource = "synthetic",
+                          # the first copy described, with the small-cell rule: this table is made from real people's rows
+                          profile = tryCatch(vcr_population_profile(syn$data[[1]], empirical = TRUE), error = function(e) NULL), profileCopy = 1L,
                           allowedUses = vcr_domain()$syntheticUses),
        tables = .vcr_tables_of(list(vcr_write_table(copies, "synthetic-population", output_dir))))
 }

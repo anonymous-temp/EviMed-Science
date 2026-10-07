@@ -1500,6 +1500,15 @@ export {
   suppressForModel,
 } from './src/vcrSuppression.mjs'
 
+// vcrPopulationProfile — 4 exports: the profile block of a generated population (scenario, literature,
+// empirical synthetic) the 人群 tab draws, and its validator
+export {
+  VCR_PROFILE_CONTINUOUS_FIELDS,
+  VCR_PROFILE_HISTOGRAM_BINS,
+  VCR_PROFILE_KINDS,
+  validatePopulationProfile,
+} from './src/vcrPopulationProfile.mjs'
+
 // vcrRules — 16 exports: the two closed rule grammars 「虚拟临研」 uses instead of code: row rules over table
 // columns (three-valued, Kleene) and eligibility requirements over dated facts,
 // with their limits, validators and the row-rule evaluator the parity fixture pins

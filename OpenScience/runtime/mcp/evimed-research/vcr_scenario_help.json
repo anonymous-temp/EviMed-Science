@@ -107,6 +107,7 @@
           "variant": {"on":"population.variables[].family","is":["normal","lognormal","beta","gamma","uniform","exponential"]}
         },
         {"path":"population.variables[].paramSd","type":"map","of":{"type":"number","min":0},"count":{"min":1,"max":4}},
+        {"path":"population.variables[].label","type":"string","maxLength":80},
         {"path":"population.variables[].meanlog","type":"number","required":true,"variant":{"on":"population.variables[].family","is":["lognormal"]}},
         {"path":"population.variables[].sdlog","type":"number","gt":0,"required":true,"variant":{"on":"population.variables[].family","is":["lognormal"]}},
         {"path":"population.variables[].alpha","type":"number","gt":0,"required":true,"variant":{"on":"population.variables[].family","is":["beta"]}},
@@ -164,7 +165,7 @@
           "scenario": {
             "population": {
               "variables": [
-                {"name":"age","family":"normal","mean":60,"sd":10,"min":18,"max":90},
+                {"name":"age","label":"年龄","family":"normal","mean":60,"sd":10,"min":18,"max":90},
                 {"name":"female","family":"bernoulli","prob":0.4},
                 {"name":"stage","family":"categorical","probs":[0.5,0.3,0.2]}
               ]
@@ -179,6 +180,7 @@
       "rows": [
         {"path":"baselineTable","type":"list","count":{"min":1,"max":100},"items":{"type":"object"},"required":true},
         {"path":"baselineTable[].variable","type":"string","maxLength":64,"role":"column","required":true},
+        {"path":"baselineTable[].label","type":"string","maxLength":80},
         {"path":"baselineTable[].mean","type":"number"},
         {"path":"baselineTable[].sd","type":"number","gt":0},
         {"path":"baselineTable[].proportion","type":"number","min":0,"max":1},
@@ -201,7 +203,7 @@
         {
           "label": "a published baseline table",
           "scenario": {
-            "baselineTable": [{"variable":"age","mean":62,"sd":9},{"variable":"male","proportion":0.55},{"variable":"ecog","proportions":[0.4,0.5,0.1],"levels":["0","1","2"]}],
+            "baselineTable": [{"variable":"age","label":"年龄","mean":62,"sd":9},{"variable":"male","proportion":0.55},{"variable":"ecog","proportions":[0.4,0.5,0.1],"levels":["0","1","2"]}],
             "n": 400
           }
         }

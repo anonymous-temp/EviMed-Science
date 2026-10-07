@@ -304,8 +304,14 @@ const patientsFields = () => ({
 // ---------------------------------------------------------------------------
 
 const VARIABLE_BOUNDS = { min: number(), max: number() }
-/** @param {Record<string, any>} fields */
-const uncertain = (fields) => ({ ...fields, paramSd: PARAM_SD })
+const VARIABLE_LABEL = string({ maxLength: 80 })
+/**
+ * What a variable of a stated population may carry besides its distribution: how uncertain each parameter is, and the name a
+ * reader sees for it. The label is display only (the engine never reads it into a calculation); it comes back in the profile of
+ * the generated table (`diagnostics.profile[].label`) so the page can say 年龄 where the column is called `age`.
+ * @param {Record<string, any>} fields
+ */
+const uncertain = (fields) => ({ ...fields, paramSd: PARAM_SD, label: VARIABLE_LABEL })
 const POPULATION_VARIABLES = array({
   t: 'variant', on: 'family',
   variants: {
@@ -411,6 +417,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   'population.literature': object({
     baselineTable: req(array(object({
       variable: req(COLUMN),
+      label: VARIABLE_LABEL,
       mean: number(), sd: number({ gt: 0 }), proportion: number({ min: 0, max: 1 }),
       // A categorical row: its proportions (which sum to one — the handler checks), and optionally what each level is called.
       proportions: array(number({ min: 0, max: 1 }), { min: 2, max: 50 }),

@@ -265,12 +265,12 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     timeZero: { column: 'index_date' }, exit: { column: 'last_followup' } } }],
   'population.scenario': [{ label: 'three variables from stated distributions', scenario: {
     population: { variables: [
-      { name: 'age', family: 'normal', mean: 60, sd: 10, min: 18, max: 90 },
+      { name: 'age', label: '年龄', family: 'normal', mean: 60, sd: 10, min: 18, max: 90 },
       { name: 'female', family: 'bernoulli', prob: 0.4 },
       { name: 'stage', family: 'categorical', probs: [0.5, 0.3, 0.2] }] },
     n: 500 } }],
   'population.literature': [{ label: 'a published baseline table', scenario: {
-    baselineTable: [{ variable: 'age', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }, { variable: 'ecog', proportions: [0.4, 0.5, 0.1], levels: ['0', '1', '2'] }], n: 400 } }],
+    baselineTable: [{ variable: 'age', label: '年龄', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }, { variable: 'ecog', proportions: [0.4, 0.5, 0.1], levels: ['0', '1', '2'] }], n: 400 } }],
   'population.synthpop': [{ label: 'a synthetic copy of the study table', scenario: { holdoutShare: 0.2, m: 5, constraints: [{ name: 'age', rule: { op: 'between', column: 'age', low: 18, high: 100 } }] } }],
   'population.quality': [{ label: 'a synthetic table against its training table', scenario: { trainingInputId: 'snp_1:subject', syntheticInputId: 'pop_synth@1' } }],
   'patients.continuous': [{ label: 'a continuous endpoint', scenario: {
