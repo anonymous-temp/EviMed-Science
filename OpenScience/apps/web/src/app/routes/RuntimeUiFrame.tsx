@@ -4,6 +4,8 @@ import { errorCodeMessage, errorCodeOutcome, SIMULATED_WALLET_PAGES } from "@evi
 import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebAgentRun, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
+import { saveToKnowledgeBase } from "@/lib/sourceClient";
+import { toast } from "@/lib/toast";
 import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { useFrameReplyChecks } from "@/lib/replyChecks";
 import { useResearchBilling } from "@/lib/useResearchBilling";
@@ -715,6 +717,19 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         incoming.current = message.seq;
         const anchor = typeof message.anchor === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.anchor) ? `#${message.anchor}` : "";
         navigate(`/app/runs/${encodeURIComponent(runId)}/files/${path.split("/").map(encodeURIComponent).join("/")}${anchor}`);
+      } else if (message.type === "evimed.runtime-ui.save-to-knowledge-base") {
+        // 「存入知识库」 on a delivered file's card: a copy of the run's file in this project's knowledge base. The frame
+        // names a file of a run and nothing else; the control plane reads it through its own guarded file boundary and
+        // writes it under the project's knowledge base. The answer is the toast: the frame is another origin and has
+        // no way to show it.
+        const runId = typeof message.runId === "string" && SESSION_ID.test(message.runId) ? message.runId : null;
+        const path = artifactPath(message.path);
+        if (!runId || !path) return;
+        incoming.current = message.seq;
+        void saveToKnowledgeBase(path).then(
+          (saved) => toast.success(saved.duplicate ? "这份文件已经在知识库里" : "已存入知识库，正在读取"),
+          (failure) => toast.error(`没能存入知识库：${webErrorMessage(failure)}`),
+        );
       } else if (message.type === "evimed.runtime-ui.search-result" && typeof message.requestId === "string" && searches.current.has(message.requestId)) {
         incoming.current = message.seq;
         const settle = searches.current.get(message.requestId)!;

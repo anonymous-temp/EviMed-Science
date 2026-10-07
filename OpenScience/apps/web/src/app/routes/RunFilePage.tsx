@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, FileQuestion, Loader2 } from "lucide-react";
-import { hasWebApi, listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
+import { hasWebApi, listWebAgentRuns, webErrorMessage, type WebAgentRun } from "@/lib/apiClient";
 import { extOf, extToKind, previewKindForName } from "@/lib/artifacts";
 import { readArtifact } from "@/lib/artifactFile";
 import { isClaimMatrixPath, safeWorkspacePath } from "@/lib/claimCitations";
@@ -9,6 +9,8 @@ import { runTitle } from "@/lib/runPresentation";
 import { chatPath, openRunProject } from "@/lib/runLocation";
 import { artifactDisplayName } from "@/lib/artifactNames";
 import { parseFailureMessage } from "@/lib/errorText";
+import { saveToKnowledgeBase } from "@/lib/sourceClient";
+import { toast } from "@/lib/toast";
 import { ProvenancePanel } from "@/components/inspector/ProvenancePanel";
 import { Button } from "@/components/ui/Button";
 import { PageTitle } from "@/components/layout/PageTitle";
@@ -60,6 +62,20 @@ export function RunFilePage() {
   // While another project is asked for the run: this project's answer for the
   // file — most likely "not in this workspace" — is not shown meanwhile.
   const [locating, setLocating] = useState(false);
+
+  // 「存入知识库」: a copy of this file in the project's knowledge base, read like an upload.
+  const [saving, setSaving] = useState(false);
+  const saveToLibrary = async (file: string) => {
+    setSaving(true);
+    try {
+      const saved = await saveToKnowledgeBase(file);
+      toast.success(saved.duplicate ? "这份文件已经在知识库里" : "已存入知识库，正在读取");
+    } catch (failure) {
+      toast.error(`没能存入知识库：${webErrorMessage(failure)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -123,6 +139,7 @@ export function RunFilePage() {
             {run ? `${runTitle(run)} · ` : ""}{path ? artifactDisplayName(path) : "文件"}
           </h1>
           {path && <Button variant="text" onClick={() => setShowVersions((current) => !current)}>{showVersions ? "查看当前文件" : "结果版本"}</Button>}
+          {path && <Button variant="text" loading={saving} onClick={() => void saveToLibrary(path)}>存入知识库</Button>}
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {showVersions && !locating && path && <ProvenancePanel key={`${path}:${initialVersionId ?? ""}`} path={path} runId={run?.id} initialVersionId={initialVersionId} />}

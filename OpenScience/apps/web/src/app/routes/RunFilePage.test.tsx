@@ -1,14 +1,24 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RunFilePage } from "./RunFilePage";
 
 const mocks = vi.hoisted(() => ({
+  saveToKnowledgeBase: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
   listWebAgentRuns: vi.fn(),
   readArtifact: vi.fn(),
   readClaimVerification: vi.fn(),
   openRunProject: vi.fn(),
 }));
+
+vi.mock("@/lib/sourceClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sourceClient")>()),
+  saveToKnowledgeBase: mocks.saveToKnowledgeBase,
+}));
+vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
 
 vi.mock("@/lib/runLocation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/runLocation")>()),
@@ -105,5 +115,21 @@ describe("RunFilePage", () => {
   it("says a file that cannot be read cannot be read", async () => {
     renderAt("/app/runs/run_1/files/deliverables/d1/missing.md");
     expect(await screen.findByRole("alert")).toHaveTextContent("无法读取此文件");
+  });
+
+  // The conversation's file card has its own 「存入知识库」; this page's header is the same action for a file opened on its own.
+  it("keeps the file in the knowledge base from its header, and says what happened", async () => {
+    mocks.saveToKnowledgeBase.mockResolvedValue({ path: "knowledge-base/chat/clinical-evidence-report-1a2b3c4d.md", duplicate: false, sourceId: "src_a" });
+    renderAt(`/app/runs/run_1/files/${REPORT}`);
+    await screen.findByRole("heading", { level: 1, name: /证据分析报告/ });
+    await userEvent.click(screen.getByRole("button", { name: "存入知识库" }));
+    await waitFor(() => expect(mocks.saveToKnowledgeBase).toHaveBeenCalledWith(REPORT));
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已存入知识库，正在读取");
+    mocks.saveToKnowledgeBase.mockResolvedValueOnce({ path: "x", duplicate: true, sourceId: "src_a" });
+    await userEvent.click(screen.getByRole("button", { name: "存入知识库" }));
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("这份文件已经在知识库里"));
+    mocks.saveToKnowledgeBase.mockRejectedValueOnce(new Error("HTTP 415"));
+    await userEvent.click(screen.getByRole("button", { name: "存入知识库" }));
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("没能存入知识库")));
   });
 });

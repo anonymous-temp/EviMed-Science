@@ -300,12 +300,18 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
   };
   const OpenIcon = () => h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
     h('path', { d: 'M7 7h10v10' }), h('path', { d: 'M7 17 17 7' }));
+  const SaveIcon = () => h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+    h('path', { d: 'M12 10v6' }), h('path', { d: 'M9 13h6' }),
+    h('path', { d: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z' }));
 
   /**
    * One delivered file: its name, 「类型 · 大小」 (「文件夹 · 类型」 when two
-   * files share the name), and the one way to open it.
-   * The name is the document's (the reader's title); the file's own name is
-   * the tooltip, as it is in the file tree.
+   * files share the name), and the two things to do with it — open it, or
+   * keep it in the project's knowledge base (「存入知识库」, which the shell
+   * does; the frame only names the run's file). The name is the document's
+   * (the reader's title); the file's own name is the tooltip, as it is in the
+   * file tree. The card is the button that opens the file and the save is its
+   * sibling in a wrapper, since a button cannot hold a button.
    * @param {{ file: any, runId: string, sessionId: string | null, useResource?: (address: string) => any }} props
    */
   const FileCard = ({ file, runId, sessionId, useResource }) => {
@@ -314,22 +320,33 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     const resource = typeof useResource === 'function' ? useResource(sessionId ? fileAddress(sessionId, file.path) : '') : null;
     const size = resource && resource.status === 'live' ? formatBytes(resource.value?.bytes) : null;
     const facts = [file.where, file.type, size].filter(Boolean).join(' · ');
-    return h('button', {
-      type: 'button', 'data-evimed-file': file.path, 'aria-label': `打开${file.label}`, title: file.name,
-      onClick: () => { void openDeliveredFile(sidebarRight, sessionId, file.path,
-        () => kit.hub.send('open-artifact', { runId, path: file.path })); },
-      style: {
-        display: 'flex', alignItems: 'center', gap: '10px', width: '100%', minWidth: 0, boxSizing: 'border-box',
-        padding: '10px 12px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '12px',
-        background: 'transparent', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer',
+    return h('div', { style: { position: 'relative', minWidth: 0 } },
+      h('button', {
+        type: 'button', 'data-evimed-file': file.path, 'aria-label': `打开${file.label}`, title: file.name,
+        onClick: () => { void openDeliveredFile(sidebarRight, sessionId, file.path,
+          () => kit.hub.send('open-artifact', { runId, path: file.path })); },
+        style: {
+          display: 'flex', alignItems: 'center', gap: '10px', width: '100%', minWidth: 0, boxSizing: 'border-box',
+          padding: '10px 76px 10px 12px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '12px',
+          background: 'transparent', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer',
+        },
       },
-    },
-    h('span', { 'aria-hidden': true, style: { flex: 'none', width: '32px', height: '32px', borderRadius: '8px', display: 'grid', placeItems: 'center', background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)' } },
-      h(FileIcon, { kind: file.icon })),
-    h('span', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' } },
-      h('span', { style: { ...text, ...title } }, file.label),
-      h('span', { style: { ...meta, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, facts)),
-    h('span', { 'aria-hidden': true, style: { flex: 'none', display: 'inline-flex', color: 'var(--dsw-alias-label-tertiary)' } }, h(OpenIcon)));
+      h('span', { 'aria-hidden': true, style: { flex: 'none', width: '32px', height: '32px', borderRadius: '8px', display: 'grid', placeItems: 'center', background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)' } },
+        h(FileIcon, { kind: file.icon })),
+      h('span', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' } },
+        h('span', { style: { ...text, ...title } }, file.label),
+        h('span', { style: { ...meta, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, facts))),
+      // The right edge: the save beside the open mark. The row passes clicks through to the card except on the save.
+      h('span', { style: { position: 'absolute', top: 0, bottom: 0, right: '10px', display: 'flex', alignItems: 'center', gap: '4px', pointerEvents: 'none' } },
+        h('button', {
+          type: 'button', 'data-evimed-file-save': file.path, 'aria-label': `把${file.label}存入知识库`, title: '存入知识库',
+          onClick: () => { kit.hub.send('save-to-knowledge-base', { runId, path: file.path }); },
+          style: {
+            pointerEvents: 'auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px',
+            border: 'none', borderRadius: '8px', background: 'transparent', color: 'var(--dsw-alias-label-tertiary)', font: 'inherit', cursor: 'pointer',
+          },
+        }, h(SaveIcon)),
+        h('span', { 'aria-hidden': true, style: { display: 'inline-flex', width: '24px', justifyContent: 'center', color: 'var(--dsw-alias-label-tertiary)' } }, h(OpenIcon))));
   };
 
   /**

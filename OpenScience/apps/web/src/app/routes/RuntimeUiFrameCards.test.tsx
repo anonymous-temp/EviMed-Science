@@ -165,6 +165,25 @@ describe("the files after the answer that delivered them", () => {
     expect(document.body.textContent).not.toMatch(/已交付|已核对|用时|¥|结论/);
   });
 
+  // 2026-10-07 plan §2.3: a conversation's file can be kept in the project's knowledge base from its own card.
+  it("keeps a file in the knowledge base from its card, without opening it, and names only the run's file", () => {
+    const openResource = vi.fn();
+    const f = frame([], { sidebarRight: { openResource } });
+    const sent: Array<[string, Record<string, unknown>]> = [];
+    f.kit.hub.attach((type: string, fields: Record<string, unknown>) => { sent.push([type, fields]); });
+    act(() => f.kit.hub.deliver("run-state", live));
+    const Answer = f.find("conversation.chat.node", "assistant-step")!;
+    render(<Answer {...answerProps} />);
+    const save = screen.getByRole("button", { name: "把证据分析报告存入知识库" });
+    expect(save).toHaveAttribute("data-evimed-file-save", "deliverables/evidence/clinical-evidence-report.md");
+    // One button per card for each thing, and the save is not inside the one that opens: a button cannot hold a button.
+    expect(screen.getByRole("button", { name: "打开证据分析报告" }).contains(save)).toBe(false);
+    expect(screen.getAllByRole("button", { name: /存入知识库/ })).toHaveLength(2);
+    fireEvent.click(save);
+    expect(sent).toEqual([["save-to-knowledge-base", { runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md" }]]);
+    expect(openResource).not.toHaveBeenCalled();
+  });
+
   it("a reply check with a problem is one line that opens into each flagged sentence, its reason, the source's words and link", () => {
     const f = frame([]);
     act(() => f.kit.hub.deliver("reply-check", { sessionId: "session-a", checks: [{ turnSeq: 40, status: "done", cautions: [], verdicts: [
