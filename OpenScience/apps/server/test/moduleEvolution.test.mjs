@@ -76,6 +76,38 @@ test("fresh curator requires exact public bytes, earliest-public proof and indep
   assert.equal(added[0].sourceHash,sourceHash);
 });
 
+test("the curator continues where its last read stopped, extracts each entry once and retries a failed extraction", async () => {
+  const {createModuleEvolutionCurator} = await import("../src/moduleEvolutionCurator.mjs");
+  const {createHash} = await import("node:crypto");
+  // A feed of 250 entries received after the freeze; only every tenth is first public after it.
+  const feed = Array.from({length: 250}, (_, index) => {
+    const sourceText = `Study ${index} reports ${index} events among 100 participants.`;
+    return {sourceRoot:`study-${index}`,sourceText,sourceHash:createHash("sha256").update(sourceText).digest("hex"),
+      firstPublicAt:index % 10 === 9 ? "2026-10-06T00:00:00Z" : "2026-10-01T00:00:00Z",firstPublicEvidenceId:`gateway-${index}`,provenanceResolved:true,
+      cursor:{receivedAt:`2026-10-05 01:00:${String(index).padStart(6, "0")}+00`,at:new Date(Date.parse("2026-10-05T01:00:00Z") + index).toISOString(),id:String(index + 1)}};
+  });
+  const saved = new Map(), reads = [], extracted = [];
+  let failOn = "study-129";
+  const curator = createModuleEvolutionCurator({taskPool:{add:async () => {}},now:()=>new Date("2026-10-07T00:00:00Z"),
+    readCursor:async key => saved.get(key) ?? null, saveCursor:async (key, cursor) => { saved.set(key, cursor); },
+    readSnapshots:async query => { reads.push(query); const after = query.afterId == null ? 0 : Number(query.afterId);
+      return feed.filter(entry => Number(entry.cursor.id) > after).slice(0, query.limit); },
+    extractTask:async ({source}) => { if (source.sourceRoot === failOn) throw Object.assign(new Error("budget"), {code:"usage_budget_exceeded"});
+      extracted.push(source.sourceRoot); return {id:`task-${source.sourceRoot}`,curatorIndependent:true,sourceQuotes:[source.sourceText]}; }});
+  const input = {moduleId:"frontier",candidate:{frozenAt:"2026-10-05T00:00:00Z"},modelReleasedAt:"2026-10-04T00:00:00Z",epoch:"e1"};
+  assert.equal((await curator.curate(input)).added, 10, "the first hundred entries hold ten that qualify");
+  await assert.rejects(curator.curate(input), {code:"usage_budget_exceeded"});
+  assert.equal(reads[1].afterId, "100", "the second read starts after the first hundred, not at the freeze");
+  failOn = null;
+  // The second read added 109 and 119 before 129 failed; the third starts at 129 again.
+  assert.equal((await curator.curate(input)).added, 10);
+  assert.equal(reads[2].afterId, "129", "the failed entry is tried again; nothing before it is read twice");
+  assert.equal((await curator.curate(input)).added, 3);
+  assert.equal((await curator.curate(input)).added, 0);
+  assert.equal(extracted.length, 25);
+  assert.equal(new Set(extracted).size, 25, "no entry is extracted twice");
+});
+
 test("a candidate modifies one mutable component and its smoke executes known-correct units", async () => {
   const adapters = createModuleEvolutionAdapters({enabled:{frontier:true},runners:{frontier:async input=>({units:input.batch.map(item=>({id:item.id,score:1,sourceHash:"source"}))})}});
   const prepared = await adapters.frontier.prepare({policy:{selectionThreshold:81},proposal:{components:["selectionThreshold"]}});

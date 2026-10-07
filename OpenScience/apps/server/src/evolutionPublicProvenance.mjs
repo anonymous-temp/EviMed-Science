@@ -7,6 +7,9 @@ export function publicCalendarDate(parts){if(!Array.isArray(parts)||parts.length
 /** @param {{service:any,fetchImpl?:typeof fetch,now?:()=>Date,loadReleaseSource?:((proof:any,row:any)=>Promise<any>)|null}} dependencies */
 export function createEvolutionPublicProvenance({service,fetchImpl=fetch,now=()=>new Date(),loadReleaseSource=null}){
  async function get(url,format="json"){try{const response=await fetchImpl(url,{redirect:'error',signal:AbortSignal.timeout(30000),headers:{accept:'application/json'}});if(!response.ok)return null;let bytes;if(response.body?.getReader){const reader=response.body.getReader(),chunks=[];let size=0;try{for(;;){const item=await reader.read();if(item.done)break;size+=item.value.byteLength;if(size>512*1024){await reader.cancel();return null;}chunks.push(Buffer.from(item.value));}}finally{reader.releaseLock();}bytes=Buffer.concat(chunks);}else bytes=Buffer.from(await response.text());if(bytes.length>512*1024)return null;const digest=createHash("sha256").update(bytes).digest("hex");const id=`evolution-public-source-version-${digest}`;if(!await service.get(id))await service.save('public-source-version',id,{url,sha256:digest,bodyBase64:bytes.toString('base64'),fetchedAt:now().toISOString(),origin:'external-source'});return {data:format==='json'?JSON.parse(bytes.toString('utf8')):bytes.toString('utf8'),evidence:{id,url,sha256:digest}};}catch{return null;}}
+ const aliasRecordId=alias=>`evolution-public-provenance-alias-${hash(alias).slice(0,32)}`;
+ /** @param {string[]} aliases */
+ async function recordForAliases(aliases){for(const alias of aliases){const pointer=await service.get(aliasRecordId(alias));const row=pointer?.payload?.recordId?await service.get(pointer.payload.recordId):null;if(row)return row;}return null;}
  async function resolvePaper(paper){
   const unresolved=(evidence=[],root=null,aliases=[])=>({firstPublicAt:null,firstPublicEvidenceId:null,sourceRoot:root,aliases,provenanceResolved:false,provenanceEvidence:evidence});
   const arxiv=/^(?:arxiv:|https?:\/\/arxiv\.org\/abs\/|(?:doi:)?10\.48550\/arxiv\.)(\d{4}\.\d{4,5})(?:v\d+)?$/i.exec(String(paper.identity??paper.doi??paper.url??""));
@@ -32,14 +35,18 @@ export function createEvolutionPublicProvenance({service,fetchImpl=fetch,now=()=
   }
   if(queue.some(value=>!visited.has(value)))ambiguous=true;
   for(const registryId of [...registryIds].slice(0,3)){const found=await get(`https://clinicaltrials.gov/api/v2/studies/${registryId}`);if(!found){ambiguous=true;continue;}evidence.push(found.evidence);const record=found.data;if(record.protocolSection?.identificationModule?.nctId!==registryId){ambiguous=true;continue;}if(record.hasResults===true){const date=record.protocolSection?.statusModule?.resultsFirstPostDateStruct?.date;if(/^\d{4}-\d{2}-\d{2}$/.test(date??''))addDate(date,found.evidence.id);else ambiguous=true;}}
-  const orderedAliases=[...aliases].sort();const prior=(await service.list('public-provenance')).find(row=>(row.payload.aliases??[]).some(value=>aliases.has(value)));const root=prior?.payload.sourceRoot??orderedAliases.find(value=>value.startsWith('doi:'))??orderedAliases[0]??null;
+  // Found through one pointer per alias: a scan of every provenance record per paper grew by hundreds of records a day
+  // once the confirmation curator resolved the whole feed (2026-10-07).
+  const orderedAliases=[...aliases].sort();const prior=await recordForAliases(orderedAliases);const root=prior?.payload.sourceRoot??orderedAliases.find(value=>value.startsWith('doi:'))??orderedAliases[0]??null;
   if(ambiguous||!dates.length||!root)return unresolved(evidence,root,orderedAliases);
   const earliest=dates.sort((a,b)=>a.at.localeCompare(b.at))[0];
   // An observed earlier date may move the bound earlier. A later metadata version cannot reset it.
   const firstPublicAt=prior?.payload.firstPublicAt&&prior.payload.firstPublicAt<earliest.at?prior.payload.firstPublicAt:earliest.at;
   const firstPublicEvidenceId=firstPublicAt===earliest.at?earliest.evidenceId:prior.payload.firstPublicEvidenceId;
   const payload={firstPublicAt,firstPublicEvidenceId,sourceRoot:root,aliases:[...new Set([...(prior?.payload.aliases??[]),...orderedAliases])],provenanceResolved:true,provenanceEvidence:evidence,updatedAt:now().toISOString()};
-  const id=prior?.id??`evolution-public-provenance-${hash(root).slice(0,32)}`;await service.save('public-provenance',id,payload,prior);return payload;
+  const id=prior?.id??`evolution-public-provenance-${hash(root).slice(0,32)}`;await service.save('public-provenance',id,payload,prior);
+  for(const alias of payload.aliases)if(!await service.get(aliasRecordId(alias)))await service.save('public-provenance-alias',aliasRecordId(alias),{alias,recordId:id});
+  return payload;
  }
  /** Read already registered release proofs only when the official source and actual model match. @param {string} actualModel */
  async function modelReleaseProof(actualModel){

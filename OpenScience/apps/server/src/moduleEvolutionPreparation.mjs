@@ -59,11 +59,16 @@ export function createModuleEvolutionPreparation({service,taskPool,policies,prov
   }
   if(!deps.verifyTask)return {status:'waiting',reason:'independent_curator_review_unavailable'};
   const assets=await service.list('resource-asset');
-  const curator=createModuleEvolutionCurator({taskPool,now:()=>service.now(),readSnapshots:async query=>{
-   const entries=await discovery?.discover(query)??[],snapshots=[];
-   for(const entry of entries){if(!entry.sourceText)continue;
+  const cursorId=key=>`evolution-curation-cursor-${hash(key).slice(0,32)}`;
+  const curator=createModuleEvolutionCurator({taskPool,now:()=>service.now(),
+   readCursor:async key=>(await service.get(cursorId(key)))?.payload??null,
+   saveCursor:async (key,cursor)=>{const prior=await service.get(cursorId(key));await service.save('curation-cursor',cursorId(key),{key,...cursor,savedAt:service.now().toISOString()},prior);},
+   readSnapshots:async query=>{
+   // Medical modules are confirmed on the medical feed; the AI discovery channel is self-research's.
+   const entries=await discovery?.discover({...query,discovery:'exclude'})??[],snapshots=[];
+   for(const entry of entries){if(!entry.sourceText){snapshots.push({cursor:entry.cursor,skipped:true});continue;}
     const chronology=await provenance.resolvePaper({...entry,identity:entry.doi??entry.sourceUrl,url:entry.sourceUrl});
-    if(!chronology.provenanceResolved)continue;
+    if(!chronology.provenanceResolved){snapshots.push({cursor:entry.cursor,skipped:true});continue;}
     const sourceHash=createHash('sha256').update(entry.sourceText).digest('hex');
     const source={...entry,...chronology,sourceHash,sourceAliases:chronology.aliases,studyFamilyId:chronology.sourceRoot,textScope:'preserved-feed-abstract'};
     const id=`evolution-confirmation-source-${sourceHash}`;

@@ -3,16 +3,24 @@ import { HttpError } from "./security.mjs";
 /** Public discovery includes screened-out entries and never publishes them. @param {{database: any}} dependencies */
 export function createFrontierEvolutionDiscovery({ database }) {
   return {
-    /** @param {{since: string, limit?: number}} input */
-    async discover({ since, limit = 25 }) {
-      const result = await database.query(`SELECT e.*, min(v.published_at) AS earliest_public_at, array_remove(array_agg(DISTINCT v.doi), NULL) AS related_dois
+    /** Entries received after `since` (or after the `since`/`afterId` cursor a previous read returned), in arrival order.
+     * `discovery` picks the AI discovery channel the medical feed drops (`only`, for self-research), everything else
+     * (`exclude`, for medical confirmation tasks) or both (`any`).
+     * @param {{since: string, afterId?: string|null, limit?: number, discovery?: "only"|"exclude"|"any"}} input */
+    async discover({ since, afterId = null, limit = 25, discovery = "any" }) {
+      const discoveryOnly = "(e.source_id = 'arxiv-agent-self-improvement' OR coalesce(e.facts->>'discovery_only', '') = 'true')";
+      const channel = discovery === "only" ? discoveryOnly : discovery === "exclude" ? `NOT ${discoveryOnly}` : "true";
+      const after = afterId == null ? "e.received_at > $1::timestamptz" : "(e.received_at, e.id) > ($1::timestamptz, $3::bigint)";
+      const result = await database.query(`SELECT e.*, e.received_at::text AS received_at_exact, min(v.published_at) AS earliest_public_at, array_remove(array_agg(DISTINCT v.doi), NULL) AS related_dois
         FROM evimed_frontier.entries e
         LEFT JOIN evimed_frontier.item_links l ON l.kind IN ('preprint-of', 'new-version')
           AND (lower(l.from_doi) = lower(e.doi) OR lower(l.to_doi) = lower(e.doi))
         LEFT JOIN evimed_frontier.entries v ON lower(v.doi) IN (lower(l.from_doi), lower(l.to_doi))
-        WHERE e.received_at > $1::timestamptz
-        GROUP BY e.id ORDER BY e.received_at, e.id LIMIT $2`, [since, Math.max(1, Math.min(100, limit))]);
+        WHERE ${after} AND ${channel}
+        GROUP BY e.id ORDER BY e.received_at, e.id LIMIT $2`, [since, Math.max(1, Math.min(100, limit)), ...(afterId == null ? [] : [String(afterId)])]);
       return result.rows.map((entry) => ({ id: String(entry.id), title: entry.title_raw, abstract: entry.summary_raw,
+        // The exact database timestamp (microseconds) and id: a cursor rounded to milliseconds would read its own row again.
+        cursor: { receivedAt: entry.received_at_exact ?? new Date(entry.received_at).toISOString(), at: new Date(entry.received_at).toISOString(), id: String(entry.id) },
         sourceUrl: entry.canonical_url, sourceText: entry.summary_raw, sourceDigest: entry.content_sha256,
         publicationStatus: entry.facts?.publicationStatus ?? "unknown", doi: entry.doi,
         sourceRoot: entry.doi ? [...(entry.related_dois ?? []),entry.doi].map((doi)=>String(doi).toLowerCase()).sort()[0] : entry.identity_key,
