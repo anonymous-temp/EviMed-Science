@@ -5,6 +5,7 @@ import { createRef, useState } from "react";
 import { Pencil } from "lucide-react";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { FilterChip, FilterChips, FilterSelect } from "./FilterChips";
+import { Drawer } from "./Drawer";
 import { IconButton } from "./IconButton";
 import { List, ListRow } from "./ListRow";
 import { Menu } from "./Menu";
@@ -230,6 +231,20 @@ describe("Menu", () => {
     await userEvent.keyboard("{Enter}");
     expect(onDelete).toHaveBeenCalledOnce();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+});
+
+describe("Menu inside a layer", () => {
+  it("takes its own Escape: the drawer around it stays open, and the next Escape closes the drawer", async () => {
+    const onClose = vi.fn();
+    render(<Drawer title="任务" onClose={onClose}><Menu label="更多" items={[{ label: "暂停任务", onSelect: vi.fn() }]}><button type="button">更多</button></Menu></Drawer>);
+    await userEvent.click(screen.getByRole("button", { name: "更多" }));
+    await screen.findByRole("menu");
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(onClose).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 

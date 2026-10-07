@@ -1,5 +1,5 @@
 import { EvolutionOpportunities } from '@/components/evolution/EvolutionOpportunities';
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { ArrowUp, CalendarClock, RefreshCw, X } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
@@ -16,6 +16,7 @@ import { FormDialog } from "@/components/ui/FormDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Textarea } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
+import { Menu } from "@/components/ui/Menu";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -26,7 +27,7 @@ import { ResearchProgress } from "@/components/autopilot/ResearchProgress";
 import { TaskForm } from "@/components/autopilot/TaskForm";
 import { TaskGroup } from "@/components/autopilot/TaskGroup";
 import { TaskTimeline } from "@/components/autopilot/TaskTimeline";
-import { activeAgenda, needsMaterial, pauseNotes, recurrence, RECOMMENDATIONS, resumableByReply, revisionConflict, scheduleOf, scheduleStatus, type Recommendation } from "@/components/autopilot/taskPresentation";
+import { activeAgenda, episodeCap, lastRunLine, needsMaterial, pauseNotes, recurrence, RECOMMENDATIONS, repeatLine, resumableByReply, revisionConflict, scheduleOf, scheduleStatus, zoneName, type Recommendation } from "@/components/autopilot/taskPresentation";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
 
 /** Where an upload lands: the project's knowledge base, which registers it as a source. */
@@ -42,6 +43,8 @@ export function AutopilotPage() {
 
 function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
+  // The page follows the sidebar's project and says which: plain text, not a second selector with a different meaning.
+  const projectName = useProjectStore(state => state.projects.find(project => project.id === projectId)?.name);
   const [params, setParams] = useSearchParams();
   const selectedId = params.get("task");
   const digestId = params.get("digest");
@@ -69,6 +72,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const progressGeneration = useRef(0);
   const operating = useRef(false);
   const selection = useRef(selectedId); selection.current = selectedId;
+  const scroller = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const request = ++generation.current;
@@ -208,6 +212,14 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   };
   const openDigest = (id?: string | null) => { if (id) void markDigestOpened(id).catch(() => { /* Read telemetry must not prevent opening a result. */ }); };
   const selected = agendas?.find(agenda => agenda.id === selectedId);
+  // The newest run is at the end of the record and is what a researcher opens a task for: it is on screen when the drawer opens,
+  // when the record and the progress above it have arrived (they move the end down), and when a newer run is added.
+  const newestRun = selectedEpisodes?.reduce<string>((newest, run) => `${run.payload.createdAt ?? ""}|${run.id}` > newest ? `${run.payload.createdAt ?? ""}|${run.id}` : newest, "") ?? "";
+  const scrollKey = `${selectedId}|${selected ? "task" : ""}|${newestRun}|${researchState ? "progress" : ""}`;
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [scrollKey]);
   // Material: files are uploaded through the knowledge base (which registers them as sources), then named to the
   // task by their digest; the task itself never receives bytes.
   const addMaterial = async () => {
@@ -238,10 +250,11 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const inactive = visible.filter(agenda => !scheduled.includes(agenda));
   // The groups of one list. A task opens in the drawer; an empty group is not drawn.
   const taskGroup = (label: string, items: AgendaRecord[], muted = false) => items.length > 0 && <TaskGroup label={label}><List divided>{items.map(agenda =>
-    <ListRow key={agenda.id} title={agenda.payload.title} muted={muted} meta={`${scheduleStatus(agenda)} · ${recurrence(scheduleOf(agenda))}`} onOpen={() => select(agenda.id)} />)}</List></TaskGroup>;
+    <ListRow key={agenda.id} title={agenda.payload.title} muted={muted} onOpen={() => select(agenda.id)}
+      meta={<><span className="block">{scheduleStatus(agenda)} · {repeatLine(scheduleOf(agenda))}</span><span className="block">{lastRunLine(agenda, episodes)}</span></>} />)}</List></TaskGroup>;
   const canReply = selected ? activeAgenda(selected) || resumableByReply(selected) : false;
 
-  return <PageShell title="定时任务" actions={<>
+  return <PageShell title="定时任务" meta={projectName} actions={<>
     <SearchInput label="搜索任务" value={search} onChange={event => setSearch(event.target.value)} />
     <Button onClick={() => setEditor({})}>新建任务</Button>
   </>}>
@@ -254,26 +267,30 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
     </div>}
     {selected && <Drawer bare title={selected.payload.title} onClose={() => select(null)} widthClassName="max-w-2xl"><div className="flex h-full min-h-0 flex-col">
       <header className="flex items-start gap-3 border-b border-border px-6 py-4">
-        <div className="min-w-0 flex-1"><h2 className="text-title font-semibold text-text">{selected.payload.title}</h2><p className="mt-1 text-caption text-text-3">{recurrence(scheduleOf(selected))} · {scheduleOf(selected).timeZone}</p><p className="mt-1 text-caption text-text-3">{scheduleStatus(selected)}</p>{pauseNotes(selected).map(note => <p key={note} className="mt-1 whitespace-pre-wrap break-words text-caption text-text-2">{note}</p>)}</div>
+        <div className="min-w-0 flex-1"><h2 className="text-title font-semibold text-text">{selected.payload.title}</h2><p className="mt-1 text-caption text-text-3">{[recurrence(scheduleOf(selected)), zoneName(scheduleOf(selected).timeZone), episodeCap(selected.payload.maxEpisodeCny)].filter(Boolean).join(" · ")}</p><p className="mt-1 text-caption text-text-3">{scheduleStatus(selected)}</p>{pauseNotes(selected).map(note => <p key={note} className="mt-1 whitespace-pre-wrap break-words text-caption text-text-2">{note}</p>)}</div>
         <IconButton icon={X} label="关闭" onClick={() => select(null)} />
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5"><div className="space-y-5">
-        <div className="flex flex-wrap gap-1">
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-6 py-5"><div className="space-y-5">
+        <div className="flex flex-wrap items-center gap-1">
           <Button variant="text" size="sm" disabled={busy} onClick={() => setEditor({ agenda: selected })}>编辑任务</Button>
-          <Button variant="text" size="sm" disabled={busy} onClick={() => activeAgenda(selected) ? setConfirm({ kind: "pause", agenda: selected }) : void operate({ kind: "resume", agenda: selected })}>{activeAgenda(selected) ? "暂停任务" : "启用任务"}</Button>
           <Button variant="secondary" size="sm" disabled={busy || !activeAgenda(selected)} onClick={() => setConfirm({ kind: "run", agenda: selected, requestId: crypto.randomUUID() })}>立即运行</Button>
-          <Button variant="text" size="sm" disabled={busy} onClick={() => setConfirm({ kind: "archive", agenda: selected })}>删除任务</Button>
+          {/* Pausing is as common as editing; deleting is not, and sits behind the same fold so it is never next to an everyday action. */}
+          <Menu label="更多" items={[
+            { label: activeAgenda(selected) ? "暂停任务" : "启用任务", disabled: busy, onSelect: () => activeAgenda(selected) ? setConfirm({ kind: "pause", agenda: selected }) : void operate({ kind: "resume", agenda: selected }) },
+            "separator",
+            { label: "删除任务", destructive: true, disabled: busy, onSelect: () => setConfirm({ kind: "archive", agenda: selected }) },
+          ]}><Button variant="text" size="sm">更多</Button></Menu>
         </div>
         {actionError && <div role="alert" className="text-ui text-error">{actionError}{retry && <Button variant="text" disabled={busy} onClick={() => void operate(retry)}>重试操作</Button>}</div>}
         <div className="ml-auto max-w-body rounded-panel bg-accent px-5 py-4 text-ui leading-relaxed text-accent-fg"><p className="whitespace-pre-wrap break-words">{selected.payload.prompt ?? selected.payload.topics.join("\n")}</p></div>
-        <ResearchProgress agenda={selected} state={researchState} error={progressError} busy={busy} onAdd={() => void addMaterial()} onPick={() => setPicking(true)}
+        <ResearchProgress agenda={selected} state={researchState} error={progressError} busy={busy} lastRun={lastRunLine(selected, selectedEpisodes ?? episodes, { withTime: true })} onAdd={() => void addMaterial()} onPick={() => setPicking(true)}
           onRemove={sourceId => void operate({ kind: "material", agenda: selected, remove: sourceId })} onRetry={() => void loadProgress()} />
         {historyError && <LoadError message={historyError} onRetry={() => void loadHistory()} />}
         {selectedEpisodes ? <TaskTimeline agenda={selected} episodes={selectedEpisodes} onOpen={openDigest} /> : !historyError && <FilesSkeleton />}
       </div></div>
       <div className="border-t border-border px-6 pb-5 pt-3"><form className="rounded-composer border border-border bg-surface-2 p-3 shadow-e1" onSubmit={event => { event.preventDefault(); if (!note.trim() || busy || !canReply || retry?.kind === "follow-up") return; void operate({ kind: "follow-up", agenda: selected, requestId: crypto.randomUUID(), note }); }}>
         <Textarea aria-label="针对任务追问" rows={2} maxLength={8000} placeholder={activeAgenda(selected) ? "提问、更正上面的结论，或说明需要暂停…" : resumableByReply(selected) ? "回复后任务会继续…" : "请先启用任务，再发送追问"} disabled={!canReply || busy || retry?.kind === "follow-up"} value={note} className="border-transparent bg-transparent focus:border-transparent" onChange={event => setNote(event.target.value)} />
-        <div className="flex items-center justify-between gap-3"><span className="text-caption text-text-3">{activeAgenda(selected) ? `单次上限 ¥${selected.payload.maxEpisodeCny}` : resumableByReply(selected) ? "发送后任务将继续" : "请先启用任务"}</span><Button type="submit" aria-label="发送追问" size="sm" loading={busy} disabled={!canReply || !note.trim() || retry?.kind === "follow-up"}><ArrowUp size={16} aria-hidden="true" /></Button></div>
+        <div className="flex items-center justify-between gap-3"><span className="text-caption text-text-3">{activeAgenda(selected) ? "" : resumableByReply(selected) ? "发送后任务将继续" : "请先启用任务"}</span><Button type="submit" aria-label="发送追问" size="sm" loading={busy} disabled={!canReply || !note.trim() || retry?.kind === "follow-up"}><ArrowUp size={16} aria-hidden="true" /></Button></div>
       </form>{refreshExhausted && <div className="mt-2 flex items-center gap-2 text-caption text-text-3">自动刷新已暂停<Button variant="text" size="sm" onClick={() => { setRefreshExhausted(false); setRefreshCycle(value => value + 1); void Promise.all([load(), loadHistory()]); }}><RefreshCw size={16} aria-hidden="true" />刷新结果</Button></div>}</div>
     </div></Drawer>}
     {selectedId && agendas !== null && !selected && <Drawer title="任务详情" onClose={() => select(null)}><EmptyState icon={CalendarClock} title="未找到这个任务" description="关闭后从列表选择其他任务。" /></Drawer>}

@@ -49,3 +49,46 @@ export function artifactDisplayName(path: string): string {
   const name = path.slice(path.lastIndexOf("/") + 1);
   return DOCUMENT_NAMES[name] ?? name;
 }
+
+/**
+ * The formats a researcher opens as a document. A run writes its helper scripts, intermediate tables and logs into the same
+ * folder as its report, and a list of every file that survived put `build_final.py` beside the report (2026-10-07 audit). This is
+ * the closed list of formats worth a link; the chat's file cards rank by the same extensions (`fileTypeOf`, harness-port) — copied
+ * here because the web does not import the port. A JSON file is a document only when it is the evidence matrix.
+ */
+const READABLE_EXTENSIONS: ReadonlySet<string> = new Set(["md", "docx", "pdf", "pptx", "html", "xlsx", "csv", "tsv", "png", "jpg", "jpeg", "svg", "txt"]);
+const SHEET_EXTENSIONS: ReadonlySet<string> = new Set(["xlsx", "csv", "tsv"]);
+const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set(["png", "jpg", "jpeg", "svg"]);
+
+function nameAndExtension(path: string): { lower: string; extension: string } {
+  const lower = path.slice(path.lastIndexOf("/") + 1).toLowerCase();
+  return { lower, extension: lower.includes(".") ? lower.slice(lower.lastIndexOf(".") + 1) : "" };
+}
+
+/** Whether a delivered file is one a researcher reads (see above); the rest of a run's files are its working material. */
+export function isReadableArtifact(path: string): boolean {
+  const { lower, extension } = nameAndExtension(path);
+  if (extension === "json") return /matrix.*\.json$/.test(lower);
+  // A run's own bookkeeping is not a delivery, whatever its extension: the revision notes are a backstage genre (the chat's cards skip them too).
+  if (/^revision-notes?\.md$/.test(lower)) return false;
+  return READABLE_EXTENSIONS.has(extension);
+}
+
+/** Where a readable file sorts: the report, then its evidence matrix, then documents, sheets, pictures; a delivery summary last. */
+function readableRank(path: string): number {
+  const { lower, extension } = nameAndExtension(path);
+  if (extension === "json") return 1;
+  if (lower === "delivery-summary.md") return 5;
+  if (/report/.test(lower) && lower !== "reporting-checklist.md" && !SHEET_EXTENSIONS.has(extension) && !IMAGE_EXTENSIONS.has(extension)) return 0;
+  return SHEET_EXTENSIONS.has(extension) ? 3 : IMAGE_EXTENSIONS.has(extension) ? 4 : 2;
+}
+
+/**
+ * A run's files as a researcher sees them: the documents in reading order, and the rest (scripts, intermediate data, logs) kept
+ * apart rather than dropped — nothing is deleted from the record, it is only not offered first.
+ */
+export function splitArtifacts<T extends { path: string }>(refs: readonly T[]): { readable: T[]; other: T[] } {
+  const readable = refs.filter(ref => isReadableArtifact(ref.path))
+    .map((ref, index) => ({ ref, index })).sort((a, b) => readableRank(a.ref.path) - readableRank(b.ref.path) || a.index - b.index).map(entry => entry.ref);
+  return { readable, other: refs.filter(ref => !isReadableArtifact(ref.path)) };
+}
