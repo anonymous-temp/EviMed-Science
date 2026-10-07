@@ -153,7 +153,7 @@ const REASONS = Object.freeze({
   }],
   // It can be asked, and something it needs is missing or just failed.
   'engine-not-ready': ['limited', (d, c) => `分析引擎（${verbOf(d)}）${c.engineState === 'unreachable' ? '现在连不上' : '现在没有就绪'}；提交后仍会受理，受阻时会如实说明。`],
-  'data-source-not-configured': ['limited', (d) => `数据源「${connectorCredentialSpec(String(d ?? ''))?.title ?? '一个外部数据源'}」这个部署没有配置，使用时可以添加你自己的凭据；其余部分照常。`],
+  'data-source-not-configured': ['limited', (d) => `用到「${connectorCredentialSpec(String(d ?? ''))?.title ?? '一个外部数据源'}」的数据时需要添加你自己的凭据；可以先开始，缺的部分之后在对话里补上。`],
   // 「虚拟临床研究」's statistics engine: composed and not answering, or not composed at all. Neither stops a study: the steps
   // that do not compute stand, and a computation submitted now is accepted and continues by itself once the engine is back.
   'vcr-engine-not-answering': ['limited', () => '统计计算引擎现在没有回应；提交的计算会被受理，引擎恢复后自动继续。'],

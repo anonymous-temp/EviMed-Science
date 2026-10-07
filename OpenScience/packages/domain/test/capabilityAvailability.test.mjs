@@ -122,6 +122,8 @@ test('a missing engine or data source is a fact about today and outranks a succe
   assert.equal(missing.state, 'limited')
   assert.match(missing.text, /OpenGWAS/)
   assert.match(missing.text, /添加你自己的凭据/)
+  assert.match(missing.text, /可以先开始/, 'a missing credential does not stop the start; the reader is told what happens next')
+  assert.doesNotMatch(missing.text, /部署/, 'the sentence is about the reader\'s data, not about how the deployment is configured')
   // Several limits: the first decides, the rest are carried, never dropped.
   const several = projectAvailability({ subject, reasons: [
     { code: 'optional-tool-not-offered', detail: 'web_read', source: 'deployment-composition' },

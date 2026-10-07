@@ -42,15 +42,18 @@ function durationText([min, max]: [number, number]): string | null {
 
 /**
  * What a tool usually takes out of the allowance: 「约 ¥4～8 额度」, in whole
- * credits (one credit is one CNY). Null when the estimate names no range —
- * nothing supports one (`basis: "none"`), or the two ends are not a range — so
- * a price nobody estimated is left out, never shown as zero.
+ * credits (one credit is one CNY) — the low end floored, the high end rounded
+ * up, because it is an 「约」 figure and `¥4.05～7.02` only wraps the card. A
+ * range that stays under one credit keeps its cents. Null when the estimate
+ * names no range — nothing supports one (`basis: "none"`), or the two ends are
+ * not a range — so a price nobody estimated is left out, never shown as zero.
  */
 function allowanceText(estimate: WebResearchEstimate | undefined): string | null {
   if (!estimate || estimate.basis === "none") return null;
   const { low, high } = estimate;
   if (typeof low !== "number" || typeof high !== "number" || !Number.isFinite(low) || !Number.isFinite(high) || low < 0 || low > high) return null;
-  return `约 ¥${low === high ? formatNumber(high) : formatRange(low, high)} 额度`;
+  const [from, to] = high < 1 ? [low, high] : [Math.floor(low), Math.ceil(high)];
+  return `约 ¥${from === to ? formatNumber(to) : formatRange(from, to)} 额度`;
 }
 
 /**
@@ -189,21 +192,25 @@ export function CapabilitiesPage() {
 }
 
 /**
- * The states whose sentence a reader can act on, and so is shown. The rest
- * (installed, executable, unverified) are a label alone: the sentence for them
- * says how often something ran, which is the system explaining itself
- * (AGENTS.md, 「The interface never explains the system」). It is still there for
- * assistive technology.
+ * The states a reader can act on, and so are drawn — a label and its sentence.
+ * The rest (installed, executable, unverified) are operational history: how
+ * often something ran on this deployment, which a version bump turns from one
+ * word into another with nothing a researcher could see changing, and which
+ * opens the same conversation either way — the system explaining itself
+ * (AGENTS.md, 「The interface never explains the system」; DESIGN.md 页面结构
+ * rule 4). They draw nothing; the sentence stays for assistive technology and
+ * the label stays in the API. Still a label, never a gate: no tool is hidden
+ * or disabled for what its state says.
  */
 const SENTENCE_SHOWN = new Set<WebAvailabilityState>(["limited", "unavailable", "source-planned"]);
 
 /**
  * One tool: its icon and name, one sentence, how long it usually takes, what
- * this deployment can truthfully say about it — and, where the allowance is
- * simulated, what it usually takes out of it, with the mark every simulated
- * amount carries. The label is a label: the card opens the same conversation
- * whatever it says (an unavailable tool reports "blocked" by its own mechanism
- * when asked).
+ * this deployment can truthfully say about it when that is something to act on
+ * — and, where the allowance is simulated, what it usually takes out of it,
+ * with the mark every simulated amount carries. The label is a label: the card
+ * opens the same conversation whatever it says (an unavailable tool reports
+ * "blocked" by its own mechanism when asked).
  */
 function ToolCard({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estimate?: WebResearchEstimate; busy: boolean; onOpen: () => void }) {
   const Icon = capabilityIcon(agent.id);
@@ -211,6 +218,7 @@ function ToolCard({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; esti
   const allowance = allowanceText(estimate);
   const availability = agent.availability ?? null;
   const sentenceId = `availability-${agent.id}`;
+  const shown = availability !== null && SENTENCE_SHOWN.has(availability.state);
   return (
     <button
       type="button"
@@ -226,13 +234,13 @@ function ToolCard({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; esti
       </span>
       <span className="text-ui text-text-2">{agent.description}</span>
       {availability && (
-        <span id={sentenceId} className={SENTENCE_SHOWN.has(availability.state) ? "text-caption text-text-3" : "sr-only"}>
+        <span id={sentenceId} className={shown ? "text-caption text-text-3" : "sr-only"}>
           {availability.text}
         </span>
       )}
-      {(duration || allowance || availability) && (
+      {(duration || allowance || shown) && (
         <span className="mt-auto flex flex-wrap items-center gap-x-1.5 gap-y-1 pt-1 text-caption text-text-3">
-          {availability && <Tag>{availability.label}</Tag>}
+          {shown && <Tag>{availability.label}</Tag>}
           {[duration, allowance].filter(Boolean).join(" · ")}
           {allowance && <SimulatedMark />}
         </span>
