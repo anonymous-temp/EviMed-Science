@@ -264,6 +264,19 @@ researcher reads when they open the method, at most 4,000 characters, adding
 nothing the method does not say. It is never part of SKILL.md. Leave `display`
 out for `no_change`.
 
+Here is the register to write in, for a method about stating where a number
+comes from. It shows how a title and its steps sound; do not copy its subject.
+Each step says what the researcher does or checks, in words they use in their
+own work, and none says how the platform recorded it:
+
+```json
+"display": {
+  "title": "正文里的数字都写明范围和出处",
+  "summary": "写报告时，每个数字旁边都交代它指的是哪一群人、哪一段时间，以及出自哪份文献，读的人不必再回头去查。",
+  "steps": "1. 动笔前，把要写进正文的每个数字对应到一份具体的文献。\n2. 数字旁写上它指的人群和时间范围。\n3. 同一个数字在全文出现多次时，说法保持一致。\n4. 文献没有给出范围的数字，写“文中未说明范围”，不要自己补。"
+}
+```
+
 Nothing you write may set a status of `approved`, and nothing may claim an
 evaluation verdict. The contract rejects both.
 
