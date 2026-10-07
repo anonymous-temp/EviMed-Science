@@ -129,6 +129,30 @@ test("observation still never invents progress: what the data says of a step nob
   assert.deepEqual(vcrStepUpdates({ steps: failed, seen: [["trial", { status: "failed", note: "设计不受支持" }]], flying: new Set(), plan }), []);
 });
 
+test("a step stored as running whose run is gone follows the data — a partial computation reads 未完成, never 进行中 for ever", () => {
+  // The live case: the trial step was written running when the run was sent, every design has a result but one stopped at its
+  // CPU budget, no job is open and no run holds the slot. Nothing asks for the trial step any more (another step was requested).
+  const stored = { ...steps(["population"]), trial: { status: "running", requested: false, runId: "run_1" } };
+  const plan = wantedVcrSteps(vcrProgramSteps(stored));
+  assert.equal(plan.want.has("trial"), false, "the case: the step is no longer wanted");
+  const partial = { status: "failed", note: "有一个方案的计算时间用完了" };
+  assert.deepEqual(vcrStepUpdates({ steps: stored, seen: [["trial", partial]], flying: new Set(), plan }),
+    [{ step: "trial", fields: { status: "failed", note: "有一个方案的计算时间用完了" } }]);
+  // Finished data reads done, and a stale result reads stale.
+  assert.deepEqual(vcrStepUpdates({ steps: stored, seen: [["trial", { status: "done", note: null }]], flying: new Set(), plan }),
+    [{ step: "trial", fields: { status: "done" } }]);
+  // A design that waits for a job nobody will enqueue is not 排队中 for a step nobody asks for: the step is put back to none.
+  assert.deepEqual(vcrStepUpdates({ steps: stored, seen: [["trial", { status: "queued", note: null }]], flying: new Set(), plan }),
+    [{ step: "trial", fields: { status: "none", note: null } }]);
+  // While a run holds the step, or a job of its own is open, nothing changes: running is true.
+  assert.deepEqual(vcrStepUpdates({ steps: stored, seen: [["trial", partial]], flying: new Set(["trial"]), plan }), [],
+    "a run out for the step holds it: its end reads the data");
+  assert.deepEqual(vcrStepUpdates({ steps: stored, seen: [["trial", { status: "running", note: null }]], flying: new Set(), plan }), []);
+  // A step stored as anything but running, not wanted, still stays where it is: observation never invents progress.
+  const quiet = { ...steps(["population"]), trial: { status: "none", requested: false } };
+  assert.deepEqual(vcrStepUpdates({ steps: quiet, seen: [["trial", partial]], flying: new Set(), plan }), []);
+});
+
 test("which engine job a research object needs is deterministic, and is the one the engine runs for that method", () => {
   assert.equal(vcrJobKindFor("population", { kind: "real" }), "build_cohort");
   assert.equal(vcrJobKindFor("population", { kind: "empirical_synthetic" }), "synthesize_population");
