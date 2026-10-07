@@ -27,7 +27,7 @@ beforeEach(() => {
   useProjectStore.setState({ currentId: "project-one", projects: [{ id: "project-one", name: "当前项目" }] });
   api.pendingPersonalSkillTransfers.mockResolvedValue({ items: [] });
   api.listPersonalSkills.mockResolvedValue({ items: [personal], nextCursor: null });
-  api.listPlatformSkills.mockResolvedValue({ groups: [], items: [] });
+  api.listPlatformSkills.mockResolvedValue({ groups: [], geoGroup: "", items: [] });
   api.pluginInventory.mockResolvedValue({ projectId: "project-one", items: [], webRead: false, researchTools: { count: 0, groups: [] }, engines: [] });
   api.extensionCatalogue.mockResolvedValue({ items: [] }); api.extensionInstallations.mockResolvedValue({ items: [], nextCursor: null });
   api.getPersonalSkill.mockResolvedValue(personal); api.personalSkillHistory.mockResolvedValue([]); api.personalSkillDefaults.mockResolvedValue({ revision: 1, payload: { skills: [] } });

@@ -18,7 +18,7 @@ vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), .
 
 const row = (name: string, group: string, extra: object = {}) => ({ id: `curated:${name}`, name, title: `${group}技能 ${name}`, use: `${name} 的一句话用途`, group, source: "platform", canCopy: true, ...extra });
 const platformList = {
-  groups: ["科研分析", "写作与核查", "办公文档", "社区", "循证传播"],
+  groups: ["科研分析", "写作与核查", "办公文档", "社区", "循证传播"], geoGroup: "循证传播",
   items: [
     ...["a", "b", "c", "d", "e", "f"].map(name => row(name, "科研分析")),
     row("check", "写作与核查"),
@@ -279,4 +279,12 @@ it("an address that names one of the reader's skills opens it, and closing retur
   await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/extensions\/skills$/));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("the method pack's group is marked with the module's radar by the name the server gives it, never one the page spells", async () => {
+  skills.listPlatformSkills.mockResolvedValue({ ...platformList, groups: [...platformList.groups, "方法包"], geoGroup: "方法包", items: [...platformList.items, row("geo-x", "方法包", { id: "geo-private:geo-x", canCopy: false })] });
+  open("/app/extensions/skills");
+  const group = await screen.findByRole("region", { name: "方法包" });
+  expect(group.querySelector("svg.lucide-radar")).not.toBeNull();
+  expect(screen.getByRole("region", { name: "科研分析" }).querySelector("svg.lucide-radar")).toBeNull();
 });

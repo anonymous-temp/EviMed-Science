@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { PendingSkillTransfers } from "./SkillImport";
 import type { PendingSkillTransfer, PersonalSkill, PlatformSkill, PlatformSkillList } from "@/lib/skillLibraryClient";
-import { SKILL_GROUP_ICON } from "./extensionCopy";
+import { SKILL_GROUP_ICON, SKILL_PACK_ICON } from "./extensionCopy";
 
 /** Rows a group shows before 「展开其余 N 个」. */
 const SHOWN = 4;
@@ -60,7 +60,7 @@ export function SkillsList({ personal, platform, query, hasMore, loadingMore, on
       {groups.map(group => {
         const unfolded = !!needle || open.has(group.name);
         const rows = unfolded ? group.items : group.items.slice(0, SHOWN);
-        const Icon = SKILL_GROUP_ICON[group.name] ?? SKILL_GROUP_ICON["科研分析"];
+        const Icon = group.name === platform?.geoGroup ? SKILL_PACK_ICON : SKILL_GROUP_ICON[group.name] ?? SKILL_GROUP_ICON["科研分析"];
         const rest = group.items.length - rows.length;
         return (
           <Group key={group.name} name={group.name} count={group.items.length}>

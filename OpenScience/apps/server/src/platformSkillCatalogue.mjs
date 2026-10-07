@@ -188,7 +188,7 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
   return {
     /** Every skill a researcher is offered, in the groups' order (a group with no skill is simply not drawn). @param {any} user */
     async list(user) {
-      return { groups: [...SKILL_DISPLAY_GROUPS], items: (await visible(user)).map(publicRow) };
+      return { groups: [...SKILL_DISPLAY_GROUPS], geoGroup: SKILL_DISPLAY_GEO_GROUP, items: (await visible(user)).map(publicRow) };
     },
     /** One skill: its words and, where this image carries the folder, its full text. @param {string} id @param {any} user */
     async read(id, user) {

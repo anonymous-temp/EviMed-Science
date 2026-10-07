@@ -63,15 +63,18 @@ export const ENGINE_COPY: readonly EngineCopy[] = [
   { id: "research_topic_selection", title: "科研选题引擎", short: "科研选题", icon: Calculator, use: "检索证据、梳理空白，提出可检验的研究方向" },
 ];
 
-/** Where each skill group's rows get their icon. */
+/**
+ * Where each skill group's rows get their icon. The method pack's group is not in this table: the server names it (`geoGroup`),
+ * and the list marks it with the radar the sidebar gives that module, so no page spells the module's name here.
+ */
 export const SKILL_GROUP_ICON: Readonly<Record<string, LucideIcon>> = {
   我的技能: BookOpen,
   科研分析: FlaskConical,
   写作与核查: BookText,
   办公文档: Wand2,
   社区: Sparkles,
-  循证传播: Radar,
 };
+export const SKILL_PACK_ICON: LucideIcon = Radar;
 
 /**
  * Chinese labels for the settings a package's schema names. A key with no label here is shown as 「其他设置」: a raw key such

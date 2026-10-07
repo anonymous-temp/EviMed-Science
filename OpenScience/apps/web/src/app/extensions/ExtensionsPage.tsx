@@ -133,7 +133,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
           {platform.state.status === "loading" && firstPersonal.state.status === "loading" ? <FilesSkeleton /> : (
             <SkillsList personal={personal} platform={platform.state.status === "ready" ? platform.state.data : null} query={query}
               hasMore={!!cursor} loadingMore={loadingMore} onMore={() => void loadMore()}
-              onOpenPlatform={skill => { navigate(root, { replace: true }); setOpen({ kind: "platform", skill }); }}
+              onOpenPlatform={skill => { if (skillId) navigate(root, { replace: true }); setOpen({ kind: "platform", skill }); }}
               onOpenPersonal={skill => openSkill(skill.id)}
               onResume={entry => setOpen({ kind: "import", recovery: entry })} />
           )}
@@ -141,7 +141,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
       ) : inventory.state.status === "error" ? <LoadError message={inventory.state.message} onRetry={() => inventory.reload()} />
         : !inventoryReady ? <FilesSkeleton />
           : <PluginsList inventory={inventoryReady} citation={citation} extensions={extensions} allCatalogue={extensions?.all ?? []} query={query} busyId={installing}
-            onOpen={target => { if (target.kind === "extension") { setOpen(null); navigate(`/app/extensions/plugins/${encodeURIComponent(target.id)}`); } else { navigate(root, { replace: true }); setOpen({ kind: "plugin", target }); } }}
+            onOpen={target => { if (target.kind === "extension") { setOpen(null); navigate(`/app/extensions/plugins/${encodeURIComponent(target.id)}`); } else { if (extensionId) navigate(root, { replace: true }); setOpen({ kind: "plugin", target }); } }}
             onInstall={entry => void install(entry)} />}
 
       {tab === "skills" && skillId && <PersonalSkillDrawer key={skillId} skillId={skillId} projectId={projectId} onClose={close}

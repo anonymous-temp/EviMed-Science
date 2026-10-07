@@ -83,7 +83,8 @@ export interface PlatformSkill {
   /** Whether the control plane can copy this skill into the account's own skills. */
   canCopy: boolean;
 }
-export interface PlatformSkillList { groups: string[]; items: PlatformSkill[] }
+/** `geoGroup` names the group the 循证传播 method pack is listed under, so a page can mark it without spelling it. */
+export interface PlatformSkillList { groups: string[]; geoGroup: string; items: PlatformSkill[] }
 export interface PlatformSkillDetail extends PlatformSkill {
   /** The sentence that says when the skill is used; null where there is none. */
   when: string | null;

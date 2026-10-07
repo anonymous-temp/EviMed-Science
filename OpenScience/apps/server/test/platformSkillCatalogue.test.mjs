@@ -30,8 +30,9 @@ async function skill(root, relative, text, extra = {}) {
 
 test("the list is the fifty-seven shipped skills in Chinese, in their groups, answered from the packages alone", async () => {
   const catalogue = createPlatformSkillCatalogue({ rootDir: repoRoot });
-  const { groups, items } = await catalogue.list(reader);
+  const { groups, geoGroup, items } = await catalogue.list(reader);
   assert.deepEqual(groups, [...SKILL_DISPLAY_GROUPS]);
+  assert.equal(geoGroup, SKILL_DISPLAY_GEO_GROUP, "the page is told which group is the module's, so it names none itself");
   assert.equal(items.length, 57);
   assert.ok(items.every((item) => /[㐀-鿿]/.test(item.title) && /[㐀-鿿]/.test(item.use)), "every row is in Chinese");
   assert.ok(items.every((item) => item.directory === undefined && item.when === undefined), "a row names no folder on the server and carries no full text");
