@@ -1840,7 +1840,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   managed_browser_unavailable: '浏览器暂时无法连接，可稍后重试。',
   managed_browser_action_unknown: '本次操作结果尚未确认，请先查看页面再继续。',
 
-  extension_contract_invalid: '扩展信息格式不正确，请检查后重新提交。',
+  extension_contract_invalid: '提交的内容格式不正确，请检查后重新提交。',
   extension_proof_untrusted: '这个扩展尚未取得平台可核对的兼容记录。',
   extension_proof_stale: '扩展或运行环境版本已变化，兼容记录需要重新核对。',
   extension_proof_incomplete: '扩展的兼容核验尚未完成，已有科研任务仍可继续。',
