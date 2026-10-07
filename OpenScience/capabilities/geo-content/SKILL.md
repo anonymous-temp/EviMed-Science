@@ -95,6 +95,28 @@ conclusion sits in the first 80–150 characters; paragraphs stand alone; every
 article carries statistics, a verbatim quotation and a clickable source; one
 spelling of the product everywhere; author and medical reviewer visible.
 
+## Channel formats
+
+An article whose `channel` is an owned platform takes that platform's shape
+(the ids are the project's owned-link platform ids). The evidence rules above do
+not move with the channel: the title is still the question, the conclusion and its
+certainty word still come first, and every number keeps its source. The title and
+length limits are the platforms' own; the rest is how their readers read.
+
+| Channel | Title and length | Structure | Images |
+|---|---|---|---|
+| `wechat_mp` 微信公众号 | title ≤ 64 字, 摘要 ≤ 120 字 stating the conclusion; deep 2,000–5,000 字, popular 1,500–2,500 字 | H2/H3 headings; bold only the conclusion and key numbers; references with links at the end | cover 900×383 (2.35:1); body figures 900 px wide, each captioned with its source |
+| `zhihu` 知乎 | answer or article; deep 2,000–5,000 字, a popular answer 800–2,000 字 | the first paragraph answers; plain headings and numbered lists, no emoji; numbers cited where they stand | figures only where they carry data |
+| `xiaohongshu` 小红书 | title ≤ 20 字; body ≤ 1,000 字 (300–800 reads best); at most 10 topic tags | one point per line, paragraphs of two or three lines | 3–6 cards at 3:4 (1080×1440): the question and the conclusion first, then one claim per card with its number and source |
+| `toutiao` 头条号 | title ≤ 30 字; article 1,500–3,000 字, or a 微头条 under 300 字 for one question | the answer in the first three lines; paragraphs of two or three sentences | 16:9 cover, 1–3 figures |
+| `bilibili` 专栏 | 2,000–5,000 字 | Markdown headings, tables and formulas; formal citations | data figures |
+
+A title is the reader's question, never a hook formula: no 最 / 第一 / 唯一, no
+exclamation or emoji bait, no promise of effect, no 种草 of a medicine, no
+purchase or contact guidance on any platform. Publishing stays a person's act in
+the platform's own backend, and the AI-generated label the 标识办法 requires is
+kept wherever the platform shows it.
+
 ## Humanize last, and keep the evidence still
 
 Medical review first, then the language pass, and the pass changes only
