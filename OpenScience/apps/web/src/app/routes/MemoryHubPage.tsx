@@ -6,6 +6,7 @@ import { listAllHandbooks } from "@/lib/handbooksClient";
 import { fetchMyCapsule } from "@/lib/memoryClient";
 import { SELF_SECTIONS } from "@/lib/memoryGroups";
 import { listAllMethods } from "@/lib/methodsClient";
+import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { useGeoFeature } from "@/lib/geoClient";
 import { useVcrFeature } from "@/lib/vcrClient";
@@ -125,7 +126,8 @@ export function MemoryHubPage() {
   const projectsKey = projects.map((project) => project.id).join("\u0000");
   const geoIds = useGeoProjectIds(geoOn, projectsKey);
   const vcrIds = useVcrProjectIds(vcrOn, projectsKey);
-  const projectName = (id: string | null) => (id ? projects.find((project) => project.id === id)?.name ?? null : null);
+  const labels = useProjectLabels();
+  const projectName = (id: string | null) => (id ? labels.get(id) ?? null : null);
   const knownProjects = useMemo(() => new Set(projects.map((project) => project.id)), [projects]);
 
   const records = useMemo(() => data?.profile?.records ?? [], [data]);

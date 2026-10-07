@@ -109,6 +109,16 @@ describe("the projects the 项目 tab can show", () => {
     ]);
   });
 
+  it("tells two projects of one name apart, and keeps the id the choice is made by", () => {
+    const year = new Date().getFullYear();
+    const twins = [
+      { id: "g1", name: "波立维", createdAt: new Date(year, 8, 29, 9, 0).toISOString() },
+      { id: "g2", name: "波立维", createdAt: new Date(year, 9, 1, 9, 0).toISOString() },
+    ];
+    const choices = projectChoices(twins, { vcr: new Set(), geo: new Set(["g1", "g2"]) }, []);
+    expect(choices.map((choice) => [choice.id, choice.name])).toEqual([["g1", "波立维 · 9月29日"], ["g2", "波立维 · 10月1日"]]);
+  });
+
   it("lists a project with no facts too, and a 「其他」 only when some fact names no project the account still has", () => {
     expect(projectChoices(projects, sets, factItems([record({ id: "x", kind: "project_fact", scope: "project", scopeId: "p1" })], [])).map((choice) => choice.id)).not.toContain(OTHER_PROJECT);
     const orphan = factItems([record({ id: "x", kind: "project_fact", scope: "project", scopeId: "deleted" })], []);

@@ -97,7 +97,10 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     assert.equal(meFromSecond.status, 200);
     assert.equal((await meFromSecond.json()).data.user.id, "alice");
     const projectsFromSecond = await fetch(`${second.base}/api/projects`, { headers: { Cookie: alice.cookie } });
-    assert.deepEqual((await projectsFromSecond.json()).data, [
+    const listedFromSecond = (await projectsFromSecond.json()).data;
+    // The day a project was made rides along: it is what tells two projects of one name apart.
+    for (const item of listedFromSecond) assert.ok(Date.parse(item.createdAt), `${item.id} carries the day it was made`);
+    assert.deepEqual(listedFromSecond.map(({ createdAt, ...item }) => item), [
       { id: "paper1", name: "Paper 1", archivedAt: null, runCount: 0, lastActivityAt: null },
       { id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null },
     ]);
@@ -140,7 +143,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     const bob = await login(second.base, "bob", "abc123");
     assert.equal(bob.response.status, 200);
     const bobProjects = await fetch(`${second.base}/api/projects`, { headers: { Cookie: bob.cookie } });
-    assert.deepEqual((await bobProjects.json()).data, [{ id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null }]);
+    assert.deepEqual((await bobProjects.json()).data.map(({ createdAt, ...item }) => item), [{ id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null }]);
     const bobCannotSeeAlice = await fetch(`${second.base}/api/research-sessions`, {
       headers: { Cookie: bob.cookie, "X-Open-Science-Project": "paper1" },
     });
@@ -426,6 +429,10 @@ test("a stored English default is renamed once, and a rename and an archive are 
     const byId = new Map(fromSecond.data.map((item) => [item.id, item]));
     assert.equal(byId.get(created.data.id).name, "二甲双胍（肾功能不全）");
     assert.equal(byId.get(created.data.id).archivedAt, archived.data.archivedAt);
+    // Made, renamed and archived: the day it was made never moves.
+    assert.ok(Date.parse(created.data.createdAt));
+    assert.equal(byId.get(created.data.id).createdAt, created.data.createdAt);
+    assert.equal(archived.data.createdAt, created.data.createdAt);
     assert.equal(byId.get("default").name, "Default Project", "renamed once, not on every start");
     const versions = await admin.query("SELECT version FROM evimed_control.schema_migrations ORDER BY version");
     // Every version up to the one this build writes last, each once: the

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { Cloud, FileUp, Folder, Globe, Plus, Search, StickyNote, Upload } from "lucide-react";
 import { SOURCE_KINDS } from "@evimed/domain";
 import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
+import { projectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { addToLibrary, decideDuplicateGroup, listDuplicateCandidates, listSources, openListOffered, refetchSource, removeFromLibrary,
   removeSource, retrySource, type DuplicateGroup, type SourceCounts, type SourceKind, type SourceRecord, type SourceScope } from "@/lib/sourceClient";
@@ -130,7 +131,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   // Where a new document goes: the project the page lists, or — in the shared scope, which belongs to no project —
   // the project the tab is in.
   const addProjectId = scopeProjectId ?? currentProjectId;
-  const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
+  const projectNames = useMemo(() => projectLabels(projects), [projects]);
 
   const generation = useRef(0);
   const loaded = useRef(0);

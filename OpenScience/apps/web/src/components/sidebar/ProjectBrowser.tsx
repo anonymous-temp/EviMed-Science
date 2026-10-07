@@ -4,7 +4,7 @@ import { ChevronRight, Folder, FolderOpen, Loader2, Pencil, Plus, Radar, Search,
 import { cn } from "@/lib/cn";
 import { webErrorMessage, type WebAgentRun, type WebProject } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { PROJECT_NAME_MAX, projectErrorMessage, projectNameProblem } from "@/lib/projectNames";
+import { PROJECT_NAME_MAX, labelOf, projectErrorMessage, projectLabels, projectNameProblem } from "@/lib/projectNames";
 import { chatPath } from "@/lib/runLocation";
 import { compactTime, runMoment, runTitle } from "@/lib/runPresentation";
 import { groupConversations, type Conversation } from "@/lib/conversations";
@@ -172,6 +172,8 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   // they are not the researcher's to tell apart from the ones they made, so they gather in two groups at the end. A study that is still
   // a draft is not listed at all.
   const shown = useMemo(() => listed.filter((project) => !vcrDraftIds.has(project.id)), [listed, vcrDraftIds]);
+  // Two projects of one name are told apart by the day they were made (`projectLabels`); the stored name is what a rename starts from.
+  const labels = useMemo(() => projectLabels(shown), [shown]);
   const ordinary = useMemo(() => shown.filter((project) => !geoProjectIds.has(project.id) && !vcrProjectIds.has(project.id)), [shown, geoProjectIds, vcrProjectIds]);
   const moduleProjects: Record<ModuleName, WebProject[]> = useMemo(() => ({
     geo: shown.filter((project) => geoProjectIds.has(project.id)),
@@ -215,9 +217,9 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   useEffect(() => {
     if (announced.current === currentId) return;
     announced.current = currentId;
-    const name = projects.find((project) => project.id === currentId)?.name;
-    if (name) setAnnouncement(`已切换到项目“${name}”`);
-  }, [currentId, projects]);
+    const project = projects.find((candidate) => candidate.id === currentId);
+    if (project) setAnnouncement(`已切换到项目“${labelOf(labels, project)}”`);
+  }, [currentId, projects, labels]);
 
   // Opening another project's task swaps its button for a link (the project
   // is current now), which takes the keyboard focus with it. Give it back to
@@ -379,6 +381,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
     <ProjectGroup
       key={project.id}
       project={project}
+      label={labelOf(labels, project)}
       geo={geoProjectIds.has(project.id)}
       vcr={vcrProjectIds.has(project.id)}
       current={project.id === currentId}
@@ -507,7 +510,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
                     <TaskRow
                       conversation={conversation}
                       projectId={project.id}
-                      projectName={project.name}
+                      projectName={labelOf(labels, project)}
                       current={project.id === currentId}
                       active={project.id === currentId && isOpenTask(conversation.lead, location.pathname)}
                       withProject
@@ -610,6 +613,7 @@ function ModuleGroup({ label, icon: Icon, count, open, onToggle, children }: {
  */
 function ProjectGroup({
   project,
+  label,
   geo,
   vcr,
   current,
@@ -630,6 +634,8 @@ function ProjectGroup({
   onWarm,
 }: {
   project: WebProject;
+  /** What the project is called on screen: its name, told apart from a namesake by its start day. */
+  label: string;
   /** A GEO project: the radar instead of the folder. */
   geo: boolean;
   /** A 虚拟临床研究 study: the people icon instead of the folder. */
@@ -736,7 +742,7 @@ function ProjectGroup({
         </form>
       ) : (
         <div className="group/project relative">
-          <Tooltip content={project.name} kind="label" whenTruncated>
+          <Tooltip content={label} kind="label" whenTruncated>
             <button
               ref={toggleRef}
               type="button"
@@ -754,7 +760,7 @@ function ProjectGroup({
                 aria-hidden="true"
               />
               <Icon size={16} className={cn("shrink-0", current ? "text-accent" : "text-muted")} aria-hidden="true" />
-              <span className={cn("min-w-0 flex-1 truncate", current && "font-semibold")}>{project.name}</span>
+              <span className={cn("min-w-0 flex-1 truncate", current && "font-semibold")}>{label}</span>
               {switching ? (
                 <Loader2 size={16} className="shrink-0 animate-spin text-muted motion-reduce:animate-none" aria-hidden="true" />
               ) : running && (
@@ -767,12 +773,12 @@ function ProjectGroup({
             {/* A plus, as the kernel's list has it: the pen-in-a-square of
               * 「新对话」 sat beside the rename pencil as its near twin. The
               * row's two actions are a list row's icon buttons (28). */}
-            <IconButton icon={Plus} size="sm" label={`在“${project.name}”新建对话`} title="在此项目新建对话" onClick={onNewTask} />
+            <IconButton icon={Plus} size="sm" label={`在“${label}”新建对话`} title="在此项目新建对话" onClick={onNewTask} />
             {!standIn && (
               <IconButton
                 icon={Pencil}
                 size="sm"
-                label={`重命名项目“${project.name}”`}
+                label={`重命名项目“${label}”`}
                 title="重命名"
                 onClick={() => { setDraft(project.name); setRenameError(null); setRenaming(true); }}
               />
@@ -783,7 +789,7 @@ function ProjectGroup({
       {renameError && <p role="alert" className="px-2 py-1 text-caption text-error">{renameError}</p>}
       {failure && <p role="alert" className="py-1 pl-7 pr-2 text-caption text-error">{failure}</p>}
       {expanded && (
-        <ul id={listId} aria-label={`“${project.name}”的对话`} className="mt-0.5 flex flex-col">
+        <ul id={listId} aria-label={`“${label}”的对话`} className="mt-0.5 flex flex-col">
           {(runs === undefined || runs.status === "loading") && (
             <li className="py-1 pl-11 pr-2 text-caption text-muted">正在读取</li>
           )}
@@ -801,7 +807,7 @@ function ProjectGroup({
               <TaskRow
                 conversation={conversation}
                 projectId={project.id}
-                projectName={project.name}
+                projectName={label}
                 current={current}
                 active={isOpen(conversation.lead)}
                 onOpen={(row) => onOpenTask(conversation.lead, row)}

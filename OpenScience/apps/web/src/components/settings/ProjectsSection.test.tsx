@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { projectMetaLine } from "@/lib/projectNames";
 import { ProjectsSection } from "./ProjectsSection";
 
-type Project = { id: string; name: string; runCount?: number; lastActivityAt?: string | null };
+type Project = { id: string; name: string; runCount?: number; lastActivityAt?: string | null; createdAt?: string | null };
 
 const mocks = vi.hoisted(() => ({
   projectId: "default",
@@ -20,7 +20,15 @@ const mocks = vi.hoisted(() => ({
   rename: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
+  geoIds: new Set<string>(),
+  vcrIds: new Set<string>(),
 }));
+
+// Which projects are a module's comes from the readers the sidebar uses; here it is a fixture.
+vi.mock("@/lib/geoClient", () => ({ useGeoFeature: () => (mocks.geoIds.size ? "on" : "off") }));
+vi.mock("@/lib/vcrClient", () => ({ useVcrFeature: () => (mocks.vcrIds.size ? "on" : "off") }));
+vi.mock("@/components/geo/useGeoProjectIds", () => ({ useGeoProjectIds: () => mocks.geoIds }));
+vi.mock("@/components/vcr/useVcrProjectIds", () => ({ useVcrProjects: () => ({ studies: mocks.vcrIds, drafts: new Set<string>() }) }));
 
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
@@ -52,6 +60,8 @@ describe("项目", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.projectId = "default";
+    mocks.geoIds = new Set();
+    mocks.vcrIds = new Set();
     mocks.projects = [
       { id: "default", name: "我的研究", runCount: 12, lastActivityAt: new Date(Date.now() - 3 * 3_600_000).toISOString() },
       { id: "paper1", name: "Paper 1", runCount: 0, lastActivityAt: null },
@@ -160,6 +170,49 @@ describe("项目", () => {
     await waitFor(() => expect(screen.queryByText("Paper 1")).not.toBeInTheDocument());
     expect(mocks.toastSuccess).toHaveBeenCalledWith("已删除“Paper 1”");
     expect(mocks.load).toHaveBeenCalled();
+  });
+
+  it("tells two projects of one name apart in the list, the menus and the dialogs, and renames from the stored name", async () => {
+    const year = new Date().getFullYear();
+    mocks.geoIds = new Set(["g1", "g2"]);
+    mocks.projects = [
+      { id: "default", name: "我的研究", lastActivityAt: null },
+      { id: "g1", name: "波立维", createdAt: new Date(year, 8, 29, 9, 0).toISOString() },
+      { id: "g2", name: "波立维", createdAt: new Date(year, 8, 29, 17, 30).toISOString() },
+    ];
+    open();
+    expect(await screen.findByText("波立维 · 9月29日 09:00")).toBeInTheDocument();
+    expect(screen.getByText("波立维 · 9月29日 17:30")).toBeInTheDocument();
+    expect(screen.queryByText("波立维")).not.toBeInTheDocument();
+    // The module's projects are in a group of their own, as in the sidebar.
+    expect(screen.getByRole("heading", { name: "循证 GEO" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的项目" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重命名“波立维 · 9月29日 17:30”" }));
+    expect(screen.getByRole("textbox", { name: "“波立维 · 9月29日 17:30”的新名字" })).toHaveValue("波立维");
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    fireEvent.click(screen.getByRole("button", { name: "“波立维 · 9月29日 09:00”的更多操作" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "删除项目“波立维 · 9月29日 09:00”？" });
+    // A module's project says what goes with it.
+    expect(within(dialog).getByText(/这是循证 GEO 项目，删除会一并删除它的测量和稿件。/)).toBeInTheDocument();
+  });
+
+  it("says nothing of modules to a researcher who has none, and keeps one list", async () => {
+    open();
+    await screen.findByText("我的研究");
+    expect(screen.queryByRole("heading", { name: "我的项目" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("list", { name: "项目列表" })).toHaveLength(1);
+  });
+
+  it("names a study's deletion for what it is", async () => {
+    mocks.vcrIds = new Set(["v1"]);
+    mocks.projects = [{ id: "default", name: "我的研究" }, { id: "v1", name: "心血管结局试验" }];
+    open();
+    await screen.findByText("心血管结局试验");
+    expect(screen.getByRole("heading", { name: "虚拟临床研究" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "“心血管结局试验”的更多操作" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+    expect(within(await screen.findByRole("alertdialog")).getByText(/这是虚拟临床研究项目，删除会一并删除这项研究。/)).toBeInTheDocument();
   });
 
   it("still reports a deletion when the move afterwards is refused", async () => {
