@@ -7340,6 +7340,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
   let usageReconcileTimer = null;
   let idleRuntimeSweepTimer = null;
+  let runtimeCleanupTimer = null;
   let usageReconcileRun = null;
   // A reservation whose settlement never arrived would otherwise stay 'reserved'
   // forever: nothing else in the system reads reservation_expires_at, so the row
@@ -7407,6 +7408,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (usageReconcileTimer) clearInterval(usageReconcileTimer);
     if (sessionPurgeTimer) clearInterval(sessionPurgeTimer);
     if (idleRuntimeSweepTimer) clearInterval(idleRuntimeSweepTimer);
+    if (runtimeCleanupTimer) clearInterval(runtimeCleanupTimer);
     capsuleCleanupTimer = null;
     evidenceLinkTimer = null;
     autopilotScheduleTimer = null;
@@ -7415,6 +7417,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     usageReconcileTimer = null;
     sessionPurgeTimer = null;
     idleRuntimeSweepTimer = null;
+    runtimeCleanupTimer = null;
   };
 
   let evidenceReownRun = false;
@@ -7505,6 +7508,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (!idleRuntimeSweepTimer) {
         idleRuntimeSweepTimer = setInterval(() => { void runtimeManager.sweepIdleRuntimes().catch(() => {}); }, 60_000);
         idleRuntimeSweepTimer.unref();
+      }
+      // A container removal that was not confirmed holds its project until it is; this
+      // is what confirms it when nobody is asking to start (`reconcileFailedStops`).
+      // Its own timer, not the sweep's: the sweep returns early when no idle timeout is set.
+      if (!runtimeCleanupTimer) {
+        runtimeCleanupTimer = setInterval(() => { void runtimeManager.reconcileFailedStops().catch(() => {}); },
+          Math.max(1_000, Math.min(60_000, Number(config.runtimeCleanupRetryMs) || 15_000)));
+        runtimeCleanupTimer.unref();
       }
     } catch (error) {
       recurringWorkStarted = false;
@@ -7677,6 +7688,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (usageReconcileTimer) clearInterval(usageReconcileTimer);
       if (sessionPurgeTimer) clearInterval(sessionPurgeTimer);
       if (idleRuntimeSweepTimer) clearInterval(idleRuntimeSweepTimer);
+      if (runtimeCleanupTimer) clearInterval(runtimeCleanupTimer);
       await usageReconcileRun;
       await sessionPurgeRun;
       await runtimeUi.close();
@@ -8777,6 +8789,34 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
     "Background runtimes a researcher's start tried to retire and could not.",
     "counter",
     { value: runtimeStats.background?.yieldFailures ?? 0 },
+  );
+  // A container removal that was not confirmed holds its project's start (`runtime_cleanup_required`)
+  // until it is: how many are held, how long the oldest has been, and how the retries came out.
+  const cleanup = runtimeStats.cleanup ?? {};
+  addMetric(
+    lines,
+    "open_science_runtime_cleanup_pending",
+    "Projects whose previous runtime's container removal is not confirmed, so their next start is refused until it is.",
+    "gauge",
+    { value: Number(cleanup.pending) || 0 },
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_cleanup_oldest_age_seconds",
+    "How long the oldest unconfirmed container removal has been standing; zero when none is.",
+    "gauge",
+    { value: Number(cleanup.oldestAgeSeconds) || 0 },
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_cleanup_retries_total",
+    "Retries of an unconfirmed container removal, by how they ended: the removal succeeded, the runtime was found gone, or it failed again.",
+    "counter",
+    [
+      { value: Number(cleanup.retries?.recovered) || 0, labels: { result: "recovered" } },
+      { value: Number(cleanup.retries?.confirmedGone) || 0, labels: { result: "confirmed_gone" } },
+      { value: Number(cleanup.retries?.failed) || 0, labels: { result: "failed" } },
+    ],
   );
   addMetric(lines, "open_science_runtime_proxy_active", "Active runtime proxy requests and streams.", "gauge", {
     value: runtimeStats.proxy?.active ?? 0,

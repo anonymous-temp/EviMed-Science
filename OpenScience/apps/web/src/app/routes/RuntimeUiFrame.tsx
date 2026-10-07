@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { errorCodeMessage, errorCodeOutcome, SIMULATED_WALLET_PAGES } from "@evimed/domain";
-import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebAgentRun, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
+import { errorCodeMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "@evimed/domain";
+import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebAgentRuns, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebAgentRun, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { saveToKnowledgeBase } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
-import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
+import { provideFrameSessionSearch, reportPathOf, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { useFrameReplyChecks } from "@/lib/replyChecks";
 import { useResearchBilling } from "@/lib/useResearchBilling";
 import { conversationTitle } from "@/lib/conversationTitles";
@@ -18,6 +18,9 @@ import { isGeoTab } from "@/components/geo/geoTabs";
 import { geoProjectPath, useFrameGeoOptions } from "@/components/geo/useFrameGeoOptions";
 import { useFrameVcrOptions } from "@/components/vcr/useFrameVcrOptions";
 
+/** What a refused start asks of the reader (`runtimeStartRecovery`). */
+type StartRecovery = ReturnType<typeof runtimeStartRecovery>;
+
 /** Why this surface is showing an alert instead of the conversation. */
 interface FrameFailure {
   text: string;
@@ -26,13 +29,6 @@ interface FrameFailure {
    *  to fail, which is the over-refusal pattern: an unexplained refusal costs
    *  less trust than one whose only offered action cannot work. */
   retryable: boolean;
-  /** A ceiling or a hold. The account page is where the position is stated and
-   *  where the ceiling is raised, so it is the offered action instead. */
-  capped: boolean;
-  /** A concurrency ceiling rather than a spend one: the action that helps is
-   *  stopping a conversation that is already running, not raising a quota, so
-   *  the account page is not offered. */
-  concurrency?: boolean;
   /** A specific conversation could not be opened: offer a new one beside the
    *  retry, which would only ask for the same conversation again. */
   newTask?: boolean;
@@ -40,6 +36,16 @@ interface FrameFailure {
    *  comes from the dictionary; the code is kept because one refusal has an
    *  action of its own (`SIMULATED_CREDITS_EXHAUSTED`). */
   code?: string | null;
+  /**
+   * What the refusal asks of the reader, which decides the action beside the
+   * retry: `spend` is the one cause the allowance page can lift, `wait` the
+   * results the project already holds, `autopilot` the page of scheduled
+   * tasks. Absent for a failure this surface observed itself, which has no
+   * cause to act on but a retry. Until 2026-10-07 every refusal the control
+   * plane classed as a ceiling or a hold read as a spending one, and a
+   * conversation held by a cleanup offered only 「查看科研额度」 (audit B03).
+   */
+  recovery?: StartRecovery;
 }
 
 /**
@@ -53,7 +59,7 @@ const SIMULATED_CREDITS_EXHAUSTED = "simulated_credits_exhausted";
 /** A failure this surface observed itself — a timer, a native error frame —
  *  where no control-plane refusal exists to explain. */
 function frameFailure(text: string): FrameFailure {
-  return { text, retryable: true, capped: false };
+  return { text, retryable: true };
 }
 
 /**
@@ -77,24 +83,32 @@ function frameFailure(text: string): FrameFailure {
 function refusedFrame(error: unknown): FrameFailure {
   const text = webErrorMessage(error, { fallback: "对话暂时无法连接，请重试。" });
   if (!(error instanceof WebApiError)) return frameFailure(text);
-  // A 423 that is only an apply under way: say so and offer the retry, not the usage page.
-  if (error.code === PREPARING_CODE) return { text, retryable: true, capped: false };
-  const capped = errorCodeOutcome(error.code ?? "") === "capped" || [402, 423, 429].includes(error.status);
   // A 401 is already being handled elsewhere — `fetchWithWebAuth` announces the
   // ended session and the shell moves to the login route — so a retry here
   // would race that, not fix it.
-  return { text, retryable: !capped && error.status !== 401, capped, code: error.code };
+  return failureFor(runtimeStartRecovery(error.code, error.status), text, error.code, error.status !== 401);
 }
 
 /**
- * A refusal the frame's own document announced.
- *
- * The runtime-UI origin serves a notice page when the session cannot be
- * opened, and that page now posts the code and the sentence it rendered. The
- * codes worth acting on differently are the ceilings: a conversation refused
- * because the deployment is already at its runtime limit is waited out or
- * freed, and no quota page can lift it.
+ * The failure a refusal is shown as, by what it asks of the reader
+ * (`runtimeStartRecovery`; one table for the start call, the binding and the
+ * frame's own notice page, which used to disagree). The sentence is the
+ * dictionary's except for the three causes whose dictionary sentence points at
+ * something this page does not offer or offers differently: the cleanup that
+ * outlasted the wait, the autopilot hold, and the slot cap.
  */
+function failureFor(recovery: StartRecovery, text: string, code: string | null | undefined, retryable = true): FrameFailure {
+  switch (recovery) {
+    // A spending ceiling is lifted on the allowance page, not by asking again; the simulated
+    // allowance has a page of its own (`SIMULATED_CREDITS_EXHAUSTED`).
+    case "spend": return { text, retryable: false, recovery, code };
+    case "wait": return { text: CLEANUP_GAVE_UP_TEXT, retryable, recovery, code };
+    case "autopilot": return { text: AUTOPILOT_HOLD_TEXT, retryable, recovery, code };
+    case "slots": return { text: RUNTIME_SLOT_CAP_TEXT, retryable, recovery, code };
+    default: return { text, retryable, recovery, code };
+  }
+}
+
 /** The slot cap, said as what it is. On 2026-09-15 the only runtime slot of
  *  the deployment was taken and the shell told the second reader that "cold
  *  starts sometimes take longer" — a retry loop against a limit that no wait
@@ -103,6 +117,22 @@ function refusedFrame(error: unknown): FrameFailure {
  *  menu on its row in the sidebar. The frame's own notice page says the same
  *  words (`runtimeUiServer.mjs`). */
 const RUNTIME_SLOT_CAP_TEXT = "你同时进行的研究已达上限，先结束一个再试。";
+
+/**
+ * The previous task's runtime is still being cleaned up (`runtime_cleanup_required`), or is stopping
+ * (`runtime_busy`): the platform is finishing something, and the control plane retries it by itself.
+ * Said on the cover, never as an alert: nothing has failed. The opening asks again by itself, at the pace
+ * the control plane named and then 3, 5, 8 and 15 seconds, for two minutes; past that the cleanup is taking
+ * longer than a wait is worth, and the alert says so with 重试 and the way to what the project already holds.
+ * Until 2026-10-07 this arrived as 「查看科研额度」 and nothing else, for as long as the hold stood (audit B03).
+ */
+const CLEANUP_LINE = "正在清理上一次任务的运行环境，完成后自动继续";
+const CLEANUP_RETRY_MS = [3_000, 5_000, 8_000, 15_000] as const;
+const CLEANUP_WAIT_MS = 120_000;
+const CLEANUP_GAVE_UP_TEXT = "运行环境还没有清理完成，暂时不能继续这个对话。稍后再试，已有成果可以先阅读。";
+
+/** The project's own scheduled research holds its runtime: it ends by itself, and the page that lists it is 定时任务. */
+const AUTOPILOT_HOLD_TEXT = "这个项目正在执行你设定的定时研究，结束后即可继续。";
 
 /**
  * Every research environment of the deployment is taken (2026-10-05).
@@ -115,12 +145,14 @@ const RUNTIME_SLOT_CAP_TEXT = "你同时进行的研究已达上限，先结束�
  * here, for as long as the reader stays on this conversation; it starts when a
  * slot frees. Said on the cover, never as an alert: nothing has failed.
  */
-const ROOM_FULL_CODE = "runtime_capacity_full";
 const ROOM_FULL_LINE = "所有研究环境都在使用中，空出后会自动开始。";
 const ROOM_RETRY_MS = [5_000, 8_000, 12_000, 15_000] as const;
 
-function isRoomFull(error: unknown): error is WebApiError {
-  return error instanceof WebApiError && error.code === ROOM_FULL_CODE;
+/** Which wait a refused start is, when it is one: the code decides (`runtimeStartRecovery`). */
+function startRefusal(error: unknown): "room" | "cleanup" | null {
+  if (!(error instanceof WebApiError)) return null;
+  const recovery = runtimeStartRecovery(error.code, error.status);
+  return recovery === "room" ? "room" : recovery === "wait" ? "cleanup" : null;
 }
 
 /**
@@ -138,14 +170,20 @@ const PREPARING_LINE = "正在准备运行环境";
 const PREPARING_RETRY_MS = 2_000;
 const PREPARING_RETRY_LIMIT = 5;
 
+/**
+ * A refusal the frame's own document announced.
+ *
+ * The runtime-UI origin serves a notice page when the session cannot be
+ * opened, and that page now posts the code and the sentence it rendered. It is
+ * read through the same table as the start call (`runtimeStartRecovery`), so
+ * one cause is one screen: a conversation refused because the deployment is
+ * already at its runtime limit is freed, a spending ceiling goes to the page
+ * that states it, and neither is a retry loop.
+ */
 function noticedFrame(code: string, detail: string, title: string): FrameFailure {
   // A notice whose title says it all sends no detail (「项目正忙，请稍后再试」).
   const text = detail || title || (code === "runtime_limit_exceeded" ? RUNTIME_SLOT_CAP_TEXT : errorCodeMessage(code));
-  const capped = errorCodeOutcome(code) === "capped";
-  // The one ceiling here that is about spend: neither a wait nor ending another
-  // conversation lifts it, so it gets no retry and keeps its own action.
-  if (code === SIMULATED_CREDITS_EXHAUSTED) return { text, retryable: false, capped: true, code };
-  return { text, retryable: true, capped, concurrency: capped, code };
+  return failureFor(runtimeStartRecovery(code), text, code);
 }
 
 /**
@@ -153,15 +191,17 @@ function noticedFrame(code: string, detail: string, title: string): FrameFailure
  *
  * Read from the start call the opening makes itself rather than from a status
  * snapshot: a refusal recorded by an earlier attempt must not fail the retry
- * the reader pressed after freeing a slot.
+ * the reader pressed after freeing a slot. What is a wait goes to the cover
+ * (`waitToStart`) before it gets here, and what is no refusal of the start
+ * (a rate limit, a slow answer) is left to the frame's own document to show.
  */
 function refusedStart(error: unknown): FrameFailure | null {
+  if (!(error instanceof WebApiError)) return null;
+  const recovery = runtimeStartRecovery(error.code, error.status);
   // The opening goes on: the frame's own start waits for the apply (and the
   // notice page retries the opening if it does not end in time).
-  if (error instanceof WebApiError && error.code === PREPARING_CODE) return null;
-  if (!(error instanceof WebApiError) || errorCodeOutcome(error.code ?? "") !== "capped") return null;
-  if (error.code === "runtime_limit_exceeded") return { text: RUNTIME_SLOT_CAP_TEXT, retryable: true, capped: true, concurrency: true, code: error.code };
-  return refusedFrame(error);
+  if (recovery === "preparing" || recovery === "retry" || recovery === "room") return null;
+  return failureFor(recovery, webErrorMessage(error, { fallback: "对话暂时无法连接，请重试。" }), error.code);
 }
 
 const SESSION_ID = /^[A-Za-z0-9_-]{1,160}$/;
@@ -336,10 +376,15 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   const [preparing, setPreparing] = useState(false);
   const preparingRetries = useRef(0);
   const preparingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // Every research environment is taken (`ROOM_FULL_CODE`): the cover says so
-  // and the opening asks again by itself until a slot frees.
-  const [waitingForRoom, setWaitingForRoom] = useState(false);
-  const roomAsks = useRef(0);
+  // The opening is standing in line, and for what: every research environment is
+  // taken (`runtime_capacity_full`) or the previous task's is still being cleaned up
+  // (`CLEANUP_LINE`). The cover says so and the opening asks again by itself until
+  // it can start. One timer serves both, `waitKind` is its reference copy, and a
+  // cleanup is waited for only so long (`CLEANUP_WAIT_MS`).
+  const [waiting, setWaiting] = useState<"room" | "cleanup" | null>(null);
+  const waitKind = useRef<"room" | "cleanup" | null>(null);
+  const waitAsks = useRef(0);
+  const waitSince = useRef(0);
   const roomTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const roomHold = useRef({ active, suspended });
   roomHold.current = { active, suspended };
@@ -375,8 +420,9 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   useEffect(() => {
     preparingRetries.current = 0;
     setPreparing(false);
-    roomAsks.current = 0;
-    setWaitingForRoom(false);
+    waitKind.current = null;
+    waitAsks.current = 0;
+    setWaiting(null);
     return () => { clearTimeout(preparingTimer.current); clearTimeout(roomTimer.current); roomTimer.current = undefined; };
   }, [projectId]);
 
@@ -391,6 +437,56 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     // on every navigation the shell makes elsewhere.
     if (changed && error && active) setAttempt(value => value + 1);
   }, [navigationKey, error, active]);
+
+  // Standing in line (`runtime_capacity_full`, `CLEANUP_LINE`): one timer, whoever noticed first — this
+  // opening's own start or the frame document's notice — and one more ask each
+  // time it fires. A frame the reader is not looking at asks nothing; the timer
+  // keeps its pace and asks again once it is on screen. A full house is waited
+  // out for as long as the reader stays; a cleanup for two minutes, then it is
+  // an alert with the retry and the results the project already holds.
+  const endWait = useCallback(() => {
+    clearTimeout(roomTimer.current);
+    roomTimer.current = undefined;
+    waitKind.current = null;
+    waitAsks.current = 0;
+    setWaiting(null);
+  }, []);
+  const waitToStart = useCallback((kind: "room" | "cleanup", retryAfterSeconds: number | null) => {
+    if (waitKind.current !== kind) { waitKind.current = kind; waitAsks.current = 0; waitSince.current = Date.now(); }
+    if (kind === "cleanup" && Date.now() - waitSince.current >= CLEANUP_WAIT_MS) {
+      endWait();
+      setError(failureFor("wait", "", null));
+      return;
+    }
+    setWaiting(kind);
+    if (roomTimer.current !== undefined) return;
+    const ladder = kind === "room" ? ROOM_RETRY_MS : CLEANUP_RETRY_MS;
+    const rung = ladder[Math.min(waitAsks.current, ladder.length - 1)];
+    waitAsks.current += 1;
+    const delay = Math.max(rung, retryAfterSeconds ? retryAfterSeconds * 1_000 : 0);
+    const ask = () => {
+      roomTimer.current = undefined;
+      if (!roomHold.current.active || roomHold.current.suspended) { waitToStart(kind, null); return; }
+      void startWebRuntime({ projectId, opening: true }).then(() => {
+        // A slot was free, or the cleanup is done: the opening begins again, and finds its runtime up.
+        endWait();
+        setAttempt(value => value + 1);
+      }).catch((cause: unknown) => {
+        const refused = startRefusal(cause);
+        if (refused === "room" || refused === "cleanup") { waitToStart(refused, cause instanceof WebApiError ? cause.retryAfterSeconds : null); return; }
+        endWait();
+        setError(refusedStart(cause) ?? refusedFrame(cause));
+      });
+    };
+    roomTimer.current = setTimeout(ask, delay);
+  }, [projectId, endWait]);
+  // What a refused start of the opening is to the opening: a wait, or something to show.
+  const meetStartRefusal = useCallback((cause: unknown) => {
+    const refused = startRefusal(cause);
+    if (refused) { waitToStart(refused, cause instanceof WebApiError ? cause.retryAfterSeconds : null); return; }
+    const refusal = refusedStart(cause);
+    if (refusal) setError(refusal);
+  }, [waitToStart]);
 
   useEffect(() => {
     let live = true;
@@ -423,9 +519,15 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now()
         || typeof value.renewalToken !== "string" || !value.renewalToken) throw new Error("Invalid frame binding");
       setBinding(value);
-    }).catch((cause: unknown) => { if (live) setError(refusedFrame(cause)); });
+    }).catch((cause: unknown) => {
+      if (!live) return;
+      // A binding refused for a cleanup that has not finished is the same wait as the start's.
+      const wait = startRefusal(cause);
+      if (wait) waitToStart(wait, cause instanceof WebApiError ? cause.retryAfterSeconds : null);
+      else setError(refusedFrame(cause));
+    });
     return () => { live = false; if (frameId) release(frameId); };
-  }, [projectId, origin, attempt]);
+  }, [projectId, origin, attempt, waitToStart]);
 
   useEffect(() => {
     if (!frameId) return;
@@ -516,7 +618,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // Which moment the opening is in, for its deadline; opening the task (a
   // request in flight) is timed by its own deadline further down.
   const runtimeMoment = startStatus?.startStage ?? "environment";
-  const deadlineMoment: OpenMoment | null = navigated || pending || ready || waitingForRoom ? null
+  const deadlineMoment: OpenMoment | null = navigated || pending || ready || waiting !== null ? null
     : runtimeUp && binding ? "interface" : runtimeMoment;
   useEffect(() => {
     if (error || deadlineMoment === null) return;
@@ -530,35 +632,6 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     return () => clearTimeout(timeout);
   }, [error, attempt, deadlineMoment, booted, projectId]);
 
-  // The place in line (`ROOM_FULL_CODE`): one timer, whoever noticed first — this
-  // opening's own start or the frame document's notice — and one more ask each
-  // time it fires. A frame the reader is not looking at asks nothing; the timer
-  // keeps its pace and asks again once it is on screen.
-  const waitForRoom = useCallback((retryAfterSeconds: number | null) => {
-    setWaitingForRoom(true);
-    if (roomTimer.current !== undefined) return;
-    const rung = ROOM_RETRY_MS[Math.min(roomAsks.current, ROOM_RETRY_MS.length - 1)];
-    roomAsks.current += 1;
-    const delay = Math.max(rung, retryAfterSeconds ? retryAfterSeconds * 1_000 : 0);
-    const ask = () => {
-      roomTimer.current = undefined;
-      if (!roomHold.current.active || roomHold.current.suspended) { waitForRoom(null); return; }
-      void startWebRuntime({ projectId, opening: true }).then(() => {
-        // A slot was free: the opening begins again, and finds its runtime up.
-        roomAsks.current = 0;
-        setWaitingForRoom(false);
-        setAttempt(value => value + 1);
-      }).catch((cause: unknown) => {
-        if (isRoomFull(cause)) { waitForRoom(cause.retryAfterSeconds); return; }
-        roomAsks.current = 0;
-        setWaitingForRoom(false);
-        const refusal = refusedStart(cause);
-        setError(refusal ?? refusedFrame(cause));
-      });
-    };
-    roomTimer.current = setTimeout(ask, delay);
-  }, [projectId]);
-
   // This opening's own start. The frame document starts the runtime too, and
   // the two join one start on the server; this call is made because its answer
   // can be read — a start refused into a frame is a page this shell cannot see
@@ -569,13 +642,10 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   useEffect(() => {
     let live = true;
     void startWebRuntime({ projectId, opening: true }).catch((cause: unknown) => {
-      if (!live) return;
-      if (isRoomFull(cause)) { waitForRoom(cause.retryAfterSeconds); return; }
-      const refusal = refusedStart(cause);
-      if (refusal) setError(refusal);
+      if (live) meetStartRefusal(cause);
     });
     return () => { live = false; };
-  }, [projectId, attempt, waitForRoom]);
+  }, [projectId, attempt, meetStartRefusal]);
 
   // The moment the start is in, asked while the runtime is not up yet. A
   // status read that fails changes nothing: the deadline stays in charge.
@@ -598,13 +668,9 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // reconnects may not take a runtime back (`makeRoomFor`), so the button is
   // an opening as well as a renewal; a start still refused says why.
   const reconnect = useCallback(() => {
-    void startWebRuntime({ projectId, opening: true }).catch((cause: unknown) => {
-      if (isRoomFull(cause)) { waitForRoom(cause.retryAfterSeconds); return; }
-      const refusal = refusedStart(cause);
-      if (refusal) setError(refusal);
-    });
+    void startWebRuntime({ projectId, opening: true }).catch(meetStartRefusal);
     renewBinding.current?.();
-  }, [projectId, waitForRoom]);
+  }, [projectId, meetStartRefusal]);
 
   /** One message to the frame's bridge, in the envelope and sequence it checks. */
   const postToFrame = useCallback((type: string, fields: object) => {
@@ -635,7 +701,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           preparingTimer.current = setTimeout(() => setAttempt(value => value + 1), PREPARING_RETRY_MS);
           return;
         }
-        if (message.code === ROOM_FULL_CODE) { waitForRoom(null); return; }
+        const wait = runtimeStartRecovery(message.code);
+        if (wait === "room" || wait === "wait") { waitToStart(wait === "room" ? "room" : "cleanup", null); return; }
         setError(noticedFrame(message.code, typeof message.detail === "string" ? message.detail.slice(0, 200) : "",
           typeof message.title === "string" ? message.title.slice(0, 200) : ""));
         return;
@@ -650,8 +717,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         recoveryAttempted.current = false;
         preparingRetries.current = 0;
         setPreparing(false);
-        roomAsks.current = 0;
-        setWaitingForRoom(false);
+        endWait();
         setNativeError(null);
         incoming.current = message.seq; lastSent.current = ""; setReady(true);
         setReadyGeneration(value => value + 1);
@@ -832,7 +898,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [binding, origin, projectId, intent, location, navigate, navigated, attempt, postToFrame, waitForRoom]);
+  }, [binding, origin, projectId, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait]);
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;
@@ -975,11 +1041,37 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // it has, switching to another shows nothing — the kernel is on screen and
   // keeps its own composer (a switch inside a live runtime used to read as a
   // cold start: walk of 2026-09-20, 「每次点会话都要冷启动」).
-  const cover = navigated ? null : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} line={waitingForRoom ? ROOM_FULL_LINE : preparing ? PREPARING_LINE : undefined} />;
+  //
+  // The line says what the opening is waiting for when it is something other than a start: a full
+  // house, or the previous task's runtime still being cleaned up — which the control plane
+  // reports (`cleanupPending`) before the start that will be refused for it has even been asked.
+  const cleaning = waiting === "cleanup" || (startStatus?.cleanupPending === true && !runtimeUp);
+  const waitLine = waiting === "room" ? ROOM_FULL_LINE : cleaning ? CLEANUP_LINE : null;
+  const cover = navigated ? null : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} line={waitLine ?? (preparing ? PREPARING_LINE : undefined)} />;
   // A renewal that failed is only worth saying once the lease it renews has
   // actually run out — or when it is an expired login, which no retry fixes.
   const leaseAlert = leaseFailure && (leaseFailure.final || leaseExpired) ? leaseFailure.text : null;
   const connectionNotice = nativeError ?? leaseAlert;
+  // 重试: another opening with a fresh allowance of waiting, on the same intent — a brief handed over by a
+  // capability card or a hand-off lives in the address's state and is sent again with it.
+  const retry = () => { endWait(); setAttempt(value => value + 1); };
+  // 查看已有成果: what the control plane holds of this conversation reads without a runtime — its delivered
+  // report when the ledger has one, else the project's files. The conversation's own text lives in the kernel's
+  // session store and is not faked from the ledger, which keeps no reply text.
+  const openExistingResults = async () => {
+    let target = "/app/files";
+    try {
+      const runs = (await listWebAgentRuns({ projectId })).filter((run) => sessionId && run.sessionId === sessionId);
+      for (const run of runs.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))) {
+        const file = reportPathOf({ runId: run.id, artifacts: run.artifacts, unverifiedArtifacts: run.unverifiedArtifacts }) ?? run.artifacts?.[0] ?? null;
+        const path = artifactPath(file);
+        if (path) { target = `/app/runs/${encodeURIComponent(run.id)}/files/${path.split("/").map(encodeURIComponent).join("/")}`; break; }
+      }
+    } catch {
+      // The ledger could not be read: the project's files are still the honest place.
+    }
+    navigate(target);
+  };
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -991,18 +1083,21 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         {error ? (
           <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-ui text-error">
             <p>{error.text}</p>
-            {error.retryable && <Button ref={retryButton} variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
+            {error.retryable && <Button ref={retryButton} variant="ghost" onClick={retry}>重试</Button>}
             {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
+            {/* A cleanup that outlasted the wait: what the project already holds needs no runtime. */}
+            {error.recovery === "wait" && <Button variant="ghost" onClick={() => { void openExistingResults(); }}>查看已有成果</Button>}
+            {error.recovery === "autopilot" && <Button variant="ghost" onClick={() => navigate("/app/autopilot")}>查看定时任务</Button>}
             {/* The usage section of settings, where a spend ceiling is stated — or,
                 for a simulated allowance that ran out, the page that tops it up. */}
-            {error.capped && !error.concurrency && (error.code === SIMULATED_CREDITS_EXHAUSTED ? <SimulatedRechargeButton /> : <UsageButton />)}
+            {error.recovery === "spend" && (error.code === SIMULATED_CREDITS_EXHAUSTED ? <SimulatedRechargeButton /> : <UsageButton />)}
           </div>
         ) : (
           <>
             {navigated && (connectionNotice || !ready) && (
               <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
-                <p>{connectionNotice ?? "正在重连"}</p>
-                {connectionNotice && <Button variant="ghost" onClick={reconnect} disabled={renewing}>重新连接</Button>}
+                <p>{waiting === "cleanup" ? CLEANUP_LINE : connectionNotice ?? "正在重连"}</p>
+                {connectionNotice && waiting !== "cleanup" && <Button variant="ghost" onClick={reconnect} disabled={renewing}>重新连接</Button>}
               </div>
             )}
             {cover}

@@ -32,6 +32,7 @@ export const ALERT_NOTICES = Object.freeze({
   OpenScienceTaskQueueNearCapacity: { title: "任务队列快满了", sentence: "全局任务队列持续超过上限的八成，新任务可能要排队。" },
   OpenScienceRuntimeCapacityNearLimit: { title: "运行环境快用满了", sentence: "同时运行的研究环境持续超过上限的八成，新对话可能要等待。" },
   OpenScienceRuntimeQuotaMonitorGap: { title: "有运行环境没有被额度监控覆盖", sentence: "至少一个正在运行的研究环境不在项目空间额度的定时检查之内。" },
+  OpenScienceRuntimeCleanupStuck: { title: "有项目的研究环境一直没能关闭", sentence: "某个项目上一次任务的运行环境十五分钟都没能确认关闭，这个项目的新对话会一直等待；平台在自动重试，反复失败多半是容器卡住了。" },
   OpenScienceMemoryIndexRefusingWrites: { title: "记忆索引不再收新内容", sentence: "记忆索引的最近一次写入连续十五分钟失败，多半是向量模型或它的密钥出了问题。" },
   OpenScienceMemoryRecallDegraded: { title: "记忆召回已降级", sentence: "十五分钟里每次召回都没能用上索引，只能退回关键词匹配；记忆没有丢，但排序变差了。" },
   OpenScienceCertificateExpiringSoon: { title: "网站证书三天内到期", sentence: "公开网站的 TLS 证书不到三天就过期，自动续期可能已经停了。" },

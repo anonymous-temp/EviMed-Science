@@ -174,6 +174,7 @@ export {
   RUNTIME_ERROR_CODES,
   RUNTIME_ROOM_REFUSAL_CODES,
   RUNTIME_ROOM_WAIT_CODES,
+  RUNTIME_START_RECOVERY,
   RUN_OUTCOME_KINDS,
   RUN_VERDICT_ERROR_CODES,
   SOCKET_TOOL_ERROR_CODES,
@@ -188,6 +189,7 @@ export {
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
   runOutcomeKind,
+  runtimeStartRecovery,
   terminalEvidenceSourceErrorCodes,
   turnEndErrorCode,
 } from './src/errorCodes.mjs'

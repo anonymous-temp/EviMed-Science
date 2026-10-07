@@ -147,6 +147,9 @@ const operatorLevers = {
   OPEN_SCIENCE_RUNTIME_IDLE_YIELD_AFTER_MS: ["open-science-web"],
   // How long a run's dispatch waits for a free runtime slot (2026-10-05).
   OPEN_SCIENCE_RUNTIME_START_WAIT_MS: ["open-science-web"],
+  // The retry of a container removal that was not confirmed (2026-10-07): the web API's runtime manager holds and retries it.
+  OPEN_SCIENCE_RUNTIME_CLEANUP_RETRY_MS: ["open-science-web"],
+  OPEN_SCIENCE_RUNTIME_CLEANUP_RETRY_MAX_MS: ["open-science-web"],
   // The frame layer's per-body off switches: the control every body is
   // measured against has to be reachable from .env.
   OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF: ["open-science-web"],

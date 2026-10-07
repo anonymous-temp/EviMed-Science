@@ -3883,11 +3883,11 @@ test("the runtime bootstrap writes the tools this runtime does not offer, for th
   }
 });
 
-async function stopFixture(t) {
+async function stopFixture(t, config = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "bounded-stop-"));
   const owned = { ...project, rootDir: root, baseDir: root, workspaceDir: path.join(root, "workspace"), runtimeDir: path.join(root, "runtime"), metaDir: path.join(root, ".openscience") };
   await Promise.all([owned.workspaceDir, owned.runtimeDir, owned.metaDir].map(directory => mkdir(directory)));
-  const manager = new RuntimeManager({ runtimeMode: "kernel", runtimeSandboxMode: "docker" });
+  const manager = new RuntimeManager({ runtimeMode: "kernel", runtimeSandboxMode: "docker", ...config });
   manager.enforceProjectQuota = async () => {};
   manager.makeRoomFor = async () => {};
   const runtime = { ...fakeRuntime(owned.id, owned.workspaceDir), project: owned, modelGatewayTokenJti: "old-generation", modelGatewayScope: { runId: "episode-one" } };
@@ -3937,18 +3937,177 @@ test("concurrent explicit and idle stops close one captured runtime only once", 
   assert.equal(closed, 1);
 });
 
-test("failed provider close blocks replacement until that captured runtime is cleaned", async t => {
+test("a failed provider close refuses the start with a pace to ask again at, and the start that follows heals it without an operator", async t => {
   const { manager, owned, runtime } = await stopFixture(t);
-  let fails = true, starts = 0;
-  runtime.close = async () => { if (fails) throw new Error("Unconfirmed close"); };
+  let fails = true, closes = 0, starts = 0;
+  runtime.close = async () => { closes += 1; if (fails) throw new Error("Unconfirmed close"); };
   manager.startKernel = async () => { starts += 1; return fakeRuntime(owned.id, owned.workspaceDir); };
   await assert.rejects(manager.endBoundedRuntime(owned, "episode-one", "old-generation"), /Unconfirmed close/);
-  await assert.rejects(manager.start(owned), { code: "runtime_cleanup_required" });
+  // Asked at once, the close is not run again: it has only just failed, and a shell asking every few
+  // seconds must not each run a container removal. It is told when to ask.
+  await assert.rejects(manager.start(owned), error => error.code === "runtime_cleanup_required" && error.status === 503 && error.retryAfterSeconds === 5);
   assert.equal(starts, 0);
+  assert.equal(closes, 1);
+  // The container was removed meanwhile; the next start settles the close itself and proceeds.
   fails = false;
-  assert.equal(await manager.endBoundedRuntime(owned, "episode-one", "old-generation"), true);
+  manager.failedRuntimeStops.get(manager.key(owned)).lastAttemptAt -= 10_000;
   await manager.start(owned);
   assert.equal(starts, 1);
+  assert.equal(closes, 2);
+  assert.equal(manager.failedRuntimeStops.has(manager.key(owned)), false);
+  assert.deepEqual(manager.cleanupRetryStats, { recovered: 1, failed: 0, confirmedGone: 0 });
+});
+
+test("a close that still fails on the start's retry keeps the refusal, counts the attempt and keeps when it first failed", async t => {
+  const { manager, owned, runtime } = await stopFixture(t);
+  runtime.close = async () => { throw Object.assign(new Error("Runtime controller could not clean up\nthe runtime container."), { code: "runtime_cleanup_failed" }); };
+  manager.startKernel = async () => fakeRuntime(owned.id, owned.workspaceDir);
+  await assert.rejects(manager.stop(owned), { code: "runtime_cleanup_failed" });
+  const key = manager.key(owned);
+  const first = manager.failedRuntimeStops.get(key);
+  assert.equal(first.attempts, 1);
+  assert.equal(first.cause, "runtime_cleanup_failed");
+  first.lastAttemptAt -= 10_000;
+  first.failedAt -= 60_000;
+  await assert.rejects(manager.start(owned), { code: "runtime_cleanup_required" });
+  const second = manager.failedRuntimeStops.get(key);
+  assert.equal(second.attempts, 2);
+  assert.equal(second.failedAt, first.failedAt, "the age of the hold is from the first failure");
+  assert.ok(second.nextAt > first.nextAt - 1, "the pause grows");
+  assert.deepEqual(manager.cleanupRetryStats, { recovered: 0, failed: 1, confirmedGone: 0 });
+  const events = (await readFile(path.join(owned.metaDir, "runtime.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+  assert.deepEqual(events.filter(event => event.event.startsWith("cleanup_")).map(event => [event.event, event.attempt, event.cause]),
+    [["cleanup_failed", 1, "runtime_cleanup_failed"], ["cleanup_retry", 2, "runtime_cleanup_failed"]]);
+});
+
+test("the pause before a retry doubles from the configured first step up to its ceiling", async t => {
+  const { manager } = await stopFixture(t, { runtimeCleanupRetryMs: 15_000, runtimeCleanupRetryMaxMs: 300_000 });
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 40].map(attempts => manager.cleanupRetryDelayMs(attempts)),
+    [15_000, 30_000, 60_000, 120_000, 240_000, 300_000, 300_000, 300_000]);
+  const defaults = (await stopFixture(t)).manager;
+  assert.equal(defaults.cleanupRetryDelayMs(1), 15_000);
+  assert.equal(defaults.cleanupRetryDelayMs(99), 300_000);
+});
+
+test("the timer's pass retries a due close with no one asking, and the slot, the status and the gauge come back", async t => {
+  // No idle timeout is configured: the sweep returns early, and this pass must not.
+  const { manager, owned, runtime } = await stopFixture(t, { runtimeIdleTimeoutMs: 0 });
+  const key = manager.key(owned);
+  let failures = 2, closes = 0;
+  runtime.close = async () => { closes += 1; if (failures-- > 0) throw new Error("Unconfirmed close"); };
+  await assert.rejects(manager.stop(owned), /Unconfirmed close/);
+  assert.equal(manager.runtimeCount(), 1, "the unconfirmed runtime still holds a slot");
+  assert.equal((await manager.status(owned)).cleanupPending, true);
+  assert.deepEqual(
+    { pending: manager.cleanupSnapshot().pending, retries: manager.cleanupSnapshot().retries },
+    { pending: 1, retries: { recovered: 0, failed: 0, confirmedGone: 0 } },
+  );
+
+  assert.equal(await manager.sweepIdleRuntimes(), 0);
+  assert.equal(await manager.reconcileFailedStops(), 0, "not due yet");
+  assert.equal(closes, 1);
+
+  manager.failedRuntimeStops.get(key).nextAt = 0;
+  assert.equal(await manager.reconcileFailedStops(), 0, "due, and the close fails again");
+  assert.equal(closes, 2);
+  const again = manager.failedRuntimeStops.get(key);
+  assert.equal(again.attempts, 2);
+  assert.ok(again.nextAt > Date.now(), "and the next retry is later");
+
+  again.nextAt = 0;
+  assert.equal(await manager.reconcileFailedStops(), 1);
+  assert.equal(closes, 3);
+  assert.equal(manager.failedRuntimeStops.has(key), false);
+  assert.equal(manager.runtimeCount(), 0, "the slot is free");
+  assert.equal((await manager.status(owned)).cleanupPending, false);
+  assert.deepEqual(manager.cleanupSnapshot(), { pending: 0, oldestAgeSeconds: 0, retries: { recovered: 1, failed: 1, confirmedGone: 0 } });
+  // What a completed stop leaves is left: the project is recorded stopped, not still running.
+  const state = JSON.parse(await readFile(path.join(owned.metaDir, "runtime-state.json"), "utf8"));
+  assert.equal(state.running, false);
+  assert.equal(state.event, "stopped");
+});
+
+test("a runtime the provider can say is gone is cleared at once, without closing it again", async t => {
+  const { manager, owned, runtime } = await stopFixture(t);
+  const key = manager.key(owned);
+  let closes = 0;
+  runtime.close = async () => { closes += 1; throw new Error("Unconfirmed close"); };
+  await assert.rejects(manager.stop(owned), /Unconfirmed close/);
+  manager.provider.confirmGone = async (project) => project.id === owned.id;
+  manager.failedRuntimeStops.get(key).nextAt = 0;
+  assert.equal(await manager.reconcileFailedStops(), 1);
+  assert.equal(closes, 1, "nothing left to close");
+  assert.equal(manager.failedRuntimeStops.has(key), false);
+  assert.deepEqual(manager.cleanupRetryStats, { recovered: 0, failed: 0, confirmedGone: 1 });
+  const events = (await readFile(path.join(owned.metaDir, "runtime.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+  assert.equal(events.find(event => event.event === "cleanup_recovered")?.reason, "confirmed_gone");
+});
+
+test("a provider that cannot be asked, or says it does not know, leaves the close to be retried", async t => {
+  for (const confirm of [async () => { throw new Error("controller down"); }, async () => false, undefined]) {
+    const { manager, owned, runtime } = await stopFixture(t);
+    let closes = 0;
+    runtime.close = async () => { closes += 1; throw new Error("Unconfirmed close"); };
+    await assert.rejects(manager.stop(owned), /Unconfirmed close/);
+    manager.provider.confirmGone = confirm;
+    manager.failedRuntimeStops.get(manager.key(owned)).nextAt = 0;
+    assert.equal(await manager.reconcileFailedStops(), 0);
+    assert.equal(closes, 2, "the close was run again");
+    assert.equal(manager.failedRuntimeStops.has(manager.key(owned)), true);
+  }
+});
+
+test("the thirty requests of one conversation opening share one retry of the close", async t => {
+  const { manager, owned, runtime } = await stopFixture(t, { runtimeCleanupRetryMs: 20 });
+  let closes = 0, release;
+  runtime.close = async () => {
+    closes += 1;
+    if (closes === 1) throw new Error("Unconfirmed close");
+    await new Promise(resolve => { release = resolve; });
+  };
+  manager.startKernel = async () => fakeRuntime(owned.id, owned.workspaceDir);
+  await assert.rejects(manager.stop(owned), /Unconfirmed close/);
+  await sleep(40);
+  const starts = Array.from({ length: 30 }, () => manager.start(owned).then(() => "started", error => error.code));
+  await sleep(20);
+  release();
+  assert.deepEqual([...new Set(await Promise.all(starts))], ["started"]);
+  assert.equal(closes, 2, "one retry for thirty starts");
+});
+
+test("a close that fails twice and then succeeds frees the project for the shell that keeps asking, with no operator, and the gauge returns to zero", async t => {
+  const { manager, owned, runtime } = await stopFixture(t, { runtimeCleanupRetryMs: 20, runtimeCleanupRetryMaxMs: 80 });
+  let closes = 0, starts = 0;
+  runtime.close = async () => { closes += 1; if (closes <= 2) throw new Error("Unconfirmed close"); };
+  manager.startKernel = async () => { starts += 1; return fakeRuntime(owned.id, owned.workspaceDir); };
+  await assert.rejects(manager.stop(owned), /Unconfirmed close/);
+  assert.equal(manager.cleanupSnapshot().pending, 1);
+  const refusals = [];
+  for (let ask = 0; ask < 40 && !starts; ask += 1) {
+    await manager.start(owned).catch(error => refusals.push([error.code, error.retryAfterSeconds]));
+    if (!starts) await sleep(25);
+  }
+  assert.equal(starts, 1, "the start the shell kept asking for went through");
+  assert.equal(closes, 3);
+  assert.ok(refusals.length >= 1 && refusals.every(([code, after]) => code === "runtime_cleanup_required" && after === 5), JSON.stringify(refusals));
+  assert.deepEqual(manager.cleanupSnapshot(), { pending: 0, oldestAgeSeconds: 0, retries: { recovered: 1, failed: 1, confirmedGone: 0 } });
+  assert.equal((await manager.status(owned)).cleanupPending, false);
+});
+
+test("a controller that reports the container missing confirms a Docker runtime gone; any other answer does not", async t => {
+  const { manager, owned } = await stopFixture(t);
+  assert.equal(await manager.provider.confirmGone(owned), false, "no controller to ask");
+  for (const [answer, gone] of [[{ state: "missing" }, true], [{ state: "exited" }, false], [{ state: "running", running: true }, false], [new Error("down"), false]]) {
+    manager.runtimeController = { runtimeStatus: async () => { if (answer instanceof Error) throw answer; return answer; } };
+    assert.equal(await manager.provider.confirmGone(owned), gone, JSON.stringify(answer));
+  }
+});
+
+test("a project whose close is unconfirmed still answers its interactive calls with the refusal and the pace to ask again at", async t => {
+  const { manager, owned, runtime } = await stopFixture(t);
+  runtime.close = async () => { throw new Error("Unconfirmed close"); };
+  await assert.rejects(manager.stop(owned), /Unconfirmed close/);
+  assert.throws(() => manager.assertInteractiveRuntimeAvailable(owned), error => error.code === "runtime_cleanup_required" && error.retryAfterSeconds === 5);
 });
 
 test("a stale token refresh failure never removes a replacement runtime", async t => {

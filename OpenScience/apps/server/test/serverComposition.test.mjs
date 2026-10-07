@@ -680,6 +680,17 @@ test("startup arms every recurring sweep, and each timer really drives its own s
   }
 });
 
+test("startup arms the retry of unconfirmed container removals, and its timer drives the manager's pass", async (t) => {
+  const fixture = await composedApp(t);
+  let passes = 0;
+  fixture.app.runtimeManager.reconcileFailedStops = async () => { passes += 1; return 0; };
+  // Identified by effect, like the sweeps above: the callback of the timer at the configured cadence runs the pass.
+  const candidates = live(fixture.armed).filter((entry) => entry.delay === 15_000);
+  assert.ok(candidates.length > 0, "no timer is armed at the retry cadence");
+  for (const entry of candidates) entry.callback();
+  assert.equal(passes >= 1, true, "no timer at the retry cadence runs the manager's pass");
+});
+
 for (const managedBrowserEnabled of [false, true]) test(`a maintenance pause clears every recurring timer and reopening re-arms them (managed browser=${managedBrowserEnabled})`, async (t) => {
   const fixture = await composedApp(t, {
     managedBrowserEnabled,

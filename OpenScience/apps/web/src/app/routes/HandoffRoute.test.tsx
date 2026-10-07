@@ -74,9 +74,28 @@ describe("转为深度研究", () => {
     expect(client.productRequest).toHaveBeenCalledTimes(2);
   });
 
-  it("without a hand-off in the address there is nothing to do, and nothing is created", () => {
+  it("without a hand-off in the address it offers a blank conversation, exactly as 「新对话」 does, and creates nothing", async () => {
     renderAt("");
     expect(screen.getByText("没有要转入的问题")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "开始新对话" }));
+    const where = screen.getByTestId("location").textContent ?? "";
+    expect(where).toMatch(/^\/app\/chat\|create\|[^|]*\|[A-Za-z0-9_-]+\|undefined$/);
+    expect(client.productRequest).not.toHaveBeenCalled();
+  });
+
+  it("a link whose fragment cannot be read says it is no good, with the same one action and no way back to an origin it does not know", async () => {
+    renderAt("#not%20a%20payload!");
+    expect(screen.getByText("这条转入链接已失效")).toBeTruthy();
+    expect(screen.queryByText("没有要转入的问题")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(client.productRequest).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "开始新对话" }));
+    expect(screen.getByTestId("location").textContent).toMatch(/^\/app\/chat\|create\|/);
+  });
+
+  it("a fragment that decodes to no question is a damaged link too", () => {
+    renderAt(handoffFragment({ question: "" } as HandoffInput));
+    expect(screen.getByText("这条转入链接已失效")).toBeTruthy();
     expect(client.productRequest).not.toHaveBeenCalled();
   });
 });

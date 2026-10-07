@@ -293,8 +293,30 @@ const ROOM_WAIT_GIVE_UP_MS = 10 * 60_000;
 /** A wait asked about this recently is one somebody is still in (`open_science_runtime_start_waiting`). */
 const ROOM_WAIT_ACTIVE_MS = 2 * 60_000;
 
+/**
+ * A start refused while the previous runtime's close is still unconfirmed
+ * (`failedRuntimeStops`): what it tells its caller to wait before asking again.
+ * The start itself retries the close when it is asked, so this is the pace the
+ * shell asks at, not the pace of the retries (`cleanupRetryDelayMs`).
+ */
+const CLEANUP_RETRY_AFTER_SECONDS = 5;
+/** Default first step, and ceiling, of the background retry of an unconfirmed close (`OPEN_SCIENCE_RUNTIME_CLEANUP_RETRY_MS`). */
+const DEFAULT_CLEANUP_RETRY_MS = 15_000;
+const DEFAULT_CLEANUP_RETRY_MAX_MS = 5 * 60_000;
+/** The cause of a failed close, as the ledger and the log keep it: one line, no control characters. */
+const CLEANUP_CAUSE_CHARS = 200;
+
 function positiveLimit(value) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
+}
+
+/** @param {unknown} failure what a provider close threw @returns {string} */
+function cleanupCause(failure) {
+  const code = /** @type {any} */ (failure)?.code;
+  const text = typeof code === "string" && code
+    ? code
+    : failure instanceof Error ? failure.message : String(failure ?? "");
+  return text.replace(/\p{Cc}+/gu, " ").replace(/\s+/g, " ").trim().slice(0, CLEANUP_CAUSE_CHARS) || "unknown";
 }
 
 function proxyLimitExceeded(scope, limit) {
@@ -838,6 +860,7 @@ function publicRuntimeStatus(runtime, fields = {}) {
     provider: fields.provider ?? null,
     startStage: fields.startStage ?? null,
     startError: fields.startError ?? null,
+    cleanupPending: fields.cleanupPending === true,
     // What a remote runtime's guest reported at start: its kernel release and
     // the Landlock level the kernel's write fence got there (plan §3.1 #9).
     sandbox: runtime?.sandbox ?? null,
@@ -866,6 +889,7 @@ function publicRuntimeStatusFromState(state, fields = {}) {
     provider: fields.provider ?? null,
     startStage: fields.startStage ?? null,
     startError: fields.startError ?? null,
+    cleanupPending: fields.cleanupPending === true,
     sandbox: state?.sandbox && typeof state.sandbox === "object" ? state.sandbox : null,
   };
 }
@@ -3063,6 +3087,9 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  * @property {(project: Record<string, any>, plan: Record<string, any>, input: { port: number, password: string }) => Promise<any>} launch
  *   starts the kernel; returns the process handle whose `exit` the manager watches
  * @property {(project: Record<string, any>, plan: Record<string, any>, child: any) => Promise<void>} close
+ * @property {(project: Record<string, any>, runtime: Record<string, any>) => Promise<boolean>} [confirmGone] whether the provider can
+ *   say, from its own state, that this runtime no longer exists: the one fact that settles a close whose answer was lost
+ *   (`RuntimeManager.resolveFailedStop`). Absent or false means "not known", never "still there".
  * @property {(project: Record<string, any>, plan: Record<string, any>) => void} afterExit
  * @property {(project: Record<string, any>, runtime: Record<string, any>) => Promise<void>} sampleResources
  * @property {(project: Record<string, any>, state: Record<string, any>) => Promise<{ cleaned: boolean, missing: boolean, failed?: boolean, reason?: string, error?: string | null, reattached?: boolean, skipped?: boolean }>} cleanupOrphan
@@ -3246,6 +3273,17 @@ export class DockerRuntimeProvider {
     if (plan.socketPath) await fs.rm(plan.socketPath, { force: true }).catch(() => {});
   }
 
+  /** The controller no longer sees this project's container. A controller that cannot be asked, or a host that runs Docker
+   *  directly (whose `close()` does not throw on a container it could not remove), says nothing. */
+  async confirmGone(project) {
+    if (!this.manager.runtimeController) return false;
+    try {
+      return (await this.manager.runtimeController.runtimeStatus(project))?.state === "missing";
+    } catch {
+      return false;
+    }
+  }
+
   /** Removed here, after the exit record has been written. `close()` cleans up
    *  when the manager stops a runtime, but a container that dies on its own
    *  never reaches it — that was `--rm`'s job, and `--rm` is what deleted the
@@ -3386,7 +3424,26 @@ export class RuntimeManager {
     });
     this.runtimes = new Map();
     this.runtimeStops = new Map();
+    /**
+     * Runtimes whose provider close was not confirmed, by project key. The
+     * entry is the project's slot and its refusal (`runtime_cleanup_required`)
+     * until the close is confirmed, and it settles itself: a start retries the
+     * close (`settleFailedStop`) and a timer retries it with a growing pause
+     * (`reconcileFailedStops`), each first asking the provider whether the
+     * runtime is already gone. Until 2026-10-07 nothing did, and the entry —
+     * kept in memory only — stood until the process restarted: six hours of
+     * 503 for one project, from one proxy request that died ten seconds
+     * before the close that failed.
+     *
+     * `attempts` counts failed closes including the first; `nextAt` is when the
+     * timer tries again; `cause` is what the last close threw, one line.
+     * @type {Map<string, { runtime: any, project: any, generation: string | null, failedAt: number, attempts: number, lastAttemptAt: number, nextAt: number, cause: string }>}
+     */
     this.failedRuntimeStops = new Map();
+    /** Retries of those closes in flight, by project key: a conversation opens with about thirty requests, and they share one. */
+    this.cleanupRetries = new Map();
+    /** What the retries came to (`open_science_runtime_cleanup_retries_total`). */
+    this.cleanupRetryStats = { recovered: 0, failed: 0, confirmedGone: 0 };
     // Which learned methods the last launch of each project mounted, by
     // project key. Read by the observation producer, which otherwise knows only
     // about approved methods and would record nothing for a candidate on trial
@@ -3814,7 +3871,7 @@ export class RuntimeManager {
 
   assertInteractiveRuntimeAvailable(project) {
     if (this.runtimeStops.has(this.key(project))) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
-    if (this.failedRuntimeStops.has(this.key(project))) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
+    if (this.failedRuntimeStops.has(this.key(project))) throw this.cleanupRequired();
     if (this.boundedRuntimeScope(project)) {
       throw new HttpError(423, "runtime_reserved_for_autopilot", "This project runtime is completing bounded proactive research.");
     }
@@ -3823,7 +3880,7 @@ export class RuntimeManager {
   async reserveBoundedRuntimeSession(project, budgetScope) {
     const key = this.key(project);
     if(budgetScope?.capabilityId!==undefined)this.platformSkillScopes.set(key,budgetScope.capabilityId);
-    if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
+    if (this.failedRuntimeStops.has(key)) await this.settleFailedStop(project);
     const scope = {
       runId: safeId(budgetScope?.runId, "bounded run id"),
       dailyLimit: Number(budgetScope?.dailyLimit), weeklyLimit: Number(budgetScope?.weeklyLimit), runLimit: Number(budgetScope?.runLimit),
@@ -3904,12 +3961,16 @@ export class RuntimeManager {
     for (let pending; (pending = this.runtimeStops.get(key));) {
       try { await pending; }
       catch (error) {
-        if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs a confirmed cleanup before replacement.");
+        if (this.failedRuntimeStops.has(key)) {
+          // The stop that failed is the one this start was waiting behind: settle it now rather than refuse.
+          await this.settleFailedStop(project, "The previous runtime needs a confirmed cleanup before replacement.");
+          continue;
+        }
         throw error;
       }
     }
     await this.runtimeQuotaStops.get(key);
-    if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs a confirmed cleanup before replacement.");
+    if (this.failedRuntimeStops.has(key)) await this.settleFailedStop(project, "The previous runtime needs a confirmed cleanup before replacement.");
     this.assertBoundedStartOwnership(project, options.boundedScope ?? null);
     return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project, options)) : this.startAdmitted(project, options);
   }
@@ -3918,7 +3979,7 @@ export class RuntimeManager {
   async startAdmitted(project, { opening = false, speculative = false, dispatch = false, boundedScope = null } = {}) {
     const key = this.key(project);
     if (this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
-    if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
+    if (this.failedRuntimeStops.has(key)) throw this.cleanupRequired();
     this.assertBoundedStartOwnership(project, boundedScope);
     let existing = this.runtimes.get(key);
     if (existing && existing.workspaceDir !== project.workspaceDir) {
@@ -4581,6 +4642,9 @@ export class RuntimeManager {
     const key = this.key(project);
     const runtime = this.runtimes.get(key);
     const provider = this.providerName();
+    // The previous runtime's close is not confirmed yet (`failedRuntimeStops`): a start is refused until it
+    // is, and the shell that is about to ask can say so first.
+    const cleanupPending = this.failedRuntimeStops.has(key);
     if (runtime) {
       return publicRuntimeStatus(runtime, {
         stale: false,
@@ -4601,7 +4665,7 @@ export class RuntimeManager {
     const startError = failure && Date.now() - failure.at < START_FAILURE_VISIBLE_MS
       ? { code: failure.code, status: failure.status, at: new Date(failure.at).toISOString() }
       : null;
-    const fields = { provider, startStage, startError };
+    const fields = { provider, startStage, startError, cleanupPending };
     const state = await readRuntimeState(project);
     if (state) return publicRuntimeStatusFromState(state, fields);
     return publicRuntimeStatus(null, fields);
@@ -5371,6 +5435,7 @@ export class RuntimeManager {
         lastYieldedAt: this.backgroundYields.lastAt,
       },
       roomWaits: this.roomWaitsSnapshot(),
+      cleanup: this.cleanupSnapshot(),
       methodMounts: { ...this.methodMounts, maxPromptBytes: positiveLimit(this.config.mountedMethodPromptBytes) },
       unverifiedReleaseLaunches: [...this.unverifiedReleaseLaunches].map(([code, launches]) => ({ code, launches })),
     };
@@ -6092,21 +6157,179 @@ export class RuntimeManager {
 
   /** Close the captured provider, remembering an unconfirmed close for retry.
    * Failure records become visible only after the terminal callback, so that
-   * callback cannot recursively wait for this very shutdown.
+   * callback cannot recursively wait for this very shutdown. A close that fails
+   * again keeps what the entry already knew (when it first failed, how often),
+   * and says why: the cause went unrecorded until 2026-10-07, which made the
+   * one failure that held a project for six hours unknowable afterwards.
    * @param {any} project @param {any} runtime @param {string} status @param {string|null} generation
    * @param {string} [errorCode] @param {'user' | 'platform' | null} [by] who asked for the stop */
   async closeCapturedRuntime(project, runtime, status, generation, errorCode, by = null) {
     const key = this.key(project);
-    if (this.failedRuntimeStops.get(key)?.runtime === runtime) this.failedRuntimeStops.delete(key);
+    const previous = this.failedRuntimeStops.get(key)?.runtime === runtime ? this.failedRuntimeStops.get(key) : null;
+    if (previous) this.failedRuntimeStops.delete(key);
     let failure = null;
     try { await runtime.close(); await this.pluginService?.clearPromptAdmissions(project); }
     catch (error) { failure = error; }
     await this.notifyRuntimeStop(project, runtime, status, errorCode, by);
     if (failure) {
-      if (!this.runtimes.has(key)) this.failedRuntimeStops.set(key, { runtime, generation });
-      await appendRuntimeEvent(project, "cleanup_failed", { kind: runtime.kind, error: "runtime_cleanup_required" }, this.config);
+      const cause = cleanupCause(failure);
+      const attempts = (previous?.attempts ?? 0) + 1;
+      const now = Date.now();
+      if (!this.runtimes.has(key)) {
+        this.failedRuntimeStops.set(key, {
+          runtime, project, generation, failedAt: previous?.failedAt ?? now, attempts, lastAttemptAt: now,
+          nextAt: now + this.cleanupRetryDelayMs(attempts), cause,
+        });
+      }
+      // The first failure is `cleanup_failed`; the closes the retries make that fail again are `cleanup_retry`.
+      await appendRuntimeEvent(project, previous ? "cleanup_retry" : "cleanup_failed", {
+        kind: runtime.kind, error: "runtime_cleanup_required", cause, attempt: attempts,
+      }, this.config);
       throw failure;
     }
+  }
+
+  /** How long after its `attempts`-th failed close the next retry is due: the configured first step, doubling, up to the ceiling. */
+  cleanupRetryDelayMs(attempts) {
+    const first = positiveLimit(this.config.runtimeCleanupRetryMs) ?? DEFAULT_CLEANUP_RETRY_MS;
+    const ceiling = Math.max(first, positiveLimit(this.config.runtimeCleanupRetryMaxMs) ?? DEFAULT_CLEANUP_RETRY_MAX_MS);
+    return Math.min(ceiling, first * 2 ** Math.max(0, attempts - 1));
+  }
+
+  /** The 503 a project with an unconfirmed close answers, with the pace to ask again at. */
+  cleanupRequired(message = "The previous runtime needs cleanup.") {
+    return new HttpError(503, "runtime_cleanup_required", message, { retryAfterSeconds: CLEANUP_RETRY_AFTER_SECONDS });
+  }
+
+  /**
+   * Settle a project's unconfirmed close if it can be settled now, else refuse
+   * with `runtime_cleanup_required`. The start path calls this where it used to
+   * throw on the bare entry, so the first start after a failed close is also
+   * its retry, and the researcher whose project was held by one stuck container
+   * no longer needs an operator to press 重启.
+   *
+   * A retry is spaced from the last attempt by the shorter of five seconds and
+   * the configured first step, so the thirty requests of one conversation
+   * opening, or a shell asking every few seconds, do not each run a container
+   * removal.
+   * @param {any} project @param {string} [message]
+   */
+  async settleFailedStop(project, message) {
+    const key = this.key(project);
+    const entry = this.failedRuntimeStops.get(key);
+    if (!entry) return;
+    const gap = Math.min(5_000, positiveLimit(this.config.runtimeCleanupRetryMs) ?? DEFAULT_CLEANUP_RETRY_MS);
+    if (this.cleanupRetries.has(key) || Date.now() - entry.lastAttemptAt >= gap) await this.resolveFailedStop(project).catch(() => {});
+    if (this.failedRuntimeStops.has(key)) throw this.cleanupRequired(message);
+  }
+
+  /**
+   * One attempt to settle a project's unconfirmed close: ask the provider
+   * whether the runtime is already gone, else run the close again. Both are
+   * idempotent — a container that is not there counts as removed — and the
+   * second goes through the same serialization as every stop, so it cannot
+   * overlap another stop or a start.
+   *
+   * Success, either way, ends the entry and leaves the project in the state
+   * a completed stop would have (`runtime-state.json` says stopped); failure
+   * keeps it, with its attempt counted and the next retry later. Concurrent
+   * callers share one attempt.
+   * @param {any} project
+   * @returns {Promise<'none'|'recovered'|'confirmed_gone'|'failed'>}
+   */
+  resolveFailedStop(project) {
+    const key = this.key(project);
+    if (!this.failedRuntimeStops.has(key)) return Promise.resolve("none");
+    const running = this.cleanupRetries.get(key);
+    if (running) return running;
+    const attempt = this.runFailedStopRetry(project, key).finally(() => {
+      if (this.cleanupRetries.get(key) === attempt) this.cleanupRetries.delete(key);
+    });
+    this.cleanupRetries.set(key, attempt);
+    return attempt;
+  }
+
+  /** @param {any} project @param {string} key @returns {Promise<'none'|'recovered'|'confirmed_gone'|'failed'>} */
+  async runFailedStopRetry(project, key) {
+    const entry = this.failedRuntimeStops.get(key);
+    if (!entry) return "none";
+    // A stop already under way is the retry: wait for it and read what it left.
+    const pending = this.runtimeStops.get(key);
+    if (pending) {
+      await Promise.resolve(pending).catch(() => {});
+      return this.failedRuntimeStops.has(key) ? "failed" : "none";
+    }
+    const owner = entry.project ?? project;
+    let gone = false;
+    try { gone = (await this.provider.confirmGone?.(owner, entry.runtime)) === true; } catch { gone = false; }
+    if (gone) {
+      if (this.failedRuntimeStops.get(key) !== entry) return "none";
+      this.failedRuntimeStops.delete(key);
+      this.cleanupRetryStats.confirmedGone += 1;
+      await this.pluginService?.clearPromptAdmissions(owner).catch(() => {});
+      await this.recordSettledStop(owner, entry, "confirmed_gone");
+      return "confirmed_gone";
+    }
+    try {
+      const closed = await this.withRuntimeStop(owner, async () => {
+        if (this.failedRuntimeStops.get(key) !== entry) return false;
+        await this.closeCapturedRuntime(owner, entry.runtime, "canceled", entry.generation);
+        return true;
+      });
+      if (!closed) return this.failedRuntimeStops.has(key) ? "failed" : "none";
+    } catch {
+      // `closeCapturedRuntime` put the entry back with its attempt counted and the cause recorded.
+      this.cleanupRetryStats.failed += 1;
+      return "failed";
+    }
+    this.cleanupRetryStats.recovered += 1;
+    await this.recordSettledStop(owner, entry, "closed");
+    return "recovered";
+  }
+
+  /** What a completed stop would have written, for a close the retry settled. */
+  async recordSettledStop(project, entry, reason) {
+    const runtime = entry.runtime;
+    await appendRuntimeEvent(project, "cleanup_recovered", {
+      kind: runtime.kind, reason, attempts: entry.attempts, afterSeconds: Math.round((Date.now() - entry.failedAt) / 1000),
+    }, this.config).catch(() => {});
+    await recordRuntimeState(project, "stopped", {
+      running: false, kind: runtime.kind, startedAt: runtime.startedAt, pid: runtime.pid,
+      exitedAt: runtime.exitedAt ?? new Date().toISOString(), sandboxMode: runtime.sandboxMode ?? "mock",
+      networkMode: runtime.networkMode ?? null, containerName: runtime.containerName ?? null,
+    }).catch(() => {});
+  }
+
+  /**
+   * Retry every unconfirmed close that is due, on a timer: the project that
+   * nobody is asking to start (the autopilot defers on the refusal and waits;
+   * a researcher has gone home) still gets its slot back. Runs whether or not
+   * an idle timeout is configured, which the reaper's early return would have
+   * made a coin toss.
+   * @returns {Promise<number>} how many entries this pass settled
+   */
+  async reconcileFailedStops() {
+    let settled = 0;
+    for (const [key, entry] of [...this.failedRuntimeStops]) {
+      if (this.failedRuntimeStops.get(key) !== entry || entry.nextAt > Date.now()) continue;
+      const project = entry.project ?? entry.runtime?.project;
+      if (!project) continue;
+      const outcome = await this.resolveFailedStop(project).catch(() => "failed");
+      if (outcome === "recovered" || outcome === "confirmed_gone") settled += 1;
+    }
+    return settled;
+  }
+
+  /** What `/api/ops/metrics` reads of the unconfirmed closes: how many project(s) they hold, how long the oldest has, and what the retries came to. */
+  cleanupSnapshot() {
+    const now = Date.now();
+    let oldest = 0;
+    for (const entry of this.failedRuntimeStops.values()) oldest = Math.max(oldest, now - entry.failedAt);
+    return {
+      pending: this.failedRuntimeStops.size,
+      oldestAgeSeconds: Math.round(oldest / 1000),
+      retries: { ...this.cleanupRetryStats },
+    };
   }
 
   /**
@@ -6739,8 +6962,15 @@ export class RuntimeManager {
         activity.lastUseAt = Date.now();
         continue;
       }
-      await this.stopIdleRuntime(project).catch(() => {});
-      stopped++;
+      // Counted only when the stop completed: it used to count a stop that threw
+      // (and the failure vanished), which is how a close that was never
+      // confirmed read as a runtime reclaimed. The failure is left on the
+      // project's ledger; the entry it leaves is retried (`reconcileFailedStops`).
+      const done = await this.stopIdleRuntime(project).catch(async (error) => {
+        await appendRuntimeEvent(project, "idle_stop_failed", { cause: cleanupCause(error) }, this.config).catch(() => {});
+        return false;
+      });
+      if (done) stopped++;
     }
     return stopped;
   }

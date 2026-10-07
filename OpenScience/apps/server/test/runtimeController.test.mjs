@@ -153,6 +153,11 @@ if (args[0] === "ps") {
   process.exit(0);
 }
 if (args[0] === "rm" && args[1] === "-f") {
+  // A daemon that refuses the removal, and says why (the cause the controller must keep).
+  if (process.env.FAKE_DOCKER_RM_FAILS) {
+    process.stderr.write(process.env.FAKE_DOCKER_RM_FAILS + "\\n");
+    process.exit(1);
+  }
   const delayMs = Number(process.env.FAKE_DOCKER_RM_DELAY_MS) || 0;
   if (delayMs > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
   const containerName = args[2];
@@ -864,6 +869,47 @@ test("runtime controller serializes start and cleanup for the same project", asy
     delete process.env.FAKE_VOLUME_ROOT;
     delete process.env.FAKE_DOCKER_LOG;
     delete process.env.FAKE_DOCKER_RM_DELAY_MS;
+    await removeTree(tmp);
+  }
+});
+
+test("a container removal Docker refuses is answered with the fixed sentence and logged with Docker's own reason", async (t) => {
+  const tmp = await shortTempDir("osrc-");
+  const dataDir = path.join(tmp, "data");
+  const socketPath = path.join(tmp, "control", "controller.sock");
+  const dockerBin = await fakeDocker(tmp);
+  const project = await projectTree(dataDir);
+  if (await skipUnsupportedRuntimeSocket(t, project)) {
+    await removeTree(tmp);
+    return;
+  }
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  process.env.FAKE_DOCKER_RM_FAILS = "Error response from daemon: removal of container is already in progress";
+  const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
+  const written = [];
+  const write = process.stderr.write;
+  try {
+    await controller.listen();
+    const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath, runtimeControllerTimeoutMs: 3_000 });
+    process.stderr.write = (chunk, ...rest) => { written.push(String(chunk)); return write.call(process.stderr, chunk, ...rest); };
+    await assert.rejects(client.cleanupRuntime(project), (error) => error?.status === 502 && error?.code === "runtime_cleanup_failed"
+      && !/in progress/.test(error.message), "the web process is told the fixed sentence only");
+    process.stderr.write = write;
+    const line = written.map((text) => { try { return JSON.parse(text); } catch { return null; } }).find((entry) => entry?.event === "runtime.cleanup_failed");
+    assert.ok(line, "the controller logs the failed removal");
+    assert.equal(line.reason, "rm_failed");
+    assert.match(line.cause, /removal of container is already in progress/);
+    assert.equal(line.projectId, project.id);
+    assert.equal(line.userId, project.userId);
+    assert.match(line.containerName, /^[a-z0-9_.-]+$/i);
+    assert.ok(line.cause.length <= 300);
+  } finally {
+    process.stderr.write = write;
+    await controller.close().catch(() => {});
+    delete process.env.FAKE_DOCKER_STATE;
+    delete process.env.FAKE_VOLUME_ROOT;
+    delete process.env.FAKE_DOCKER_RM_FAILS;
     await removeTree(tmp);
   }
 });

@@ -18,12 +18,15 @@ import {
   ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
   ERROR_DETAIL_FIELDS,
+  RUNTIME_ROOM_REFUSAL_CODES,
+  RUNTIME_START_RECOVERY,
   RUN_OUTCOME_KINDS,
   RUN_VERDICT_ERROR_CODES,
   errorCodeMessage,
   errorCodeOutcome,
   knownErrorCodeMessage,
   runOutcomeKind,
+  runtimeStartRecovery,
 } from "../index.mjs";
 
 /** Any CJK ideograph. A sentence without one is not the Chinese this UI needs.
@@ -183,3 +186,37 @@ test("a refusal's declared numbers are declared once, for every ceiling that rai
   assert.deepEqual(ERROR_DETAIL_FIELDS.credits_weekly_limit_reached.window, ["week"]);
 });
 
+
+test("every refusal a runtime start can meet says what the reader is to do, by code, and anything else is a plain retry on purpose", () => {
+  // The refusals of a start the control plane names: the room ones, and every runtime or apply code a person meets
+  // before anything runs. A new one without a row here would fall to a retry, which is the wrong answer for a hold.
+  const startRefusals = [
+    ...RUNTIME_ROOM_REFUSAL_CODES,
+    ...CONTROL_PLANE_ERROR_CODES.filter((code) => /^runtime_|^plugin_apply_|^usage_budget_/.test(code)),
+  ];
+  assert.ok(startRefusals.length >= 6, `the walk saw only ${startRefusals.length} start refusals`);
+  for (const code of new Set(startRefusals)) {
+    assert.ok(Object.hasOwn(RUNTIME_START_RECOVERY, code), `${code} has no recovery`);
+    assert.equal(runtimeStartRecovery(code, 503), RUNTIME_START_RECOVERY[code]);
+  }
+  assert.deepEqual(
+    Object.fromEntries(["runtime_cleanup_required", "runtime_busy", "runtime_reserved_for_autopilot", "runtime_limit_exceeded",
+      "runtime_capacity_full", "plugin_apply_in_progress", "usage_budget_exceeded"].map((code) => [code, runtimeStartRecovery(code)])),
+    { runtime_cleanup_required: "wait", runtime_busy: "wait", runtime_reserved_for_autopilot: "autopilot", runtime_limit_exceeded: "slots",
+      runtime_capacity_full: "room", plugin_apply_in_progress: "preparing", usage_budget_exceeded: "spend" },
+  );
+  // Every table row names a code this build knows, so a renamed code cannot leave a dead row.
+  const known = new Set(ALL_ERROR_CODES);
+  for (const code of Object.keys(RUNTIME_START_RECOVERY)) assert.ok(known.has(code), `${code} is in no list`);
+  // The spending family is spend whatever its status; an unknown 402 is the gateway's spending refusal.
+  for (const code of ["credits_exhausted", "simulated_credits_exhausted", "credits_daily_limit_reached", "credits_weekly_limit_reached", "runtime_spend_limit_reached"]) {
+    assert.equal(runtimeStartRecovery(code, 402), "spend", code);
+  }
+  assert.equal(runtimeStartRecovery("some_future_code", 402), "spend");
+  // Not a quota problem: a rate limit, a lock of another cause, a code nobody has heard of, and no code at all.
+  assert.equal(runtimeStartRecovery("rate_limited", 429), "retry");
+  assert.equal(runtimeStartRecovery("some_future_code", 423), "retry");
+  assert.equal(runtimeStartRecovery("runtime_start_timeout", 504), "retry");
+  assert.equal(runtimeStartRecovery(null, 500), "retry");
+  assert.equal(runtimeStartRecovery(undefined), "retry");
+});

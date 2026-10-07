@@ -78,6 +78,7 @@ function mount(state: unknown = null, path = "/app/chat") {
     <Route path="/app/account" element={<div>account and usage</div>} />
     <Route path="/app/account/simulated/:page" element={<div>simulated wallet</div>} />
     <Route path="/app/files" element={<div>knowledge base</div>} />
+    <Route path="/app/autopilot" element={<div>scheduled tasks</div>} />
     <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
   </Routes></MemoryRouter>);
 }
@@ -485,6 +486,258 @@ describe("native frame identity and readiness", () => {
     });
   });
 
+  describe("a conversation opened while the previous task's runtime is still being cleaned up", () => {
+    // 2026-10-07, audit B03 (P0): one stuck cleanup refused every start of a project for hours, and the
+    // page offered 「查看科研额度」 and nothing else — the refusal was classed as a ceiling and every
+    // ceiling read as a spending one. The refusal is said for what it is: a wait, on the cover; and
+    // when the wait is long, the retry and the way to what the project already holds.
+    const WAIT_LINE = "正在清理上一次任务的运行环境，完成后自动继续";
+    const GAVE_UP = "运行环境还没有清理完成，暂时不能继续这个对话。稍后再试，已有成果可以先阅读。";
+    const cleaning = (status = 503, code = "runtime_cleanup_required") => new WebApiError("The previous runtime needs cleanup.", { status, code, retryAfterSeconds: 5 });
+    const noQuotaPage = () => {
+      expect(screen.queryByRole("button", { name: /额度|用量/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: "去模拟充值" })).toBeNull();
+    };
+
+    it("covers the conversation with its title and one line, asks again by itself, and opens when the cleanup is done", async () => {
+      vi.useFakeTimers();
+      rememberConversationTitles([{ sessionId: "session-a", title: "ASPREE试验主要结论" } as WebAgentRun]);
+      mocks.start.mockRejectedValueOnce(cleaning());
+      mocks.start.mockRejectedValueOnce(cleaning());
+      mocks.start.mockResolvedValue(undefined);
+      const { container } = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      const cover = screen.getByRole("status");
+      expect(cover).toHaveTextContent("ASPREE试验主要结论");
+      expect(cover).toHaveTextContent(WAIT_LINE);
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByRole("button", { name: /重试|已有成果/ })).toBeNull();
+      noQuotaPage();
+      expect(mocks.start).toHaveBeenCalledTimes(1);
+      // At the pace the control plane named (five seconds), not before.
+      await act(async () => { await vi.advanceTimersByTimeAsync(4_900); });
+      expect(mocks.start).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      expect(mocks.start).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole("status")).toHaveTextContent(WAIT_LINE);
+      const bindings = mocks.create.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
+      // The third ask finds the cleanup done: the conversation opens again, against a runtime that is up.
+      expect(mocks.start.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(mocks.create.mock.calls.length).toBeGreaterThan(bindings);
+      expect(screen.queryByText(WAIT_LINE)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+
+    it("says it for a runtime that is still stopping the same way", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValue(new WebApiError("The runtime is stopping; retry shortly.", { status: 409, code: "runtime_busy" }));
+      mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByRole("status")).toHaveTextContent(WAIT_LINE);
+      expect(screen.queryByRole("alert")).toBeNull();
+      noQuotaPage();
+    });
+
+    it("says it before the start is refused, when the status already reports a cleanup under way", async () => {
+      vi.useFakeTimers();
+      mocks.create.mockImplementation(() => new Promise(() => {}));
+      mocks.start.mockImplementation(() => new Promise(() => {}));
+      mocks.status.mockResolvedValue({ running: false, provider: "docker", startStage: null, startError: null, cleanupPending: true });
+      mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByRole("status")).toHaveTextContent(WAIT_LINE);
+      mocks.status.mockResolvedValue({ running: false, provider: "docker", startStage: "environment", startError: null, cleanupPending: false });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_600); });
+      expect(screen.getByRole("status")).toHaveTextContent("正在打开");
+      expect(screen.getByRole("status")).not.toHaveTextContent(WAIT_LINE);
+    });
+
+    it("takes the frame document's own notice as the same wait", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockResolvedValue(undefined);
+      const { container } = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      const detail = errorCodeMessage("runtime_cleanup_required");
+      emit(container.querySelector("iframe")!, { type: "evimed.runtime-ui.notice", code: "runtime_cleanup_required", title: "对话暂时打不开", detail });
+      expect(screen.getByRole("status")).toHaveTextContent(WAIT_LINE);
+      expect(screen.queryByRole("alert")).toBeNull();
+      noQuotaPage();
+      const bindings = mocks.create.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
+      // One ask found the cleanup done and the conversation is opened again.
+      expect(mocks.create.mock.calls.length).toBeGreaterThan(bindings);
+      expect(screen.queryByText(WAIT_LINE)).toBeNull();
+    });
+
+    it("after two minutes says it is taking long, with 重试 and the way to what the project holds — never the quota page", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValue(cleaning());
+      mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(100_000); });
+      expect(screen.getByRole("status")).toHaveTextContent(WAIT_LINE);
+      expect(screen.queryByRole("alert")).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(40_000); });
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(GAVE_UP);
+      expect(screen.getByRole("button", { name: "重试" })).toHaveFocus();
+      expect(screen.getByRole("button", { name: "查看已有成果" })).toBeInTheDocument();
+      noQuotaPage();
+      expect(screen.queryByText(WAIT_LINE)).toBeNull();
+      // Not asked without end: the allowance of waiting is spent.
+      const asked = mocks.start.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+      expect(mocks.start.mock.calls.length).toBe(asked);
+    });
+
+    it("重试 gives it a fresh allowance, and the brief the reader came with is sent when it opens", async () => {
+      vi.useFakeTimers();
+      const intent = { kind: "create", sessionId: "session-new", draft: "我的草稿：司美格鲁肽的心血管获益", requestId: "request-draft", projectId: "default" };
+      mocks.start.mockRejectedValue(cleaning());
+      const { container } = mount({ runtimeUiIntent: intent }, "/app/chat");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
+      expect(screen.getByRole("alert")).toHaveTextContent(GAVE_UP);
+      // The cleanup finished meanwhile.
+      mocks.start.mockReset(); mocks.start.mockResolvedValue(undefined);
+      const bindings = mocks.create.mock.calls.length;
+      await act(async () => { screen.getByRole("button", { name: "重试" }).click(); await vi.advanceTimersByTimeAsync(0); });
+      expect(mocks.create.mock.calls.length).toBe(bindings + 1);
+      expect(screen.queryByRole("alert")).toBeNull();
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", requestId: "request-draft", intent: { sessionId: "session-new", draft: intent.draft } });
+    });
+
+    it("重试 after the give-up waits again for a fresh two minutes if the cleanup is still not done", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValue(cleaning());
+      mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
+      expect(screen.getByRole("alert")).toHaveTextContent(GAVE_UP);
+      await act(async () => { screen.getByRole("button", { name: "重试" }).click(); await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByRole("status")).toHaveTextContent(WAIT_LINE);
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(screen.queryByRole("alert")).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(80_000); });
+      expect(screen.getByRole("alert")).toHaveTextContent(GAVE_UP);
+    });
+
+    it("查看已有成果 opens the report this conversation delivered, read without a runtime", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValue(cleaning());
+      mocks.listRuns.mockResolvedValue([
+        { id: "run_other", sessionId: "session-other", createdAt: "2026-10-07T09:00:00.000Z", artifacts: ["deliverables/other.md"] },
+        { id: "run_old", sessionId: "session-a", createdAt: "2026-10-06T09:00:00.000Z", artifacts: ["deliverables/old.md"] },
+        { id: "run_new", sessionId: "session-a", createdAt: "2026-10-07T09:00:00.000Z", artifacts: ["deliverables/notes.md", "deliverables/clinical-evidence-report.md"] },
+      ]);
+      mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
+      await act(async () => { screen.getByRole("button", { name: "查看已有成果" }).click(); await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByTestId("path")).toHaveTextContent("/app/runs/run_new/files/deliverables/clinical-evidence-report.md");
+      expect(screen.getByText("run file reader")).toBeInTheDocument();
+    });
+
+    it("查看已有成果 opens the project's files when the conversation delivered nothing, or the ledger cannot be read", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValue(cleaning());
+      mocks.listRuns.mockResolvedValue([{ id: "run_a", sessionId: "session-a", createdAt: "2026-10-07T09:00:00.000Z", artifacts: [] }]);
+      const first = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
+      await act(async () => { screen.getByRole("button", { name: "查看已有成果" }).click(); await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByTestId("path")).toHaveTextContent("/app/files");
+      first.unmount();
+
+      mocks.listRuns.mockRejectedValue(new Error("ledger down"));
+      mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
+      await act(async () => { screen.getByRole("button", { name: "查看已有成果" }).click(); await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByTestId("path")).toHaveTextContent("/app/files");
+    });
+
+    it("says the same for a binding refused for the cleanup, and waits for it the same way", async () => {
+      vi.useFakeTimers();
+      mocks.create.mockRejectedValueOnce(cleaning());
+      mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByRole("status")).toHaveTextContent(WAIT_LINE);
+      expect(screen.queryByRole("alert")).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
+      expect(mocks.create.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByText(WAIT_LINE)).toBeNull();
+    });
+  });
+
+  describe("every other refusal of a start is said for its own cause", () => {
+    it("tells the project's own scheduled research from a quota: its own sentence, a retry, and the scheduled tasks — no usage page", async () => {
+      mocks.start.mockRejectedValue(new WebApiError("This project runtime is completing bounded proactive research.", { status: 423, code: "runtime_reserved_for_autopilot" }));
+      mount(null, "/app/chat/session-a");
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("这个项目正在执行你设定的定时研究，结束后即可继续。");
+      expect(alert).not.toHaveTextContent("主动研究");
+      expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /额度|用量/ })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "查看定时任务" }));
+      expect(screen.getByTestId("path")).toHaveTextContent("/app/autopilot");
+      expect(screen.getByText("scheduled tasks")).toBeInTheDocument();
+    });
+
+    it("reads the autopilot hold on the frame document's notice page the same way", async () => {
+      const { container } = mount(null, "/app/chat/session-a");
+      await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+      emit(container.querySelector("iframe")!, { type: "evimed.runtime-ui.notice", code: "runtime_reserved_for_autopilot", title: "对话暂时打不开", detail: errorCodeMessage("runtime_reserved_for_autopilot") });
+      expect(await screen.findByRole("alert")).toHaveTextContent("这个项目正在执行你设定的定时研究，结束后即可继续。");
+      expect(screen.getByRole("button", { name: "查看定时任务" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /额度|用量/ })).toBeNull();
+    });
+
+    it("does not call a rate limit, or a lock of another cause, a quota problem: a retry and nothing else", async () => {
+      for (const refusal of [
+        new WebApiError("Too many requests.", { status: 429, code: "rate_limited" }),
+        new WebApiError("Locked.", { status: 423, code: "some_future_lock" }),
+      ]) {
+        mocks.create.mockRejectedValueOnce(refusal);
+        const view = mount();
+        const alert = await screen.findByRole("alert");
+        expect(alert).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /额度|用量|已有成果|定时任务/ })).toBeNull();
+        view.unmount();
+      }
+    });
+
+    it("keeps the spending refusals to the allowance page whichever way they arrive", async () => {
+      // The start call, the binding and the notice page agree: a spend refusal is the one cause the page lifts.
+      mocks.start.mockRejectedValueOnce(new WebApiError("This request would exceed the usage limit.", { status: 402, code: "usage_budget_exceeded" }));
+      const view = mount(null, "/app/chat/session-a");
+      expect(await screen.findByRole("alert")).toHaveTextContent(errorCodeMessage("usage_budget_exceeded"));
+      expect(screen.getByRole("button", { name: "查看用量" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+      view.unmount();
+
+      const { container } = mount(null, "/app/chat/session-a");
+      await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+      emit(container.querySelector("iframe")!, { type: "evimed.runtime-ui.notice", code: "credits_exhausted", title: "对话暂时打不开", detail: errorCodeMessage("credits_exhausted") });
+      expect(await screen.findByRole("alert")).toHaveTextContent(errorCodeMessage("credits_exhausted"));
+      expect(await screen.findByRole("button", { name: "查看用量" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    });
+  });
+
   it("offers retry on frame failure without silently switching dispatchers", async () => {
     mocks.create.mockRejectedValueOnce(new Error("Unavailable")); mount();
     expect(await screen.findByRole("alert")).toHaveTextContent("对话暂时无法连接");
@@ -619,7 +872,8 @@ describe("native frame identity and readiness", () => {
     const { container, unmount } = mount(null, "/app/chat/session-a");
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
     emit(container.querySelector("iframe")!, { type: "evimed.runtime-ui.notice", code: "runtime_limit_exceeded", title: "对话暂时打不开", detail: "" });
-    expect(await screen.findByRole("alert")).toHaveTextContent("对话暂时打不开");
+    // Said as the cap it is, whatever the page titled itself: the code decides what the refusal is.
+    expect(await screen.findByRole("alert")).toHaveTextContent("你同时进行的研究已达上限，先结束一个再试。");
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "去模拟充值" })).toBeNull();
     expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
