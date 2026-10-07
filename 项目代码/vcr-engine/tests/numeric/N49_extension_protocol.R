@@ -87,3 +87,43 @@ vcr_case("N49c", c("AC-04", "AC-30"), function() {
        detail = sprintf("%d domain examples across %d methods, every one a valid job that the engine runs to a result: %s", length(rows), length(methods),
                         paste(vapply(rows, function(x) sprintf("%s (%s)", x$m, if (x$valid && x$ran) "ok" else "FAILED"), character(1)), collapse = ", ")))
 })
+
+vcr_case("N49d", c("AC-26", "AC-30"), function() {
+  # A caller's key is read exactly. R's `$` on a list matches a key by its prefix (`input$location` returned `locationX`; case N30 and the
+  # 2026-09-29 review), and the per-kind key lists keep that unexploitable only where the lists are right; the code that reads a caller's
+  # scenario in this release does not rely on them: every new reader takes its keys with `[["key"]]`. The scan reads the source of the new
+  # files and of the new functions in the shared ones and fails on a `$` applied to a variable that holds something a caller wrote.
+  root <- VCR_ROOT
+  read_src <- function(f) readLines(file.path(root, "R", f), warn = FALSE, encoding = "UTF-8")
+  function_lines <- function(lines, name) {
+    start <- which(startsWith(lines, paste0(name, " <- function")))
+    if (!length(start)) return(NULL)
+    nxt <- which(grepl("^[.A-Za-z_][.A-Za-z0-9_]* <- function", lines) & seq_along(lines) > start[1])
+    lines[start[1]:((if (length(nxt)) nxt[1] else length(lines) + 1L) - 1L)]
+  }
+  # the names this release gives to what a caller wrote (the scenario and the objects inside it); internal lists have other names
+  holders <- c("sc", "tr", "an", "acc", "re", "d", "job", "scenario", "truth", "analysis", "spec", "row", "v", "declared")
+  pattern <- sprintf("(^|[^A-Za-z0-9_.\"'])(%s)\\$[A-Za-z_]", paste(holders, collapse = "|"))
+  targets <- list(
+    list("longitudinal.R", NULL),
+    list("single_arm.R", NULL),
+    list("population.R", c(".vcr_declared_scenario", ".vcr_declared_literature", ".vcr_rule_columns", ".vcr_profile_kind", ".vcr_profile_variable", "vcr_population_profile")),
+    list("assurance.R", c("vcr_gs_exits", "vcr_assurance_group_sequential", "vcr_assurance_group_sequential_simulated")),
+    list("engine.R", c(".vcr_job_assurance_group_sequential")))
+  hits <- character(0); scanned <- 0L; functions <- 0L
+  for (tg in targets) {
+    lines <- read_src(tg[[1]])
+    bodies <- if (is.null(tg[[2]])) list(lines) else lapply(tg[[2]], function(nm) { b <- function_lines(lines, nm); if (is.null(b)) hits <<- c(hits, paste(tg[[1]], nm, "not found")); b })
+    for (b in bodies) {
+      if (is.null(b)) next
+      functions <- functions + 1L; scanned <- scanned + length(b)
+      code <- b[!grepl("^\\s*#", b)]
+      code <- sub("#.*$", "", code)    # a trailing comment may talk about `x$y`
+      bad <- grep(pattern, code, perl = TRUE, value = TRUE)
+      if (length(bad)) hits <- c(hits, paste0(tg[[1]], ": ", trimws(substr(bad[1], 1, 90))))
+    }
+  }
+  list(pass = !length(hits) && functions >= 12L && scanned > 500L,
+       detail = sprintf("%d new files / functions, %d lines scanned: %s", functions, scanned,
+                        if (length(hits)) paste0("a caller's key read with $: ", paste(hits, collapse = "; ")) else "every caller key is read with [[ ]]"))
+})

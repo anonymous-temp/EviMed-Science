@@ -638,8 +638,8 @@ VCR_PROFILE_BINS <- 7L
       hist <- .vcr_profile_histogram(xs)
       if (empirical) {
         names(hist$counts) <- seq_along(hist$counts)
-        sc <- vcr_suppress_cells(stats::setNames(as.numeric(hist$counts), seq_along(hist$counts)), min_cell)
-        shown <- vapply(sc$cells %||% list(), function(cell) if (is.null(cell$merged)) as.character(cell$level) else NA_character_, character(1))
+        kept <- vcr_suppress_cells(stats::setNames(as.numeric(hist$counts), seq_along(hist$counts)), min_cell)
+        shown <- vapply(kept$cells %||% list(), function(cell) if (is.null(cell[["merged"]])) as.character(cell[["level"]]) else NA_character_, character(1))
         positive <- hist$counts > 0
         hide <- positive & !(as.character(seq_along(hist$counts)) %in% shown)
         if (any(hide)) suppressed <- c(suppressed, "histogram")
@@ -662,10 +662,10 @@ VCR_PROFILE_BINS <- 7L
     counts <- vapply(levels, function(l) if (l %in% names(present)) as.numeric(present[[l]]) else 0, numeric(1))
     hide <- rep(FALSE, length(levels)); withheld <- NULL
     if (empirical) {
-      sc <- vcr_suppress_cells(stats::setNames(counts, levels), min_cell)
-      if (!is.null(sc$withheld)) { hide[] <- TRUE; withheld <- sc$withheld }
+      kept <- vcr_suppress_cells(stats::setNames(counts, levels), min_cell)
+      if (!is.null(kept[["withheld"]])) { hide[] <- TRUE; withheld <- kept[["withheld"]] }
       else {
-        shown <- vapply(sc$cells, function(cell) if (is.null(cell$merged)) as.character(cell$level) else NA_character_, character(1))
+        shown <- vapply(kept$cells, function(cell) if (is.null(cell[["merged"]])) as.character(cell[["level"]]) else NA_character_, character(1))
         hide <- counts > 0 & !(levels %in% shown)
       }
       if (any(hide)) suppressed <- c(suppressed, "levels")
