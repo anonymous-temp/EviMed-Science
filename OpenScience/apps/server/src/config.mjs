@@ -1915,6 +1915,19 @@ export function loadConfig(overrides = {}) {
     runtimeStartWaitMs: Number(
       overrides.runtimeStartWaitMs ?? process.env.OPEN_SCIENCE_RUNTIME_START_WAIT_MS ?? 180_000,
     ),
+    // A runtime whose container removal was not confirmed holds its project
+    // (`runtime_cleanup_required`) until it is, and is retried with a growing
+    // pause (`RuntimeManager.reconcileFailedStops`): the first step, doubling up
+    // to the ceiling. A start also retries it when asked, at most every five
+    // seconds. Without a retry the hold lasted until the process restarted (six
+    // hours, 2026-10-07); with an unbounded fast one a wedged container would be
+    // hammered, so the ceiling is five minutes.
+    runtimeCleanupRetryMs: Number(
+      overrides.runtimeCleanupRetryMs ?? process.env.OPEN_SCIENCE_RUNTIME_CLEANUP_RETRY_MS ?? 15_000,
+    ),
+    runtimeCleanupRetryMaxMs: Number(
+      overrides.runtimeCleanupRetryMaxMs ?? process.env.OPEN_SCIENCE_RUNTIME_CLEANUP_RETRY_MAX_MS ?? 300_000,
+    ),
     // How long a researcher's start waits for a background runtime that is
     // still coming up or going down before it retires the ones that are up
     // (`RuntimeManager.yieldBackgroundRuntimes`): a runtime start is seconds.

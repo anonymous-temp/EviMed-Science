@@ -52,6 +52,7 @@ test("the idle sweep leaves a runtime whose ledger still runs a run, and reaps i
   manager.stopIdleRuntime = async (stopping) => {
     stopped.push(stopping.id);
     manager.runtimes.delete(manager.key(stopping));
+    return true;
   };
   await manager.start(project);
   const key = manager.key(project);
@@ -66,6 +67,26 @@ test("the idle sweep leaves a runtime whose ledger still runs a run, and reaps i
   manager.runtimeActivity.get(key).lastUseAt = Date.now() - 120_000;
   assert.equal(await manager.sweepIdleRuntimes(), 1);
   assert.deepEqual(stopped, ["paper1"]);
+  await manager.closeAll();
+});
+
+test("the idle sweep counts a stop that completed, not one that threw or was skipped", async () => {
+  const manager = managerWith({ runtimeIdleTimeoutMs: 60_000 }, { hasRunningRuns: async () => false });
+  const outcomes = [new Error("Unconfirmed close"), false, true];
+  const asked = [];
+  manager.stopIdleRuntime = async (stopping) => {
+    asked.push(stopping.id);
+    const outcome = outcomes.shift();
+    if (outcome instanceof Error) throw outcome;
+    return outcome;
+  };
+  const projects = ["one", "two", "three"].map((id) => ({ ...project, id, workspaceDir: `${project.workspaceDir}-${id}` }));
+  for (const each of projects) {
+    await manager.start(each);
+    manager.runtimeActivity.get(manager.key(each)).lastUseAt = Date.now() - 120_000;
+  }
+  assert.equal(await manager.sweepIdleRuntimes(), 1, "three stops asked, one completed");
+  assert.deepEqual(asked, ["one", "two", "three"], "a stop that threw does not end the sweep");
   await manager.closeAll();
 });
 

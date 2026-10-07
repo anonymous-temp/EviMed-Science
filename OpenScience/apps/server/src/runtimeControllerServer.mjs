@@ -397,6 +397,24 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     } catch { /* a log line is never a reason to refuse a launch */ }
   }
 
+  /** One line per container removal Docker refused. The answer to the web process is the fixed sentence above, so
+   *  without this the reason ("removal already in progress", a daemon timeout) was discarded here and the project it
+   *  held stayed stuck for hours with no way to say why (2026-10-07). The cause is the tail of Docker's own message,
+   *  bounded; Docker names containers and never credentials, and a log line is never a reason to fail the answer. */
+  function logCleanupFailure(project, containerName, cleanup) {
+    try {
+      process.stderr.write(`${JSON.stringify({
+        at: new Date().toISOString(),
+        event: "runtime.cleanup_failed",
+        reason: cleanup.reason,
+        containerName,
+        userId: project.userId,
+        projectId: project.id,
+        cause: String(cleanup.error || cleanup.stderr || cleanup.stdout || "").replace(/\s+/g, " ").trim().slice(-300),
+      })}\n`);
+    } catch { /* see above */ }
+  }
+
   function withProjectOperation(project, operation) {
     const key = `${project.userId}:${project.id}`;
     const previous = projectOperations.get(key) ?? Promise.resolve();
@@ -497,6 +515,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     runtimeOwners.delete(containerName);
     runtimeExitOutput.delete(containerName);
     if (cleanup.failed) {
+      logCleanupFailure(project, containerName, cleanup);
       throw controllerFailure(502, "runtime_cleanup_failed", "Runtime controller could not clean up the runtime container.");
     }
     return {

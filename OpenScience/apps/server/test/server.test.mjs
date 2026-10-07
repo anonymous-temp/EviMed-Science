@@ -609,6 +609,12 @@ test("operator metrics endpoint requires a bearer token and exposes only low-car
       assert.match(body, /^open_science_runtime_start_wait_seconds_total\{audience="researcher"\} 0$/m);
       assert.match(body, /^open_science_runtime_start_wait_seconds_max\{audience="researcher"\} 0$/m);
       assert.match(body, /^open_science_runtime_start_waiting\{audience="background"\} 0$/m);
+      // A container removal that was not confirmed holds its project until it is (2026-10-07).
+      assert.match(body, /^open_science_runtime_cleanup_pending 0$/m);
+      assert.match(body, /^open_science_runtime_cleanup_oldest_age_seconds 0$/m);
+      assert.match(body, /^open_science_runtime_cleanup_retries_total\{result="recovered"\} 0$/m);
+      assert.match(body, /^open_science_runtime_cleanup_retries_total\{result="confirmed_gone"\} 0$/m);
+      assert.match(body, /^open_science_runtime_cleanup_retries_total\{result="failed"\} 0$/m);
       assert.match(body, /^open_science_runtime_proxy_active \d+$/m);
       assert.match(body, /^open_science_runtime_proxy_limit\{scope="global"\} 64$/m);
       assert.match(body, /^open_science_runtime_proxy_limit\{scope="project"\} 8$/m);

@@ -134,6 +134,18 @@
           }
         },
         {
+          "alert": "OpenScienceRuntimeCleanupStuck",
+          "expr": "open_science_runtime_cleanup_oldest_age_seconds > 900",
+          "for": "5m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "A project's runtime has been waiting for its container removal for over fifteen minutes",
+            "description": "The previous runtime's container could not be confirmed removed, so that project's conversations are refused until it is. The platform retries by itself with a growing pause (five minutes at most); an age this long means the retries keep failing, for example a wedged container or a Docker daemon that refuses the removal."
+          }
+        },
+        {
           "alert": "OpenScienceMemoryIndexRefusingWrites",
           "expr": "open_science_memory_index_writing == 0",
           "for": "15m",
