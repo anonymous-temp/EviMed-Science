@@ -382,12 +382,12 @@ export class SkillLibraryService {
   /** The platform's own skills, from the control plane's packages: no runtime, session or project needed. @param {any} user */
   async listPlatform(user) {
     if (!this.platformCatalogue) throw new HttpError(503, 'product_state_unavailable', 'The platform skill list is unavailable.');
-    return this.withLibraryAccount(user, () => this.platformCatalogue.list());
+    return this.withLibraryAccount(user, () => this.platformCatalogue.list(user));
   }
   /** @param {any} user @param {string} id */
   async readPlatform(user, id) {
     if (!this.platformCatalogue) throw new HttpError(503, 'product_state_unavailable', 'The platform skill list is unavailable.');
-    return this.withLibraryAccount(user, () => this.platformCatalogue.read(id));
+    return this.withLibraryAccount(user, () => this.platformCatalogue.read(id, user));
   }
   /**
    * `POST /api/skills/platform/:id/copy`: a platform skill becomes the account's own, to edit. The title is the researcher's
@@ -400,7 +400,7 @@ export class SkillLibraryService {
     if (!this.platformCatalogue || !this.artifacts) throw new HttpError(503, 'product_state_unavailable', 'Skill copying is unavailable.');
     const catalogue = this.platformCatalogue;
     return this.withLibraryAccount(user, client => this.copyBuiltin(user, client, { idempotencyKey: input.idempotencyKey, title: input.title,
-      requestDigest: sha256(canonicalJson({ platformSkill: id, title: input.title })), snapshot: () => catalogue.snapshot(id) }));
+      requestDigest: sha256(canonicalJson({ platformSkill: id, title: input.title })), snapshot: () => catalogue.snapshot(id, user) }));
   }
   /** Deleting raw input cannot remove any adopted revision. @param {any} user @param {string} resourceId */
   async removeUpload(user, resourceId) {

@@ -55,6 +55,7 @@ import { createSkillLibraryRoutes } from "./skillLibraryRoutes.mjs";
 import { SkillSupply } from "./skillSupplyService.mjs";
 import { NativeSkillCatalogue } from "./nativeSkillCatalogue.mjs";
 import { createPlatformSkillCatalogue } from "./platformSkillCatalogue.mjs";
+import { moduleState } from "./deploymentComposition.mjs";
 import { PersonalSkillRepositoryImport } from "./personalSkillRepositoryImport.mjs";
 import { PersonalSkillTransfer } from "./personalSkillTransfer.mjs";
 import { createPersonalSkillTransferRoutes } from "./personalSkillTransferRoutes.mjs";
@@ -1150,7 +1151,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
     artifacts: skillArtifacts, supply: skillSupply,
     // The skills the platform ships, listed and read from the control plane's own packages — no runtime needed.
-    platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir }),
+    platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir, packAllowed: user => moduleState(config, user, "geo") === "on" }),
     projectAccess: async (user, project) => {
       const current = await store.requireProject(user, project.id);
       if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");

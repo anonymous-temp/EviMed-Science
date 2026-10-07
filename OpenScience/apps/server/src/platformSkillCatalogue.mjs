@@ -31,7 +31,9 @@ import { HttpError } from "./security.mjs";
  * folder; where it is not, there is no such group. Its skills carry no Chinese
  * words of their own, so they are shown by the pack's names and the first
  * sentence of its descriptions, and they can be read but never copied (the
- * pack is the owner's, not a template).
+ * pack is the owner's, not a template). Only an account the module is open to
+ * is shown them (`packAllowed`): the pack is proprietary, and a folder that
+ * reaches an image must not become something every signed-in account can read.
  *
  * A skill's id here is `<origin>:<name>` (`curated:survival-analysis`), the shape every other product id has, so it is one
  * path segment without an encoded slash a proxy might fold.
@@ -120,9 +122,10 @@ export async function readSkillFolder(directory) {
 }
 
 /**
- * @param {{ rootDir: string, packages?: ReadonlyMap<string, any>, display?: typeof SKILL_DISPLAY, now?: () => number }} options
+ * @param {{ rootDir: string, packages?: ReadonlyMap<string, any>, display?: typeof SKILL_DISPLAY, now?: () => number,
+ *   packAllowed?: (user: any) => boolean }} options
  */
-export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGES, display = SKILL_DISPLAY, now = () => Date.now() }) {
+export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGES, display = SKILL_DISPLAY, now = () => Date.now(), packAllowed = () => false }) {
   /** @type {{ at: number, rows: any[] } | null} */
   let cached = null;
 
@@ -169,9 +172,12 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
     return all;
   }
 
-  /** @param {string} id */
-  async function find(id) {
-    const row = (await rows()).find((candidate) => candidate.id === id);
+  /** The rows this account may see: the pack's only for an account the module is open to. @param {any} user */
+  const visible = async (user) => (await rows()).filter((row) => row.group !== SKILL_DISPLAY_GEO_GROUP || packAllowed(user));
+
+  /** @param {string} id @param {any} user */
+  async function find(id, user) {
+    const row = (await visible(user)).find((candidate) => candidate.id === id);
     if (!row) throw new HttpError(404, "skill_platform_not_found", "This skill is not part of the platform's skills.");
     return row;
   }
@@ -180,13 +186,13 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
   const publicRow = ({ directory: _directory, ...row }) => row;
 
   return {
-    /** Every skill a researcher is offered, in the groups' order (a group with no skill is simply not drawn). */
-    async list() {
-      return { groups: [...SKILL_DISPLAY_GROUPS], items: (await rows()).map(publicRow) };
+    /** Every skill a researcher is offered, in the groups' order (a group with no skill is simply not drawn). @param {any} user */
+    async list(user) {
+      return { groups: [...SKILL_DISPLAY_GROUPS], items: (await visible(user)).map(publicRow) };
     },
-    /** One skill: its words and, where this image carries the folder, its full text. @param {string} id */
-    async read(id) {
-      const row = await find(id);
+    /** One skill: its words and, where this image carries the folder, its full text. @param {string} id @param {any} user */
+    async read(id, user) {
+      const row = await find(id, user);
       let instructions = null;
       if (row.directory) {
         try {
@@ -199,10 +205,10 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
     /**
      * The folder of a copyable skill as the native importer takes it, with the
      * digest a copy remembers its origin by.
-     * @param {string} id
+     * @param {string} id @param {any} user
      */
-    async snapshot(id) {
-      const row = await find(id);
+    async snapshot(id, user) {
+      const row = await find(id, user);
       if (!row.canCopy || !row.directory) throw new HttpError(409, "skill_platform_not_copyable", "This skill cannot be copied.");
       const entries = await readSkillFolder(row.directory);
       const digest = `sha256:${sha256(canonicalJson(entries.map(({ bytesBase64: _bytes, ...entry }) => entry)))}`;

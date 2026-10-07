@@ -13,6 +13,7 @@ import { SkillLibraryService } from "../src/skillLibraryService.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const reader = { id: "reader" };
 const scratch = [];
 after(async () => { for (const dir of scratch) await fs.rm(dir, { recursive: true, force: true }); });
 async function tempRoot() {
@@ -29,7 +30,7 @@ async function skill(root, relative, text, extra = {}) {
 
 test("the list is the fifty-seven shipped skills in Chinese, in their groups, answered from the packages alone", async () => {
   const catalogue = createPlatformSkillCatalogue({ rootDir: repoRoot });
-  const { groups, items } = await catalogue.list();
+  const { groups, items } = await catalogue.list(reader);
   assert.deepEqual(groups, [...SKILL_DISPLAY_GROUPS]);
   assert.equal(items.length, 57);
   assert.ok(items.every((item) => /[㐀-鿿]/.test(item.title) && /[㐀-鿿]/.test(item.use)), "every row is in Chinese");
@@ -45,39 +46,44 @@ test("the list is the fifty-seven shipped skills in Chinese, in their groups, an
 
 test("one skill reads as its words and its full text without the file's front matter", async () => {
   const catalogue = createPlatformSkillCatalogue({ rootDir: repoRoot });
-  const row = await catalogue.read("curated:survival-analysis");
+  const row = await catalogue.read("curated:survival-analysis", reader);
   assert.equal(row.title, "生存分析");
   assert.equal(row.when, SKILL_DISPLAY["survival-analysis"].when);
   assert.ok(row.instructions && row.instructions.length > 200);
   assert.ok(!row.instructions.startsWith("---"), "the front matter is not the text");
-  await assert.rejects(catalogue.read("curated:no-such-skill"), { status: 404, code: "skill_platform_not_found" });
+  await assert.rejects(catalogue.read("curated:no-such-skill", reader), { status: 404, code: "skill_platform_not_found" });
 });
 
 test("a folder this image does not carry still lists, says no text and offers no copy — and never fails the list", async () => {
   const root = await tempRoot();
   await skill(root, "runtime/skills/curated-scientific/survival-analysis", "---\nname: survival-analysis\ndescription: x\n---\n\nBody text.\n");
   const catalogue = createPlatformSkillCatalogue({ rootDir: root });
-  const { items } = await catalogue.list();
+  const { items } = await catalogue.list(reader);
   assert.equal(items.length, 57);
   const present = items.find((item) => item.name === "survival-analysis");
   const absent = items.find((item) => item.name === "dsh-ppt");
   assert.equal(present.canCopy, true);
   assert.equal(absent.canCopy, false);
-  assert.equal((await catalogue.read("community:dsh-ppt")).instructions, null);
-  assert.equal((await catalogue.read("curated:survival-analysis")).instructions, "Body text.\n");
-  await assert.rejects(catalogue.snapshot("community:dsh-ppt"), { status: 409, code: "skill_platform_not_copyable" });
+  assert.equal((await catalogue.read("community:dsh-ppt", reader)).instructions, null);
+  assert.equal((await catalogue.read("curated:survival-analysis", reader)).instructions, "Body text.\n");
+  await assert.rejects(catalogue.snapshot("community:dsh-ppt", reader), { status: 409, code: "skill_platform_not_copyable" });
 });
 
-test("the method pack is listed under its own group where its folder is present, readable and never copyable", async () => {
+test("the method pack is listed under its own group where its folder is present, readable and never copyable — and only to an account the module is open to", async () => {
   const root = await tempRoot();
   await skill(root, "runtime/skills/geo-private/skills/geo-demo", "---\nname: geo-demo\ndescription: >\n  Audit a delivery package. Second sentence stays out.\n---\n\nPack text.\n");
-  const catalogue = createPlatformSkillCatalogue({ rootDir: root });
-  const { items } = await catalogue.list();
+  const allowed = new Set(["member"]);
+  const catalogue = createPlatformSkillCatalogue({ rootDir: root, packAllowed: (user) => allowed.has(user.id) });
+  const member = { id: "member" };
+  const { items } = await catalogue.list(member);
   const geo = items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP);
   assert.deepEqual(geo.map((item) => [item.id, item.title, item.use, item.canCopy]), [["geo-private:geo-demo", "geo-demo", "Audit a delivery package.", false]]);
-  assert.equal((await catalogue.read("geo-private:geo-demo")).instructions, "Pack text.\n");
-  await assert.rejects(catalogue.snapshot("geo-private:geo-demo"), { code: "skill_platform_not_copyable" });
-  const without = await createPlatformSkillCatalogue({ rootDir: await tempRoot() }).list();
+  assert.equal((await catalogue.read("geo-private:geo-demo", member)).instructions, "Pack text.\n");
+  await assert.rejects(catalogue.snapshot("geo-private:geo-demo", member), { code: "skill_platform_not_copyable" });
+  // An account outside the module sees neither the group nor the text, and reads it as a skill that does not exist.
+  assert.equal((await catalogue.list(reader)).items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP).length, 0);
+  await assert.rejects(catalogue.read("geo-private:geo-demo", reader), { status: 404, code: "skill_platform_not_found" });
+  const without = await createPlatformSkillCatalogue({ rootDir: await tempRoot(), packAllowed: () => true }).list(member);
   assert.equal(without.items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP).length, 0, "no folder, no group");
 });
 
