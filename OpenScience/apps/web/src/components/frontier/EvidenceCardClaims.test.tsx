@@ -60,9 +60,10 @@ describe("the claims of a card", () => {
 });
 
 describe("the disclosure of a card", () => {
-  it("states the model, the dates, what the AI did, who wrote it and who reviewed it", () => {
+  it("states what the AI did, the dates, who wrote it and who reviewed it, and never the name of the model", () => {
     render(<EvidenceDisclosure evidence={{ ...card, disclosure: { ...card.disclosure!, modelVersion: "2026-09", reviewers: [{ name: "王药师", title: "主管药师", affiliation: "某医院" }] } }} />);
-    expect(screen.getByText("AI 模型").nextElementSibling).toHaveTextContent("deepseek-v4-flash 2026-09");
+    expect(screen.queryByText("AI 模型")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/deepseek|2026-09/);
     expect(screen.getByText("AI 做了").nextElementSibling).toHaveTextContent("检索、筛选、抽取、综合");
     expect(screen.getByText("作者").nextElementSibling).toHaveTextContent("李研究");
     expect(screen.getByText("审核").nextElementSibling).toHaveTextContent("王药师，主管药师，某医院");

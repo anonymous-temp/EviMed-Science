@@ -12,6 +12,7 @@ import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
+import { Drawer } from "@/components/ui/Drawer";
 import {
   listEvidenceZones,
   followEvidenceZone,
@@ -25,6 +26,10 @@ const SCOPES: readonly TabItem<Scope>[] = [
   { value: "owned", label: "我创建的" },
   { value: "following", label: "我关注的" },
 ];
+
+/** A zone with no evidence yet reads 「暂无证据」 — not a count of nothing — and stands after the zones that have some. */
+const emptyLast = (zones: EvidenceZone[]) =>
+  [...zones].sort((a, b) => Number(a.evidenceCount === 0) - Number(b.evidenceCount === 0));
 
 export function EvidenceZonesPage() {
   const [params, setParams] = useSearchParams();
@@ -68,6 +73,19 @@ export function EvidenceZonesPage() {
   const capture = useEvidenceScope(`${query}:${scope}:${refresh}`);
   const [busy, setBusy] = useState<string | null>(null);
   const features = useEvidenceFeatures();
+  // 「申请选题」 opens in a drawer from the header; `asking` is the topic already typed in it (an empty zone's link brings its own).
+  const requestable = features.publicPages && !fromItem;
+  const requestParam = params.get("request");
+  const [asking, setAsking] = useState<string | null>(null);
+  useEffect(() => {
+    if (requestParam === null || !requestable) return;
+    setAsking(requestParam);
+    setParams((current) => {
+      const updated = new URLSearchParams(current);
+      updated.delete("request");
+      return updated;
+    }, { replace: true });
+  }, [requestParam, requestable, setParams]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -131,19 +149,30 @@ export function EvidenceZonesPage() {
       if (current()) setBusy(null);
     }
   };
+  // Zones are grouped by kind; the group's name is told only where there is more than one group to tell apart.
+  const kinds = EVIDENCE_ZONE_KINDS.filter((kind) => items.some((zone) => (zone.kind ?? "user") === kind));
   return (
     <PageShell
       title="证据专区"
       back={<FrontierBack />}
       contentClassName="mt-2"
       actions={
-        canCreate && (
-          <Button
-            variant="secondary"
-            onClick={() => setCreating((value) => !value)}
-          >
-            新建专区
-          </Button>
+        (requestable || canCreate) && (
+          <>
+            {requestable && (
+              <Button variant="text" onClick={() => setAsking("")}>
+                申请选题
+              </Button>
+            )}
+            {canCreate && (
+              <Button
+                variant="secondary"
+                onClick={() => setCreating((value) => !value)}
+              >
+                新建专区
+              </Button>
+            )}
+          </>
         )
       }
     >
@@ -181,7 +210,7 @@ export function EvidenceZonesPage() {
           />
         </div>
       )}
-      {total !== null && (
+      {query && total !== null && (
         <p className="mt-3 text-caption text-text-3">{total} 个匹配专区</p>
       )}
       {error && (
@@ -203,13 +232,12 @@ export function EvidenceZonesPage() {
         <EmptyState title={query ? "没有找到匹配的专区" : "暂无证据专区"} />
       ) : (
         <div className="mt-4 space-y-6">
-          {EVIDENCE_ZONE_KINDS.map((kind) => {
-            const zones = items.filter((zone) => (zone.kind ?? "user") === kind);
-            if (!zones.length) return null;
+          {kinds.map((kind) => {
+            const zones = emptyLast(items.filter((zone) => (zone.kind ?? "user") === kind));
             const label = (EVIDENCE_ZONE_KIND_LABELS_ZH as Record<string, string>)[kind];
             return (
               <section key={kind} aria-label={label}>
-                <h2 className="text-ui font-medium text-text">{label}</h2>
+                {kinds.length > 1 && <h2 className="text-ui font-medium text-text">{label}</h2>}
                 <ul className="divide-y divide-border">
                   {zones.map((zone) => (
                     <li
@@ -228,12 +256,12 @@ export function EvidenceZonesPage() {
                             {zone.description}
                           </p>
                         )}
-                        {zone.state === "draft" && (
-                          <p className="mt-2 text-caption text-text-3">草稿</p>
-                        )}
-                        {zone.evidenceCount !== null && (
+                        {(zone.state === "draft" || zone.evidenceCount !== null) && (
                           <p className="mt-2 text-caption text-text-3">
-                            {zone.evidenceCount} 条证据
+                            {[
+                              zone.state === "draft" ? "草稿" : null,
+                              zone.evidenceCount === null ? null : zone.evidenceCount === 0 ? "暂无证据" : `${zone.evidenceCount} 条证据`,
+                            ].filter(Boolean).join(" · ")}
                           </p>
                         )}
                       </div>
@@ -266,12 +294,15 @@ export function EvidenceZonesPage() {
           </Button>
         </div>
       )}
-      {features.publicPages && !fromItem && (
-        <TopicRequests
-          zones={items
-            .filter((zone) => zone.kind === "official" && zone.state === "published")
-            .map((zone) => ({ id: zone.id, title: zone.title }))}
-        />
+      {asking !== null && requestable && (
+        <Drawer title="申请选题" onClose={() => setAsking(null)}>
+          <TopicRequests
+            initialTitle={asking}
+            zones={items
+              .filter((zone) => zone.kind === "official" && zone.state === "published")
+              .map((zone) => ({ id: zone.id, title: zone.title }))}
+          />
+        </Drawer>
       )}
     </PageShell>
   );

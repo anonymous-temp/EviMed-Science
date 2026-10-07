@@ -40,6 +40,11 @@ describe("continuing research from a card", () => {
     await userEvent.click(screen.getByRole("button", { name: "继续" }));
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/chat"));
   });
+  it("says what it does when the pointer rests on it, apart from 问这条证据", async () => {
+    mount(<EvidenceContinueAction evidence={{ id: "ec_1", canResearch: true }} />);
+    await userEvent.hover(screen.getByRole("button", { name: "用这张卡继续研究" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("新建研究，并把主要来源存入知识库");
+  });
   it("shows a refusal by name and stays where it is; and is not offered on a card that may not be researched", async () => {
     client.continueResearchFromCard.mockRejectedValue(new WebApiError("no", { status: 404, code: "evidence_continue_unavailable" }));
     const { container, rerender } = mount(<EvidenceContinueAction evidence={{ id: "ec_1", canResearch: true }} />);
@@ -62,6 +67,13 @@ describe("what a card points to", () => {
     expect(screen.getByRole("link", { name: "后续研究" })).toHaveAttribute("href", "/app/frontier/zones/ez_2/evidence/ec_2");
     expect(screen.getByRole("link", { name: "新版本" })).toBeInTheDocument();
     expect(screen.getByText(/后续版本 ·/)).toBeInTheDocument();
+  });
+  it("hands the card the reader is on to the author's page, so that page can say its way back to it", async () => {
+    client.fetchEvidenceCardLinks.mockResolvedValue(links);
+    mount(<EvidenceCardLinks cardId="ec_1" from={{ to: "/app/frontier/zones/ez_1/evidence/ec_1", label: "试验药能预防卒中吗" }} />);
+    await userEvent.click(await screen.findByRole("link", { name: "李研究" }));
+    expect(screen.getByTestId("where")).toHaveTextContent("/app/frontier/authors/au_0123456789abcdef");
+    expect(JSON.parse(screen.getByTestId("where").getAttribute("data-state")!)).toEqual({ evidenceFrom: { to: "/app/frontier/zones/ez_1/evidence/ec_1", label: "试验药能预防卒中吗" } });
   });
   it("shows only the author when nothing points to or from the card, and nothing while it loads", async () => {
     client.fetchEvidenceCardLinks.mockResolvedValue({ author: links.author, origin: null, previous: null, related: [] });
