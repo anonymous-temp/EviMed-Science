@@ -339,7 +339,12 @@ test("AC-02 AC-35 the T0 chain runs on the real engine: population, patients, co
       `every step the T0 study asks for was computed by a job the orchestrator built; marks: ${JSON.stringify(marks.map((mark) => [mark.key, mark.state, mark.detail.message ?? mark.detail.error ?? null]))}`);
     assert.equal(byKind("design_analytic").length, 2);
     assert.equal(byKind("design_simulation").length, 2);
-    assert.equal(byKind("assurance").length, 1, "assurance for the fixed design whose effect card states a prediction distribution");
+    // the fixed design, whose effect card states a prediction distribution, and the group-sequential one: the engine computes its assurance now
+    // (design.assurance 1.1.0), so the orchestrator builds the stage instead of reporting the combination as not implemented
+    assert.equal(byKind("assurance").length, 2, "assurance for the fixed design and for the group-sequential one");
+    const assuranceDesigns = (await Promise.all(byKind("assurance").map((job) => store.one("SELECT scenario FROM evimed_vcr.jobs WHERE id = $1", [job.id]))))
+      .map((row) => row.scenario.design?.kind ?? "two_arm_fixed").sort();
+    assert.deepEqual(assuranceDesigns, ["group_sequential", "two_arm_fixed"]);
     const reconstruction = await store.one("SELECT scenario, inputs, checkpoint FROM evimed_vcr.jobs WHERE id = $1", [byKind("reconstruct_km")[0].id]);
     assert.deepEqual(reconstruction.scenario.provenance, { kind: "human_click", tool: "EviMed authenticated curve input", toolVersion: "1" });
     assert.equal(reconstruction.checkpoint.curveReceiptId, seed.curve.id);
