@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
@@ -25,6 +25,7 @@ export function Tabs<V extends string>({
   value,
   onChange,
   panelId,
+  trailing,
   className,
 }: {
   /** The tab list's accessible name. */
@@ -33,6 +34,8 @@ export function Tabs<V extends string>({
   value: V;
   onChange: (value: V) => void;
   panelId?: string;
+  /** Controls at the row's end; they sit on the same hairline as the tabs. */
+  trailing?: ReactNode;
   className?: string;
 }) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -48,8 +51,17 @@ export function Tabs<V extends string>({
     onChange(items[next].value);
     refs.current[next]?.focus();
   };
-  return (
-    <div role="tablist" aria-label={label} className={cn("flex min-w-0 items-end gap-6 overflow-x-auto border-b border-border", className)}>
+  const list = (
+    <div
+      role="tablist"
+      aria-label={label}
+      className={cn(
+        "flex min-w-0 items-end gap-6 overflow-x-auto border-b border-border",
+        // With controls beside it the hairline belongs to the row, from `sm` up.
+        trailing && "sm:flex-1 sm:border-b-0",
+        !trailing && className,
+      )}
+    >
       {items.map((item, index) => {
         const selected = item.value === value;
         return (
@@ -76,6 +88,13 @@ export function Tabs<V extends string>({
           </button>
         );
       })}
+    </div>
+  );
+  if (!trailing) return list;
+  return (
+    <div className={cn("flex flex-col sm:flex-row sm:items-end sm:gap-4 sm:border-b sm:border-border", className)}>
+      {list}
+      <div className="flex shrink-0 flex-wrap items-center gap-1 py-1.5 sm:pb-1.5 sm:pt-0">{trailing}</div>
     </div>
   );
 }

@@ -36,6 +36,7 @@ export function PageShell({
   title,
   meta,
   actions,
+  back,
   documentTitle,
   width = "page",
   className,
@@ -49,6 +50,8 @@ export function PageShell({
   meta?: ReactNode;
   /** The page's primary action and at most two icon buttons or a search box. */
   actions?: ReactNode;
+  /** The way back, over the title (「‹ 前沿动态」): a page that is one step down from another. */
+  back?: ReactNode;
   /** The browser tab's name, when it should differ from the heading. */
   documentTitle?: string;
   width?: PageWidth;
@@ -63,6 +66,7 @@ export function PageShell({
       {/* One box: the page gutter (24 px) and the one column, so the header
           and the body cannot disagree about where the left edge is. */}
       <div className={cn("mx-auto w-full px-6 py-6", width === "full" ? "max-w-none" : width === "wide" ? "max-w-wide" : "max-w-page")}>
+        {back && <div className="mb-2">{back}</div>}
         <PageHeader title={title} meta={meta} actions={actions} documentTitle={documentTitle} />
         <div className={cn("mt-6", contentClassName)}>{children}</div>
       </div>

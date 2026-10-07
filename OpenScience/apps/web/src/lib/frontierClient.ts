@@ -33,7 +33,7 @@
  *  - Heat is shown as the server shows it: a whole number (heat × 10), with
  *    the hot list's rank change, badge and trend, and the event page's side
  *    column. How it is computed, in the reader's words, is `@evimed/domain`'s
- *    `FRONTIER_HEAT_METHOD_ZH` (「热度怎么算」), stated from the same numbers.
+ *    `FRONTIER_HEAT_METHOD_ZH`, stated from the same numbers (no longer on the page).
  */
 import {
   FRONTIER_ITEM_FLAG_LABELS_ZH,

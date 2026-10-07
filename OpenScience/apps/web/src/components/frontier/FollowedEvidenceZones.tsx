@@ -43,12 +43,11 @@ export function FollowedEvidenceZones() {
     };
   }, [refresh]);
   return (
-    <section
-      aria-label="关注的证据专区"
-      className="mb-6 border-b border-border pb-4"
-    >
-      <div className="flex items-center justify-between">
-        <h2 className="text-ui font-medium text-text">证据专区</h2>
+    // The first group of the 关注 feed, headed like the day groups below it —
+    // not a bordered block of its own above the feed's filters (2026-10-07).
+    <section aria-label="关注的证据专区">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-body font-semibold leading-6 text-text">证据专区</h2>
         <Link
           to="/app/frontier/zones?scope=following"
           className="text-caption text-accent"

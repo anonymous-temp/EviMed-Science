@@ -1,16 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EVIDENCE_ZONE_KINDS, EVIDENCE_ZONE_KIND_LABELS_ZH } from "@evimed/domain";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useEvidenceScope } from "@/components/frontier/useEvidenceScope";
 import { ZoneEditor } from "@/components/frontier/EvidenceEditors";
 import { TopicRequests } from "@/components/frontier/TopicRequests";
 import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
-import { FilterChips } from "@/components/ui/FilterChips";
+import { Tabs, type TabItem } from "@/components/ui/Tabs";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { PageShell } from "@/components/layout/PageShell";
-import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
+import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EmptyState } from "@/components/cards/EmptyState";
-import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import {
   listEvidenceZones,
@@ -19,19 +19,26 @@ import {
 } from "@/lib/evidenceZoneClient";
 import { evidenceErrorMessage } from "@/lib/evidenceZoneClient";
 
+type Scope = "public" | "owned" | "following";
+const SCOPES: readonly TabItem<Scope>[] = [
+  { value: "public", label: "全部专区" },
+  { value: "owned", label: "我创建的" },
+  { value: "following", label: "我关注的" },
+];
+
 export function EvidenceZonesPage() {
   const [params, setParams] = useSearchParams();
   const fromItem = params.get("fromItem");
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
-  const scope: "public" | "owned" | "following" = fromItem
+  const scope: Scope = fromItem
     ? "owned"
     : params.get("scope") === "following"
       ? "following"
       : params.get("scope") === "owned"
         ? "owned"
         : "public";
-  const setScope = (next: "public" | "owned" | "following") => {
+  const setScope = (next: Scope) => {
     setParams((current) => {
       const updated = new URLSearchParams(current);
       if (next === "public") updated.delete("scope");
@@ -42,6 +49,16 @@ export function EvidenceZonesPage() {
   const [canCreate, setCanCreate] = useState(false);
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
+  // The box commits to the query a moment after typing stops, never in the middle of an IME
+  // composition (pinyin is not a query); Enter commits at once.
+  const composing = useRef(false);
+  const [composed, setComposed] = useState(0);
+  useEffect(() => {
+    const text = q.trim();
+    if (composing.current || text === query) return;
+    const timer = setTimeout(() => setQuery(text), 300);
+    return () => clearTimeout(timer);
+  }, [q, composed, query]);
   const [items, setItems] = useState<EvidenceZone[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -116,7 +133,9 @@ export function EvidenceZonesPage() {
   };
   return (
     <PageShell
-      title="前沿动态"
+      title="证据专区"
+      back={<FrontierBack />}
+      contentClassName="mt-2"
       actions={
         canCreate && (
           <Button
@@ -128,26 +147,28 @@ export function EvidenceZonesPage() {
         )
       }
     >
-      <FrontierNavigation active="zones" />
       {fromItem && (
-        <p className="mt-4 text-ui font-medium text-text">选择证据专区</p>
+        <p className="mb-3 text-ui font-medium text-text">选择证据专区</p>
       )}
-      <div className="mt-4">
-        <FilterChips
-          label="专区范围"
-          options={
-            fromItem
-              ? [{ value: "owned", label: "我创建的" }]
-              : [
-                  { value: "public", label: "全部专区" },
-                  { value: "owned", label: "我创建的" },
-                  { value: "following", label: "我关注的" },
-                ]
-          }
-          value={scope}
-          onChange={setScope}
-        />
-      </div>
+      <Tabs
+        label="专区范围"
+        // Choosing a zone for an item offers the reader's own zones only.
+        items={fromItem ? SCOPES.filter((item) => item.value === "owned") : SCOPES}
+        value={scope}
+        onChange={setScope}
+        trailing={(
+          <SearchInput
+            label="搜索"
+            size="sm"
+            value={q}
+            maxLength={200}
+            onChange={(event) => setQ(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); setQuery(q.trim()); } }}
+            onCompositionStart={() => { composing.current = true; }}
+            onCompositionEnd={(event) => { composing.current = false; setQ(event.currentTarget.value); setComposed((value) => value + 1); }}
+          />
+        )}
+      />
       {creating && (
         <div className="mt-4">
           <ZoneEditor
@@ -160,23 +181,6 @@ export function EvidenceZonesPage() {
           />
         </div>
       )}
-      <form
-        className="mt-6 flex gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setQuery(q.trim());
-        }}
-      >
-        <Input
-          aria-label="搜索证据专区"
-          placeholder="搜索证据专区"
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-        />
-        <Button type="submit" variant="secondary">
-          搜索
-        </Button>
-      </form>
       {total !== null && (
         <p className="mt-3 text-caption text-text-3">{total} 个匹配专区</p>
       )}
