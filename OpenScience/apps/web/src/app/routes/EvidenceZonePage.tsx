@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   useEvidenceScope,
   useEvidenceRequestId,
 } from "@/components/frontier/useEvidenceScope";
 import { fetchFrontierItem, type FrontierItem } from "@/lib/frontierClient";
+import { evidenceReviewLabel } from "@/components/frontier/EvidenceReading";
+import { evidenceDay } from "@/components/frontier/evidenceDate";
 import {
-  evidenceDate,
-  evidenceReviewLabel,
-} from "@/components/frontier/EvidenceReading";
+  evidenceNatureLabel,
+  evidenceVerificationTally,
+} from "@/components/frontier/EvidenceCardHeader";
 import { ZoneEditor, CardEditor } from "@/components/frontier/EvidenceEditors";
 import { EvidenceMaintenance } from "@/components/frontier/EvidenceMaintenance";
 import { EvidenceVisibility } from "@/components/frontier/EvidenceVisibility";
@@ -22,6 +24,7 @@ import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
+import { Menu } from "@/components/ui/Menu";
 import { Input, Textarea } from "@/components/ui/Input";
 import {
   fetchEvidenceZoneDetail,
@@ -134,14 +137,129 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
       if (current()) setBusy(false);
     }
   };
-  return (
-    <PageShell title="证据专区" back={<FrontierBack />}>
-      <Link
-        to="/app/frontier/zones"
-        className="mt-4 inline-block text-caption text-accent"
+  // A zone nobody has written a card for yet offers a reader nothing to search, count or ask: one sentence and the way to be told.
+  const bare =
+    !!zone &&
+    zone.state === "published" &&
+    zone.evidenceCount === 0 &&
+    !query &&
+    !zone.canEdit;
+  const askable = !!zone && zone.canResearch && (zone.evidenceCount ?? 1) > 0;
+  const countLine = !zone
+    ? null
+    : query
+      ? total === null
+        ? null
+        : `${total} 条匹配证据`
+      : zone.canEdit && total !== null && zone.evidenceCount !== null && total > zone.evidenceCount
+        ? `${zone.evidenceCount} 条已发布，含草稿共 ${total} 条`
+        : (zone.evidenceCount ?? total) === null
+          ? null
+          : `${zone.evidenceCount ?? total} 条证据`;
+  const zonePath = zone ? `/app/frontier/zones/${encodeURIComponent(zone.id)}` : "";
+  const bareNote = !zone
+    ? ""
+    : zone.canFollow && !zone.following
+      ? "这个专区还没有证据。关注后，有新证据会出现在“前沿动态”的“关注”里。"
+      : zone.following
+        ? "这个专区还没有证据。有新证据时，会出现在“前沿动态”的“关注”里。"
+        : "这个专区还没有证据。";
+  const publicLink =
+    features.publicPages && zone?.state === "published" && zone.visibility === "internet" ? (
+      <a
+        className="text-accent"
+        href={`${features.publicBasePath ?? DEFAULT_PUBLIC_BASE_PATH}/z/${encodeURIComponent(zone.id)}`}
+        target="_blank"
+        rel="noopener noreferrer"
       >
-        返回证据专区
-      </Link>
+        公开页
+      </a>
+    ) : null;
+  const metaParts = zone
+    ? [
+        zone.state === "draft" ? "草稿" : null,
+        zone.creator || null,
+        zone.createdAt ? evidenceDay(zone.createdAt) : null,
+        publicLink,
+      ].filter((part) => part !== null)
+    : [];
+  return (
+    <PageShell
+      title={zone?.title ?? "证据专区"}
+      back={
+        <FrontierBack
+          trail={[
+            {
+              label: "证据专区",
+              to: `/app/frontier/zones${fromItem ? `?fromItem=${encodeURIComponent(fromItem)}` : ""}`,
+            },
+          ]}
+        />
+      }
+      actions={
+        zone && (
+          <>
+            {zone.canFollow && (
+              <Button
+                variant="secondary"
+                loading={busy}
+                onClick={() =>
+                  void act(async (current) => {
+                    const updated = await followEvidenceZone(zone);
+                    if (current()) setZone(updated);
+                  })
+                }
+              >
+                {zone.following ? "取消关注" : "关注"}
+              </Button>
+            )}
+            {askable && (
+              <Button
+                loading={busy}
+                onClick={() =>
+                  void act(async () => {
+                    const current = capture();
+                    const prepared = await prepareEvidenceResearch(zone);
+                    if (!current()) return;
+                    navigate("/app/chat", {
+                      state: {
+                        runtimeUiIntent: newRuntimeUiIntent(prepared.draft),
+                      },
+                    });
+                  })
+                }
+              >
+                问这个专区
+              </Button>
+            )}
+            {zone.canEdit && (
+              <Menu
+                label="更多操作"
+                items={[
+                  {
+                    label: "编辑专区",
+                    disabled: editing || adding,
+                    onSelect: () => setEditing(true),
+                  },
+                  {
+                    label: zone.state === "published" ? "撤回专区" : "发布专区",
+                    disabled: editing || adding || busy,
+                    onSelect: () =>
+                      void act(async (current) => {
+                        const updated = await publishEvidenceZone(
+                          zone,
+                          zone.state === "published" ? "draft" : "published",
+                        );
+                        if (current()) setZone(updated);
+                      }),
+                  },
+                ]}
+              />
+            )}
+          </>
+        )
+      }
+    >
       {error && (
         <EmptyState
           title={error}
@@ -159,7 +277,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
         <FrontierSkeleton />
       ) : (
         zone && (
-          <div className="mt-4 space-y-6">
+          <div className="space-y-6">
             {editing && (
               <ZoneEditor
                 zone={zone}
@@ -170,108 +288,29 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                 }}
               />
             )}
-            <header>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-section font-semibold text-text">
-                  {zone.title}
-                </h2>
-                <div className="flex flex-wrap gap-2">
-                  {zone.canEdit && (
-                    <>
-                      <Button
-                        variant="text"
-                        disabled={editing || adding}
-                        onClick={() => setEditing(true)}
-                      >
-                        编辑专区
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        disabled={editing || adding}
-                        loading={busy}
-                        onClick={() =>
-                          void act(async (current) => {
-                            const updated = await publishEvidenceZone(
-                              zone,
-                              zone.state === "published"
-                                ? "draft"
-                                : "published",
-                            );
-                            if (current()) setZone(updated);
-                          })
-                        }
-                      >
-                        {zone.state === "published" ? "撤回专区" : "发布专区"}
-                      </Button>
-                    </>
-                  )}
-                  {zone.canFollow && (
-                    <Button
-                      variant="secondary"
-                      loading={busy}
-                      onClick={() =>
-                        void act(async (current) => {
-                          const updated = await followEvidenceZone(zone);
-                          if (current()) setZone(updated);
-                        })
-                      }
-                    >
-                      {zone.following ? "取消关注" : "关注"}
-                    </Button>
-                  )}
-                  {zone.canResearch && (
-                    <Button
-                      loading={busy}
-                      onClick={() =>
-                        void act(async () => {
-                          const current = capture();
-                          const prepared = await prepareEvidenceResearch(zone);
-                          if (!current()) return;
-                          navigate("/app/chat", {
-                            state: {
-                              runtimeUiIntent: newRuntimeUiIntent(
-                                prepared.draft,
-                              ),
-                            },
-                          });
-                        })
-                      }
-                    >
-                      问这个专区
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <p className="mt-2 text-caption text-text-3">
-                {zone.state === "draft" ? "草稿" : "已发布"}
-                {zone.creator && ` · ${zone.creator}`}
-                {zone.createdAt && ` · ${evidenceDate(zone.createdAt)}`}
-                {features.publicPages && zone.state === "published" && zone.visibility === "internet" && (
-                  <>
-                    {" · "}
-                    <a
-                      className="text-accent"
-                      href={`${features.publicBasePath ?? DEFAULT_PUBLIC_BASE_PATH}/z/${encodeURIComponent(zone.id)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      公开页
-                    </a>
-                  </>
-                )}
-              </p>
+            <header className="space-y-2">
+              {metaParts.length > 0 && (
+                <p className="text-caption text-text-3">
+                  {metaParts.map((part, index) => (
+                    <Fragment key={index}>
+                      {index > 0 && " · "}
+                      {part}
+                    </Fragment>
+                  ))}
+                </p>
+              )}
               {zone.description && (
-                <p className="mt-2 max-w-measure text-ui text-text-2">
+                <p className="max-w-measure text-ui text-text-2">
                   {zone.description}
                 </p>
               )}
-              {zone.state === "published" && (
-                <div className="mt-3">
+              {zone.state === "published" && !bare && (
+                <div className="pt-1">
                   <ZoneSubscription zoneId={zone.id} />
                 </div>
               )}
               {(zone.background || zone.experts.length > 0) && (
-                <details className="mt-3 text-ui">
+                <details className="text-ui">
                   <summary className="cursor-pointer text-text-3">
                     领域背景与专家
                   </summary>
@@ -301,141 +340,141 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                 onUpdated={() => setRefresh((value) => value + 1)}
               />
             )}
-            <section aria-label="专区证据">
-              <div className="mb-3 flex flex-wrap gap-3 text-caption text-text-3">
-                {total !== null && <span>{total} 条匹配证据</span>}
-                {zone.evidenceCount !== null && (
-                  <span>{zone.evidenceCount} 条已发布证据</span>
+            {bare ? (
+              <EmptyState
+                title={bareNote}
+                action={
+                  features.publicPages && zone.kind === "official" ? (
+                    <Link
+                      className="text-ui text-accent"
+                      to={`/app/frontier/zones?request=${encodeURIComponent(zone.title)}`}
+                    >
+                      申请这个主题的选题 ›
+                    </Link>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <section aria-label="专区证据">
+                {countLine && (
+                  <p className="mb-3 text-caption text-text-3">{countLine}</p>
                 )}
-                {zone.canEdit && <span>包含我的草稿</span>}
-              </div>
-              {zone.canEdit && (
-                <div className="mb-3">
+                {zone.canEdit && (
+                  <div className="mb-3">
+                    <Button
+                      variant="secondary"
+                      disabled={editing || adding}
+                      onClick={() => setAdding(true)}
+                    >
+                      添加证据
+                    </Button>
+                  </div>
+                )}
+                {adding && zone.canEdit && (
+                  <div className="mb-4">
+                    <CardEditor
+                      key={`${zone.id}:${sourceItem?.id || "new"}`}
+                      zoneId={zone.id}
+                      sourceItem={sourceItem || undefined}
+                      onCancel={() => setAdding(false)}
+                      onSaved={(card) => {
+                        setAdding(false);
+                        navigate(
+                          `/app/frontier/zones/${encodeURIComponent(zone.id)}/evidence/${encodeURIComponent(card.id)}`,
+                        );
+                      }}
+                    />
+                  </div>
+                )}
+                {(items.length > 0 || query) && (
+                  <form
+                    className="flex gap-2"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      setQuery(q.trim());
+                    }}
+                  >
+                    <Input
+                      disabled={editing || adding}
+                      aria-label="搜索当前专区证据"
+                      placeholder="搜索当前专区证据"
+                      value={q}
+                      onChange={(event) => setQ(event.target.value)}
+                    />
+                    <Button
+                      disabled={editing || adding}
+                      type="submit"
+                      variant="secondary"
+                    >
+                      搜索
+                    </Button>
+                  </form>
+                )}
+                {!items.length ? (
+                  <EmptyState
+                    title={query ? "没有找到匹配的证据" : "专区暂无证据"}
+                  />
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {items.map((card) => {
+                      const tally = evidenceVerificationTally(card);
+                      const meta = [
+                        card.state === "draft" ? "草稿" : null,
+                        evidenceNatureLabel(card),
+                        tally ? `核验 ${tally.verified}/${tally.checkable}` : null,
+                        evidenceReviewLabel(card) === "AI 已评议" ? "AI 已评议" : null,
+                      ].filter(Boolean);
+                      return (
+                        <li key={card.id} className="py-3">
+                          <Link
+                            to={`/app/frontier/zones/${encodeURIComponent(zone.id)}/evidence/${encodeURIComponent(card.id)}`}
+                            className="text-ui font-medium text-text hover:text-accent"
+                          >
+                            {card.content?.question || card.title}
+                          </Link>
+                          {(card.content?.answer || card.summary) && (
+                            <p className="mt-1 line-clamp-2 max-w-measure text-ui leading-relaxed text-text-2">
+                              {card.content?.answer || card.summary}
+                            </p>
+                          )}
+                          {meta.length > 0 && (
+                            <p className="mt-1.5 text-caption text-text-3">
+                              {meta.join(" · ")}
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {cursor && (
                   <Button
                     variant="secondary"
-                    disabled={editing || adding}
-                    onClick={() => setAdding(true)}
+                    loading={busy}
+                    onClick={() =>
+                      void act(async (current) => {
+                        const page = await listZoneEvidence(
+                          zone.id,
+                          query,
+                          cursor,
+                          zone.canEdit ? "owned" : undefined,
+                        );
+                        if (current()) {
+                          setItems((previous) => [...previous, ...page.items]);
+                          setCursor(page.nextCursor);
+                        }
+                      })
+                    }
                   >
-                    添加证据
+                    加载更多
                   </Button>
-                </div>
-              )}
-              {adding && zone.canEdit && (
-                <div className="mb-4">
-                  <CardEditor
-                    key={`${zone.id}:${sourceItem?.id || "new"}`}
-                    zoneId={zone.id}
-                    sourceItem={sourceItem || undefined}
-                    onCancel={() => setAdding(false)}
-                    onSaved={(card) => {
-                      setAdding(false);
-                      navigate(
-                        `/app/frontier/zones/${encodeURIComponent(zone.id)}/evidence/${encodeURIComponent(card.id)}`,
-                      );
-                    }}
-                  />
-                </div>
-              )}
-              <form
-                className="flex gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setQuery(q.trim());
-                }}
-              >
-                <Input
-                  disabled={editing || adding}
-                  aria-label="搜索当前专区证据"
-                  placeholder="搜索当前专区证据"
-                  value={q}
-                  onChange={(event) => setQ(event.target.value)}
-                />
-                <Button
-                  disabled={editing || adding}
-                  type="submit"
-                  variant="secondary"
-                >
-                  搜索
-                </Button>
-              </form>
-              {!items.length ? (
-                <EmptyState
-                  title={query ? "没有找到匹配的证据" : "专区暂无证据"}
-                />
-              ) : (
-                <ul className="divide-y divide-border">
-                  {items.map((card) => (
-                    <li key={card.id} className="py-4">
-                      <div className="mb-1 text-caption text-text-3">
-                        {card.subtype === "academic"
-                          ? "学术证据"
-                          : card.subtype === "knowledge"
-                            ? "知识证据卡片"
-                            : card.subtype}
-                        {card.state === "draft" && " · 草稿"}
-                      </div>
-                      <Link
-                        to={`/app/frontier/zones/${encodeURIComponent(zone.id)}/evidence/${encodeURIComponent(card.id)}`}
-                        className="text-ui font-medium text-text hover:text-accent"
-                      >
-                        {card.content?.question || card.title}
-                      </Link>
-                      {(card.content?.answer || card.summary) && (
-                        <p className="mt-2 line-clamp-3 max-w-measure text-ui leading-relaxed text-text-2">
-                          {card.content?.answer || card.summary}
-                        </p>
-                      )}
-                      <div className="mt-2 flex flex-wrap gap-3 text-caption text-text-3">
-                        {card.editorial?.author ? (
-                          <span>
-                            {card.editorial.author.kind === "ai"
-                              ? "AI 编写"
-                              : "编写"}{" "}
-                            · {card.editorial.author.name}
-                          </span>
-                        ) : (
-                          card.creator && <span>创作者 {card.creator}</span>
-                        )}
-                        {card.reviewer && <span>评议者 {card.reviewer}</span>}
-                        {evidenceReviewLabel(card) && (
-                          <span>{evidenceReviewLabel(card)}</span>
-                        )}
-                        {card.editorial?.sourceCheckedAt && (
-                          <span>
-                            来源核查 ·{" "}
-                            {evidenceDate(card.editorial.sourceCheckedAt)}
-                          </span>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {cursor && (
-                <Button
-                  variant="secondary"
-                  loading={busy}
-                  onClick={() =>
-                    void act(async (current) => {
-                      const page = await listZoneEvidence(
-                        zone.id,
-                        query,
-                        cursor,
-                        zone.canEdit ? "owned" : undefined,
-                      );
-                      if (current()) {
-                        setItems((previous) => [...previous, ...page.items]);
-                        setCursor(page.nextCursor);
-                      }
-                    })
-                  }
-                >
-                  加载更多
-                </Button>
-              )}
-            </section>
-            {zone.kind === "official" && zone.state === "published" && <EvidenceCommunityCards zoneId={zone.id} />}
-            {features.upkeep && zone.state === "published" && (
+                )}
+              </section>
+            )}
+            {zone.kind === "official" && zone.state === "published" && (
+              <EvidenceCommunityCards zoneId={zone.id} from={{ to: zonePath, label: zone.title }} />
+            )}
+            {features.upkeep && zone.state === "published" && !bare && (
               <details
                 className="text-ui"
                 onToggle={(event) => {
@@ -460,7 +499,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                     <li key={suggestion.id} className="py-3">
                       <p className="text-caption text-text-3">
                         {suggestion.author} ·{" "}
-                        {evidenceDate(suggestion.createdAt)}
+                        {evidenceDay(suggestion.createdAt)}
                       </p>
                       <p className="mt-1 whitespace-pre-wrap text-ui text-text-2">
                         {suggestion.text}

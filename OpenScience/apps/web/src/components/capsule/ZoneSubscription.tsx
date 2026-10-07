@@ -5,12 +5,13 @@ import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
 
 /**
- * 「订阅到当前项目」: a small control on an evidence zone's page that makes the zone one project's reference (evidence-flywheel F18,
- * 2026-10-05). The zone's published cards are then recalled in that project as index-only context labelled 「来自证据专区《…》」 — the
- * primary sources are cited, never the card — and nowhere else. Nothing is copied: unsubscribing removes it at once, and a zone that
- * is later unpublished or deleted says so here.
+ * 「用作当前项目的参考」: a small control on an evidence zone's page that makes the zone one project's reference (evidence-flywheel F18,
+ * 2026-10-05; the server calls it a subscription). The zone's published cards are then recalled in that project as index-only context
+ * labelled 「来自证据专区《…》」 — the primary sources are cited, never the card — and nowhere else. Nothing is copied: 「取消用作参考」
+ * removes it at once, and a zone that is later unpublished or deleted says so here. It is a different thing from 「关注」, which is the
+ * account's (new evidence reaches 前沿动态 › 关注), and the words say so.
  *
- * Mount it in `EvidenceZonePage.tsx` beside the zone's follow control, with the zone's id: `<ZoneSubscription zoneId={zone.id} />`.
+ * Mount it in `EvidenceZonePage.tsx` as the quiet row under the zone's description, with the zone's id: `<ZoneSubscription zoneId={zone.id} />`.
  * It reads the project the shell is in, and asks the server whether the module is on: where it is off the answer is a 404 and the
  * control renders nothing.
  */
@@ -47,13 +48,13 @@ export function ZoneSubscription({ zoneId, projectId }: { zoneId: string; projec
       <>
         <p className="text-ui text-text">
           {subscription.status === "active"
-            ? `已订阅到“${current.name}”：这个项目的对话会把专区里的卡片当作线索，引用时只引用原始来源。`
-            : `已订阅到“${current.name}”，但${subscription.message ?? "专区暂时没有内容。"}`}
+            ? `已用作“${current.name}”的参考：这个项目的对话会把专区里的卡片当作线索，引用时只引用原始来源。`
+            : `已用作“${current.name}”的参考，但${subscription.message ?? "专区暂时没有内容。"}`}
         </p>
-        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act(async () => { await unsubscribeZone(current.id, zoneId); return null; })}>取消订阅</Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act(async () => { await unsubscribeZone(current.id, zoneId); return null; })}>取消用作参考</Button>
       </>
     ) : (
-      <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act(() => subscribeZone(current.id, zoneId))}>订阅到当前项目</Button>
+      <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act(() => subscribeZone(current.id, zoneId))}>用作当前项目的参考</Button>
     )}
     {error && <p role="alert" className="text-caption text-error">{error}</p>}
   </div>;
