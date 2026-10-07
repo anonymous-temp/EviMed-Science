@@ -18,10 +18,27 @@
 # - **`r-base-dev` is here for the packages the snapshot has no binary for.** A
 #   binary is the normal case and compiling is the fallback; the fallback needs
 #   a compiler and the R headers.
+# - **The archive can hang, and a hung fetch has no end of its own.** On
+#   2026-10-07 this step sat on one runner for 55 minutes and on another for
+#   over 35 while the same step beside it took a minute; the job only ended at
+#   its 90-minute limit, holding the whole run with it. Each fetch therefore
+#   gives up after 30 seconds and is retried, and each apt command is given ten
+#   minutes and three attempts, so a bad mirror costs minutes and says so.
 set -euo pipefail
 
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends \
+apt_fetch=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+attempt() {
+  local try
+  for try in 1 2 3; do
+    if sudo timeout --signal=TERM --kill-after=30 600 "$@"; then return 0; fi
+    echo "ci-system-deps: attempt $try of 3 did not finish: $*" >&2
+    sleep $((try * 10))
+  done
+  return 1
+}
+
+attempt apt-get "${apt_fetch[@]}" update
+attempt apt-get "${apt_fetch[@]}" install -y --no-install-recommends \
   r-base r-base-dev r-recommended \
   libcurl4-openssl-dev libssl-dev libicu-dev libxml2-dev libnode-dev libuv1-dev \
   cmake make pandoc
