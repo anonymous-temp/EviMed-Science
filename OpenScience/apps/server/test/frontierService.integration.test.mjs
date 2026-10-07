@@ -237,6 +237,8 @@ test("search runs the keyword leg, widens 精选 to 全部, marks selected items
   const service = serviceFor();
   const zh = await service.listItems(reader, params({ q: "司美格鲁肽" }));
   assert.equal(zh.body.mode, "keyword");
+  assert.equal(zh.body.related, false, "the words matched, so these are matches");
+  assert.equal((await service.listItems(reader, params())).body.related, false, "a plain list is never related");
   assert.deepEqual(zh.body.items.map((item) => item.titleRaw), ["Semaglutide cuts cardiovascular events"]);
   const widened = await service.listItems(reader, params({ q: "trial weight" }));
   assert.deepEqual(widened.body.items.map((item) => [item.titleRaw, item.selected]), [["Tirzepatide weight trial", false]],
@@ -262,6 +264,10 @@ test("with pgvector and an embedder the vector leg joins and the answer says hyb
   assert.equal(answer.body.mode, "hybrid");
   assert.deepEqual(answer.body.items.map((item) => item.titleRaw), ["Kidney outcomes with finerenone"],
     "a question sharing no word with the item is found by the vector leg alone");
+  assert.equal(answer.body.related, true, "the words matched nothing: the page says these are the nearest by meaning");
+  const byTime = await service.listItems(reader, params({ q: "diabetic nephropathy drug", sort: "time" }));
+  assert.equal(byTime.body.related, true, "the order by time keeps it");
+  assert.equal((await service.listItems(reader, params({ q: "finerenone" }))).body.related, false, "a word that is in the title is a match, whatever the vector leg adds");
   const failing = serviceFor({ embedder: { configured: true, modelKey: "fake@1024", async embedQuery() { throw Object.assign(new Error("down"), { code: "kb_embedding_unavailable" }); } } });
   assert.equal((await failing.listItems(reader, params({ q: "finerenone" }))).body.mode, "keyword", "an embedding outage leaves keyword search standing");
 });
