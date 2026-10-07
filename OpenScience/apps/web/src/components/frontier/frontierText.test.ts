@@ -167,7 +167,7 @@ describe("the event page's side column", () => {
     expect(primaryHeld({ primary: "paper", items: [] })).toBe("有论文原文");
     expect(primaryHeld({ primary: null, hasPrimary: true, items: [] })).toBe("有一手材料");
     expect(primaryHeld({ items: [{ ...frontierItem(), role: "primary" }] })).toBe("有一手材料");
-    expect(primaryHeld({ primary: null, hasPrimary: false, items: [{ ...frontierItem(), role: "report" }] })).toBe("无");
+    expect(primaryHeld({ primary: null, hasPrimary: false, items: [{ ...frontierItem(), role: "report" }] })).toBe("暂无");
   });
 });
 

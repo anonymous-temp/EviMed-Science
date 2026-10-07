@@ -295,10 +295,10 @@ export function institutionsLine(event: Pick<FrontierEvent, "institutions72h" | 
   return event.sourceCount72h > 0 ? `${event.sourceCount72h} 家` : null;
 }
 
-/** 「有论文原文」, 「有一手材料」 or 「无」: whether the parties' own texts are among the reports. */
+/** 「有论文原文」, 「有一手材料」 or 「暂无」: whether the parties' own texts are among the reports. */
 export function primaryHeld(event: Pick<FrontierEvent, "primary" | "hasPrimary" | "items">): string {
   if (event.primary) return PRIMARY_HELD[event.primary];
-  return event.hasPrimary || event.items.some((item) => item.role === "primary") ? "有一手材料" : "无";
+  return event.hasPrimary || event.items.some((item) => item.role === "primary") ? "有一手材料" : "暂无";
 }
 
 /* --------------------------------------------------------------------- daily */
