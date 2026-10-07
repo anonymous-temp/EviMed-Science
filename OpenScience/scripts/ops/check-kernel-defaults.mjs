@@ -99,8 +99,8 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.7-rc.2",
-  sha256: "13aaf28d145bc5acf7e0194a517b6c51b2e39b7746e176148063c30d076288e6",
-  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config inside full AMD64 runtime image sha256:31779dd0b341bc9045068a454169d12d3a2417bf7d749df80806b13a14805439 on 2026-10-02; re-recorded 2026-10-05 from the same kernel's dump in CI run 37291192706 (profile-seed), whose only difference was the platform-skills root the preset gained",
+  sha256: "526992bc5c913dcc9429decb34f2f4c45737d521e441e62942e4c3c5ea026127",
+  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config inside full AMD64 runtime image sha256:31779dd0b341bc9045068a454169d12d3a2417bf7d749df80806b13a14805439 on 2026-10-02; re-recorded 2026-10-05 from the same kernel's dump in CI run 37291192706 (profile-seed), whose only difference was the platform-skills root the preset gained; 2026-10-07 the duplicate-lines row the Jev integration added to the compaction group (hand-inserted where the preset puts it; the image build's diff is the check)",
   // The complete recipe booted its seeded composition and an evimed-universal
   // session. A second read-only, network-isolated UID65534 boot passed after
   // import; image-owned profile sync then produced this byte-identical dump.
