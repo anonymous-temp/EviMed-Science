@@ -19,6 +19,21 @@ const list = (items: TopicRequest[], over: Record<string, unknown> = {}) => ({ i
 describe("申请选题", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("is the drawer's body: no section of its own, no second title, and a topic named elsewhere is written in the field and not sent", async () => {
+    client.listTopicRequests.mockResolvedValue(list([]));
+    const { container } = render(<TopicRequests initialTitle="乳腺癌" />);
+    expect(await screen.findByRole("textbox", { name: "选题" })).toHaveValue("乳腺癌");
+    expect(client.fileTopicRequest).not.toHaveBeenCalled();
+    expect(container.querySelector("section")).toBeNull();
+    expect(screen.queryByRole("heading")).toBeNull();
+    // A zone's name can be shorter than a request may be: the field says what is missing instead of leaving a dead button.
+    expect(screen.getByText("再多写几个字，说清想看什么（至少 4 个字）。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "提交申请" })).toBeDisabled();
+    await userEvent.type(screen.getByRole("textbox", { name: "选题" }), "的靶向治疗");
+    expect(screen.queryByText(/再多写几个字/)).toBeNull();
+    expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled();
+  });
+
   it("lists the open requests in the server's order with how many asked, and what is left of today", async () => {
     client.listTopicRequests.mockResolvedValue(list([request({ id: "tr_a", title: "糖尿病新药", requesters: 9, zoneTitle: "2 型糖尿病" }), request({ id: "tr_b", title: "房颤抗凝", requesters: 2 })]));
     render(<TopicRequests />);

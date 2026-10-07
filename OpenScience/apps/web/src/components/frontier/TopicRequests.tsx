@@ -20,17 +20,18 @@ const ordered = (items: TopicRequest[]) =>
   [...items].sort((a, b) => b.requesters - a.requesters || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
 
 /**
- * 「申请选题」 — a compact block on the zones list: say which topic you want evidence on, see what others asked for, and second it.
+ * 「申请选题」 — the body of the zones list's 申请选题 drawer: say which topic you want evidence on, see what others asked for, and second it.
  * The list is ordered by how many accounts asked and by nothing else; the daily limit is the server's, and its refusal is shown as it words it.
- * The page mounts it only where the public pages are on (the routes answer 404 otherwise).
+ * The page mounts it, inside the drawer, only where the public pages are on (the routes answer 404 otherwise). `initialTitle` is a topic the
+ * reader already named elsewhere — an empty zone's 「申请这个主题的选题」 — written into the field and not sent.
  */
-export function TopicRequests({ zones = [] }: { zones?: { id: string; title: string }[] }) {
+export function TopicRequests({ zones = [], initialTitle = "" }: { zones?: { id: string; title: string }[]; initialTitle?: string }) {
   const [items, setItems] = useState<TopicRequest[]>([]);
   const [seconded, setSeconded] = useState<Set<string>>(new Set());
   const [remaining, setRemaining] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(initialTitle);
   const [zoneId, setZoneId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,9 +110,8 @@ export function TopicRequests({ zones = [] }: { zones?: { id: string; title: str
   const shown = all ? items : items.slice(0, SHOWN);
   const tooShort = [...title.trim()].length < TITLE_MIN;
   return (
-    <section aria-label="申请选题" className="mt-8 border-t border-border pt-6">
-      <h2 className="text-ui font-medium text-text">申请选题</h2>
-      <p className="mt-1 max-w-measure text-caption text-text-3">
+    <div>
+      <p className="max-w-measure text-caption text-text-3">
         想看哪个主题的证据，写下来；申请的人越多越靠前，谁申请都一样。
         {remaining !== null && `今天还能申请或附议 ${remaining} 次。`}
       </p>
@@ -147,6 +147,9 @@ export function TopicRequests({ zones = [] }: { zones?: { id: string; title: str
           提交申请
         </Button>
       </form>
+      {title.trim() && tooShort && (
+        <p className="mt-2 text-caption text-text-3">再多写几个字，说清想看什么（至少 {TITLE_MIN} 个字）。</p>
+      )}
       {error && (
         <p role="alert" className="mt-2 text-ui text-error">
           {error}
@@ -200,6 +203,6 @@ export function TopicRequests({ zones = [] }: { zones?: { id: string; title: str
           )}
         </>
       )}
-    </section>
+    </div>
   );
 }
