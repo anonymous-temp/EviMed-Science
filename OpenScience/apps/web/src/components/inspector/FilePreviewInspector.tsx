@@ -289,12 +289,23 @@ export function FilePreviewInspector({
               root={data.root}
               matrixFile={matrixFile}
               page={page}
+              fitWidth={embedded}
             />
           </Suspense>
         )}
       </div>
     </div>
   );
+}
+
+/**
+ * The address a PDF frame opens. `page` and the open-parameters are a fragment the native viewer reads: Chromium honours
+ * `view=FitH` (the page fills the pane's width) and `navpanes=0` (no thumbnail column, which took 58% of a 576 px pane); a viewer that
+ * does not know them ignores them, so the fragment costs nothing there.
+ */
+export function pdfFrameSource(url: string, page?: number, fitWidth = false): string {
+  const parameters = [page ? `page=${page}` : "", fitWidth ? "view=FitH&navpanes=0" : ""].filter(Boolean).join("&");
+  return parameters ? `${url.split("#")[0]}#${parameters}` : url;
 }
 
 function Body({
@@ -309,6 +320,7 @@ function Body({
   root,
   matrixFile,
   page,
+  fitWidth,
 }: {
   kind: PreviewKind;
   url: string | null;
@@ -321,6 +333,8 @@ function Body({
   root?: FileRoot;
   matrixFile?: boolean;
   page?: number;
+  /** A pane of its own (the drawer's 原文): the PDF opens fit to the pane's width, without the viewer's thumbnail column. */
+  fitWidth?: boolean;
 }) {
   const reportRun = useReportRun();
   if (matrixFile && !showCode) {
@@ -476,7 +490,7 @@ function Body({
     // A page is a fragment the native viewer opens on; a new page is a new frame, since a changed fragment alone
     // does not move every viewer.
     return url ? (
-      <iframe key={page ?? 0} title="PDF 预览" src={page ? `${url}#page=${page}` : url} className="h-full min-h-[480px] w-full" />
+      <iframe key={page ?? 0} title="PDF 预览" src={pdfFrameSource(url, page, fitWidth)} className="h-full min-h-[480px] w-full" />
     ) : (
       <Note text="当前文件暂不支持在线预览。" />
     );

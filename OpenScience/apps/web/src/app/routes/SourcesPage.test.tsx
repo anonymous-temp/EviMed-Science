@@ -516,6 +516,25 @@ describe("知识库", () => {
       expect(preview).toHaveAttribute("data-embedded", "true");
     });
 
+    it("widens for the original and goes back to a column for what it says", async () => {
+      renderPage();
+      const drawer = await open();
+      expect(drawer.className).toMatch(/max-w-xl/);
+      await userEvent.click(within(drawer).getByRole("tab", { name: "原文" }));
+      expect(drawer.className).toMatch(/max-w-4xl/);
+      expect(drawer.className).not.toMatch(/max-w-xl/);
+      await userEvent.click(within(drawer).getByRole("tab", { name: "内容" }));
+      expect(drawer.className).toMatch(/max-w-xl/);
+    });
+
+    it("keeps a note's editor in the column", async () => {
+      mocks.listSources.mockResolvedValue(listing([note]));
+      renderPage();
+      const drawer = await open(note);
+      expect(within(drawer).getByRole("tab", { name: "原文", selected: true })).toBeInTheDocument();
+      expect(drawer.className).toMatch(/max-w-xl/);
+    });
+
     it("previews the original in the project it belongs to, not the project the tab is in", async () => {
       mocks.listSources.mockResolvedValue(listing([{ ...guideline, projectId: "paper-1" }]));
       renderPage();

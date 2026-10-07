@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
-import { FilePreviewInspector, PreviewError } from "./FilePreviewInspector";
+import { FilePreviewInspector, PreviewError, pdfFrameSource } from "./FilePreviewInspector";
 import { readArtifact, readClaimVerification } from "@/lib/artifactFile";
 
 // The markdown tests below carry inline `content`, so they never hit
@@ -220,11 +220,22 @@ describe("FilePreviewInspector — embedded in a pane that has its own header", 
     const { rerender } = render(<FilePreviewInspector embedded data={pdf} page={5} onClose={() => {}} />);
     const frame = await screen.findByTitle("PDF 预览");
     expect(previewUrl).toHaveBeenCalledWith("knowledge-base/a.pdf", "base", "paper-1");
-    expect(frame).toHaveAttribute("src", "https://science.example/api/files/preview/a.pdf?root=base&projectId=paper-1#page=5");
+    // In a pane of its own the PDF fills the width and carries no thumbnail column.
+    expect(frame).toHaveAttribute("src", "https://science.example/api/files/preview/a.pdf?root=base&projectId=paper-1#page=5&view=FitH&navpanes=0");
     rerender(<FilePreviewInspector embedded data={pdf} page={9} onClose={() => {}} />);
-    expect(await screen.findByTitle("PDF 预览")).toHaveAttribute("src", expect.stringMatching(/#page=9$/));
+    expect(await screen.findByTitle("PDF 预览")).toHaveAttribute("src", expect.stringMatching(/#page=9&view=FitH&navpanes=0$/));
     rerender(<FilePreviewInspector embedded data={pdf} onClose={() => {}} />);
-    expect((await screen.findByTitle("PDF 预览")).getAttribute("src")).not.toContain("#page");
+    const whole = (await screen.findByTitle("PDF 预览")).getAttribute("src");
+    expect(whole).not.toContain("page=");
+    expect(whole).toMatch(/#view=FitH&navpanes=0$/);
+  });
+
+  it("builds the frame address from the page and the pane, and leaves a plain preview as it was", () => {
+    expect(pdfFrameSource("https://x/a.pdf?root=base", 5, true)).toBe("https://x/a.pdf?root=base#page=5&view=FitH&navpanes=0");
+    expect(pdfFrameSource("https://x/a.pdf?root=base", undefined, true)).toBe("https://x/a.pdf?root=base#view=FitH&navpanes=0");
+    expect(pdfFrameSource("https://x/a.pdf?root=base#old", 3, true)).toBe("https://x/a.pdf?root=base#page=3&view=FitH&navpanes=0");
+    expect(pdfFrameSource("https://x/a.pdf?root=base", 5)).toBe("https://x/a.pdf?root=base#page=5");
+    expect(pdfFrameSource("https://x/a.pdf?root=base")).toBe("https://x/a.pdf?root=base");
   });
 });
 
