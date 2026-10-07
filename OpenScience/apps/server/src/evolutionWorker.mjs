@@ -10,6 +10,7 @@ export class EvolutionWorker {
     this.service = service; this.decisions = decisions; this.maintenance = maintenance; this.callbacks = callbacks; this.config = config; this.canRun = canRun; this.logger = logger;
     this.workerId = `evolution-${randomUUID()}`; this.timer = null; this.running = false;
     this.activePromise = null; this.abortController = null; this.closed = false;
+    /** @type {Set<Promise<any>>} */ this.inFlight = new Set(); /** @type {Promise<any>|null} */ this.housekeepingPromise = null;
     this.lane = lane;
     this.lanes = lane ? null : ['heavy', ...Array.from({length: Math.max(1,Math.min(2,config.evolutionLightConcurrency ?? 2))}, () => 'light')]
       .map(workerLane => new EvolutionWorker({service,decisions,maintenance,callbacks,config,canRun,logger,lane:workerLane}));
@@ -18,19 +19,31 @@ export class EvolutionWorker {
   start() { if (!this.timer) this.timer = setInterval(() => { this.tick().catch((error) => this.logger.error('Evolution worker failed', error)); }, this.config.evolutionPollMs ?? 15000); }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
   interrupt() { this.abortController?.abort(); for (const worker of this.lanes ?? []) worker.interrupt(); }
-  async close() { this.closed = true; this.stop(); this.interrupt(); await this.activePromise; for (const worker of this.lanes ?? []) await worker.close(); }
+  async close() { this.closed = true; this.stop(); this.interrupt(); await this.activePromise; await Promise.allSettled([...this.inFlight]); for (const worker of this.lanes ?? []) await worker.close(); }
   /** Optional closed job subset retains the normal lease, budget and runtime admission. @param {{kinds?:string[]}} [options] */
   tick(options = {}) {
-    if (this.activePromise) return this.activePromise;
+    if (!this.lanes) {
+      if (this.activePromise) return this.activePromise;
+      this.activePromise = this.tickOnce(options.kinds).finally(() => { this.activePromise = null; });
+      return this.activePromise;
+    }
+    // Each lane is gated by its own job only. A lane that is busy hands back the promise of the job it is running and
+    // the others claim their next job now: one gate over all three made the light lanes wait for every heavy job, which
+    // holds a runtime for many minutes (2026-10-07: three module missions queued behind one tool mission).
     const run = async () => {
-      if (!this.lanes) return this.tickOnce(options.kinds);
       if (this.closed || this.config.evolutionEnabled !== true || !await this.canRun()) return null;
-      await this.housekeeping();
+      await this.housekeepingOnce();
       const results = await Promise.all(this.lanes.map(worker => worker.tick(options)));
       return results.find(Boolean) ?? null;
     };
-    this.activePromise = run().finally(() => { this.activePromise = null; });
-    return this.activePromise;
+    const promise = run().finally(() => { this.inFlight.delete(promise); });
+    this.inFlight.add(promise);
+    return promise;
+  }
+  /** Housekeeping enqueues idempotently; one pass at a time is enough. */
+  housekeepingOnce() {
+    if (!this.housekeepingPromise) this.housekeepingPromise = Promise.resolve().then(() => this.housekeeping()).finally(() => { this.housekeepingPromise = null; });
+    return this.housekeepingPromise;
   }
   /** @param {string[]} [requestedKinds] */
   async tickOnce(requestedKinds) {
