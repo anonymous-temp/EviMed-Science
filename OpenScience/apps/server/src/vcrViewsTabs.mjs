@@ -678,7 +678,8 @@ export function presentComparatorTab(bundle) {
     rmst: rmstValue ? { value: rmstValue, tau: numeric(diagnostics.tau), label: numeric(diagnostics.tau) !== null ? `τ = ${diagnostics.tau} 个月` : null } : null,
     median: medianMeasure ? value(medianMeasure) : null,
     qc,
-    methods: execution ? [{ label: String(execution.method), version: execution.methodVersion ? `v${execution.methodVersion}` : null, note: null, passed: result?.conclusion !== "not_estimable" }] : [],
+    // The method by its Chinese name (`METHOD_LABELS`); an id the table does not hold is shown as a plain word, never as the engine's own.
+    methods: execution ? [{ label: METHOD_LABELS[String(execution.method)] ?? "引擎计算", version: execution.methodVersion ? `v${execution.methodVersion}` : null, note: null, passed: result?.conclusion !== "not_estimable" }] : [],
     e10: e10.map((entry) => ({
       key: text(entry.key) ?? "", label: (/** @type {Record<string, string>} */ (VCR_E10_CONDITION_LABELS_ZH))[String(entry.key)] ?? text(entry.label) ?? "",
       state: ["met", "partial", "doubtful"].includes(String(entry.state)) ? String(entry.state) : "doubtful", note: text(entry.note),

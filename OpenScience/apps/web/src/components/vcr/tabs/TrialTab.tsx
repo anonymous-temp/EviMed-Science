@@ -124,7 +124,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
           )}
         </div>
         {(canWrite || (!noneRan && canFile) || hasForecasts) && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className={cn("flex flex-wrap items-center gap-2", (data.headline || decided) && "mt-4")}>
             {canWrite && (
               <>
                 {!noneRan && <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>}

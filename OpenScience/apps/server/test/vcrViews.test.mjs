@@ -1294,6 +1294,17 @@ test("the comparator page keeps the weights and the borrowed prior apart: a prio
   assert.deepEqual(presentComparatorTab(emptyBundle()).prior, []);
 });
 
+test("the comparator page names the method that computed it in Chinese, and never prints the engine's own id", () => {
+  const comparator = { id: "cmp_l", version: 1, route: "literature_control", estimand: "ATT", conclusion: "limited", gapList: [], resultId: "res_l", targetTrial: {}, configuration: {}, reviewState: "ai_set", createdAt: "2026-09-28T01:00:00.000Z" };
+  const result = { id: "res_l", version: 1, kind: "comparator", conclusion: "limited", reviewState: "ai_set", counts: {}, executionId: "exe_1", measures: [], diagnostics: {} };
+  const named = (/** @type {string} */ method) => presentComparatorTab({ ...emptyBundle(), comparators: [comparator], results: [result], allResults: [result],
+    executions: new Map([["exe_1", { id: "exe_1", method, methodVersion: "1.0.0" }]]) }).methods[0];
+  assert.equal(named("evidence.reconstruct_km").label, "生存曲线重建（Guyot）");
+  assert.equal(named("comparator.rmst").label, "RMST 比较");
+  assert.equal(named("something.the_table_does_not_hold").label, "引擎计算");
+  assert.equal(named("evidence.reconstruct_km").version, "v1.0.0");
+});
+
 test("the method library says the endpoints in words, and a model's endpoint list too", () => {
   const library = presentModels({ models: [{ id: "m1", name: "m", version: "1", card: { title: "模型" }, applicability: { endpoints: ["continuous", "time_to_event"] }, evidence: [], validation: {} }],
     methods: [{ id: "mth_1", method: "patients.binary", version: "1.0.0", endpoints: ["continuous", "binary", "time_to_event"], validationEvidence: { status: "unmeasured" }, assumptions: [] },
