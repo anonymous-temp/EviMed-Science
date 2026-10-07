@@ -22,7 +22,9 @@ const WINDOW_OPTIONS = FRONTIER_HOT_WINDOWS.map((value) => ({ value, label: valu
  * events (five until 2026-10-07 — the full ranking is one tab away), each one
  * line — the rank in the rank colours, the title, the heat in grey and how the
  * rank moved (「↑2」, 「新」). The whole line opens the event. Nothing hot, no
- * card: an empty 「当前热点」 box is a promise the page cannot keep.
+ * card: an empty 「当前热点」 box is a promise the page cannot keep. On a phone the
+ * card is its first line and 「完整热榜 ›」: three rows of it stood between the
+ * header and the first article on a 844 px screen.
  */
 export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEvent[]; onOpenAll: () => void }) {
   const origin = useFrontierOrigin();
@@ -39,10 +41,10 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
       )}
     >
       <ol aria-label="当前热点" className="px-1">
-        {top.map((event) => {
+        {top.map((event, index) => {
           const change = rankChangeLabel(event.rankChange);
           return (
-            <li key={event.id}>
+            <li key={event.id} className={index > 0 ? "max-sm:hidden" : undefined}>
               <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
                 <span className={cn("w-5 shrink-0 text-right font-semibold tabular-nums", rankTone(event.rank))}>{event.rank}</span>
                 <span data-row-title className="min-w-0 flex-1 truncate font-medium text-text group-hover:text-accent">{event.title}</span>
@@ -117,6 +119,9 @@ export function HotBoard({ state, onRetry }: {
  * is its tooltip where it is cut. The
  * heat and its trend are shown only where the server sends a heat: a week's
  * or a month's ranking is by institutions, and says so in its line instead.
+ * On a phone the title wraps to two lines — a headline cut to six characters is
+ * not one — and the heat column narrows to its number, the trend line left to
+ * the desktop.
  */
 function HotRow({ event }: { event: FrontierHotEvent }) {
   const origin = useFrontierOrigin();
@@ -125,20 +130,20 @@ function HotRow({ event }: { event: FrontierHotEvent }) {
       <span className={cn("w-10 shrink-0 text-body font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
       <div className="min-w-0 flex-1">
         <Tooltip content={event.title} kind="label" whenTruncated>
-          <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex h-control min-w-0 items-center gap-1.5 rounded text-ui">
+          <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex min-h-9 min-w-0 items-center gap-1.5 rounded text-ui">
             {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
-            <span className="min-w-0 truncate text-body font-semibold text-text group-hover:text-accent">{event.title}</span>
+            <span className="min-w-0 text-body font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{event.title}</span>
           </Link>
         </Tooltip>
         <p className="text-caption text-text-3">{hotRowMeta(event)}</p>
       </div>
       {event.heat !== null && (
-        <div className="w-28 shrink-0">
+        <div className="w-16 shrink-0 sm:w-28">
           <p className="flex h-control items-center justify-end gap-0.5">
             <span className="text-title font-semibold tabular-nums text-text">{event.heat}</span>
             <span className="text-caption text-text-3">热度</span>
           </p>
-          <div className="flex h-7 justify-end"><Sparkline points={event.trend} /></div>
+          <div className="flex h-7 justify-end max-sm:hidden"><Sparkline points={event.trend} /></div>
         </div>
       )}
     </li>

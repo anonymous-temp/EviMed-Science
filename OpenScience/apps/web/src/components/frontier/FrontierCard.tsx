@@ -1,5 +1,5 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
-import { useId, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -10,7 +10,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { FrontierDetails } from "./FrontierDetails";
+import { FrontierDetails, frontierDetailsOffered } from "./FrontierDetails";
 import {
   CARD_FLAG_KEYS,
   EXTERNAL,
@@ -60,6 +60,10 @@ export interface FrontierCardProps {
  * 「⋯」, always shown (owner, 2026-09-24: actions that appear only under the
  * pointer read as missing).
  *
+ * The footer says only what it can do: 「展开摘要」 where the summary is cut at three lines, 「详情」
+ * where the drawer holds something the card does not (an abstract, the facts, the original title, a
+ * free full text), and the star, 「深入研究」 and 「⋯」; the details stay in 「⋯ › 详情」 either way.
+ *
  * The title is the way to the original, as a headline is in every reader
  * (owner, 2026-09-24: 「看原文，应该是点题目就能进去」); there is no second
  * 「原文」 control. 「深入研究」 opens a new conversation with a draft question
@@ -80,6 +84,19 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
   const navigate = useNavigate();
   const origin = useFrontierOrigin();
   const [details, setDetails] = useState(false);
+  // A summary that fits in its three lines has nothing to expand: measure the clamp, not the text.
+  const summary = useRef<HTMLParagraphElement>(null);
+  const [clamped, setClamped] = useState(false);
+  useLayoutEffect(() => {
+    const element = summary.current;
+    if (!element || expanded) return;
+    const measure = () => setClamped(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [expanded, item.summary]);
   const evidence = evidenceTag(item);
   const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
   const band = scoreBand(item);
@@ -157,11 +174,11 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
             {item.title}
           </a>
         </h3>
-        {item.summary && <p className={cn("mt-1 max-w-measure whitespace-pre-line text-ui text-text-2", !expanded && "line-clamp-3")}>{item.summary}</p>}
+        {item.summary && <p ref={summary} className={cn("mt-1 max-w-measure whitespace-pre-line text-ui text-text-2", !expanded && "line-clamp-3")}>{item.summary}</p>}
 
         <div className="-ml-1 mt-2 flex min-h-6 flex-wrap items-center gap-x-2 text-ui text-text-3">
-          {item.summary && onExpand && <button type="button" aria-expanded={expanded} onClick={onExpand} className={cn(INLINE_ACTION, "px-1 hover:text-text")}><span className="text-caption">{expanded ? "收起摘要" : "展开摘要"}</span></button>}
-          <button type="button" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">阅读详情</span></button>
+          {item.summary && onExpand && (clamped || expanded) && <button type="button" aria-expanded={expanded} onClick={onExpand} className={cn(INLINE_ACTION, "px-1 hover:text-text")}><span className="text-caption">{expanded ? "收起摘要" : "展开摘要"}</span></button>}
+          {frontierDetailsOffered(item) && <button type="button" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">详情</span></button>}
           {also > 0 && (
             <Menu label={`另有 ${also} 家报道`} align="start" items={reports}>
               <button type="button" className={cn(INLINE_ACTION, "px-1 hover:text-text")}>

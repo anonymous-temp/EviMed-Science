@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { fetchFrontierWeekly, listFrontierWeeklies, frontierErrorMessage } from "@/lib/frontierClient";
 import { DailyIssue, type DailyState } from "./DailyView";
 
+/** Rows of each lane the weekly shows before 「展开其余 N 条」: a week holds ten times a day's items. */
+const WEEKLY_LANE_ROWS = 5;
+
 export function WeeklyView({ week, onWeek }: { week: string | null; onWeek: (week: string) => void }) {
   const [state, setState] = useState<Omit<DailyState, "retry">>({ index: null, issue: null, loading: true, error: null });
   const [attempt, setAttempt] = useState(0);
@@ -18,5 +21,5 @@ export function WeeklyView({ week, onWeek }: { week: string | null; onWeek: (wee
     });
     return () => { active = false; };
   }, [week, attempt]);
-  return <DailyIssue weekly state={{ ...state, retry: () => setAttempt((n) => n + 1) }} onDay={onWeek} />;
+  return <DailyIssue weekly laneLimit={WEEKLY_LANE_ROWS} state={{ ...state, retry: () => setAttempt((n) => n + 1) }} onDay={onWeek} />;
 }
