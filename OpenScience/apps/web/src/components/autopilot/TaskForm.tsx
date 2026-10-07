@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AGENDA_DEFAULT_BUDGETS, AGENDA_MIN_EPISODE_BUDGET_CNY } from "@evimed/domain";
 import { createAgenda, getAgenda, startAgenda, updateAgenda, type AgendaRecord, type AgendaSchedule } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
-import { useProjectStore } from "@/lib/projects";
+import { useProjectLabels } from "@/lib/projectNames";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Input, Textarea, Select } from "@/components/ui/Input";
@@ -22,7 +22,7 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
   const [budgets, setBudgets] = useState({ maxEpisodeCny: agenda?.payload.maxEpisodeCny ?? AGENDA_DEFAULT_BUDGETS.maxEpisodeCny, dailyBudgetCny: agenda?.payload.dailyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.dailyBudgetCny, weeklyBudgetCny: agenda?.payload.weeklyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.weeklyBudgetCny });
   const minimum = `¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)}`;
   const episodeTooSmall = budgets.maxEpisodeCny < AGENDA_MIN_EPISODE_BUDGET_CNY;
-  const projectName = useProjectStore(state => state.projects.find(project => project.id === projectId)?.name);
+  const projectName = useProjectLabels().get(projectId);
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<AgendaRecord | null>(null);
   const [conflict, setConflict] = useState(false);

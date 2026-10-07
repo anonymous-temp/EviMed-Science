@@ -7,6 +7,7 @@ import { addAgendaMaterials, archiveAgenda, followUpAgenda, getDigest, getResear
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { sha256Hex } from "@/lib/fileDigest";
 import { productErrorMessage } from "@/lib/productClient";
+import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { chatPath } from "@/lib/runLocation";
 import { Button } from "@/components/ui/Button";
@@ -43,8 +44,9 @@ export function AutopilotPage() {
 
 function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
-  // The page follows the sidebar's project and says which: plain text, not a second selector with a different meaning.
-  const projectName = useProjectStore(state => state.projects.find(project => project.id === projectId)?.name);
+  // The page follows the sidebar's project and says which: plain text, not a second selector with a different meaning. It is the
+  // label every picker uses (`projectLabels`), so two projects of one name are told apart here as they are in the sidebar.
+  const projectName = useProjectLabels().get(projectId);
   const [params, setParams] = useSearchParams();
   const selectedId = params.get("task");
   const digestId = params.get("digest");
