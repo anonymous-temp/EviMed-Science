@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Plus, Radar } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
-import { createGeoProject, GEO_STEP_KEYS, isGeoOff, listGeoProjects, useGeoFeature, type GeoProjectSummary } from "@/lib/geoClient";
+import { createGeoProject, GEO_STEP_KEYS, isGeoOff, listGeoProjects, patchGeoProject, useGeoFeature, type GeoProjectSummary } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -12,7 +12,7 @@ import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { GeoCellText } from "@/components/geo/GeoCellText";
 import { GeoSparkline } from "@/components/geo/GeoSparkline";
 import { GeoListSkeleton, GeoOffPage } from "@/components/geo/GeoStates";
-import { coverageText, GEO_STEP_WORK, weekOf } from "@/components/geo/geoText";
+import { coverageText, GEO_STEP_WORK, weekOf, withStartDate } from "@/components/geo/geoText";
 import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation";
 
 type Listing =
@@ -22,12 +22,13 @@ type Listing =
   | { kind: "ready"; projects: GeoProjectSummary[] };
 
 /**
- * “循证 GEO”'s home (plan §5.1, mockup g01): one row per product — its name,
- * a line under it (the coverage window, or the one red sentence when an AI
- * engine says something wrong about it), and on the right the 综合可见度指数
- * with its trend against the target and the 品牌提及率 over P2 + P3. A number
- * that does not exist yet is “—”; a project that has only done one step is
- * in the list all the same.
+ * “循证 GEO”'s home (plan §5.1, mockup g01): one row per product — its name
+ * (with its start date after it when another project has the same name), a
+ * line under it (the coverage window, and what is open: how many errors an AI
+ * engine still makes about it), and on the right the 综合可见度指数 with its
+ * trend against the target and the 品牌提及率 over P2 + P3. A number that does
+ * not exist yet is “—”; a project that has only done one step is in the list
+ * all the same. A paused project's row carries 继续.
  *
  * “新建项目” creates the project and lands in its conversation, where the
  * composer already carries the “循证 GEO” chip: no form.
@@ -69,6 +70,11 @@ export function GeoHomePage() {
       .finally(() => setCreating(false));
   };
 
+  /** A paused project was set going again: its row says so without re-reading the list. */
+  const resumed = (id: string) => setListing((previous) => (previous.kind === "ready"
+    ? { kind: "ready", projects: previous.projects.map((project) => (project.id === id ? { ...project, status: "active" } : project)) }
+    : previous));
+
   return (
     <PageShell
       title="循证 GEO"
@@ -82,12 +88,14 @@ export function GeoHomePage() {
       {feature === "loading" || listing.kind === "loading" ? <GeoListSkeleton />
         : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
           : listing.projects.length === 0 ? <EmptyState icon={Radar} title="还没有循证 GEO 项目" />
-            : <ProjectList projects={listing.projects} />}
+            : <ProjectList projects={listing.projects} onResumed={resumed} />}
     </PageShell>
   );
 }
 
-function ProjectList({ projects }: { projects: GeoProjectSummary[] }) {
+function ProjectList({ projects, onResumed }: { projects: GeoProjectSummary[]; onResumed: (id: string) => void }) {
+  // Two projects of one name are told apart by the day they started.
+  const labels = withStartDate(projects);
   return (
     <div>
       <div aria-hidden="true" className="flex items-center gap-3 border-b border-border px-2 pb-2 text-caption text-text-3">
@@ -103,20 +111,34 @@ function ProjectList({ projects }: { projects: GeoProjectSummary[] }) {
         </span>
       </div>
       <List divided label="循证 GEO 项目">
-        {projects.map((project) => <ProjectRow key={project.id} project={project} />)}
+        {projects.map((project) => <ProjectRow key={project.id} project={project} label={labels.get(project.id) ?? project.name} onResumed={() => onResumed(project.id)} />)}
       </List>
     </div>
   );
 }
 
-function ProjectRow({ project }: { project: GeoProjectSummary }) {
+function ProjectRow({ project, label, onResumed }: { project: GeoProjectSummary; label: string; onResumed: () => void }) {
   const { gvi, mention } = project.headline;
   const alert = alertText(project);
   const line = subline(project);
+  const [resuming, setResuming] = useState(false);
+  const resume = () => {
+    setResuming(true);
+    void patchGeoProject(project.id, { status: "active" })
+      .then(() => {
+        toast.success("已继续。");
+        onResumed();
+      })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目无法继续，请稍后重试。" })))
+      .finally(() => setResuming(false));
+  };
   return (
     <ListRow
       to={`/app/geo/${encodeURIComponent(project.id)}`}
-      title={project.name}
+      title={label}
+      actions={project.status === "paused"
+        ? <Button variant="text" size="sm" loading={resuming} onClick={resume} aria-label={`继续“${label}”`}>继续</Button>
+        : undefined}
       meta={(
         <span data-geo-subline="">
           {line}

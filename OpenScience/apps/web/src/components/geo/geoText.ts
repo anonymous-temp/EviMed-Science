@@ -377,6 +377,30 @@ export function monthDay(value: string | Date | null | undefined): string | null
 }
 
 /**
+ * The names a list of projects is read by: two products can carry the same name (a re-run, a second window), and a list of
+ * “波立维” and “波立维” tells nothing. A name that occurs more than once gets its start date after it — “波立维（9月29日）” — and
+ * if two of those started the same day, their order in the list. The key is the project's id; a name that is alone stays as is.
+ */
+export function withStartDate(projects: ReadonlyArray<{ id: string; name: string; startedAt?: string | null; createdAt?: string | null }>): Map<string, string> {
+  const occurrences = new Map<string, number>();
+  for (const project of projects) occurrences.set(project.name, (occurrences.get(project.name) ?? 0) + 1);
+  const labels = new Map<string, string>();
+  const used = new Map<string, number>();
+  for (const project of projects) {
+    if ((occurrences.get(project.name) ?? 0) < 2) {
+      labels.set(project.id, project.name);
+      continue;
+    }
+    const date = monthDay(project.startedAt ?? project.createdAt ?? null);
+    const label = date ? `${project.name}（${date}）` : project.name;
+    const seen = (used.get(label) ?? 0) + 1;
+    used.set(label, seen);
+    labels.set(project.id, seen > 1 ? `${label} · 第 ${seen} 个` : label);
+  }
+  return labels;
+}
+
+/**
  * A project's coverage window as the reader sees it: “10月1日～12月31日”
  * when the start is known, “覆盖 90 天” otherwise.
  */

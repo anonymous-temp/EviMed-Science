@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absentWord, coverageText, GEO_ERROR_STATUS_WORDS, groupName, platformName, zh } from "./geoText";
+import { absentWord, coverageText, GEO_ERROR_STATUS_WORDS, groupName, platformName, withStartDate, zh } from "./geoText";
 
 describe("a sentence assembled from values (spec §5.5)", () => {
   it("puts a half-width space where Chinese meets a Latin name or a digit, and only there", () => {
@@ -46,5 +46,31 @@ describe("the reader's words for the platform's codes", () => {
   it("writes a coverage window as a range with ～ and no spaces", () => {
     expect(coverageText(92, "2026-10-01")).toBe("10月1日～12月31日");
     expect(coverageText(90, null)).toBe("覆盖 90 天");
+  });
+});
+
+describe("withStartDate", () => {
+  it("adds the start date to a name that occurs twice and to no other", () => {
+    const labels = withStartDate([
+      { id: "a", name: "波立维", startedAt: "2026-09-29" },
+      { id: "b", name: "波立维", startedAt: null, createdAt: "2026-10-07T08:00:00" },
+      { id: "c", name: "玛仕度肽注射液", startedAt: "2026-09-01" },
+    ]);
+    expect(labels.get("a")).toBe("波立维（9月29日）");
+    expect(labels.get("b")).toBe("波立维（10月7日）");
+    expect(labels.get("c")).toBe("玛仕度肽注射液");
+  });
+
+  it("numbers the ones that started the same day, and keeps the bare name when no date is known", () => {
+    const labels = withStartDate([
+      { id: "a", name: "波立维", startedAt: "2026-09-29" },
+      { id: "b", name: "波立维", startedAt: "2026-09-29" },
+      { id: "c", name: "氯吡格雷" },
+      { id: "d", name: "氯吡格雷" },
+    ]);
+    expect(labels.get("a")).toBe("波立维（9月29日）");
+    expect(labels.get("b")).toBe("波立维（9月29日） · 第 2 个");
+    expect(labels.get("c")).toBe("氯吡格雷");
+    expect(labels.get("d")).toBe("氯吡格雷 · 第 2 个");
   });
 });
