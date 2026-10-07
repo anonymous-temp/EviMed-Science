@@ -1035,11 +1035,11 @@
       "id": "capability/vcr-analysis",
       "name": "vcr-analysis",
       "origin": "capability",
-      "version": "1.1.2",
+      "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:a8df6b35236b0ccae8a5c0db49a214767983623fc0d1aa478105bca7b3439b84",
+      "digest": "sha256:f33ef6d80efe2e5a624ddecda1ceb5c742abf189f3f1ce18cf91926237ad8a6d",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"d5cc1046c7caf78571fecd23c98345b16ad7d7f73109339c833187fd550b2d1a"}],
+      "references": [{"path":"capability.yaml","sha256":"237ab0299d421db70b09595ee6a47adae9cd39bb77e39fa2d55dcc759be86d72"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1191,13 +1191,14 @@
       "id": "capability/vcr-protocol",
       "name": "vcr-protocol",
       "origin": "capability",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:4d2a6ad0b652c8d2a8bb4fa10d522d617046e632345e4678bd32ff192f30f1cd",
+      "digest": "sha256:3021dd740d6afbb2768e4df49c2511ae75aea5e8b534a7f7c1287669ee74c5f7",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"18fa621678b454d454c2eed6683e3611c97ed98c19a05c94f807a35b5ecb0adc"}],
+      "references": [{"path":"capability.yaml","sha256":"b0ebad7ef76965ee6bbde9e385224df867e3ff21332aff573cc10469e42fe691"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"evidence_pool","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"guideline_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"literature_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1214,10 +1215,10 @@
         {
           "name": "vcr-study-package",
           "kind": "deliverable",
-          "summaryZh": "把一句话或一份方案变成研究定义卡，并把入排条件逐条结构化、保留原文。",
+          "summaryZh": "在研究的对话里做你要的那一步：写研究定义、生成合成人群、估算样本量、模拟试验方案、查外部对照能不能做，计算交给引擎。",
           "accepts": ["question","protocolText","dataTier","intendedUse","endpointType","registryId"],
           "produces": ["study-definition.md","criteria.json","results.json"],
-          "limits": ["定义卡里的值先生效、后复核，全部带「AI 设定」标签，随时可改。","这一步不产生任何统计量；样本量与把握度由后面的仿真作业算。"]
+          "limits": ["回答里的数只转述引擎算出的结果，不心算、不估算。","定义和对象里的值先生效、后复核，全部带“AI 设定”标签，随时可改。","引擎不在线时计算暂不可用；已有的对象和结果照常保留。"]
         }
       ]
     },

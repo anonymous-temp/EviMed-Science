@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:8bb4ebdf32bea16151f9991622dc88e9ae101bf2f28ccba94fd3becf5a7cdd37",
+  "version": "sha256:8ce9c4342a5dc3b552c81dc31d7fdd4523b7d8bd50d0211c9dc60013226b150e",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 22,
@@ -858,7 +858,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration, scenario or definition carries only the keys the engine reads for the job that computes it: before you write a trial scenario, patient set, population or comparator, call vcr_simulate with action shape and that job's kind (design_analytic and design_simulation for a trial scenario; generate_patients, generate_patients_continuous or generate_patients_binary for a patient set; generate_population for a population; the comparator kind for a comparator) and write those keys and no others. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition, or, for a real cohort, fromProtocol: true with a snapshotId (the protocol's own criteria become its rules); a definition may carry title (the study's name, 24 characters) and question. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration, scenario or definition carries only the keys the engine reads for the job that computes it: before you write a trial scenario, patient set, population or comparator, call vcr_simulate with action shape and that job's kind (design_analytic and design_simulation for a trial scenario; generate_patients, generate_patients_continuous or generate_patients_binary for a patient set; generate_population for a population; the comparator kind for a comparator) and write those keys and no others. Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {
