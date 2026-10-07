@@ -300,15 +300,16 @@ test("a routed specialist turn mounts nothing and keeps its own capability instr
 
 // A conversation typed in the kernel's own frame passes through no dispatch. Until release 10.1 that meant a conversation bound to a
 // capability (a study of 虚拟临床研究, a tool picked on 科研工具) was never told so, and answered as an open one: live, a study's
-// conversation computed a sample size with a script of its own and never reached the engine.
-test("a conversation bound to a capability is handed the routing instruction a dispatch writes, word for word", () => {
+// conversation computed a sample size with a script of its own and never reached the engine. Release 10.1 handed it the
+// dispatch's own sentence, and the conversation then built a gated package for 100 steps instead of doing the step it was asked.
+test("a conversation bound to a capability is told which one and what it is for, without the dispatch's deliverable contract", () => {
   const registry = { get: (/** @type {string} */ id) => (id === "vcr-protocol"
     ? { id: "vcr-protocol", runtimeAgent: "evimed-vcr-protocol", skill: "vcr-protocol", companionSkills: ["citation-integrity"] } : null) };
-  const note = boundConversationNote({ mode: "specialist", agentId: "vcr-protocol" }, registry);
-  assert.equal(note, routedSpecialistInstruction({ agentId: "vcr-protocol", runtimeAgent: "evimed-vcr-protocol", skill: "vcr-protocol", companionSkills: ["citation-integrity"] }));
-  assert.match(String(note), /evimed_plan/);
-  assert.match(String(note), /capability 写成 vcr-protocol/);
-  assert.match(String(note), /vcr-protocol、citation-integrity/);
+  const note = String(boundConversationNote({ mode: "specialist", agentId: "vcr-protocol" }, registry));
+  assert.match(note, /专项能力 vcr-protocol（evimed-vcr-protocol）/);
+  assert.match(note, /研究者要哪一步，就按方法正文在这次对话里做哪一步/);
+  assert.notEqual(note, routedSpecialistInstruction({ agentId: "vcr-protocol", runtimeAgent: "evimed-vcr-protocol", skill: "vcr-protocol", companionSkills: ["citation-integrity"] }));
+  assert.doesNotMatch(note, /门禁|必需交付物|确定性路由/, "no gate and no routing sentence: run-policy would read the latter as a dispatch");
 });
 
 test("an open conversation, a binding to nothing and a capability this deployment no longer has add no note", () => {

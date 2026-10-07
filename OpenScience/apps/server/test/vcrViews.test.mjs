@@ -624,6 +624,9 @@ test("a failed job reaches the page in Chinese only: the engine's English note a
   assert.equal(jobView({ id: "j", kind: "rmst", state: "failed", error: { code: "cpu_budget_exhausted", message: "The CPU budget ran out." } }, NOW).error?.message, cut);
   assert.equal(jobView({ id: "j", kind: "rmst", state: "failed", error: { code: "an_engine_code_nobody_wrote_down", message: "Something broke inside R." } }, NOW).error?.message, VCR_FAILED_SENTENCE);
   assert.equal(vcrFailureSentence({ code: "rule_column_unknown", message: "" }), "规则里用了数据表里没有的列；核对列名。");
+  // The column the researcher's rule named stays in the sentence, from either quoting our engine and domain use (vcr-seam C2-1).
+  assert.equal(vcrFailureSentence({ code: "rule_column_unknown", message: "The table has no column 'creatinine_umol'." }), "规则里用了数据表里没有的列“creatinine_umol”；核对列名。");
+  assert.equal(vcrFailureSentence({ code: "rule_column_unknown", message: 'The table has no column "egfr".' }), "规则里用了数据表里没有的列“egfr”；核对列名。");
   assert.match(VCR_FAILED_SENTENCE, /已算出的部分保留/);
   assert.equal(jobView({ id: "j", kind: "rmst", state: "running" }, NOW).error, null);
 });

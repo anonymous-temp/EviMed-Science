@@ -405,6 +405,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         /** The control plane's context block for this dispatch, kept because it
          *  is where a routed session's capability is named. */
         contextText: null,
+        /** The capability the control plane bound this conversation to when it was opened, or ''. */
+        binding: '',
         /** Set when the turn ended: the receipt is written and the bytes are
          *  the delivery. Within a turn a deliverable stays editable. */
         frozen: false,
@@ -645,7 +647,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       return { capabilityId: planned[0], item: entry.items.find((/** @type {any} */ candidate) => String(candidate.capability ?? '') === planned[0]) ?? null }
     }
     const named = namedCapabilityIds(`${entry.briefText ?? ''}\n${entry.contextText ?? ''}`, ctx.get('evimedCapabilities') ?? [])
-    return named.length === 1 ? { capabilityId: named[0], item: null } : null
+    if (named.length === 1) return { capabilityId: named[0], item: null }
+    if (named.length > 1) return null
+    // A conversation the control plane bound when it was opened, with no dispatch to say so (`sessionBindingFile`).
+    return entry.binding ? { capabilityId: entry.binding, item: null } : null
   }
 
   /**
@@ -2830,6 +2835,16 @@ async function loadBrief(ctx, agent, sessionState, config) {
 }
 
 /**
+ * The capability id in a session's binding file, or ''. A closed shape the control plane writes (`{ capability }`); the
+ * id is then resolved against the mounted catalogue like any other, and an internal capability still needs its dispatch.
+ * @param {string | null} raw @returns {string}
+ */
+function parseBinding(raw) {
+  const capability = raw == null ? '' : String(parseJson(raw)?.capability ?? '')
+  return /^[a-z0-9][a-z0-9-]{0,63}$/.test(capability) ? capability : ''
+}
+
+/**
  * @param {any} ctx @param {any} agent @param {Record<string, any>} entry
  * @param {Record<string, any>} config
  * @returns {Promise<void>}
@@ -2858,6 +2873,9 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   // experiment: identical boots differing only in whether the brief existed
   // before the session, one writes the medium and one does not.
   const sessionBriefDir = `${workspaceLayout.briefDir}/sessions/${sessionId}`
+  // The conversation's binding, read before the early return below: a turn typed into the kernel's own window has no
+  // dispatch index, and it is exactly that turn that needs the capability's tools on its first request. Latched once found.
+  if (!entry.binding) entry.binding = parseBinding(await readFileAt(ctx, cwd, workspaceLayout.sessionBindingFile(sessionId)))
   const rawIndex = await readFileAt(ctx, cwd, `${sessionBriefDir}/index.json`)
     ?? await readFileAt(ctx, cwd, workspaceLayout.briefIndexFile)
   if (rawIndex == null) return

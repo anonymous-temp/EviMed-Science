@@ -62,6 +62,11 @@ export const workspaceLayout = Object.freeze({
   briefMemoryFile: `${BRIEF_DIR}/memory.md`,
   /** Run identity handed into the container. */
   briefIndexFile: `${BRIEF_DIR}/index.json`,
+  /** The capability a conversation was bound to when it was opened (a study's, a GEO project's, a 科研工具 chip's),
+   *  written by the control plane beside the session's own brief files. A turn typed into the kernel's window has no
+   *  dispatch and so no context naming its capability; without this file its first request went out without the
+   *  capability's tools, and the model planned the work without them (2026-10-07). */
+  sessionBindingFile: (/** @type {string} */ sessionId) => `${BRIEF_DIR}/sessions/${sessionId}/binding.json`,
   /** The only plan artifact in the whole system (§7.1). */
   planFile: 'task-plan.json',
   /** Written only by evimed_submit_deliverable. */

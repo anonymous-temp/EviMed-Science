@@ -2865,6 +2865,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     },
   });
+  researchSessions.onSpecialistBound = (project, sessionId, agentId) => runtimeManager.writeSessionBinding?.(project, sessionId, agentId) ?? Promise.resolve(false);
   runtimeManager.pluginService = pluginService;
   // The other half of the same seam. `syncCapsuleMethods` reads this before
   // every launch, and left unassigned it materializes an empty directory: the
@@ -5873,6 +5874,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // the window must not wait on the product database — and the window's
         // own boot takes far longer than the write.
         void runtimeManager.syncCapsuleProfile(project);
+        // And the bindings of conversations opened before the binding file existed, so their next typed turn is a
+        // session of their capability from its first request. Not awaited, for the same reason.
+        void researchSessions.list(project).then((sessions) => runtimeManager.syncSessionBindings(project, sessions)).catch(() => {});
         res.setHeader("Set-Cookie", frame.cookie);
         res.setHeader("Cache-Control", "no-store");
         sendJson(res, 201, { data: { frameId: frame.frameId, frameUrl: frame.frameUrl, expiresAt: frame.expiresAt, renewalToken: frame.renewalToken } });

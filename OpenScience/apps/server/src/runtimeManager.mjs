@@ -5197,6 +5197,48 @@ export class RuntimeManager {
   }
 
   /**
+   * Writes the capability a conversation was bound to (`workspaceLayout.sessionBindingFile`), so a turn typed into the
+   * kernel's own window — which no dispatch precedes — is a session of that capability from its first request: its tools
+   * in the request, its method in the first step. Before this file the binding was a label on the composer and in the
+   * ledger only, and a study's conversation planned its work without the engine's tools (2026-10-07). Isolated: a session
+   * without the file still learns its capability when its plan names it, one request late.
+   * @param {Record<string, any>} project @param {string} sessionId @param {string} capabilityId
+   * @returns {Promise<boolean>} whether the file was written
+   */
+  async writeSessionBinding(project, sessionId, capabilityId) {
+    try {
+      const relative = workspaceLayout.sessionBindingFile(safeId(sessionId, "session id"));
+      const text = `${JSON.stringify({ capability: safeId(capabilityId, "capability id") })}\n`;
+      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), text, { encoding: "utf8", mode: 0o444 });
+      await this.mirrorWorkspaceWrite(project, relative, text);
+      return true;
+    } catch {
+      // isolated: evimed_session_binding_write_failures_total
+      return false;
+    }
+  }
+
+  /**
+   * Writes the binding file of every specialist conversation of a project that has none — the conversations bound before
+   * the file existed. Called when the kernel's window opens, the last moment the control plane sees before a typed turn.
+   * @param {Record<string, any>} project @param {{ sessionId: string, mode?: string, agentId?: string | null }[]} sessions
+   * @returns {Promise<number>} how many were written
+   */
+  async syncSessionBindings(project, sessions) {
+    let written = 0;
+    for (const session of (sessions ?? []).filter((item) => item?.mode === "specialist" && item.agentId).slice(0, 200)) {
+      try {
+        const file = path.join(project.workspaceDir, workspaceLayout.sessionBindingFile(safeId(session.sessionId, "session id")));
+        if (await fs.lstat(file).catch(() => null)) continue;
+      } catch {
+        continue;
+      }
+      if (await this.writeSessionBinding(project, session.sessionId, String(session.agentId))) written += 1;
+    }
+    return written;
+  }
+
+  /**
    * Start, in the background of a sign-in, the runtime of the project this
    * account used last (plan §3.1 #8), so the project the reader opens next is
    * already running when they reach it.

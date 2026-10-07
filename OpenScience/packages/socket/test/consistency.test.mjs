@@ -1554,6 +1554,32 @@ test("a session bound to a capability carries that capability's tools on its fir
   assert.equal(plain.filters.filter((/** @type {any} */ filter) => filter.disposed).length, 0, "and its narrowing is never lifted");
 });
 
+test("a conversation the control plane bound when it was opened carries its capability's tools on its first typed request", async () => {
+  // 2026-10-07, acceptance of release 10.1: a study's conversation in 虚拟临床研究, typed into the kernel's window, had no
+  // dispatch and so no context naming its capability. Its first eight requests went out without the engine's tools; the
+  // model wrote 「引擎作业接口不可用」 into its plan and computed the sample size with scripts of its own.
+  const { MCP_TOOL_NAMES: mcpNames } = await import("@evimed/domain");
+  const managed = "mcp__evimed__research_topic_selection";
+  const registered = [...mcpNames, "bash", "read", "skill"];
+  const skills = { "research-topic-selection": "# 科研选题\n先启动专项任务，再补充检索。\n" };
+
+  const bound = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY], skills });
+  bound.files.set("/workspace/.evimed-brief/sessions/native-session/binding.json", JSON.stringify({ capability: "research-topic-selection" }));
+  bound.start();
+  await bound.step(1);
+  const [first] = bound.requests;
+  assert.ok(first.tools.includes(managed), `the first request carries the bound capability's tool: ${JSON.stringify(first.tools)}`);
+  assert.match(messageText(first.messages), /<evimed-method capability="research-topic-selection">/, "and its method");
+
+  for (const raw of ['{"capability":"../../etc"}', "not json", '{"capability":"research-brief"}']) {
+    const other = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY], skills });
+    other.files.set("/workspace/.evimed-brief/sessions/native-session/binding.json", raw);
+    other.start();
+    await other.step(1);
+    assert.ok(!other.requests[0].tools.includes(managed), `a binding that names nothing mounted grants nothing: ${raw}`);
+  }
+});
+
 test("the dispatch's context reaches the first request even when its read finishes while that request is assembled", async () => {
   // Measured on a live kernel (2026-09-27): session start read the context and
   // injected it into the inbox. The control plane creates the session and

@@ -166,6 +166,12 @@ export class ResearchSessionStore {
   constructor(agentRegistry, { stateStore = null } = {}) {
     this.agentRegistry = Promise.resolve(agentRegistry);
     this.stateStore = stateStore;
+    /**
+     * Told when a conversation is bound to a specialist, so the binding reaches the runtime as a file
+     * (`runtimeManager.writeSessionBinding`). Set by the server once the runtime manager exists; never fails a binding.
+     * @type {((project: any, sessionId: string, agentId: string) => Promise<unknown>) | null}
+     */
+    this.onSpecialistBound = null;
   }
 
   async list(project) {
@@ -186,6 +192,15 @@ export class ResearchSessionStore {
   }
 
   async put(project, rawSessionId, input) {
+    const record = await this.putRecord(project, rawSessionId, input);
+    if (record?.mode === "specialist" && record.agentId && this.onSpecialistBound) {
+      const bound = this.onSpecialistBound;
+      await Promise.resolve().then(() => bound(project, record.sessionId, record.agentId)).catch(() => null);
+    }
+    return record;
+  }
+
+  async putRecord(project, rawSessionId, input) {
     const sessionId = safeId(rawSessionId, "research session id");
     const registry = await this.agentRegistry;
     const request = validateInputContract(input);

@@ -219,7 +219,13 @@ export function boundConversationNote(binding, registry) {
   if (binding?.mode !== "specialist" || !binding.agentId) return null;
   const agent = registry?.get?.(binding.agentId);
   if (!agent) return null;
-  return routedSpecialistInstruction({ agentId: agent.id, runtimeAgent: agent.runtimeAgent, skill: agent.skill, companionSkills: agent.companionSkills });
+  // Not the dispatch's sentence. That one tells a run to plan a deliverable and holds it to the capability's gate, which
+  // turned an answer-mode conversation into a 100-step package build (acceptance of release 10.1). The tools and the
+  // method reach the session through its binding file (`runtimeManager.writeSessionBinding`); this says what they are for.
+  return [
+    `这是绑定在专项能力 ${escapeContext(agent.id)}（${escapeContext(agent.runtimeAgent)}）上的研究对话，这个能力的方法正文和工具随本轮送到。`,
+    "研究者要哪一步，就按方法正文在这次对话里做哪一步；只有研究者要的是一份文件交付物时，才用 evimed_plan 写下计划。",
+  ].join("\n");
 }
 
 export async function prepareResearchContext(

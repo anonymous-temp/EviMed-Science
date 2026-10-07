@@ -103,7 +103,24 @@ export function vcrPageSentence(message) {
  */
 export function vcrFailureSentence(error) {
   const recorded = object(error);
-  return vcrPageSentence(recorded.message) ?? knownErrorCodeMessage(String(recorded.code ?? "")) ?? VCR_FAILED_SENTENCE;
+  return vcrPageSentence(recorded.message) ?? namedFailureSentence(recorded) ?? knownErrorCodeMessage(String(recorded.code ?? "")) ?? VCR_FAILED_SENTENCE;
+}
+
+/**
+ * The refusals whose sentence is no use without the name the researcher wrote: a rule naming a column the table does not
+ * have says which column (the vcr-seam case C2-1; release 10.1 dropped it). A closed table of codes, and the name is the one
+ * our own engine and domain quote in their message (`'x'` from R, `"x"` from the domain's JSON) — a format, not a reading.
+ * @type {Readonly<Record<string, (name: string) => string>>}
+ */
+const NAMED_FAILURES = Object.freeze({
+  rule_column_unknown: (name) => `规则里用了数据表里没有的列“${name}”；核对列名。`,
+});
+
+/** @param {Record<string, any>} recorded @returns {string | null} */
+function namedFailureSentence(recorded) {
+  const sentence = NAMED_FAILURES[String(recorded.code ?? "")];
+  const name = /['"]([^'"\n]{1,64})['"]/.exec(String(recorded.message ?? ""))?.[1];
+  return sentence && name ? sentence(name) : null;
 }
 
 // --- people ------------------------------------------------------------------------
