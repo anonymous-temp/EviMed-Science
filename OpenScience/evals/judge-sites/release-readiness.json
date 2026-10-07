@@ -157,7 +157,7 @@
       "qualification": "uncalibrated",
       "threshold": 0.8,
       "missing": [
-        "Researcher-confirmed document-type labels over all 22 choices have not been collected."
+        "Researcher-confirmed document-type labels over the whole document-type list have not been collected."
       ]
     },
     "J8": {
