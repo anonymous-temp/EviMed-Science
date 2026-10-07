@@ -233,7 +233,7 @@ function DailySection({ id, title, items, safety = false, limit }: { id: string;
   const rest = items.length - shown.length;
   return (
     <section aria-labelledby={`daily-${id}`} className="mt-8">
-      <h3 id={`daily-${id}`} className="flex scroll-mt-14 items-baseline gap-2">
+      <h3 id={`daily-${id}`} className="flex scroll-mt-24 items-baseline gap-2">
         <span className={cn("text-ui font-semibold", safety ? "text-danger-strong" : "text-text")}>{title}</span>
         <span className="text-caption tabular-nums text-text-3">{items.length}</span>
       </h3>
