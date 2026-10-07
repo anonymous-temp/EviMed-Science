@@ -11,6 +11,7 @@ const client = vi.hoisted(() => ({
   useGeoFeature: vi.fn(),
   listGeoProjects: vi.fn(),
   createGeoProject: vi.fn(),
+  patchGeoProject: vi.fn(),
   open: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
   useGeoFeature: client.useGeoFeature,
   listGeoProjects: client.listGeoProjects,
   createGeoProject: client.createGeoProject,
+  patchGeoProject: client.patchGeoProject,
 }));
 
 // Opening a GEO conversation switches the shell's project; that has its own
@@ -85,6 +87,47 @@ describe("循证 GEO home", () => {
     expect(list.querySelectorAll("[data-severity]")).toHaveLength(1);
     expect(within(list).getByText("3 条讲错待处理")).toBeInTheDocument();
     expect(within(list).getByText("1 篇稿件的安全问题待确认")).toBeInTheDocument();
+  });
+
+  it("tells two projects of one name apart by the day each started, and leaves a single name alone", async () => {
+    client.listGeoProjects.mockResolvedValue([
+      { ...GEO_SUMMARIES[0], id: "geo_a", name: "波立维", startedAt: "2026-09-29" },
+      { ...GEO_SUMMARIES[1], id: "geo_b", name: "波立维", startedAt: "2026-10-07" },
+      { ...GEO_SUMMARIES[2], id: "geo_c", name: "玛仕度肽注射液" },
+    ]);
+    renderHome();
+    const list = await screen.findByRole("list", { name: "循证 GEO 项目" });
+    expect(within(list).getByRole("link", { name: "波立维（9月29日）" })).toHaveAttribute("href", "/app/geo/geo_a");
+    expect(within(list).getByRole("link", { name: "波立维（10月7日）" })).toHaveAttribute("href", "/app/geo/geo_b");
+    expect(within(list).getByRole("link", { name: "玛仕度肽注射液" })).toBeInTheDocument();
+  });
+
+  it("offers 继续 on a paused project only, and sets it going again where the reader is looking", async () => {
+    client.listGeoProjects.mockResolvedValue([
+      { ...GEO_SUMMARIES[0], id: "geo_a", status: "paused" },
+      { ...GEO_SUMMARIES[1], id: "geo_b", status: "active" },
+    ]);
+    client.patchGeoProject.mockResolvedValue({});
+    renderHome();
+    const list = await screen.findByRole("list", { name: "循证 GEO 项目" });
+    const rows = within(list).getAllByRole("listitem");
+    expect(within(rows[0]).getByText(/已暂停/)).toBeInTheDocument();
+    expect(within(rows[1]).queryByRole("button", { name: /继续/ })).not.toBeInTheDocument();
+    await userEvent.click(within(rows[0]).getByRole("button", { name: "继续“玛仕度肽注射液”" }));
+    await waitFor(() => expect(client.patchGeoProject).toHaveBeenCalledWith("geo_a", { status: "active" }));
+    // The row no longer says paused and no longer offers it; the list was not re-read.
+    await waitFor(() => expect(within(rows[0]).queryByRole("button", { name: /继续/ })).not.toBeInTheDocument());
+    expect(within(rows[0]).queryByText(/已暂停/)).not.toBeInTheDocument();
+    expect(client.listGeoProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps 继续 when the project cannot be set going, and says so", async () => {
+    client.listGeoProjects.mockResolvedValue([{ ...GEO_SUMMARIES[0], id: "geo_a", status: "paused" }]);
+    client.patchGeoProject.mockRejectedValue(new WebApiError("no", { status: 403, code: "geo_forbidden" }));
+    renderHome();
+    await userEvent.click(await screen.findByRole("button", { name: /^继续/ }));
+    await waitFor(() => expect(client.patchGeoProject).toHaveBeenCalled());
+    expect(await screen.findByRole("button", { name: /^继续/ })).toBeInTheDocument();
   });
 
   it("creates a project and lands in its conversation — no form", async () => {
