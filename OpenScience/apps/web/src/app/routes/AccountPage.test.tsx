@@ -34,7 +34,7 @@ vi.mock("@/components/settings/MonthlyUsage", () => ({ MonthlyUsage: () => <div>
 vi.mock("@/components/settings/ResearchAllowance", () => ({ ResearchAllowance: () => <div>科研额度分区</div> }));
 vi.mock("@/components/settings/ConnectorsSection", () => ({ ConnectorsSection: () => <div>数据源分区</div> }));
 vi.mock("@/components/settings/ProjectsSection", () => ({ ProjectsSection: () => <div>项目分区</div> }));
-vi.mock("./OpsPage", () => ({ OpsPage: () => <div>运维分区<p>项目插件</p></div> }));
+vi.mock("./OpsPage", () => ({ OpsPage: () => <div>运维分区<p>循证进化</p></div> }));
 
 const me = (operator = false) => ({
   user: { id: "alice", name: "Alice", tenantId: "alice" },
@@ -212,13 +212,13 @@ describe("设置", () => {
     expect(await screen.findByText("账户分区（含飞书）")).toBeInTheDocument();
   });
 
-  // 「项目插件」 is an operator's: a researcher has nothing to configure in it.
-  it("offers 运维, and the project plugins in it, only to an operator account", async () => {
+  // 「循证进化」 is an operator's: a researcher has nothing to look at in it.
+  it("offers 运维, and the evolution panel in it, only to an operator account", async () => {
     open("/app/account?tab=projects");
     expect(await screen.findByText("项目分区")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
     expect(within(nav()).queryByRole("link", { name: "运维" })).not.toBeInTheDocument();
-    expect(screen.queryByText("项目插件")).not.toBeInTheDocument();
+    expect(screen.queryByText("循证进化")).not.toBeInTheDocument();
   });
 
   it("offers 运维 when the control plane says this account is one", async () => {
@@ -227,7 +227,7 @@ describe("设置", () => {
     open();
     await user.click(await within(nav()).findByRole("link", { name: "运维" }));
     expect(await screen.findByText("运维分区")).toBeInTheDocument();
-    expect(screen.getByText("项目插件")).toBeInTheDocument();
+    expect(screen.getByText("循证进化")).toBeInTheDocument();
   });
 
   it("keeps 外观 to a theme, a language and the shortcuts, with no hint under any group", async () => {

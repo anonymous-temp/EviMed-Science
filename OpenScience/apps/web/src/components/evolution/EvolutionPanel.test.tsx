@@ -16,6 +16,8 @@ describe('evolution discovery boundaries', () => {
   it('shows verification and data labels plus downloadable requirements for operators', async () => {
     mocks.access = {enabled: true, operator: true}; render(<MemoryRouter><EvolutionPanel /></MemoryRouter>);
     expect(await screen.findByText('调查加权分析')).toBeInTheDocument();
+    // Its name on the operations page, where it moved to from under the tool grid.
+    expect(screen.getByRole('heading', {name: '循证进化'})).toBeInTheDocument(); expect(screen.queryByText('进化工具')).not.toBeInTheDocument();
     expect(screen.getByText('已复现已发表算例')).toBeInTheDocument(); expect(screen.getByText('公开数据')).toBeInTheDocument();
     expect(mocks.dossiers).toHaveBeenCalledOnce();
   });
