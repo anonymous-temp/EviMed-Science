@@ -122,3 +122,22 @@ test("a candidate modifies one mutable component and its smoke executes known-co
   assert.equal((await adapters.frontier.prepare({policy:{selectionThreshold:81,editInstructions:"changed"}})).reason,"candidate_must_change_one_component");
   assert.equal((await adapters.frontier.smoke({batch:[{id:"1"},{id:"2"}]})).passed,true);
 });
+
+test("a module proposal's rollback revision and reproduced failure come from the platform, never from the model", async () => {
+  const { moduleProposalWithFacts } = await import("../src/moduleEvolutionAdapters.mjs");
+  const { evolutionProposalIssues } = await import("../../../packages/domain/src/evolutionSelection.mjs");
+  const said = { policy: { selectionThreshold: 70 }, proposal: { components: ["selectionThreshold"], mechanisms: ["stricter-screen"], change: "raise the threshold",
+    reason: "fewer off-topic items", predictedBenefits: ["precision"], possibleHarms: ["recall"], costChange: 0, opportunityKind: "exploration",
+    rollbackVersion: "invented", failureReproduced: true } };
+  const repair = { baseline: { revisionId: "evolution-module-policy-frontier:3" }, sources: ["repair"] };
+  const unrecorded = moduleProposalWithFacts(said, repair, false);
+  assert.equal(unrecorded.proposal.rollbackVersion, "evolution-module-policy-frontier:3");
+  assert.equal(unrecorded.proposal.opportunityKind, "repair");
+  assert.deepEqual(evolutionProposalIssues(unrecorded.proposal), ["reproducible-failure-required"], "the model's claim does not count");
+  assert.deepEqual(evolutionProposalIssues(moduleProposalWithFacts(said, repair, true).proposal), []);
+  const growth = moduleProposalWithFacts(said, { sources: ["new-method"] }, true);
+  assert.equal(growth.proposal.rollbackVersion, "code-default");
+  assert.equal(growth.proposal.failureReproduced, undefined);
+  assert.deepEqual(evolutionProposalIssues(growth.proposal), []);
+  assert.equal(moduleProposalWithFacts(null, repair, true), null);
+});

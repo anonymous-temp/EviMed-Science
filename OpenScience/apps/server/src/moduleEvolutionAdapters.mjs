@@ -4,6 +4,20 @@ import { validateModuleEvolutionPolicy } from "./moduleEvolutionPolicies.mjs";
 export const MODULE_EVOLUTION_IDS = Object.freeze(["tools", "frontier", "geo", "autopilot", "sources", "evidence", "memory", "runtime"]);
 export const MODULE_CONFIRMATION_MINIMUM = Object.freeze({ frontier: 30, geo: 30, autopilot: 20, runtime: 10 });
 
+/** The facts of a module proposal the platform holds are written here, never taken from the model: the revision a
+ * rollback returns to, and — for a repair — whether the failure it answers is one the platform itself recorded. On
+ * 2026-10-07 a 前沿动态 repair mission spent its five attempts on `rollbackVersion` and `failureReproduced`, which the
+ * prompt asked the model for and no code ever supplied.
+ * @param {any} proposed the model's {policy, proposal} @param {{baseline?:{revisionId?:string}, sources?:string[]}} mission
+ * @param {boolean} failureRecorded */
+export function moduleProposalWithFacts(proposed, mission, failureRecorded) {
+  if (!proposed || typeof proposed !== "object" || Array.isArray(proposed)) return proposed;
+  const proposal = { ...(proposed.proposal && typeof proposed.proposal === "object" ? proposed.proposal : {}), rollbackVersion: mission.baseline?.revisionId ?? "code-default" };
+  delete proposal.failureReproduced;
+  if ((mission.sources ?? []).includes("repair")) Object.assign(proposal, { opportunityKind: "repair", failureReproduced: failureRecorded === true });
+  return { ...proposed, proposal };
+}
+
 /** An evaluator must execute the declared batch and return individually measured units.
  * No configured evaluator means unavailable, never a synthetic pass.
  * @param {{enabled?: Record<string, boolean>, policies?: any, defaults?: Record<string, any>, runners?: Record<string, (input: any) => Promise<any>>,
