@@ -220,6 +220,10 @@ vcr_job_generate_patients_longitudinal <- function(job, output_dir = NULL, ...) 
   eff <- tr[["covariateEffects"]]
   if (!is.null(pop)) {
     if (n1 + n0 != n) vcr_abort("scenario_value_invalid", "scenario.design", "For a stored population the arm sizes add up to the number of members.")
+    # the generated table has columns of its own; a population variable of the same name would be read as one of them
+    if (any(names(pop) %in% c("patientId", "arm", "visit", "time", "y", "source", "modelTier"))) {
+      vcr_abort("scenario_value_invalid", "inputs", "A population column is named like a column of the generated table (patientId, arm, visit, time, y, source, modelTier); rename it in the population.")
+    }
     z <- as.integer(rank(stats::runif(n), ties.method = "first") <= n1)
     if (!is.null(eff) && length(eff)) {
       cols <- names(eff)

@@ -146,10 +146,14 @@ vcr_case("N46d", c("AC-11", "AC-26"), function() {
   r_bad <- .n46_run(bad_n, 4604L, "d2", dir, list(in_pop))
   no_pop <- .n46_run(sc, 4604L, "d3", dir)
   codes <- list(bad = vcr_test_issue_codes(r_bad), none = vcr_test_issue_codes(no_pop))
+  # a population column that carries the name of a column of the generated table is refused, never silently merged with it
+  clash <- vcr_test_input(data.frame(x = pop$x, time = 1), "pop_n46d_clash@1", source = "synthetic", kind = "snapshot_file")
+  r_clash <- .n46_run(sc, 4604L, "d4", dir, list(clash))
   list(pass = identical(r$status, "succeeded") && all(abs(z) < 4) && identical(as.integer(arms), as.integer(c(n / 2L, n / 2L))) && abs(at0 - 5) < 0.2 &&
-         identical(r_bad$status, "failed") && "scenario_value_invalid" %in% codes$bad && identical(no_pop$status, "failed") && "scenario_value_invalid" %in% codes$none && "x" %in% names(d),
-       detail = sprintf("population of %d members: covariate effect %.3f (want 0.8), effect on the slope %.3f (want -0.3), control slope %.3f (want 0.5) (worst %.2f SE); arms %d/%d; control mean at t = 0 is %.2f for the stated intercept 5 although the covariate averages 10; arm sizes that do not add up -> %s; a covariate effect with no population -> %s",
-                        n, co("x")[1], co("time:arm")[1], co("time")[1], max(abs(z)), arms[[1]], arms[[2]], at0, paste(codes$bad, collapse = ","), paste(codes$none, collapse = ",")))
+         identical(r_bad$status, "failed") && "scenario_value_invalid" %in% codes$bad && identical(no_pop$status, "failed") && "scenario_value_invalid" %in% codes$none && "x" %in% names(d) &&
+         identical(r_clash$status, "failed") && "scenario_value_invalid" %in% vcr_test_issue_codes(r_clash),
+       detail = sprintf("population of %d members: covariate effect %.3f (want 0.8), effect on the slope %.3f (want -0.3), control slope %.3f (want 0.5) (worst %.2f SE); arms %d/%d; control mean at t = 0 is %.2f for the stated intercept 5 although the covariate averages 10; arm sizes that do not add up -> %s; a covariate effect with no population -> %s; a population column named like a column of the table -> %s",
+                        n, co("x")[1], co("time:arm")[1], co("time")[1], max(abs(z)), arms[[1]], arms[[2]], at0, paste(codes$bad, collapse = ","), paste(codes$none, collapse = ","), paste(vcr_test_issue_codes(r_clash), collapse = ",")))
 })
 
 vcr_case("N46e", c("AC-09", "AC-20"), function() {

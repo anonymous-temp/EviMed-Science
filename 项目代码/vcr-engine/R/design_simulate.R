@@ -661,7 +661,7 @@ vcr_analytic_check <- function(scenario, measures) {
   # An exact closed form is held to the simulation's own error; an approximation is
   # held to that error plus the bias it is documented to carry, and the result says so.
   bias <- if (identical(analytic$basis, "asymptotic_logrank_score")) VCR_LOGRANK_APPROXIMATION_BIAS
-          else if (analytic$basis %in% c("first_order_one_sample_logrank", "asymptotic_one_sample_logrank")) VCR_ONE_SAMPLE_LOGRANK_APPROXIMATION_BIAS else 0
+          else if (isTRUE(analytic$basis %in% c("first_order_one_sample_logrank", "asymptotic_one_sample_logrank"))) VCR_ONE_SAMPLE_LOGRANK_APPROXIMATION_BIAS else 0
   tolerance <- 3 * mcse + bias
   c(analytic, list(simulated = sim[[1]]$value, difference = d, mcse = mcse,
                    differenceInMcse = if (mcse > 0) d / mcse else NA_real_,
