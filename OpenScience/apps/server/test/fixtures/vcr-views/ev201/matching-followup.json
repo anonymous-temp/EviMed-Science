@@ -9,6 +9,9 @@
     "snapshotAt": null
   },
   "direction": "trial_to_patient",
+  "directions": [
+    "trial_to_patient"
+  ],
   "funnel": [
     {
       "key": "candidates",

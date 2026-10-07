@@ -199,7 +199,9 @@ def tool_definitions():
                 "patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, "
                 "a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, "
                 "data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population "
-                "item may carry fromLibrary {definitionId, version?} instead of a definition. Numbers are not writable: results, counts, "
+                "item may carry fromLibrary {definitionId, version?} instead of a definition, or, for a real cohort, fromProtocol: true with a "
+                "snapshotId (the protocol's own criteria become its rules); a definition may carry title (the study's name, 24 characters) "
+                "and question. Numbers are not writable: results, counts, "
                 "measures and execution records come from the engine, and an object's configuration, scenario or definition "
                 "carries only the keys the engine reads for the job that computes it: before you write a trial scenario, "
                 "patient set, population or comparator, call vcr_simulate with action shape and that job's kind "
@@ -237,7 +239,10 @@ def tool_definitions():
                 "design it is read for) and a valid example; shape with no kind lists the kinds. Patient-level kinds "
                 "name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence is evidence_pool and "
                 "match_criteria is built by the platform from the protocol; maic_time_to_event_comparator takes "
-                "reconstructionResultId, never rows. How to read the results is in the vcr-analysis skill."
+                "reconstructionResultId, never rows. A computation of one of the study's objects (a trial scenario, population, patient "
+                "set, comparator or design grid) names it: subjectId is the id vcr_write returned, and its result is filed under that "
+                "object alone; with none, the one object the scenario fits is taken, and several are refused with the list. "
+                "How to read the results is in the vcr-analysis skill."
             ),
             "inputSchema": {
                 "type": "object",

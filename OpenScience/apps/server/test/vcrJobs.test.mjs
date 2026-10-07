@@ -296,3 +296,13 @@ test("an engine that ended a job with no result is named in the sentence, and an
   assert.ok(!/drop table/.test(strange.message));
   assert.ok(strange.message.length > 0);
 });
+
+test("the jobs that are about one of the study's objects are told from those that are not", async () => {
+  const { VCR_SUBJECT_KINDS, vcrJobObjectKind } = await import("../src/vcrJobs.mjs");
+  assert.deepEqual([...VCR_SUBJECT_KINDS], ["population", "patient_set", "comparator", "trial_scenario", "design_grid"]);
+  for (const kind of ["design_analytic", "design_simulation", "assurance", "design_grid", "generate_population", "generate_patients", "weight_comparator"]) {
+    assert.ok(vcrJobObjectKind(kind), `${kind} is about an object`);
+  }
+  // a job that is about no object of these five is not asked for one
+  for (const kind of ["pool_evidence", "reconstruct_km", "accrual_forecast", "match_criteria", "profile_snapshot"]) assert.equal(vcrJobObjectKind(kind), null, kind);
+});

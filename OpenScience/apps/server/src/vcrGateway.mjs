@@ -72,6 +72,8 @@ import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { VCR_TRIAL_RESTRICTED_FIELDS, deriveFromExit, followupFidelityFindings, postExitEpisode, trialPeriodEpisode } from "./vcrRecruit.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION } from "./vcrMatching.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE } from "./vcrJobs.mjs";
+import { resolveJobSubject } from "./vcrSubjects.mjs";
+import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
@@ -112,7 +114,8 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
   "vcr_curve_provenance_unavailable", "vcr_curve_provenance_invalid", "vcr_curve_source_changed",
   "vcr_curve_calibration_invalid", "vcr_curve_digitizer_unavailable", "vcr_intake_busy", "vcr_intake_timeout", "vcr_intake_failed",
-  "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_job_not_found", "registry_unavailable",
+  "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_simulate_subject_required", "vcr_simulate_subject_unknown",
+  "vcr_job_not_found", "registry_unavailable",
 ]);
 
 class VcrGatewayError extends Error {
@@ -939,8 +942,46 @@ const WRITERS = {
     return done.id;
   },
 
-  async population(item, { store, study, knowledge, caller }, extra) {
-    if (!item.only(["kind", "name", "definition", "snapshotId", "allowedUses", "fromLibrary"])) return null;
+  async population(item, { store, study, knowledge, caller, dataPlane, matchStore }, extra) {
+    if (!item.only(["kind", "name", "definition", "snapshotId", "allowedUses", "fromLibrary", "fromProtocol"])) return null;
+    // 「从方案出发查覆盖」: the rules are the protocol's own criteria, made into cohort rules on the columns of a frozen snapshot by the
+    // platform (`vcrCohortRulesFromCriteria`); the run names the snapshot and nothing else. What the snapshot cannot answer comes back
+    // criterion by criterion, with why — the engine's counts are what the page and the next read say about the rest.
+    if (item.row.fromProtocol != null) {
+      if (item.row.fromProtocol !== true) item.bad("fromProtocol", "fromProtocol 写 true：条件取自本研究的方案。");
+      if (item.row.definition !== undefined || item.row.fromLibrary !== undefined || (item.row.kind !== undefined && item.row.kind !== "real")) {
+        item.bad("fromProtocol", "fromProtocol 提供人群的入选规则：不要同时写 definition 或 fromLibrary，kind 只能是 real。");
+      }
+      const snapshotId = item.row.snapshotId == null ? "" : String(item.row.snapshotId);
+      if (!snapshotId) item.bad("snapshotId", "按方案查覆盖要说明在哪份冻结的数据快照上查：snapshotId 必填。");
+      else await item.owned("snapshotId", "snapshot", snapshotId);
+      const name = item.str("name", { max: 120 }) ?? VCR_COVERAGE_POPULATION_NAME;
+      if (!dataPlane?.runtimeProfile) item.bad("snapshotId", "数据平面未接入本部署：这一步暂不可用。", "vcr_write_refused");
+      if (!item.ok) return null;
+      const protocol = await store.latestProtocolVersion(study.id);
+      const criteria = protocol
+        ? (matchStore?.listCriteria ? await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }) : await store.criteria(protocol.id)) : [];
+      if (!criteria.length) {
+        item.bad("fromProtocol", "本研究还没有结构化的入排条件：先用 vcr_write what=protocol 写下方案的条件，再查覆盖。", "vcr_write_refused");
+        return null;
+      }
+      const profile = await dataPlane.runtimeProfile(study, { snapshotId });
+      const fieldMap = list(profile?.fieldMap).map(object).map((entry) => ({
+        column: entry.column, alias: entry.alias, parameter: entry.parameter, concept: entry.concept, unit: entry.unit, identifier: entry.identifier === true }));
+      const made = vcrCohortRulesFromCriteria({ criteria, fieldMap });
+      if (!made.rules.length) {
+        item.bad("fromProtocol", `方案里没有一条条件能在这份数据上按列判断：${made.skipped.slice(0, 6).map((entry) => `${entry.code}（${entry.why}）`).join("；")}。先确认数据的字段对应，或补充数据。`, "vcr_write_refused");
+        return null;
+      }
+      const saved = await store.savePopulation({
+        studyId: study.id, userId: study.userId, name, kind: "real", definition: { rules: made.rules }, snapshotId, allowedUses: [],
+        // What the snapshot could not answer is kept with the population: the tab says which criteria are not in the count, and why.
+        reviewState: "ai_set", profile: { coverage: { notEvaluated: made.skipped.map((entry) => ({ code: entry.code, why: entry.why })) } }, quality: {}, waterfall: [],
+      });
+      extra.results.push({ index: item.index, populationId: saved.id, coverage: { evaluated: made.rules.map((rule) => rule.name),
+        notEvaluated: made.skipped.map((entry) => ({ code: entry.code, why: entry.why })) } });
+      return saved.id;
+    }
     // A definition from the account's library: the rules, time zero and exit are the library's, the study's dataset names
     // the columns (renamed only where the pack makes it unambiguous), and the study is recorded as a use of that version.
     if (item.row.fromLibrary != null) {
@@ -1005,7 +1046,8 @@ const WRITERS = {
 
   async comparator(item, { store, study }) {
     if (!item.only(["route", "estimand", "targetTrial", "configuration"])) return null;
-    const route = item.choice("route", vcrRouteOptions(study.dataTier).map((option) => option.route), { required: true });
+    // The routes this version can compute: the model-prediction comparator is not one of them, at any tier (it is listed as unsupported).
+    const route = item.choice("route", vcrRouteOptions(study.dataTier).filter((option) => option.supported).map((option) => option.route), { required: true });
     const estimand = item.choice("estimand", VCR_ESTIMANDS, { fallback: "ATT" });
     const targetTrial = item.obj("targetTrial") ?? {};
     const configuration = item.obj("configuration") ?? {};
@@ -1930,12 +1972,35 @@ async function startJob(vcr, study, request) {
   // input id into the scenario itself, so it is part of what makes the same request the same job.
   const derived = request.reconstructionResultId
     ? [{ resultId: request.reconstructionResultId, table: VCR_RECONSTRUCTION_REFERENCE.table, bindTo: VCR_RECONSTRUCTION_REFERENCE.bindTo }] : [];
+  // A cohort asked for with no scenario is the real population's own: its rules (from the protocol's criteria, or the ones the run wrote)
+  // on the snapshot it names — the one step 「从方案出发查覆盖」 is: write the population, then ask for the cohort.
+  if (request.kind === "build_cohort" && !Object.keys(scenario).length) {
+    const own = (await resolveJobSubject({ store: vcr.store, study, kind: request.kind, subjectId: request.subjectId, scenario })).row;
+    if (own.kind !== "real" || !Object.keys(object(own.definition)).length) {
+      throw gatewayError(400, "vcr_simulate_payload_invalid", "队列的入选规则写在人群对象里：先用 vcr_write what=population 写 kind real 的人群（带 definition，或 fromProtocol: true 和 snapshotId）。");
+    }
+    scenario = { ...object(own.definition) };
+    if (!inputs.length && own.snapshotId) inputs = [{ kind: "snapshot", id: String(own.snapshotId) }];
+  }
   const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
+  // A computation of a research object names it: its result is filed under that object and replaces only that object's earlier
+  // results. The id the run gave is checked against the study; with none, the one object the scenario fits is taken, and several
+  // (or none) are refused by name with what the study holds.
+  const subject = await resolveJobSubject({ store: vcr.store, study, kind: request.kind, subjectId: request.subjectId, scenario });
+  if (subject) {
+    detail = { ...detail, ...subject.detail };
+    const running = await vcr.orchestrator?.inFlightStage?.(study.id, subject.detail);
+    if (running) {
+      return { action: "start", jobId: running.id, state: running.state, progress: running.progress ?? {}, alreadyRunning: true,
+        subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version) },
+        message: "这个对象的这一步平台已经在算了：读这个作业的进度和结果就行，不必再排一个。" };
+    }
+  }
   const { job } = await vcr.jobs.enqueue({
     studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs, ...(derived.length ? { derived } : {}),
     seed: request.seed, replicates: request.replicates, cpuSecondsLimit: request.cpuSecondsLimit,
     // The same frozen scenario asked for twice is the same job; a changed one is not.
-    idempotencyKey: `vcr:${study.id}:runtime:${request.kind}:${request.subjectId ?? ""}:${scenarioHash}`,
+    idempotencyKey: `vcr:${study.id}:runtime:${request.kind}:${subject?.row.id ?? request.subjectId ?? ""}:${scenarioHash}`,
     detail,
   }).catch(error => {
     if (error?.status === 400 && ['generate_population', 'literature_population', 'synthesize_population',
@@ -1951,7 +2016,11 @@ async function startJob(vcr, study, request) {
     }
     throw error;
   });
+  // The programme learns the stage is taken and lands the result on the object when it ends; a failure to say so costs a
+  // duplicate computation, never this job.
+  if (subject && vcr.orchestrator?.noteRuntimeJob) await vcr.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
   return { action: "start", jobId: job.id, state: job.state, progress: job.progress, ...(notes ? { notes } : {}),
+    ...(subject ? { subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version) } } : {}),
     // A job stopped for budget is the second human stop: the run is
     // told plainly so it goes on with what it can do (§10.1).
     ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };

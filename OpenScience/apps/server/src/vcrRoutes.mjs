@@ -63,11 +63,14 @@ import {
   VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
   VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
 
+import { createReadStream } from "node:fs";
+
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
 import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
+import { resolveJobSubject } from "./vcrSubjects.mjs";
 import { VCR_CARD_KINDS, createVcrCardEdits } from "./vcrCardEdits.mjs";
 import { zhTime } from "./vcrViewsKit.mjs";
 
@@ -89,6 +92,16 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_intended_use_invalid",
   "vcr_status_invalid",
   "vcr_step_invalid",
+  // 「让 AI 做」 on a study nothing has been said about; a computation that names no object, or one that is not the study's.
+  "vcr_definition_missing",
+  "vcr_simulate_subject_required",
+  "vcr_simulate_subject_unknown",
+  // The generated records of a study as a file: nothing kept to hand over, a real patient's rows, an empirical synthetic table with no
+  // leakage check, no data plane.
+  "vcr_records_not_found",
+  "vcr_records_not_synthetic",
+  "vcr_records_quality_missing",
+  "vcr_records_unavailable",
   "vcr_tab_not_found",
   "vcr_job_kind_invalid",
   "vcr_job_scenario_invalid",
@@ -163,6 +176,8 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/decisions": ["write"],
   "POST /studies/:id/export": ["export"],
   "GET /studies/:id/export/:export": ["read"],
+  "GET /studies/:id/records/:result.csv": ["read"],
+  "GET /studies/:id/records/:result.quality.json": ["read"],
   "GET /studies/:id/publications": ["read"],
   "POST /studies/:id/publications": ["manage_study"],
   "POST /studies/:id/predictions": ["manage_study"],
@@ -211,6 +226,7 @@ const roleHolds = (role, ability) => roleAllows(role, ability);
  */
 export function vcrRoutePattern(pathname) {
   const parts = pathname.slice("/api/vcr".length).split("/").filter(Boolean);
+  if (parts[0] === "studies" && parts[2] === "records" && parts.length === 4) return "/api/vcr/studies/:id/records/:result";
   if (!parts.length) return "/api/vcr";
   if (parts[0] === "models") return "/api/vcr/models";
   if (parts[0] === "precedents") return "/api/vcr/precedents";
@@ -343,7 +359,7 @@ function wholeNumber(value, field, max) {
  *     rename?: (ownerId: string, projectId: string, name: string, previousName: string) => Promise<unknown>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, cards?: any }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, records?: any, cards?: any }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -361,7 +377,9 @@ export function createVcrRoutes(dependencies) {
     let parts;
     try { parts = url.pathname.slice("/api/vcr".length).split("/").filter(Boolean).map(decodeURIComponent); }
     catch { throw new HttpError(400, "vcr_path_invalid", "Invalid 虚拟临研 path."); }
-    if (parts.some((part) => !ID.test(part))) throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+    // The generated records are a file: `…/records/<result>.csv` and its sibling `<result>.quality.json` — the one place a path segment has a dot.
+    const records = /^\/api\/vcr\/studies\/([A-Za-z0-9_-]{1,80})\/records\/([A-Za-z0-9_-]{1,80})\.(csv|quality\.json)$/.exec(url.pathname);
+    if (!records && parts.some((part) => !ID.test(part))) throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     const method = req.method ?? "GET";
     const reply = (/** @type {any} */ value, status = 200) => { sendJson(res, status, { data: value }); return true; };
     // Read at request time: packages composed after the routes attach to the
@@ -436,6 +454,42 @@ export function createVcrRoutes(dependencies) {
       const roles = await requireAbility(study, abilities);
       return { study, roles };
     };
+
+    // --- the generated records, as a file ------------------------------------------------------
+    if (records) {
+      if (method !== "GET") throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      const { study } = await authorize(records[1], "read");
+      const records_ = dependencies.records ?? service.packages?.records ?? null;
+      if (!records_) throw UNAVAILABLE();
+      const format = records[3] === "csv" ? "csv" : "quality";
+      /** @param {Record<string, any>} entry */
+      const noted = (entry) => records_.audit(study, String(user.id), { resultId: records[2], format, ...entry }).catch(() => null);
+      try {
+        if (format === "quality") {
+          const quality = await records_.quality(study, records[2]);
+          await noted({ outcome: "ok", bytes: Buffer.byteLength(quality.body) });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": `attachment; filename="${quality.filename}"` });
+          res.end(quality.body);
+          return true;
+        }
+        const file = await records_.csv(study, records[2]);
+        await noted({ outcome: "ok", bytes: file.bytes + Buffer.byteLength(file.header), method: file.method });
+        res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+          "Content-Disposition": `attachment; filename="${file.filename}.csv"`, "Content-Length": String(file.bytes + Buffer.byteLength(file.header)) });
+        res.write(file.header);
+        await new Promise((resolve, reject) => {
+          const stream = createReadStream(file.file);
+          stream.on("error", reject).on("end", resolve);
+          res.on("close", resolve);
+          stream.pipe(res);
+        });
+        return true;
+      } catch (error) {
+        if (error instanceof HttpError) await noted({ outcome: "refused", reason: error.code });
+        throw error;
+      }
+    }
 
     /**
      * The citations of an `external_evidence` card are ids of this study's
@@ -926,8 +980,11 @@ export function createVcrRoutes(dependencies) {
         return reply({ jobs: await hooks.jobs.listForStudy(study.id), budget: await hooks.jobs.budgetOf?.(study.id) ?? null });
       }
       if (parts.length === 3 && method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit"]);
+        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId"]);
         word(body.kind, VCR_JOB_KINDS, "vcr_job_kind_invalid", "kind");
+        if (body.subjectId != null && (typeof body.subjectId !== "string" || !ID.test(body.subjectId))) {
+          throw new HttpError(400, "vcr_job_scenario_invalid", "subjectId is the id of one of the study's objects.");
+        }
         if (body.scenario != null && (typeof body.scenario !== "object" || Array.isArray(body.scenario))) {
           throw new HttpError(400, "vcr_job_scenario_invalid", "scenario is an object.");
         }
@@ -937,11 +994,16 @@ export function createVcrRoutes(dependencies) {
         const { study } = await authorize(id, "run");
         if (!hooks.jobs?.enqueue) throw UNAVAILABLE();
         const cpuSecondsLimit = body.cpuSecondsLimit == null ? null : wholeNumber(body.cpuSecondsLimit, "cpuSecondsLimit", CPU_SECONDS_MAX);
+        // A computation names the object it is for, like the conversation's (`resolveJobSubject`): its result is filed under it.
+        const subject = hooks.jobs.store
+          ? await resolveJobSubject({ store: hooks.jobs.store, study, kind: body.kind, subjectId: body.subjectId ?? null, scenario: body.scenario ?? {} }) : null;
         const { job, created } = await audited("vcr.job.enqueue", (result) => ({ code: result.job.id, detail: String(body.kind) }),
           { code: id, detail: String(body.kind) }, () => hooks.jobs.enqueue({
             studyId: study.id, userId: String(user.id), kind: body.kind, scenario: body.scenario ?? {}, inputs: body.inputs ?? [],
             seed: body.seed ?? null, replicates: body.replicates ?? null, cpuSecondsLimit,
+            detail: subject ? { ...subject.detail, origin: "page" } : (body.subjectId ? { subjectId: body.subjectId } : {}),
           }));
+        if (subject && hooks.orchestrator?.noteRuntimeJob) await hooks.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
         return reply(job, created ? 201 : 200);
       }
       if (parts.length === 4 && method === "GET") {

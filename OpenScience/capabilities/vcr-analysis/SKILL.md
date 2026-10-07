@@ -22,7 +22,7 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 ## 你写对象，平台交给引擎算
 
-用 `mcp__evimed__vcr_write` 写人群、虚拟患者集、对照和试验方案。**写下去，平台就把这个对象冻结成一个引擎作业，算完把结果存回来**，不需要你自己排作业。只有回答一个不属于任何对象的问题（比如一句话问"要多少例"）才用 `mcp__evimed__vcr_simulate`：`action: "start"` 拿到 `jobId`，`action: "status"` 轮询。作业超出研究的计算预算会停在确认处，只有研究者的确认能放行它，不要对它轮询；照实告诉用户在等什么、大概多少机时，然后继续做不依赖它的部分。
+用 `mcp__evimed__vcr_write` 写人群、虚拟患者集、对照和试验方案。**写下去，平台就把这个对象冻结成一个引擎作业，算完把结果存回来**，不需要你自己排作业。直接排计算（`mcp__evimed__vcr_simulate`）只在对话里一句话问"要多少例"这类问题时用，而且每一次计算都要说它算的是哪个对象：先写一个试验方案对象，再把它的 id 作为 `subjectId`（解析、模拟、成功把握是同一份结果的几个部分，几个方案是几份结果，互不顶替）。`action: "start"` 拿到 `jobId`，`action: "status"` 轮询。作业超出研究的计算预算会停在确认处，只有研究者的确认能放行它，不要对它轮询；照实告诉用户在等什么、大概多少机时，然后继续做不依赖它的部分。
 
 **对象里只能写引擎认识的字段。** 多写一个字段、拼错一个字段（比如脱落率没有写成 `accrual.dropoutAnnual`），这个对象不会被算，而是被拒绝并说出字段的路径——引擎从不悄悄忽略一个参数。**写之前先读，不要凭印象起名字**：用 `mcp__evimed__vcr_simulate` `{ "action": "shape", "kind": "<作业类型>" }` 读这个方法认识的全部字段（类型、单位、范围、默认值、必填还是可选、按哪种终点或设计才读）和一个有效示例；试验方案用 `design_analytic` 和 `design_simulation`，虚拟患者集用 `generate_patients*`。被拒绝时，拒绝的话里已经列出那个位置引擎读的字段，照着改，不必再猜。零效应情景写 `truth.null: true`（布尔值），脱落只有 `accrual.dropoutAnnual` 一种写法（每 12 个时间单位的比例）；`alpha` 是总 α，`sided` 写 1 或 2。**`accrual`（入组、随访、脱落）只有事件时间终点才有**：二分类和连续终点的虚拟患者集与试验方案不写 `accrual`，写了就是多写的字段，照样被拒绝。
 
@@ -47,8 +47,8 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
     "n": 240,
     "population": {
       "variables": [
-        { "name": "age", "family": "normal", "mean": 63, "sd": 9 },
-        { "name": "ldh", "family": "lognormal", "meanlog": 5.4, "sdlog": 0.35 }
+        { "name": "age", "label": "年龄", "family": "normal", "mean": 63, "sd": 9 },
+        { "name": "ldh", "label": "乳酸脱氢酶", "family": "lognormal", "meanlog": 5.4, "sdlog": 0.35 }
       ],
       "constraints": [
         { "name": "成年", "rule": { "op": "compare", "column": "age", "comparator": "gte", "value": 18 } }
@@ -58,6 +58,8 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
   "allowedUses": ["design", "feasibility"]
 }
 ```
+
+变量可以带 `label`（页面上显示的名字，只用于显示，引擎不拿它算任何东西）。人群算完，引擎会按变量描述它生成的那张表——设定的分布、生成出来的均数、标准差或各水平的占比、缺失数和一个小直方图——研究页的人群页签就用它，让研究者对照“设定的”和“生成的”；经验合成的人群里人数很少的格子引擎会隐藏，你转述时同样不要还原。这些数字你从 `mcp__evimed__vcr_read` 读，不要自己算。
 
 文献人群写 `baselineTable`（每行一个变量，连续变量给 `mean` 和 `sd`，二分类给 `proportion`）；真实队列写 `rules`（每条 `{ name, rule }`）加 `timeZero` 和 `exit` 两个列名，并带 `snapshotId`。**规则是数据，不是代码**：`compare`、`between`、`in`、`missing`、`present`，用 `all`、`any`、`not` 组合，列名必须是这张表里真有的列；写成表达式字符串会被拒绝。
 
@@ -89,6 +91,23 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 ```
 
 风险比、对照组中位、脱落率这些参数由假设卡填进 `truth` 和 `accrual`，你只写卡里没有的部分（这里是协变量效应）。
+
+连续终点要看随访轨迹（每次随访的平均变化、两组轨迹的差）时，用纵向模型 `reference-longitudinal`：`scenario` 里写 `visits`（随访时间表，从小到大，至少两个时间点），`truth.effect` 是处理使每个时间单位的变化速度多变化多少（两组起点相同），再写 `truth.intercept`、`truth.slope`、`truth.sd`（残差标准差）、`truth.randomEffects`（`sdIntercept`、`sdSlope`、`correlation`）和 `dropoutPerVisit`（每次随访前退出的概率，完全随机缺失，退出后的随访记为缺失）。没有 `visits` 的连续终点仍是单个终点值。输出是每次随访的观测值、两组的平均轨迹和 95% 范围、同一个人在两种分组下的轨迹，**是情景推演，不是对任何真实人群或个体的预测**。
+
+```json vcr:object:patient_set
+{
+  "name": "12 周纵向轨迹",
+  "modelId": "reference-longitudinal",
+  "modelVersion": "1.0.0",
+  "scenario": {
+    "design": { "nTreat": 100, "nControl": 100 },
+    "endpoint": { "type": "continuous" },
+    "visits": [0, 4, 8, 12],
+    "truth": { "effect": -0.05, "intercept": 7.5, "slope": -0.01, "sd": 0.6, "randomEffects": { "sdIntercept": 0.9, "sdSlope": 0.03, "correlation": 0.2 } },
+    "dropoutPerVisit": 0.05
+  }
+}
+```
 
 **「数字孪生」这四个字有门槛**：个体条件化、随新数据更新、校准过的不确定性、验证记录，四项齐全才是 `digital_twin`，否则是 `baseline_conditioned_prediction`（基线条件化预测）。平台自己按证据推导这个标签，你不要替它下结论。
 
@@ -217,15 +236,17 @@ A single recorded arm is a benchmark, not a comparison. For a receipt containing
 }
 ```
 
-Supported designs are fixed two-arm (continuous/binary/time-to-event), group-sequential (time-to-event), and three separate **binary-only** single-arm paths. Unsupported combinations are refused by name; never substitute two generated arms for a single-arm design.
+Supported designs are fixed two-arm (continuous/binary/time-to-event), group-sequential (time-to-event), and the single-arm paths: `single_arm` for a binary, continuous or time-to-event endpoint, and `simon_two_stage` and `single_arm_external`, which are binary only. Unsupported combinations are refused by name; never substitute two generated arms for a single-arm design.
 
 - `single_arm`: `configuration.design.n`, `truth.nullRate` and `truth.responseRate`; `analysis.method: "exact_binomial"`, explicit `alternative: "greater" | "less" | "two.sided"` and matching `sided`. A response count succeeds exactly when its binomial p-value is at most alpha. Two-sided uses probability ordering (`stats::binom.test`), not a silently doubled one-sided tail. Rates zero/one are supported. Use sourced assumption cards for the actual rates and a declared proposed sample size; do not invent defaults.
+- `single_arm` with a **continuous** endpoint: a mean compared with a fixed historical value, not with a generated control arm. `design.n`, `truth.benchmark` (the historical mean), `truth.effect` (the true mean minus the benchmark; 0 is the null) and `truth.sd`; `analysis.method: "one_sample_t"`, or `"one_sample_z"` with the known SD in `analysis.sd`, and an explicit `alternative` with the matching `sided`. The benchmark is a number you take from a sourced assumption card, never a default.
+- `single_arm` with a **time-to-event** endpoint: `design.n`, the benchmark survival as `truth.controlMedian` (or `truth.controlDistribution`) and the effect as `truth.hazardRatio` (the trial's hazard over the benchmark's; 1 is the null); `analysis.method: "one_sample_logrank"`; `alternative: "less"` is a benefit (a hazard below the benchmark's) and `"greater"` is harm; `accrual` as for any time-to-event design. Analytic sample size is computed for the binary single-arm only: a continuous or time-to-event single-arm design is sized by simulation and the result says so.
 - `simon_two_stage`: analytical search uses sourced null/alternative rates and the declared alpha/power/maxN. The selected optimal/minimax result supplies frozen `design.n1`, `n`, `r1`, `r` to `analysis.method: "simon_boundary"`, `sided: 1`; simulation states `truth.responseRate`. First-stage responses at most r1 stop for futility; a continued trial succeeds only above r total responses. The platform binds simulation to the selected analytical result version. Do not independently search boundaries inside replicates or guess omitted thresholds. Report rejection, PET and expected N with MCSE and exact reference; stopped sample proportions are naive estimates and adjusted sequential coverage is unavailable.
 - `single_arm_external`: binary **synthetic two-stratum operating-characteristic scenarios**, not real or reconstructed external patients. State `design.n`, `truth.controlRates: [p00,p01]`, `truth.treatmentRates: [p10,p11]` and `external: {kind:"stratified_beta_binomial", n, targetPrevalence, sourcePrevalence, parameterInformation, logOddsDrift, sensitivityDrifts:[...]}`. Every field is a frozen, explicitly justified assumption. `analysis: {method:"stratified_risk_difference", estimand:"ATT", sided, alpha}` standardizes both means to the fixed treatment-target mixture. Historical stratum probabilities have finite beta parameter uncertainty; the analysis includes that uncertainty in a beta-binomial Wald variance. Report actual null calibration, bias, coverage, weighted external ESS, failures and drift sensitivity. Missing target-stratum support is not estimable. Increasing generated N never removes the declared parameter uncertainty or supplies real patients. Time drift, unmeasured confounding and finite-sample inference remain limitations; simulation is not clinical validation.
 
-For these paths, zero-effect scenarios state `responseRate == nullRate` or zero target ATT. `truth.null` is a label and must agree with that law; changing a flag cannot create a null scenario. The usual 20,000/5,000 replicate floors, immutable seeds/checkpoints and cancellation preserve completed batches. New paths use design-method version 1.1.0; prior supported 1.0.0 scenarios remain replayable. Grid overrides use these actual size/rate/boundary keys and every projected cell is validated before enqueue. There is no single-arm continuous/survival implementation in this version; preserve other supported analyses and state that named limitation.
+For these paths, zero-effect scenarios state `responseRate == nullRate` or zero target ATT. `truth.null` is a label and must agree with that law; changing a flag cannot create a null scenario. The usual 20,000/5,000 replicate floors, immutable seeds/checkpoints and cancellation preserve completed batches. New paths use design-method version 1.1.0; prior supported 1.0.0 scenarios remain replayable. Grid overrides use these actual size/rate/boundary keys and every projected cell is validated before enqueue. Single-arm continuous and time-to-event simulation and grids run at design-method version 1.2.0. Every single-arm design compares with a stated benchmark: say in the report where the benchmark came from and that it is held fixed.
 
-**解析优先、仿真复核**：平台对每个方案先算解析结果再仿真，两者差异超出蒙特卡洛误差时结果里带着差值，你在报告里说出来。固定设计的效应有假设卡给出预测分布时，平台还会算成功把握（按证据的不确定性平均后的功效）。重复次数不用你定：零假设情景默认不少于 2 万次，备择不少于 5,000 次，`targetMcse` 写了目标精度就按 p(1−p)/MCSE² 自动抬高。
+**解析优先、仿真复核**：平台对每个方案先算解析结果再仿真，两者差异超出蒙特卡洛误差时结果里带着差值，你在报告里说出来。固定设计的效应有假设卡给出预测分布时，平台还会算成功把握（按证据的不确定性平均后的功效）；成组序贯设计也算，意思是在任一次期中或最终分析越过界值的概率（设计里的 `events` 是最大事件数，`informationRates` 是各次分析的位置）。重复次数不用你定：零假设情景默认不少于 2 万次，备择不少于 5,000 次，`targetMcse` 写了目标精度就按 p(1−p)/MCSE² 自动抬高。
 
 **必须有一个零效应情景**（`truth.null: true`，或在设计网格的真值列表里放一列），否则 I 类错误无从谈起。比较设计和真值的组合用设计网格，`dimensions.designs` 列出设计，`truthScenarios` 列出真值情景，每一格的数字是引擎填的：
 
@@ -250,7 +271,7 @@ For these paths, zero-effect scenarios state `responseRate == nullRate` or zero 
 }
 ```
 
-一句话问样本量这类不属于任何对象的问题，直接排一个解析作业（解析作业按效应算样本量，零效应——风险比 1、效应 0、两组率相同——没有样本量，会被拒绝并指向这一句；方案的 I 类错误对零效应情景排 `design_simulation` 来测，不要问 `design_analytic`）：
+一句话问样本量：先写一个试验方案，再用它的 id 作为 `subjectId` 排一个解析作业（解析作业按效应算样本量，零效应——风险比 1、效应 0、两组率相同——没有样本量，会被拒绝并指向这一句；方案的 I 类错误对零效应情景排 `design_simulation` 来测，不要问 `design_analytic`）：
 
 ```json vcr:design_analytic
 {

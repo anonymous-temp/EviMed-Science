@@ -765,5 +765,43 @@
     }
   ],
   "engineAvailable": false,
-  "engineMismatch": null
+  "engineMismatch": null,
+  "unsupported": [
+    {
+      "key": "model_comparator",
+      "label": "模型预测比较器",
+      "group": "对照",
+      "note": "暂不支持"
+    },
+    {
+      "key": "digital_twin",
+      "label": "数字孪生与基线条件化预测模型",
+      "group": "虚拟患者",
+      "note": "暂不支持"
+    },
+    {
+      "key": "mechanistic",
+      "label": "机制模型（QSP、PBPK）",
+      "group": "虚拟患者",
+      "note": "暂不支持"
+    },
+    {
+      "key": "non_inferiority",
+      "label": "非劣效设计",
+      "group": "试验设计",
+      "note": "暂不支持"
+    },
+    {
+      "key": "adaptive",
+      "label": "适应性设计",
+      "group": "试验设计",
+      "note": "暂不支持"
+    },
+    {
+      "key": "platform",
+      "label": "平台试验设计",
+      "group": "试验设计",
+      "note": "暂不支持"
+    }
+  ]
 }

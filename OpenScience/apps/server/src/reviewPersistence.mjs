@@ -103,6 +103,8 @@ CREATE TABLE IF NOT EXISTS evimed_review.reply_checks (
   UNIQUE (user_id, project_id, run_id),
   FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id) ON DELETE CASCADE
 );
+-- A reply in a 虚拟临研 study's conversation is also held against the numbers the study's engine computed (vcrReplyCheck.mjs): the row names the study.
+ALTER TABLE evimed_review.reply_checks ADD COLUMN IF NOT EXISTS study_id text;
 CREATE INDEX IF NOT EXISTS review_reply_checks_queue_idx ON evimed_review.reply_checks (status, created_at);
 CREATE INDEX IF NOT EXISTS review_reply_checks_session_idx ON evimed_review.reply_checks (user_id, project_id, session_id, created_at DESC);
 `;

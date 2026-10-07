@@ -38,9 +38,14 @@ test("a real proactive digest persists one actionable inbox item under its owner
   const agenda = await autopilot.create(digestOwner, { projectId: "default", title: "Digest integration",
     topics: ["research updates"], taskTypes: ["literature-sentinel"], dailyBudgetCny: 2,
     weeklyBudgetCny: 10, maxEpisodeCny: 1.5, scheduleHour: 1, timeZone: "UTC" });
-  const input = { digestId: "digest-inbox-contract", date: "2026-09-06", episodeIds: ["episode-contract"], costCny: 0, claims: [] };
+  // A briefing that found something is announced once; one that found nothing is recorded and not announced (2026-10-07: the
+  // inbox carried a daily 「0 条重点发现，0 条待验证线索」).
+  const input = { digestId: "digest-inbox-contract", date: "2026-09-06", episodeIds: ["episode-contract"], costCny: 0,
+    claims: [{ id: "claim-contract", statement: "A lead worth reading", type: "synthesized", tier: "unverified", what_would_change: "A new trial" }] };
   const digest = await autopilot.createDigest(digestOwner, agenda.id, input);
   await autopilot.createDigest(digestOwner, agenda.id, input);
+  const quiet = await autopilot.createDigest(digestOwner, agenda.id, { digestId: "digest-inbox-quiet", date: "2026-09-07", episodeIds: ["episode-quiet"], costCny: 0, claims: [] });
+  assert.equal((await service.list(digestOwner)).items.some(item => item.source?.id === quiet.id), false);
   const notices = (await service.list(digestOwner)).items.filter(item => item.source?.id === digest.id);
   assert.equal(notices.length, 1);
   assert.deepEqual(notices[0].source, { type: "digest", id: digest.id });

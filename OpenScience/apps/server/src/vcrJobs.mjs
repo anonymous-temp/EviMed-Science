@@ -433,6 +433,22 @@ export function vcrResultKindFor(kind) {
   return "snapshot_profile";
 }
 
+/**
+ * The kinds of research object a result is filed under: the result's `subject_id` is that object's id, and a result is superseded
+ * only by another result of the same subject (`recordResult`).
+ */
+export const VCR_SUBJECT_KINDS = Object.freeze(["population", "patient_set", "comparator", "trial_scenario", "design_grid"]);
+
+/**
+ * The kind of research object a job of this kind computes, or null for one that is not about an object (pooling evidence, matching
+ * criteria, an accrual forecast, the profile of a snapshot).
+ * @param {string} kind
+ */
+export function vcrJobObjectKind(kind) {
+  const filed = vcrResultKindFor(kind);
+  return VCR_SUBJECT_KINDS.includes(filed) ? filed : null;
+}
+
 export class VcrJobs {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config?: Record<string, any>, engine?: any,

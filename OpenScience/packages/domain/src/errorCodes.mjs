@@ -621,6 +621,9 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_write_payload_invalid",
   "vcr_simulate_action_invalid",
   "vcr_simulate_payload_invalid",
+  // A computation names the object it is for; the answer says which ones the study holds.
+  "vcr_simulate_subject_required",
+  "vcr_simulate_subject_unknown",
   "vcr_job_not_found",
   // The run's own request was wrong: a job the engine's protocol refuses (the
   // scenario names a key the method does not read, a design it does not
@@ -1210,6 +1213,13 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_intended_use_invalid',
   'vcr_status_invalid',
   'vcr_step_invalid',
+  'vcr_definition_missing',
+  'vcr_simulate_subject_required',
+  'vcr_simulate_subject_unknown',
+  'vcr_records_not_found',
+  'vcr_records_not_synthetic',
+  'vcr_records_quality_missing',
+  'vcr_records_unavailable',
   'vcr_card_edit_refused',
   'vcr_card_edit_empty',
   'vcr_card_edit_unchanged',
@@ -1266,6 +1276,8 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   'vcr_write_payload_invalid',
   'vcr_simulate_action_invalid',
   'vcr_simulate_payload_invalid',
+  'vcr_simulate_subject_required',
+  'vcr_simulate_subject_unknown',
   'registry_unavailable',
   // What the trial registry channel answers (`trialRegistryClient.mjs`): each
   // reaches the run as itself, because 「没有这条登记」 and 「登记库没配置」 are
@@ -1838,6 +1850,13 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_intended_use_invalid: '预期用途只能选：探索、研究设计支持、指定研究分析、申报准备。',
   vcr_status_invalid: '研究状态只能是进行中、已暂停或已归档。',
   vcr_step_invalid: '没有这一步；研究的步骤是定义、证据、人群、患者、对照、试验、匹配。',
+  vcr_definition_missing: '先说一句要研究什么：在对话里写下问题，或上传方案。',
+  vcr_simulate_subject_required: '这项计算要说明它算的是研究里的哪一个对象：把对象的 id 作为 subjectId 传进来，先用 vcr_write 写下这个对象。',
+  vcr_simulate_subject_unknown: 'subjectId 不是本研究的对象；用 vcr_read 看研究里现有的对象，再传它的 id。',
+  vcr_records_not_found: '这次计算没有可下载的记录：重新生成一次，再下载。',
+  vcr_records_not_synthetic: '这是真实患者的记录，不能下载：真实患者的行不离开数据平面。',
+  vcr_records_quality_missing: '这份经验合成的记录还没有质量报告和泄露检查，不能下载：先生成质量报告。',
+  vcr_records_unavailable: '本部署没有接入数据平面，生成的记录暂时不能下载。',
   vcr_card_edit_refused: '这样改不成立，没有保存；按提示改正后再试。',
   vcr_card_edit_empty: '没有要改的设定。',
   vcr_card_edit_unchanged: '设定没有变化，没有生成新版本。',
