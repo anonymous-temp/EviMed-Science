@@ -20,6 +20,7 @@ import {
   removePersonalSkill, restorePersonalSkill, savePersonalSkillDefaults, saveProjectSkills, updatePersonalSkill,
   type PersonalSkill, type SkillSelection, type SkillSelectionRecord, type SkillSupplyResult, type SkillVersion, type SkillWrite,
 } from "@/lib/skillLibraryClient";
+import { MissingRecord, orMissing, RecordMissing } from "./MissingRecord";
 import { DrawerSection } from "./PlatformSkillDrawer";
 import { SkillEditor } from "./SkillEditor";
 
@@ -47,15 +48,19 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
   const alive = useRef(true), generation = useRef(0), working = useRef(false);
   const [skill, setSkill] = useState<PersonalSkill | null>(null), [history, setHistory] = useState<SkillVersion[]>([]);
   const [defaults, setDefaults] = useState<SkillSelectionRecord | null>(null), [selection, setSelection] = useState<SkillSelectionRecord | null>(null), [supply, setSupply] = useState<SkillSupplyResult | null>(null);
-  const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false), [removing, setRemoving] = useState(false), [compared, setCompared] = useState<SkillVersion | null>(null);
+  const [error, setError] = useState<string | null>(null), [missing, setMissing] = useState(false), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false), [removing, setRemoving] = useState(false), [compared, setCompared] = useState<SkillVersion | null>(null);
   const [view, setView] = useState<"content" | "versions">("content");
   const load = useCallback(async () => {
     const request = ++generation.current;
     try {
       // The package is a label beside the skill: reading it can fail without the skill failing to open.
-      const [record, versions, future, project, packaged] = await Promise.all([getPersonalSkill(skillId), personalSkillHistory(skillId), personalSkillDefaults(), projectSkills(projectId), personalSkillSupply(skillId).catch(() => null)]);
-      if (alive.current && request === generation.current) { setSkill(record); setHistory(versions); setDefaults(future); setSelection(project); setSupply(packaged); setError(null); }
-    } catch (caught) { if (alive.current && request === generation.current) setError(productErrorMessage(caught)); }
+      const [record, versions, future, project, packaged] = await Promise.all([orMissing(getPersonalSkill(skillId)), orMissing(personalSkillHistory(skillId)), personalSkillDefaults(), projectSkills(projectId), personalSkillSupply(skillId).catch(() => null)]);
+      if (alive.current && request === generation.current) { setSkill(record); setHistory(versions); setDefaults(future); setSelection(project); setSupply(packaged); setError(null); setMissing(false); }
+    } catch (caught) {
+      if (!alive.current || request !== generation.current) return;
+      // A skill that is not there is its own state, not an error to retry; any other failure keeps the line and 刷新.
+      if (caught instanceof RecordMissing) { setMissing(true); setError(null); } else setError(productErrorMessage(caught));
+    }
   }, [skillId, projectId]);
   useEffect(() => { const requests = generation; alive.current = true; void load(); return () => { alive.current = false; requests.current++; }; }, [load]);
   const act = async (work: () => Promise<unknown>) => {
@@ -81,6 +86,7 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
       { label: "移除", icon: Trash2, destructive: true, onSelect: () => setRemoving(true) },
     ]} />
   );
+  if (missing) return <Drawer title="技能" onClose={onClose}><MissingRecord noun="技能" list="回到技能列表" onBack={onClose} /></Drawer>;
   return (
     <Drawer title={skill?.payload.title ?? "技能"} description="我的技能" onClose={onClose} actions={menu || undefined}>
       {error && <p role="alert" className="mb-4 text-ui text-error">{error}<Button variant="text" disabled={busy} onClick={() => void load()}>刷新</Button></p>}
