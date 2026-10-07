@@ -85,8 +85,9 @@ export function createModuleEvolutionPreparation({service,taskPool,policies,prov
   const auditQuarter=/^(\d{4})-?Q([1-4])$/i.exec(input.quarter??'');
   const auditBoundary=auditQuarter?new Date(Date.UTC(Number(auditQuarter[1]),(Number(auditQuarter[2])-1)*3,1)).toISOString():null;
   const pool=input.phase==='audit'?'audit':'confirmation';
-  await curator.curate({...input,pool,candidate:{...input.candidate,frozenAt:input.freezeAt??input.candidate?.frozenAt??auditBoundary},exposedSourceRoots:assets.filter(row=>row.payload.exposedToDevelopment).flatMap(row=>[row.payload.sourceRoot,...(row.payload.sourceAliases??[])])});
-  const count=(await service.list('task')).filter(row=>row.payload.moduleId===input.moduleId&&row.payload.pool===pool && (pool!=='audit'||row.payload.quarter===input.quarter)).length;
-  return {status:count>=(MODULE_CONFIRMATION_MINIMUM[input.moduleId]??1)?'ready':'waiting',reason:'fresh_confirmation_tasks_pending'};
+  const pooled=async()=>(await service.list('task')).filter(row=>row.payload.moduleId===input.moduleId&&row.payload.pool===pool && (pool!=='audit'||row.payload.quarter===input.quarter)).length;
+  const minimum=MODULE_CONFIRMATION_MINIMUM[input.moduleId]??1;
+  await curator.curate({...input,pool,want:Math.max(1,minimum-await pooled()),candidate:{...input.candidate,frozenAt:input.freezeAt??input.candidate?.frozenAt??auditBoundary},exposedSourceRoots:assets.filter(row=>row.payload.exposedToDevelopment).flatMap(row=>[row.payload.sourceRoot,...(row.payload.sourceAliases??[])])});
+  return {status:await pooled()>=minimum?'ready':'waiting',reason:'fresh_confirmation_tasks_pending'};
  };
 }

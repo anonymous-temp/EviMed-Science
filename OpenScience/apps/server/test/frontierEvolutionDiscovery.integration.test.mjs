@@ -57,6 +57,19 @@ test("a read resumes after its cursor, ties on the arrival instant included, and
 
   assert.deepEqual((await discovery.discover({ since, limit: 100, discovery: "only" })).map((entry) => entry.id), [ids[4], ids[5]]);
   assert.equal((await discovery.discover({ since, limit: 100 })).length, rows.length, "without a channel every entry is read");
+  // A feed date not after the freeze cannot be fresh; an undated entry is still read.
+  const dated = [];
+  for (const [key, published] of [["evo-dated-old", "2033-04-01T00:00:00Z"], ["evo-dated-new", "2033-05-02T00:00:00Z"]]) {
+    const inserted = await db.query(`INSERT INTO evimed_frontier.entries (plugin_entry_id, plugin_seq, source_id, identity_key, url, canonical_url,
+        title_raw, summary_raw, published_at, first_seen_at, received_at, content_sha256)
+      VALUES ($1,$2,'evo-journal',$1,$3,$3,$1,$1,$4,$5,$5,$6) RETURNING id`,
+      [key, 100 + dated.length, `https://example.org/${key}`, published, new Date(base + 10_000), createHash("sha256").update(key).digest("hex")]);
+    dated.push(String(inserted.rows[0].id));
+  }
+  const fresh = await discovery.discover({ since: new Date(base + 9_000).toISOString(), limit: 100, discovery: "exclude", publishedAfter: "2033-04-30T00:00:00.000Z" });
+  assert.deepEqual(fresh.map((entry) => entry.id), [dated[1]]);
+  const undated = await discovery.discover({ since, limit: 100, discovery: "exclude", publishedAfter: "2033-04-30T00:00:00.000Z" });
+  assert.deepEqual(undated.map((entry) => entry.id), [...medical, dated[1]]);
   // Without a cursor the read keeps its old meaning: everything after the instant.
-  assert.deepEqual((await discovery.discover({ since: new Date(base + 1000).toISOString(), limit: 100, discovery: "exclude" })).map((entry) => entry.id), medical.slice(4));
+  assert.deepEqual((await discovery.discover({ since: new Date(base + 1000).toISOString(), limit: 100, discovery: "exclude" })).map((entry) => entry.id), [...medical.slice(4), ...dated]);
 });

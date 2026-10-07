@@ -94,18 +94,23 @@ test("the curator continues where its last read stopped, extracts each entry onc
       return feed.filter(entry => Number(entry.cursor.id) > after).slice(0, query.limit); },
     extractTask:async ({source}) => { if (source.sourceRoot === failOn) throw Object.assign(new Error("budget"), {code:"usage_budget_exceeded"});
       extracted.push(source.sourceRoot); return {id:`task-${source.sourceRoot}`,curatorIndependent:true,sourceQuotes:[source.sourceText]}; }});
-  const input = {moduleId:"frontier",candidate:{frozenAt:"2026-10-05T00:00:00Z"},modelReleasedAt:"2026-10-04T00:00:00Z",epoch:"e1"};
-  assert.equal((await curator.curate(input)).added, 10, "the first hundred entries hold ten that qualify");
+  const input = {moduleId:"frontier",candidate:{frozenAt:"2026-10-05T00:00:00Z"},modelReleasedAt:"2026-10-04T00:00:00Z",epoch:"e1",want:10};
+  assert.equal((await curator.curate(input)).added, 10, "the first hundred entries hold the ten the cohort lacks");
+  assert.equal(reads[0].publishedAfter, "2026-10-05T00:00:00.000Z", "entries the feed dates before the freeze are left out by the read");
   await assert.rejects(curator.curate(input), {code:"usage_budget_exceeded"});
   assert.equal(reads[1].afterId, "100", "the second read starts after the first hundred, not at the freeze");
   failOn = null;
   // The second read added 109 and 119 before 129 failed; the third starts at 129 again.
   assert.equal((await curator.curate(input)).added, 10);
   assert.equal(reads[2].afterId, "129", "the failed entry is tried again; nothing before it is read twice");
-  assert.equal((await curator.curate(input)).added, 3);
+  assert.equal((await curator.curate({...input,want:undefined})).added, 3);
   assert.equal((await curator.curate(input)).added, 0);
   assert.equal(extracted.length, 25);
   assert.equal(new Set(extracted).size, 25, "no entry is extracted twice");
+  // With no stated need one call reads at most three pages.
+  saved.clear(); reads.length = 0; extracted.length = 0;
+  assert.equal((await curator.curate({...input,want:undefined})).added, 25);
+  assert.equal(reads.length, 3);
 });
 
 test("a candidate modifies one mutable component and its smoke executes known-correct units", async () => {
