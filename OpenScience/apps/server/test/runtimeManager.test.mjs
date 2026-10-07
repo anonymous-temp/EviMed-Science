@@ -4075,6 +4075,25 @@ test("the thirty requests of one conversation opening share one retry of the clo
   assert.equal(closes, 2, "one retry for thirty starts");
 });
 
+test("a close that fails twice and then succeeds frees the project for the shell that keeps asking, with no operator, and the gauge returns to zero", async t => {
+  const { manager, owned, runtime } = await stopFixture(t, { runtimeCleanupRetryMs: 20, runtimeCleanupRetryMaxMs: 80 });
+  let closes = 0, starts = 0;
+  runtime.close = async () => { closes += 1; if (closes <= 2) throw new Error("Unconfirmed close"); };
+  manager.startKernel = async () => { starts += 1; return fakeRuntime(owned.id, owned.workspaceDir); };
+  await assert.rejects(manager.stop(owned), /Unconfirmed close/);
+  assert.equal(manager.cleanupSnapshot().pending, 1);
+  const refusals = [];
+  for (let ask = 0; ask < 40 && !starts; ask += 1) {
+    await manager.start(owned).catch(error => refusals.push([error.code, error.retryAfterSeconds]));
+    if (!starts) await sleep(25);
+  }
+  assert.equal(starts, 1, "the start the shell kept asking for went through");
+  assert.equal(closes, 3);
+  assert.ok(refusals.length >= 1 && refusals.every(([code, after]) => code === "runtime_cleanup_required" && after === 5), JSON.stringify(refusals));
+  assert.deepEqual(manager.cleanupSnapshot(), { pending: 0, oldestAgeSeconds: 0, retries: { recovered: 1, failed: 1, confirmedGone: 0 } });
+  assert.equal((await manager.status(owned)).cleanupPending, false);
+});
+
 test("a controller that reports the container missing confirms a Docker runtime gone; any other answer does not", async t => {
   const { manager, owned } = await stopFixture(t);
   assert.equal(await manager.provider.confirmGone(owned), false, "no controller to ask");
