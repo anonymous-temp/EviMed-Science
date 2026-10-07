@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  boundConversationNote,
   prepareResearchContext,
+  routedSpecialistInstruction,
   syncKnowledgeBase,
 } from "../src/researchContext.mjs";
 
@@ -293,5 +295,35 @@ test("a routed specialist turn mounts nothing and keeps its own capability instr
     assert.deepEqual(prepared.mountedSkills, []);
     assert.doesNotMatch(prepared.system, /<evimed-skill/);
     assert.match(prepared.system, /把交付物的 capability 写成 clinical-evidence-synthesis/);
+  });
+});
+
+// A conversation typed in the kernel's own frame passes through no dispatch. Until release 10.1 that meant a conversation bound to a
+// capability (a study of 虚拟临床研究, a tool picked on 科研工具) was never told so, and answered as an open one: live, a study's
+// conversation computed a sample size with a script of its own and never reached the engine.
+test("a conversation bound to a capability is handed the routing instruction a dispatch writes, word for word", () => {
+  const registry = { get: (/** @type {string} */ id) => (id === "vcr-protocol"
+    ? { id: "vcr-protocol", runtimeAgent: "evimed-vcr-protocol", skill: "vcr-protocol", companionSkills: ["citation-integrity"] } : null) };
+  const note = boundConversationNote({ mode: "specialist", agentId: "vcr-protocol" }, registry);
+  assert.equal(note, routedSpecialistInstruction({ agentId: "vcr-protocol", runtimeAgent: "evimed-vcr-protocol", skill: "vcr-protocol", companionSkills: ["citation-integrity"] }));
+  assert.match(String(note), /evimed_plan/);
+  assert.match(String(note), /capability 写成 vcr-protocol/);
+  assert.match(String(note), /vcr-protocol、citation-integrity/);
+});
+
+test("an open conversation, a binding to nothing and a capability this deployment no longer has add no note", () => {
+  const registry = { get: () => null };
+  assert.equal(boundConversationNote({ mode: "open-domain" }, registry), null);
+  assert.equal(boundConversationNote(null, registry), null);
+  assert.equal(boundConversationNote({ mode: "specialist" }, registry), null);
+  assert.equal(boundConversationNote({ mode: "specialist", agentId: "retired-capability" }, registry), null);
+});
+
+test("a dispatched turn's context carries the same instruction", async () => {
+  await withProject(async (project) => {
+    const routed = { agentId: "meta-analysis", agentVersion: "1.0.0", runtimeAgent: "evimed-meta-analysis", skill: "meta-analysis", companionSkills: [] };
+    const prepared = await prepareResearchContext(project, { sessionId: "s1", mode: "specialist", agentId: "meta-analysis" },
+      { kbSearchEnabled: true }, { routedSpecialist: routed });
+    assert.ok(prepared.system.includes(routedSpecialistInstruction(routed)));
   });
 });

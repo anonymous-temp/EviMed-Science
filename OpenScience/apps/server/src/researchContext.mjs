@@ -178,6 +178,50 @@ async function libraryDocumentCount(config, userId) {
   }
 }
 
+/**
+ * What a turn is told when the platform has routed it to one capability: plan
+ * with it, and its method arrives in this conversation.
+ *
+ * One wording for both ways a turn reaches the kernel. A dispatch writes it into
+ * the run's context; a conversation typed in the kernel's own frame — which
+ * passes through no dispatch — is handed it as the conversation's first-step
+ * note when the conversation is bound to a capability (`boundConversationNote`).
+ * Until 2026-10-07 only the dispatch said it: a study's conversation in
+ * 「虚拟临床研究」 carried the capability on its chip and in the ledger, and the
+ * model, told nothing, answered a sample-size question with a script of its own
+ * and never reached the engine (live acceptance of release 10).
+ * @param {{ agentId: string, runtimeAgent?: string | null, skill?: string | null, companionSkills?: readonly string[] | null }} routedSpecialist
+ * @returns {string}
+ */
+export function routedSpecialistInstruction(routedSpecialist) {
+  const routedSkills = [routedSpecialist.skill, ...(routedSpecialist.companionSkills ?? [])].filter(Boolean);
+  return [
+    `平台已根据当前问题确定性路由到专项能力：${escapeContext(routedSpecialist.agentId)}（${escapeContext(routedSpecialist.runtimeAgent)}）。`,
+    `先用 evimed_plan 写下计划，把交付物的 capability 写成 ${escapeContext(routedSpecialist.agentId)}；它的方法正文`
+      + (routedSkills.length ? `（${escapeContext(routedSkills.join("、"))}）` : "")
+      + "会随之送到本会话，不需要也无法用 skill 工具加载。默认就在这次对话里按该方法完成检索、阅读、证据与写作；只有同时有多件互相独立的交付物时才委派。",
+    "该专项的必需交付物与门禁照常适用：只有它们齐备并通过校验，本轮才算完成。不得退回普通开放域回答来绕过专项契约。",
+  ].join("\n");
+}
+
+/**
+ * The first-step note of a conversation bound to a capability, or none.
+ *
+ * A binding is the researcher's own choice (a tool picked on 科研工具, a study
+ * or a GEO project opened from its module), recorded as a specialist session.
+ * The note is the routing instruction above and nothing else: the method, the
+ * persona and the tools follow from the plan, as they do on a dispatch.
+ * @param {{ mode?: string, agentId?: string } | null | undefined} binding the research session's record
+ * @param {{ get: (id: string) => any } | null | undefined} registry
+ * @returns {string | null}
+ */
+export function boundConversationNote(binding, registry) {
+  if (binding?.mode !== "specialist" || !binding.agentId) return null;
+  const agent = registry?.get?.(binding.agentId);
+  if (!agent) return null;
+  return routedSpecialistInstruction({ agentId: agent.id, runtimeAgent: agent.runtimeAgent, skill: agent.skill, companionSkills: agent.companionSkills });
+}
+
 export async function prepareResearchContext(
   project,
   session,
@@ -237,9 +281,6 @@ export async function prepareResearchContext(
     .filter((skill) => typeof skill?.name === "string" && skill.name.trim()
       && typeof skill?.body === "string" && skill.body.trim())
     .map((skill) => ({ name: skill.name.trim(), body: skill.body }));
-  const routedSkills = routedSpecialist
-    ? [routedSpecialist.skill, ...(routedSpecialist.companionSkills ?? [])].filter(Boolean)
-    : [];
   // A routed turn's methods reach the model without it asking: the run policy
   // hands this session the capability's skill bodies, persona and tools the
   // moment the plan names it, and a delegation injects the same three into a
@@ -254,13 +295,7 @@ export async function prepareResearchContext(
   // Delegation is the model's judgement now, and this says what the turn is
   // about rather than how to arrange it.
   const routingInstruction = routedSpecialist
-    ? [
-        `平台已根据当前问题确定性路由到专项能力：${escapeContext(routedSpecialist.agentId)}（${escapeContext(routedSpecialist.runtimeAgent)}）。`,
-        `先用 evimed_plan 写下计划，把交付物的 capability 写成 ${escapeContext(routedSpecialist.agentId)}；它的方法正文`
-          + (routedSkills.length ? `（${escapeContext(routedSkills.join("、"))}）` : "")
-          + "会随之送到本会话，不需要也无法用 skill 工具加载。默认就在这次对话里按该方法完成检索、阅读、证据与写作；只有同时有多件互相独立的交付物时才委派。",
-        "该专项的必需交付物与门禁照常适用：只有它们齐备并通过校验，本轮才算完成。不得退回普通开放域回答来绕过专项契约。",
-      ].join("\n")
+    ? routedSpecialistInstruction(routedSpecialist)
     : session.mode === "open-domain"
       ? [
           "本轮未命中确定性专项路由，由开放域答问主路处理。",

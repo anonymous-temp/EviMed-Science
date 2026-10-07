@@ -55,7 +55,9 @@ test("the session routes and the panel they served are gone, and the composition
   // a trial is opened in the kernel's own conversation surface. It now reaches
   // every conversation through the capsule gateway's `session`, once — so the
   // dispatch no longer adds it a second time.
-  assert.match(server, /notes: \(userId, projectId, sessionId\) => sessionDispatchNotes\(/, "the capsule gateway answers with it");
+  // 2026-10-07: the same answer also says which capability the conversation is bound to (`boundConversationNote`), first.
+  assert.match(server, /notes: async \(userId, projectId, sessionId\) => \{[\s\S]{0,1400}?sessionDispatchNotes\(\{ researchMemory, capsules: capsuleService \}, userId, projectId, sessionId\)/, "the capsule gateway answers with it");
+  assert.match(server, /boundConversationNote\(await researchSessions\.get\(project, sessionId\), await agentRegistry\)/, "and with the conversation's binding");
   assert.doesNotMatch(server, /const sessionNotes = await sessionDispatchNotes\(/, "and nothing else adds it");
 });
 

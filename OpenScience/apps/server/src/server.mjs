@@ -117,7 +117,7 @@ import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMoun
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
 import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
-import { prepareResearchContext } from "./researchContext.mjs";
+import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import {
   OPEN_DOMAIN_ANSWER_AGENT_ID,
   classifierFailureReason,
@@ -4353,9 +4353,21 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     sessions: researchMemory.configured ? {
       running: (_user, project) => agentRuns.activeRuns(project),
       state: (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId),
-      // What a conversation's own state adds at its first step: the pack a
-      // 「试用一次」 conversation is trying.
-      notes: (userId, projectId, sessionId) => sessionDispatchNotes({ researchMemory, capsules: capsuleService }, userId, projectId, sessionId),
+      // What a conversation's own state adds at its first step: the capability it is bound to (a conversation typed in the
+      // kernel's frame passes through no dispatch, so this is where it learns the binding — `boundConversationNote`), and the
+      // pack a 「试用一次」 conversation is trying. The binding is best effort like the rest: a record that cannot be read adds
+      // nothing, and the conversation goes on as an open one.
+      notes: async (userId, projectId, sessionId) => {
+        const bound = await (async () => {
+          const owner = await store.userById(userId);
+          if (!owner) return null;
+          const project = await store.requireProject(owner, projectId);
+          // A turn the control plane dispatched already carries the instruction in its own context; said twice it is only longer.
+          const dispatched = (await agentRuns.activeRuns(project)).some((/** @type {any} */ run) => run.sessionId === sessionId && run.dispatchId);
+          return dispatched ? null : boundConversationNote(await researchSessions.get(project, sessionId), await agentRegistry);
+        })().catch(() => null);
+        return [...(bound ? [bound] : []), ...await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, userId, projectId, sessionId)];
+      },
       recordRecall: (project, runId, items) => agentRuns.recordLearning(project, runId, {
         appendRecalledMemories: items.map((item) => (item.source === "capsule"
           ? { id: `capsule:${item.id}`, kind: item.factKind ?? "capsule", scope: "capsule" }
