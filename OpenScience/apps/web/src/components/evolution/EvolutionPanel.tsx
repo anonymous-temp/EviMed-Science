@@ -11,6 +11,11 @@ import { LoadError } from '@/components/cards/LoadError';
 
 const VALIDATION: Record<string, string> = { V0: '已构建', V1: '仅模拟验证', V2: '已复现已发表算例', V3: '已复现已发表研究', V4: '已用于真实研究' };
 const DATA: Record<string, string> = { D0: '等待数据来源', D1: '模拟数据', D2: '公开数据', D3: '用户数据已匹配', D4: '真实与外部数据' };
+// Where a development plan stands, in the operator's words. A status this table does not know prints nothing rather than its raw value.
+const DOSSIER_STATUS: Record<string, string> = {
+  planned: '待开始', building: '研发中', repair: '修复中', review: '复核中', waiting_resource: '等待资料', waiting_confirmation: '等待确认',
+  waiting_budget: '等待额度', published: '已上线', impossible: '无法推进', rejected: '已否决',
+};
 
 export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dataset?: Record<string, unknown> }) {
   const access = useEvolutionAccess();
@@ -24,6 +29,8 @@ export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dat
   }, [projectId, access.operator, dataset]);
   useEffect(() => { if (access.enabled && (projectId || access.operator)) void load(); }, [access.enabled, access.operator, projectId, load]);
   if (!access.enabled || (!projectId && !access.operator)) return null;
+  // A plan with neither a title nor a goal has nothing to tell one from the next: it is not listed, not printed as a placeholder.
+  const plans = dossiers.filter(row => row.payload.title || row.payload.goal);
   // Beside a dataset's meaning the panel says what the data can use and is silent when it can use nothing yet.
   if (dataset && tools !== null && tools.length === 0 && !error) return null;
   return <section aria-label={dataset ? "这份数据可用的工具" : "循证进化"} className="mt-6 space-y-3">
@@ -37,6 +44,6 @@ export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dat
       {tool.dataRequirements && <Disclosure summary="数据要求"><Button variant="text" size="sm" onClick={() => downloadEvolutionRequirements(tool)}>下载数据要求</Button><Button variant="text" size="sm" onClick={() => downloadEvolutionTemplate(tool)}>下载表格模板</Button></Disclosure>}
       {access.operator && tool.artifactDigest && <Disclosure summary="版本"><p className="break-all font-mono text-caption text-text-3">{tool.artifactDigest}</p></Disclosure>}
     </li>)}</ul>}
-    {!projectId && access.operator && <Disclosure summary="研发计划"><ul className="space-y-2">{dossiers.map(row => <li key={row.id} className="text-ui text-text-2">{row.payload.title ?? row.payload.goal ?? '研发计划'}</li>)}</ul>{dossiers.length === 0 && <EmptyState title="暂无研发计划" />}</Disclosure>}
+    {!projectId && access.operator && <Disclosure summary="研发计划"><ul className="space-y-2">{plans.map(row => <li key={row.id} className="flex flex-wrap items-center gap-2 text-ui text-text-2"><span>{row.payload.title ?? row.payload.goal}</span>{DOSSIER_STATUS[row.payload.status] && <Tag>{DOSSIER_STATUS[row.payload.status]}</Tag>}</li>)}</ul>{plans.length === 0 && <EmptyState title="暂无研发计划" />}</Disclosure>}
   </section>;
 }

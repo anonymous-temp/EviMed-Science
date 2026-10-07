@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { EvolutionPanel } from './EvolutionPanel';
 const mocks = vi.hoisted(() => ({ access: {enabled: false, operator: false}, tools: vi.fn(), dossiers: vi.fn() }));
@@ -20,6 +21,26 @@ describe('evolution discovery boundaries', () => {
     expect(screen.getByRole('heading', {name: '循证进化'})).toBeInTheDocument(); expect(screen.queryByText('进化工具')).not.toBeInTheDocument();
     expect(screen.getByText('已复现已发表算例')).toBeInTheDocument(); expect(screen.getByText('公开数据')).toBeInTheDocument();
     expect(mocks.dossiers).toHaveBeenCalledOnce();
+  });
+  it('lists a development plan once with where it stands, and leaves out a plan that has neither a title nor a goal', async () => {
+    mocks.access = {enabled: true, operator: true};
+    mocks.dossiers.mockResolvedValue([
+      {id: 'd1', payload: {title: '生存分析扩展', status: 'building'}}, {id: 'd2', payload: {goal: '补全真实世界数据校准', status: 'waiting_resource'}},
+      {id: 'd3', payload: {status: 'planned'}}, {id: 'd4', payload: {status: 'planned'}}, {id: 'd5', payload: {title: '未知阶段的计划', status: 'something_new'}},
+    ]);
+    render(<MemoryRouter><EvolutionPanel /></MemoryRouter>);
+    await userEvent.click(await screen.findByText('研发计划'));
+    expect(screen.getByText('生存分析扩展')).toBeInTheDocument(); expect(screen.getByText('研发中')).toBeInTheDocument();
+    expect(screen.getByText('补全真实世界数据校准')).toBeInTheDocument(); expect(screen.getByText('等待资料')).toBeInTheDocument();
+    // The two plans with nothing to say are not printed as identical placeholder rows, and a status the table does not know prints no raw value.
+    expect(screen.queryByText('研发计划', {selector: 'li, li *'})).not.toBeInTheDocument(); expect(screen.queryByText('待开始')).not.toBeInTheDocument();
+    expect(screen.getByText('未知阶段的计划')).toBeInTheDocument(); expect(screen.queryByText('something_new')).not.toBeInTheDocument();
+  });
+  it('says there is no plan when every stored plan is empty of words', async () => {
+    mocks.access = {enabled: true, operator: true}; mocks.dossiers.mockResolvedValue([{id: 'd3', payload: {status: 'planned'}}]);
+    render(<MemoryRouter><EvolutionPanel /></MemoryRouter>);
+    await userEvent.click(await screen.findByText('研发计划'));
+    expect(screen.getByText('暂无研发计划')).toBeInTheDocument();
   });
   it('shows public paper citations and the tool\'s state, and no call counts or raw requirement structure', async () => {
     mocks.access = {enabled: true, operator: false};
