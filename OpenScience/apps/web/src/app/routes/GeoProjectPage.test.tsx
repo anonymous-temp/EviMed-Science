@@ -215,7 +215,7 @@ describe("a GEO project's page", () => {
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
     expect(screen.getByRole("menuitem", { name: "成员" })).toBeInTheDocument();
-    for (const hidden of ["出品方", "导出提案资料包", "暂停", "删除"]) expect(screen.queryByRole("menuitem", { name: hidden })).not.toBeInTheDocument();
+    for (const hidden of ["重命名", "出品方", "导出提案资料包", "暂停", "删除"]) expect(screen.queryByRole("menuitem", { name: hidden })).not.toBeInTheDocument();
   });
 
   it("“对话” opens the project's latest conversation, “周报” exports it", async () => {
@@ -232,7 +232,7 @@ describe("a GEO project's page", () => {
     client.exportGeo.mockResolvedValue({ sessionId: "ses_export", runId: "run_1" });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
-    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["成员", "出品方", "导出提案资料包", "暂停", "删除"]);
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["重命名", "成员", "出品方", "导出提案资料包", "暂停", "删除"]);
     await userEvent.click(screen.getByRole("menuitem", { name: "导出提案资料包" }));
     await waitFor(() => expect(client.exportGeo).toHaveBeenCalledWith("geo_masi", "proposal"));
 
@@ -247,6 +247,43 @@ describe("a GEO project's page", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "删除" }));
     await waitFor(() => expect(client.deleteGeoProject).toHaveBeenCalledWith("geo_masi"));
     await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo$/));
+  });
+
+  // 2026-10-07 plan §7: the name a project is listed by is the researcher's to change, here as it is in the sidebar's own pencil.
+  it("“⋯” renames the project: the name is one line of at most 40 characters, saved, and the page and the sidebar read it again", async () => {
+    renderProject();
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
+    const dialog = screen.getByRole("dialog", { name: "重命名" });
+    const field = within(dialog).getByRole("textbox", { name: "项目名" });
+    expect(field).toHaveValue("玛仕度肽注射液");
+    // Nothing is sent for an empty or unchanged name.
+    await userEvent.clear(field);
+    await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("请给项目起个名字。");
+    expect(client.patchGeoProject).not.toHaveBeenCalled();
+    client.getGeoProject.mockClear();
+    client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, name: "玛仕度肽（2026 方案）" });
+    await userEvent.type(field, "玛仕度肽（2026 方案）");
+    await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(client.patchGeoProject).toHaveBeenCalledWith("geo_masi", { name: "玛仕度肽（2026 方案）" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "玛仕度肽（2026 方案）" })).toBeInTheDocument();
+    expect(client.getGeoProject).toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "重命名" })).not.toBeInTheDocument();
+  });
+
+  it("a rename that fails says so in the dialog and keeps the typed name", async () => {
+    client.patchGeoProject.mockRejectedValue(new WebApiError("no", { status: 500 }));
+    renderProject();
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
+    const dialog = screen.getByRole("dialog", { name: "重命名" });
+    const field = within(dialog).getByRole("textbox", { name: "项目名" });
+    await userEvent.clear(field); await userEvent.type(field, "新名字");
+    await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+    expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+    expect(field).toHaveValue("新名字");
+    expect(screen.getByRole("dialog", { name: "重命名" })).toBeInTheDocument();
   });
 
   it("reads as a new project before anything was measured: “—” and a sentence, never a zero", async () => {

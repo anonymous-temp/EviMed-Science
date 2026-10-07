@@ -26,6 +26,7 @@ import { Tag } from "@/components/ui/Tag";
 import { GeoOffPage, GeoProjectSkeleton } from "@/components/geo/GeoStates";
 import { MembersDialog } from "@/components/geo/MembersDialog";
 import { ProducerDialog } from "@/components/geo/ProducerDialog";
+import { RenameDialog } from "@/components/geo/RenameDialog";
 import { railSteps } from "@/components/geo/geoOverviewModel";
 import { coverageText, GEO_MONITORING_TITLE, weekOf } from "@/components/geo/geoText";
 import { GEO_MONITORING_TABS, GEO_TAB_REDIRECTS, GEO_TABS, geoTabPath, resolveGeoTab, type GeoTabKey } from "@/components/geo/geoTabs";
@@ -85,7 +86,7 @@ export function GeoProjectPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   /** The dialog the ⋯ menu opened: who else is in the project, or who speaks for the product. */
-  const [panel, setPanel] = useState<"members" | "producer" | null>(null);
+  const [panel, setPanel] = useState<"members" | "producer" | "rename" | null>(null);
   const { tab, moved } = resolveGeoTab(tabParam);
 
   useEffect(() => {
@@ -147,6 +148,7 @@ export function GeoProjectPage() {
   const abilities = project.access?.abilities;
   const can = (ability: string) => !abilities || abilities.includes(ability);
   const menu: MenuEntry[] = [
+    ...(can("edit") ? [{ label: "重命名", onSelect: () => setPanel("rename") }] : []),
     { label: "成员", onSelect: () => setPanel("members") },
     ...(can("edit") ? [{ label: "出品方", onSelect: () => setPanel("producer") }] : []),
     ...(can("run") ? [{ label: "导出提案资料包", onSelect: () => act("proposal", () => exportGeo(geoId, "proposal"), "提案资料包无法导出，请稍后重试。") }] : []),
@@ -211,6 +213,20 @@ export function GeoProjectPage() {
         <Tab geoId={geoId} project={project} />
       </div>
       {panel === "members" && <MembersDialog geoId={geoId} onClose={() => setPanel(null)} />}
+      {panel === "rename" && (
+        <RenameDialog
+          geoId={geoId}
+          initial={project.name}
+          onCancel={() => setPanel(null)}
+          onSaved={() => {
+            setPanel(null);
+            reload();
+            // The sidebar lists the project by this name too.
+            void useProjectStore.getState().load();
+            toast.success("已重命名。");
+          }}
+        />
+      )}
       {panel === "producer" && <ProducerDialog geoId={geoId} initial={project.producer ?? null} onSaved={() => { setPanel(null); reload(); }} onCancel={() => setPanel(null)} />}
       {confirmDelete && (
         <ConfirmDialog
