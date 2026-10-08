@@ -5,7 +5,7 @@ import { taskBudgetRefusal } from "../src/agendaBudget.mjs";
 import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 
-async function fixture(t, digestProjectId = "owned-project") {
+async function fixture(t, digestProjectId = "owned-project", { stopRun = null } = {}) {
   const calls = [];
   const agenda = { id: "agenda-one", projectId: "owned-project", revision: 2 };
   const digest = { id: "digest-one", projectId: digestProjectId, revision: 1 };
@@ -27,6 +27,13 @@ async function fixture(t, digestProjectId = "owned-project") {
     schedule: async (userId, id, body) => { calls.push({ method: "schedule", userId, id, body }); return { episode: { id: "episode-one" } }; },
     listDigests: async (userId, options) => { calls.push({ method: "digests", userId, options }); return { items: [digest], nextCursor: null }; },
     listEpisodes: async (userId, options) => { calls.push({ method: "episodes", userId, options }); return { items: [], nextCursor: null }; },
+    projectEpisode: episode => ({ ...episode, payload: Object.fromEntries(Object.entries(episode.payload).filter(([key]) => key !== "prompt")) }),
+    cancelEpisode: async (userId, agendaId, episodeId, options) => {
+      calls.push({ method: "cancelEpisode", userId, agendaId, episodeId, canStop: typeof options?.stopRun === "function" });
+      if (episodeId === "episode-unknown") throw new HttpError(404, "autopilot_episode_not_found", "Research episode is unavailable.");
+      if (typeof options?.stopRun === "function") await options.stopRun({ runId: "run-going", sessionId: "session-going" });
+      return { id: episodeId, projectId: "owned-project", revision: 4, payload: { agendaId, status: "canceled", prompt: "the machine brief", interactive: true } };
+    },
     getDigest: async () => digest,
     markDigestOpened: async (userId, id) => { calls.push({ method: "opened", userId, id }); return digest; },
     decide: async (userId, id, body) => { calls.push({ method: "decide", userId, id, body }); return digest; },
@@ -47,7 +54,7 @@ async function fixture(t, digestProjectId = "owned-project") {
       return { id };
     },
   };
-  const route = createAutopilotRoutes({ store, service, maxJsonBytes: 64 * 1024 });
+  const route = createAutopilotRoutes({ store, service, maxJsonBytes: 64 * 1024, stopRun });
   const server = createServer((req, res) => route(req, res).then((handled) => {
     if (!handled) { res.writeHead(404); res.end(); }
   }).catch((error) => sendError(res, error)));
@@ -170,4 +177,40 @@ test("the question's progress and material are read and changed only through an 
   assert.equal(remove.status, 200);
   assert.deepEqual(calls.find((call) => call.method === "removeMaterial"), { method: "removeMaterial", userId: "owner", id: "agenda-one", sourceId: "src_" + "a".repeat(32) });
   assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-one/materials`, { method: "GET", headers })).status, 404);
+});
+
+test("one execution is canceled through an owned task, with CSRF and a request id, returning the episode without its brief", async (t) => {
+  const stopped = [];
+  const { base, headers, calls } = await fixture(t, "owned-project", { stopRun: async (project, runId) => { stopped.push({ project: project.id, runId }); } });
+  const url = `${base}/api/autopilot/agendas/agenda-one/episodes/episode-one/cancel`;
+  const canceled = await fetch(url, { method: "POST", headers, body: JSON.stringify({ requestId: "cancel-1" }) });
+  assert.equal(canceled.status, 200);
+  const { data } = await canceled.json();
+  assert.equal(data.id, "episode-one");
+  assert.equal(data.payload.status, "canceled");
+  assert.equal(data.payload.interactive, true, "where the execution ran is part of what the page reads");
+  assert.equal(data.payload.prompt, undefined, "the platform's brief is never returned");
+  assert.deepEqual(calls.at(-1), { method: "cancelEpisode", userId: "owner", agendaId: "agenda-one", episodeId: "episode-one", canStop: true });
+  assert.deepEqual(stopped, [{ project: "owned-project", runId: "run-going" }], "a going execution's run is stopped by the control plane's own stop, scoped to the task's project");
+
+  const noCsrf = { ...headers };
+  delete noCsrf["x-open-science-csrf"];
+  assert.equal((await fetch(url, { method: "POST", headers: noCsrf, body: JSON.stringify({ requestId: "cancel-2" }) })).status, 403);
+  assert.equal((await fetch(url, { method: "POST", headers: { ...headers, cookie: "" }, body: JSON.stringify({ requestId: "cancel-2" }) })).status, 401);
+  for (const body of [{}, { requestId: "" }, { requestId: 7 }, { requestId: "x".repeat(161) }, { requestId: "ok", force: true }, { requestId: "ok", projectId: "other" }]) {
+    const refused = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+    assert.equal(refused.status, 400, JSON.stringify(body));
+    assert.equal((await refused.json()).code, "autopilot_payload_invalid");
+  }
+  const cancelCalls = () => calls.filter(call => call.method === "cancelEpisode").length;
+  assert.equal(cancelCalls(), 1, "a missing CSRF header, no session and every bad body reached nothing");
+  const unknownEpisode = await fetch(`${base}/api/autopilot/agendas/agenda-one/episodes/episode-unknown/cancel`, { method: "POST", headers, body: JSON.stringify({ requestId: "cancel-3" }) });
+  assert.equal(unknownEpisode.status, 404);
+  assert.equal((await unknownEpisode.json()).code, "autopilot_episode_not_found");
+  const unknownAgenda = await fetch(`${base}/api/autopilot/agendas/agenda-other/episodes/episode-one/cancel`, { method: "POST", headers, body: JSON.stringify({ requestId: "cancel-4" }) });
+  assert.equal(unknownAgenda.status, 404);
+  assert.equal((await unknownAgenda.json()).code, "autopilot_agenda_not_found");
+  assert.equal(cancelCalls(), 2, "the unknown agenda never reaches the cancel; only the unknown episode asked the service");
+  // The GET of the same path is not a cancel.
+  assert.equal((await fetch(url, { headers })).status, 404);
 });

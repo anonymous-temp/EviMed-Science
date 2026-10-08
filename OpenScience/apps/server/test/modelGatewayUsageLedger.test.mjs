@@ -437,10 +437,12 @@ test("a bounded runtime token retains episode attribution after markers compact 
 
 /* --------------------------------------------- run attribution (E §9.4, C3) */
 
-async function callWith(t, { attributeRun = null, runPurpose = null, caller = { userId: "usage-owner", projectId: "default" }, extraConfig = {} } = {}, requestBody) {
+async function callWith(t, { attributeRun = null, runPurpose = null, runScope = null, caller = { userId: "usage-owner", projectId: "default" }, extraConfig = {} } = {}, requestBody) {
   const events = [];
+  let upstreamCalls = 0;
   const upstream = createServer(async (req, res) => {
     for await (const _chunk of req) { /* consume */ }
+    upstreamCalls += 1;
     res.writeHead(200, { "content-type": "application/json" });
     res.end('{"id":"provider-x","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":10}}');
   });
@@ -448,14 +450,14 @@ async function callWith(t, { attributeRun = null, runPurpose = null, caller = { 
   t.after(() => new Promise((resolve) => upstream.close(resolve)));
   const gateway = createServer(createModelGatewayHandler({ ...config(upstreamBase), ...extraConfig },
     { assertActiveModelGatewayToken: () => caller }, {
-      usageLedger: ledger(events), ...(attributeRun ? { attributeRun } : {}), ...(runPurpose ? { runPurpose } : {}),
+      usageLedger: ledger(events), ...(attributeRun ? { attributeRun } : {}), ...(runPurpose ? { runPurpose } : {}), ...(runScope ? { runScope } : {}),
     }));
   const gatewayBase = await listen(gateway);
   t.after(() => new Promise((resolve) => gateway.close(resolve)));
   const post = (/** @type {Record<string, string>} */ headers = {}) => fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
     method: "POST", headers: { authorization: "Bearer runtime", "content-type": "application/json", ...headers }, body: JSON.stringify(requestBody),
   }).then((response) => response.text());
-  return { events, post };
+  return { events, post, base: gatewayBase, upstreamCalls: () => upstreamCalls };
 }
 
 test("an interactive runtime's call is charged to the one run going in its project, and capped by the per-run limit", async (t) => {
@@ -512,6 +514,89 @@ test("a bounded runtime keeps the run its token names, and an unattributable cal
   const broken = await callWith(t, { attributeRun: async () => { throw new Error("ledger unreadable"); } }, { messages: [{ role: "user", content: "x" }] });
   assert.equal((await broken.post()).length > 0, true, "an attribution failure never costs the call");
   assert.equal(broken.events[0].input.runId, null);
+});
+
+/* ------------------------------- a scheduled execution in the researcher's runtime (R13, E-20) */
+
+test("a call attributed to a scheduled execution is booked under its episode and held to the episode's limit; any other run is left alone", async (t) => {
+  const asked = [];
+  const { events, post } = await callWith(t, {
+    attributeRun: async ({ sessionId }) => (sessionId === "ses_episode" ? "run_episode" : "run_chat"),
+    runScope: async (request) => { asked.push(request); return request.runId === "run_episode" ? { usageRunId: "episode-one", runLimit: 2.5 } : null; },
+    extraConfig: { userRunSpendLimit: 3 },
+  }, { messages: [{ role: "user", content: "Next step." }] });
+  await post({ "x-deepseek-harness-session-id": "ses_episode" });
+  assert.deepEqual(asked, [{ userId: "usage-owner", projectId: "default", runId: "run_episode" }], "asked by the run the kernel's session belongs to");
+  assert.equal(events[0].input.runId, "episode-one", "booked under the episode, where the task's caps and the episode's cost read it");
+  assert.equal(events[0].input.runLimit, 2.5, "against the episode's own limit, not the account's per-run default");
+
+  // The researcher's turn in the same conversation, once the execution is over, is another run with the account's own rule.
+  await post({ "x-deepseek-harness-session-id": "ses_chat" });
+  assert.equal(events[2].input.runId, "run_chat");
+  assert.equal(events[2].input.runLimit, 3);
+});
+
+test("a scheduled execution whose limit cannot be read is refused before anything is reserved or sent", async (t) => {
+  const refused = await callWith(t, {
+    attributeRun: async () => "run_episode",
+    runScope: async () => { throw Object.assign(new Error("episode unreadable"), { code: "autopilot_episode_not_found" }); },
+  }, { messages: [{ role: "user", content: "Next step." }] });
+  const response = await fetch(`${refused.base}/internal/model/v1/chat/completions`, {
+    method: "POST", headers: { authorization: "Bearer runtime", "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "Next step." }] }),
+  });
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.error.code, "model_gateway_run_scope_unavailable");
+  assert.match(body.error.message, /nothing was sent to the provider/);
+  assert.equal(refused.events.length, 0, "no reservation");
+  assert.equal(refused.upstreamCalls(), 0);
+});
+
+test("the scope hook is for an interactive runtime's attributed calls only: a bounded token and an unattributed call never reach it", async (t) => {
+  const never = async () => assert.fail("not asked");
+  const bounded = await callWith(t, {
+    caller: { userId: "usage-owner", projectId: "default", runId: "episode-1", runLimit: 1.5, dailyLimit: 2, weeklyLimit: 5 },
+    runScope: never,
+  }, { messages: [{ role: "user", content: "Bounded." }] });
+  await bounded.post();
+  assert.equal(bounded.events[0].input.runLimit, 1.5, "a bounded runtime is capped by its token");
+  const unattributed = await callWith(t, { attributeRun: async () => null, runScope: never }, { messages: [{ role: "user", content: "Two runs." }] });
+  await unattributed.post();
+  assert.equal(unattributed.events[0].input.runId, null);
+});
+
+test("the episode tag and signed scope may ride in injected context for a bounded runtime, and an interactive runtime refuses both", async (t) => {
+  // A scheduled execution's first message is the researcher's instruction (2026-10-08); the tag and the signed scope are in the run
+  // context the socket injects, a user-role message of its own. The gateway finds markers wherever they are for a runtime whose
+  // token names the run.
+  const marker = issueModelGatewayBudgetMarker({ secret: signingSecret, userId: "usage-owner", projectId: "default",
+    runId: "episode-ctx", dailyLimit: 11, weeklyLimit: 33, runLimit: 4 });
+  const messages = [
+    { role: "user", content: "每周检索 SGLT2 抑制剂的新证据。" },
+    { role: "user", content: `<evimed-agenda>…</evimed-agenda>\n\n<evimed-autopilot-episode>episode-ctx</evimed-autopilot-episode>\n${marker}` },
+  ];
+  let seen = "";
+  const upstreamSeen = async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    seen = Buffer.concat(chunks).toString("utf8");
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end('{"id":"p","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1}}');
+  };
+  const boundedEvents = [];
+  const bounded = await call(t, upstreamSeen, ledger(boundedEvents), { messages }, { assertActiveModelGatewayToken: () => ({ userId: "usage-owner", projectId: "default",
+    runId: "episode-ctx", dailyLimit: 11, weeklyLimit: 33, runLimit: 4 }) });
+  assert.equal(bounded.status, 200);
+  await bounded.text();
+  assert.equal(boundedEvents.find((event) => event.type === "reserve").input.runLimit, 4);
+  assert.doesNotMatch(seen, /evimed-budget-scope|evimed-autopilot-episode/, "stripped before the provider");
+  assert.match(seen, /每周检索/, "and the researcher's words are untouched");
+
+  const interactiveEvents = [];
+  const interactive = await call(t, upstreamSeen, ledger(interactiveEvents), { messages });
+  assert.equal(interactive.status, 401, "an interactive runtime's newest context carrying the tag and a marker is refused: this is why an interactive execution carries neither");
+  assert.equal(interactiveEvents.length, 0);
 });
 
 /* ------------------------------------------------------- purpose (X1) */

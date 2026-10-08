@@ -220,6 +220,22 @@ export class ProductJobs {
     return result.rowCount ?? 0;
   }
 
+  /**
+   * Cancel the jobs of one kind that are still waiting and whose payload carries the given facts. A job already claimed is not
+   * touched (its worker finishes or fails it); a cancellation job (`action: "cancel"`) is never matched, because it is the
+   * thing that undoes work and must run.
+   * @param {string} userId @param {string} kind @param {Record<string, string>} match payload fields that must equal these
+   * @returns {Promise<number>} how many were canceled
+   */
+  async cancelQueued(userId, kind, match) {
+    await migrateProductStore(this.database);
+    const result = await this.database.query(`UPDATE evimed_product.jobs SET status='canceled',
+      finished_at=coalesce(finished_at,clock_timestamp()),updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
+      WHERE user_id=$1 AND kind=$2 AND status='queued' AND payload @> $3::jsonb AND payload->>'action' IS DISTINCT FROM 'cancel'`,
+    [productId(userId, "user"), productKind(kind, PRODUCT_JOB_KINDS), JSON.stringify(match)]);
+    return result.rowCount ?? 0;
+  }
+
   /** @param {string} userId @param {string} id */
   async cancel(userId, id) {
     await migrateProductStore(this.database);

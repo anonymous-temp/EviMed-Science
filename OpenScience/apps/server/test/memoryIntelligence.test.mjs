@@ -1045,6 +1045,38 @@ test("the capsule's own profile cannot re-enter as an observation of itself", as
     "and the run says how much of its own transcript it refused to read");
 });
 
+test("a scheduled task's dispatch is not observed again on every execution, and what the researcher types into it still is", async () => {
+  // The first message of an execution is the task's own instruction, with no platform tag on it (2026-10-08): the researcher did
+  // write it, once. Read as their words on every execution, a daily task would hand the extractor the same sentence every day.
+  const instruction = "每周检索 SGLT2 抑制剂心衰再入院的新证据。";
+  const messages = [
+    { info: { id: "u1", role: "user", source: "user", sourceRequestId: "req-dispatch", turnStartSeq: 1 }, parts: [{ type: "text", text: instruction }] },
+    { info: { id: "a1", role: "assistant", turnStartSeq: 1 }, parts: [{ type: "text", text: "已检索。" }] },
+    { info: { id: "u2", role: "user", source: "user", sourceRequestId: "req-typed", turnStartSeq: 1 }, parts: [{ type: "text", text: "这个方向只看随机对照试验。" }] },
+  ];
+  const own = conversationMemorySources(messages, "s", { dispatchedRequestIds: new Set(["req-dispatch"]) });
+  assert.deepEqual(own.sources.filter((source) => source.role === "user").map((source) => source.text), ["这个方向只看随机对照试验。"],
+    "the sentence typed mid-run has a request of its own and is theirs");
+  assert.deepEqual(own.excluded, [{ reason: "dispatched", count: 1 }], "the refusal is counted, not silent");
+  // Without the request ids (an ordinary conversation) nothing changes.
+  assert.equal(conversationMemorySources(messages, "s").sources.filter((source) => source.role === "user").length, 2);
+
+  // Through the run: only a scheduled execution's own route reason selects the requests.
+  /** @type {any[][]} */ const seen = [];
+  const make = () => new MemoryIntelligence(config, new MemoryStoreDouble(), {
+    fetchImpl: async (_input, init) => {
+      seen.push(JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources);
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [], forget: [] }) } }] });
+    },
+  });
+  const episodeRun = { ...run("run_episode"), effectiveRouteReason: "autopilot:literature-sentinel", kernelRequestIds: ["req-dispatch"] };
+  await make().recordRun(project(), episodeRun, messages);
+  assert.deepEqual(seen.at(-1).filter((source) => source.role === "user").map((source) => source.text), ["这个方向只看随机对照试验。"]);
+  const chatRun = { ...run("run_chat"), effectiveRouteReason: "choice:answer", kernelRequestIds: ["req-dispatch"] };
+  await make().recordRun(project(), chatRun, messages);
+  assert.equal(seen.at(-1).filter((source) => source.role === "user").length, 2, "an ordinary run's dispatched question is the researcher's own words");
+});
+
 test("what the extractor refused reaches the run's audit line and its quality notice", async () => {
   const serverSource = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
   // `conversationMemorySources` returns its refusals instead of dropping them.

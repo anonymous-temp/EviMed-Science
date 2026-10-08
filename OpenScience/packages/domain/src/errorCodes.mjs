@@ -1181,6 +1181,10 @@ const sourceIntakeErrorCodes = Object.freeze([
 const autopilotMaterialErrorCodes = Object.freeze([
   'autopilot_material_not_found',
   'autopilot_materials_full',
+  // 2026-10-08: the task page's own reads and stops of one execution (`POST …/episodes/:id/cancel`). A task or an execution that is
+  // not there for this account; the page says so and goes back to its list.
+  'autopilot_agenda_not_found',
+  'autopilot_episode_not_found',
 ])
 
 /**
@@ -2361,8 +2365,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // ——— Refusals a person meets before anything runs ———
   usage_budget_exceeded: '这次请求会超出账户设定的用量上限，因此没有开始，也没有产生费用。可在“设置 → 用量”查看已用与上限。',
   runtime_reserved_for_autopilot:
-    '这个项目的运行时正在执行你自己设定的主动研究任务，暂时不接受交互提问。'
-    + '等这一轮结束后即可继续，或在“主动研究”里先暂停它。',
+    '这个项目的运行环境正在执行你设定的定时任务，暂时不接受提问。'
+    + '等这次执行结束后即可继续，或在“定时任务”里先停止这次执行。',
   runtime_busy: '这个项目的运行时正被另一次任务占用，稍后会自动重试。',
   runtime_cleanup_required: '上一次任务的运行环境尚未关闭，清理完成后可继续研究。',
   runtime_limit_exceeded: '你同时进行的研究已达上限，这次没有开始。先结束一个再试。',
@@ -2430,6 +2434,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
   autopilot_material_not_found: '找不到这份资料，或它不属于这个研究问题所在的项目。先把文件加入这个项目的知识库，再关联到问题。',
   autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
+  autopilot_agenda_not_found: '找不到这个定时任务。它可能已被删除，回到任务列表刷新后再看。',
+  autopilot_episode_not_found: '找不到这次执行。它可能已被清理，刷新任务页后再看。',
   autopilot_daily_budget_spent:
     '这个任务近 24 小时的花费已达它自己设定的“每日上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
     + '等预算随时间释放，或在“编辑任务”里调高每日上限即可。',

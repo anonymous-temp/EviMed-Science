@@ -288,9 +288,15 @@ function turnEndingsByTurn(messages) {
  * injection" are the same zero, and only one of them is a working run.
  *
  * @param {readonly any[]} messages @param {string} sessionId
+ * @param {{ dispatchedRequestIds?: ReadonlySet<string> | null }} [options]
+ *   `dispatchedRequestIds`: the requests the control plane itself sent into this conversation for a scheduled task. What a
+ *   scheduled execution shows as its first message is the task's own instruction, which the researcher did write — once, in
+ *   the form. Read as their words on every execution it would be observed again each day (three runs, three "independent"
+ *   observations, and an inferred record activates at three), so the dispatch is refused here by the request that carried it,
+ *   not by any mark in its text: a correction typed into the same conversation has a request of its own and is kept.
  * @returns {{sources: {sourceRef: string, role: string, text: string}[], excluded: {reason: string, count: number}[]}}
  */
-export function conversationMemorySources(messages, sessionId) {
+export function conversationMemorySources(messages, sessionId, { dispatchedRequestIds = null } = {}) {
   if (!Array.isArray(messages)) return { sources: [], excluded: [] };
   const turnEndings = turnEndingsByTurn(messages);
   const sources = [];
@@ -300,7 +306,9 @@ export function conversationMemorySources(messages, sessionId) {
     const message = messages[index];
     const role = message?.info?.role ?? message?.role;
     if (!["user", "assistant"].includes(role)) continue;
-    const rejection = memorySourceRejection(message, turnEndings);
+    const requestId = message?.info?.sourceRequestId ?? message?.sourceRequestId;
+    const rejection = role === "user" && dispatchedRequestIds && typeof requestId === "string" && dispatchedRequestIds.has(requestId)
+      ? "dispatched" : memorySourceRejection(message, turnEndings);
     if (rejection) {
       excluded.set(rejection, (excluded.get(rejection) ?? 0) + 1);
       continue;
@@ -910,7 +918,10 @@ export class MemoryIntelligence {
    * that is the whole reason the two paths differ.
    */
   async recordRun(project, run, messages = [], { holdForOwner = false } = {}) {
-    const { sources, excluded } = conversationMemorySources(messages, run.sessionId);
+    const { sources, excluded } = conversationMemorySources(messages, run.sessionId, {
+      dispatchedRequestIds: String(run?.effectiveRouteReason ?? "").startsWith("autopilot:") && Array.isArray(run?.kernelRequestIds)
+        ? new Set(run.kernelRequestIds) : null,
+    });
     // The switch covers this too.
     //
     // It did not, and the asymmetry was invisible from outside: `this.enabled`
