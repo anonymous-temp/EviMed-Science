@@ -47,6 +47,12 @@ export interface EpisodePayload {
  agendaId: string; taskType: string; date: string; budgetCny: number;
   status: "queued" | "running" | "merged" | "failed" | "canceled" | string;
   runId: string | null; sessionId?: string | null; digestId?: string | null;
+  /**
+   * Where the execution ran. `true`: in the researcher's own open project runtime — its conversation is the kernel's and can be
+   * shown live. `false` (or absent, as on every execution before the field): in a bounded runtime that holds the project, so its
+   * conversation cannot be opened until it ends and the page shows the run ledger's progress instead.
+   */
+  interactive?: boolean;
   artifactRefs?: AutopilotArtifactRef[]; claims?: DigestClaim[];
   resourceDeferrals?: Record<string, { code: string; status: "waiting" | "exhausted"; retryAt?: string | null } | null>;
   /** What the episode was chosen to do: by the model from the progress, or by the date rotation when the model could not be asked. */
@@ -68,13 +74,17 @@ export function getResearchState(id: string) { return productRequest<ResearchSta
 /** Associate sources of the question's project with it: by id (already in the knowledge base) or by the SHA-256 of the bytes just uploaded. */
 export function addAgendaMaterials(id: string, input: { sourceIds?: string[]; sha256?: string[] }) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/materials`, "POST", input); }
 export function removeAgendaMaterial(id: string, sourceId: string) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/materials/${encodeURIComponent(sourceId)}`, "DELETE"); }
+/** Cancels this one execution — never the task: pausing is `stopAgenda`. Returns the episode as it now stands. */
+export function cancelEpisode(agendaId: string, episodeId: string, requestId: string) {
+  return productRequest<EpisodeRecord>(`/autopilot/agendas/${encodeURIComponent(agendaId)}/episodes/${encodeURIComponent(episodeId)}/cancel`, "POST", { requestId });
+}
 export function startAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/start`, "POST", { expectedRevision: revision }); }
 export function stopAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/stop`, "POST", { expectedRevision: revision }); }
 export function scheduleAgenda(id: string, date: string) { return productRequest<{ episode: { id: string } }>(`/autopilot/agendas/${encodeURIComponent(id)}/schedule`, "POST", { date }); }
 export function listEpisodes(projectId: string, agendaId?: string) {
   return productRequest<ProductPage<EpisodeRecord>>(`/autopilot/episodes?projectId=${encodeURIComponent(projectId)}${agendaId ? `&agendaId=${encodeURIComponent(agendaId)}` : ""}`);
 }
-// A briefing is read through the run that produced it (主动科研, 2026-09-23):
+// A briefing is read through the run that produced it (定时任务, 2026-09-23):
 // its address resolves to that conversation, and opening a result records the
 // read the stopping rules count. The per-finding decisions left the page with
 // the briefing cards; the server keeps its routes.

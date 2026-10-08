@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { cn } from "@/lib/cn";
 import { fetchWebMe, listWebAgentRuns, warmWebRuntime, webRuntimeProfile } from "@/lib/apiClient";
 import { conversationTitle } from "@/lib/conversationTitles";
 import { useProjectStore } from "@/lib/projects";
 import { chatPath, chatSessionId, isChatPath } from "@/lib/runLocation";
+import { isTaskPath } from "@/lib/taskLocation";
+import { useTaskPane } from "@/lib/taskPane";
 
 import { Button } from "@/components/ui/Button";
 import { FrameSkeleton, RuntimeUiFrame } from "@/app/routes/RuntimeUiFrame";
@@ -58,13 +60,32 @@ function releasesSettled(pending: readonly Promise<void>[], ms: number): Promise
  *
  * The chat route (`SessionRoute`) is therefore a placeholder: this decides
  * which conversation is open, from the address alone.
+ *
+ * THE OTHER PLACE IT SHOWS (2026-10-08, 定时任务). A task's page (`/app/autopilot/:taskId`) is a conversation too: the task bar over
+ * the kernel's conversation of one execution. The page cannot render the frame — moving an iframe in the tree reloads it, the
+ * cost this component exists to avoid — so it renders an empty pane and registers it (`registerTaskPane`), and this places the
+ * same resident frame over that pane: positioned and sized to the pane's rectangle, kept in step as the pane, the window, the
+ * scroll or the sidebar changes it. Switching pages, switching projects and collapsing the sidebar are all moves of the pane, never
+ * of the frame's place in the tree.
+ *
+ * What `/app/chat` shows after the frame was on an execution's conversation. The frame follows the address, never the other way
+ * round: on the chat surface the conversation is the one the address names, and a bare `/app/chat` resumes the one the researcher
+ * last worked in (`/api/me` `lastSessionId`, which is read from researcher runs only: an execution is a machine's run and is never
+ * "last open"), or opens a new one. So going back to 新对话 or to a chat from a task never leaves the researcher in the execution:
+ * the frame is asked to open the chat's conversation, and the task's own conversation stays what it was, one click away on its page.
  */
 export function SessionFrameHost() {
   const location = useLocation();
   const navigate = useNavigate();
   const currentProjectId = useProjectStore((state) => state.currentId);
   const onChat = isChatPath(location.pathname);
-  const sessionId = chatSessionId(location.pathname);
+  // A task's page asking for the frame over its pane: the execution's conversation, in this project.
+  const taskPane = useTaskPane();
+  const onTask = isTaskPath(location.pathname);
+  const taskSession = onTask && taskPane && taskPane.projectId === currentProjectId ? taskPane.sessionId : null;
+  // The frame is on screen: as the chat surface, or placed over a task's pane.
+  const onSurface = onChat || taskSession !== null;
+  const sessionId = onChat ? chatSessionId(location.pathname) : taskSession;
   // Whether this arrival is a deliberate new conversation. 「新对话」 — the
   // sidebar row, the palette entry, a capability card — carries an intent in
   // the navigation state; a plain visit to /app/chat does not.
@@ -86,7 +107,7 @@ export function SessionFrameHost() {
   // mounted — never reordered: React moves a keyed element by reinserting it,
   // and an iframe reinserted into the document loads its page again, which is
   // the rebuild keeping it was for. Recency is kept beside it (`lastShown`).
-  const [cached, setCached] = useState<string[]>(() => (onChat ? [currentProjectId] : []));
+  const [cached, setCached] = useState<string[]>(() => (onSurface ? [currentProjectId] : []));
   // When each kept project was last the one on the conversation surface.
   const lastShown = useRef(new Map<string, number>());
   const shownSeq = useRef(0);
@@ -136,12 +157,12 @@ export function SessionFrameHost() {
 
   // The admitted project's surface is kept, and is now the most recently shown.
   useEffect(() => {
-    if (!onChat || admitted !== currentProjectId) return;
+    if (!onSurface || admitted !== currentProjectId) return;
     lastShown.current.set(currentProjectId, ++shownSeq.current);
     // Room was made above; the bound is only ever reached if that was skipped.
     setCached((kept) => (kept.includes(currentProjectId) ? kept
       : [...(kept.length < CACHED_PROJECTS ? kept : kept.filter((id) => id !== leastRecentlyShown(kept, lastShown.current))), currentProjectId]));
-  }, [onChat, admitted, currentProjectId]);
+  }, [onSurface, admitted, currentProjectId]);
 
   // Land on the conversation you were last in, not on a new empty one.
   //
@@ -211,9 +232,40 @@ export function SessionFrameHost() {
     warmed.current = admitted;
     const afterRelease = evictedFor.current === admitted;
     evictedFor.current = null;
-    if (onChat && uiOrigin) return;
+    if (onSurface && uiOrigin) return;
     warmWebRuntime(admitted, { afterRelease });
-  }, [admitted, onChat, uiOrigin]);
+  }, [admitted, onSurface, uiOrigin]);
+
+  // Where the task page's pane is, in this host's own coordinates, kept current. A pane moves with the window, the sidebar, the task
+  // bar growing a line, a scroll: its size is observed, and so are the window and every scroll, and the host re-reads it each render.
+  const root = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const measure = useRef<() => void>(() => undefined);
+  const paneElement = !onChat && taskSession !== null ? taskPane?.element ?? null : null;
+  useLayoutEffect(() => {
+    const host = root.current;
+    if (!paneElement || !host) { setPlacement(null); measure.current = () => undefined; return undefined; }
+    const read = () => {
+      const pane = paneElement.getBoundingClientRect();
+      const origin = host.getBoundingClientRect();
+      const next = { left: Math.round(pane.left - origin.left), top: Math.round(pane.top - origin.top), width: Math.round(pane.width), height: Math.round(pane.height) };
+      setPlacement((previous) => (previous && previous.left === next.left && previous.top === next.top && previous.width === next.width && previous.height === next.height ? previous : next));
+    };
+    measure.current = read;
+    read();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(read);
+    observer?.observe(paneElement);
+    observer?.observe(host);
+    window.addEventListener("resize", read);
+    document.addEventListener("scroll", read, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", read);
+      document.removeEventListener("scroll", read, true);
+      measure.current = () => undefined;
+    };
+  }, [paneElement]);
+  useLayoutEffect(() => { measure.current(); });
 
   if (!uiOrigin) {
     if (!onChat) return null;
@@ -226,23 +278,34 @@ export function SessionFrameHost() {
     );
   }
 
+  // Over a task's pane the host itself takes no room and no clicks; only the frame's box, at the pane's rectangle, does.
+  const placed = !onChat && taskSession !== null;
+  const box = placed && placement ? { left: placement.left, top: placement.top, width: placement.width, height: placement.height } : undefined;
   return (
     // Hidden rather than unmounted: see the note above.
-    <div className={cn("relative h-full w-full", !onChat && "hidden")} data-session-surface={onChat ? "visible" : "hidden"}>
-      {cached.map((projectId) => (
-        <div key={projectId} className={cn("absolute inset-0", projectId !== currentProjectId && "hidden")}>
-          <RuntimeUiFrame
-            projectId={projectId}
-            origin={uiOrigin}
-            sessionId={sessionId}
-            active={onChat && projectId === currentProjectId}
-            suspended={resolving}
-            onRelease={(released) => trackRelease(projectId, released)}
-          />
-        </div>
-      ))}
+    <div ref={root} className={cn(onChat ? "relative h-full w-full" : placed ? "pointer-events-none absolute inset-0" : "hidden")}
+      data-session-surface={onChat ? "visible" : placed ? "task" : "hidden"}>
+      {cached.map((projectId) => {
+        const here = projectId === currentProjectId;
+        return (
+          <div key={projectId} data-task-frame={placed && here ? "" : undefined}
+            className={cn("absolute", !placed && "inset-0", (!here || (placed && !box)) && "hidden", placed && "pointer-events-auto")} style={here ? box : undefined}>
+            <RuntimeUiFrame
+              projectId={projectId}
+              origin={uiOrigin}
+              sessionId={sessionId}
+              active={onSurface && here}
+              mirrorAddress={onChat}
+              suspended={onChat && resolving}
+              onRelease={(released) => trackRelease(projectId, released)}
+            />
+          </div>
+        );
+      })}
       {/* This project has no surface yet: the one it displaces is still being released. */}
-      {onChat && !cached.includes(currentProjectId) && <FrameSkeleton title={conversationTitle(sessionId)} />}
+      {onSurface && !cached.includes(currentProjectId) && (placed
+        ? box && <div className="pointer-events-auto absolute" style={box}><FrameSkeleton title={conversationTitle(sessionId)} /></div>
+        : <FrameSkeleton title={conversationTitle(sessionId)} />)}
     </div>
   );
 }
