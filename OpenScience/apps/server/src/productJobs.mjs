@@ -205,6 +205,21 @@ export class ProductJobs {
     return job(result.rows[0]);
   }
 
+  /**
+   * Close the queued jobs of one kind and action that a newer job of the same work replaces: they have not started,
+   * and running them after it would do the same work again. Recorded as cancelled with what replaced them.
+   * @param {string} userId @param {string} kind @param {string} action @param {string} replacementId
+   * @returns {Promise<number>} how many were closed
+   */
+  async supersedeQueued(userId, kind, action, replacementId) {
+    await migrateProductStore(this.database);
+    const result = await this.database.query(`UPDATE evimed_product.jobs SET status='canceled',
+      result=jsonb_build_object('supersededBy',$4::text),finished_at=clock_timestamp(),updated_at=clock_timestamp()
+      WHERE user_id=$1 AND kind=$2 AND status='queued' AND payload->>'action'=$3 AND NOT (payload ? 'after') AND id<>$4`,
+    [productId(userId, "user"), productKind(kind, PRODUCT_JOB_KINDS), String(action), productId(replacementId)]);
+    return result.rowCount ?? 0;
+  }
+
   /** @param {string} userId @param {string} id */
   async cancel(userId, id) {
     await migrateProductStore(this.database);

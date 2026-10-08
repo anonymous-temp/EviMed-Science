@@ -7314,11 +7314,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const user = await store.userById(row.user_id);
           if (!user) continue;
           await ensureLearningProject(store, user);
-          await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {
+          const pass = await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {
             // One pass per researcher per interval however often this timer fires.
             idempotencyKey: `consolidate:sleep:${interval}:${period}`,
             projectId: LEARNING_PROJECT_ID,
           });
+          // An earlier hour's pass still waiting — the account's learning budget was spent, and it waited — is
+          // this one's work: one pass runs when the budget allows, not one per hour waited (2026-10-08, live: 23).
+          await productJobs.supersedeQueued(row.user_id, "consolidate", "sleep", pass.id);
         } catch (error) {
           await securityAudit(config, "learning.consolidate.enqueue", "failed", {
             userId: row.user_id,
