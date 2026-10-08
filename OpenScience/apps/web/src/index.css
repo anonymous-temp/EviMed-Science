@@ -140,31 +140,31 @@
   --border-control: var(--n-control); /* 3.21 on the page, 3.10 on the sidebar */
   --text: var(--n-900); /* 16.00 on the page */
   --text-2: var(--n-700); /* 9.37 on the page */
-  --text-3: var(--n-500); /* 5.48 on the page, 4.76 on surface-1 — nothing lighter carries text */
-  --text-graphic: var(--n-400); /* graphics only, 2.90 — never text */
-  --accent: var(--brand-600); /* 6.05 on the page; white on it 6.24 */
+  --text-3: var(--n-500); /* 5.48 on the page, 5.29 on the sidebar — nothing lighter carries text */
+  --text-graphic: var(--n-400); /* decorative graphics only, 2.69 on the page — never text, never a status */
+  --accent: var(--brand-600); /* 6.05 on the page; white on it 6.27 */
   --accent-fg: #ffffff;
   --accent-soft: var(--brand-50);
   --accent-pressed: var(--brand-700);
-  --accent-strong: var(--brand-800); /* on accent-soft: 9.93 */
+  --accent-strong: var(--brand-800); /* on accent-soft: 9.44 */
   --ok: var(--ok-600);
   --ok-soft: var(--ok-50);
   --warn: var(--warn-600);
   --warn-soft: var(--warn-50);
-  --warn-strong: var(--warn-800); /* on warn-soft: 7.92 */
+  --warn-strong: var(--warn-800); /* on warn-soft: 6.87 */
   --error: var(--danger-600); /* 5.53 on the page */
   --error-fg: #ffffff;
   --danger: var(--danger-600);
   --danger-soft: var(--danger-50);
-  --danger-strong: var(--danger-800); /* on danger-soft: 8.13 */
+  --danger-strong: var(--danger-800); /* on danger-soft: 6.97 */
   --info: var(--info-700);
   --info-soft: var(--info-50);
   --link: var(--brand-600); /* 6.05 on the page */
   --verify-ok: var(--brand-600);
   --verify-pending: var(--warn-600);
   --highlight: #fdeba8;
-  --focus: var(--brand-600); /* 2 px ring, 6.24 light */
-  --badge: var(--danger-600); /* unread count; white on it 5.49 — the dark scheme keeps the same step because white on danger-400 is 4.00 */
+  --focus: var(--brand-600); /* 2 px ring, 6.05 on the page */
+  --badge: var(--danger-600); /* unread count; white on it 5.73 — the dark scheme keeps the same step because white on danger-400 is 4.00 */
   --badge-fg: #ffffff;
   --member-from: #f6d58e;
   --member-to: #fbe7be;
@@ -172,7 +172,7 @@
   --dot-done: var(--ok-600);
   --dot-review: var(--warn-600);
   --dot-failed: var(--danger-600);
-  --dot-canceled: var(--n-400);
+  --dot-canceled: var(--n-control);
   --chart-grid: var(--n-150);
   --chart-axis: var(--n-control);
   --chart-band: var(--brand-50);
@@ -237,7 +237,7 @@
   --dot-done: var(--ok-300);
   --dot-review: var(--warn-400);
   --dot-failed: var(--danger-400);
-  --dot-canceled: var(--n-600);
+  --dot-canceled: var(--n-500);
   --chart-grid: var(--dark-border);
   --chart-axis: var(--dark-border-strong);
   --chart-band: var(--brand-950);

@@ -50,7 +50,7 @@
  * steps and the version still read 2.0.0, so "both sides pin one version"
  * could not see the drift).
  */
-export const DESIGN_TOKENS_VERSION = '2.1.2'
+export const DESIGN_TOKENS_VERSION = '2.1.3'
 
 /* ------------------------------------------------------------------ ramps -- */
 
@@ -240,35 +240,37 @@ export const COLOR_ROLES = Object.freeze(
     /* --- text ----------------------------------------------------------- */
     text: { light: 'n-900', dark: '#eef1f4', note: '16.00 on the page' },
     'text-2': { light: 'n-700', dark: '#c3cad2', note: '9.37 on the page' },
-    'text-3': { light: 'n-500', dark: '#8d96a0', note: '5.48 on the page, 4.76 on surface-1 — nothing lighter carries text' },
-    // Icons and rules only. Never a word: 2.90 on the page.
-    'text-graphic': { light: 'n-400', dark: 'n-600', note: 'graphics only, 2.90 — never text' },
+    'text-3': { light: 'n-500', dark: '#8d96a0', note: '5.48 on the page, 5.29 on the sidebar — nothing lighter carries text' },
+    // Icons and rules only. Never a word, and never a status: 2.69 on the page,
+    // under the 3:1 a meaningful graphic needs, which is why `dot-*` has its own
+    // steps and `contrast.mjs` fails a dot that borrows this one.
+    'text-graphic': { light: 'n-400', dark: 'n-600', note: 'decorative graphics only, 2.69 on the page — never text, never a status' },
 
     /* --- accent --------------------------------------------------------- */
     // One accent: the primary action, the link, the focus ring, the selected
     // row, the ✓ verified mark, and "our" series in a chart.
-    accent: { light: 'brand-600', dark: 'brand-400', note: '6.05 on the page; white on it 6.24' },
+    accent: { light: 'brand-600', dark: 'brand-400', note: '6.05 on the page; white on it 6.27' },
     'accent-fg': { light: '#ffffff', dark: 'dark-bg' },
     // Selected rows, the current sidebar row, the verified chip. Never text.
     'accent-soft': { light: 'brand-50', dark: 'brand-950' },
     // The pressed state of an accent surface.
     'accent-pressed': { light: 'brand-700', dark: 'brand-300' },
     // Text on `accent-soft`. Same step as the ramp's 800, different job.
-    'accent-strong': { light: 'brand-800', dark: 'brand-300', note: 'on accent-soft: 9.93' },
+    'accent-strong': { light: 'brand-800', dark: 'brand-300', note: 'on accent-soft: 9.44' },
 
     /* --- status: colour is never the only carrier ----------------------- */
     ok: { light: 'ok-600', dark: 'ok-300' },
     'ok-soft': { light: 'ok-50', dark: 'ok-950' },
     warn: { light: 'warn-600', dark: 'warn-300' },
     'warn-soft': { light: 'warn-50', dark: 'warn-950' },
-    'warn-strong': { light: 'warn-800', dark: 'warn-300', note: 'on warn-soft: 7.92' },
+    'warn-strong': { light: 'warn-800', dark: 'warn-300', note: 'on warn-soft: 6.87' },
     // Red is spent on clinical safety, deletion and a severe error, and on
     // nothing else. Low certainty is not red: it is a shorter blue bar.
     error: { light: 'danger-600', dark: 'danger-300', note: '5.53 on the page' },
     'error-fg': { light: '#ffffff', dark: 'dark-bg' },
     danger: { light: 'danger-600', dark: 'danger-300' },
     'danger-soft': { light: 'danger-50', dark: 'danger-950' },
-    'danger-strong': { light: 'danger-800', dark: 'danger-300', note: 'on danger-soft: 8.13' },
+    'danger-strong': { light: 'danger-800', dark: 'danger-300', note: 'on danger-soft: 6.97' },
     info: { light: 'info-700', dark: 'info-300' },
     'info-soft': { light: 'info-50', dark: 'info-950' },
     // Links wear the accent: one accent colour on the whole product.
@@ -283,8 +285,8 @@ export const COLOR_ROLES = Object.freeze(
     // A located quotation in a preserved source, and a search hit. Body text
     // on it still reads.
     highlight: { light: '#fdeba8', dark: 'warn-800' },
-    focus: { light: 'brand-600', dark: 'brand-400', note: '2 px ring, 6.24 light' },
-    badge: { light: 'danger-600', dark: 'danger-600', note: 'unread count; white on it 5.49 — the dark scheme keeps the same step because white on danger-400 is 4.00' },
+    focus: { light: 'brand-600', dark: 'brand-400', note: '2 px ring, 6.05 on the page' },
+    badge: { light: 'danger-600', dark: 'danger-600', note: 'unread count; white on it 5.73 — the dark scheme keeps the same step because white on danger-400 is 4.00' },
     'badge-fg': { light: '#ffffff', dark: '#ffffff' },
     // The membership card's one gradient — the single brand moment a settings
     // page is allowed.
@@ -292,11 +294,17 @@ export const COLOR_ROLES = Object.freeze(
     'member-to': { light: '#fbe7be', dark: '#5c4a1d' },
 
     /* --- run-state dots: graphics, 3:1, always beside a shape and a word - */
+    // 3:1 on the canvas, on a card and on the sidebar, in both schemes —
+    // `contrast.mjs` measures all five on all three. 已停止 was `text-graphic`'s
+    // own grey (2.69 light, 2.71 dark): a mark that says something cannot wear
+    // the colour of a decoration. It is the next step towards the text now:
+    // `control` in the light scheme (3.21 / 3.33 / 3.10), 500 in the dark
+    // (3.28 / 3.05 / 3.05).
     'dot-running': { light: 'brand-500', dark: 'brand-400' },
     'dot-done': { light: 'ok-600', dark: 'ok-300' },
     'dot-review': { light: 'warn-600', dark: 'warn-400' },
     'dot-failed': { light: 'danger-600', dark: 'danger-400' },
-    'dot-canceled': { light: 'n-400', dark: 'n-600' },
+    'dot-canceled': { light: 'n-control', dark: 'n-500' },
 
     /* --- chart chrome --------------------------------------------------- */
     'chart-grid': { light: 'n-150', dark: 'dark-border' },
