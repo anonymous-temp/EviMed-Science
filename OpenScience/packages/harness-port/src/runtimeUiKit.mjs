@@ -373,24 +373,11 @@ export function createFrameKit(ctx, target, require, vocabulary) {
   const warn = (/** @type {string} */ message, /** @type {unknown} */ error) => target?.console?.warn?.(`[evimed-frame] ${message}`, error);
 
   /**
-   * The one way a body registers into a slot.
-   *
-   * Refuses a misuse synchronously and by name — the wrong option for the
-   * slot's kind, a single-slot entry that would collide with the kernel's own
-   * at priority 0, a shipped key taken over at the shipped priority, a slot
-   * the pinned table does not know — because every one of those, left to the
-   * kernel, was a registration that "succeeded" and rendered nothing.
-   *
-   * The kernel's own refusal is different: it can arrive later, inside the
-   * `register()` of whichever entry declares the slot. Thrown there it would
-   * break THAT entry — the chat view, the composer — so it is caught and
-   * logged instead, and costs only this occupant.
-   *
+   * The options a registration into a slot is made with, or a refusal.
    * @param {{ slot: string, id?: string, key?: string, priority?: number, order?: number, select?: (owner: any) => any, locale?: string, inject?: any, label?: string | (() => string), inherit?: any }} spec
-   * @param {any} Component
-   * @returns {() => void}
+   * @returns {Record<string, any>}
    */
-  function occupy(spec, Component) {
+  function slotOptions(spec) {
     const contract = slots[spec?.slot];
     if (!contract) throw new Error(`[evimed-frame] slot "${spec?.slot}" is not in the pinned slot table; read its contract before occupying it`);
     /** @type {Record<string, any>} */
@@ -423,13 +410,103 @@ export function createFrameKit(ctx, target, require, vocabulary) {
     if (spec.locale) options.locale = spec.locale;
     if (spec.inject) options.inject = spec.inject;
     if (spec.label) options.label = spec.label;
+    return options;
+  }
+
+  /**
+   * The one way a body registers into a slot.
+   *
+   * Refuses a misuse synchronously and by name — the wrong option for the
+   * slot's kind, a single-slot entry that would collide with the kernel's own
+   * at priority 0, a shipped key taken over at the shipped priority, a slot
+   * the pinned table does not know — because every one of those, left to the
+   * kernel, was a registration that "succeeded" and rendered nothing.
+   *
+   * The kernel's own refusal is different: it can arrive later, inside the
+   * `register()` of whichever entry declares the slot. Thrown there it would
+   * break THAT entry — the chat view, the composer — so it is caught and
+   * logged instead, and costs only this occupant.
+   *
+   * @param {{ slot: string, id?: string, key?: string, priority?: number, order?: number, select?: (owner: any) => any, locale?: string, inject?: any, label?: string | (() => string), inherit?: any }} spec
+   * @param {any} Component
+   * @returns {() => void}
+   */
+  function occupy(spec, Component) {
+    const options = slotOptions(spec);
+    return ctx.slots.inject(spec.slot, () => register(options, Component));
+  }
+
+  /**
+   * The registration, made. A refusal is caught and logged: it can arrive
+   * inside the `register()` of the entry that declares the slot, and costs
+   * only this occupant.
+   * @param {Record<string, any>} options @param {any} Component
+   * @returns {() => void}
+   */
+  function register(options, Component) {
+    try {
+      return ctx.slots.register(options, Component);
+    } catch (error) {
+      warn(`${options.name}${options.key ? `[${options.key}]` : options.id ? `[${options.id}]` : ''} was refused by the kernel:`, error);
+      return () => {};
+    }
+  }
+
+  /**
+   * A takeover of a shipped keyed entry that keeps what the shipped entry
+   * hands its component.
+   *
+   * A keyed entry may be registered with an `inject` — the business hooks its
+   * component is given as props. The chat's `assistant-step` row is one
+   * (`inject: () => ({ hooks: { presentation } })`, which becomes
+   * `usePresentation`), and the slot renderer hands a render the props of the
+   * entry that WINS: the lowest priority. A takeover registered without the
+   * shipped entry's `inject` therefore wins, receives no `usePresentation`,
+   * draws the shipped row it shadows with those props, and the row's own
+   * reasoning disclosure throws `usePresentation is not a function`. The
+   * renderer then retires the crashed entry and the next one down goes through
+   * the same, until only the kernel's row is left — which is what a 0.1.7-rc.2
+   * conversation did: no reasoning line, and none of the cards, files or
+   * checks that were meant to follow the answer (E-11, reproduced on a booted
+   * kernel 2026-10-08).
+   *
+   * So the takeover inherits the shipped entry (`inject`, `store`, `locale`),
+   * which only exists once the kernel has registered it: the registration is
+   * made when that entry appears, and again if it is ever replaced. Nothing is
+   * registered while the kernel has no entry for the key — there is no row to
+   * take over then.
+   *
+   * @param {{ slot: string, key: string, priority: number, locale?: string }} spec
+   * @param {any} Component
+   * @returns {() => void}
+   */
+  function occupyOver(spec, Component) {
+    slotOptions(spec);
     return ctx.slots.inject(spec.slot, () => {
-      try {
-        return ctx.slots.register(options, Component);
-      } catch (error) {
-        warn(`${spec.slot}${options.key ? `[${options.key}]` : options.id ? `[${options.id}]` : ''} was refused by the kernel:`, error);
-        return () => {};
-      }
+      /** @type {any} */
+      let shipped = null;
+      /** @type {(() => void) | null} */
+      let own = null;
+      const refresh = () => guarded(`${spec.slot}[${spec.key}] takeover`, () => {
+        const entries = typeof ctx.slots.entries === 'function' ? ctx.slots.entries(spec.slot) : [];
+        const next = (Array.isArray(entries) ? entries : []).find((/** @type {any} */ entry) => entry && entry.options
+          && entry.options.key === spec.key && (entry.options.priority ?? 0) === 0 && entry.component !== Component) ?? null;
+        // `shipped` is set before the registration is made, so a change this very
+        // registration notifies finds nothing new.
+        if (next === shipped) return;
+        const previous = own;
+        own = null;
+        shipped = next;
+        if (previous) previous();
+        if (next) own = register(slotOptions({ ...spec, inherit: next }), Component);
+      });
+      const stop = typeof ctx.slots.subscribe === 'function' ? ctx.slots.subscribe(spec.slot, refresh) : () => {};
+      refresh();
+      return () => {
+        stop();
+        if (own) own();
+        own = null;
+      };
     });
   }
 
@@ -506,6 +583,7 @@ export function createFrameKit(ctx, target, require, vocabulary) {
     vocabulary: vocabulary ?? {},
     hub,
     occupy,
+    occupyOver,
     guarded,
     withServices,
     useFrameState,

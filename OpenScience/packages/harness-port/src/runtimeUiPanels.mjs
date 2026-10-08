@@ -408,10 +408,13 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     const node = props?.node;
     const seq = node?.data?.finalNode?.seq;
     const closing = Number.isInteger(seq) && tail?.closing?.finalNode?.seq === seq && (newest === undefined || newest === node.data.turn);
-    if (!closing) return own;
+    // The kernel draws one answer node in two parts when it folds the turn's process:
+    // its reasoning (inside the fold) and the response. What follows the answer
+    // follows the response only.
+    if (!closing || props?.groupPart === 'reasoning') return own;
     return h(React.Fragment, null, own, h(TurnFiles, { turn: { start: node?.location?.turn?.start?.time, end: tail?.time }, useResource: props?.useResource }));
   }
-  kit.guarded('file cards', () => kit.occupy({ slot, key: 'assistant-step', priority: -2, locale: 'chat' }, AnswerWithFiles));
+  kit.guarded('file cards', () => kit.occupyOver({ slot, key: 'assistant-step', priority: -2, locale: 'chat' }, AnswerWithFiles));
 
 }
 

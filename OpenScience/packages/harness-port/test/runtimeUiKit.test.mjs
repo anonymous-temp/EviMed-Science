@@ -6,7 +6,7 @@ import {
   createFrameKit, createHub, parseToolText, partialArgField, toolCallState, validFrame,
 } from '../src/runtimeUiKit.mjs';
 import { FRAME_VOCABULARY } from '../src/runtimeUiFrame.mjs';
-import { fakeCtx, fakeTarget, kernelSlots } from './helpers/frameFakes.mjs';
+import { fakeCtx, fakeTarget, kernelSlots, SHIPPED_ROW_HOOKS } from './helpers/frameFakes.mjs';
 
 // Verbatim from a production transcript, 2026-09-16 (project
 // eval-memory-ablation-v7-545d9b64) — the same samples the control plane's
@@ -87,6 +87,65 @@ test('a takeover draws the row it shadows: the next entry above its own, whichev
   // Another key's entries are not in the cell; an unregistered component shadows nothing.
   assert.equal(kit.shadowed(slot, 'context', Files), null);
   assert.equal(kit.shadowed(slot, 'assistant-step', () => null), null);
+});
+
+// E-11, reproduced on a booted 0.1.7-rc.2 kernel on 2026-10-08: the console showed
+// `TypeError: usePresentation is not a function at ReasoningRow` and
+// `slot entry crashed in 'conversation.chat.node'` on every answer that carried a
+// reasoning block. The kernel registers its `assistant-step` row with
+// `inject: () => ({ hooks: { presentation } })`; the renderer hands a render the
+// props of the entry that wins (the lowest priority), so a takeover registered
+// without that `inject` won, got no `usePresentation`, and drew the shipped row
+// with props the row cannot work from. The renderer retired each crashed entry
+// in turn, which is also why the files, sources and reply check never appeared.
+test('a takeover of a shipped row carries what the shipped entry injects, so the row it draws gets its hooks', () => {
+  const ctx = fakeCtx({ slots: kernelSlots() });
+  const target = fakeTarget();
+  const kit = createFrameKit(ctx, target, undefined, FRAME_VOCABULARY);
+  const slot = 'conversation.chat.node';
+  const shippedInject = /** @type {any} */ (SHIPPED_ROW_HOOKS)[slot]['assistant-step'];
+  function Files() { return null; }
+  function Checks() { return null; }
+  kit.occupyOver({ slot, key: 'assistant-step', priority: -2, locale: 'chat' }, Files);
+  kit.occupyOver({ slot, key: 'assistant-step', priority: -1, locale: 'chat' }, Checks);
+  const ours = ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === slot && entry.options.key === 'assistant-step' && (entry.options.priority ?? 0) < 0);
+  assert.equal(ours.length, 2);
+  for (const entry of ours) assert.equal(entry.options.inject, shippedInject, 'the shipped entry\'s own hooks reach the winning registration');
+  // Still takeovers: below the kernel, each drawing the one it shadows.
+  assert.equal(kit.shadowed(slot, 'assistant-step', Files), Checks);
+  assert.equal(kit.shadowed(slot, 'assistant-step', Checks), 'shipped');
+  // A row the kernel registers without hooks is taken over without any.
+  function Quiet() { return null; }
+  kit.occupyOver({ slot, key: 'context', priority: -1, locale: 'chat' }, Quiet);
+  const quiet = ctx.slots.registrations.find((/** @type {any} */ entry) => entry.options.key === 'context' && entry.component === Quiet);
+  assert.equal(quiet.options.inject, undefined);
+  assert.deepEqual(target.warnings, []);
+});
+
+test('a takeover waits for the kernel\'s entry and leaves with its owner', () => {
+  const slots = kernelSlots();
+  // The kernel has not registered its rows yet.
+  slots.registrations.splice(0, slots.registrations.length);
+  const ctx = fakeCtx({ slots });
+  const target = fakeTarget();
+  const kit = createFrameKit(ctx, target, undefined, FRAME_VOCABULARY);
+  const slot = 'conversation.chat.node';
+  function Checks() { return null; }
+  const leave = kit.occupyOver({ slot, key: 'assistant-step', priority: -1, locale: 'chat' }, Checks);
+  const ours = () => slots.registrations.filter((/** @type {any} */ entry) => entry.component === Checks);
+  assert.equal(ours().length, 0, 'there is no row to take over yet');
+  // The kernel registers its entry: the takeover follows, carrying its inject.
+  const injectA = () => ({ hooks: { presentation: 'a' } });
+  slots.register({ name: slot, key: 'assistant-step', inject: injectA, locale: 'chat' }, 'native-a');
+  assert.equal(ours().length, 1);
+  assert.equal(ours()[0].options.inject, injectA);
+  // A second entry at another priority is not the shipped one.
+  slots.register({ name: slot, key: 'assistant-step', priority: -5, inject: () => ({}) }, () => null);
+  assert.equal(ours().length, 1);
+  // Leaving removes the takeover and stops watching.
+  leave();
+  assert.equal(ours().length, 0);
+  assert.deepEqual(target.warnings, []);
 });
 
 test('the bootstrap object is validated field by field', () => {

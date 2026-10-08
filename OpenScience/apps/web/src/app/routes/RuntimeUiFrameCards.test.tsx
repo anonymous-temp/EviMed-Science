@@ -15,7 +15,7 @@ import { apply as applyCommands } from "../../../../../packages/harness-port/src
 
 type Listener = () => void;
 type Component = (props: Record<string, unknown>) => React.ReactElement | null;
-type Registration = { options: { name: string; key?: string; id?: string; priority?: number }; component: Component };
+type Registration = { options: { name: string; key?: string; id?: string; priority?: number }; component: Component; inject?: () => unknown };
 
 /**
  * A 0.1.7 session list: the session on screen is the row the main view
@@ -30,7 +30,13 @@ function mainView(sessionId: string, catalogue?: Array<Record<string, unknown>>)
 }
 
 function frame(entries: Array<Record<string, unknown>>, extra: Record<string, unknown> = {}) {
-  const registrations: Registration[] = [];
+  // The kernel's own answer row, registered the way `ui-chat` registers it: with the hooks it injects.
+  // A takeover is made over the entry that exists, so a frame with none has nothing to take over (E-11).
+  const registrations: Registration[] = [{
+    options: { name: "conversation.chat.node", key: "assistant-step" },
+    component: () => null,
+    inject: () => ({ hooks: { presentation: () => true } }),
+  }];
   const listeners = new Set<Listener>();
   let snapshot = mainView("session-a", entries);
   const sessions = {
@@ -44,7 +50,7 @@ function frame(entries: Array<Record<string, unknown>>, extra: Record<string, un
     uiWorkspace,
     slots: {
       inject: (_name: string, setup: () => unknown) => setup(),
-      register: (options: Registration["options"], component: Component) => { registrations.push({ options, component }); return () => {}; },
+      register: (options: Registration["options"] & { inject?: () => unknown }, component: Component) => { registrations.push({ options, component, inject: options.inject }); return () => {}; },
       entries: (name: string) => registrations.filter((entry) => entry.options.name === name)
         .sort((a, b) => (a.options.priority ?? 0) - (b.options.priority ?? 0)),
     },
@@ -193,7 +199,8 @@ describe("the files after the answer that delivered them", () => {
     ] }] }));
     const Answer = f.find("conversation.chat.node", "assistant-step")!;
     render(<Answer {...answerProps} />);
-    const toggle = screen.getByRole("button", { name: /⚠ 1 处引用待核对/ });
+    const toggle = screen.getByRole("button", { name: "复核：1 处引用可能不支持所述结论" });
+    expect(toggle.textContent).not.toContain("⚠");
     expect(screen.queryByText("华法林与布洛芬合用无妨 [2]。")).toBeNull();
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");

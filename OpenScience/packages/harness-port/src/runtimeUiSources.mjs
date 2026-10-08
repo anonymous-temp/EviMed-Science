@@ -312,11 +312,13 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const node = props?.node;
     const seq = node?.data?.finalNode?.seq;
     const closing = Number.isInteger(seq) && tail?.closing?.finalNode?.seq === seq && (newest === undefined || newest === node.data.turn);
-    if (!closing) return own;
+    // One answer node is drawn twice when the turn's process is folded — its
+    // reasoning inside the fold, then the response; the sources follow the response.
+    if (!closing || props?.groupPart === 'reasoning') return own;
     return h(React.Fragment, null, own, h(TurnSources, { turn: { start: node?.location?.turn?.start?.time, end: tail?.time } }));
   }
 
-  kit.guarded('source cards', () => kit.occupy({ slot, key: 'assistant-step', priority: -3, locale: 'chat' }, AnswerWithSources));
+  kit.guarded('source cards', () => kit.occupyOver({ slot, key: 'assistant-step', priority: -3, locale: 'chat' }, AnswerWithSources));
 }
 
 /** The body as the socket's build composes it. */
