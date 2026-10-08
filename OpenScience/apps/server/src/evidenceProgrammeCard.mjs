@@ -286,7 +286,7 @@ export function buildProgrammeCard(input) {
     sources: sourcesOut,
     limitations: [
       ...uncertainty.slice(0, 5),
-      excludedCount ? `另有 ${excludedCount} 条结论没有通过核验或复核，没有放进这张卡，留在平台的内部研究记录里。` : "",
+      excludedCount ? `另有 ${excludedCount} 条结论没有通过引文核对或复核，没有放进这张卡，留在平台的内部研究记录里。` : "",
     ].filter(Boolean).join("\n").slice(0, 12_000),
     provenance: programmeCardProvenance(input.agenda.id, input.taskType),
     content: { question: input.question, answer, context, ...(comparisons.length ? { comparisons } : {}) },

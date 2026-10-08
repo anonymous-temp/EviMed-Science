@@ -128,10 +128,11 @@ describe("ReportReader", () => {
     await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
     const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
     expect(within(table).getByRole("rowheader", { name: "CLM-002" })).toBeInTheDocument();
-    expect(within(table).getByText("⚠ 原文中未找到")).toBeInTheDocument();
+    expect(within(table).getByText("⚠ 引文未在原文中找到")).toBeInTheDocument();
   });
 
   // 「未核对」 once stood for three things: the checks still on their way, the checks that could not be read, and a claim nobody checked.
+  // The column is ✓, ⚠ or blank now, and 核对中 only while they are on their way.
   it("reads 核对中 on the matrix tab while the checks are on their way, and the marks once they arrive", async () => {
     let arrive!: (value: unknown) => void;
     mocks.readClaimVerification.mockReturnValue(new Promise((resolve) => { arrive = resolve; }));
@@ -144,20 +145,27 @@ describe("ReportReader", () => {
       claims: [{ claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: ".evimed-sources/aspree/fulltext.md", status: "verified" }] }],
       counts: { verified: 1 },
     });
-    // The checks were read and the second claim is not among them: only now is it 未核对.
-    expect(await within(table).findByText("✓ 已核对")).toBeInTheDocument();
-    expect(within(table).getByText("未核对")).toBeInTheDocument();
+    // The checks were read and the second claim is not among them: its cell is blank, not 未核对.
+    expect(await within(table).findByText("✓ 引文已核对")).toBeInTheDocument();
+    expect(within(table).queryByText("未核对")).toBeNull();
     expect(within(table).queryByText("核对中")).toBeNull();
   });
 
-  it("reads 暂无核对结果, not 未核对, when the checks cannot be read", async () => {
-    mocks.readClaimVerification.mockRejectedValue(new Error("offline"));
+  it("shows an error row with 重试, not 暂无核对结果, when the checks cannot be read — and reads them again from it", async () => {
+    mocks.readClaimVerification.mockRejectedValueOnce(new Error("offline"));
     renderReader();
     await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
     const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
-    await waitFor(() => expect(within(table).getAllByText("暂无核对结果")).toHaveLength(2));
-    expect(within(table).queryByText("未核对")).toBeNull();
-    expect(within(table).queryByText("核对中")).toBeNull();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("核对结果暂时读取不到");
+    expect(within(table).queryByText(/暂无核对结果|未核对|核对中/)).toBeNull();
+    mocks.readClaimVerification.mockResolvedValue({
+      claims: [{ claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: ".evimed-sources/aspree/fulltext.md", status: "verified" }] }],
+      counts: { verified: 1 },
+    });
+    await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
+    expect(await within(screen.getByRole("table", { name: "证据矩阵：2 条结论" })).findByText("✓ 引文已核对")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("opens a claim of the matrix tab in a drawer beside the report, with its quotation and check", async () => {
@@ -166,7 +174,7 @@ describe("ReportReader", () => {
     await userEvent.click(await screen.findByRole("button", { name: "CLM-002" }));
     const drawer = await screen.findByRole("dialog", { name: "CLM-002" });
     expect(within(drawer).getByText("“higher risk of major hemorrhage”")).toBeInTheDocument();
-    expect(within(drawer).getByText("⚠ 原文中未找到")).toBeInTheDocument();
+    expect(within(drawer).getByText("⚠ 引文未在原文中找到")).toBeInTheDocument();
     expect(within(drawer).getByText(/这段引文没有在保存的原文中找到/)).toBeInTheDocument();
   });
 
@@ -274,21 +282,21 @@ describe("version-bound report evidence", () => {
     expect(mocks.readArtifact).not.toHaveBeenCalled();
     expect(mocks.readClaimVerification).not.toHaveBeenCalled();
   });
-  it("says on the matrix tab of an old version that its checks are not there, instead of calling the claims unchecked", async () => {
+  it("leaves the check column of an old version blank where its checks are not there, instead of calling the claims unchecked", async () => {
     renderReader({ immutableVersion: version({ status: "available", matrixText: JSON.stringify(matrix) }) });
     await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
     const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
-    expect(within(table).getAllByText("暂无核对结果")).toHaveLength(2);
-    expect(within(table).queryByText("未核对")).toBeNull();
+    expect(within(table).queryByText(/暂无核对结果|未核对|核对中/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
   it("shows the frozen checks on the matrix tab of an old version", async () => {
     renderReader({ immutableVersion: version({ status: "available", matrixText: JSON.stringify(matrix),
       verification: { claims: [{ claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: ".evimed-sources/aspree/fulltext.md", status: "verified" }] }], counts: { verified: 1 } } }) });
     await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
     const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
-    expect(within(table).getByText("✓ 已核对")).toBeInTheDocument();
-    // Read, and the second claim is not in them.
-    expect(within(table).getByText("未核对")).toBeInTheDocument();
+    expect(within(table).getByText("✓ 引文已核对")).toBeInTheDocument();
+    // Read, and the second claim is not in them: blank.
+    expect(within(table).queryByText("未核对")).toBeNull();
   });
   it("does not offer a current-workspace source link when its old snapshot is absent", async () => {
     const selected = version({ status: "available", matrixText: JSON.stringify(matrix) }); selected.inputs = [];

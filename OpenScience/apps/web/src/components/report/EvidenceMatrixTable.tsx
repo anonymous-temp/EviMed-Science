@@ -11,6 +11,7 @@ import {
 } from "@/lib/claimCitations";
 import { cn } from "@/lib/cn";
 import type { VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
+import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
 import { FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
 import { ScrollRegion } from "@/components/ui/ScrollRegion";
@@ -77,15 +78,18 @@ const GROUND = { bg: "bg-bg", surface: "bg-surface", "surface-2": "bg-surface-2"
  * source titles and quotations, a filter on the check and one on the kind of
  * claim narrow the list; the toolbar says how many of the claims it shows.
  *
- * What the check column says depends on whether the checks were read
- * (`verificationState`): 「核对中」 while they are on their way, 「暂无核对结果」
- * when they could not be read, and 「未核对」 only when they were read and this
- * claim is not among them.
+ * The check column is ✓, ⚠ or blank (v2.1 §29.2; design reference §8.2): a
+ * found quotation, one that was not, or no check to report. The one word it
+ * ever writes besides is 「核对中」 while the checks are on their way. When
+ * reading them failed that is said once, in an error row above the list with
+ * 「重试」, not in every row; a report that was never checked says nothing, and
+ * the 「核对」 filter is not offered without checks to filter by.
  */
 export function EvidenceMatrixTable({
   claims,
   verified,
   verificationState,
+  onRetry,
   runId,
   ground = "bg",
   className,
@@ -94,6 +98,8 @@ export function EvidenceMatrixTable({
   verified?: Map<string, VerifiedClaim>;
   /** Whether the checks were read; absent, a non-empty `verified` means they were. */
   verificationState?: ClaimCheckState;
+  /** Reads the checks again; the 「重试」 of the error row shown when reading them failed. */
+  onRetry?: () => void;
   runId?: string | null;
   /** The ground the toolbar sticks over while the list scrolls under it. */
   ground?: keyof typeof GROUND;
@@ -181,6 +187,10 @@ export function EvidenceMatrixTable({
         <p aria-live="polite" className="ml-auto shrink-0 text-caption tabular-nums text-text-3">显示 {shown.length} / {rows.length} 条</p>
       </div>
 
+      {state === "failed" && onRetry && (
+        <LoadError className="mb-3 max-sm:mx-4" message="核对结果暂时读取不到，引文仍可逐条对照来源。" onRetry={onRetry} />
+      )}
+
       <div className={cn("overflow-hidden rounded-card border border-border bg-surface", className)}>
         {rowData.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
@@ -217,7 +227,7 @@ export function EvidenceMatrixTable({
               <thead>
                 <tr className="text-compact text-text-3">
                   <th scope="col" className={cn(HEAD, "sticky left-0 z-page w-24 bg-surface-2")}>结论</th>
-                  <th scope="col" className={cn(HEAD, "w-32")}>核对</th>
+                  <th scope="col" className={cn(HEAD, "w-40")}>核对</th>
                   <th scope="col" className={HEAD}>内容</th>
                   <th scope="col" className={cn(HEAD, "w-1/4")}>来源</th>
                   <th scope="col" className={cn(HEAD, "w-24")}>类型</th>

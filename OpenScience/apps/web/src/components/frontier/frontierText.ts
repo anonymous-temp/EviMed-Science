@@ -272,8 +272,14 @@ export function hotBoardStamp(window: FrontierHotWindow, takenAt: string | null)
  * reading, oldest first, scaled between their own lowest and highest (a flat
  * line sits in the middle), and the last point, which the chart marks. Null
  * with fewer than two readings — nothing to draw a line through.
+ *
+ * A reading that is missing keeps its place on the time axis and breaks the
+ * line: each run of consecutive readings is its own `M … L …` segment, and no
+ * stroke crosses a gap (design reference §11.2 — a gap is shown, never joined
+ * over). A reading with a gap on both sides has no neighbour to be joined to,
+ * so it is returned in `dots` for the chart to mark and is not in `path`.
  */
-export function sparkline(points: readonly FrontierTrendPoint[], width: number, height: number, inset = 2): { path: string; last: { x: number; y: number } } | null {
+export function sparkline(points: readonly FrontierTrendPoint[], width: number, height: number, inset = 2): { path: string; last: { x: number; y: number }; dots: { x: number; y: number }[] } | null {
   const read = points.flatMap((point, index) => (point.heat === null ? [] : [{ index, heat: point.heat }]));
   if (read.length < 2) return null;
   const span = Math.max(1, points.length - 1);
@@ -282,8 +288,20 @@ export function sparkline(points: readonly FrontierTrendPoint[], width: number, 
   const x = (index: number) => inset + (index / span) * (width - inset * 2);
   const y = (heat: number) => (high === low ? height / 2 : inset + (1 - (heat - low) / (high - low)) * (height - inset * 2));
   const round = (value: number) => Math.round(value * 10) / 10;
-  const coords = read.map((point) => ({ x: round(x(point.index)), y: round(y(point.heat)) }));
-  return { path: coords.map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`).join(" "), last: coords[coords.length - 1] };
+  const runs: { x: number; y: number }[][] = [];
+  let before = -2;
+  for (const point of read) {
+    const coord = { x: round(x(point.index)), y: round(y(point.heat)) };
+    if (point.index === before + 1) runs[runs.length - 1].push(coord);
+    else runs.push([coord]);
+    before = point.index;
+  }
+  const lastRun = runs[runs.length - 1];
+  return {
+    path: runs.filter((run) => run.length > 1).map((run) => run.map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`).join(" ")).join(" "),
+    last: lastRun[lastRun.length - 1],
+    dots: runs.filter((run) => run.length === 1).map((run) => run[0]),
+  };
 }
 
 /* --------------------------------------------------------------------- event */
@@ -302,6 +320,22 @@ export function primaryHeld(event: Pick<FrontierEvent, "primary" | "hasPrimary" 
 }
 
 /* --------------------------------------------------------------------- daily */
+
+/** The name a reader knows a time zone by: 「北京时间」 for the platform's own; else the browser's long name for it; else its IANA name. */
+export function zoneName(timeZone: string): string {
+  if (timeZone === "Asia/Shanghai") return "北京时间";
+  try {
+    const name = new Intl.DateTimeFormat("zh-CN", { timeZone, timeZoneName: "long" }).formatToParts(new Date()).find((part) => part.type === "timeZoneName")?.value;
+    return name || timeZone;
+  } catch {
+    return timeZone;
+  }
+}
+
+/** 「07:30（北京时间）」: the clock the server publishes by and whose clock it is. */
+export function scheduleLabel(schedule: { time: string; timeZone: string }): string {
+  return `${schedule.time}（${zoneName(schedule.timeZone)}）`;
+}
 
 /** 「52 条 · 约 9 分钟」; the minutes only where the server has counted them. */
 export function dailyMeta(issue: Pick<FrontierDaily, "itemCount" | "readingMinutes">): string {

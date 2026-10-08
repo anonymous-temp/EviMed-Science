@@ -64,6 +64,7 @@ export {
 } from './src/extensions.mjs'
 
 export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.mjs'
+export { safeAppReturnPath } from './src/returnPath.mjs'
 
 
 // toolNames — 22 exports

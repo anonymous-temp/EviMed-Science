@@ -181,12 +181,12 @@ export function RunFilePage() {
 }
 
 function MatrixPage({ path, runId }: { path: string; runId: string }) {
-  const { document, verified, verificationState } = useClaimMatrix(path, "workspace");
+  const { document, verified, verificationState, retry } = useClaimMatrix(path, "workspace");
   return (
     // Edge to edge on a phone, where each claim is a card.
     <div className="mx-auto w-full max-w-content-full px-6 py-6 max-sm:px-0 max-sm:py-3">
       {document
-        ? <EvidenceMatrixTable claims={document.claims} verified={verified} verificationState={verificationState} runId={runId} className="max-sm:rounded-none max-sm:border-x-0" />
+        ? <EvidenceMatrixTable claims={document.claims} verified={verified} verificationState={verificationState} onRetry={retry} runId={runId} className="max-sm:rounded-none max-sm:border-x-0" />
         : <p className="text-ui text-muted max-sm:px-4">这个证据矩阵里没有可读的结论。</p>}
     </div>
   );

@@ -126,7 +126,7 @@ export function VcrHomePage() {
         onChange={(next) => setParams(next === "studies" ? {} : { tab: next }, { replace: true })}
         panelId="vcr-home-panel"
         trailing={tab === "studies" && ready && ready.studies.length > 0
-          ? <SearchInput label="搜索研究" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} />
+          ? <SearchInput label="搜索研究" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} />
           : undefined}
       />
 

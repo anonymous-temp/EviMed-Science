@@ -395,6 +395,18 @@ export interface FrontierDailySummary {
   generatedAt: string | null;
 }
 
+/** When the daily is published as this deployment is configured: `HH:MM` on the clock of an IANA time zone. */
+export interface FrontierDailySchedule {
+  time: string;
+  timeZone: string;
+}
+
+/** `GET /api/frontier/dailies`: the archive, newest first, and the schedule the server publishes by (null from a server that names none). */
+export interface FrontierDailyArchive {
+  dailies: FrontierDailySummary[];
+  schedule: FrontierDailySchedule | null;
+}
+
 /**
  * 「你关注的专区」 of an issue (flywheel F10): the cards of the zones this reader follows that were published
  * (`new`) or changed (`updated`) in the issue's window. Theirs alone — the issue's text is the same for everyone.
@@ -1068,14 +1080,17 @@ export async function fetchFrontierEvent(eventId: string): Promise<FrontierEvent
   return event;
 }
 
-export function listFrontierDailies(limit = 30): Promise<FrontierDailySummary[] | null> {
+export function listFrontierDailies(limit = 30): Promise<FrontierDailyArchive | null> {
   return optional(async () => {
     const raw = record(await productRequest<unknown>(`/frontier/dailies?limit=${Math.min(60, Math.max(1, Math.floor(limit)))}`)) ?? {};
-    return (Array.isArray(raw.dailies) ? raw.dailies : Array.isArray(raw.items) ? raw.items : []).flatMap((entry) => {
+    const dailies = (Array.isArray(raw.dailies) ? raw.dailies : Array.isArray(raw.items) ? raw.items : []).flatMap((entry) => {
       const row = record(entry);
       const day = text(row?.day);
       return day ? [{ day, title: text(row?.title), itemCount: count(row?.itemCount), generatedAt: moment(row?.generatedAt) }] : [];
     });
+    const named = record(raw.schedule);
+    const time = text(named?.time), timeZone = text(named?.timeZone);
+    return { dailies, schedule: time && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) && timeZone && timeZone.length <= 64 ? { time, timeZone } : null };
   });
 }
 

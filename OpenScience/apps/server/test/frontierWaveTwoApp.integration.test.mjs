@@ -178,6 +178,9 @@ test("the daily over the wire: the archive and one issue, its items read now; a 
   await database.query("UPDATE evimed_frontier.items SET state = 'withdrawn' WHERE id = $1", [gone.id]);
   const archive = (await (await fetch(`${base}/api/frontier/dailies?limit=5`, { headers: sessions.reader })).json()).data;
   assert.deepEqual(archive.dailies.map((entry) => [entry.day, entry.title, entry.itemCount]), [["2026-09-21", "日报头条", 2]]);
+  // The archive carries the schedule the daily is published by, so the page names it instead of a copy written into the interface.
+  assert.match(archive.schedule.time, /^([01]\d|2[0-3]):[0-5]\d$/);
+  assert.equal(typeof archive.schedule.timeZone, "string");
   const issue = (await (await fetch(`${base}/api/frontier/dailies/2026-09-21`, { headers: sessions.reader })).json()).data.daily;
   assert.equal(issue.lead.item.id, lead.publicId);
   assert.equal(issue.lead.text, "头条导读");

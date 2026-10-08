@@ -30,8 +30,8 @@ function Calculation({ claim }: { claim: EvidenceClaim }) {
 }
 
 function Mark({ mark }: { mark: EvidenceClaimMark | undefined }) {
-  if (mark === "✓") return <span className="mr-1 text-verify-ok" aria-label="已核验">✓</span>;
-  if (mark === "⚠") return <span className="mr-1 text-verify-pending" aria-label="未能核验">⚠</span>;
+  if (mark === "✓") return <span className="mr-1 text-verify-ok" aria-label="引文已核对">✓</span>;
+  if (mark === "⚠") return <span className="mr-1 text-verify-pending" aria-label="未核对上">⚠</span>;
   return null;
 }
 

@@ -1,6 +1,7 @@
 import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
 import { frontierNoticeHref, shareNoticeHref } from "@evimed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -25,11 +26,22 @@ import {
 } from "@/lib/inboxClient";
 import { inboxWhen, orderInbox, severityOf } from "@/lib/inboxGroups";
 import { splitNoticeBody } from "@/lib/qualityNotices";
+import { withParam } from "@/lib/addressState";
+import { usePageScroll } from "@/lib/pageScroll";
 import { toast } from "@/lib/toast";
 import { useOperator } from "@/lib/useOperator";
 import { cn } from "@/lib/cn";
 
 type Filter = "all" | "unread";
+
+/** The most pages of the list an address brings back at once; each is one request, in turn. */
+const MAX_RESTORED_PAGES = 10;
+
+/** How many pages of the list the address asks for: absent or malformed is the first one. */
+function pagesOf(value: string | null): number {
+  const pages = value !== null && /^\d{1,3}$/.test(value) ? Number(value) : 1;
+  return Math.min(Math.max(pages, 1), MAX_RESTORED_PAGES);
+}
 
 /** What a notice still asks of the reader, in two characters (2026-09-23 inventory §1.9). */
 const WAITING: Record<string, string> = { question: "待回答", review: "待核对" };
@@ -47,6 +59,13 @@ const WAITING: Record<string, string> = { question: "待回答", review: "待核
  * fifty briefings is on a page nobody opens, and the section's number is the
  * bell's. 「全部已读」 leaves them unread; each is opened.
  *
+ * Where the reader is lives in the address (design reference A08): `?filter=unread`,
+ * `?open=` for the row that is open in place and `?pages=` for how many pages
+ * 「加载更多」 has brought in — so Back from the conversation a row opened, a
+ * reload and a pasted link find the list as it was. All three replace the
+ * history entry (the frontier feed's rule for a narrowed view), and a filter
+ * starts again from the first page.
+ *
  * What it no longer is (2026-09-23 plan §5.8): a card with two buttons per
  * notice, a segmented control, day headings, a subtitle about when it
  * notifies, and 「自动运行 N 条」 — an evaluation writes no notice any more and
@@ -55,7 +74,14 @@ const WAITING: Record<string, string> = { question: "待回答", review: "待核
  */
 export function InboxPage() {
   const operator = useOperator();
-  const [filter, setFilter] = useState<Filter>("all");
+  const [params, setParams] = useSearchParams();
+  const filter: Filter = params.get("filter") === "unread" ? "unread" : "all";
+  const openId = params.get("open");
+  /** Pages the address asks for; read when a load starts, so a page brought in by 「加载更多」 does not start another. */
+  const wantedPages = useRef(1);
+  wantedPages.current = pagesOf(params.get("pages"));
+  /** Pages the list holds now. */
+  const loadedPages = useRef(1);
   const [items, setItems] = useState<InboxItem[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [unreadTotal, setUnreadTotal] = useState<number | null>(null);
@@ -64,7 +90,6 @@ export function InboxPage() {
   const [loadingSafety, setLoadingSafety] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const generation = useRef(0);
@@ -80,9 +105,21 @@ export function InboxPage() {
     // The pinned class is its own request: a failure there leaves the loaded page to pin what it holds, as before.
     const pinned = listInbox({ unread: true, severity: "safety" }).catch(() => null);
     try {
-      const page = await listInbox({ unread: filter === "unread" });
+      let page = await listInbox({ unread: filter === "unread" });
+      let reached = 1;
+      // A reader coming back to page 3 finds page 3: the pages the address names are read in turn, as 「加载更多」 would.
+      while (reached < wantedPages.current && page.nextCursor) {
+        // A page that cannot be read ends the restoring there: the list keeps what it has and 「加载更多」 asks for the rest.
+        const next = await listInbox({ unread: filter === "unread", cursor: page.nextCursor }).catch(() => null);
+        if (current !== generation.current) return;
+        if (!next) break;
+        const known = new Set(page.items.map((item) => item.id));
+        page = { ...next, items: [...page.items, ...next.items.filter((item) => !known.has(item.id))] };
+        reached += 1;
+      }
       const found = await pinned;
       if (current !== generation.current) return;
+      loadedPages.current = reached;
       setItems(page.items);
       setCursor(page.nextCursor);
       setUnreadTotal(typeof page.unreadTotal === "number" ? page.unreadTotal : null);
@@ -181,6 +218,8 @@ export function InboxPage() {
         return [...(existing ?? []), ...page.items.filter((item) => !known.has(item.id))];
       });
       setCursor(page.nextCursor);
+      loadedPages.current += 1;
+      setParams((existing) => withParam(existing, "pages", String(loadedPages.current)), { replace: true });
     } catch (caught) {
       if (current === generation.current) setError(inboxErrorMessage(caught));
     } finally {
@@ -209,11 +248,21 @@ export function InboxPage() {
     }
   };
 
+  const scrollAnchor = usePageScroll(items !== null);
   const order = items ? orderInbox(items, safety?.items) : null;
   // The heading says what the bell says; the loaded rows can only be fewer than the count, never more.
   const safetyUnread = order ? Math.max(safety?.total ?? 0, order.pinned.length) : 0;
   // 「全部已读」 leaves the safety findings unread, so it is only offered while something else is.
   const hasUnread = unreadTotal != null ? unreadTotal - safetyUnread > 0 : (items ?? []).some((item) => !item.readAt && severityOf(item) !== "safety");
+
+  const setOpen = (id: string | null) => setParams((existing) => withParam(existing, "open", id), { replace: true });
+  /** A filter starts the list again: from its first page, with nothing open. */
+  const chooseFilter = (next: Filter) => setParams((existing) => {
+    const updated = withParam(existing, "filter", next === "unread" ? "unread" : null);
+    updated.delete("pages");
+    updated.delete("open");
+    return updated;
+  }, { replace: true });
 
   const row = (item: InboxItem) => (
     <InboxRow
@@ -222,7 +271,7 @@ export function InboxPage() {
       operator={operator}
       busy={busyId === item.id}
       open={openId === item.id}
-      onToggle={() => { setOpenId((current) => (current === item.id ? null : item.id)); readOnOpen(item); }}
+      onToggle={() => { setOpen(openId === item.id ? null : item.id); readOnOpen(item); }}
       onRead={() => void update(item, () => markInboxRead(item.id, item.revision))}
       onResolve={(actionId) => void update(item, () => resolveInboxItem(item.id, actionId, item.revision))}
       onOpened={readOnOpen}
@@ -238,10 +287,11 @@ export function InboxPage() {
         </Button>
       )}
     >
+      <span ref={scrollAnchor} hidden />
       <FilterChips
         label="消息筛选"
         value={filter}
-        onChange={setFilter}
+        onChange={chooseFilter}
         options={[
           { value: "all", label: "全部" },
           { value: "unread", label: "未读", ...(unreadTotal ? { count: unreadTotal } : {}) },

@@ -189,6 +189,14 @@ function measureControls(controls) {
   }
 }
 
+test("the back-office list still catches a ledger count, and lets the evidence card's 引文已核对 n/m through", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  assert.equal(caught("已核对 41/72"), true);
+  assert.equal(caught("核对 37 条"), true);
+  assert.equal(caught("引文已核对 1/2"), false);
+  assert.equal(caught("解读 · 综合 · 引文已核对 1/2 · AI 已评议"), false);
+});
+
 /** A list row's title: a text button with no height of its own, `lines` lines of 22 px. */
 const title = (lines) => ({ tag: "button", text: "一个很长的资料标题".repeat(lines), height: 22 * lines });
 

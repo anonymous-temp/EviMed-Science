@@ -5,7 +5,7 @@ import {
   fetchWebResearchStatements, fetchWebResearchStatementDetail, fetchWebAccountUsage,
   webErrorMessage, type WebResearchAllowance, type WebResearchStatement, type WebResearchStatementDetail, type WebResearchStatements, type WebUsageSummary,
 } from "@/lib/apiClient";
-import { formatCny, formatDateTime } from "@/lib/format";
+import { formatDateTime, formatLingdou } from "@/lib/format";
 import { useOperator } from "@/lib/useOperator";
 import { allowanceSimulated } from "@/lib/useResearchBilling";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -16,7 +16,7 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Panel, PanelRow } from "@/components/ui/Panel";
 import { AllowanceAmount, CommerceLink, allowanceText, commerceHref, SimulatedAllowanceNotice, SimulatedDataLine, SimulatedMark } from "./SimulatedAllowance";
 
-const money = (value: number | null | undefined) => formatCny(value) || "暂不可用";
+const money = (value: number | null | undefined) => formatLingdou(value) || "暂不可用";
 const membershipLabels: Record<string, string> = { active: "有效", canceled: "已取消", cancelled: "已取消", expired: "已到期", inactive: "未开通", pending: "待生效" };
 const statusLabels = { pending: "结算中", settled: "已结算", failed: "结算失败", waived: "未计费", absorbed: "平台承担" };
 /** The four commerce destinations, in the order their rows are drawn. */
@@ -61,7 +61,7 @@ export function ResearchAllowance({ allowance }: { allowance: WebResearchAllowan
         {/* The platform's wallet says what it holds in each kind, and which of the gift ends next. EviMed's says one number, and a hold only if it reports one. */}
         {allowance.balances && <>
           <PanelRow label="充值" description="不会过期" control={<AllowanceAmount value={allowance.balances.purchased} simulated={simulated} mark={false} />} />
-          <PanelRow label="赠送" description={allowance.nextExpiry ? `其中 ${allowanceText(allowance.nextExpiry.amount)} 将于 ${expiryWords(allowance.nextExpiry.at)}到期` : undefined} control={<AllowanceAmount value={allowance.balances.gifted} simulated={simulated} mark={false} />} />
+          <PanelRow label="赠送" description={allowance.nextExpiry ? `其中 ${allowanceText(allowance.nextExpiry.amount)}将于 ${expiryWords(allowance.nextExpiry.at)}到期` : undefined} control={<AllowanceAmount value={allowance.balances.gifted} simulated={simulated} mark={false} />} />
         </>}
         {allowance.held !== null && (allowance.balances || Number(allowance.held) > 0) && <PanelRow label={allowance.balances ? "冻结" : "占用额度"} description={allowance.balances ? "正在进行的研究暂时占用，结束后按实际用量结算" : undefined} control={<AllowanceAmount value={allowance.held} simulated={simulated} mark={false} />} />}
       </>}

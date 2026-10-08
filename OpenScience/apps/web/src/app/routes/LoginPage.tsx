@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { MIN_PASSWORD_LENGTH } from "@evimed/domain";
 import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { EviMedMark } from "@/components/brand/EviMedMark";
 import {
   fetchWebAuthMethods,
@@ -18,9 +18,14 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { PageTitle } from "@/components/layout/PageTitle";
+import { loginReturnTarget } from "@/lib/loginReturn";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  // Where the sign-in goes back to: the address the reader was sent away from (`?next=`, kept only if it is a page inside the app), else
+  // the front door. Read once: the form's own navigation must not change what a failed attempt returns to.
+  const [params] = useSearchParams();
+  const returnTo = loginReturnTarget(params);
   const [methods, setMethods] = useState<WebAuthMethods | null>(null);
   const [checking, setChecking] = useState(true);
   const [username, setUsername] = useState("");
@@ -37,7 +42,7 @@ export function LoginPage() {
       .then(([me, available]) => {
         if (!active) return;
         if (me) {
-          navigate("/app/chat", { replace: true });
+          navigate(returnTo, { replace: true });
           return;
         }
         setMethods(available);
@@ -51,7 +56,7 @@ export function LoginPage() {
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [navigate, returnTo]);
 
 /**
  * Why the sign-in did not go through.
@@ -79,7 +84,7 @@ function signInMessage(error: unknown): string {
       if (registering) await registerWeb(username.trim(), password);
       else if (methods?.mode === "development") await loginDevelopmentWeb();
       else await loginWeb(username.trim(), password);
-      navigate("/app/chat", { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (err) {
       setError(registering ? registrationMessage(err) : signInMessage(err));
     } finally {
@@ -110,7 +115,7 @@ function signInMessage(error: unknown): string {
         <h1 className="sr-only">{registering ? "注册" : "登录"}</h1>
 
         {methods?.mode === "oidc" ? (
-          <a href={getWebOidcStartUrl("/app/chat")} className={buttonClasses({ size: "lg", className: "w-full" })}>
+          <a href={getWebOidcStartUrl(returnTo)} className={buttonClasses({ size: "lg", className: "w-full" })}>
             {methods.oidc?.label ?? "统一身份登录"}
             <ArrowRight size={16} aria-hidden="true" />
           </a>

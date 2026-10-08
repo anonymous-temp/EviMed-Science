@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,19 +31,21 @@ vi.mock("@/lib/apiClient", () => ({
   loginDevelopmentWeb: mocks.loginDevelopmentWeb,
   registerWeb: mocks.registerWeb,
   WebApiError: mocks.FakeWebApiError,
-  getWebOidcStartUrl: () => "/api/auth/oidc/start?returnTo=%2Fapp%2Fchat",
+  getWebOidcStartUrl: (returnTo: string) => `/api/auth/oidc/start?returnTo=${encodeURIComponent(returnTo)}`,
 }));
 
 function LocationProbe() {
-  return <div data-testid="location">{useLocation().pathname}</div>;
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}{location.search}{location.hash}</div>;
 }
 
-function renderLogin() {
+function renderLogin(search = "") {
   return render(
-    <MemoryRouter initialEntries={["/login"]}>
+    <MemoryRouter initialEntries={[`/login${search}`]}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/app/chat" element={<LocationProbe />} />
+        <Route path="/app/*" element={<LocationProbe />} />
+        <Route path="*" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -97,6 +99,62 @@ describe("LoginPage", () => {
 
     await waitFor(() => expect(mocks.loginWeb).toHaveBeenCalledWith("alice", "secret"));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/chat");
+  });
+
+  // Design reference §16.3: signing in puts the reader back at the address they were sent away from.
+  describe("returning to the address that was asked for", () => {
+    const signIn = async () => {
+      await userEvent.type(await screen.findByLabelText("账号"), "alice");
+      await userEvent.type(screen.getByLabelText("密码"), "secret");
+      await userEvent.click(screen.getByRole("button", { name: "登录" }));
+    };
+
+    it("goes back to the deep link, query and fragment included, after a password sign-in", async () => {
+      renderLogin(`?next=${encodeURIComponent("/app/memory?tab=methods&q=%E8%83%8C#CLM-001")}`);
+      await signIn();
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/memory?tab=methods&q=%E8%83%8C#CLM-001"));
+    });
+
+    it("goes back to it after a registration too, and after a development sign-in", async () => {
+      mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: true });
+      renderLogin(`?next=${encodeURIComponent("/app/files?tab=sources")}`);
+      await userEvent.click(await screen.findByRole("button", { name: "还没有账号？注册一个" }));
+      await userEvent.type(screen.getByLabelText("账号"), "alice");
+      await userEvent.type(screen.getByLabelText("密码"), "secret");
+      await userEvent.click(screen.getByRole("button", { name: "注册并进入" }));
+      await waitFor(() => expect(mocks.registerWeb).toHaveBeenCalledWith("alice", "secret"));
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/files?tab=sources"));
+    });
+
+    it("hands the OIDC start the same address, so the callback can bring the reader back to it", async () => {
+      mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "oidc", oidc: { label: "统一身份登录", startUrl: "/api/auth/oidc/start" } });
+      renderLogin(`?next=${encodeURIComponent("/app/runs/run_1/files/report.md?quote=a%20b")}`);
+      const link = await screen.findByRole("link", { name: /统一身份登录/ });
+      expect(link).toHaveAttribute("href", `/api/auth/oidc/start?returnTo=${encodeURIComponent("/app/runs/run_1/files/report.md?quote=a%20b")}`);
+    });
+
+    it("sends someone who is already signed in straight to it", async () => {
+      mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+      renderLogin(`?next=${encodeURIComponent("/app/autopilot?task=t1")}`);
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/autopilot?task=t1"));
+    });
+
+    it("uses the front door for a missing next and refuses every address that is not a page inside the app", async () => {
+      renderLogin();
+      await signIn();
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat$/));
+      cleanup();
+      for (const hostile of ["//evil.example/app/chat", "/\\evil.example", "https://evil.example/", "/settings", "/app/%2e%2e/login", "/app//evil.example", "javascript:alert(1)"]) {
+        mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+        const { unmount } = renderLogin(`?next=${encodeURIComponent(hostile)}`);
+        await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat$/));
+        unmount();
+      }
+      mocks.fetchWebMe.mockResolvedValue(null);
+      mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "oidc", oidc: { label: "统一身份登录", startUrl: "/api/auth/oidc/start" } });
+      renderLogin(`?next=${encodeURIComponent("//evil.example")}`);
+      expect(await screen.findByRole("link", { name: /统一身份登录/ })).toHaveAttribute("href", "/api/auth/oidc/start?returnTo=%2Fapp%2Fchat");
+    });
   });
 
   // 2026-09-23 plan §5.10, mockup m12: the brand once, two labelled fields and

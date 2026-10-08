@@ -45,12 +45,12 @@ export const extensionVersion = (coordinate: ExtensionCoordinate) => coordinate.
  *  row says it briefly, the detail page in full. A label only (owner ruling 2026-10-04): no state here decides whether a
  *  package can be added, enabled or used, and an unknown or missing state reads as the unverified one, never as verified. */
 const evidenceLabels: Record<string, { short: string; long: string }> = {
-  "saas-qualified": { short: "已验证", long: "兼容核验通过" },
-  "qualification-stale": { short: "验证已过期", long: "兼容核验已过期" },
-  "qualification-incomplete": { short: "验证未完成", long: "兼容核验未完成" },
+  "saas-qualified": { short: "已验证", long: "兼容核对通过" },
+  "qualification-stale": { short: "验证已过期", long: "兼容核对已过期" },
+  "qualification-incomplete": { short: "验证未完成", long: "兼容核对未完成" },
 };
 export function extensionEvidenceLabel(evidenceState: string | undefined, form: "short" | "long" = "short") {
-  return (evidenceLabels[evidenceState ?? ""] ?? { short: "尚未验证", long: "尚未完成兼容核验" })[form];
+  return (evidenceLabels[evidenceState ?? ""] ?? { short: "尚未验证", long: "尚未完成兼容核对" })[form];
 }
 export function extensionStatus(item: Pick<ExtensionInstallation, "effective" | "phase">) {
   if (item.effective) return "可使用";

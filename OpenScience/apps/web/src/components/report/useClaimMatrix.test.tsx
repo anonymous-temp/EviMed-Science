@@ -30,10 +30,10 @@ describe("useClaimMatrix: what an empty set of checks means", () => {
     expect(result.current.verified.get("CLM-001")?.status).toBe("verified");
   });
 
-  it("is unavailable when the checks cannot be read, whether the read fails or answers nothing", async () => {
+  it("is failed, not unavailable, when reading the checks fails — and unavailable when the report simply has none", async () => {
     mocks.readClaimVerification.mockRejectedValue(new Error("offline"));
     const failed = renderHook(() => useClaimMatrix(MATRIX, "workspace"));
-    await waitFor(() => expect(failed.result.current.verificationState).toBe("unavailable"));
+    await waitFor(() => expect(failed.result.current.verificationState).toBe("failed"));
     // The matrix itself still reads.
     expect(failed.result.current.document?.claims.size).toBe(1);
     failed.unmount();
@@ -41,6 +41,21 @@ describe("useClaimMatrix: what an empty set of checks means", () => {
     mocks.readClaimVerification.mockResolvedValue(null);
     const none = renderHook(() => useClaimMatrix(MATRIX, "workspace"));
     await waitFor(() => expect(none.result.current.verificationState).toBe("unavailable"));
+  });
+
+  it("reads again on retry: loading, then the checks once the server answers", async () => {
+    mocks.readClaimVerification.mockRejectedValueOnce(new Error("offline"));
+    const { result } = renderHook(() => useClaimMatrix(MATRIX, "workspace"));
+    await waitFor(() => expect(result.current.verificationState).toBe("failed"));
+    let arrive!: (value: unknown) => void;
+    mocks.readClaimVerification.mockReturnValue(new Promise((resolve) => { arrive = resolve; }));
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.verificationState).toBe("loading"));
+    await waitFor(() => expect(result.current.document?.claims.size).toBe(1));
+    await act(async () => { arrive(checks); });
+    expect(result.current.verificationState).toBe("ready");
+    expect(result.current.verified.get("CLM-001")?.status).toBe("verified");
+    expect(mocks.readClaimVerification).toHaveBeenCalledTimes(2);
   });
 
   it("is unavailable, not loading for ever, when there is no matrix to read", async () => {

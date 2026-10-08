@@ -100,7 +100,7 @@ export function EvidenceReading({
         <EvidenceCardHeader evidence={evidence} updatedAt={evidenceUpdatedAt(evidence)} />
         {publicationSources.length > 0 && (
           <div role="alert" className="space-y-2 text-ui text-warn">
-            <p>来源状态有警示，原有结论需要重新核查。以下内容保留供追溯，不能作为已完成核验的临床或科研依据。</p>
+            <p>来源状态有警示，原有结论需要重新核查。以下内容保留供追溯，不能作为已完成核对的临床或科研依据。</p>
             {publicationSources.map(({source,index})=><p key={index}>{publicationLabel(source.publicationStatus!.kind)}<EvidenceReferences evidence={evidence} indexes={[index]} /></p>)}
           </div>
         )}

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { validateOidcSettings, openOidcFlow, sealOidcFlow } from "../src/oidc.mjs";
+import { validateOidcSettings, openOidcFlow, sealOidcFlow, safeReturnTo, OIDC_DEFAULT_RETURN_PATH } from "../src/oidc.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 
 const clientId = "open-science-test";
@@ -241,7 +241,7 @@ test("hosted OIDC code flow validates PKCE and ID token without persisting provi
     assert.equal(localLogin.status, 404);
     assert.equal((await localLogin.json()).code, "auth_method_disabled");
 
-    const start = await fetch(`${base}/api/auth/oidc/start?returnTo=%2Fsettings`, { redirect: "manual" });
+    const start = await fetch(`${base}/api/auth/oidc/start?returnTo=${encodeURIComponent("/app/memory?tab=methods&q=%E8%83%8C%E6%99%AF")}`, { redirect: "manual" });
     assert.equal(start.status, 302);
     const flowCookie = cookieValue(start, "os_oidc_flow");
     assert.match(flowCookie, /^os_oidc_flow=.+/);
@@ -256,7 +256,8 @@ test("hosted OIDC code flow validates PKCE and ID token without persisting provi
       redirect: "manual",
     });
     assert.equal(callback.status, 303);
-    assert.equal(callback.headers.get("location"), "/settings");
+    // The address the sign-in was asked from, whole, query included: not the app's front door.
+    assert.equal(callback.headers.get("location"), "/app/memory?tab=methods&q=%E8%83%8C%E6%99%AF");
     assert.match(callback.headers.get("set-cookie") ?? "", /os_oidc_flow=;[^,]*Max-Age=0/);
     const sessionCookie = cookieValue(callback, "os_session");
     assert.match(sessionCookie, /^os_session=.+/);
@@ -285,6 +286,47 @@ test("hosted OIDC code flow validates PKCE and ID token without persisting provi
     assert.equal((await persistedMe.json()).data.user.name, "Ada Researcher");
   } finally {
     await app?.close();
+    await provider.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("the sign-in returns only to a path inside /app on this origin, and anything else lands on the front door", () => {
+  assert.equal(OIDC_DEFAULT_RETURN_PATH, "/app/chat");
+  for (const address of ["/app/chat", "/app/runs/run_1/files/a.md?quote=x%20y#CLM-001", "/app/memory?record=rec_1"]) assert.equal(safeReturnTo(address), address);
+  for (const hostile of [
+    undefined, null, "", "/settings", "/login", "/api/auth/logout", "//evil.example", "/\\evil.example", "/\t/evil.example", "/\n/evil.example",
+    "https://evil.example/app/chat", "javascript:alert(1)", "/app/../login", "/app/%2e%2e/login", "/app/%2f%2fevil.example", "/app//evil.example",
+    "/app/%5cevil.example", "/app/chat\r\nSet-Cookie: x=1", "/app/聊天", `/app/${"a".repeat(2100)}`,
+  ]) assert.equal(safeReturnTo(hostile), OIDC_DEFAULT_RETURN_PATH, JSON.stringify(hostile));
+});
+
+test("the OIDC callback never redirects off the app, whatever returnTo the start asked for", async () => {
+  const provider = await startMockProvider();
+  const dataDir = await mkdtemp(path.join(tmpdir(), "open-science-oidc-return-"));
+  const app = createWebApiApp({ dataDir, port: 0, publicUrl: "http://127.0.0.1", ...oidcOverrides(provider.issuer) });
+  try {
+    const address = await app.listen(0, "127.0.0.1");
+    const base = `http://127.0.0.1:${address.port}`;
+    app.config.publicUrl = base;
+    const landing = async (returnTo) => {
+      const query = returnTo === undefined ? "" : `?returnTo=${encodeURIComponent(returnTo)}`;
+      const start = await fetch(`${base}/api/auth/oidc/start${query}`, { redirect: "manual" });
+      assert.equal(start.status, 302);
+      const authorize = await fetch(start.headers.get("location"), { redirect: "manual" });
+      const callback = await fetch(authorize.headers.get("location"), { headers: { Cookie: cookieValue(start, "os_oidc_flow") }, redirect: "manual" });
+      assert.equal(callback.status, 303);
+      return callback.headers.get("location");
+    };
+    assert.equal(await landing("/app/files/src_1?tab=sources"), "/app/files/src_1?tab=sources");
+    assert.equal(await landing(), "/app/chat");
+    for (const hostile of ["//evil.example", "/\\evil.example", "/\t/evil.example", "https://evil.example/", "/settings", "/app/%2e%2e/api/auth/logout", "/app/%2f%2fevil.example"]) {
+      const location = await landing(hostile);
+      assert.equal(location, "/app/chat", JSON.stringify(hostile));
+      assert.equal(new URL(location, base).origin, base);
+    }
+  } finally {
+    await app.close();
     await provider.close();
     await rm(dataDir, { recursive: true, force: true });
   }

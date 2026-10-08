@@ -9,7 +9,7 @@ describe("the top of a card", () => {
     const header = screen.getByTestId("evidence-card-header");
     expect(header).toHaveTextContent("出品方 李研究 · 用户 · 与所涉产品无利益关系");
     expect(screen.getByText("性质 解读 · 综合")).toBeInTheDocument();
-    expect(screen.getByText("核验 1/2")).toBeInTheDocument();
+    expect(screen.getByText("引文已核对 1/2")).toBeInTheDocument();
     expect(screen.queryByText(/时效/)).not.toBeInTheDocument();
   });
   it("calls first-hand work first-hand, and a company's card as the company's own", () => {

@@ -13,6 +13,7 @@ import { Toaster } from "@/components/ui/Toaster";
 import { useProjectStore } from "@/lib/projects";
 import { useUiStore } from "@/lib/store";
 import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "@/lib/apiClient";
+import { loginAddress } from "@/lib/loginReturn";
 
 /** Below Tailwind's `lg` the sidebar is a drawer over the content; from `lg` up it is a column beside it. */
 const DRAWER_LAYOUT = "(max-width: 1023px)";
@@ -35,6 +36,9 @@ export function AppShell() {
   const location = useLocation();
   const onChat = isChatPath(location.pathname);
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+  // A person who signed out (or deleted the account) is not sent back to the page they left when they sign in again; one whose session
+  // simply ended, or who opened a deep link without one, is (design reference §16.3).
+  const signedOut = useRef(false);
   // Inside the EviMed Vue shell (`?embed=1`): the content area and nothing
   // else — the host draws the sidebar. Decided once, from the entry address,
   // because a link inside an embedded page drops the query string.
@@ -110,11 +114,15 @@ export function AppShell() {
   }, [sidebarCollapsed, embedded]);
 
   useEffect(() => {
-    const clearSession = () => {
+    const clearSession = (event: Event) => {
+      signedOut.current = (event as CustomEvent<{ deliberate?: boolean } | undefined>).detail?.deliberate === true;
       useProjectStore.getState().clear();
       setAuthState("unauthenticated");
     };
-    const startSession = () => setAuthState("authenticated");
+    const startSession = () => {
+      signedOut.current = false;
+      setAuthState("authenticated");
+    };
     window.addEventListener(WEB_SESSION_ENDED_EVENT, clearSession);
     window.addEventListener(WEB_SESSION_STARTED_EVENT, startSession);
     return () => {
@@ -147,7 +155,7 @@ export function AppShell() {
     );
   }
   if (authState === "unauthenticated") {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={signedOut.current ? "/login" : loginAddress(location)} replace />;
   }
 
   return (

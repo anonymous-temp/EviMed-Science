@@ -41,7 +41,7 @@ describe("publishing a result as an evidence card", () => {
     const boxes = await screen.findAllByRole("checkbox");
     expect(boxes.map((box) => (box as HTMLInputElement).checked)).toEqual([true, false, false]);
     expect(defaultClaimSelection([{ claimId: "a", text: "", claimType: "direct", status: "verified" }, { claimId: "b", text: "", claimType: "direct", status: "no_quote" }])).toEqual(["a"]);
-    expect(screen.getByLabelText("已核验")).toHaveTextContent("✓");
+    expect(screen.getByLabelText("引文已核对")).toHaveTextContent("✓");
     expect(screen.getByText("生成的是草稿，发布由你自己决定。")).toBeInTheDocument();
   });
   it("lists the researcher's own zones, offers a new one, and sends exactly the selection to the chosen zone", async () => {
@@ -89,7 +89,7 @@ describe("publishing a result as an evidence card", () => {
   });
   it("publishes the server's own selection when the result's claims cannot be listed", async () => {
     mount({ ...version, review: { status: "unavailable", matrixVersionId: `rv_${"b".repeat(64)}` } } as unknown as ResultVersion);
-    expect(await screen.findByText("这个结果的结论列表暂时读不到，将发布其中已核验的结论。")).toBeInTheDocument();
+    expect(await screen.findByText("这个结果的结论列表暂时读不到，将发布其中引文已核对的结论。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "生成证据卡草稿" }));
     expect(client.publishResultAsEvidenceCard).toHaveBeenCalledWith(version.versionId, { projectId: "stroke", zoneId: "ez_1" });
   });

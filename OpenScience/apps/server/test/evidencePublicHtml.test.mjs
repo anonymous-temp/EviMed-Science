@@ -165,7 +165,7 @@ test("《编辑说明》 states the five principles of the plan and that money b
   assert.ok(principles);
   assert.equal(principles[1].match(/<li>/g)?.length, 5);
   for (const sentence of ["出品方如实标注", "同一把尺子", "每句可溯源", "官方内容只由平台出品，研究只认原始来源", "钱买得到发布和分发，买不到排名和结论"]) assert.ok(body.includes(sentence), sentence);
-  for (const sentence of ["核验没有通过（⚠）的结论不发布", "每周最多发两张", "记录只追加，发布后不能改", "撤回的卡片保留一个说明页", "任何人都能申请选题"]) assert.ok(body.includes(sentence), sentence);
+  for (const sentence of ["引文没有核对上（⚠）的结论不发布", "每周最多发两张", "记录只追加，发布后不能改", "撤回的卡片保留一个说明页", "任何人都能申请选题"]) assert.ok(body.includes(sentence), sentence);
 });
 
 test("the stylesheet is generated from the design tokens: every colour in it is a token's, nothing is requested, and a phone gets one column", () => {

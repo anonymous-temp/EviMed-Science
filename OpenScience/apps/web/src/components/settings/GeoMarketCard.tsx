@@ -14,7 +14,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/cards/EmptyState";
 
 type View = "unknown" | "problems" | "topups" | "settlement";
-const money = (value: number | null | undefined) => value == null ? "—" : `¥${value.toFixed(2)}`;
+const money = (value: number | null | undefined) => value == null ? "—" : `${value.toFixed(2)} 灵豆`;
 const flowLabels: Record<string, string> = { settle: "结算支出", refund: "已到账退款", reserve: "预留", release: "释放预留",
   topup_request: "申请充值", topup_confirmed: "充值到账", adjustment: "调整", budget_set: "预算变更" };
 const reasonLabels: Record<string, string> = { text_changed: "正文内容不符", domain_mismatch: "发布域名不符", unreachable: "页面无法访问", above_reserve: "金额超过预留" };

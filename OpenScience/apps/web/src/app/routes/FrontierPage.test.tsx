@@ -706,11 +706,14 @@ describe("日报", () => {
   }
 
   beforeEach(() => {
-    client.listFrontierDailies.mockResolvedValue([
-      { day: "2026-09-21", title: "口服 PCSK9 抑制剂拿到硬终点证据", itemCount: 18, generatedAt: ago(5) },
-      { day: "2026-09-20", title: "FDA 批准皮下注射阿尔茨海默病抗体", itemCount: 9, generatedAt: ago(29) },
-      { day: "2026-09-19", title: "医保目录初审", itemCount: 12, generatedAt: ago(53) },
-    ]);
+    client.listFrontierDailies.mockResolvedValue({
+      dailies: [
+        { day: "2026-09-21", title: "口服 PCSK9 抑制剂拿到硬终点证据", itemCount: 18, generatedAt: ago(5) },
+        { day: "2026-09-20", title: "FDA 批准皮下注射阿尔茨海默病抗体", itemCount: 9, generatedAt: ago(29) },
+        { day: "2026-09-19", title: "医保目录初审", itemCount: 12, generatedAt: ago(53) },
+      ],
+      schedule: { time: "07:30", timeZone: "Asia/Shanghai" },
+    });
     client.fetchFrontierDaily.mockImplementation(async (day: string) => issue(day));
   });
 

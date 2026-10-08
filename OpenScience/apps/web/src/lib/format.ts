@@ -44,15 +44,19 @@ export function baseName(path: string | null): string {
 }
 
 /**
- * An amount in yuan the way a researcher reads a bill: two decimals, and
- * 「不足 ¥0.01」 below a cent rather than eight decimals of a model call's
+ * An amount in 灵豆 the way a researcher reads a bill: two decimals, and
+ * 「不足 0.01 灵豆」 below a cent rather than eight decimals of a model call's
  * price (review B: 「实际费用 ¥0.00123456 CNY」). Empty for a value that is
  * not an amount.
+ *
+ * The number is the CNY figure the ledger holds — one 灵豆 is one yuan — and
+ * the unit on screen is always 灵豆: no 「¥」 is drawn anywhere in the app
+ * (design reference §15.1; held by `noCurrencySymbol.test.ts`).
  */
-export function formatCny(value: number | null | undefined): string {
+export function formatLingdou(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "";
-  if (value > 0 && value < 0.01) return "不足 ¥0.01";
-  return `¥${value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (value > 0 && value < 0.01) return "不足 0.01 灵豆";
+  return `${value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 灵豆`;
 }
 
 /**

@@ -76,11 +76,11 @@ test('a refusal on a simulated allowance says 模拟 and is a ceiling', () => {
 
 test('the refusal a window prints says the allowance is low, by how much when known, and where it is topped up', () => {
   assert.equal(allowanceRefusalSentence({ simulated: true, balanceCny: 3.5, estimateCny: 6 }),
-    '模拟额度不足，这次没有开始：可用模拟额度 ¥3.50，这件事预计至少需要 ¥6.00。到“设置 → 科研额度”做一次模拟充值后即可继续。');
+    '模拟额度不足，这次没有开始：可用模拟额度 3.50 灵豆，这件事预计至少需要 6.00 灵豆。到“设置 → 科研额度”做一次模拟充值后即可继续。');
   assert.equal(allowanceRefusalSentence({ balanceCny: 0, estimateCny: 12.345 }),
-    '科研额度不足，这次没有开始：可用 ¥0.00，这件事预计至少需要 ¥12.35。到“设置 → 科研额度”充值后即可继续。');
+    '科研额度不足，这次没有开始：可用 0.00 灵豆，这件事预计至少需要 12.35 灵豆。到“设置 → 科研额度”充值后即可继续。');
   // No estimate (a free conversation against an empty allowance): the balance alone.
-  assert.equal(allowanceRefusalSentence({ balanceCny: 0 }), '科研额度不足，这次没有开始：可用 ¥0.00。到“设置 → 科研额度”充值后即可继续。');
+  assert.equal(allowanceRefusalSentence({ balanceCny: 0 }), '科研额度不足，这次没有开始：可用 0.00 灵豆。到“设置 → 科研额度”充值后即可继续。');
   // Nothing known: the sentence still says what happened and where to go, and invents no amount.
   assert.equal(allowanceRefusalSentence(), '科研额度不足，这次没有开始。到“设置 → 科研额度”充值后即可继续。');
   assert.equal(allowanceRefusalSentence({ simulated: true, balanceCny: Number.NaN, estimateCny: -1 }),

@@ -167,7 +167,7 @@ test("a refuted claim and a claim the run could not verify never reach a card; t
     assert.deepEqual(card.sources.map((source) => source.title), ["FLAURA"], "and so do the sources only they stood on");
     const recorded = await outcomeOf(fx, "2026-10-05", run.episodeId);
     assert.deepEqual(recorded.excluded, { refuted: 1, run_not_verified: 1 });
-    assert.match(card.limitations, /另有 2 条结论没有通过核验或复核/);
+    assert.match(card.limitations, /另有 2 条结论没有通过引文核对或复核/);
     const counters = fx.programme.status().counters;
     assert.deepEqual([counters.claimsExcluded.refuted, counters.claimsExcluded.run_not_verified, counters.claimsPublished], [1, 1, 1]);
     // The episode itself still holds every claim, graded as they were.

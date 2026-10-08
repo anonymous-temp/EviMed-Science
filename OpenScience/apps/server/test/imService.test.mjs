@@ -59,7 +59,7 @@ test("the progress card says how long, which line, and what the run observed —
     },
   }, now);
   assert.match(deep.status, /^⏳ 进行中 · .+ · 已用 15 分钟 · 通常 15–30 分钟$/);
-  assert.equal(deep.progress, ["当前：检索", "文献：检索 42 · 纳入 12 · 全文 5", "结论核验：6/8", "✓ 临床证据报告", "· 证据矩阵"].join("\n"));
+  assert.equal(deep.progress, ["当前：检索", "文献：检索 42 · 纳入 12 · 全文 5", "引文已核对：6/8", "✓ 临床证据报告", "· 证据矩阵"].join("\n"));
 });
 
 test("the answer is the run's last assistant text inside its own window", () => {

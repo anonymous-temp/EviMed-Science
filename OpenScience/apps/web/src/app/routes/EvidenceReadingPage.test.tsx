@@ -53,13 +53,13 @@ describe("reading an evidence card", () => {
     mount();
     const header = await screen.findByTestId("evidence-card-header");
     expect(header).toHaveTextContent("出品方 李研究 · 用户 · 与所涉产品无利益关系");
-    expect(screen.getByText("核验 1/2")).toBeInTheDocument();
+    expect(screen.getByText("引文已核对 1/2")).toBeInTheDocument();
     // The producer line is the first thing in the article.
     expect(header.closest("article")?.querySelector("header")?.firstElementChild).toBe(header);
     expect(screen.getByRole("radio", { name: "临床版" })).toBeChecked();
     expect(screen.getByRole("table", { name: "结局总结表" })).toBeInTheDocument();
-    expect(screen.getByLabelText("已核验")).toBeInTheDocument();
-    expect(screen.getByLabelText("未能核验")).toBeInTheDocument();
+    expect(screen.getByLabelText("引文已核对")).toBeInTheDocument();
+    expect(screen.getByLabelText("未核对上")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: "公众版" }));
     expect(screen.getByText("每 1000 人里")).toBeInTheDocument();
   });

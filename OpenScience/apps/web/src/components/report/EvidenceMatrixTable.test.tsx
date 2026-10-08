@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -65,7 +65,7 @@ describe("EvidenceMatrixTable: the list", () => {
     const first = within(table).getByRole("rowheader", { name: "CLM-001" });
     expect(first).toHaveClass("sticky", "left-0");
     const row = first.closest("tr")!;
-    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["✓ 已核对", "不降低主要心血管事件。", "ASPREE", "直接证据"]);
+    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["✓ 引文已核对", "不降低主要心血管事件。", "ASPREE", "直接证据"]);
     // The reference number, the quotation and the PICO are the drawer's.
     expect(within(row).queryByText("12")).toBeNull();
     expect(within(row).queryByText(/did not result/)).toBeNull();
@@ -76,7 +76,7 @@ describe("EvidenceMatrixTable: the list", () => {
     const row = screen.getByRole("rowheader", { name: "CLM-003" }).closest("tr")!;
     expect(within(row).getByText("Meta")).toBeInTheDocument();
     expect(within(row).getByText("等 2 项")).toBeInTheDocument();
-    expect(within(row).getByText("⚠ 原文未保存")).toBeInTheDocument();
+    expect(within(row).getByText("⚠ 原文未保存，无法核对")).toBeInTheDocument();
     expect(within(row).getByText("综合结论")).toBeInTheDocument();
   });
 
@@ -163,9 +163,9 @@ describe("EvidenceMatrixTable: finding a claim", () => {
   });
 });
 
-describe("EvidenceMatrixTable: the check says what is known", () => {
-  const rowsRead = (state: ClaimCheckState, checks?: Map<string, VerifiedClaim>) => {
-    renderMatrix({ verificationState: state, verified: checks ?? new Map() });
+describe("EvidenceMatrixTable: the check is ✓, ⚠ or blank", () => {
+  const rowsRead = (state: ClaimCheckState, checks?: Map<string, VerifiedClaim>, props: Partial<Parameters<typeof EvidenceMatrixTable>[0]> = {}) => {
+    renderMatrix({ verificationState: state, verified: checks ?? new Map(), ...props });
     return screen.getAllByRole("rowheader").map((header) => within(header.closest("tr")!).getAllByRole("cell")[0].textContent);
   };
 
@@ -179,32 +179,68 @@ describe("EvidenceMatrixTable: the check says what is known", () => {
     expect(screen.queryByRole("group", { name: "核对" })).toBeNull();
   });
 
-  it("says 暂无核对结果 when they could not be read, and offers no filter on them", () => {
-    expect(rowsRead("unavailable")).toEqual(["暂无核对结果", "暂无核对结果"]);
-    expect(screen.queryByText("未核对")).toBeNull();
+  it("leaves the cells blank, and says nothing, for a report that was never checked", () => {
+    expect(rowsRead("unavailable")).toEqual(["", ""]);
+    expect(screen.queryByText(/未核对|暂无核对结果/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("group", { name: "核对" })).toBeNull();
     expect(screen.getByText("显示 2 / 2 条")).toBeInTheDocument();
   });
 
-  it("says 未核对 only when they were read and the claim is not among them", () => {
-    expect(rowsRead("ready", new Map([["CLM-001", verified.get("CLM-001")!]]))).toEqual(["✓ 已核对", "未核对"]);
+  it("leaves a claim the read checks do not name blank, and never 未核对", () => {
+    expect(rowsRead("ready", new Map([["CLM-001", verified.get("CLM-001")!]]))).toEqual(["✓ 引文已核对", ""]);
+    expect(screen.queryByText(/未核对|暂无核对结果/)).toBeNull();
+    // It still counts as one to look at again.
     expect(screen.getByRole("group", { name: "核对" })).toBeInTheDocument();
   });
 
-  it("treats a claim as the checks read it when the caller gives no state: found checks mean read, none mean unreadable", () => {
-    const first = renderMatrix({ verificationState: undefined });
-    expect(screen.getAllByText("✓ 已核对")).toHaveLength(1);
-    first.unmount();
-    renderMatrix({ verificationState: undefined, verified: new Map() });
-    expect(screen.getAllByText("暂无核对结果")).toHaveLength(2);
+  it("writes ⚠ in the words the popover uses, and the ✓ the same", () => {
+    expect(rowsRead("ready", verified)).toEqual(["✓ 引文已核对", "⚠ 原文未保存，无法核对"]);
   });
 
-  it("says a derived claim has no quotation to check, whatever the state", () => {
+  it("shows a failed read as one error row with 重试, blank cells, and asks again from the button", async () => {
+    const retry = vi.fn();
+    expect(rowsRead("failed", undefined, { onRetry: retry })).toEqual(["", ""]);
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("核对结果暂时读取不到");
+    expect(screen.queryByText(/未核对|暂无核对结果|核对中/)).toBeNull();
+    expect(screen.queryByRole("group", { name: "核对" })).toBeNull();
+    await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no error row for the checks of a report that has none, nor while they load", () => {
+    rowsRead("unavailable", undefined, { onRetry: vi.fn() });
+    expect(screen.queryByRole("alert")).toBeNull();
+    cleanup();
+    rowsRead("loading", undefined, { onRetry: vi.fn() });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("takes a failed read in the cards of a phone the same way", async () => {
+    phone();
+    renderMatrix({ verificationState: "failed", verified: new Map(), onRetry: vi.fn() });
+    expect(screen.getByRole("alert")).toHaveTextContent("核对结果暂时读取不到");
+    expect(screen.queryByText(/未核对|暂无核对结果/)).toBeNull();
+  });
+
+  it("treats a claim as the checks read it when the caller gives no state: found checks mean read, none mean there are none", () => {
+    const first = renderMatrix({ verificationState: undefined });
+    expect(screen.getAllByText("✓ 引文已核对")).toHaveLength(1);
+    first.unmount();
+    renderMatrix({ verificationState: undefined, verified: new Map() });
+    expect(screen.queryByText(/未核对|暂无核对结果/)).toBeNull();
+  });
+
+  it("wears no mark on a derived claim, whatever the state: it has no quotation to check", () => {
     const derived = parseClaimMatrix(JSON.stringify({ claims: [
       { claimId: "CLM-009", claim: "合并后的绝对风险差 0.4%。", claimType: "derived", method: "由 CLM-001 与 CLM-003 的事件数相减", derivedFrom: ["CLM-001", "CLM-003"] },
     ] }));
     renderMatrix({ claims: derived, verificationState: "loading", verified: new Map() });
-    expect(screen.getByText("推导，无引文")).toBeInTheDocument();
+    const row = screen.getByRole("rowheader", { name: "CLM-009" }).closest("tr")!;
+    expect(within(row).getAllByRole("cell")[0]).toHaveTextContent(/^$/);
+    expect(screen.queryByText("核对中")).toBeNull();
+    expect(within(row).getByText("推导结果")).toBeInTheDocument();
   });
 });
 
@@ -223,8 +259,8 @@ describe("EvidenceMatrixTable: a claim in the drawer", () => {
       "href", "/app/runs/run_1/files/.evimed-sources/aspree/fulltext.md?quote=did%20not%20result%20in%20a%20significantly%20lower%20risk",
     );
     // The check sits under the id, so a long panel never hides it, and the dialog is described by it.
-    expect(within(drawer).getByText("✓ 已核对")).toBeInTheDocument();
-    expect(drawer).toHaveAccessibleDescription("✓ 已核对");
+    expect(within(drawer).getByText("✓ 引文已核对")).toBeInTheDocument();
+    expect(drawer).toHaveAccessibleDescription("✓ 引文已核对");
     expect(within(drawer).getByText("引文已在保存的原文中核对")).toBeInTheDocument();
   });
 
@@ -282,9 +318,9 @@ describe("EvidenceMatrixTable: a claim in the drawer", () => {
     const sources = within(drawer).getAllByRole("listitem");
     expect(sources).toHaveLength(2);
     expect(within(sources[0]).getByText("“lower risk of cardiovascular events”")).toBeInTheDocument();
-    expect(within(sources[0]).getByText("✓ 已核对")).toBeInTheDocument();
+    expect(within(sources[0]).getByText("✓ 引文已核对")).toBeInTheDocument();
     expect(within(sources[0]).getByRole("link", { name: "打开原始来源" })).toHaveAttribute("href", "https://example.org/meta");
-    expect(within(sources[1]).getByText("⚠ 原文中未找到")).toBeInTheDocument();
+    expect(within(sources[1]).getByText("⚠ 引文未在原文中找到")).toBeInTheDocument();
     // Only the source that carries a location says anything about one.
     expect(within(drawer).getAllByText(/^位置：/)).toHaveLength(1);
     expect(within(sources[0]).getByText("位置：位置未知")).toBeInTheDocument();
@@ -337,16 +373,24 @@ describe("EvidenceMatrixTable: a claim in the drawer", () => {
     expect(within(drawer).getByText("推导结果：由其他结论计算或推断，本身没有引文")).toBeInTheDocument();
   });
 
-  it("says in the drawer, too, that the checks are on their way or could not be read", async () => {
+  it("says in the drawer, too, that the checks are on their way, could not be read, or are not there — in a sentence, with no mark", async () => {
     const loading = renderMatrix({ verificationState: "loading", verified: new Map() });
     await userEvent.click(screen.getByRole("button", { name: "CLM-001" }));
     expect(await within(await screen.findByRole("dialog")).findByText("正在读取这条结论的核对结果。")).toBeInTheDocument();
     loading.unmount();
+    const failed = renderMatrix({ verificationState: "failed", verified: new Map() });
+    await userEvent.click(screen.getByRole("button", { name: "CLM-001" }));
+    let drawer = await screen.findByRole("dialog");
+    expect(within(drawer).getByText("这份报告的核对结果暂时读取不到，引文仍可逐条对照来源。")).toBeInTheDocument();
+    expect(within(drawer).queryByText(/未核对|暂无核对结果/)).toBeNull();
+    // A blank mark leaves the dialog with no description line rather than an empty one.
+    expect(drawer).not.toHaveAccessibleDescription();
+    failed.unmount();
     renderMatrix({ verificationState: "unavailable", verified: new Map() });
     await userEvent.click(screen.getByRole("button", { name: "CLM-001" }));
-    const drawer = await screen.findByRole("dialog");
-    expect(within(drawer).getByText("暂无核对结果")).toBeInTheDocument();
-    expect(within(drawer).queryByText("未核对")).toBeNull();
+    drawer = await screen.findByRole("dialog");
+    expect(within(drawer).getByText("这份报告还没有核对结果，引文仍可逐条对照来源。")).toBeInTheDocument();
+    expect(within(drawer).queryByText(/未核对|暂无核对结果/)).toBeNull();
   });
 });
 
@@ -358,10 +402,10 @@ describe("EvidenceMatrixTable: on a phone", () => {
     const list = screen.getByRole("list", { name: "证据矩阵" });
     const cards = within(list).getAllByRole("button");
     expect(cards).toHaveLength(2);
-    expect(cards[0]).toHaveTextContent("CLM-001✓ 已核对不降低主要心血管事件。ASPREE");
-    expect(cards[1]).toHaveTextContent("CLM-003⚠ 原文未保存三项试验综合。Meta 等 2 项");
+    expect(cards[0]).toHaveTextContent("CLM-001✓ 引文已核对不降低主要心血管事件。ASPREE");
+    expect(cards[1]).toHaveTextContent("CLM-003⚠ 原文未保存，无法核对三项试验综合。Meta 等 2 项");
     // The check is on the first line of the card, where a thumb sees it.
-    expect(within(cards[1]).getByText("⚠ 原文未保存")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("⚠ 原文未保存，无法核对")).toBeInTheDocument();
   });
 
   it("opens the claim from a card, search and filters included", async () => {

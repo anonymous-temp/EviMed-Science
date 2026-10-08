@@ -475,8 +475,8 @@ test("a claim whose quotation only the author's own excerpt holds is a ⚠ the p
   const { text } = await serve(t);
   const page = await text(`/evidence/c/${typed.id}`);
   assert.equal(page.status, 200);
-  assert.ok(page.body.includes("引文只在作者自己提供的摘录里找到，平台没有读到来源原文，所以不标 ✓"), "the status is said, not 核验状态未知");
-  assert.equal(page.body.includes("核验状态未知"), false);
+  assert.ok(page.body.includes("引文只在作者自己提供的摘录里找到，平台没有读到来源原文，所以不标 ✓"), "the status is said, not 核对状态未知");
+  assert.equal(page.body.includes("核对状态未知"), false);
   const card = json(await text(`/evidence/api/v1/cards/${typed.id}`)).data.card;
   assert.deepEqual([card.claims.total, card.claims.verified, card.claims.warned], [1, 0, 1], "the ⚠ count includes the claim the platform could not check");
   assert.equal(card.claimList[0].status, "author_excerpt_only");

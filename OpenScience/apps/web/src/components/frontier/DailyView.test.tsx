@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -90,5 +90,73 @@ describe("a day's lanes in full, a week's in a preview", () => {
     expect(within(screen.getByRole("list", { name: "临床证据" })).getAllByRole("listitem")).toHaveLength(8);
     expect(screen.queryByRole("button", { name: "展开其余 3 条" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "展开其余 2 条" })).toBeInTheDocument();
+  });
+});
+
+describe("the lead story", () => {
+  const lead = (over: Partial<NonNullable<FrontierDaily["lead"]>> = {}): NonNullable<FrontierDaily["lead"]> => ({
+    item: frontierItem({ id: "lead", title: "FDA 发布新方法学专题", url: "https://example.org/fda-nams" }), text: "FDA 发布直接最终规则。", event: null, ...over,
+  });
+
+  it("makes its title the link to the original, in a new tab, and has no separate 「原文」 control", () => {
+    show(issue({ lead: lead() }));
+    const title = screen.getByRole("heading", { level: 3, name: "FDA 发布新方法学专题" });
+    const link = within(title).getByRole("link", { name: "FDA 发布新方法学专题" });
+    expect(link).toHaveAttribute("href", "https://example.org/fda-nams");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    // One kind of 「原文」 entry on the page: the lead does not add its own, and says whose it is in plain grey text.
+    expect(screen.queryByText(/原文/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /原文/ })).not.toBeInTheDocument();
+    const section = screen.getByRole("region", { name: "头条" });
+    expect(within(section).getAllByRole("link")).toHaveLength(1);
+    expect(within(section).getByText(frontierItem().source.name)).not.toHaveAttribute("href");
+  });
+});
+
+describe("a day without an issue", () => {
+  const empty = (over: Partial<DailyState> = {}): DailyState => ({ index: [], issue: null, loading: false, error: null, retry: () => {}, ...over });
+  const showEmpty = (state: DailyState, props: Partial<Parameters<typeof DailyIssue>[0]> = {}) =>
+    render(<MemoryRouter><DailyIssue state={state} onDay={() => {}} {...props} /></MemoryRouter>);
+
+  it("names the publication time and time zone the server reports, not a time written into the page", () => {
+    showEmpty(empty({ schedule: { time: "08:15", timeZone: "Asia/Shanghai" } }));
+    expect(screen.getByText("今日日报 08:15（北京时间）发布")).toBeInTheDocument();
+    expect(screen.queryByText(/07:30/)).not.toBeInTheDocument();
+    expect(screen.getByText("当天没有符合条件的内容时不出刊。")).toBeInTheDocument();
+  });
+
+  it("names another time zone by its own name", () => {
+    showEmpty(empty({ schedule: { time: "07:30", timeZone: "UTC" } }));
+    expect(screen.getByText(/^今日日报 07:30（.*(UTC|协调世界时|世界时间).*）发布$/)).toBeInTheDocument();
+  });
+
+  it("promises no time from a server that named none", () => {
+    showEmpty(empty());
+    expect(screen.getByText("今日日报尚未发布")).toBeInTheDocument();
+    expect(screen.queryByText(/\d{2}:\d{2}/)).not.toBeInTheDocument();
+    // With nothing published at all there is no past to open.
+    expect(screen.queryByRole("button", { name: "往期" })).not.toBeInTheDocument();
+  });
+
+  it("lets the reader open a past issue from the empty state when there are any, for the real day that has none", async () => {
+    const onDay = vi.fn();
+    showEmpty(empty({
+      day: "2026-10-01", schedule: { time: "07:30", timeZone: "Asia/Shanghai" },
+      index: [{ day: "2026-10-07", title: null, itemCount: 12, generatedAt: null }, { day: "2026-10-06", title: null, itemCount: 9, generatedAt: null }],
+    }), { onDay });
+    expect(screen.getByText("10月1日 周四没有日报")).toBeInTheDocument();
+    expect(screen.getByText("日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "往期" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "10月6日 周二" }));
+    expect(onDay).toHaveBeenCalledWith("2026-10-06");
+  });
+
+  it("keeps saying 暂无日报 where the server has no daily at all, and 暂无周报 for a week", () => {
+    showEmpty(empty({ index: null }));
+    expect(screen.getByText("暂无日报")).toBeInTheDocument();
+    cleanup();
+    showEmpty(empty(), { weekly: true });
+    expect(screen.getByText("暂无周报")).toBeInTheDocument();
   });
 });

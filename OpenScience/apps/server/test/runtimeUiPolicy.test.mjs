@@ -454,7 +454,7 @@ test("a turn typed into the kernel's own window asks the research allowance befo
     const refused = await c.next();
     assertNativeError(refused, streamId, "simulated_credits_exhausted");
     // What the kernel's window prints: Chinese, says the allowance is simulated and too low, by how much, and where to top up.
-    assert.equal(refused.error.message, "模拟额度不足，这次没有开始：可用模拟额度 ¥3.50，这件事预计至少需要 ¥6.00。到“设置 → 科研额度”做一次模拟充值后即可继续。");
+    assert.equal(refused.error.message, "模拟额度不足，这次没有开始：可用模拟额度 3.50 灵豆，这件事预计至少需要 6.00 灵豆。到“设置 → 科研额度”做一次模拟充值后即可继续。");
     assert.deepEqual(await c.next(), { type: "end", streamId });
   }
   assert.deepEqual(f.received, [], "nothing reached the kernel");
@@ -481,7 +481,7 @@ test("a turn typed into the kernel's own window asks the research allowance befo
       payload: { args: { request: { requestId, sessionId: "s-allowance", ...(mode ? { mode } : {}), content: [{ type: "text", text: "再做一个" }] } } } }) });
   const httpRefusal = await http("http-begin");
   assert.equal(httpRefusal.status, 402);
-  assert.match(await httpRefusal.text(), /可用模拟额度 ¥3\.50/, "the page-served refusal says the same words");
+  assert.match(await httpRefusal.text(), /可用模拟额度 3\.50 灵豆/, "the page-served refusal says the same words");
   assert.equal((await http("http-steer", "steer")).status, 200);
   assert.deepEqual(asked.map((entry) => entry.mode), [undefined, "queue", undefined], "only the turn that begins was asked, on HTTP too");
   // With an allowance the same turn begins.

@@ -62,10 +62,10 @@ export function AllowanceAmount({ value, simulated, mark = simulated, className,
   </>;
 }
 
-/** An amount as the allowance pages draw it (¥12.30), or '' for a value that is not one. */
+/** An amount as the allowance pages draw it (12.30 灵豆), or '' for a value that is not one. */
 export function allowanceText(value: WebAmount | null | undefined, rounding: "down" | "nearest" = "down"): string {
   const text = value === null || value === undefined || (typeof value === "number" && value < 0) ? "" : formatCredits(value, { rounding });
-  return text ? `¥${text}` : "";
+  return text ? `${text} 灵豆` : "";
 }
 
 /**

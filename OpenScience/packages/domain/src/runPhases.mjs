@@ -27,7 +27,7 @@ export const RUN_ACTIVITY_PHASE_LABELS_ZH = Object.freeze({
   search: '检索',
   screen: '筛选',
   fulltext: '全文',
-  claims: '核验',
+  claims: '核对',
   write: '撰写',
   deliver: '交付',
 })
@@ -106,7 +106,7 @@ export function phaseOfToolCall(toolName, input = null) {
  *
  * `current` is the furthest phase reached, not the phase of the most recent
  * labelled call. A run that delivered and then made one more checking call read
- * 「核验」 for the rest of its life, and 「筛选」 read 0 on nearly every run
+ * 「核对」 for the rest of its life, and 「筛选」 read 0 on nearly every run
  * because only two tools carry that label — so the line moved backwards while
  * the run moved forwards. Phases are an order a deep run passes through, and a
  * reader watching one wants to know how far it has got.

@@ -53,11 +53,12 @@ export const SIMULATED_TOPUP_PACKAGES = Object.freeze([
   Object.freeze({ id: 'topup-500', credits: 500 }),
 ])
 
-/** An amount as the allowance page draws it (¥12.30), or '' when there is no amount to draw.
+/** An amount as the allowance page draws it (12.30 灵豆; a credit is one CNY, and the unit on screen is always the credit),
+ *  or '' when there is no amount to draw.
  *  @param {unknown} value @param {{ rounding?: 'nearest' | 'down' | 'up' }} [options] */
-function yuan(value, options = {}) {
+function lingdou(value, options = {}) {
   const units = creditUnitsOrNull(value)
-  return units === null || units < 0n ? '' : `¥${formatCredits(units, options)}`
+  return units === null || units < 0n ? '' : `${formatCredits(units, options)} 灵豆`
 }
 
 /**
@@ -80,8 +81,8 @@ export function allowanceRefusalSentence({ simulated = false, balanceCny = null,
   // What is held is rounded down and what is needed is rounded up: a refusal
   // must never show a balance that would have covered the amount it says it was
   // short of.
-  const have = yuan(balanceCny, { rounding: 'down' })
-  const need = yuan(estimateCny, { rounding: 'up' })
+  const have = lingdou(balanceCny, { rounding: 'down' })
+  const need = lingdou(estimateCny, { rounding: 'up' })
   const lead = simulated ? `${SIMULATED_WALLET_LABEL}额度不足，这次没有开始` : '科研额度不足，这次没有开始'
   const held = simulated ? `可用${SIMULATED_WALLET_LABEL}额度 ${have}` : `可用 ${have}`
   const amounts = have ? `：${held}${need ? `，这件事预计至少需要 ${need}` : ''}` : ''
