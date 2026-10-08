@@ -49,6 +49,19 @@ export function normalizeSourceText(value) {
     schema: sourceUnderstandingSchema(value.docType), text, units, auditSample: sourceUnderstandingAuditSample({ sourceId: value.sourceId, generation: value.generation, units }) }
 }
 
+/** What a reader is told about a source before opening it (design reference §13.1, N-17): what it contains, and what limits it.
+ *
+ * Both are optional lists of short plain statements written by the capability from the source — not anchored (the summary
+ * is not either) and not cut out of the summary. They exist for every document type, whatever its schema's slots are; a
+ * schema's own `limitations` slot (paper, general) stays the one anchored statement. An output without the field is an
+ * understanding written before it existed or by a run that left it out, and is valid: the reader shows nothing for it, which
+ * is different from an empty list (nothing to list, or nothing the document states). Bounds are the reader's, so a longer
+ * list or a longer item is a shape the contract refuses rather than one the page would cut. */
+export const SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS = 5
+export const SOURCE_UNDERSTANDING_CONTENTS_ITEM_MAX_CHARS = 200
+export const SOURCE_UNDERSTANDING_LIMITATIONS_MAX_ITEMS = 5
+export const SOURCE_UNDERSTANDING_LIMITATION_ITEM_MAX_CHARS = 400
+
 /** The omission audit's status vocabulary.
  *
  * `not_run` stays valid on purpose. Coverage answers which units were parsed;
@@ -328,6 +341,24 @@ export function sourceUnderstandingOmissionNotice(output, input) {
   }
 }
 
+/** The shape of one of the two reader-facing lists, or no issue when the output does not carry it.
+ * @param {any} list @param {string} name @param {number} maxItems @param {number} maxChars @returns {string[]} */
+function textListIssues(list, name, maxItems, maxChars) {
+  if (list === undefined) return []
+  if (!Array.isArray(list) || list.length > maxItems) return [`${name} must be a list of at most ${maxItems} items.`]
+  return list.some(item => !nonempty(item, maxChars)) ? [`Each ${name} item must be nonempty text of at most ${maxChars} characters.`] : []
+}
+
+/** What the page keeps of a stored list: strings only, trimmed, bounded. Reads never throw, so a malformed stored value
+ * projects as the part of it that is usable.
+ * @param {any} list @param {number} maxItems @param {number} maxChars @returns {string[]} */
+function textList(list, maxItems, maxChars) {
+  return (Array.isArray(list) ? list : [])
+    .filter(item => typeof item === 'string' && item.trim() && !item.includes('\0'))
+    .map(item => item.trim().slice(0, maxChars))
+    .slice(0, maxItems)
+}
+
 /** @param {any} value @param {number} max */
 function nonempty(value, max = 8000) { return typeof value === 'string' && Boolean(value.trim()) && value.length <= max && !value.includes('\0') }
 /** @param {any} value */
@@ -347,6 +378,8 @@ export function validateSourceUnderstanding(output, input) {
     || typeof input.text !== 'string' || !Array.isArray(input.units)) return [...issues, 'Immutable source input is invalid.']
   if (!['structured', 'deep'].includes(input.depth)) issues.push('Understanding is only valid for structured or deep depth.')
   if (!nonempty(output.summary, 8000)) issues.push('summary is required and bounded.')
+  issues.push(...textListIssues(output.contents, 'contents', SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS, SOURCE_UNDERSTANDING_CONTENTS_ITEM_MAX_CHARS))
+  issues.push(...textListIssues(output.limitations, 'limitations', SOURCE_UNDERSTANDING_LIMITATIONS_MAX_ITEMS, SOURCE_UNDERSTANDING_LIMITATION_ITEM_MAX_CHARS))
   const units = new Map(input.units.map((/** @type {any} */ unit) => [unit.id, unit]))
   // One shared predicate decides both which anchors are unusable and which units
   // the output reaches, so the contract and the omission notice cannot drift.
@@ -415,6 +448,10 @@ export function projectSourceUnderstandingOutput(value, input) {
   const anchors = evidence => evidence.map(({ sourceId, generation, unitId, start, end, quote }) => ({ sourceId, generation, unitId, start, end, quote }))
   return {
     schemaVersion: value.schemaVersion, sourceId: value.sourceId, generation: value.generation, docType: value.docType, depth: value.depth, summary: value.summary,
+    // Carried only where the output carried them: a record without the field is an understanding that predates it, and an empty
+    // list is an answer (nothing to list, nothing the document states).
+    ...(Array.isArray(value.contents) ? { contents: textList(value.contents, SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS, SOURCE_UNDERSTANDING_CONTENTS_ITEM_MAX_CHARS) } : {}),
+    ...(Array.isArray(value.limitations) ? { limitations: textList(value.limitations, SOURCE_UNDERSTANDING_LIMITATIONS_MAX_ITEMS, SOURCE_UNDERSTANDING_LIMITATION_ITEM_MAX_CHARS) } : {}),
     slots: Object.fromEntries(Object.entries(value.slots).map(([key, raw]) => {
       const slot = /** @type {any} */ (raw)
       return [key, slot.state === 'known' ? { state: 'known', value: slot.value, evidence: anchors(slot.evidence) } : { state: 'unknown', reason: slot.reason }]

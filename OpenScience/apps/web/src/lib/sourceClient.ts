@@ -35,6 +35,14 @@ export interface SourceUnderstanding {
    *  A label on a stored understanding, never a reason it is missing; the page does not print it. */
   verification?: "unverified";
   summary: string;
+  /**
+   * 「包含什么」: up to five things the document holds, written from the document and not cut from the summary (N-17).
+   * Absent on an understanding written before the field existed — not read, which is not the same as none; an empty list is
+   * an answer.
+   */
+  contents?: string[];
+  /** 「局限」: what limits the document, as it states it or as its stated design implies; empty when it states none. Absent as `contents` is. */
+  limitations?: string[];
   slots: Record<string, { state: "known"; value: string; evidence: SourceAnchor[] } | { state: "unknown"; reason: string }>;
   claims: Array<{ id: string; statement: string; evidence: SourceAnchor[] }>;
   methods: Array<{

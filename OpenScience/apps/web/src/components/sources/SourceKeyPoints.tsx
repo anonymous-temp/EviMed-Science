@@ -43,15 +43,17 @@ const flat = (text: string) => text.replace(/\s+/g, " ").trim();
  *  1. the one-line gist — the same sentence the list row has (the summary's first);
  *  2. for a paper, what it is (who wrote it, where, and the study's design, people, intervention, endpoints, effect, DOI) —
  *     only what it states;
- *  3. up to eight key points, each with the page it rests on — a page of a PDF opens that page of the original;
- *  4. one sentence on what was not read, only when something was not (`coverageGap`); a document is never said to be
+ *  3. what it contains (「包含什么」) and what limits it (「局限」), each only when the reading has some — the reading
+ *     writes them from the document, for every type, and an understanding from before they existed has neither (N-17);
+ *  4. up to eight key points, each with the page it rests on — a page of a PDF opens that page of the original;
+ *  5. one sentence on what was not read, only when something was not (`coverageGap`); a document is never said to be
  *     understood because its file is there;
- *  5. its tables and figures, with their pages;
- *  6. under folds: the whole summary, and the versions before this one.
+ *  6. its tables and figures, with their pages;
+ *  7. under folds: the whole summary, and the versions before this one;
+ *  8. the conversations that used it (「用过它的对话」), last, when there are any (N-16).
  *
- * A table has its data's meaning (`DatasetMeaningPanel`) where the key points would be. There is no 「包含什么」 or
- * 「局限」 and no 「用过它的对话」: the reading has no fields for the first two and nothing records the third, and a sentence
- * cut out of the summary to fill a slot is not a field.
+ * A table has its data's meaning (`DatasetMeaningPanel`) where the key points would be. A sentence cut out of the summary
+ * is never put in for 「包含什么」 or 「局限」: where the reading has none, the page has none, and 「重新读取」 produces them.
  */
 export function SourceKeyPoints({ source, busy, versionPath, onShowPage, onRetry }: {
   source: SourceRecord;
@@ -182,6 +184,8 @@ function Understood({ source, understanding, pageMap, meaning, entries, versions
           </dl>
         </Section>
       )}
+      <TextList title="包含什么" items={understanding.contents} />
+      <TextList title="局限" items={understanding.limitations} />
       {table ? meaning : (
         understanding.claims.length > 0 && (
           <Section title="要点">
@@ -206,6 +210,23 @@ function Understood({ source, understanding, pageMap, meaning, entries, versions
       )}
       {versions}
     </div>
+  );
+}
+
+/** One of the two lists the reading writes from the document — what it contains, what limits it — or nothing where it has none. */
+function TextList({ title, items }: { title: string; items: readonly string[] | undefined }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <Section title={title}>
+      <ul className="space-y-1">
+        {items.map((item, index) => (
+          <li key={`${index}:${item}`} className="flex gap-2">
+            <span className="w-5 shrink-0 text-center text-text-3" aria-hidden="true">·</span>
+            <span className="min-w-0 max-w-measure">{item}</span>
+          </li>
+        ))}
+      </ul>
+    </Section>
   );
 }
 

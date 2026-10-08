@@ -31,6 +31,25 @@ Write `source-understanding.json` with:
   for the researcher: what the document says, never a list of what it lacks or of
   what a template expected of it, and never how it was read — no units,
   offsets, character counts, UTF-16 or parser details.
+- `contents`: up to five short items, each at most 200 characters, saying what the
+  document contains, so that a researcher can decide whether to open it: the tables
+  or datasets it holds (and what their columns or entities are), the sections or
+  chapters that carry its substance, the figures of note, its appendices. Read them
+  off the document itself. They are not the summary cut into pieces: do not repeat
+  the summary's first sentence or restate what the summary already says, and each
+  item names a different thing. A document with nothing to list — a two-line note —
+  has `[]`.
+- `limitations`: what limits this document, as the document states it or as plainly
+  follows from a design it states: for a paper, the limitations it concedes (its
+  limitations section, or the discussion's own caveats) and design facts it names
+  itself, such as a single-centre retrospective cohort or a short follow-up; for a
+  guideline, a label or a policy, the scope it excludes or the evidence gaps it
+  admits. At most five items, each at most 400 characters. A document that states
+  no limitation has `[]`, and that is the right answer: a limitation is never
+  invented to fill the list, never a critique a reviewer would add, and never a
+  restatement of an unknown slot. Where the schema also has a `limitations` slot,
+  the slot carries the one anchored statement and this list carries each
+  limitation as its own item; the two do not disagree.
 - `slots`: exactly the keys in `input.schema.slots`. Each is either
   `{"state":"known","value":"...","evidence":[anchor]}` or
   `{"state":"unknown","reason":"..."}`. A known value is something the document
@@ -127,14 +146,17 @@ claiming that without sampling is the failure this field exists to prevent.
    This source contract resolves anchors against its preserved document, not
    external DOI registries; do not fetch another source or claim an external
    citation audit. There are no generated figures to certify in this package.
-   Preserve the identical input copy. Finish this review and repair the draft
-   before proceeding; do not submit yet, because acceptance freezes its bytes.
+   Read `contents` and `limitations` against the source in the same pass: delete
+   a `contents` item the document does not hold and a `limitations` item it does
+   not state or imply, rather than softening it. Preserve the identical input
+   copy. Finish this review and repair the draft before proceeding; do not submit
+   yet, because acceptance freezes its bytes.
 2. **`manuscript-humanize`**: load the language-matched writing rules and apply
    them only to the summary and the method draft's explanatory prose. First save
    a local pre-edit copy and inventory its evidence arrays, source identifiers,
    generation, unit identifiers, ranges, quotes, quantities and dates. Edit the
    JSON prose fields in place; never run a whole-document prose rewrite over
-   this structured record. Leave slots, claims, unknown reasons and the audit
+   this structured record. Leave slots, claims, `contents`, `limitations`, unknown reasons and the audit
    state unchanged. In method prose, preserve every number, unit, date,
    condition and statement of uncertainty. Compare the edited fields with the
    pre-edit copy and undo any change to that protected set. The omission audit

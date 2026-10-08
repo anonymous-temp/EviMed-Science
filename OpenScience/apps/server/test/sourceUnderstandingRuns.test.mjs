@@ -68,3 +68,19 @@ test("an understanding the run's receipt did not vouch for is stored with that l
   f.output.generation = 3;
   await assert.rejects(adapter.execute(f), { code: "source_understanding_invalid" });
 });
+
+// N-17: what a source contains and what limits it reach the stored understanding, bounded, and only where the run wrote them.
+test("a run's contents and limitations are stored as written, and an output without them stores without them", async () => {
+  const run = async output => new SourceUnderstandingRuns({ dispatch: async () => ({ runId: "run_one", sessionId: "sess_one" }),
+    readResult: async () => ({ status: "succeeded", output }) }).execute(fixture());
+  const f = fixture();
+  const written = await run({ ...f.output, contents: ["表 3 推荐等级汇总", "合并糖尿病时的用药调整"], limitations: [] });
+  assert.deepEqual(written.output.contents, ["表 3 推荐等级汇总", "合并糖尿病时的用药调整"]);
+  assert.deepEqual(written.output.limitations, [], "nothing stated is an answer, and it is stored as one");
+  const left = await run(f.output);
+  assert.equal("contents" in left.output, false, "an output that left them out is not stored as having none");
+  assert.equal("limitations" in left.output, false);
+  // A shape the contract refuses is refused before it is stored: six items is a sixth the page would have to cut.
+  await assert.rejects(run({ ...f.output, contents: Array.from({ length: 6 }, (_, index) => `第 ${index} 项`) }), { code: "source_understanding_invalid" });
+  await assert.rejects(run({ ...f.output, limitations: "单中心" }), { code: "source_understanding_invalid" });
+});

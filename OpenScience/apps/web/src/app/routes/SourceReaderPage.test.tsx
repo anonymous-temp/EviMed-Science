@@ -401,6 +401,53 @@ describe("a document's page", () => {
       expect(text()).not.toMatch(/包含什么|局限|用过它的对话|遗漏|抽查|查看历史|方法草稿/);
     });
 
+    // N-17: what the document contains and what limits it, written by the reading from the document, for every type.
+    it("put what the document contains and what limits it after the study information and before the key points, only where the reading has them", async () => {
+      const written = understanding();
+      written.current.slots = { ...written.current.slots, design: { state: "known", value: "随机对照试验", evidence: [] } } as never;
+      (written.current as Record<string, unknown>).contents = ["表 3 推荐等级汇总", "合并糖尿病时的用药调整"];
+      (written.current as Record<string, unknown>).limitations = ["仅纳入单中心回顾性病例", "随访不足一年"];
+      mocks.getSourceUnderstanding.mockResolvedValue(written);
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("仅纳入单中心回顾性病例");
+      order("讲了什么", "研究信息", "随机对照试验", "包含什么", "表 3 推荐等级汇总", "合并糖尿病时的用药调整", "局限", "仅纳入单中心回顾性病例", "随访不足一年", "要点", "一线经验治疗推荐铋剂四联方案");
+      const sections = within(columnOf("points")!).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+      expect(sections.indexOf("包含什么")).toBeLessThan(sections.indexOf("要点"));
+    });
+
+    it("leave a list out where the reading has none — an empty list is an answer, a missing one was never read — and never cut one out of the summary", async () => {
+      const written = understanding();
+      (written.current as Record<string, unknown>).contents = [];
+      (written.current as Record<string, unknown>).limitations = [];
+      mocks.getSourceUnderstanding.mockResolvedValue(written);
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toMatch(/包含什么|局限/);
+      // An understanding that predates the fields has neither heading either, however long its summary is.
+      cleanup();
+      mocks.getSourceUnderstanding.mockResolvedValue(understanding());
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toMatch(/包含什么|局限/);
+    });
+
+    it("show them for a table as well, beside the meaning of its columns", async () => {
+      const written = { ...understanding({}, "src_sheet"), current: { ...understanding().current, sourceId: "src_sheet", contents: ["基线表", "结局表"], limitations: ["未说明数据的缺失处理"] } };
+      mocks.getSourceUnderstanding.mockResolvedValue(written);
+      mocks.getSource.mockResolvedValue(sheet);
+      renderReader(readerAt("src_sheet"));
+      await screen.findByRole("heading", { level: 1, name: sheet.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("基线表");
+      order("包含什么", "基线表", "局限", "未说明数据的缺失处理", "数据含义面板");
+    });
+
     it("say the gist as the row does, and fold the whole summary only when there is more than the gist", async () => {
       const oneSentence = understanding();
       oneSentence.current.summary = "给出一线四联方案、疗程 14 天与根除后复查的推荐。";
