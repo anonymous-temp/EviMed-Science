@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES, RUNTIME_ROOM_REFUSAL_CODES } from "@evimed/domain";
 import { autopilotAttemptDispatchId } from "./autopilotService.mjs";
 import { HttpError } from "./security.mjs";
+import { wireClause } from "./dshRuntimeAdapter.mjs";
 
 export const AUTOPILOT_RESOURCE_BACKOFF_MS = Object.freeze([300_000, 900_000, 3_600_000, 21_600_000, 86_400_000]);
 
@@ -227,7 +228,7 @@ export class AutopilotWorker {
           }).catch(() => {});
         }
         if (!leaseLost && code !== "product_job_lease_lost") {
-          await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: "Independent claim verification failed." }, {
+          await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: `Independent claim verification failed${wireClause(error)}.` }, {
             retry: !terminal, delayMs: terminal ? 0
               : code === "runtime_busy" ? this.busyDelayMs : Math.min(60_000, 1000 * 2 ** Math.min(job.attempts, 6)),
           }).catch((failure) => { if (failure?.code !== "product_job_lease_lost") throw failure; });

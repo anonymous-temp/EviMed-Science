@@ -154,6 +154,27 @@ const WIRE_ERROR_CODES = Object.freeze({
 });
 
 /**
+ * The refusal of one kernel call. Besides our code and the kernel's sentence it carries, as `wire`, what the kernel
+ * said in closed-format tokens only — the method and the kernel's own error code (or `http_<status>`, `not_json`) —
+ * for the ledger of whatever failed on it, which keeps no message (a background job records its code alone, so four
+ * claim re-checks of 2026-09-30…10-08 failed as `runtime_wire_protocol_mismatch` with nothing to say which call or
+ * which kernel error). Never sent to a browser: `sendError` shapes details by code.
+ * @param {number} status @param {{ code: string, message: string }} mapped @param {unknown} method @param {unknown} kernelCode
+ */
+export function wireRefusal(status, mapped, method, kernelCode) {
+  const token = (/** @type {unknown} */ value) => (typeof value === "string" && /^[A-Za-z0-9/_.-]{1,64}$/.test(value) ? value : null);
+  return Object.assign(new HttpError(status, mapped.code, mapped.message), { wire: { method: token(method), kernelCode: token(kernelCode) } });
+}
+
+/** One short clause naming a refusal's kernel call, for a ledger that keeps a message only: "" when it has none.
+ * @param {unknown} error */
+export function wireClause(error) {
+  const wire = /** @type {any} */ (error)?.wire;
+  if (!wire || (!wire.method && !wire.kernelCode)) return "";
+  return ` (kernel ${wire.kernelCode ?? "error"}${wire.method ? ` on ${wire.method}` : ""})`;
+}
+
+/**
  * @param {{ code?: string, message?: string }} error
  * @returns {{ code: string, message: string }}
  */
@@ -388,8 +409,7 @@ export class DshRuntimeAdapter {
     }
     const result = await this.transport.call(method, payload, options);
     if (result?.ok) return result.value;
-    const mapped = mapWireError(result?.error ?? {});
-    throw new HttpError(502, mapped.code, mapped.message);
+    throw wireRefusal(502, mapWireError(result?.error ?? {}), method, result?.error?.code);
   }
 
   /**

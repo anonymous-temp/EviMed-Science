@@ -1128,3 +1128,17 @@ test("every section of the fixture says where it came from, and the live ones ar
   assert.equal(golden.mux.every((frame) => frame.type === "item" && typeof frame.streamId === "string"), true);
   assert.equal(new Set(golden.mux.map((frame) => frame.streamId)).size, 3, "three logical streams shared one socket");
 });
+
+test("a kernel refusal carries its method and the kernel's own code as tokens, and a job ledger can name them", async () => {
+  const { wireRefusal, wireClause } = await import("../src/dshRuntimeAdapter.mjs");
+  const refused = wireRefusal(502, mapWireError({ code: "gateway/arguments-invalid", message: "prompt.parts[0] must be a string" }), "session/prompt", "gateway/arguments-invalid");
+  assert.equal(refused.code, "runtime_wire_protocol_mismatch");
+  assert.equal(refused.status, 502);
+  assert.deepEqual(refused.wire, { method: "session/prompt", kernelCode: "gateway/arguments-invalid" });
+  assert.equal(wireClause(refused), " (kernel gateway/arguments-invalid on session/prompt)");
+  // Anything that is not a token is dropped, never copied into a ledger.
+  const odd = wireRefusal(502, { code: "runtime_wire_protocol_mismatch", message: "x" }, "session/prompt", "secret key sk-123 leaked here");
+  assert.equal(odd.wire.kernelCode, null);
+  assert.equal(wireClause(odd), " (kernel error on session/prompt)");
+  assert.equal(wireClause(new Error("plain")), "");
+});

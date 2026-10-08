@@ -48,6 +48,7 @@ import { AgentBayRuntimeProvider } from "./agentbay/runtimeProvider.mjs";
 import {
   isAllowedWireMethod,
   mapWireError,
+  wireRefusal,
   normalizeTranscript,
   transcriptToLedgerMessages,
   sessionListItems,
@@ -6707,19 +6708,18 @@ export class RuntimeManager {
     });
     if (response.status < 200 || response.status >= 300) {
       await response.body?.cancel().catch(() => {});
-      throw new HttpError(502, "runtime_wire_protocol_mismatch", `Kernel answered HTTP ${response.status} for ${method}.`);
+      throw wireRefusal(502, { code: "runtime_wire_protocol_mismatch", message: `Kernel answered HTTP ${response.status} for ${method}.` }, method, `http_${response.status}`);
     }
     const payloadBytes = await readRuntimeResponseBody(response.body, maxBytes ?? this.config.maxJsonBytes);
     let envelope;
     try {
       envelope = JSON.parse(payloadBytes.toString("utf8"));
     } catch {
-      throw new HttpError(502, "runtime_wire_protocol_mismatch", `Kernel answer for ${method} is not JSON.`);
+      throw wireRefusal(502, { code: "runtime_wire_protocol_mismatch", message: `Kernel answer for ${method} is not JSON.` }, method, "not_json");
     }
     const result = envelope?.result;
     if (result?.ok) return result.value;
-    const mapped = mapWireError(result?.error ?? {});
-    throw new HttpError(502, mapped.code, mapped.message);
+    throw wireRefusal(502, mapWireError(result?.error ?? {}), method, result?.error?.code);
   }
 
   /**
