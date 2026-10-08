@@ -14,6 +14,9 @@ import type {
   GeoMonitoring,
   GeoProject,
   GeoQuestions,
+  GeoSourceAnswer,
+  GeoSourceDetail,
+  GeoSourceRow,
   GeoSources,
   GeoStepKey,
   GeoStepStatus,
@@ -273,7 +276,7 @@ export const answerFilled: GeoAnswer = {
 export const sourcesFilled: GeoSources = {
   sources: [
     { id: "src_1", domain: "dxy.com", name: "丁香医生", kind: "health_media", layer: "coverage", conditions: { icp: true, newsIndexed: true, medical: true }, impostor: false, cited: { doubao: 30, deepseek: 18 }, mentionsOurs: 0, wrongOurs: 0, market: null },
-    { id: "src_2", domain: "baike.baidu.com", name: "百度百科", kind: "百科", layer: null, conditions: { icp: true, newsIndexed: false, medical: null }, impostor: false, cited: { deepseek: 33 }, mentionsOurs: 2, wrongOurs: 1, market: null },
+    { id: "src_2", domain: "baike.baidu.com", name: "百度百科", kind: "百科", layer: null, conditions: { icp: true, newsIndexed: false, medical: null }, impostor: false, cited: { deepseek: 33 }, mentionsOurs: 2, wrongOurs: 1, mentionsOursByEngine: { deepseek: 2 }, wrongOursByEngine: { deepseek: 1 }, market: null },
     { id: "src_3", domain: "39.net", name: "39 健康网", kind: "health_media", layer: "coverage", conditions: { icp: true, newsIndexed: true, medical: true }, impostor: false, cited: { doubao: 21 }, mentionsOurs: 0, wrongOurs: 0, market: { price: 120, resourceId: "r1" } },
     { id: "src_4", domain: "fake-times.example", name: "某某时报网", kind: "news", layer: null, conditions: { icp: false, newsIndexed: false, medical: false }, impostor: true, cited: { doubao: 4 }, mentionsOurs: 0, wrongOurs: 0, market: null },
   ],
@@ -352,3 +355,34 @@ export const monitoringFilled: GeoMonitoring = {
   newErrors: [diagnosisFilled.errors[0]],
   next: { date: "2026-10-20", kind: "weekly" },
 };
+
+/**
+ * What `GET …/sources/:sourceId` answers for a row, built from the row's own numbers as the server builds them: the answers that
+ * cite the site, as many as it was cited, of which `wrongOurs` misstate us (the first of them with the sentence this site's marker
+ * is beside) and `mentionsOurs` name us — the misstating ones first, as they are counted. A fixture that agrees with its row by
+ * construction: what a test asserts is that the page shows the row's numbers as the list it opens, and nothing cut off.
+ */
+export function sourceDetailOf(row: GeoSourceRow, { engine = null }: { engine?: string | null } = {}): GeoSourceDetail {
+  const cited = engine ? row.cited[engine] ?? 0 : Object.values(row.cited).reduce((sum, count) => sum + count, 0);
+  const wrong = engine ? row.wrongOursByEngine?.[engine] ?? 0 : row.wrongOurs;
+  const mentions = engine ? row.mentionsOursByEngine?.[engine] ?? 0 : row.mentionsOurs;
+  const engines = Object.keys(row.cited);
+  const answers: GeoSourceAnswer[] = Array.from({ length: cited }, (_, index) => ({
+    snapshotId: `snap_${row.id}_${index}`,
+    engine: engine ?? engines[index % Math.max(1, engines.length)] ?? "deepseek",
+    questionId: `q_${index}`,
+    question: `第 ${index + 1} 个问题`,
+    askedAt: "2026-10-13T08:00:00Z",
+    // The misstating answers are the first ones; they name us too, then the rest up to the count.
+    mentionsOurs: index < mentions,
+    misstated: index < wrong,
+    wrong: index < wrong ? [{ text: `第 ${index + 1} 句讲错的话`, fromThisSite: index === 0 }] : [],
+  }));
+  return {
+    source: { id: row.id, domain: row.domain, name: row.name, kind: row.kind, layer: row.layer, conditions: row.conditions, impostor: row.impostor, market: row.market },
+    round: { id: "round_1", kind: "weekly", sampleDate: "2026-10-13" },
+    engine,
+    counts: { cited, wrongOurs: wrong, mentionsOurs: mentions },
+    answers,
+  };
+}

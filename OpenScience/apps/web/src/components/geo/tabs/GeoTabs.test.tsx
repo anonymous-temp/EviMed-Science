@@ -14,6 +14,7 @@ import {
   journeyFilled,
   monitoringFilled,
   questionsFilled,
+  sourceDetailOf,
   sourcesFilled,
 } from "../__fixtures__/geoTabs";
 import { AccuracyTab } from "./AccuracyTab";
@@ -33,6 +34,7 @@ const client = vi.hoisted(() => ({
   unmeasureGeoQuestion: vi.fn(),
   getGeoDiagnosis: vi.fn(),
   getGeoSources: vi.fn(),
+  getGeoSource: vi.fn(),
   setGeoTier: vi.fn(),
   getGeoArticles: vi.fn(),
   getGeoArticleText: vi.fn(),
@@ -69,6 +71,7 @@ function Probe() {
     <>
       <div data-testid="location">{location.pathname}</div>
       <div data-testid="search">{location.search}</div>
+      <div data-testid="state">{JSON.stringify(location.state ?? null)}</div>
     </>
   );
 }
@@ -288,24 +291,33 @@ describe("问题", () => {
     expect(screen.getByText("3 个语义群 · 2 问 · 2 条真实问法")).toBeInTheDocument();
   });
 
-  it("a measured question opens the answer it last got; one never asked has nothing to open", async () => {
+  it("a measured question is a link to the answer it last got, the whole row; one never asked has nothing to open and is not drawn as if it had", async () => {
     client.getGeoQuestions.mockResolvedValue(questionsFilled);
     renderTab(<QuestionsTab {...props()} />);
     await userEvent.click(await screen.findByRole("button", { name: "恶心呕吐与胃肠反应" }));
-    const asked = document.querySelector("[data-geo-question='q_1']") as HTMLElement;
-    expect(within(asked).getByRole("link", { name: /^看回答/ })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_doubao");
+    const asked = (document.querySelector("[data-geo-question='q_1']") as HTMLElement).closest("li") as HTMLElement;
+    const link = within(asked).getByRole("link", { name: /看回答/ });
+    expect(link).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_doubao");
+    // The title is the row's target: its link carries the question and the walk's hook.
+    expect(link).toHaveTextContent("打了减重针一直恶心，要不要停药？");
+    expect(link).toHaveAttribute("data-row-title");
+    expect(link.className).toMatch(/after:absolute/);
+    expect(asked.className).toMatch(/hover:bg-surface-2/);
     await userEvent.click(screen.getByRole("button", { name: "停药与体重反弹" }));
-    const never = document.querySelector("[data-geo-question='q_4']") as HTMLElement;
-    expect(within(never).queryByRole("link", { name: /看回答/ })).not.toBeInTheDocument();
+    const never = (document.querySelector("[data-geo-question='q_4']") as HTMLElement).closest("li") as HTMLElement;
+    expect(within(never).queryByRole("link")).not.toBeInTheDocument();
+    expect(never.className).not.toMatch(/hover:/);
+    expect(within(never).getByText("停药后体重会反弹吗？").closest("[data-row-title]")).not.toBeNull();
   });
 
-  it("removes a question from measurement with the row's own action, always visible", async () => {
+  it("removes a question from measurement with the row's own 「⋯」, which is always there", async () => {
     client.getGeoQuestions.mockResolvedValue(questionsFilled);
     client.unmeasureGeoQuestion.mockResolvedValue({});
     renderTab(<QuestionsTab {...props()} />);
     await userEvent.click(await screen.findByRole("button", { name: "恶心呕吐与胃肠反应" }));
-    const row = document.querySelector("[data-geo-question='q_1']") as HTMLElement;
-    await userEvent.click(within(row).getByRole("button", { name: "移出测量问句" }));
+    const row = (document.querySelector("[data-geo-question='q_1']") as HTMLElement).closest("li") as HTMLElement;
+    await userEvent.click(within(row).getByRole("button", { name: "“打了减重针一直恶心，要不要停药？”的操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "移出测量问句" }));
     await waitFor(() => expect(client.unmeasureGeoQuestion).toHaveBeenCalledWith("geo_1", "q_1"));
     await waitFor(() => expect(client.getGeoQuestions).toHaveBeenCalledTimes(2));
   });
@@ -327,54 +339,208 @@ describe("信源", () => {
   }));
   const rowOf = (domain: string) => document.querySelector(`[data-geo-source='${domain}']`)?.closest("li") as HTMLElement;
 
-  it("lists sources as rows that say the risk without opening: cited, wrong, named, in that order of weight; impostors are left out and counted", async () => {
+  const header = () => screen.getByRole("group", { name: "按数字排序" });
+  const order = () => within(screen.getByRole("list", { name: "信源" })).getAllByRole("listitem")
+    .map((row) => row.querySelector("[data-geo-source]")?.getAttribute("data-geo-source"));
+  const cellOf = (domain: string, key: string) => rowOf(domain).querySelector(`[data-list-cell='${key}']`) as HTMLElement;
+  const valueOf = (domain: string, key: string) => cellOf(domain, key).querySelector("[data-list-value]")?.textContent;
+
+  it("lists sources as rows of a name, a kind and a domain with three counted columns under named headers; impostors are left out", async () => {
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     renderTab(<SourcesTab {...props()} />);
-    expect(await screen.findByText("3 个信源 · 已排除 1 个冒名站")).toBeInTheDocument();
+    // The count line says one thing; the impostor site is in the fold at the foot of the page.
+    expect(await screen.findByText("3 个信源")).toBeInTheDocument();
+    expect(screen.queryByText(/已排除/)).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     const list = screen.getByRole("list", { name: "信源" });
     expect(within(list).queryByText("某某时报网")).not.toBeInTheDocument();
-    // Most cited first.
-    expect(within(list).getAllByRole("listitem").map((row) => row.querySelector("[data-geo-source]")?.getAttribute("data-geo-source")))
-      .toEqual(["dxy.com", "baike.baidu.com", "39.net"]);
+    expect(screen.getByText("冒名站")).toBeInTheDocument();
+    // Most cited first, the headers naming the three columns in the rows' order.
+    expect(order()).toEqual(["dxy.com", "baike.baidu.com", "39.net"]);
+    expect(within(header()).getAllByRole("button").map((button) => button.textContent)).toEqual(["被引用", "讲错的回答", "提到你"]);
     const baike = rowOf("baike.baidu.com");
-    expect(baike).toHaveTextContent("被引用 33 次 · 有 1 处讲错 · 提到你 2 次");
-    expect(within(baike).getByText("有 1 处讲错")).toHaveClass("text-danger");
+    expect(["cited", "wrong", "mentions"].map((key) => valueOf("baike.baidu.com", key))).toEqual(["33", "1", "2"]);
+    // Red is one count, and only when there is something in it.
+    expect(cellOf("baike.baidu.com", "wrong")).toHaveClass("text-danger");
+    expect(cellOf("dxy.com", "wrong")).not.toHaveClass("text-danger");
+    expect(cellOf("dxy.com", "wrong")).not.toBeInstanceOf(HTMLButtonElement);
+    expect(cellOf("baike.baidu.com", "wrong")).toBeInstanceOf(HTMLButtonElement);
+    // The old sentence that read as the site's doing is gone; the name, the kind and the domain share the line.
+    expect(baike).not.toHaveTextContent("处讲错");
     expect(within(baike).getByText("百科")).toBeInTheDocument();
+    expect(within(baike).getByText("baike.baidu.com")).toHaveClass("text-text-3");
     expect(within(rowOf("dxy.com")).getByText("健康媒体")).toBeInTheDocument();
-    expect(within(rowOf("dxy.com")).getByText("覆盖")).toBeInTheDocument();
-    expect(within(rowOf("39.net")).getByText("¥120/篇")).toBeInTheDocument();
-    // The conditions are for opening the row, not for the first screen.
+    // Tier words and prices are the drawer's; the row keeps 自有 alone.
+    expect(within(rowOf("dxy.com")).queryByText("覆盖")).not.toBeInTheDocument();
+    expect(within(rowOf("39.net")).queryByText("¥120/篇")).not.toBeInTheDocument();
     expect(document.querySelector("[data-geo-condition]")).toBeNull();
+    // A row that opens something says so, and shows it under the pointer.
+    expect(rowOf("baike.baidu.com").className).toMatch(/hover:bg-surface-2/);
     // What the page used to put under the list is on 方案 now.
     expect(screen.queryByText("预期匹配")).not.toBeInTheDocument();
     expect(screen.queryByText("主战场")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "档三" })).not.toBeInTheDocument();
   });
 
-  it("opens a source in place to its conditions as words, merging the ones nobody checked", async () => {
-    client.getGeoSources.mockResolvedValue(sourcesFilled);
+  it("marks a site of our own with 自有 on its row and names no other layer there", async () => {
+    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: [{ ...sourcesFilled.sources[0], layer: "owned" }, sourcesFilled.sources[2]] });
     renderTab(<SourcesTab {...props()} />);
-    await screen.findByText("3 个信源 · 已排除 1 个冒名站");
-    await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
-    const detail = rowOf("baike.baidu.com").querySelector("[data-geo-source-detail]") as HTMLElement;
-    expect(detail.querySelector("[data-geo-condition='icp:yes']")).not.toBeNull();
-    expect(detail.querySelector("[data-geo-condition='newsIndexed:no']")).not.toBeNull();
-    expect(detail).toHaveTextContent("医疗未核实");
-    expect(detail.querySelector("[data-geo-condition='medical:unknown']")).toBeNull();
-    expect(screen.getByText("“未核实”是平台还没核对这一项，不等于不满足。")).toBeInTheDocument();
+    await screen.findByText("2 个信源");
+    expect(within(rowOf("dxy.com")).getByText("自有")).toBeInTheDocument();
+    expect(within(rowOf("39.net")).queryByText("覆盖")).not.toBeInTheDocument();
+  });
 
-    await userEvent.click(within(rowOf("39.net")).getByRole("button", { name: /39 健康网/ }));
-    expect(rowOf("39.net").querySelector("[data-geo-source-detail]")).toHaveTextContent("单篇价格 ¥120");
-    // One row open at a time.
+  it("opens a source in a drawer listing the answers its row counts: as many misstating answers as the red number, each the way into its page", async () => {
+    const baike = sourcesFilled.sources[1];
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue(sourceDetailOf(baike));
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    const rowWrong = Number(valueOf("baike.baidu.com", "wrong"));
+    await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
+    const dialog = await screen.findByRole("dialog", { name: "百度百科" });
+    expect(client.getGeoSource).toHaveBeenCalledWith("geo_1", "src_2", null);
+    // Header: the site, its domain as an outside link, its kind.
+    const link = within(dialog).getByRole("link", { name: /baike\.baidu\.com/ });
+    expect(link).toHaveAttribute("href", "https://baike.baidu.com");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(dialog).toHaveTextContent("百科");
+    // The count the drawer shows, the answers it lists and the number on the row are one number.
+    const wrongSection = (await within(dialog).findByRole("region", { name: "讲错的回答" }));
+    expect(wrongSection.querySelector("[data-geo-source-count='wrong']")).toHaveTextContent(String(rowWrong));
+    expect(wrongSection.querySelectorAll("[data-geo-source-answer]")).toHaveLength(rowWrong);
+    // Misstating answers lead; each is “引擎 · 问题 · 日期”, the wrong sentence under it drawn as the answer page draws it.
+    const first = wrongSection.querySelector("[data-geo-source-answer]") as HTMLElement;
+    expect(first).toHaveTextContent("DeepSeek · 第 1 个问题 · 10月13日");
+    expect(first).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_src_2_0");
+    const sentence = wrongSection.querySelector("[data-geo-source-wrong]") as HTMLElement;
+    expect(sentence).toHaveTextContent("第 1 句讲错的话");
+    expect(sentence).toHaveClass("underline", "decoration-danger", "decoration-wavy");
+    expect(within(wrongSection).getByText("出自这个站")).toBeInTheDocument();
+    // The other answers follow, the ones that name us marked, every one a link to its page.
+    const others = within(dialog).getByRole("region", { name: "其他回答" });
+    expect(others.querySelector("[data-geo-source-count='others']")).toHaveTextContent(String(33 - rowWrong));
+    expect(within(others).getAllByText("提到你")).toHaveLength(1);
+    for (const answer of dialog.querySelectorAll("[data-geo-source-answer]")) expect(answer.getAttribute("href")).toMatch(/^\/app\/geo\/geo_1\/answers\/snap_src_2_/);
+    // 显示更多 keeps a long list short.
+    expect(others.querySelectorAll("[data-geo-source-answer]")).toHaveLength(10);
+    // The last thing it says: the conditions, as words, and what is unchecked.
+    const conditions = dialog.querySelector("[data-geo-source-detail]") as HTMLElement;
+    expect(conditions.querySelector("[data-geo-condition='icp:yes']")).not.toBeNull();
+    expect(conditions.querySelector("[data-geo-condition='newsIndexed:no']")).not.toBeNull();
+    expect(conditions).toHaveTextContent("医疗未核实");
+    expect(conditions.querySelector("[data-geo-condition='medical:unknown']")).toBeNull();
+    expect(within(dialog).getByText("“未核实”是平台还没核对这一项，不等于不满足。")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "在对话中处理" })).toBeInTheDocument();
+    // The expansion in the row is gone.
     expect(rowOf("baike.baidu.com").querySelector("[data-geo-source-detail]")).toBeNull();
   });
 
-  it("says “三项都未核实” once instead of three dashes", async () => {
-    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: many(2) });
+  it("pressing the red count opens the same drawer and rests on the answers it counts", async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    try {
+      client.getGeoSources.mockResolvedValue(sourcesFilled);
+      client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
+      renderTab(<SourcesTab {...props()} />);
+      await screen.findByText("3 个信源");
+      await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /讲错的回答/ }));
+      const dialog = await screen.findByRole("dialog", { name: "百度百科" });
+      const section = await within(dialog).findByRole("region", { name: "讲错的回答" });
+      await waitFor(() => expect(scrolled.mock.contexts).toContain(section));
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
+  it("lists the answers that cite a site nothing misstated, with its conditions after them", async () => {
+    const dxy = sourcesFilled.sources[0];
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue(sourceDetailOf(dxy));
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("dxy.com")).getByRole("button", { name: /丁香医生/ }));
+    const dialog = await screen.findByRole("dialog", { name: "丁香医生" });
+    const all = await within(dialog).findByRole("region", { name: "引用它的回答" });
+    expect(all.querySelectorAll("[data-geo-source-answer]").length).toBeGreaterThan(0);
+    expect(within(dialog).queryByRole("region", { name: "讲错的回答" })).not.toBeInTheDocument();
+    expect(dialog.querySelector("[data-geo-source-wrong]")).toBeNull();
+    expect(dialog.querySelector("[data-geo-source-tier]")).toHaveTextContent("层级 覆盖");
+    expect(dialog.querySelector("[data-geo-source-counts]")).toHaveTextContent("48 个回答引用了这个站，其中 0 个讲错了信尔美");
+  });
+
+  it("says so when the latest round has no answer citing the site, and when nothing has been measured", async () => {
+    const dxy = sourcesFilled.sources[0];
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue({ ...sourceDetailOf(dxy), counts: { cited: 0, wrongOurs: 0, mentionsOurs: 0 }, answers: [] });
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("dxy.com")).getByRole("button", { name: /丁香医生/ }));
+    expect(await screen.findByText("最近一轮测量（10月13日）里，没有回答引用这个站。")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    client.getGeoSource.mockResolvedValue({ ...sourceDetailOf(dxy), round: null, counts: { cited: 0, wrongOurs: 0, mentionsOurs: 0 }, answers: [] });
+    await userEvent.click(within(rowOf("dxy.com")).getByRole("button", { name: /丁香医生/ }));
+    expect(await screen.findByText(/还没有完成的测量/)).toBeInTheDocument();
+    // The conditions are still the last thing it says.
+    expect(within(screen.getByRole("dialog")).getByRole("region", { name: "投放条件" })).toBeInTheDocument();
+  });
+
+  it("hands a draft with the domain and the wrong sentences to the project's conversation, and sends nothing", async () => {
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
+    const dialog = await screen.findByRole("dialog", { name: "百度百科" });
+    await within(dialog).findByRole("region", { name: "讲错的回答" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "在对话中处理" }));
+    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function)));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+    // The draft waits in the composer: the intent carries it, and nothing asks the model.
+    const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string } } | null;
+    const draft = state?.runtimeUiIntent?.draft ?? "";
+    expect(draft).toContain("baike.baidu.com");
+    expect(draft).toContain("第 1 句讲错的话");
+    expect(draft).toContain("1 个讲错了信尔美");
+    expect(client.runGeoStep).not.toHaveBeenCalled();
+  });
+
+  it("sorts by a column header: the most cited first, then the most misstating, again to reverse; the paging starts over", async () => {
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    expect(within(header()).getByRole("button", { name: /按被引用排序，当前从多到少/ })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(within(header()).getByRole("button", { name: "按讲错的回答排序" }));
+    // The one that misstated us leads; the rest keep the order of how often they were cited.
+    expect(order()).toEqual(["baike.baidu.com", "dxy.com", "39.net"]);
+    expect(within(header()).getByRole("button", { name: /按讲错的回答排序，当前从多到少/ })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(within(header()).getByRole("button", { name: /按讲错的回答排序/ }));
+    expect(order()).toEqual(["dxy.com", "39.net", "baike.baidu.com"]);
+    await userEvent.click(within(header()).getByRole("button", { name: "按提到你排序" }));
+    expect(order()[0]).toBe("baike.baidu.com");
+  });
+
+  it("narrows every column and the drawer to the engine the page is filtered to", async () => {
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1], { engine: "deepseek" }));
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(screen.getByRole("button", { name: "DeepSeek" }));
+    expect(order()).toEqual(["baike.baidu.com", "dxy.com"]);
+    expect([valueOf("dxy.com", "cited"), valueOf("dxy.com", "wrong")]).toEqual(["18", "0"]);
+    await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
+    await screen.findByRole("dialog", { name: "百度百科" });
+    expect(client.getGeoSource).toHaveBeenCalledWith("geo_1", "src_2", "deepseek");
+    expect(await screen.findByText(/只看 ?DeepSeek/)).toBeInTheDocument();
+  });
+
+  it("says “三项都未核实” once instead of three dashes, in the drawer", async () => {
+    const rows = many(2);
+    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: rows });
+    client.getGeoSource.mockResolvedValue(sourceDetailOf(rows[0] as never));
     renderTab(<SourcesTab {...props()} />);
     await userEvent.click(await screen.findByRole("button", { name: /站点0/ }));
-    const detail = rowOf("site0.example").querySelector("[data-geo-source-detail]") as HTMLElement;
+    const dialog = await screen.findByRole("dialog", { name: "站点0" });
+    const detail = dialog.querySelector("[data-geo-source-detail]") as HTMLElement;
     expect(detail).toHaveTextContent("三项都未核实");
     expect(detail.querySelector("[data-geo-condition]")).toBeNull();
   });
@@ -382,7 +548,7 @@ describe("信源", () => {
   it("filters by engine, by what a site did to us, and by a word of its name or domain", async () => {
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     renderTab(<SourcesTab {...props()} />);
-    await screen.findByText("3 个信源 · 已排除 1 个冒名站");
+    await screen.findByText("3 个信源");
     await userEvent.click(screen.getByRole("button", { name: "豆包" }));
     expect(screen.queryByText("百度百科")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "全部引擎" }));
@@ -395,11 +561,15 @@ describe("信源", () => {
     await userEvent.click(screen.getByRole("menuitemradio", { name: "全部信源" }));
 
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索信源" }), "39.NET");
-    expect(screen.getByText("匹配 1 个信源 · 已排除 1 个冒名站")).toBeInTheDocument();
+    expect(screen.getByText("匹配 1 个信源")).toBeInTheDocument();
     expect(screen.getByText("39 健康网")).toBeInTheDocument();
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索信源" }));
+    // The box can be emptied from itself: the clear button, and Escape.
+    await userEvent.click(screen.getByRole("button", { name: "清除搜索" }));
+    expect(screen.getByText("3 个信源")).toBeInTheDocument();
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索信源" }), "不存在");
     expect(screen.getByText("没有包含“不存在”的信源。")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByText("3 个信源")).toBeInTheDocument();
   });
 
   it("shows 30 of a thousand sources, then 30 more at a time, and starts over when the query changes", async () => {

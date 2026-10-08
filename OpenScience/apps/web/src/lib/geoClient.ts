@@ -419,10 +419,39 @@ export interface GeoSourceRow {
   /** The three conditions: ICP owner matches, news-grade indexed, medical category or vertical. */
   conditions: { icp: boolean | null; newsIndexed: boolean | null; medical: boolean | null };
   impostor: boolean;
+  /** Answers of the latest round that cited the site, per engine. */
   cited: Record<string, number>;
+  /** Of the answers that cited it, how many named us; how many misstated us (the count the source's detail lists). */
   mentionsOurs: number;
   wrongOurs: number;
+  /** The same two counts per engine: an engine filter narrows every column, and the detail it opens. */
+  mentionsOursByEngine?: Record<string, number>;
+  wrongOursByEngine?: Record<string, number>;
   market: { price: number | null; resourceId: string } | null;
+}
+
+/** One answer of the latest round that cites a source (`GET …/sources/:sourceId`). */
+export interface GeoSourceAnswer {
+  snapshotId: string;
+  engine: GeoEngine;
+  questionId: string | null;
+  question: string | null;
+  askedAt: string | null;
+  mentionsOurs: boolean;
+  /** The answer misstates us: it is one of the source row's 讲错的回答. */
+  misstated: boolean;
+  /** The wrong sentences of a misstating answer; `fromThisSite` when the engine's inline marker beside the sentence points at this site. */
+  wrong: Array<{ text: string; fromThisSite: boolean }>;
+}
+
+/** What a source row stands for: the answers its three numbers count. */
+export interface GeoSourceDetail {
+  source: Pick<GeoSourceRow, "id" | "domain" | "name" | "kind" | "layer" | "conditions" | "impostor" | "market">;
+  round: { id: string; kind: string; sampleDate: string | null } | null;
+  /** The engine the list was narrowed to, when it was. */
+  engine: GeoEngine | null;
+  counts: { cited: number; wrongOurs: number; mentionsOurs: number };
+  answers: GeoSourceAnswer[];
 }
 export interface GeoTier {
   tier: GeoTierId;
@@ -729,6 +758,11 @@ export function geoScreenshotUrl(geoId: string, sha256: string): string {
 
 export function getGeoSources(geoId: string) {
   return productRequest<GeoSources>(`${project(geoId)}/sources`);
+}
+
+/** One source's detail: the answers of the latest round that cite it, one engine's when `engine` is given. */
+export function getGeoSource(geoId: string, sourceId: string, engine?: string | null) {
+  return productRequest<GeoSourceDetail>(`${project(geoId)}/sources/${id(sourceId)}${engine ? `?engine=${encodeURIComponent(engine)}` : ""}`);
 }
 
 export function setGeoTier(geoId: string, tier: GeoTierId) {

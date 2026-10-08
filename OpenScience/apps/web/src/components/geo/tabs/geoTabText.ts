@@ -8,7 +8,7 @@
  */
 import type { GeoCell, GeoClaim, GeoEngine, GeoOverviewMetricKey, GeoSeverity, GeoSnapshotStatus } from "@/lib/geoClient";
 import { geoCellPhrase } from "../GeoCellText";
-import { engineName, GEO_METRIC_NAMES, GEO_METRIC_UNITS, monthDay, type GeoUnit } from "../geoText";
+import { engineName, GEO_METRIC_NAMES, GEO_METRIC_UNITS, monthDay, zh, type GeoUnit } from "../geoText";
 
 /* ------------------------------------------------------------------ metrics */
 
@@ -259,4 +259,40 @@ export function rowDraft({
 /** “DeepSeek：它需要每天注射一次” — a wrong sentence with the engine that said it. */
 export function errorLine(error: { engine: GeoEngine; statement: string }): string {
   return `${engineName(error.engine)}：${error.statement}`;
+}
+
+/** The most wrong sentences a source's draft carries: enough to name the claim, not a transcript. */
+const DRAFT_SENTENCES = 5;
+
+/**
+ * The draft 「在对话中处理」 puts in the composer for a source: its domain, what the latest round's answers that cite it did to
+ * the product, and the wrong sentences — the ones the engine's own marker puts on this site first. It states the co-occurrence as
+ * one (“引用它的回答里有 N 个讲错了…”), never as the site having said it. The reader sends it, or does not.
+ */
+export function sourceDraft({
+  product,
+  name,
+  domain,
+  cited,
+  wrong,
+  mentions,
+  sentences,
+}: {
+  product: string;
+  name: string | null;
+  domain: string;
+  cited: number;
+  wrong: number;
+  mentions: number;
+  /** Wrong sentences, those from this site first. */
+  sentences: ReadonlyArray<{ text: string; fromThisSite: boolean }>;
+}): string {
+  const site = name && name !== domain ? `${name}（${domain}）` : domain;
+  const picked = [...new Map([...sentences].sort((left, right) => Number(right.fromThisSite) - Number(left.fromThisSite)).map((sentence) => [sentence.text, sentence])).values()]
+    .slice(0, DRAFT_SENTENCES);
+  if (wrong === 0) {
+    return zh`看看信源 ${site}：最近一轮有 ${cited} 个回答引用了它，其中 ${mentions} 个提到了${product}。要不要在这个站放内容，怎么放？`;
+  }
+  const listed = picked.map((sentence, index) => `${index + 1}）“${sentence.text}”`).join("；");
+  return zh`处理信源 ${site}：最近一轮引用它的 ${cited} 个回答里，有 ${wrong} 个讲错了${product}${listed ? `。讲错的句子：${listed}` : ""}。这个站该怎么处理？`;
 }
