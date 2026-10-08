@@ -1317,6 +1317,15 @@ export {
   standardName,
   wilsonInterval,
 } from './src/geoMetrics.mjs'
+// geoCoverage — 5 exports: what a 「循证 GEO」 reading was measured over (the engines that answered, the question set and its
+// pools, the probe surface) as one comparable key, and the rule that two readings are compared only when their keys are equal.
+export {
+  geoCoverageDifference,
+  geoCoverageKey,
+  geoCoverageStatement,
+  geoSurfaceKey,
+  parseGeoCoverageKey,
+} from './src/geoCoverage.mjs'
 export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresentation.mjs';
 export { shareNoticeHref } from './src/shareNotice.mjs';
 

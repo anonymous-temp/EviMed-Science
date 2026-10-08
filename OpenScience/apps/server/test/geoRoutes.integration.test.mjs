@@ -414,7 +414,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   const page = (await call("GET", `/api/geo/projects/${id}`)).payload.data;
   const [gvi, mention, accuracy, citation] = page.overview.metrics;
   assert.equal(gvi.cell.value, 31.5);
-  assert.deepEqual(gvi.trend, [{ date: "2026-09-24", value: 31.5, n: null }], "a point carries the sample it rests on");
+  assert.deepEqual(gvi.trend, [{ date: "2026-09-24", value: 31.5, n: null, coverage: "v1|P1|deepseek|web;fast;newchat" }], "a point carries the sample it rests on, and what its round measured");
   assert.deepEqual([mention.cell.numerator, mention.cell.denominator], [56, 310], "the plain M-01S, not its top1 variant");
   assert.equal(accuracy.cell.status, "insufficient");
   assert.equal(citation.cell.status, "absent");
@@ -430,12 +430,12 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(row.headline.mention.denominator, 310);
 
   const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
-  assert.deepEqual(monitoring.series[0], { key: "gvi", points: [{ date: "2026-09-24", value: 31.5, n: null, k: null }] });
-  assert.deepEqual(monitoring.arms.pilot, [{ date: "2026-09-24", value: 33.2 }], "the arm-scope index at pool null");
-  assert.deepEqual(monitoring.arms.control, [{ date: "2026-09-24", value: 30.1 }]);
+  assert.deepEqual(monitoring.series[0], { key: "gvi", points: [{ date: "2026-09-24", value: 31.5, n: null, k: null, coverage: "v1|P1|deepseek|web;fast;newchat" }] });
+  assert.deepEqual(monitoring.arms.pilot, [{ date: "2026-09-24", value: 33.2, coverage: "v1|P1|deepseek|web;fast;newchat" }], "the arm-scope index at pool null");
+  assert.deepEqual(monitoring.arms.control, [{ date: "2026-09-24", value: 30.1, coverage: "v1|P1|deepseek|web;fast;newchat" }]);
   assert.equal(monitoring.arms.netEffect.value, 0.06);
   assert.equal(monitoring.arms.netEffect.noiseBand, 0.04);
-  assert.deepEqual(monitoring.byEngine.find((/** @type {any} */ entry) => entry.engine === "deepseek").points, [{ date: "2026-09-24", value: 0.42 }]);
+  assert.deepEqual(monitoring.byEngine.find((/** @type {any} */ entry) => entry.engine === "deepseek").points, [{ date: "2026-09-24", value: 0.42, coverage: "v1|P1|deepseek|web;fast;newchat" }]);
   assert.equal(monitoring.newErrors[0].id, `e-${id}`);
   assert.equal(monitoring.next.kind, "weekly", "past a baseline, the next is the weekly round");
   // G6: a confirmation round in the queue is not the next measurement; the
@@ -606,7 +606,9 @@ test("a rival's mention rate over full measurements is a series of its own; the 
     [`sq-${id}`, ALICE, id]);
 
   const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
-  assert.deepEqual(monitoring.rivals, [{ name: "替尔泊肽", points: [{ date: "2026-09-21", value: 31, n: 100, k: 31 }, { date: "2026-09-28", value: 34, n: 100, k: 34 }] }]);
+  // The first full round has no answer to name a coverage from (null: not equal to anything); the second heard from 千问 on a risk question.
+  assert.deepEqual(monitoring.rivals, [{ name: "替尔泊肽", points: [
+    { date: "2026-09-21", value: 31, n: 100, k: 31, coverage: null }, { date: "2026-09-28", value: 34, n: 100, k: 34, coverage: "v1|P4|qianwen|web;fast;newchat" }] }]);
 
   const sources = (await call("GET", `/api/geo/projects/${id}/sources`)).payload.data;
   const deepseek = sources.expectations.find((/** @type {any} */ row) => row.engine === "deepseek");
@@ -734,4 +736,128 @@ test("a source's detail lists the answers its row counts: the three numbers are 
   refused(await call("GET", `/api/geo/projects/${id}/sources/${row.id}`, { user: MALLORY }), 404, "geo_project_not_found");
   const other2 = await seededProject();
   refused(await call("GET", `/api/geo/projects/${other2.project.id}/sources/${row.id}`), 404, "geo_source_not_found");
+});
+
+/**
+ * Four weekly rounds of one project: the first two heard from deepseek and kimi, the last two from doubao as well — the engine set
+ * changed between the second and the third. One answer per engine per round to the first question, each citing the pages the caller
+ * names; returns the ids.
+ * @param {string} id @param {{ questionId: string, cites: (round: number, engine: string) => any[], wrong?: (round: number, engine: string) => boolean }} plan
+ */
+async function weeklyRounds(id, plan) {
+  const insert = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => database.query(sql, values);
+  const days = ["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"];
+  const engines = [["deepseek", "kimi"], ["deepseek", "kimi"], ["deepseek", "kimi", "doubao"], ["deepseek", "kimi", "doubao"]];
+  /** @type {string[]} */
+  const rounds = [];
+  for (const [index, day] of days.entries()) {
+    const roundId = `w${index + 1}-${id}`;
+    rounds.push(roundId);
+    await insert(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, status, planned, done, sample_date, finished_at)
+      VALUES ($1, $2, $3, 'weekly', 1, $4::text[], 'done', 10, 10, $5::date, $6::timestamptz)`, [roundId, ALICE, id, engines[index], day, `${day}T12:00:00Z`]);
+    for (const engine of engines[index]) {
+      const key = `${roundId}-${engine}`;
+      await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, 'valid', '回答', $8::jsonb)`,
+      [key, ALICE, roundId, id, plan.questionId, engine, `${day}T08:00:00Z`, JSON.stringify(plan.cites(index + 1, engine))]);
+      await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours) VALUES ($1, $2, $3, $4, true)`,
+        [key, ALICE, id, plan.wrong?.(index + 1, engine) ? "wrong_ours" : "none"]);
+    }
+  }
+  return { rounds, engines };
+}
+
+test("a source's detail lists the pages of the site that were cited, and its counts across rounds under each round's coverage key", options, async () => {
+  const { project } = await seededProject();
+  const id = project.id;
+  const [question] = (await store.questionMap(id, 1)).flatMap((group) => group.questions);
+  const page = (/** @type {string} */ path, /** @type {string} */ title) => ({ url: `https://www.news.example.org${path}`, domain: "www.news.example.org", title });
+  const { rounds } = await weeklyRounds(id, {
+    questionId: question.id,
+    // The latest round: /a is cited by every answer (twice by one, which counts once), /b?id=2 and /b?id=3 are pages of their own.
+    cites: (round, engine) => (round === 4
+      ? [page("/a#top", "指南解读"), ...(engine === "deepseek" ? [page("/a", "指南解读"), page("/b?id=2", "")] : []), ...(engine === "kimi" ? [page("/b?id=3", "用药提醒"), page("/a/", "指南")] : []),
+        { url: "https://other.example.org/x", domain: "other.example.org", title: "别的站" }]
+      : [page("/a", "指南解读")]),
+    wrong: (round, engine) => (round === 4 && engine === "kimi") || (round === 3 && engine === "deepseek") || (round === 1),
+  });
+  await database.query(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain, name) VALUES ($1, $2, $3, 'news.example.org', '某新闻网')`, [`gsrc_pages_${run}`, ALICE, id]);
+  const detail = (await call("GET", `/api/geo/projects/${id}/sources/gsrc_pages_${run}`)).payload.data;
+
+  // The pages of the latest round: one address per page (the query is part of it), the title the citations gave it, how many answers
+  // cited it and how many of those misstated us.
+  assert.deepEqual(detail.pages.map((/** @type {any} */ entry) => [entry.url, entry.title, entry.cited, entry.wrongOurs]), [
+    ["https://www.news.example.org/a", "指南解读", 3, 1],
+    // Equally cited: the one that sat in a misstating answer first.
+    ["https://www.news.example.org/b?id=3", "用药提醒", 1, 1],
+    ["https://www.news.example.org/b?id=2", null, 1, 0],
+  ]);
+  assert.equal(detail.pagesTotal, 3);
+  assert.equal(detail.pages.every((/** @type {any} */ entry) => !entry.url.includes("#")), true, "a fragment is not a page");
+  // The pages are of the answers the counts count.
+  assert.equal(detail.counts.cited, 3);
+  assert.ok(detail.pages.every((/** @type {any} */ entry) => entry.cited <= detail.counts.cited));
+
+  // Counts across the last rounds, oldest first, the latest being the detail's own counts.
+  assert.deepEqual(detail.history.map((/** @type {any} */ point) => [point.roundId, point.sampleDate, point.cited, point.wrongOurs]), [
+    [rounds[0], "2026-09-07", 2, 2], [rounds[1], "2026-09-14", 2, 0], [rounds[2], "2026-09-21", 3, 1], [rounds[3], "2026-09-28", 3, 1],
+  ]);
+  assert.deepEqual(detail.history.at(-1).cited, detail.counts.cited);
+  assert.equal(detail.history.at(-1).wrongOurs, detail.counts.wrongOurs);
+  // Coverage: the engine set changed between the second and the third round, nothing else did.
+  const coverage = detail.history.map((/** @type {any} */ point) => point.coverage);
+  assert.equal(coverage[0], coverage[1]);
+  assert.equal(coverage[2], coverage[3]);
+  assert.notEqual(coverage[1], coverage[2]);
+  assert.deepEqual(coverage.map((/** @type {string} */ key) => key.split("|")[2]), ["deepseek,kimi", "deepseek,kimi", "deepseek,doubao,kimi", "deepseek,doubao,kimi"]);
+  assert.equal(coverage[0].split("|")[0], "v1");
+
+  // One engine's own counts are of that engine alone: another engine joining does not change what it covers.
+  const kimi = (await call("GET", `/api/geo/projects/${id}/sources/gsrc_pages_${run}?engine=kimi`)).payload.data;
+  assert.deepEqual(kimi.history.map((/** @type {any} */ point) => [point.cited, point.wrongOurs]), [[1, 1], [1, 0], [1, 0], [1, 1]]);
+  assert.equal(new Set(kimi.history.map((/** @type {any} */ point) => point.coverage)).size, 1);
+  assert.deepEqual(kimi.pages.map((/** @type {any} */ entry) => [entry.url, entry.cited]), [["https://www.news.example.org/a", 1], ["https://www.news.example.org/b?id=3", 1]]);
+
+  // A site that has not been cited has no pages and a history of zeros, not a missing one.
+  await database.query(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain) VALUES ($1, $2, $3, 'idle.example.org')`, [`gsrc_idle2_${run}`, ALICE, id]);
+  const idle = (await call("GET", `/api/geo/projects/${id}/sources/gsrc_idle2_${run}`)).payload.data;
+  assert.deepEqual([idle.pages, idle.pagesTotal, idle.history.map((/** @type {any} */ point) => point.cited)], [[], 0, [0, 0, 0, 0]]);
+});
+
+test("every point of a trend carries the coverage key of its round, and a change of the engine set changes the key and nothing else", options, async () => {
+  const { project } = await seededProject();
+  const id = project.id;
+  const [question] = (await store.questionMap(id, 1)).flatMap((group) => group.questions);
+  const { rounds } = await weeklyRounds(id, { questionId: question.id, cites: () => [] });
+  const insert = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => database.query(sql, values);
+  const metric = (/** @type {string} */ key, /** @type {Record<string, any>} */ row) => insert(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id,
+      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ok', $12)`,
+  [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null, row.value, row.at]);
+  for (const [index, round] of rounds.entries()) {
+    const at = `${["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"][index]}T13:00:00Z`;
+    await metric(`g${index}`, { round, metricId: "M-19", value: 50 - index * 3, n: 100, k: 50, at });
+    await metric(`m${index}`, { round, metricId: "M-01S", value: 30 - index, n: 100, k: 30, at });
+    await metric(`k${index}`, { round, scope: "engine", engine: "kimi", metricId: "M-01", value: 20 + index, n: 100, k: 20, at });
+    await metric(`r${index}`, { round, metricId: "M-16", rival: "替尔泊肽", value: 31 + index, n: 100, k: 31, at });
+  }
+  const keys = (/** @type {any[]} */ points) => points.map((point) => point.coverage);
+  const shape = (/** @type {string[]} */ list) => list.map((key, index) => (index === 0 ? 0 : key === list[index - 1] ? 0 : 1)).join("");
+
+  const page = (await call("GET", `/api/geo/projects/${id}`)).payload.data;
+  const gvi = page.overview.metrics.find((/** @type {any} */ entry) => entry.key === "gvi");
+  assert.equal(gvi.trend.length, 4);
+  assert.equal(shape(keys(gvi.trend)), "0010", "the key moves once, where the engine set did");
+  assert.ok(gvi.trend.every((/** @type {any} */ point) => typeof point.coverage === "string" && point.coverage.startsWith("v1|")));
+  assert.match(gvi.trend[0].coverage, /\|deepseek,kimi\|web;fast;newchat$/);
+  assert.match(gvi.trend[3].coverage, /\|deepseek,doubao,kimi\|web;fast;newchat$/);
+
+  const watch = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
+  assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "gvi").points)), "0010");
+  assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "mention").points)), "0010");
+  assert.equal(shape(keys(watch.rivals[0].points)), "0010", "a rival's reading is over the same round");
+  // An engine's own series is of that engine alone: the others joining the sample is not a change of what it covers.
+  const kimi = watch.byEngine.find((/** @type {any} */ line) => line.engine === "kimi");
+  assert.equal(shape(keys(kimi.points)), "0000");
+  assert.match(kimi.points[0].coverage, /\|kimi\|web;fast;newchat$/);
 });

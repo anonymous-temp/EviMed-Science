@@ -48,7 +48,8 @@ import {
   GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoCellRows,
 } from "@evimed/domain";
 import { geoLockCheck, geoProgramMinimal } from "./geoWrites.mjs";
-import { answersCiting, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
+import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
+import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
 import { geoSourceFromRow } from "./geoStore.mjs";
 import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs";
 import { HttpError } from "./security.mjs";
@@ -92,6 +93,8 @@ const NOISE_BAND_OF = GEO_VIEW_METRIC_IDS.mention;
 /** …and the project-scope `NET` row of the index (pool-scope rows carry each pool's metric). */
 const NET_EFFECT_OF = GEO_VIEW_METRIC_IDS.gvi;
 const TREND_POINTS = 26;
+/** The rounds a source's detail reads its counts across: the latest and the few before it. */
+const SOURCE_HISTORY_ROUNDS = 6;
 const WEEK_ITEMS = 5;
 const WEEK_MS = 7 * 86_400_000;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -378,11 +381,14 @@ export class GeoService {
 
   /**
    * A metric's project-scope series: one point per round (its latest row),
-   * oldest first, the last 26.
+   * oldest first, the last 26. With `coverage`, every point carries the key of
+   * what its round measured (`geoCoverageKey`): two points are compared only
+   * when their keys are equal (R14 N-4).
    * @param {string[]} geoIds @param {readonly string[]} metricIds
-   * @returns {Promise<Map<string, Map<string, Array<{ date: string, value: number | null, n: number | null, k: number | null }>>>>}
+   * @param {string} [scope] @param {string} [extra] @param {{ coverage?: boolean }} [options]
+   * @returns {Promise<Map<string, Map<string, Array<{ date: string, value: number | null, n: number | null, k: number | null, coverage?: string | null }>>>>}
    */
-  async #series(geoIds, metricIds, scope = "project", extra = "") {
+  async #series(geoIds, metricIds, scope = "project", extra = "", { coverage = false } = {}) {
     // `extra` names a column spliced into the query: only these two ever are.
     if (extra && !["arm", "engine"].includes(extra)) throw new TypeError("A series splits by arm or engine only.");
     /** @type {Map<string, Map<string, Array<{ date: string, value: number | null, n: number | null, k: number | null }>>>} */
@@ -395,11 +401,16 @@ export class GeoService {
         WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = $3 AND m.metric_id = ANY($2::text[]) AND m.pool IS NULL AND ${PLAIN_ROW}
         ORDER BY m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.computed_at DESC
       ) latest ORDER BY computed_at`, [geoIds, [...metricIds], scope, [...GEO_HEADLINE_ROUND_KINDS]]);
+    const coverages = coverage ? await roundCoverages(this.store, result.rows.map((/** @type {any} */ row) => String(row.round_id ?? ""))) : null;
     for (const row of result.rows) {
       const key = extra ? `${row.metric_id}\u0000${row[extra] ?? ""}` : String(row.metric_id);
       const map = byProject.get(row.geo_project_id) ?? new Map();
       const points = map.get(key) ?? [];
-      points.push({ date: rowDay(row, this.timeZone), value: num(row.value), n: num(row.denominator), k: num(row.numerator) });
+      points.push({
+        date: rowDay(row, this.timeZone), value: num(row.value), n: num(row.denominator), k: num(row.numerator),
+        // An engine's own series is of that engine alone: its rate does not move with which others answered.
+        ...(coverages ? { coverage: coverageKeyOf(coverages.get(String(row.round_id ?? "")), { engine: extra === "engine" ? text(row.engine) : null }) } : {}),
+      });
       map.set(key, points);
       byProject.set(row.geo_project_id, map);
     }
@@ -412,7 +423,7 @@ export class GeoService {
    * questions our headline rate M-01S is over) per full measurement, oldest
    * first, the last 26: the grey lines beside ours (G15). A rival no round
    * measured has no series.
-   * @param {string} geoId @returns {Promise<Array<{ name: string, points: Array<{ date: string, value: number | null, n: number | null, k: number | null }> }>>}
+   * @param {string} geoId @returns {Promise<Array<{ name: string, points: Array<{ date: string, value: number | null, n: number | null, k: number | null, coverage: string | null }> }>>}
    */
   async #rivalSeries(geoId) {
     const rows = (await this.store.query(`SELECT * FROM (
@@ -422,11 +433,13 @@ export class GeoService {
           AND m.variant IS NULL AND m.group_id IS NULL AND m.arm IS NULL
         ORDER BY m.round_id, m.rival, m.computed_at DESC
       ) latest ORDER BY computed_at`, [geoId, GEO_RIVAL_METRIC_ID, [...GEO_HEADLINE_ROUND_KINDS]])).rows;
-    /** @type {Map<string, Array<{ date: string, value: number | null, n: number | null, k: number | null }>>} */
+    /** @type {Map<string, Array<{ date: string, value: number | null, n: number | null, k: number | null, coverage: string | null }>>} */
     const byRival = new Map();
+    const coverages = await roundCoverages(this.store, rows.map((/** @type {any} */ row) => String(row.round_id ?? "")));
     for (const row of rows) {
       const points = byRival.get(String(row.rival)) ?? [];
-      points.push({ date: rowDay(row, this.timeZone), value: row.status === "ok" ? num(row.value) : null, n: num(row.denominator), k: num(row.numerator) });
+      points.push({ date: rowDay(row, this.timeZone), value: row.status === "ok" ? num(row.value) : null, n: num(row.denominator), k: num(row.numerator),
+        coverage: coverageKeyOf(coverages.get(String(row.round_id ?? ""))) });
       byRival.set(String(row.rival), points);
     }
     return [...byRival].map(([name, points]) => ({ name, points: points.slice(-TREND_POINTS) }));
@@ -595,7 +608,7 @@ export class GeoService {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
     const [latest, series, targets, week, names, started] = await Promise.all([
       this.#latestProjectMetrics([project.id], metricIds),
-      this.#series([project.id], metricIds),
+      this.#series([project.id], metricIds, "project", "", { coverage: true }),
       this.store.latestTargets(project.id),
       this.#week(project),
       this.#controlProjectNames([{ userId: project.userId, projectId: project.projectId }]),
@@ -608,7 +621,8 @@ export class GeoService {
       cell: geoCellFromRow(rows.get(metricId)),
       target: this.#target(targets, project.tier, metricId),
       // The sample size travels with each point: a thin round is not a reading, and only the page can tell from it.
-      trend: (points.get(metricId) ?? []).map(({ date, value, n }) => ({ date, value, n })),
+      // What each round measured travels with its point: a change is stated only between points of one coverage (N-4).
+      trend: (points.get(metricId) ?? []).map(({ date, value, n, coverage }) => ({ date, value, n, coverage })),
     }));
     await this.#attachSnapshotIds(project.id, GEO_OVERVIEW_METRICS.map(({ metricId }, index) => ({ cell: metrics[index].cell, row: rows.get(metricId) })));
     return {
@@ -1120,13 +1134,18 @@ export class GeoService {
   }
 
   /**
-   * The latest round the sources are counted from: the newest finished headline round (baseline, weekly, single step) — the round
-   * `refreshSourceCitations` counts at its end, so a row and its detail speak of the same answers.
-   * @param {string} geoId
+   * The rounds the sources are counted from, newest first: finished headline rounds (baseline, weekly, single step). The first is the
+   * round `refreshSourceCitations` counts at its end, so a row and its detail speak of the same answers.
+   * @param {string} geoId @param {number} [limit]
    */
-  async #latestSourceRound(geoId) {
+  async #sourceRounds(geoId, limit = 1) {
     return (await this.store.query(`SELECT id, kind, sample_date, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
-      AND status IN ('done', 'partial') ORDER BY finished_at DESC NULLS LAST, created_at DESC LIMIT 1`, [geoId, [...GEO_HEADLINE_ROUND_KINDS]])).rows[0] ?? null;
+      AND status IN ('done', 'partial') ORDER BY finished_at DESC NULLS LAST, created_at DESC LIMIT $3`, [geoId, [...GEO_HEADLINE_ROUND_KINDS], limit])).rows;
+  }
+
+  /** The newest of those, or null before there is one. @param {string} geoId */
+  async #latestSourceRound(geoId) {
+    return (await this.#sourceRounds(geoId, 1))[0] ?? null;
   }
 
   /**
@@ -1134,6 +1153,10 @@ export class GeoService {
    * answers the row's three numbers count — each with its question, its engine and date, whether it misstates us and whether it names
    * us; for a misstating answer, the wrong sentences, each marked when the engine's inline marker puts it on this site. Misstating
    * answers come first, then the ones that name us, then the rest. The counts are `tallySources` over those same answers.
+   *
+   * Two more reads on the same answers (R14 N-11): the specific pages of the site those answers cited (`pagesCited`: the address, its
+   * title, how many answers cited it), and the same counts for the few rounds before this one (`history`, oldest first, the latest
+   * last), each with the coverage key of its round (N-4) — the page compares two of them only when the keys are equal.
    * @param {{ id: string }} user @param {string} id @param {string} sourceId @param {{ engine?: string | null }} [options]
    */
   async source(user, id, sourceId, { engine = null } = {}) {
@@ -1142,9 +1165,13 @@ export class GeoService {
     if (!row) throw failure(404, "geo_source_not_found", "Source not found.");
     const source = geoSourceFromRow(row);
     const domain = source.domain.toLowerCase();
-    const round = await this.#latestSourceRound(project.id);
-    const citing = round ? answersCiting(await roundAnswers(this.store, String(round.id)), domain, engine) : [];
-    const counted = tallySources(citing).get(domain) ?? null;
+    const rounds = await this.#sourceRounds(project.id, SOURCE_HISTORY_ROUNDS);
+    const round = rounds[0] ?? null;
+    // Each round's answers are read once, and the latest round's are the list: the history's last point IS the detail's counts.
+    const citingByRound = await Promise.all(rounds.map(async (entry) => answersCiting(await roundAnswers(this.store, String(entry.id)), domain, engine)));
+    const citing = citingByRound[0] ?? [];
+    const coverages = await roundCoverages(this.store, rounds.map((entry) => String(entry.id)));
+    const cited = pagesCited(citing, domain);
     const detail = new Map((citing.length === 0 ? [] : (await this.store.query(`SELECT s.id, q.text AS question_text,
         CASE WHEN f.failure_mode = 'wrong_ours' THEN s.answer_text END AS answer_text,
         CASE WHEN f.failure_mode = 'wrong_ours' THEN f.statements END AS statements
@@ -1173,12 +1200,14 @@ export class GeoService {
       },
       round: round ? { id: String(round.id), kind: String(round.kind), sampleDate: round.sample_date ? rowDay(round, this.timeZone) : null } : null,
       engine,
-      counts: {
-        cited: Object.values(counted?.byEngine ?? {}).reduce((sum, count) => sum + count.cited, 0),
-        wrongOurs: counted?.wrongOurs ?? 0,
-        mentionsOurs: counted?.mentionsOurs ?? 0,
-      },
+      counts: countsOf(citing, domain),
       answers,
+      pages: cited.pages,
+      pagesTotal: cited.total,
+      history: rounds.map((entry, index) => ({
+        roundId: String(entry.id), kind: String(entry.kind), sampleDate: entry.sample_date ? rowDay(entry, this.timeZone) : null,
+        coverage: coverageKeyOf(coverages.get(String(entry.id)), { engine }), ...countsOf(citingByRound[index], domain),
+      })).reverse(),
     };
   }
 
@@ -1401,9 +1430,9 @@ export class GeoService {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
     const since = new Date(this.now().getTime() - WEEK_MS).toISOString();
     const [series, arms, byEngine, net, noise, cited, newErrors, queued, baseline, rivals] = await Promise.all([
-      this.#series([project.id], metricIds),
-      this.#series([project.id], [GEO_ARM_METRIC_ID], "arm", "arm"),
-      this.#series([project.id], [GEO_VIEW_METRIC_IDS.mention], "engine", "engine"),
+      this.#series([project.id], metricIds, "project", "", { coverage: true }),
+      this.#series([project.id], [GEO_ARM_METRIC_ID], "arm", "arm", { coverage: true }),
+      this.#series([project.id], [GEO_VIEW_METRIC_IDS.mention], "engine", "engine", { coverage: true }),
       this.store.query(`SELECT * FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2 AND variant = $3
         ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.netEffect, NET_EFFECT_OF]),
       this.store.query(`SELECT value FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2 AND variant = $3
@@ -1424,7 +1453,7 @@ export class GeoService {
     const projectSeries = series.get(project.id) ?? new Map();
     const armSeries = arms.get(project.id) ?? new Map();
     const engineSeries = byEngine.get(project.id) ?? new Map();
-    const points = (/** @type {string} */ key) => (armSeries.get(`${GEO_ARM_METRIC_ID}\u0000${key}`) ?? []).map(({ date, value }) => ({ date, value }));
+    const points = (/** @type {string} */ key) => (armSeries.get(`${GEO_ARM_METRIC_ID}\u0000${key}`) ?? []).map(({ date, value, coverage }) => ({ date, value, coverage }));
     const netRow = net.rows[0];
     // Otherwise the weekly re-measure the schedule will run, by its own skip
     // rules, and only while the program monitors at all.
@@ -1443,7 +1472,7 @@ export class GeoService {
         netEffect: { ...geoCellFromRow(netRow), noiseBand: noise.rows[0] ? num(noise.rows[0].value) : null },
       },
       byEngine: project.engines.map((engine) => ({
-        engine, points: (engineSeries.get(`${GEO_VIEW_METRIC_IDS.mention}\u0000${engine}`) ?? []).map(({ date, value }) => ({ date, value })),
+        engine, points: (engineSeries.get(`${GEO_VIEW_METRIC_IDS.mention}\u0000${engine}`) ?? []).map(({ date, value, coverage }) => ({ date, value, coverage })),
       })),
       rivals,
       cited,
