@@ -3,7 +3,7 @@ import { Tag } from "@/components/ui/Tag";
 import type { EvidenceCard } from "@/lib/evidenceZoneClient";
 import { evidenceDay } from "./evidenceDate";
 
-/** The 核验 tag's numbers: how many of the card's claims have their quotation found in their source, of how many carry one. */
+/** The 引文已核对 tag's numbers: how many of the card's claims have their quotation found in their source, of how many carry one. */
 export function evidenceVerificationTally(evidence: Pick<EvidenceCard, "claimVerification">): { verified: number; checkable: number } | null {
   const counts = evidence.claimVerification;
   if (!counts) return null;
@@ -19,7 +19,7 @@ export function evidenceNatureLabel(evidence: Pick<EvidenceCard, "originality" |
 
 /**
  * The top of a card, in one wrapping row: who made it and how that producer relates to the products it concerns, the labels a
- * reader weighs it by (plan §4.4) as small plain tags — 性质 (first-hand or interpretation), 时效 when the server has one, 核验
+ * reader weighs it by (plan §4.4) as small plain tags — 性质 (first-hand or interpretation), 时效 when the server has one, 引文已核对
  * n/m — and the day it was last updated. They are labels: nothing here stops a reader or a writer, and a label the card does not
  * carry is not drawn. Everything else about who wrote and checked it is the folded 「编写与核查」 under the answer.
  */
@@ -44,7 +44,7 @@ export function EvidenceCardHeader({ evidence, updatedAt }: { evidence: Evidence
       {draft && <Tag>草稿</Tag>}
       {nature && <Tag>{`性质 ${nature}`}</Tag>}
       {currency && <Tag tone={evidence.currency === "current" ? "neutral" : "warn"}>{`时效 ${currency}`}</Tag>}
-      {tally && <Tag>{`核验 ${tally.verified}/${tally.checkable}`}</Tag>}
+      {tally && <Tag>{`引文已核对 ${tally.verified}/${tally.checkable}`}</Tag>}
       {updatedAt && <span className="text-caption text-text-3">{`更新于 ${evidenceDay(updatedAt)}`}</span>}
     </div>
   );

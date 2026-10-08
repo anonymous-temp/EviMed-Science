@@ -7,10 +7,10 @@ describe("the claims of a card", () => {
   it("marks each claim ✓ or ⚠ and shows its quotation, with the sentence for what ⚠ means", () => {
     render(<EvidenceClaims evidence={card} />);
     const [verified, unverified] = screen.getAllByRole("listitem");
-    expect(within(verified).getByLabelText("已核验")).toHaveTextContent("✓");
+    expect(within(verified).getByLabelText("引文已核对")).toHaveTextContent("✓");
     expect(within(verified).getByText("“Among 100 adults on the drug, 7 had a stroke”")).toBeInTheDocument();
     expect(within(verified).getByText("不确定性：开放标签。")).toBeInTheDocument();
-    expect(within(unverified).getByLabelText("未能核验")).toHaveTextContent("⚠");
+    expect(within(unverified).getByLabelText("未核对上")).toHaveTextContent("⚠");
     expect(within(unverified).getByText("来源里没有找到这段引文")).toBeInTheDocument();
     expect(within(unverified).getByRole("link", { name: "查看来源 1" })).toHaveAttribute("href", expect.stringContaining("evidence-source-"));
   });
@@ -20,7 +20,7 @@ describe("the claims of a card", () => {
         verification: { claimId: "CLM-009", claimType: "direct", status: "author_excerpt_only", mark: "⚠", sources: [{ sourceIndex: 1, status: "author_excerpt_only", mark: "⚠" }] } },
     ] }} />);
     const [item] = screen.getAllByRole("listitem");
-    expect(within(item).getByLabelText("未能核验")).toHaveTextContent("⚠");
+    expect(within(item).getByLabelText("未核对上")).toHaveTextContent("⚠");
     expect(within(item).getByText("摘录由作者提供，平台未读取原文")).toBeInTheDocument();
   });
   it("shows an estimate with its working and a synthesis with each of its sources", () => {
@@ -34,7 +34,7 @@ describe("the claims of a card", () => {
     expect(screen.getByText("综合结论 · 把握程度中")).toBeInTheDocument();
     expect(screen.getByText("“q1”")).toBeInTheDocument();
     expect(screen.getByText("“q2”")).toBeInTheDocument();
-    expect(screen.getByLabelText("未能核验")).toBeInTheDocument();
+    expect(screen.getByLabelText("未核对上")).toBeInTheDocument();
   });
   it("shows a calculated claim as 平台计算 with its engine, method and receipt, and a ⚠ with the sentence for why its receipt did not hold", () => {
     const basis = { engine: "drug_safety_analysis", method: "faers.signals@1.1.0", receiptId: `rv_${"a".repeat(64)}`, valuePath: "values[0].ror.value", machineValue: 2.4012, format: "f2" };
@@ -45,15 +45,15 @@ describe("the claims of a card", () => {
     const [held, lost] = screen.getAllByRole("listitem");
     expect(within(held).getByText("平台计算")).toBeInTheDocument();
     expect(within(held).getByText(`引擎 drug_safety_analysis · 方法 faers.signals@1.1.0 · 回执 rv_${"a".repeat(64)}`)).toBeInTheDocument();
-    expect(within(held).getByLabelText("已核验")).toHaveTextContent("✓");
-    expect(within(lost).getByLabelText("未能核验")).toHaveTextContent("⚠");
+    expect(within(held).getByLabelText("引文已核对")).toHaveTextContent("✓");
+    expect(within(lost).getByLabelText("未核对上")).toHaveTextContent("⚠");
     expect(within(lost).getByText("回执里的数值与结论记录的机器值不一致")).toBeInTheDocument();
     expect(within(held).queryByText(/来源 \d/)).not.toBeInTheDocument();
   });
   it("shows a claim of an older card as a plain line, and draws nothing for a card with none", () => {
     const { container, rerender } = render(<EvidenceClaims evidence={{ ...card, claims: [{ text: "旧卡片的结论 [1]" }] }} />);
     expect(screen.getByText("旧卡片的结论 [1]")).toBeInTheDocument();
-    expect(screen.queryByLabelText("已核验")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("引文已核对")).not.toBeInTheDocument();
     rerender(<EvidenceClaims evidence={{ ...card, claims: [] }} />);
     expect(container).toBeEmptyDOMElement();
   });

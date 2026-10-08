@@ -423,7 +423,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                       const meta = [
                         card.state === "draft" ? "草稿" : null,
                         evidenceNatureLabel(card),
-                        tally ? `核验 ${tally.verified}/${tally.checkable}` : null,
+                        tally ? `引文已核对 ${tally.verified}/${tally.checkable}` : null,
                         evidenceReviewLabel(card) === "AI 已评议" ? "AI 已评议" : null,
                       ].filter(Boolean);
                       return (

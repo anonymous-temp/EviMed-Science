@@ -92,7 +92,7 @@ test("every page kind is fetched with no session through the real app, the pages
   assert.ok(index.body.includes("房颤抗凝") && !index.body.includes("仅平台可见"));
   for (const [pathname, needle] of [
     [`/evidence/z/${open.id}`, "阿哌沙班和卒中"], [`/evidence/z/${open.id}/changes`, "已重新检索，结论未变"], [`/evidence/c/${card.id}`, "结果总结（临床版）"], [`/evidence/c/${card.id}?view=public`, "事实框"],
-    [`/evidence/a/${ownerHandle}`, "房颤抗凝"], ["/evidence/about", "钱买得到发布和分发，买不到排名和结论"], ["/evidence/metrics", "核验通过率"], ["/evidence/simulations", "Simulated trial"],
+    [`/evidence/a/${ownerHandle}`, "房颤抗凝"], ["/evidence/about", "钱买得到发布和分发，买不到排名和结论"], ["/evidence/metrics", "引文核对通过率"], ["/evidence/simulations", "Simulated trial"],
     ["/evidence/simulations/sim-1", "预测"], ["/evidence/requests", "选题申请"],
   ]) {
     const answer = await page(pathname);

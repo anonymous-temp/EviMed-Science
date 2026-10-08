@@ -68,7 +68,7 @@ test("the question bank's month and the calibration table appear under the three
   const { text } = await serve(t, { questionBank: async ({ month }) => (month === "2026-10" ? bankMonth(month) : EMPTY_MONTH(month)), predictionCalibration: async () => CALIBRATION });
   const page = await text("/evidence/metrics");
   assert.equal(page.status, 200);
-  assert.ok(page.body.indexOf("核验通过率") < page.body.indexOf("AI 助手回答常见用药问题：2026-10"), "under the three figures");
+  assert.ok(page.body.indexOf("引文核对通过率") < page.body.indexOf("AI 助手回答常见用药问题：2026-10"), "under the three figures");
   assert.ok(page.body.indexOf("AI 助手回答常见用药问题") < page.body.indexOf("预测的校准"));
   // The per-class accuracy: counts, a rate where something was decided, and the plain words where nothing was.
   assert.match(page.body, /<tr><td>用法用量<\/td><td class="num">10<\/td><td class="num">8<\/td><td class="num">6<\/td><td class="num">75%<\/td><\/tr>/);
@@ -112,7 +112,7 @@ test("absent readers, readers with nothing to say and readers that fail leave th
   const broken = await serve(t, { questionBank: async () => { throw new Error("geo schema missing"); }, predictionCalibration: async () => { throw new Error("evolution down"); } });
   const brokenPage = await broken.text("/evidence/metrics");
   assert.equal(brokenPage.status, 200, "a failed section never fails the page");
-  assert.ok(brokenPage.body.includes("按月公开的数") && brokenPage.body.includes("核验通过率"), "the three figures are still there");
+  assert.ok(brokenPage.body.includes("按月公开的数") && brokenPage.body.includes("引文核对通过率"), "the three figures are still there");
   assert.equal(brokenPage.body.includes("预测的校准"), false);
   assert.ok(broken.reports.includes("evidence_public_section_failed"), "traceable, not swallowed");
   assert.equal(/** @type {any} */ (broken.routes).stats().metrics.sectionFailures, 2);

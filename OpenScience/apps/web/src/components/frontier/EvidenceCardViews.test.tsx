@@ -30,8 +30,8 @@ describe("the two views of one card", () => {
     // A panel the author left empty is not drawn as an empty heading.
     expect(screen.queryByText("说明书怎么说")).not.toBeInTheDocument();
     // One panel rests on a verified claim, one on none.
-    expect(screen.getAllByText("✓ 对应已核验的结论").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("⚠ 没有对应到已核验的结论").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("✓ 对应引文已核对的结论").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("⚠ 没有对应到引文已核对的结论").length).toBeGreaterThan(0);
     expect(screen.getByText("每 1000 人里")).toBeInTheDocument();
     expect(screen.getByText(/卒中（2 年）：常规治疗 120，试验药 70/)).toBeInTheDocument();
     expect(screen.getByText(/大出血（2 年）：常规治疗 10，试验药 30/)).toBeInTheDocument();

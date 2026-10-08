@@ -172,8 +172,8 @@ function PanelBlock({ panel }: { panel: Panel }) {
 /** Whether a plain-language sentence rests on claims whose quotations were all found. */
 function TraceMark({ traced }: { traced: boolean }) {
   return traced
-    ? <span className="text-caption text-verify-ok">✓ 对应已核验的结论</span>
-    : <span className="text-caption text-verify-pending">⚠ 没有对应到已核验的结论</span>;
+    ? <span className="text-caption text-verify-ok">✓ 对应引文已核对的结论</span>
+    : <span className="text-caption text-verify-pending">⚠ 没有对应到引文已核对的结论</span>;
 }
 
 /** The public layout: the panels the author wrote, then the fact box. */

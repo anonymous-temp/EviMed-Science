@@ -120,7 +120,7 @@ describe("a zone's page", () => {
     expect(await screen.findByText("3 条已发布，含草稿共 4 条")).toBeInTheDocument();
   });
 
-  it("shows each card as its question, a two-line answer and one line of 性质 · 核验 · AI 已评议 — not who wrote it, nor when it was checked", async () => {
+  it("shows each card as its question, a two-line answer and one line of 性质 · 引文已核对 · AI 已评议 — not who wrote it, nor when it was checked", async () => {
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: readable, feedback: [] });
     client.listZoneEvidence.mockResolvedValue({ items: [{ ...card, content: { question: "试验药能预防卒中吗？", answer: "能，但出血增多。" }, editorial: { author: { kind: "ai", name: "EviMed 证据 AI", model: "deepseek-v4-flash" }, reviewer: { kind: "ai", name: "核对 AI" }, status: "ai-reviewed", reviewRevision: card.revision, sourceCheckedAt: "2026-10-04T12:00:00Z" } }], total: 1, nextCursor: null });
     mount();
@@ -128,7 +128,7 @@ describe("a zone's page", () => {
     expect(link).toHaveAttribute("href", "/app/frontier/zones/ez_1/evidence/ec_0123456789abcdef");
     const row = link.closest("li")!;
     expect(within(row).getByText("能，但出血增多。")).toHaveClass("line-clamp-2");
-    expect(row).toHaveTextContent("解读 · 综合 · 核验 1/2 · AI 已评议");
+    expect(row).toHaveTextContent("解读 · 综合 · 引文已核对 1/2 · AI 已评议");
     expect(row).not.toHaveTextContent(/AI 编写|EviMed 证据 AI|来源核查|评议者|学术证据|deepseek/);
   });
 
@@ -137,7 +137,7 @@ describe("a zone's page", () => {
     client.listZoneEvidence.mockResolvedValue({ items: [{ ...card, state: "draft", editorial: { author: { kind: "ai", name: "写作 AI" }, reviewer: null, status: "review-pending", reviewRevision: null } }], total: 1, nextCursor: null });
     mount();
     const row = (await screen.findByRole("link", { name: card.title })).closest("li")!;
-    expect(row).toHaveTextContent("草稿 · 解读 · 综合 · 核验 1/2");
+    expect(row).toHaveTextContent("草稿 · 解读 · 综合 · 引文已核对 1/2");
     expect(row).not.toHaveTextContent(/AI 待评议|AI 已评议/);
   });
 

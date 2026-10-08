@@ -26,7 +26,7 @@ export function defaultClaimSelection(claims: readonly ResultCardClaim[]): strin
 }
 
 const MARK: Record<string, { mark: string; className: string; label: string }> = {
-  verified: { mark: "✓", className: "text-verify-ok", label: "已核验" },
+  verified: { mark: "✓", className: "text-verify-ok", label: "引文已核对" },
   derived: { mark: "", className: "text-text-3", label: "推导结果" },
 };
 
@@ -85,7 +85,7 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
           {listed ? (
             <ul className="max-h-64 space-y-2 overflow-y-auto">
               {claims.map((claim) => {
-                const style = MARK[claim.status] ?? { mark: "⚠", className: "text-verify-pending", label: "未能核验" };
+                const style = MARK[claim.status] ?? { mark: "⚠", className: "text-verify-pending", label: "未核对上" };
                 return (
                   <li key={claim.claimId}>
                     <label className="flex items-start gap-2 text-ui text-text-2">
@@ -101,7 +101,7 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
               })}
             </ul>
           ) : (
-            <p className="text-ui text-text-2">这个结果的结论列表暂时读不到，将发布其中已核验的结论。</p>
+            <p className="text-ui text-text-2">这个结果的结论列表暂时读不到，将发布其中引文已核对的结论。</p>
           )}
         </fieldset>
         <div className="space-y-2">

@@ -65,7 +65,7 @@ it("the platform's qualification record is a label nobody sees on the drawer, an
     extensions.extensionCatalogue.mockResolvedValue({ items: [{ ...descriptor, evidenceState: state }] });
     const view = show();
     expect(await screen.findByRole("button", { name: "用于当前项目" })).toBeEnabled();
-    expect(document.body.textContent).not.toMatch(/兼容核验|验证已过期|验证未完成|尚未验证/);
+    expect(document.body.textContent).not.toMatch(/兼容核[验对]|验证已过期|验证未完成|尚未验证/);
     view.unmount();
   }
 });

@@ -159,9 +159,9 @@ export function runDeliverables(run: WebAgentRun, live?: LiveRunFold | null): We
 export const DELIVERABLE_STATUS_LABEL: Record<WebRunDeliverableStatus, string> = {
   planned: "待开始",
   delegated: "进行中",
-  submitted: "核验中",
+  submitted: "核对中",
   rejected: "需修改",
-  accepted: "已通过核验",
+  accepted: "已通过核对",
   delivered: "已交付",
   failed: "未完成",
 };

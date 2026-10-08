@@ -32,7 +32,7 @@ const CLAIM_STATUS_LABELS = {
   // Added when a ✓ came to mean the platform read the source (author_excerpt_only) and when the platform began to compute (calculation_unverified).
   author_excerpt_only: "引文只在作者自己提供的摘录里找到，平台没有读到来源原文，所以不标 ✓",
   calculation_unverified: "这个数由平台的计算引擎给出，这里没有读到它的计算回执，所以不标 ✓",
-  unknown: "核验状态未知",
+  unknown: "核对状态未知",
 };
 const COVERAGE_LABELS = { "full-text": "全文", abstract: "摘要", excerpt: "摘录" };
 const ORIGINALITY_NOTE = { true: "一手", false: "解读" };
@@ -140,7 +140,7 @@ export function zonePage({ zone, cards }) {
   const currency = Object.entries(SOURCE_CURRENCY_LABELS_ZH).filter(([key]) => counts[key]).map(([key, label]) => `${label} ${counts[key]}`);
   return {
     title: `${zone.title} · ${EVIDENCE_SITE_NAME}`,
-    description: clip(zone.description || `${zone.kindLabel}“${zone.title}”的证据卡，每张写明出品方，每条结论标出引文核验的结果。`),
+    description: clip(zone.description || `${zone.kindLabel}“${zone.title}”的证据卡，每张写明出品方，每条结论标出引文核对的结果。`),
     body: html`${producerLine(zone.producer, zone.owner.name)}
 <h1>${zone.title}</h1>
 <p class="meta">${zone.kindLabel} · ${countOf(zone.cards, "张证据卡")}${zone.withdrawnCards ? `，另有 ${zone.withdrawnCards} 张已撤回` : ""} · ${countOf(zone.follows, "人关注")} · 作者 ${authorLink(zone.owner)}${zone.lastCheckedAt ? html` · 最后核对 ${timeTag(zone.lastCheckedAt)}` : ""}</p>
@@ -201,9 +201,9 @@ function publicView(view) {
   return html`<section aria-labelledby="panels"><h2 id="panels">公众版</h2>
 ${view.panels.filter((/** @type {any} */ panel) => panel.key !== "sourcesAndCheckDate").map((/** @type {any} */ panel) => {
     if (panel.key === "commonMisunderstandings") {
-      return html`<h3>${panel.label}</h3>${panel.status === "written" ? html`<ul>${panel.items.map((/** @type {any} */ item) => html`<li><strong>${item.misunderstanding}</strong><br>${item.correction}${item.observedIn ? html`<br><span class="muted">观察到的地方：${item.observedIn}</span>` : ""}${item.traced ? "" : html` <span class="mark-warn" title="没有全部追到已核验的结论">⚠ 未全部追到已核验的结论</span>`}</li>`)}</ul>` : html`<p class="muted">作者没有填写这一栏。</p>`}`;
+      return html`<h3>${panel.label}</h3>${panel.status === "written" ? html`<ul>${panel.items.map((/** @type {any} */ item) => html`<li><strong>${item.misunderstanding}</strong><br>${item.correction}${item.observedIn ? html`<br><span class="muted">观察到的地方：${item.observedIn}</span>` : ""}${item.traced ? "" : html` <span class="mark-warn" title="没有全部追到引文已核对的结论">⚠ 未全部追到引文已核对的结论</span>`}</li>`)}</ul>` : html`<p class="muted">作者没有填写这一栏。</p>`}`;
     }
-    return html`<h3>${panel.label}</h3>${panel.status === "written" ? html`<p>${panel.text}${panel.traced ? html` <span class="mark-ok" title="这一栏所依据的结论都已核验">✓</span>` : html` <span class="mark-warn" title="没有全部追到已核验的结论">⚠ 未全部追到已核验的结论</span>`}</p>` : html`<p class="muted">作者没有填写这一栏。</p>`}`;
+    return html`<h3>${panel.label}</h3>${panel.status === "written" ? html`<p>${panel.text}${panel.traced ? html` <span class="mark-ok" title="这一栏所依据的结论，引文都已核对">✓</span>` : html` <span class="mark-warn" title="没有全部追到引文已核对的结论">⚠ 未全部追到引文已核对的结论</span>`}</p>` : html`<p class="muted">作者没有填写这一栏。</p>`}`;
   })}
 <div class="factbox"><h3>事实框：每 ${box.per} 人里</h3>
 ${box.status === "available" ? html`<p class="muted">和对照相比，每 ${box.per} 人里的人数；两组用同一个分母，数字由程序按事件数和分母算出。</p>${factRows("获益", box.benefits)}${factRows("不良反应", box.harms)}`
@@ -454,16 +454,16 @@ ${estimate.n ? html`<p>估计值的平均绝对误差为 ${estimate.meanAbsolute
 export function metricsPage({ months, questionBank = null, calibration = null }) {
   return {
     title: `按月公开的数 · ${EVIDENCE_SITE_NAME}`,
-    description: "EviMed 证据中心每月公开的三个数：核验通过率、纠错的中位时效、质疑数及其结果。",
+    description: "EviMed 证据中心每月公开的三个数：引文核对通过率、纠错的中位时效、质疑数及其结果。",
     body: html`<h1>按月公开的数</h1>
 <p class="muted">三个数都是从数据表里重新算出来的，不是另外记下的总数。月份按北京时间的日历月算。没有数据的月份写明没有数据，不写 0。</p>
 <ul>
-<li><strong>核验通过率</strong>：当月末仍然公开的证据卡里，所有结论中引文在来源里逐字找到的占比。</li>
+<li><strong>引文核对通过率</strong>：当月末仍然公开的证据卡里，所有结论中引文在来源里逐字找到的占比。</li>
 <li><strong>纠错中位时效</strong>：从来源变更（或读者提出质疑）到卡片更新的时间的中位数，只算由这两类信号引起的更正和撤回。</li>
 <li><strong>质疑</strong>：读者当月提出的质疑数，和它们现在的结果：维持、修正、撤回、处理中。</li>
 </ul>
 ${months.length ? html`<div class="table-wrap"><table>
-<thead><tr><th>月份</th><th>核验通过率</th><th>纠错中位时效</th><th>质疑和结果</th></tr></thead>
+<thead><tr><th>月份</th><th>引文核对通过率</th><th>纠错中位时效</th><th>质疑和结果</th></tr></thead>
 <tbody>${months.map(({ month, data, figures }) => data ? html`<tr>
 <td>${month}</td>
 <td>${figures.verification.passRate === null ? "这个月没有已列出的结论" : html`${Math.round(figures.verification.passRate * 1000) / 10}%<br><span class="muted">${figures.verification.verified} / ${figures.verification.claims} 条结论，${figures.verification.cards} 张卡</span>`}</td>

@@ -215,7 +215,7 @@ export function progressView(run, now) {
     lines.push(`文献：检索 ${Number(sources.searched) || 0} · 纳入 ${Number(sources.included) || 0} · 全文 ${Number(sources.fullText) || 0}`);
   }
   const claims = progress.claims ?? {};
-  if (Number(claims.total) > 0) lines.push(`结论核验：${Number(claims.verified) || 0}/${Number(claims.total)}`);
+  if (Number(claims.total) > 0) lines.push(`引文已核对：${Number(claims.verified) || 0}/${Number(claims.total)}`);
   const deliverables = Array.isArray(progress.deliverables) ? progress.deliverables : Array.isArray(run?.deliverables) ? run.deliverables : [];
   for (const item of deliverables.slice(0, 5)) {
     const done = ["accepted", "delivered", "submitted"].includes(item?.status);

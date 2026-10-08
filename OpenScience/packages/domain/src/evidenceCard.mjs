@@ -88,7 +88,7 @@ export const EVIDENCE_CARD_ERROR_MESSAGES_ZH = Object.freeze({
   evidence_disclosure_required: '产品专区的证据卡，以及企业和医生出品的证据卡，必须披露作者和审核人。',
   evidence_zone_kind_forbidden: '官方专区只能由平台的内部操作建立，专区类型建立之后也不能更改。',
   evidence_visibility_requires_publication: '专区先发布，才能公开到互联网；撤回发布后会自动回到平台内可见。',
-  evidence_ranking_input_unknown: '排序只能读取已登记的输入（时效、核验比例、评议分、关注数）；付费等其他字段不能参与排序。',
+  evidence_ranking_input_unknown: '排序只能读取已登记的输入（时效、核对比例、评议分、关注数）；付费等其他字段不能参与排序。',
   evidence_primary_requires_calculation: '官方专区里的一手卡（原创分析、复算核验、原创研究）至少要有一条带计算依据的结论：数字要有引擎回执，不能只靠引用。这张卡没有保存。',
   evidence_interpretive_calculation_refused: '解读类的卡（综合、速览）不能把数字标成平台自己的计算；论文里的数字只能作为引文。这张卡没有保存。',
 })
