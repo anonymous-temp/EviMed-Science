@@ -13,6 +13,7 @@ async function fixture(t, { withOpenList = false, connector = null, withKnowledg
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
     get: async (userId, id) => { calls.push({ method: "get", userId, id }); return { id, projectId: "owned-project", revision: 2 }; },
+    isShared: async (userId, source) => { calls.push({ method: "isShared", userId, id: source.id }); return null; },
     override: async (userId, id, body) => { calls.push({ method: "override", userId, id, body }); return { id, payload: body }; },
     retry: async (userId, id, body) => { calls.push({ method: "retry", userId, id, body }); return { id, status: "queued" }; },
     cancel: async (userId, id, body) => { calls.push({ method: "cancel", userId, id, body }); return { id, status: "canceled" }; },
@@ -186,6 +187,25 @@ test("source routes never expose runtime binding paths or cancellation work item
   assert.equal(JSON.stringify(body).includes("private"), false);
   assert.equal(body.data.payload.analysis.run.id, "run1");
   assert.equal(body.data.payload.outputs.artifactPath, "knowledge-base/.evimed-derived/source-one/index.md");
+});
+
+test("one document is read with whether the account library holds it, which the reader page needs and a list row already carries", async t => {
+  const { base, headers, calls, service } = await fixture(t);
+  service.get = async (_userId, id) => ({ id, kind: "source", projectId: "owned-project", revision: 4, createdAt: "2026-10-05T08:00:00Z", updatedAt: "2026-10-05T08:00:00Z", deletedAt: null,
+    payload: { paths: ["knowledge-base/guideline.pdf"], status: "complete", docType: "review-guideline", fingerprint: { size: 100, sha256: "a".repeat(64) }, outputs: {} } });
+  service.isShared = async (userId, source) => { calls.push({ method: "isShared", userId, id: source.id }); return true; };
+  const shared = await (await fetch(`${base}/api/sources/src_one`, { headers })).json();
+  assert.equal(shared.data.display.shared, true);
+  assert.deepEqual(calls.filter(call => call.method === "isShared"), [{ method: "isShared", userId: "owner", id: "src_one" }]);
+  service.isShared = async () => false;
+  assert.equal((await (await fetch(`${base}/api/sources/src_one`, { headers })).json()).data.display.shared, false);
+  // Nothing to look up (no durable store, no fingerprint): not known, never a guess.
+  service.isShared = async () => null;
+  assert.equal((await (await fetch(`${base}/api/sources/src_one`, { headers })).json()).data.display.shared, null);
+  // The source's own project is still checked before anything is asked about it.
+  service.get = async () => ({ id: "src_other", projectId: "other-project" });
+  service.isShared = async () => { throw new Error("must not be asked for a project the caller does not own"); };
+  assert.equal((await fetch(`${base}/api/sources/src_other`, { headers })).status, 404);
 });
 
 test("source mutations require CSRF and reject browser-supplied ownership", async (t) => {

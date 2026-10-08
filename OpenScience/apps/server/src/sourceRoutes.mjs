@@ -183,7 +183,9 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
       return reply(entryReply(await requireKnowledge().refetchLink({ user, project: owned, source })));
     }
     if (parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
-    if (parts.length === 1 && method === "GET") return reply(source);
+    // One document, as the reader page opens it: the row's own `shared` (whether the account library holds the bytes) is a
+    // column of the list query, so a single read asks for it here.
+    if (parts.length === 1 && method === "GET") return reply({ ...source, shared: await service.isShared(user.id, source) });
     if (parts.length === 1 && method === "PATCH") {
       return reply(await service.override(user.id, sourceId,
         await bodyOf(req, maxJsonBytes, ["expectedRevision", "docType", "depth", "reason"])));

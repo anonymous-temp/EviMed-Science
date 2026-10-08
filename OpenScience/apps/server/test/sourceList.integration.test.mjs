@@ -158,6 +158,12 @@ test("the shared scope lists one document per entry of the account library, whic
   const own = await sources.list(owner, { projectId: "default" });
   assert.deepEqual(own.items.map((item) => [item.payload.paths[0].replace("knowledge-base/", ""), item.shared]).sort(), [["private.pdf", false], ["shared-guideline.pdf", true]]);
   assert.equal((await sources.list(owner, { projectId: "study" })).items.find((item) => item.id === sameBytesElsewhere.source.id).shared, true, "the same bytes in another project are the same document");
+  // A single read asks the same question the list answers per row: only this account's library, by the bytes.
+  assert.equal(await sources.isShared(owner, shared), true);
+  assert.equal(await sources.isShared(owner, sameBytesElsewhere.source), true, "the same bytes in another project are the same document");
+  assert.equal(await sources.isShared(owner, await add(owner, "default", "unshared.pdf")), false);
+  assert.equal(await sources.isShared(stranger, shared), false, "another account's library is not this document's");
+  assert.equal(await sources.isShared(owner, { payload: {} }), null, "a document with no fingerprint has nothing to look up");
   // The shared documents are searched and counted like any scope; a removed entry is out of it.
   assert.deepEqual((await sources.list(owner, { shared: true, q: "nothing like it" })).items, []);
   assert.equal((await sources.list(owner, { shared: true, kind: "table" })).items.length, 0);

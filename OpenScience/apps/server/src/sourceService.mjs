@@ -1372,6 +1372,21 @@ export class SourceService {
   /** @param {string} userId @param {string} sourceId */
   async get(userId, sourceId, options = {}) { return this.requireSource(userId, sourceId, options); }
 
+  /**
+   * Whether the account library holds this document's bytes: what a list query answers per row (`shared`) and a single
+   * read did not, so the reader page could not tell 「设为所有项目可用」 from 「改为仅本项目」. Null where there is nothing to
+   * look up (no durable store, or a document with no fingerprint).
+   * @param {string} userId @param {{ payload?: any }} source @returns {Promise<boolean | null>}
+   */
+  async isShared(userId, source) {
+    const database = this.documents.database;
+    const sha256 = source.payload?.fingerprint?.sha256;
+    if (!database || typeof sha256 !== "string" || !sha256) return null;
+    const result = await database.query(`SELECT EXISTS (SELECT 1 FROM evimed_product.documents l WHERE l.user_id=$1 AND l.kind='preferences'
+        AND l.deleted_at IS NULL AND l.id='library:'||$2::text AND l.payload->>'recordType'='library-item') AS shared`, [userId, sha256]);
+    return result.rows[0]?.shared === true;
+  }
+
   // ---------------------------------------------------------------------------
   // Synced folders. A folder the researcher named is the unit of sync; nothing
   // here ever walks a drive the researcher did not register.
