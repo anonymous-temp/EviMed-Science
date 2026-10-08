@@ -337,7 +337,7 @@
           },
           "annotations": {
             "summary": "Under 85% of the frontier edits pass the number check first time",
-            "description": "More than 15% of the day's first edit answers carried a number the source does not have (plan 10.5.8's \u590d\u6838\u4e00\u6b21\u901a\u8fc7\u7387); edit_first_pass_failures_total names the other fields sent back."
+            "description": "More than 15% of the day's first edit answers carried a number the source does not have (plan 10.5.8's \u590d\u6838\u4e00\u6b21\u901a\u8fc7\u7387); edit_first_pass_failures_total names the other fields sent back and edit_first_pass_issues_total{field,kind} the kind (empty, length, link, language, number)."
           }
         },
         {
@@ -349,7 +349,7 @@
           },
           "annotations": {
             "summary": "More than 5% of today's items were published title-only",
-            "description": "Items whose edit failed the number check twice are published with their original title only (plan 10.5.8)."
+            "description": "Items whose edit failed a check twice (the summary over its length limit, a number the source does not have, a link, not Chinese) are published with their original title only (plan 10.5.8); a summary whose length is the only fault is kept down to the whole sentences that fit instead. open_science_frontier_edit_final_issues_total{field,kind} names what the last answer failed."
           }
         },
         {

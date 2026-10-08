@@ -6,6 +6,7 @@ import {
   FRONTIER_EDITOR_VERSION,
   FRONTIER_EDIT_INSTRUCTIONS,
   FRONTIER_MODEL_INPUT_CHARS,
+  FRONTIER_PROSE_ISSUE_KINDS,
   FRONTIER_SCREEN_INSTRUCTIONS,
   FRONTIER_TEXT_LIMITS,
   FrontierEditor,
@@ -15,6 +16,7 @@ import {
   isChineseTitle,
   parseModelJson,
   sha256,
+  trimToWholeSentences,
   validateScreen,
   verifyEdit,
 } from "../src/frontierEditor.mjs";
@@ -264,6 +266,184 @@ test("a rewrite that fails again leaves the title only — and only a title that
   const dropped = await new FrontierEditor(config, { owner, callModel: titleWrong.callModel }).edit(item());
   assert.equal(dropped.verification, "title-only");
   assert.equal(dropped.output?.titleZh, null, "neither title passed: the original title stands alone");
+});
+
+// Three sentences of a summary: the first two are 89 code points, all three 152 (over the 140 limit).
+const SENTENCE_1 = "一项纳入 17,604 例患者的研究显示，司美格鲁肽使主要不良心血管事件降低 20%，风险比 0.80，随访 39.8 个月。";
+const SENTENCE_2 = "这一结果为无糖尿病的肥胖人群提供了心血管保护的证据。";
+const SENTENCE_3 = "对于临床医生而言，这提示在评估此类患者的心血管风险时，可以把药物治疗纳入综合管理的考虑范围之内，并结合个体情况权衡获益与风险。";
+const length = (/** @type {string} */ text) => [...text].length;
+
+test("a length issue names the measured length, the limit and how much to cut — for the title and the summary", async () => {
+  const modelInput = buildModelInput(item());
+  const long = SENTENCE_1 + SENTENCE_2 + SENTENCE_3;
+  assert.equal(length(long), 152);
+  const summary = verifyEdit(answer({ summary_zh: long }), item(), modelInput);
+  assert.deepEqual(summary.issues, ["summary_zh 太长：现在 152 个字，不能超过 140 个字，请删掉至少 12 个字（可以删去次要的限定语或英文全称，保留数字与结论）。"]);
+  assert.deepEqual(summary.kinds, [{ field: "summary_zh", kind: "length" }]);
+  const title = verifyEdit(answer({ title_zh: "司".repeat(75) }), item(), modelInput);
+  assert.deepEqual(title.issues, ["title_zh 太长：现在 75 个字，不能超过 60 个字，请删掉至少 15 个字（可以删去次要的限定语或英文全称，保留数字与结论）。"]);
+  assert.deepEqual(title.kinds, [{ field: "title_zh", kind: "length" }]);
+
+  // …and the rewrite message the model receives carries it.
+  const { calls, callModel } = stubModel([() => answer({ summary_zh: long }), () => answer()]);
+  const result = await new FrontierEditor(config, { owner, callModel }).edit(item());
+  assert.equal(result.verification, "repaired");
+  assert.match(calls[1].body.messages[3].content, /- summary_zh 太长：现在 152 个字，不能超过 140 个字，请删掉至少 12 个字/);
+});
+
+test("every kind of failed Chinese text is named: empty, length, link, language, number", () => {
+  const modelInput = buildModelInput(item());
+  /** @param {Record<string, any>} overrides */
+  const kinds = (overrides) => verifyEdit(answer(overrides), item(), modelInput).kinds;
+  assert.deepEqual(kinds({ summary_zh: "" }), [{ field: "summary_zh", kind: "empty" }]);
+  assert.deepEqual(kinds({ title_zh: "  " }), [{ field: "title_zh", kind: "empty" }]);
+  assert.deepEqual(kinds({ summary_zh: "见 www.nejm.org 原文，降低 20%。" }), [{ field: "summary_zh", kind: "link" }]);
+  assert.deepEqual(kinds({ summary_zh: "Semaglutide lowered events by 20%." }), [{ field: "summary_zh", kind: "language" }]);
+  assert.deepEqual(kinds({ summary_zh: "心血管事件降低 25%。" }), [{ field: "summary_zh", kind: "number" }]);
+  assert.deepEqual(kinds({ title_zh: "司美格鲁肽降低心血管事件 25%" }), [{ field: "title_zh", kind: "number" }]);
+  assert.deepEqual(kinds({ summary_zh: "司".repeat(150) + " www.nejm.org" }).map(({ kind }) => kind), ["length", "link"]);
+  assert.deepEqual(kinds({ lane: "ai" }), [], "a lane, specialties and the rest are not Chinese texts");
+  assert.deepEqual(kinds({}), []);
+  assert.deepEqual([...FRONTIER_PROSE_ISSUE_KINDS], ["empty", "length", "link", "language", "number"], "the closed set the counters are labelled with");
+  const seen = new Set([
+    ...kinds({ summary_zh: "" }), ...kinds({ summary_zh: "司".repeat(150) + " www.nejm.org" }),
+    ...kinds({ summary_zh: "Semaglutide lowered events." }), ...kinds({ summary_zh: "降低 25%。" }),
+  ].map(({ kind }) => kind));
+  assert.deepEqual([...seen].sort(), [...FRONTIER_PROSE_ISSUE_KINDS].sort(), "every kind is produced, and none outside the set");
+});
+
+test("a rewrite whose summary is only too long is published with its whole sentences that fit, repaired", async () => {
+  const long = SENTENCE_1 + SENTENCE_2 + SENTENCE_3;
+  const { calls, callModel } = stubModel([() => answer({ summary_zh: `${long}${SENTENCE_3}` }), () => answer({ summary_zh: long })]);
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const result = await editor.edit(item());
+  assert.equal(calls.length, 2, "one rewrite, then nothing more is paid for");
+  assert.equal(result.verification, "repaired");
+  assert.equal(result.attempts, 2);
+  assert.equal(result.output?.summaryZh, SENTENCE_1 + SENTENCE_2, "the longest prefix of whole sentences within 140");
+  assert.ok(length(result.output?.summaryZh ?? "") <= FRONTIER_TEXT_LIMITS.summary);
+  // The rest of the answer stands as a verified answer's: it is not a title-only stand-in.
+  assert.equal(result.output?.titleZh, "司美格鲁肽降低非糖尿病肥胖患者心血管事件 20%");
+  assert.deepEqual(result.output?.scores, { impact: 26, novelty: 15, relevance: 17 });
+  assert.deepEqual(result.output?.entities.drugs, ["司美格鲁肽"]);
+  // The numbers were checked on the text that is published: 17,604, 20%, 0.80, 39.8 and the title's 20%.
+  assert.deepEqual(result.numbers?.missing, []);
+  assert.equal(result.numbers?.checked, 5);
+  assert.ok(result.issues.some((issue) => issue.includes("太长")), "the length it was trimmed for stays on the result");
+  assert.equal(editor.counters.summaryTrimmed, 1);
+  assert.equal(editor.counters.verification.repaired, 1);
+  assert.equal(editor.counters.verification["title-only"], 0);
+  assert.deepEqual(editor.counters.finalIssues, {}, "an item that was published with a summary has no final issue");
+  assert.deepEqual(editor.counters.firstPassIssues, { summary_zh: { length: 1 } });
+});
+
+test("with a single attempt, the first answer's too-long summary is trimmed the same way", async () => {
+  const { calls, callModel } = stubModel([() => answer({ summary_zh: SENTENCE_1 + SENTENCE_2 + SENTENCE_3 })]);
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const result = await editor.edit(item(), { singleAttempt: true });
+  assert.equal(calls.length, 1);
+  assert.equal(result.verification, "repaired");
+  assert.equal(result.output?.summaryZh, SENTENCE_1 + SENTENCE_2);
+  assert.equal(editor.counters.summaryTrimmed, 1);
+  assert.equal(editor.counters.rewrites, 0);
+});
+
+test("a rewrite that could not be had leaves the first answer's too-long summary trimmed, not dropped", async () => {
+  const { callModel } = stubModel([() => answer({ summary_zh: SENTENCE_1 + SENTENCE_2 + SENTENCE_3 }), refuse("model_gateway_timeout")]);
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const result = await editor.edit(item());
+  assert.equal(result.verification, "repaired");
+  assert.equal(result.output?.summaryZh, SENTENCE_1 + SENTENCE_2);
+  assert.equal(result.error, "model_gateway_timeout", "the failed rewrite is still on the record");
+});
+
+test("a too-long summary with no whole sentence under the limit stays title-only", async () => {
+  // One sentence of 189 code points: nothing of it is a whole sentence within 140.
+  const oneSentence = `${Array(3).fill(SENTENCE_3.slice(0, -1)).join("，")}。`;
+  assert.equal(length(oneSentence), 189);
+  const { callModel } = stubModel([() => answer({ summary_zh: oneSentence }), () => answer({ summary_zh: oneSentence })]);
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const result = await editor.edit(item());
+  assert.equal(result.verification, "title-only");
+  assert.equal(result.output?.summaryZh, null);
+  assert.equal(result.output?.titleZh, "司美格鲁肽降低非糖尿病肥胖患者心血管事件 20%", "a title that passed on its own is kept, as ever");
+  assert.equal(result.output?.scores, null);
+  assert.ok(result.issues.some((issue) => issue.includes("现在 189 个字")));
+  assert.equal(editor.counters.summaryTrimmed, 0);
+  assert.deepEqual(editor.counters.finalIssues, { summary_zh: { length: 1 } });
+});
+
+test("a too-long summary that is also wrong another way is not trimmed: a link, a number, an empty one, another field", async () => {
+  const long = SENTENCE_1 + SENTENCE_2 + SENTENCE_3;
+  for (const [what, overrides] of /** @type {Array<[string, Record<string, any>]>} */ ([
+    ["a link in the tail that would be dropped", { summary_zh: `${long} 详见 https://example.org` }],
+    ["a number the source does not have", { summary_zh: `${long}另有 35% 的患者出现了不良反应。` }],
+    ["a number the source does not have in the part that would be kept", { summary_zh: SENTENCE_1.replace("20%", "25%") + SENTENCE_2 + SENTENCE_3 }],
+    ["not Chinese prose", { summary_zh: "Semaglutide reduced major adverse cardiovascular events by 20% in 17,604 patients. ".repeat(3) }],
+    ["a lane outside the item's own", { summary_zh: long, lane: "ai" }],
+    ["a title that failed too", { summary_zh: long, title_zh: "司美格鲁肽降低心血管事件 25%" }],
+  ])) {
+    const { callModel } = stubModel([() => answer(overrides), () => answer(overrides)]);
+    const editor = new FrontierEditor(config, { owner, callModel });
+    const result = await editor.edit(item());
+    assert.equal(result.verification, "title-only", what);
+    assert.equal(result.output?.summaryZh, null, what);
+    assert.equal(editor.counters.summaryTrimmed, 0, what);
+  }
+});
+
+test("the kind counters count each failed kind once per first answer, and the final ones the answer an item was left on", async () => {
+  const long = SENTENCE_1 + SENTENCE_2 + SENTENCE_3;
+  const english = "Semaglutide reduced major adverse cardiovascular events by 20% in 17,604 patients over 39.8 months. ".repeat(2);
+  const editor = new FrontierEditor(config, { owner, callModel: stubModel([
+    // 1: a link in the summary and a number in the title, twice → title-only.
+    () => answer({ summary_zh: "司美格鲁肽使主要不良心血管事件降低 20%，详见 www.nejm.org。", title_zh: "司美格鲁肽降低心血管事件 25%" }),
+    () => answer({ summary_zh: "司美格鲁肽使主要不良心血管事件降低 20%，详见 www.nejm.org。", title_zh: "司美格鲁肽降低心血管事件 25%" }),
+    // 2: an empty summary, then a good one → repaired.
+    () => answer({ summary_zh: "" }),
+    () => answer(),
+    // 3: three wrong numbers in one summary (one count), then too long and not Chinese → title-only.
+    () => answer({ summary_zh: "降低 25%，随访 40 个月，纳入 99 例。" }),
+    () => answer({ summary_zh: english }),
+    // 4: too long → rewritten, still too long → trimmed.
+    () => answer({ summary_zh: long }),
+    () => answer({ summary_zh: long }),
+  ]).callModel });
+  for (let index = 0; index < 4; index += 1) await editor.edit(item());
+  assert.deepEqual(editor.counters.firstPassIssues, {
+    summary_zh: { link: 1, empty: 1, number: 1, length: 1 },
+    title_zh: { number: 1 },
+  });
+  assert.deepEqual(editor.counters.finalIssues, {
+    summary_zh: { link: 1, length: 1, language: 1 },
+    title_zh: { number: 1 },
+  });
+  assert.equal(editor.counters.summaryTrimmed, 1);
+  assert.deepEqual(editor.counters.verification, { passed: 0, repaired: 2, "title-only": 2, pending: 0 });
+  assert.deepEqual(editor.counters.firstPassFailures, { summary_zh: 4, title_zh: 1 }, "the field counter is unchanged");
+});
+
+test("trimToWholeSentences keeps the longest prefix of whole sentences that fits, by a fixed set of sentence ends", () => {
+  assert.equal(trimToWholeSentences("甲乙。丙丁。戊己。", 6), "甲乙。丙丁。");
+  assert.equal(trimToWholeSentences("甲乙。丙丁。戊己。", 5), "甲乙。");
+  assert.equal(trimToWholeSentences("甲乙。丙丁。戊己。", 9), "甲乙。丙丁。戊己。", "exactly the limit fits");
+  assert.equal(trimToWholeSentences("甲乙。丙丁。", 2), null, "not even the first sentence fits");
+  assert.equal(trimToWholeSentences("没有句号的一段话", 100), null, "no sentence end, no whole sentence");
+  assert.equal(trimToWholeSentences("甲乙！丙丁？戊己。", 6), "甲乙！丙丁？");
+  // A decimal point is not a sentence end; an ASCII stop, ! ? or ; before a space or the end is.
+  assert.equal(trimToWholeSentences("风险比 0.80 提示获益。随访 39.8 个月。", 12), null);
+  assert.equal(trimToWholeSentences("降低 20%. 风险比 0.80! 随访 39.8 个月", length("降低 20%. 风险比 0.80!")), "降低 20%. 风险比 0.80!");
+  assert.equal(trimToWholeSentences("降低 20%. 风险比 0.80! 随访 39.8 个月", length("降低 20%.")), "降低 20%.");
+  // …but an ASCII stop after a Latin letter is an abbreviation (vs., et al.), not an end.
+  assert.equal(trimToWholeSentences("与安慰剂 vs. 对照相比降低风险。", length("与安慰剂 vs.")), null);
+  assert.equal(trimToWholeSentences("与安慰剂 vs. 对照相比降低风险。", 100), "与安慰剂 vs. 对照相比降低风险。");
+  // A semicolon ends a clause the reader takes as a sentence; a kept text does not end on one.
+  assert.equal(trimToWholeSentences("降低 20%；风险比 0.80；随访 39.8 个月。", length("降低 20%；风险比 0.80；")), "降低 20%；风险比 0.80。");
+  assert.equal(trimToWholeSentences("降低 20%; 风险比 0.80; 随访 39.8 个月。", length("降低 20%; 风险比 0.80;")), "降低 20%; 风险比 0.80。");
+  // A closing quote or bracket belongs to the sentence it closes.
+  assert.equal(trimToWholeSentences("结果为「阳性。」后续无关。", length("结果为「阳性。」")), "结果为「阳性。」");
+  assert.equal(trimToWholeSentences("结果为阳性（见表 1。）后续无关。", length("结果为阳性（见表 1。）")), "结果为阳性（见表 1。）");
 });
 
 test("a Chinese source keeps its own title; the model's title is not used or checked", async () => {

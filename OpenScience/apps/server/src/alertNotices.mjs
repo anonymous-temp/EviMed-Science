@@ -50,7 +50,7 @@ export const ALERT_NOTICES = Object.freeze({
   FrontierBacklogOld: { title: "前沿动态有任务积压", sentence: "有条目等待处理超过六小时，新内容会晚出现。" },
   FrontierIngestBelowBaseline: { title: "今天收到的内容偏少", sentence: "最近一天新进的条目不到上周同一天的一半。" },
   FrontierFirstPassLow: { title: "前沿动态编辑的一次通过率偏低", sentence: "超过一成半的编辑结果带有信源里没有的数字，被退回重写。" },
-  FrontierTitleOnlyHigh: { title: "只发出标题的条目偏多", sentence: "今天超过 5% 的条目因数字核对两次没通过，只发布了原标题。" },
+  FrontierTitleOnlyHigh: { title: "只发出标题的条目偏多", sentence: "今天超过 5% 的条目编辑结果两次没通过核对（摘要太长、数字与原文不符等），只发布了原标题。" },
   FrontierBudgetNearLimit: { title: "前沿动态今日预算快用完", sentence: "模块今天的模型预算已用掉八成，超过之后新条目只收集、不再编辑。" },
   FrontierFewSelectedByNoon: { title: "今天入选的动态偏少", sentence: "北京时间中午已过，今天入选的条目还不到五条。" },
   FrontierEdgeRelayDown: { title: "东京中转节点不通", sentence: "经东京节点的请求三十分钟全部失败，依赖它的信源读不到内容。" },
