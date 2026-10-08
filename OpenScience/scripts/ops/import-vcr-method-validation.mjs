@@ -110,6 +110,25 @@ function reportedMethodMetadata(methods) {
   }));
 }
 
+/**
+ * The report as the engine's own snapshot shapes it. R writes a one-element array as its element (jsonlite's auto-unboxing),
+ * at any depth: `endpoints: "continuous"`, but also `legacyDesigns: "two_arm_fixed"` and `support.single_arm: "binary"` inside
+ * `legacyReleases`, fields the engine gained in release 10 — and the import refused every report since
+ * (`report_methods_mismatch`, 2026-10-08). Where the snapshot has an array and the report has one value, the value is boxed;
+ * nothing else changes, so a real difference still fails the comparison.
+ * @param {unknown} value the report's @param {unknown} shape the snapshot's @returns {unknown}
+ */
+export function boxedLike(value, shape) {
+  if (Array.isArray(shape)) {
+    const items = Array.isArray(value) ? value : value === undefined ? value : [value];
+    return Array.isArray(items) ? items.map((item, index) => boxedLike(item, shape[Math.min(index, shape.length - 1)])) : items;
+  }
+  if (object(shape) && object(value)) {
+    return Object.fromEntries(Object.entries(/** @type {Record<string, unknown>} */ (value)).map(([key, item]) => [key, boxedLike(item, /** @type {Record<string, unknown>} */ (shape)[key])]));
+  }
+  return value;
+}
+
 /** Bind GitHub's own run, job and immutable artifact metadata to one revision. */
 export function verifyGitHubIdentity({ repository, sourceRevision, runId, jobId, run, job, artifact }) {
   requireValue(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) && SHA.test(sourceRevision) && IDENTIFIER.test(String(runId)) && IDENTIFIER.test(String(jobId)), 'ci_identity_invalid');
@@ -141,7 +160,7 @@ export function produceMethodValidation({ reportBytes, logBytes, sourceRevision,
   const digest = numericalSourceDigest(source.runtimeFiles);
   const lockHash = packageLockHash(source.runtimeFiles.find(file => file.path === 'R/package-lock.json').bytes);
   requireValue(report.numericalSourceDigest === digest && report.packageLockHash === lockHash, 'report_source_mismatch');
-  requireValue(equal(reportedMethodMetadata(report.methods), source.methods), 'report_methods_mismatch');
+  requireValue(equal(boxedLike(reportedMethodMetadata(report.methods), source.methods), source.methods), 'report_methods_mismatch');
   const definitions = sourceCases(source.caseFiles);
   requireValue(Array.isArray(report.cases) && report.cases.length === definitions.size && object(report.methodsByCase), 'report_cases_incomplete');
   const executed = new Set();

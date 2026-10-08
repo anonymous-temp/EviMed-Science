@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { VCR_ENGINE_METHODS } from '@evimed/domain';
-import { NUMERIC_REFERENCES, assertProtectedDirectory, fetchGitHubEvidence, methodsWithoutReference, numericalSourceDigest, packageLockHash, parseArguments,
+import { NUMERIC_REFERENCES, assertProtectedDirectory, boxedLike, fetchGitHubEvidence, methodsWithoutReference, numericalSourceDigest, packageLockHash, parseArguments,
   produceMethodValidation, readValidationSource, sourceCases, verifyGitHubIdentity, writeMethodValidation } from '../../../scripts/ops/import-vcr-method-validation.mjs';
 import { referenceProblems } from '../../../scripts/ops/vcr-method-references.mjs';
 
@@ -309,4 +309,20 @@ test('protected install policy rejects writable ancestors and non-root ownership
   for (const patch of [{ uid: 501 }, { mode: 0o40777 }, { mode: 0o40775 }, { isDirectory: () => false }]) {
     assert.throws(() => assertProtectedDirectory({ ...stat, ...patch }), /destination_directory_unprotected/);
   }
+});
+
+
+test("a report's one-element arrays, written by R as their element at any depth, are boxed to the snapshot's shape and nothing else is", () => {
+  // 2026-10-08: the engine's metadata gained `legacyDesigns` and `legacyReleases` in release 10, R unboxed them, and every
+  // import since was refused as `report_methods_mismatch`.
+  const shape = { "design.simulate": { version: "1.2.0", legacyDesigns: ["two_arm_fixed", "group_sequential"],
+    legacyReleases: [{ version: "1.1.0", support: { two_arm_fixed: ["continuous", "binary"], single_arm: ["binary"] } }] },
+    "design.assurance": { version: "1.1.0", legacyDesigns: ["two_arm_fixed"] } };
+  const reported = { "design.simulate": { version: "1.2.0", legacyDesigns: ["two_arm_fixed", "group_sequential"],
+    legacyReleases: { version: "1.1.0", support: { two_arm_fixed: ["continuous", "binary"], single_arm: "binary" } } },
+    "design.assurance": { version: "1.1.0", legacyDesigns: "two_arm_fixed" } };
+  assert.deepEqual(boxedLike(reported, shape), shape);
+  // A real difference survives the boxing.
+  assert.notDeepEqual(boxedLike({ ...reported, "design.assurance": { version: "1.0.0", legacyDesigns: "two_arm_fixed" } }, shape), shape);
+  assert.notDeepEqual(boxedLike({ ...reported, "design.assurance": { version: "1.1.0", legacyDesigns: "single_arm" } }, shape), shape);
 });
