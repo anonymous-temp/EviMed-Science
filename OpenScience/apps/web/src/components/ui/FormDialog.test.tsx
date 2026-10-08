@@ -17,4 +17,9 @@ describe('centered form dialog',()=>{
   await userEvent.keyboard('{Escape}');fireEvent.click(screen.getByRole('dialog').parentElement!);expect(close).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'关闭'})).toBeDisabled();
   view.rerender(<FormDialog title="编辑任务" onClose={latest}><input aria-label="名称"/></FormDialog>);await userEvent.keyboard('{Escape}');expect(latest).toHaveBeenCalledOnce();expect(close).not.toHaveBeenCalled();
  });
+ it('takes focus on the panel when it has no field, so the corner 关闭 shows no tooltip and the first Escape closes it',async()=>{
+  const close=vi.fn();render(<FormDialog title="成员" onClose={close}><p>只读内容</p></FormDialog>);
+  const panel=screen.getByRole('dialog',{name:'成员'});expect(panel).toHaveFocus();expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  await userEvent.keyboard('{Escape}');expect(close).toHaveBeenCalledOnce();
+ });
 });

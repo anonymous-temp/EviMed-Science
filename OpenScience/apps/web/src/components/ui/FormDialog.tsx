@@ -1,6 +1,6 @@
 import {useEffect,useId,useRef,type ReactNode} from 'react';
 import {X} from 'lucide-react';
-import {focusableIn,trapTab} from '@/lib/focusTrap';
+import {trapTab} from '@/lib/focusTrap';
 import {IconButton} from './IconButton';
 
 /** A bounded centered form panel; writes stay visible until their caller settles. */
@@ -10,7 +10,9 @@ export function FormDialog({title,children,onClose,busy=false}:{title:string;chi
  useEffect(()=>{
   const trigger=document.activeElement instanceof HTMLElement?document.activeElement:null;
   const field=panel.current?.querySelector<HTMLElement>('input:not(:disabled),textarea:not(:disabled),select:not(:disabled)');
-  (field??focusableIn(panel.current)[0]??panel.current)?.focus();
+  // A field, or else the panel itself — not the corner 关闭: focusing it shows its tooltip unasked, and the tooltip, the top layer
+  // while it is up, takes the reader's first Escape (the Drawer's release-11 finding; a dialog with no field needed two presses).
+  (field??panel.current)?.focus();
   const key=(event:KeyboardEvent)=>{
    if(event.key==='Escape'){event.stopPropagation();if(!working.current)close.current();}
    else if(event.key==='Tab'){

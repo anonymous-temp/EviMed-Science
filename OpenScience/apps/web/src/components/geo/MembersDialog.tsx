@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { addGeoMember, getGeoMembers, removeGeoMember, type GeoMember, type GeoMemberRole, type GeoMembers } from "@/lib/geoClient";
-import { trapTab } from "@/lib/focusTrap";
 import { Button } from "@/components/ui/Button";
 import { FilterChips } from "@/components/ui/FilterChips";
+import { FormDialog } from "@/components/ui/FormDialog";
 import { Input } from "@/components/ui/Input";
 
 /** The three roles a member may be given, in the words a team uses. The owner is the account that made the project. */
@@ -33,24 +33,11 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
   const [hospital, setHospital] = useState("");
   const [department, setDepartment] = useState("");
   const [saving, setSaving] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  const close = useRef(onClose);
-  close.current = onClose;
 
   const load = useCallback(() => {
     void getGeoMembers(geoId).then(setData, (caught: unknown) => setError(webErrorMessage(caught, { fallback: "成员暂时无法读取。" })));
   }, [geoId]);
   useEffect(load, [load]);
-  useEffect(() => {
-    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close.current();
-      if (event.key === "Tab") trapTab(dialogRef.current, event);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); trigger?.focus(); };
-  }, []);
 
   const manage = Boolean(data?.you.abilities.includes("manage_members"));
 
@@ -74,38 +61,33 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
   };
 
   return (
-    <div role="presentation" className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-md rounded-card border border-border bg-surface p-6 shadow-modal">
-        <h2 id={titleId} className="text-ui font-semibold text-text">成员</h2>
-        <ul aria-label="成员列表" className="mt-4 flex flex-col divide-y divide-faint">
-          {(data?.members ?? []).map((member) => (
-            <li key={member.userId} className="flex items-center gap-3 py-2 text-ui">
-              <span className="min-w-0 flex-1 truncate text-text">{member.name || member.userId}</span>
-              <span className="shrink-0 text-caption text-text-3">{member.roleLabels.join("、")}</span>
-              {!member.owner && manage && (
-                <Button variant="text" size="sm" onClick={() => remove(member)}>移除</Button>
-              )}
-            </li>
-          ))}
-        </ul>
-        {manage && (
-          <form className="mt-4 flex flex-col gap-3" onSubmit={add} noValidate>
-            <Input label="成员的账号" autoComplete="off" value={userId} onChange={(event) => setUserId(event.target.value)} />
-            <FilterChips<GeoMemberRole> label="角色" options={ROLE_OPTIONS} value={role} onChange={(next) => { if (next) setRole(next); }} />
-            {role === "medical_reviewer" && (
-              <>
-                <Input label="医院" autoComplete="off" value={hospital} onChange={(event) => setHospital(event.target.value)} />
-                <Input label="科室" autoComplete="off" value={department} onChange={(event) => setDepartment(event.target.value)} />
-              </>
+    <FormDialog title="成员" onClose={onClose} busy={saving}>
+      <ul aria-label="成员列表" className="flex flex-col divide-y divide-faint">
+        {(data?.members ?? []).map((member) => (
+          <li key={member.userId} className="flex items-center gap-3 py-2 text-ui">
+            <span className="min-w-0 flex-1 truncate text-text">{member.name || member.userId}</span>
+            <span className="shrink-0 text-caption text-text-3">{member.roleLabels.join("、")}</span>
+            {!member.owner && manage && (
+              <Button variant="text" size="sm" onClick={() => remove(member)}>移除</Button>
             )}
-            <p className="text-caption text-text-3">{ROLE_NOTE[role]}</p>
-            <div className="flex justify-end"><Button type="submit" loading={saving}>添加</Button></div>
-          </form>
-        )}
-        {error && <p role="alert" className="mt-3 text-ui text-danger">{error}</p>}
-        <div className="mt-4 flex justify-end"><Button variant="secondary" onClick={onClose}>关闭</Button></div>
-      </div>
-    </div>
+          </li>
+        ))}
+      </ul>
+      {manage && (
+        <form className="mt-4 flex flex-col gap-3" onSubmit={add} noValidate>
+          <Input label="成员的账号" autoComplete="off" value={userId} onChange={(event) => setUserId(event.target.value)} />
+          <FilterChips<GeoMemberRole> label="角色" options={ROLE_OPTIONS} value={role} onChange={(next) => { if (next) setRole(next); }} />
+          {role === "medical_reviewer" && (
+            <>
+              <Input label="医院" autoComplete="off" value={hospital} onChange={(event) => setHospital(event.target.value)} />
+              <Input label="科室" autoComplete="off" value={department} onChange={(event) => setDepartment(event.target.value)} />
+            </>
+          )}
+          <p className="text-caption text-text-3">{ROLE_NOTE[role]}</p>
+          <div className="flex justify-end"><Button type="submit" loading={saving}>添加</Button></div>
+        </form>
+      )}
+      {error && <p role="alert" className="mt-3 text-ui text-danger">{error}</p>}
+    </FormDialog>
   );
 }
