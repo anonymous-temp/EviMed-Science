@@ -234,6 +234,19 @@ describe("the routes of the second wave", () => {
     await expect(fetchFrontierHot()).resolves.toBeNull();
   });
 
+  it("read the daily archive with the schedule the server publishes by, and take no schedule that is not a clock and a zone", async () => {
+    const day = { day: "2026-10-07", title: "头条", itemCount: 12, generatedAt: null };
+    fetchMock.mockResolvedValueOnce(reply(200, { data: { dailies: [day], schedule: { time: "07:30", timeZone: "Asia/Shanghai" } } }));
+    await expect(listFrontierDailies()).resolves.toEqual({ dailies: [day], schedule: { time: "07:30", timeZone: "Asia/Shanghai" } });
+    // A server that names none, or names something that is not a time of day, promises no time.
+    fetchMock.mockResolvedValueOnce(reply(200, { data: { dailies: [day] } }));
+    await expect(listFrontierDailies()).resolves.toEqual({ dailies: [day], schedule: null });
+    fetchMock.mockResolvedValueOnce(reply(200, { data: { dailies: [], schedule: { time: "7:30", timeZone: "Asia/Shanghai" } } }));
+    await expect(listFrontierDailies()).resolves.toEqual({ dailies: [], schedule: null });
+    fetchMock.mockResolvedValueOnce(reply(200, { data: { dailies: [], schedule: { time: "24:10", timeZone: "UTC" } } }));
+    await expect(listFrontierDailies()).resolves.toEqual({ dailies: [], schedule: null });
+  });
+
   it("still fail loudly on a real failure", async () => {
     fetchMock.mockResolvedValue(reply(500, { error: "boom", code: "internal_error" }));
     await expect(fetchFrontierHot()).rejects.toBeInstanceOf(WebApiError);

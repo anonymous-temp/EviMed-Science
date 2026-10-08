@@ -7,6 +7,7 @@ import {
   frontierErrorMessage,
   listFrontierDailies,
   type FrontierDaily,
+  type FrontierDailySchedule,
   type FrontierDailySummary,
   type FrontierFollowedZone,
   type FrontierItem,
@@ -20,7 +21,7 @@ import { FilterChip } from "@/components/ui/FilterChips";
 import { Menu } from "@/components/ui/Menu";
 import { FrontierDetails, frontierDetailsOffered } from "./FrontierDetails";
 import { FrontierSkeleton } from "./FrontierSkeleton";
-import { EXTERNAL, INLINE_ACTION, dailyMeta, rankLabel, shortDate } from "./frontierText";
+import { EXTERNAL, INLINE_ACTION, dailyMeta, rankLabel, scheduleLabel, shortDate } from "./frontierText";
 
 /** 往期 lists this many issues: two weeks, a menu that fits a laptop screen. */
 const ARCHIVE_SHOWN = 14;
@@ -33,6 +34,10 @@ export interface DailyState {
   loading: boolean;
   error: string | null;
   retry: () => void;
+  /** The issue asked for (`?day=`); null for "the newest". Names the day an empty state is about. */
+  day?: string | null;
+  /** When the server publishes, from its own configuration; absent from a server that names none. */
+  schedule?: FrontierDailySchedule | null;
 }
 
 /**
@@ -42,6 +47,7 @@ export interface DailyState {
  */
 export function useFrontierDaily(day: string | null, enabled: boolean): DailyState {
   const [index, setIndex] = useState<FrontierDailySummary[] | null>(null);
+  const [schedule, setSchedule] = useState<FrontierDailySchedule | null>(null);
   const [issue, setIssue] = useState<FrontierDaily | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
@@ -52,17 +58,17 @@ export function useFrontierDaily(day: string | null, enabled: boolean): DailySta
     setLoading(true);
     setError(null);
     (async () => {
-      const dailies = await listFrontierDailies(30);
-      const wanted = day ?? dailies?.[0]?.day ?? null;
-      const found = wanted && dailies !== null ? await fetchFrontierDaily(wanted) : null;
-      return { dailies, found };
+      const archive = await listFrontierDailies(30);
+      const wanted = day ?? archive?.dailies[0]?.day ?? null;
+      const found = wanted && archive !== null ? await fetchFrontierDaily(wanted) : null;
+      return { archive, found };
     })().then(
-      ({ dailies, found }) => { if (active) { setIndex(dailies); setIssue(found); } },
+      ({ archive, found }) => { if (active) { setIndex(archive?.dailies ?? null); setSchedule(archive?.schedule ?? null); setIssue(found); } },
       (caught: unknown) => { if (active) setError(frontierErrorMessage(caught)); },
     ).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [day, enabled, attempt]);
-  return { index, issue, loading, error, retry: () => setAttempt((value) => value + 1) };
+  return { index, issue, loading, error, retry: () => setAttempt((value) => value + 1), day, schedule };
 }
 
 /**
@@ -117,10 +123,28 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
   if (state.loading && !state.issue) return <FrontierSkeleton />;
   if (state.error) return <LoadError message={state.error} onRetry={state.retry} />;
   if (state.index === null) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周报" : "暂无日报"} />;
-  if (!state.issue) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周报" : "今日日报 07:30 发布"} />;
+  const archive = state.index.slice(0, ARCHIVE_SHOWN);
+  const pastIssues = (current: string | null) => archive.length > 0 && (
+    <Menu label="往期" items={archive.map((entry) => ({ label: weekly ? rangeLabel(entry.day) : shortDate(entry.day), checked: entry.day === current, onSelect: () => onDay(entry.day) }))}>
+      <FilterChip menu>往期</FilterChip>
+    </Menu>
+  );
+  if (!state.issue) {
+    // The server does not tell a reader that a day was left unpublished, so this says when issues come and what leaves a day without one,
+    // and never that something failed or that nothing qualified. Past issues stay one tap away whenever there are any.
+    const when = state.schedule ? scheduleLabel(state.schedule) : null;
+    const asked = !weekly && state.day ? state.day : null;
+    return (
+      <EmptyState
+        icon={CalendarDays}
+        title={weekly ? "暂无周报" : asked ? `${shortDate(asked)}没有日报` : when ? `今日日报 ${when}发布` : "今日日报尚未发布"}
+        description={weekly ? undefined : asked && when ? `日报每天 ${when}发布；当天没有符合条件的内容时不出刊。` : "当天没有符合条件的内容时不出刊。"}
+        action={pastIssues(asked) || undefined}
+      />
+    );
+  }
   const issue = state.issue;
   const { previous, next } = neighbours(issue, state.index);
-  const archive = state.index.slice(0, ARCHIVE_SHOWN);
   const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
   const lanes = [
     ...(issue.safety.length > 0 ? [{ id: "safety", title: "安全警示", count: issue.safety.length }] : []),
@@ -140,22 +164,15 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
               <FilterChip menu>分类</FilterChip>
             </Menu>
           )}
-          {archive.length > 0 && (
-            <Menu label="往期" items={archive.map((entry) => ({ label: weekly ? rangeLabel(entry.day) : shortDate(entry.day), checked: entry.day === issue.day, onSelect: () => onDay(entry.day) }))}>
-              <FilterChip menu>往期</FilterChip>
-            </Menu>
-          )}
+          {pastIssues(issue.day)}
         </span>
       </header>
 
       {issue.lead && (
         <section aria-label="头条" className="mt-5">
-          <h3 className="max-w-measure-body text-title font-semibold text-text">{issue.lead.item.title}</h3>
-          {/* The feed card's own look for a link of this kind: the size is the inner span's, so the link itself is the page's one 28 px
-              inline action. A 12 px link was the daily's tenth kind of control. */}
-          <a href={issue.lead.item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1 mt-1 px-1 text-accent")}>
-            <span className="text-caption">{issue.lead.item.source.name} · 原文 ↗</span>
-          </a>
+          {/* The title is the way to the original, as on the feed's card and on every row below (§12.3): one kind of 「原文」 entry on the page. */}
+          <h3 className="max-w-measure-body text-title font-semibold text-text"><a href={issue.lead.item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{issue.lead.item.title}</a></h3>
+          <p className="mt-1 text-caption text-text-3">{issue.lead.item.source.name}</p>
           {(leadText || issue.lead.event) && (
             <p className="mt-2 max-w-measure text-ui text-text-2">
               {leadText}

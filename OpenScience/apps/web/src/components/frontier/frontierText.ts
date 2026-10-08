@@ -303,6 +303,22 @@ export function primaryHeld(event: Pick<FrontierEvent, "primary" | "hasPrimary" 
 
 /* --------------------------------------------------------------------- daily */
 
+/** The name a reader knows a time zone by: 「北京时间」 for the platform's own; else the browser's long name for it; else its IANA name. */
+export function zoneName(timeZone: string): string {
+  if (timeZone === "Asia/Shanghai") return "北京时间";
+  try {
+    const name = new Intl.DateTimeFormat("zh-CN", { timeZone, timeZoneName: "long" }).formatToParts(new Date()).find((part) => part.type === "timeZoneName")?.value;
+    return name || timeZone;
+  } catch {
+    return timeZone;
+  }
+}
+
+/** 「07:30（北京时间）」: the clock the server publishes by and whose clock it is. */
+export function scheduleLabel(schedule: { time: string; timeZone: string }): string {
+  return `${schedule.time}（${zoneName(schedule.timeZone)}）`;
+}
+
 /** 「52 条 · 约 9 分钟」; the minutes only where the server has counted them. */
 export function dailyMeta(issue: Pick<FrontierDaily, "itemCount" | "readingMinutes">): string {
   return [`${issue.itemCount} 条`, ...(issue.readingMinutes > 0 ? [`约 ${issue.readingMinutes} 分钟`] : [])].join(" · ");

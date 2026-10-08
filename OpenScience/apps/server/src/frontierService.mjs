@@ -1313,7 +1313,8 @@ export class FrontierService {
     const value = params.get("limit");
     const limit = value == null || value === "" ? 30 : Number(value);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 60) throw failure(400, "frontier_query_invalid", "The limit parameter is invalid.");
-    return { dailies: await this.daily.list(limit) };
+    // The schedule rides with the archive so the page can say when the next issue comes, in whose clock, without a copy of the setting.
+    return { dailies: await this.daily.list(limit), schedule: { time: this.daily.dailyTime, timeZone: this.daily.timeZone } };
   }
 
   /**
