@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAutopilotRunScope, episodePlacementCounts, episodeScopeBlock, episodeVisibleText } from "../src/autopilotEpisodeScope.mjs";
+import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText } from "../src/autopilotEpisodeScope.mjs";
 
 const EPISODE = "episode-0123456789abcdef0123456789abcdef";
 
@@ -16,10 +16,12 @@ test("the first message of an execution is the researcher's own words: the instr
   assert.equal(episodeVisibleText(undefined, brief), brief);
 });
 
-test("only a bounded execution carries the episode tag and its signed scope, and both are written once", () => {
-  assert.equal(episodeScopeBlock({ episodeId: EPISODE, marker: null }), "", "the gateway refuses both in an interactive runtime");
-  const block = episodeScopeBlock({ episodeId: EPISODE, marker: "<evimed-budget-scope>a.b</evimed-budget-scope>" });
-  assert.equal(block, `\n\n<evimed-autopilot-episode>${EPISODE}</evimed-autopilot-episode>\n<evimed-budget-scope>a.b</evimed-budget-scope>`);
+test("every execution carries the brief in its run context; only a bounded one carries the episode tag and its signed scope", () => {
+  const brief = "Run the literature-sentinel proactive research episode.\nEpisode ID: e1.";
+  assert.equal(episodeContextBlock({ brief, episodeId: EPISODE, marker: null }), `\n\n<evimed-autopilot-brief>\n${brief}\n</evimed-autopilot-brief>`,
+    "the gateway refuses the tag and the marker in an interactive runtime");
+  const block = episodeContextBlock({ brief, episodeId: EPISODE, marker: "<evimed-budget-scope>a.b</evimed-budget-scope>" });
+  assert.equal(block, `\n\n<evimed-autopilot-brief>\n${brief}\n</evimed-autopilot-brief>\n<evimed-autopilot-episode>${EPISODE}</evimed-autopilot-episode>\n<evimed-budget-scope>a.b</evimed-budget-scope>`);
 });
 
 function scopeFixture({ ledger, episodes = {}, users = ["u1"], listCalls = [] } = {}) {

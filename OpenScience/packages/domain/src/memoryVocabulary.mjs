@@ -67,7 +67,9 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
     legacy: 'the knowledge-base excerpts every dispatch used to carry, retired 2026-09-20 when kb_search became a tool the model chooses; transcripts from before still carry it',
   },
   { tag: 'evimed-specialist', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },
-  // A bounded execution's tag, written into the run context beside the signed budget scope (`episodeScopeBlock`), no longer
+  // A scheduled execution's brief, in its run context (`episodeContextBlock`): the platform's words to the model, never the researcher's.
+  { tag: 'evimed-autopilot-brief', role: 'injected', emitters: ['apps/server/src/autopilotEpisodeScope.mjs'] },
+  // A bounded execution's tag, written into the run context beside the signed budget scope (`episodeContextBlock`), no longer
   // into the message the researcher sees (2026-10-08): the first message of a scheduled execution is their own instruction.
   { tag: 'evimed-autopilot-episode', role: 'injected', emitters: ['apps/server/src/autopilotEpisodeScope.mjs'] },
   { tag: 'evimed-autopilot-verification', role: 'injected', emitters: ['apps/server/src/server.mjs'] },

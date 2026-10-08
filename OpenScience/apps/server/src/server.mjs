@@ -242,7 +242,7 @@ import { cancelAutopilotVerification, AutopilotService, VERIFICATION_ARTIFACT, V
   autopilotLogicalDispatchId, isUnsentAutopilotLeaseLoss, verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
 import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
-import { createAutopilotRunScope, episodeScopeBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
+import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { AutopilotPlanner, autopilotPlannerMetricFamily } from "./autopilotNextAction.mjs";
@@ -4316,7 +4316,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
                 await recordExtensionPromptActor(user, project, request);
               },
               text,
-              system: `${prepared.system}${episodeScopeBlock({ episodeId: episode.episodeId, marker: budgetMarker })}`,
+              system: `${prepared.system}${episodeContextBlock({ brief: episode.prompt, episodeId: episode.episodeId, marker: budgetMarker })}`,
               memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),

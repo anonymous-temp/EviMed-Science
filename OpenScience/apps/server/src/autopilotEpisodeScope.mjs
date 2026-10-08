@@ -5,11 +5,11 @@
  *
  * **What the conversation shows.** The first message of an execution's session is the researcher's own words: the task's
  * instruction, or — for a follow-up — the note they wrote. The episode id, task type, planned focus, budget, progress and
- * contract boilerplate are the platform's brief, and they reach the model through the channels the platform already has for
- * it (the run's brief, which the socket injects as context the conversation does not draw for a researcher; and, for a bounded
- * runtime, the signed budget scope in the run context). Before this a researcher who opened an execution's conversation read
- * "Run the literature-sentinel proactive research episode … Maximum episode budget: CNY 100.00" and a base64 marker as the
- * first thing they had "said".
+ * contract boilerplate are the platform's brief, and they reach the model as platform context the socket injects and a
+ * researcher's conversation does not draw: in the run context written for this session (`episodeContextBlock`, which for a
+ * bounded runtime also carries the episode tag and the signed budget scope), and in the run's injected brief file. Before this a
+ * researcher who opened an execution's conversation read "Run the literature-sentinel proactive research episode … Maximum
+ * episode budget: CNY 100.00" and a base64 marker as the first thing they had "said".
  *
  * **What holds an interactive execution to its cap.** A bounded runtime is capped by its token: the token names the run and its
  * limits, and every model call is reserved against them. An execution started inside the researcher's open runtime has no such
@@ -68,14 +68,21 @@ export function episodeVisibleText(payload, fallback) {
 }
 
 /**
- * The block of platform context a bounded execution carries so the gateway can verify that its prompt belongs to a scoped
- * runtime: the episode tag and the signed budget marker. Empty for an interactive execution — the gateway refuses both there.
+ * What an execution carries in its run context beside the researcher's words: the platform's whole brief (episode id, task type, planned
+ * focus, budget, progress, contract boilerplate), and — for a bounded runtime only — the episode tag and the signed budget marker the
+ * gateway checks the prompt's scope with. The brief is also in the run's injected brief file; it is repeated here because that file is a
+ * host-side mirror shared by the whole workspace (a remote runtime never receives it, and a second dispatch overwrites it), whereas the
+ * run context is written per session through the runtime provider and cannot be read by another conversation. The run context is
+ * platform context the conversation does not draw for a researcher.
  *
- * @param {{ episodeId: string, marker: string | null }} input
- * @returns {string} text to append to the run context, or ""
+ * An interactive execution carries no tag and no marker: the gateway refuses both in an interactive runtime.
+ *
+ * @param {{ brief: string, episodeId: string, marker: string | null }} input
+ * @returns {string} text to append to the run context
  */
-export function episodeScopeBlock({ episodeId, marker }) {
-  return marker ? `\n\n<evimed-autopilot-episode>${episodeId}</evimed-autopilot-episode>\n${marker}` : "";
+export function episodeContextBlock({ brief, episodeId, marker }) {
+  return `\n\n<evimed-autopilot-brief>\n${brief}\n</evimed-autopilot-brief>`
+    + (marker ? `\n<evimed-autopilot-episode>${episodeId}</evimed-autopilot-episode>\n${marker}` : "");
 }
 
 /**

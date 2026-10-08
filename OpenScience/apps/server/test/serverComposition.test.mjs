@@ -1272,6 +1272,7 @@ test("a bounded execution opens with the researcher's own instruction; the brief
   assert.equal(dispatches[0].question, INSTRUCTION, "the run is listed and titled by their words");
   assert.equal(dispatches[0].brief, BRIEF, "and the delivery gate and the run's brief read the whole of what the platform asked");
   assert.match(String(prompts[0].system), /<evimed-budget-scope>/, "the signed scope is in the run context");
+  assert.ok(String(prompts[0].system).includes(`<evimed-autopilot-brief>\n${BRIEF}\n</evimed-autopilot-brief>`), "and so is the whole brief, in the per-session context a remote runtime receives");
   const stored = fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload;
   assert.equal(stored.interactive, false);
   assert.equal(stored.runLimitCny, 6);
@@ -1313,6 +1314,7 @@ test("with the runtime open for the researcher, an execution runs in it: no rese
   assert.equal(prompts[0].text, INSTRUCTION);
   assert.doesNotMatch(`${prompts[0].text}\n${prompts[0].system}`, /evimed-budget-scope|evimed-autopilot-episode/,
     "the gateway refuses a marker in an interactive runtime, and one left in the history would cap what the researcher says next");
+  assert.ok(String(prompts[0].system).includes(`<evimed-autopilot-brief>\n${BRIEF}\n</evimed-autopilot-brief>`), "the brief is in the run context all the same");
   assert.equal(dispatches[0].sessionId, outcome.sessionId);
   assert.equal(dispatches[0].effectiveRouteReason, "autopilot:literature-sentinel", "the route reason is what the gateway's cap lookup recognises it by");
   const stored = fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload;
