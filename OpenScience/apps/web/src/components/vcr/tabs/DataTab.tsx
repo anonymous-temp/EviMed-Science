@@ -145,11 +145,19 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
   const selected = (asked ? data.assumptions.find((assumption) => assumption.id === asked || assumption.key === asked) : null)
     ?? data.assumptions.find((assumption) => assumption.id === data.selectedId)
     ?? shown[0] ?? data.assumptions[0] ?? null;
-  const open = (assumption: VcrAssumption) => setParams((current) => {
-    const next = new URLSearchParams(current);
-    next.set("card", assumption.key || assumption.id);
-    return next;
-  }, { replace: true });
+  const open = (assumption: VcrAssumption) => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("card", assumption.key || assumption.id);
+      return next;
+    }, { replace: true });
+    // Below the two-column layout the detail stacks under the list: a press must show its result where the reader is looking
+    // (page-structure rule 6), so the detail is brought into view — a no-op beside the list, where it already is.
+    requestAnimationFrame(() => {
+      const detail = document.querySelector("[data-vcr-assumption-detail]");
+      if (detail && typeof detail.scrollIntoView === "function") detail.scrollIntoView({ block: "nearest" });
+    });
+  };
   const count = (value: Filter) => data.assumptions.filter((assumption) => matches(assumption, value)).length;
 
   return (
@@ -186,9 +194,8 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
                   key={assumption.id}
                   title={assumption.name}
                   onOpen={() => open(assumption)}
-                  expanded={selected?.id === assumption.id}
-                  titleProps={{ "data-vcr-assumption": assumption.id, "aria-current": selected?.id === assumption.id ? "true" : undefined }}
-                  className={cn(selected?.id === assumption.id && "bg-accent-soft")}
+                  selected={selected?.id === assumption.id}
+                  titleProps={{ "data-vcr-assumption": assumption.id }}
                   trailing={(
                     <span className="text-ui font-medium tabular-nums text-text">
                       {valueText(assumption.value)}

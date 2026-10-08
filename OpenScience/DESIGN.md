@@ -331,7 +331,7 @@ bordered pill or bordered `<button>` outside it:
 | `IconButton` | 28 in a row, 36 in a header; the label is its name and its `Tooltip` |
 | `Tooltip` | an inverse 12 px layer on `z-tooltip`: an icon's name or a truncated line's whole text; hoverable, Escape closes it, never the only place something is said |
 | `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` at 500 when current |
-| `List` / `ListRow` | like things as rows, no box; the title is the row's target (600 when unread), at most two quiet actions and “⋯”, always visible |
+| `List` / `ListRow` | like things as rows, no box; the title is the row's target (600 when unread), at most two quiet actions and “⋯”, always visible. A row that can be pressed says so: hover `surface-2`, `selected` `accent-soft`, and a trailing mark the row draws itself (› opens a drawer or page, ⌄ expands in place, ↗ leaves); `trailing` text lets the press through. Numbers of one measure are `columns` under a `ListHeader` |
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has |
 

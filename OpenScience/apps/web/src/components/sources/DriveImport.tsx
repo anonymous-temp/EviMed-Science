@@ -59,7 +59,7 @@ export function OpenListBrowser({ projectId, onImported, onFolderRegistered }: {
       <Button variant="secondary" disabled={busy} onClick={() => void registerFolder(remotePath)}><FolderSync size={16} aria-hidden="true" />同步此文件夹</Button>
     </form>
     {entries && <List className="mt-3">
-      {remotePath !== "/" && <ListRow leading={<CornerLeftUp size={16} className="text-text-3" aria-hidden="true" />} title="返回上级" onOpen={() => void browse(parent)} />}
+      {remotePath !== "/" && <ListRow leading={<CornerLeftUp size={16} className="text-text-3" aria-hidden="true" />} title="返回上级" chevron={false} onOpen={() => void browse(parent)} />}
       {entries.length === 0 ? <li className="px-2 py-3 text-ui text-text-3">这里没有可导入的资料。</li> : entries.map((entry) => entry.entryType === "dir"
         ? <ListRow key={entry.path} leading={<Folder size={16} className="text-text-3" aria-hidden="true" />} title={entry.name} onOpen={() => void browse(entry.path)}
           actions={<Button variant="text" size="sm" disabled={busy} onClick={() => void registerFolder(entry.path)}><FolderSync size={16} aria-hidden="true" />同步</Button>} />

@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
 import { ListRow } from "@/components/ui/ListRow";
 
 /**
@@ -30,12 +29,7 @@ export function MemoryListRow({ title, summary, end, onOpen, highlighted = false
       title={<span className="line-clamp-2 max-w-measure">{title}</span>}
       meta={summary ? <span className="line-clamp-2 max-w-measure">{summary}</span> : undefined}
       onOpen={onOpen}
-      trailing={(
-        <>
-          {end}
-          <ChevronRight size={16} aria-hidden="true" />
-        </>
-      )}
+      trailing={end}
     />
   );
 }

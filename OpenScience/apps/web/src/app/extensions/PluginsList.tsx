@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Puzzle } from "lucide-react";
+import { Puzzle } from "lucide-react";
 import { searchMatches } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
@@ -101,7 +101,7 @@ export function PluginsList({ inventory, citation, extensions, allCatalogue, que
               const copy = PLUGIN_COPY[row.id], Icon = copy.icon;
               return <ListRow key={row.id} leading={<Icon size={20} aria-hidden className="text-text-3" />} title={copy.title}
                 meta={row.id === "research-tools" ? `${copy.use}，共 ${inventory.researchTools.count} 个` : copy.use}
-                trailing={<><span>始终开启</span><ChevronRight size={16} aria-hidden /></>} onOpen={() => onOpen(row.target)} />;
+                trailing={<span>始终开启</span>} onOpen={() => onOpen(row.target)} />;
             })}
           </List>
           {citation.error && !citation.plugin && <p role="alert" className="px-2 pt-2 text-caption text-error">{citation.error}</p>}
@@ -113,7 +113,7 @@ export function PluginsList({ inventory, citation, extensions, allCatalogue, que
             {shownEngines.map(({ copy, available }) => {
               const Icon = copy.icon;
               return <ListRow key={copy.id} leading={<Icon size={20} aria-hidden className="text-text-3" />} title={copy.title} meta={copy.use}
-                trailing={<>{!available && <span>暂不可用</span>}<ChevronRight size={16} aria-hidden /></>} onOpen={() => onOpen({ kind: "engine", id: copy.id })} />;
+                trailing={!available ? <span>暂不可用</span> : undefined} onOpen={() => onOpen({ kind: "engine", id: copy.id })} />;
             })}
           </List>
           {!needle && engines.length > ENGINES_SHOWN && (
@@ -129,7 +129,7 @@ export function PluginsList({ inventory, citation, extensions, allCatalogue, que
         <Group name="我的插件">
           <List label="我的插件" divided>
             {installed.map(item => <ListRow key={item.id} leading={<Puzzle size={20} aria-hidden className="text-text-3" />} title={installedTitle(item, extensions?.offered ?? [], allCatalogue) || "插件"}
-              trailing={<><span>{extensionState(item)}</span><ChevronRight size={16} aria-hidden /></>} onOpen={() => onOpen({ kind: "extension", id: item.id })} />)}
+              trailing={<span>{extensionState(item)}</span>} onOpen={() => onOpen({ kind: "extension", id: item.id })} />)}
           </List>
         </Group>
       )}

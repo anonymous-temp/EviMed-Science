@@ -11,7 +11,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { FilterChip, FilterChips } from "@/components/ui/FilterChips";
 import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
-import { List, ListRow } from "@/components/ui/ListRow";
+import { List, ListHeader, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
 import { ProgressRail } from "@/components/ui/ProgressRail";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -217,7 +217,7 @@ export function GalleryPage() {
         <Menu label="更多操作" items={[{ label: "重命名", onSelect: () => {} }, "separator", { label: "删除", destructive: true, onSelect: () => {} }]} />
       </Row>
 
-      <Row name="ListRow / RunStatusDot" note="同类的东西用列表；未读标题 600；状态说三遍：形状、颜色、文字。">
+      <Row name="ListRow / RunStatusDot" note="同类的东西用列表；未读标题 600；状态说三遍：形状、颜色、文字。能按的行行尾有标记，数字对齐成列。">
         <div className="w-full max-w-page">
           <List label="示例列表" divided>
             <ListRow
@@ -231,6 +231,39 @@ export function GalleryPage() {
             />
             <ListRow title="周报已生成" to="/__gallery" leading={<RunStatusDot state="review" />} meta="信尔美 · 9月25日" />
             <ListRow title="孟德尔随机化分析" to="/__gallery" muted leading={<RunStatusDot state="failed" />} meta="未完成 · 2025-12-31" />
+          </List>
+        </div>
+        <div className="w-full max-w-page">
+          {/* What a row does decides its mark; the row that does nothing has none and no hover. Hover is drawn on one row by its class. */}
+          <List label="行的状态" divided>
+            <ListRow title="打开抽屉或页面" onOpen={() => {}} meta="行尾 ›" />
+            <ListRow title="悬停的行" onOpen={() => {}} className="bg-surface-2" meta="悬停 surface-2" />
+            <ListRow title="选中的行" onOpen={() => {}} selected meta="选中 accent-soft，aria-current" />
+            <ListRow title="就地展开，已收起" onOpen={() => {}} expanded={false} meta="行尾 ⌄" />
+            <ListRow title="就地展开，已展开" onOpen={() => {}} expanded meta="⌄ 翻转；展开的内容回答这一行写出的数字" />
+            <ListRow title="去外面的地址" href="https://example.org" meta="新标签页，行尾 ↗" />
+            <ListRow title="返回上级" onOpen={() => {}} chevron={false} meta="按下不是打开什么：不画标记" />
+            <ListRow title="只是一行" meta="没有标记，没有悬停" trailing={<span>10月8日</span>} />
+          </List>
+        </div>
+        <div className="w-full max-w-page">
+          {/* Numbers of one measure down a list: columns in the same widths as their header, a red count that opens what it counts. */}
+          <ListHeader columns={[{ key: "cited", label: "被引用", sortable: true }, { key: "wrong", label: "讲错的回答", sortable: true }, { key: "mentions", label: "提到你", sortable: true }]} sort={{ key: "cited", descending: true }} onSort={() => {}} />
+          <List label="数字列" divided>
+            <ListRow
+              title={<span className="flex min-w-0 items-center gap-2"><span className="min-w-0 truncate">百度百科</span><Tag>百科</Tag><span className="min-w-0 truncate text-caption text-text-3">baike.baidu.com</span></span>}
+              onOpen={() => {}}
+              columns={[
+                { key: "cited", label: "被引用", value: "69" },
+                { key: "wrong", label: "讲错的回答", value: "14", tone: "danger", onOpen: () => {} },
+                { key: "mentions", label: "提到你", value: "35" },
+              ]}
+            />
+            <ListRow
+              title={<span className="flex min-w-0 items-center gap-2"><span className="min-w-0 truncate">丁香医生</span><Tag>健康媒体</Tag><span className="min-w-0 truncate text-caption text-text-3">dxy.com</span></span>}
+              onOpen={() => {}}
+              columns={[{ key: "cited", label: "被引用", value: "48" }, { key: "wrong", label: "讲错的回答", value: "0" }, { key: "mentions", label: "提到你", value: "0" }]}
+            />
           </List>
         </div>
         <div className="flex items-center gap-4">

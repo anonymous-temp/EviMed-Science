@@ -335,8 +335,9 @@ function InboxRow({ item, operator, busy, open, onToggle, onRead, onResolve, onO
       // Two lines of title on a phone, then an ellipsis; an open row shows the whole of it.
       title={<span className={cn("block", !(open && !href) && "line-clamp-2")}>{item.title}{unread && <span className="sr-only">（未读）</span>}</span>}
       to={href ?? undefined}
-      onOpen={href ? () => onOpened(item) : onToggle}
-      expanded={href ? undefined : open}
+      // A notice with no body and no address has nothing to open: it is a line, and 「标为已读」 is its control.
+      onOpen={href ? () => onOpened(item) : hasBody ? onToggle : undefined}
+      expanded={href || !hasBody ? undefined : open}
       unread={unread}
       muted={!unread}
       meta={hasBody ? <><InboxBody body={item.body} open={!href && open} operator={operator} />{operator && open && item.source?.type === 'system' && item.source.id.startsWith('evolution-decision-') && <EvolutionDecisionCard id={item.source.id} />}</> : undefined}

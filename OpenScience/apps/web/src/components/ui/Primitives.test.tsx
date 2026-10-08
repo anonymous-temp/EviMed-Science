@@ -7,7 +7,7 @@ import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { FilterChip, FilterChips, FilterSelect } from "./FilterChips";
 import { Drawer } from "./Drawer";
 import { IconButton } from "./IconButton";
-import { List, ListRow } from "./ListRow";
+import { List, ListHeader, ListRow } from "./ListRow";
 import { Menu } from "./Menu";
 import { Panel, PanelRow } from "./Panel";
 import { SearchInput } from "./SearchInput";
@@ -183,6 +183,128 @@ describe("ListRow", () => {
     await userEvent.click(screen.getByRole("button", { name: "编辑" }));
     expect(onEdit).toHaveBeenCalledOnce();
     expect(screen.getByRole("listitem").className).not.toMatch(BORDER);
+  });
+
+  it("says a row can be pressed: hover on surface-2, a mark from what the row does, and nothing on a row that does nothing", () => {
+    const mark = (row: HTMLElement) => row.querySelector("svg.lucide")?.getAttribute("class") ?? "";
+    render(
+      <MemoryRouter>
+        <List label="种类">
+          <ListRow title="去页面" to="/app/memory/1" />
+          <ListRow title="开抽屉" onOpen={() => {}} />
+          <ListRow title="就地展开" onOpen={() => {}} expanded={false} />
+          <ListRow title="已展开" onOpen={() => {}} expanded />
+          <ListRow title="去外面" href="https://example.org/a" />
+          <ListRow title="返回上级" onOpen={() => {}} chevron={false} />
+          <ListRow title="只是一行" />
+        </List>
+      </MemoryRouter>,
+    );
+    const row = (name: string) => screen.getByText(name).closest("li") as HTMLElement;
+    expect(mark(row("去页面"))).toContain("lucide-chevron-right");
+    expect(mark(row("开抽屉"))).toContain("lucide-chevron-right");
+    expect(mark(row("就地展开"))).toContain("lucide-chevron-down");
+    expect(mark(row("就地展开"))).not.toContain("rotate-180");
+    expect(mark(row("已展开"))).toContain("rotate-180");
+    expect(mark(row("去外面"))).toContain("lucide-arrow-up-right");
+    expect(row("返回上级").querySelector("svg")).toBeNull();
+    expect(row("只是一行").querySelector("svg")).toBeNull();
+    // The mark is decoration: the title keeps the name, and the press goes to the title's stretched layer.
+    expect(row("去页面").querySelector("[aria-hidden='true'] svg")).not.toBeNull();
+    // Hover is the grey step the eye can see; a row that does nothing has none.
+    expect(row("开抽屉").className).toMatch(/hover:bg-surface-2/);
+    expect(row("开抽屉").className).not.toMatch(/hover:bg-surface-1/);
+    expect(row("只是一行").className).not.toMatch(/hover:/);
+  });
+
+  it("draws the open item of a master/detail list in accent-soft and marks it current", () => {
+    render(
+      <List label="任务">
+        <ListRow title="周报" onOpen={() => {}} selected />
+        <ListRow title="月报" onOpen={() => {}} />
+      </List>,
+    );
+    expect(screen.getByText("周报").closest("li")).toHaveClass("bg-accent-soft");
+    expect(screen.getByText("周报").closest("li")?.className).not.toMatch(/hover:bg-surface-2/);
+    expect(screen.getByText("周报")).toHaveAttribute("aria-current", "true");
+    expect(screen.getByText("月报")).not.toHaveAttribute("aria-current");
+    expect(screen.getByText("月报").closest("li")).not.toHaveClass("bg-accent-soft");
+  });
+
+  it("lets the press through a trailing time or tag, and keeps a control placed there, in actions or in a menu clickable", async () => {
+    const onOpen = vi.fn();
+    const onSwitch = vi.fn();
+    const onAction = vi.fn();
+    render(
+      <List label="通知">
+        <ListRow
+          title="研究已完成"
+          onOpen={onOpen}
+          trailing={<><time dateTime="2026-10-08">10月8日</time><button type="button" onClick={onSwitch}>开关</button></>}
+          actions={<button type="button" onClick={onAction}>标为已读</button>}
+        />
+      </List>,
+    );
+    const trailing = screen.getByText("10月8日").parentElement as HTMLElement;
+    // Text lets the press through to the stretched title; a control in the same place is named as one that stays pressable.
+    expect(trailing.parentElement).toHaveClass("pointer-events-none");
+    expect(trailing.className).toMatch(/pointer-events-auto/);
+    expect(screen.getByText("标为已读").parentElement).toHaveClass("pointer-events-auto");
+    await userEvent.click(screen.getByRole("button", { name: "开关" }));
+    await userEvent.click(screen.getByRole("button", { name: "标为已读" }));
+    expect(onSwitch).toHaveBeenCalledOnce();
+    expect(onAction).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("aligns numeric columns under a header that sorts: a cell is text, or a button of its own that opens what it counts", async () => {
+    const onSort = vi.fn();
+    const onWrong = vi.fn();
+    const onOpen = vi.fn();
+    const columns = [
+      { key: "cited", label: "被引用", sortable: true },
+      { key: "wrong", label: "讲错的回答", sortable: true },
+      { key: "mentions", label: "提到你" },
+    ];
+    render(
+      <>
+        <ListHeader columns={columns} sort={{ key: "cited", descending: true }} onSort={onSort} />
+        <List label="信源">
+          <ListRow
+            title="百度百科"
+            onOpen={onOpen}
+            columns={[
+              { key: "cited", label: "被引用", value: "33" },
+              { key: "wrong", label: "讲错的回答", value: "14", tone: "danger", onOpen: onWrong },
+              { key: "mentions", label: "提到你", value: "2" },
+            ]}
+          />
+          <ListRow title="丁香医生" columns={[{ key: "cited", label: "被引用", value: "48" }, { key: "wrong", label: "讲错的回答", value: "0" }, { key: "mentions", label: "提到你", value: "0" }]} />
+        </List>
+      </>,
+    );
+    // The header: a group of sort buttons, the active one a pressed button with an arrow and its direction in its name; a plain label is not a button.
+    const header = screen.getByRole("group", { name: "排序" });
+    expect(within(header).getByRole("button", { name: "按被引用排序，当前从多到少" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(header).getByRole("button", { name: "按讲错的回答排序" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(header).queryByRole("button", { name: /提到你/ })).not.toBeInTheDocument();
+    await userEvent.click(within(header).getByRole("button", { name: "按讲错的回答排序" }));
+    expect(onSort).toHaveBeenCalledWith("wrong");
+    // The row: the red count is a button named by its column, and pressing it is not pressing the row.
+    const wrong = screen.getByRole("button", { name: "讲错的回答 14" });
+    expect(wrong).toHaveClass("text-danger");
+    await userEvent.click(wrong);
+    expect(onWrong).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+    // A cell without a handler is text that lets the press through to the row; the column keeps its width in every row.
+    const quiet = screen.getByText("丁香医生").closest("li")?.querySelector("[data-list-cell='wrong']") as HTMLElement;
+    expect(quiet.tagName).toBe("SPAN");
+    expect(quiet.parentElement?.parentElement).toHaveClass("pointer-events-none");
+    expect(screen.getByText("百度百科").closest("li")?.querySelector("[data-list-cell='cited']")?.parentElement).toHaveClass("w-24");
+    expect(header.querySelectorAll(":scope > .w-24")).toHaveLength(3);
+    // Opening the row still works from its title.
+    await userEvent.click(screen.getByRole("button", { name: /百度百科/ }));
+    expect(onOpen).toHaveBeenCalledOnce();
   });
 
   it("draws a divided list's rules straight: its rows drop the corner that bent them", () => {

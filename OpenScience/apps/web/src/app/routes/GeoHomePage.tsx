@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Plus, Radar } from "lucide-react";
+import { Plus, Radar } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { createGeoProject, GEO_STEP_KEYS, isGeoOff, listGeoProjects, patchGeoProject, useGeoFeature, type GeoProjectSummary } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
@@ -165,7 +165,6 @@ function ProjectRow({ project, label, onResumed }: { project: GeoProjectSummary;
           <span className="w-20 shrink-0 text-ui sm:w-28">
             <GeoCellText cell={mention} unit="percent" layout="stack" />
           </span>
-          <ChevronRight size={16} aria-hidden="true" className="w-4 shrink-0 text-text-3" />
         </>
       )}
     />

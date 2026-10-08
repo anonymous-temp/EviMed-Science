@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
 import { searchMatches } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
@@ -54,7 +53,7 @@ export function SkillsList({ personal, platform, query, hasMore, loadingMore, on
               {mine.map(skill => {
                 const Icon = SKILL_GROUP_ICON["我的技能"];
                 return <ListRow key={skill.id} leading={<Icon size={20} aria-hidden className="text-text-3" />} title={skill.payload.title} meta={skill.payload.description}
-                  trailing={<ChevronRight size={16} aria-hidden />} onOpen={() => onOpenPersonal(skill)} />;
+                  onOpen={() => onOpenPersonal(skill)} />;
               })}
             </List>
           ) : <p className="px-2 py-2 text-ui text-text-3">还没有自己的技能，可以新建一个，或导入技能文件。</p>}
@@ -71,7 +70,7 @@ export function SkillsList({ personal, platform, query, hasMore, loadingMore, on
             <List label={group.name} divided>
               {rows.map(item => (
                 <ListRow key={item.id} leading={<Icon size={20} aria-hidden className="text-text-3" />} title={item.title} meta={item.use}
-                  trailing={<ChevronRight size={16} aria-hidden />} onOpen={() => onOpenPlatform(item)} />
+                  onOpen={() => onOpenPlatform(item)} />
               ))}
             </List>
             {!needle && group.items.length > SHOWN && (
