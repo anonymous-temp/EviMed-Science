@@ -1,6 +1,6 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
@@ -130,6 +130,27 @@ function open(search = "") {
     </MemoryRouter>,
   );
 }
+
+/** The address and the router's `navigate`, for the tests that read where the page keeps its place. */
+const router: { navigate: ReturnType<typeof useNavigate> | null } = { navigate: null };
+function Where() {
+  const location = useLocation();
+  router.navigate = useNavigate();
+  return <p data-testid="where">{location.pathname}{location.search}</p>;
+}
+/** The memory page in the middle of a history: `/away` before it, so a Back that leaves the page is visible. */
+function openInHistory(search = "") {
+  return render(
+    <MemoryRouter initialEntries={["/away", `/app/memory${search}`]} initialIndex={1}>
+      <Where />
+      <Routes>
+        <Route path="/app/memory" element={<MemoryHubPage />} />
+        <Route path="/away" element={<p>别处</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+const where = () => screen.getByTestId("where").textContent;
 
 describe("记忆胶囊", () => {
   beforeEach(() => {
@@ -687,6 +708,75 @@ describe("记忆胶囊", () => {
     cleanup();
     open("?method=method%3Amissing");
     expect(await screen.findByText("当前列表中没有找到这条做法。")).toBeInTheDocument();
+  });
+
+  // A08: the page keeps its place in its address, and Back finds it.
+  it("keeps the tab, the project and the search in the address, and a tab pushes where a filter replaces", async () => {
+    const user = userEvent.setup();
+    openInHistory();
+    await user.click(await screen.findByRole("tab", { name: /^项目/ }));
+    expect(where()).toBe("/app/memory?tab=project");
+    await user.click(screen.getByRole("button", { name: "项目：疳证 Meta 文献检索" }));
+    await user.click(within(await screen.findByRole("menu", { name: "项目" })).getByRole("menuitemradio", { name: "信尔美" }));
+    expect(where()).toBe("/app/memory?tab=project&project=prj_2");
+    await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "冷链");
+    await waitFor(() => expect(where()).toBe("/app/memory?tab=project&project=prj_2&q=%E5%86%B7%E9%93%BE"));
+    // Choosing the project and typing replaced the entry; the tab pushed one: a single Back leaves for the page before it.
+    await act(async () => { await router.navigate!(-1); });
+    expect(where()).toBe("/app/memory");
+    expect(screen.getByRole("tab", { name: /^关于你/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveValue("");
+  });
+
+  it("opens the page on the tab, project, search and row its address names", async () => {
+    openInHistory(`?tab=project&project=prj_2&open=${encodeURIComponent("record:rec_6")}&q=${encodeURIComponent("冷链")}`);
+    const drawer = await screen.findByRole("dialog", { name: "项目事实" });
+    expect(within(drawer).getByText("信尔美为处方药，需冷链。")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^项目/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveValue("冷链");
+  });
+
+  it("opens a row by pushing an entry: Back closes the drawer, and closing it from the page pops that entry", async () => {
+    const user = userEvent.setup();
+    openInHistory();
+    await user.click(await screen.findByRole("button", { name: /药学背景/ }));
+    expect(await screen.findByRole("dialog", { name: "背景" })).toBeInTheDocument();
+    expect(where()).toBe("/app/memory?open=record%3Arec_1");
+    await act(async () => { await router.navigate!(-1); });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(where()).toBe("/app/memory");
+    await act(async () => { await router.navigate!(1); });
+    const drawer = await screen.findByRole("dialog", { name: "背景" });
+    await user.click(within(drawer).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(where()).toBe("/app/memory");
+    // The close popped the entry the open pushed: one Back more leaves the page, it does not land on the same list again.
+    await act(async () => { await router.navigate!(-1); });
+    expect(where()).toBe("/away");
+  });
+
+  it("closes a drawer that an address opened without leaving the page, and clears the search with its button and Escape", async () => {
+    const user = userEvent.setup();
+    openInHistory(`?open=${encodeURIComponent("record:rec_1")}`);
+    const drawer = await screen.findByRole("dialog", { name: "背景" });
+    await user.click(within(drawer).getByRole("button", { name: "关闭" }));
+    expect(where()).toBe("/app/memory");
+    const box = screen.getByRole("searchbox", { name: "搜索记忆" });
+    await user.type(box, "背景");
+    await waitFor(() => expect(where()).toBe("/app/memory?q=%E8%83%8C%E6%99%AF"));
+    await user.click(screen.getByRole("button", { name: "清除搜索" }));
+    expect(box).toHaveValue("");
+    expect(where()).toBe("/app/memory");
+    await user.type(box, "背景");
+    await user.keyboard("{Escape}");
+    expect(box).toHaveValue("");
+    expect(where()).toBe("/app/memory");
+  });
+
+  it("keeps the notice's deep links working: the record's tab, project and row land in the address", async () => {
+    openInHistory("?record=rec_6");
+    await screen.findByRole("dialog", { name: "项目事实" });
+    expect(where()).toBe("/app/memory?tab=project&project=prj_2&open=record%3Arec_6");
   });
 
   it("does not write when it is read: the capsule is made when 分享与导入 opens", async () => {

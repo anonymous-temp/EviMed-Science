@@ -1,7 +1,7 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { InboxPage } from "./InboxPage";
 import * as api from "@/lib/inboxClient";
 import { useToastStore } from "@/lib/toast";
@@ -41,16 +41,18 @@ function serve(main: api.InboxPageResult, safety?: api.InboxPageResult) {
     : main);
 }
 
+const router: { navigate: ReturnType<typeof useNavigate> | null } = { navigate: null };
 function Where() {
   const location = useLocation();
+  router.navigate = useNavigate();
   return <p data-testid="where">{location.pathname}{location.search}</p>;
 }
 
-function open() {
+function open(search = "") {
   return render(
-    <MemoryRouter initialEntries={["/app/inbox"]}>
+    <MemoryRouter initialEntries={[`/app/inbox${search}`]}>
       <Routes>
-        <Route path="/app/inbox" element={<InboxPage />} />
+        <Route path="/app/inbox" element={<><Where /><InboxPage /></>} />
         <Route path="*" element={<Where />} />
       </Routes>
     </MemoryRouter>,
@@ -226,6 +228,88 @@ it("opens a notice that points nowhere in place, whole, and reads it", async () 
   expect(title).toHaveAttribute("aria-expanded", "true");
   expect(screen.getByText("如果不是你本人扫的码，点「解除绑定」。")).toBeInTheDocument();
   await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledWith("bound", 1));
+});
+
+// A08: the list keeps its place in its address, and Back from a row finds it.
+it("keeps the filter in the address and reads it back from there", async () => {
+  serve({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 2 });
+  const { unmount } = open();
+  await userEvent.click(await screen.findByRole("button", { name: /^未读\s*2$/ }));
+  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?filter=unread"));
+  await userEvent.click(screen.getByRole("button", { name: "全部" }));
+  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/inbox$/));
+  unmount();
+  vi.mocked(api.listInbox).mockClear();
+  open("?filter=unread");
+  expect(await screen.findByRole("button", { name: /^未读\s*2$/ })).toHaveAttribute("aria-pressed", "true");
+  expect(api.listInbox).toHaveBeenCalledWith({ unread: true });
+});
+
+it("keeps the row that is open in place in the address, and opens it again from there", async () => {
+  const notice: api.InboxItem = {
+    ...review, id: "bound", noticeType: "notify", title: "飞书机器人已绑定到你的账号", body: "绑定的飞书身份：张三。\n如果不是你本人扫的码，点“解除绑定”。",
+    source: { type: "system", id: "feishu-binding:1" }, actions: [{ id: "feishu-unbind", label: "解除绑定", style: "danger" }], readAt: at(0),
+  };
+  serve({ items: [notice], nextCursor: null });
+  const { unmount } = open();
+  const title = await screen.findByRole("button", { name: /飞书机器人已绑定到你的账号/ });
+  await userEvent.click(title);
+  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?open=bound"));
+  await userEvent.click(title);
+  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/inbox$/));
+  unmount();
+  open("?open=bound");
+  expect(await screen.findByRole("button", { name: /飞书机器人已绑定到你的账号/ })).toHaveAttribute("aria-expanded", "true");
+});
+
+it("brings back the pages the address names, in turn, and keeps count as 「加载更多」 adds one", async () => {
+  const note = (id: string) => runNotice({ id, title: `第 ${id} 条通知`, readAt: at(0) });
+  vi.mocked(api.listInbox).mockImplementation(async ({ cursor = null } = {}) => {
+    if (cursor === "c2") return { items: [note("2")], nextCursor: "c3" };
+    if (cursor === "c3") return { items: [note("3")], nextCursor: "c4" };
+    return { items: [note("1")], nextCursor: "c2" };
+  });
+  const { unmount } = open();
+  await userEvent.click(await screen.findByRole("button", { name: "加载更多" }));
+  expect(await screen.findByText("第 2 条通知")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?pages=2"));
+  unmount();
+  vi.mocked(api.listInbox).mockClear();
+  open("?pages=3");
+  expect(await screen.findByText("第 3 条通知")).toBeInTheDocument();
+  expect(screen.getByText("第 1 条通知")).toBeInTheDocument();
+  expect(screen.getByText("第 2 条通知")).toBeInTheDocument();
+  expect(vi.mocked(api.listInbox).mock.calls.filter(([args]) => args?.severity !== "safety")).toEqual([[{ unread: false }], [{ unread: false, cursor: "c2" }], [{ unread: false, cursor: "c3" }]]);
+  // The next page is still one tap away.
+  expect(screen.getByRole("button", { name: "加载更多" })).toBeInTheDocument();
+});
+
+it("reads one page for a pages value that is not a small number, and keeps the pages it could read when a later one fails", async () => {
+  const note = (id: string) => runNotice({ id, title: `第 ${id} 条通知`, readAt: at(0) });
+  vi.mocked(api.listInbox).mockImplementation(async ({ cursor = null } = {}) => {
+    if (cursor === "c2") throw new Error("down");
+    return { items: [note("1")], nextCursor: "c2" };
+  });
+  const { unmount } = open("?pages=-4");
+  expect(await screen.findByText("第 1 条通知")).toBeInTheDocument();
+  expect(vi.mocked(api.listInbox).mock.calls.filter(([args]) => args?.cursor)).toEqual([]);
+  unmount();
+  open("?pages=2");
+  expect(await screen.findByText("第 1 条通知")).toBeInTheDocument();
+  // The second page failed quietly: the first stays, with the way to ask again.
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByRole("button", { name: "加载更多" })).toBeInTheDocument();
+});
+
+it("comes back from the row's destination to the list as it was", async () => {
+  const notice = runNotice({ id: "follow", readAt: at(0) });
+  serve({ items: [notice], nextCursor: null, unreadTotal: 1 });
+  open("?filter=unread&pages=1");
+  await userEvent.click(await screen.findByRole("link", { name: /已完成/ }));
+  expect(screen.getByTestId("where")).toHaveTextContent("/app/runs?run=run_follow");
+  await act(async () => { await router.navigate!(-1); });
+  expect(await screen.findByRole("button", { name: /^未读\s*1$/ })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?filter=unread");
 });
 
 it("empties the view with one sentence and no button", async () => {

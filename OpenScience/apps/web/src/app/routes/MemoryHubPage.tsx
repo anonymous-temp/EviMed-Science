@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import { useAddressOpen, useAddressText, withParam } from "@/lib/addressState";
 import { Brain } from "lucide-react";
 import { fetchMemoryProfile, searchMemories, type WebStructuredMemory } from "@/lib/apiClient";
 import { listAllHandbooks } from "@/lib/handbooksClient";
@@ -82,15 +83,26 @@ const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "
  * the methods, the handbooks), each to its last page. When any fails, one line
  * says so with 重试, and a tab whose own read failed shows nothing rather than
  * 「还没有记忆」.
+ *
+ * Where the reader is lives in the address (design reference A08): `?tab=`,
+ * `?project=` on 项目, `?q=` for the search and `?open=` for the row whose
+ * drawer is open — so Back from a conversation a drawer linked to, a reload and
+ * a pasted link all find the same list with the same row open. A choice the
+ * address does not make is the page's own (the first tab with something in it).
  */
 export function MemoryHubPage() {
   const [params, setParams] = useSearchParams();
   const projects = useProjectStore((state) => state.projects);
   const currentProjectId = useProjectStore((state) => state.currentId);
-  const [tab, setTab] = useState<MemoryTab>(() => tabFromAddress(params) ?? "self");
-  const [query, setQuery] = useState("");
-  const [projectChoice, setProjectChoice] = useState<string | null>(null);
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  // The tab the address names, else the one the page picked for the researcher once the data was in (below).
+  const [pickedTab, setPickedTab] = useState<MemoryTab>("self");
+  const tab = tabFromAddress(params) ?? pickedTab;
+  const search = useAddressText("q", 80);
+  const query = search.draft;
+  // The project the address names, else the one with facts the page picked when the shell's own had none.
+  const [pickedProject, setPickedProject] = useState<string | null>(null);
+  const projectChoice = params.get("project") ?? pickedProject;
+  const { value: openKey, open: setOpenKey, close } = useAddressOpen("open");
   const [drawer, setDrawer] = useState<"share" | "forgotten" | null>(null);
   const [found, setFound] = useState<WebStructuredMemory[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -154,20 +166,21 @@ export function MemoryHubPage() {
     const methodId = params.get("method");
     if (!recordId && !methodId) { handled.current = true; return; }
     handled.current = true;
+    const next = new URLSearchParams(params);
     if (recordId) {
       const target = facts.find((fact) => fact.kind === "record" && fact.record.id === recordId)
         ?? factItems(records, entries).find((fact) => fact.kind === "record" && fact.record.id === recordId);
       if (target) {
-        setTab(target.group);
-        if (target.group === "project") setProjectChoice(target.projectId);
-        setOpenKey(target.key);
+        next.set("tab", target.group);
+        if (target.group === "project" && target.projectId) next.set("project", target.projectId);
+        next.set("open", target.key);
       }
     } else if (methodId) {
       const target = everyPractice.methods.find((item) => item.kind === "method" && item.method.id === methodId);
-      if (target) setOpenKey(target.key);
+      next.set("tab", "methods");
+      if (target) next.set("open", target.key);
       else setMissing(data.methods === null ? "暂时读不到已学做法，请重试。" : "当前列表中没有找到这条做法。");
     }
-    const next = new URLSearchParams(params);
     next.delete("record");
     next.delete("method");
     setParams(next, { replace: true });
@@ -194,9 +207,9 @@ export function MemoryHubPage() {
       if (candidate === "project") {
         // The dropdown names one project at a time: open the first that has facts when the shell's own has none.
         const withFacts = choices.find((choice) => factsOfProject(everyFact, choice.id, knownProjects).length > 0);
-        if (withFacts && factsOfProject(everyFact, scope, knownProjects).length === 0) setProjectChoice(withFacts.id);
+        if (withFacts && factsOfProject(everyFact, scope, knownProjects).length === 0) setPickedProject(withFacts.id);
       }
-      if (candidate !== "self") setTab(candidate);
+      if (candidate !== "self") setPickedTab(candidate);
       return;
     }
   }, [data, records, entries, everyPractice, choices, scope, knownProjects]);
@@ -213,7 +226,8 @@ export function MemoryHubPage() {
   const opened: FactItem | PracticeItem | null = openKey
     ? [...facts, ...everyPractice.methods, ...everyPractice.handbooks].find((item) => item.key === openKey) ?? null
     : null;
-  const close = () => setOpenKey(null);
+  const setProjectChoice = (id: string) => setParams((current) => withParam(current, "project", id), { replace: true });
+  const chooseTab = (next: MemoryTab) => { landed.current = true; setParams((current) => withParam(current, "tab", next)); };
 
   const factRows = (rows: readonly FactItem[], label: string) => (
     <List label={label}>
@@ -294,9 +308,9 @@ export function MemoryHubPage() {
     >
       {/* One row: the tabs, and the search box at its end; on a phone the box takes its own line. */}
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-border">
-        <Tabs label="记忆" items={tabs} value={tab} onChange={(next) => { landed.current = true; setTab(next); }} className="min-w-0 flex-1 border-b-0" />
+        <Tabs label="记忆" items={tabs} value={tab} onChange={chooseTab} className="min-w-0 flex-1 border-b-0" />
         {tab !== "growth"
-          ? <SearchInput label="搜索记忆" value={query} onChange={(event) => setQuery(event.target.value)} className="mb-1.5 w-full sm:w-60" />
+          ? <SearchInput label="搜索记忆" value={query} maxLength={80} onChange={(event) => search.setDraft(event.target.value)} onClear={search.clear} {...search.composition} className="mb-1.5 w-full sm:w-60" />
           // 成长 has nothing to search, and the row keeps its height so the rule under the tabs does not jump between tabs.
           : <div aria-hidden="true" className="mb-1.5 h-control" />}
       </div>
