@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { GeoDiagnosis, GeoProject } from "@/lib/geoClient";
 import { cell, diagnosisFilled, diagnosisWith, geoProject } from "./__fixtures__/geoTabs";
 import {
+  changeWord,
+  comparableRun,
+  coverageMarker,
+  coverageNotice,
   denominatorLine,
   engineConclusion,
   engineTrendConclusion,
   engineMatrix,
   headlineSentence,
   nextSteps,
+  overviewCoverageNotice,
   overviewTiles,
   railSteps,
   railSummary,
@@ -17,6 +22,7 @@ import {
   shownDelta,
   statedValue,
   trendConclusion,
+  withCoverageMarker,
 } from "./geoOverviewModel";
 
 /**
@@ -367,5 +373,83 @@ describe("the rail on a phone", () => {
     expect(railSummary(railSteps(waiting, () => "/x"))).toBe("已完成 2 / 8 步 · 投放待你确认预算");
     const clear = geoProject({ evidence: "done" });
     expect(railSummary(railSteps(clear, () => "/x"))).toBe("已完成 1 / 8 步");
+  });
+});
+
+describe("a reading is compared only with one measured over the same thing (R14 N-4)", () => {
+  const two = "v1|P1,P2|deepseek,kimi|web";
+  const three = "v1|P1,P2|deepseek,doubao,kimi|web";
+
+  it("compares as before when the coverage keys are equal, and when neither server sent one", () => {
+    expect(readingChange([{ date: "a", value: 46.4, coverage: two }, { date: "b", value: 44, coverage: two }])).toEqual({ delta: -2.4, flat: false, from: "a", to: "b" });
+    expect(readingChange([{ date: "a", value: 46.4 }, { date: "b", value: 44 }])).toEqual({ delta: -2.4, flat: false, from: "a", to: "b" });
+  });
+
+  it("states no change at all when the engine set moved: no delta, no arrow, the plain statement", () => {
+    const change = readingChange([{ date: "a", value: 46.4, coverage: two }, { date: "b", value: 44, coverage: three }]);
+    expect(change.delta).toBeNull();
+    expect(change.flat).toBe(false);
+    expect(change).toMatchObject({ from: "a", to: "b", coverage: { comparable: false, engines: true, questions: false, surface: false } });
+    expect(shownDelta(change)).toBeNull();
+    expect(changeWord(change, "index")).toBe("引擎范围有变化，不与上一轮比较");
+    expect(coverageNotice(change)).toBe("引擎范围有变化，不与上一轮比较");
+    // The sentence says it for a rate as well, with no “个百分点”.
+    expect(changeWord(change, "percent")).toBe("引擎范围有变化，不与上一轮比较");
+    expect(trendConclusion("综合可见度", cell(44, null, 310), change, "index")).toBe("综合可见度 44，引擎范围有变化，不与上一轮比较");
+  });
+
+  it("says what moved: the questions, the probe surface, or several at once, and that a round with no recorded coverage is not compared", () => {
+    const moved = (before: string | null, after: string | null) => coverageNotice(readingChange([{ date: "a", value: 40, coverage: before }, { date: "b", value: 44, coverage: after }]));
+    expect(moved(two, "v2|P1,P2|deepseek,kimi|web")).toBe("问句范围有变化，不与上一轮比较");
+    expect(moved(two, "v1|P1,P2|deepseek,kimi|web;newchat")).toBe("测量方式有变化，不与上一轮比较");
+    expect(moved(two, "v2|P1|deepseek|web")).toBe("测量范围有变化，不与上一轮比较");
+    expect(moved(null, two)).toBe("测量范围没有记录，不与上一轮比较");
+  });
+
+  it("compares the last two STATED readings: a thin round between them does not hide a change", () => {
+    const change = readingChange([{ date: "a", value: 30, n: 310, coverage: two }, { date: "b", value: 40, n: 12, coverage: three }, { date: "c", value: 44, n: 310, coverage: three }]);
+    expect(change).toMatchObject({ delta: null, from: "a", to: "c", coverage: { engines: true } });
+  });
+
+  it("draws a line only from the readings measured over what the latest was: it starts where the coverage last changed", () => {
+    const points = [
+      { date: "a", value: 30, coverage: two }, { date: "b", value: 31, coverage: two }, { date: "c", value: 40, coverage: three }, { date: "d", value: 41, coverage: three },
+    ];
+    expect(comparableRun(points).map((point) => point.date)).toEqual(["c", "d"]);
+    expect(comparableRun(points.slice(0, 2)).map((point) => point.date)).toEqual(["a", "b"]);
+    // A server that sends no keys draws the whole series; a null key stands alone.
+    expect(comparableRun([{ date: "a", value: 1 }, { date: "b", value: 2 }]).map((point) => point.date)).toEqual(["a", "b"]);
+    expect(comparableRun([{ date: "a", value: 1, coverage: two }, { date: "b", value: 2, coverage: null }]).map((point) => point.date)).toEqual(["b"]);
+    expect(comparableRun([]).length).toBe(0);
+  });
+
+  it("marks a chart where the coverage last changed, in a few words", () => {
+    const points = [{ date: "a", value: 30, coverage: two }, { date: "b", value: 31, coverage: two }, { date: "c", value: 40, coverage: three }, { date: "d", value: 41, coverage: three }];
+    expect(coverageMarker(points)).toEqual({ index: 2, label: "引擎范围有变化" });
+    expect(coverageMarker(points.slice(0, 2))).toBeNull();
+    expect(coverageMarker([{ date: "a", value: 30 }, { date: "b", value: 31 }])).toBeNull();
+  });
+
+  it("puts the change among a chart's markers, joined to one that stands on the same reading so two labels never print over each other", () => {
+    const points = [{ date: "a", value: 30, coverage: two }, { date: "b", value: 31, coverage: three }, { date: "c", value: 33, coverage: three }];
+    expect(withCoverageMarker([], points)).toEqual([{ index: 1, label: "引擎范围有变化" }]);
+    expect(withCoverageMarker([{ index: 2, label: "首次被 AI 引用" }], points)).toEqual([{ index: 2, label: "首次被 AI 引用" }, { index: 1, label: "引擎范围有变化" }]);
+    expect(withCoverageMarker([{ index: 1, label: "首次被 AI 引用" }], points)).toEqual([{ index: 1, label: "首次被 AI 引用 · 引擎范围有变化" }]);
+    expect(withCoverageMarker([{ index: 1, label: "首次被 AI 引用" }], points.slice(0, 1))).toEqual([{ index: 1, label: "首次被 AI 引用" }]);
+  });
+
+  it("gives a tile no change and the band one sentence, from the same readings the arrows are read from", () => {
+    const metric = (key: "gvi" | "mention" | "accuracy" | "citation", cellValue: number) => ({
+      key, cell: cell(cellValue, null, 310), target: null,
+      trend: [{ date: "2026-09-25", value: cellValue + 3, n: 310, coverage: two }, { date: "2026-10-12", value: cellValue, n: 310, coverage: three }],
+    });
+    const moved = project({ overview: { ...geoProject().overview, metrics: [metric("gvi", 44), metric("mention", 23), metric("accuracy", 92), metric("citation", 50)] } });
+    const tiles = overviewTiles(moved, null);
+    expect(tiles.filter((tile) => ["gvi", "mention", "accuracy", "citation"].includes(tile.key)).map((tile) => tile.delta)).toEqual([null, null, null, null]);
+    // The line of the lead tile holds only the reading measured over what the latest was.
+    expect(tiles[0].trend).toEqual([44]);
+    expect(overviewCoverageNotice(moved)).toBe("引擎范围有变化，不与上一轮比较");
+    expect(headlineSentence(moved, null)).toContain("综合可见度 44，引擎范围有变化，不与上一轮比较");
+    expect(overviewCoverageNotice(project())).toBeNull();
   });
 });

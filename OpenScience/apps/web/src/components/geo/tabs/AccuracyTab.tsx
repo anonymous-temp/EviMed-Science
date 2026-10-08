@@ -21,7 +21,7 @@ import { isSeverityLevel, SeverityBadge, type SeverityLevel } from "@/components
 import { ShareBar, type ShareSegment } from "@/components/charts/ShareBar";
 import { GeoErrorCard } from "../GeoErrorCard";
 import { formatGeoValue, geoCellPhrase } from "../GeoCellText";
-import { denominatorLine, readingChange, shownDelta, tileValue } from "../geoOverviewModel";
+import { coverageNotice, denominatorLine, readingChange, shownDelta, tileValue } from "../geoOverviewModel";
 import { engineName, GEO_ERROR_TYPE_WORDS, zh } from "../geoText";
 import { metricName, metricUnit } from "./geoTabText";
 import { TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
@@ -76,6 +76,9 @@ function Accuracy({
   ].filter((error) => error && error.id);
   const counts = errorTotals(diagnosis, errors);
   const accuracy = project.overview.metrics.find((metric) => metric.key === "accuracy") ?? null;
+  // The accuracy rate's change is stated by the one rule: where its two readings were measured over different things there is no
+  // arrow, and the band says so once.
+  const accuracyChange = readingChange(accuracy?.trend);
   const modes = diagnosis.failureModes ?? null;
   const correct = readGeoCell(modes?.correct);
   const wrongOurs = readGeoCell(modes?.wrongOurs);
@@ -88,7 +91,7 @@ function Accuracy({
       label: "事实准确率",
       ...tileValue(accuracy?.cell, "percent"),
       // The accuracy rate has no measured band: its change is stated as a change, by the one rule.
-      delta: accuracy ? shownDelta(readingChange(accuracy.trend)) : null,
+      delta: accuracy ? shownDelta(accuracyChange) : null,
       note: accuracy?.target != null ? `目标 ${formatGeoValue(accuracy.target, "percent")}` : null,
       hint: accuracy ? geoCellPhrase(accuracy.cell, "percent") : undefined as string | undefined,
       polarity: "up" as const,
@@ -137,7 +140,7 @@ function Accuracy({
 
   return (
     <div data-geo-tab="accuracy" className="flex flex-col gap-6">
-      <StatBand label="准确与安全" footnote={denominator} columns={tiles.length >= 5 ? 5 : 4}>
+      <StatBand label="准确与安全" footnote={[denominator, coverageNotice(accuracyChange)].filter(Boolean).join(" · ") || null} columns={tiles.length >= 5 ? 5 : 4}>
         {tiles.map((tile) => (
           <StatTile
             key={tile.key}

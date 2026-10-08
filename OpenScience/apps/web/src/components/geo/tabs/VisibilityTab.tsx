@@ -18,6 +18,7 @@ import { GeoSparkline } from "../GeoSparkline";
 import { formatGeoValue, GeoCellText, geoCellWord } from "../GeoCellText";
 import {
   actionMarkers,
+  comparableRun,
   chartDates,
   engineTrendConclusion,
   denominatorLine,
@@ -26,6 +27,7 @@ import {
   rivalRanking,
   statedValue,
   trendConclusion,
+  withCoverageMarker,
 } from "../geoOverviewModel";
 import { absentWord, engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, type GeoUnit } from "../geoText";
 import { metricName, metricUnit, roundKindWord } from "./geoTabText";
@@ -110,7 +112,7 @@ function MetricTrend({
     rivals: line?.key === "mention" ? rivalLines(watch?.rivals, points.map((point) => point.date)) : [],
     target,
     targetLabel: target === null ? null : `目标 ${format(target)}`,
-    markers: actionMarkers(points.map((point) => point.date), watch),
+    markers: withCoverageMarker(actionMarkers(points.map((point) => point.date), watch), points),
     nextLabel: watch?.next?.date ? `${monthDay(watch.next.date)} ${roundKindWord(watch.next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [line, watch, target, project.name]);
@@ -198,7 +200,7 @@ function ByEngine({ rows, diagnosis }: { rows: GeoMonitoring["byEngine"] | null 
               <span className="truncate text-compact text-text-2">{engineName(row.engine)}</span>
               <GeoCellText cell={current ? pointCell(last) : pointCell(undefined)} unit={unit} layout="stack" />
               {reading
-                ? <GeoSparkline values={row.points.map(statedValue)} width={140} height={28} className="mt-1 w-full" />
+                ? <GeoSparkline values={comparableRun(row.points).map(statedValue)} width={140} height={28} className="mt-1 w-full" />
                 : why && <span data-geo-engine-why="" className="text-caption text-text-3">{why}</span>}
             </li>
           );
