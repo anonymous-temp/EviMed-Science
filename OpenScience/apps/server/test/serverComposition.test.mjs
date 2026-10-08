@@ -30,6 +30,7 @@ import path from "node:path";
 import test from "node:test";
 import { carriesPlatformContext } from "@evimed/domain";
 import { splitEpisodeBudget, verificationIdFor, verificationWorkspacePath } from "../src/autopilotService.mjs";
+import { episodePlacementCounts } from "../src/autopilotEpisodeScope.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { DISTILL_TRIGGER, FeedbackEvents, deliverableSubjectId } from "../src/feedbackEvents.mjs";
@@ -1261,8 +1262,10 @@ test("a bounded execution opens with the researcher's own instruction; the brief
   const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
   seedEpisode(fixture);
   const { reserved, prompts, dispatches } = executionHarness(fixture.app);
+  const placed = episodePlacementCounts();
 
   assert.equal((await fixture.app.autopilotWorker.dispatchEpisode(episodeRequest())).runId, "run-episode");
+  assert.equal(episodePlacementCounts().bounded - placed.bounded, 1, "counted by where it ran");
   assert.equal(reserved.length, 1, "no runtime was open: one is reserved for the execution, as before");
   assert.equal(prompts[0].text, INSTRUCTION, "the first message is what the researcher wrote, and nothing else");
   assert.equal(prompts[0].allowBounded, true);
@@ -1294,6 +1297,7 @@ test("with the runtime open for the researcher, an execution runs in it: no rese
   seedEpisode(fixture);
   const { app } = fixture;
   const { reserved, prompts, dispatches } = executionHarness(app);
+  const placed = episodePlacementCounts();
   const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
   // The researcher's conversation page is open: the project's runtime is up, and nothing has reserved it. A stand-in the app's own
   // shutdown must not meet: it is taken away again before the test ends.
@@ -1303,6 +1307,7 @@ test("with the runtime open for the researcher, an execution runs in it: no rese
   finally { app.runtimeManager.runtimes.delete(app.runtimeManager.key(project)); }
   assert.equal(outcome.runId, "run-episode");
   assert.match(outcome.sessionId, /^session_/, "a session of its own, opened in the researcher's runtime");
+  assert.equal(episodePlacementCounts().interactive - placed.interactive, 1, "counted by where it ran");
   assert.equal(reserved.length, 0, "nothing is reserved, so nothing waits for the runtime to go idle");
   assert.equal(prompts[0].allowBounded, false, "the project's conversation is not locked out while it runs");
   assert.equal(prompts[0].text, INSTRUCTION);
@@ -1321,6 +1326,7 @@ test("an open runtime that is busy with the researcher's own run makes the execu
   seedEpisode(fixture);
   const { app } = fixture;
   const { reserved, prompts } = executionHarness(app);
+  const placed = episodePlacementCounts();
   const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
   app.runtimeManager.runtimes.set(app.runtimeManager.key(project), { workspaceDir: project.workspaceDir });
   app.agentRuns.activeRuns = async () => [{ id: "run-chat", sessionId: "session-chat" }];
@@ -1332,6 +1338,7 @@ test("an open runtime that is busy with the researcher's own run makes the execu
       return true;
     });
   } finally { app.runtimeManager.runtimes.delete(app.runtimeManager.key(project)); }
+  assert.equal(episodePlacementCounts().waiting - placed.waiting, 1, "the wait is counted");
   assert.equal(reserved.length + prompts.length, 0, "nothing was reserved or sent");
   assert.equal(fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload.status, "queued", "the execution keeps its place");
 });

@@ -242,7 +242,7 @@ import { cancelAutopilotVerification, AutopilotService, VERIFICATION_ARTIFACT, V
   autopilotLogicalDispatchId, isUnsentAutopilotLeaseLoss, verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
 import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
-import { createAutopilotRunScope, episodeScopeBlock, episodeVisibleText } from "./autopilotEpisodeScope.mjs";
+import { createAutopilotRunScope, episodeScopeBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { AutopilotPlanner, autopilotPlannerMetricFamily } from "./autopilotNextAction.mjs";
@@ -4221,6 +4221,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // one in an interactive runtime, and a marker left in the conversation's history would cap what the researcher says next.
         const interactive = !programmeOwned && runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
         if (interactive && (await agentRuns.activeRuns(project)).length > 0) {
+          noteEpisodePlacement("waiting");
           throw Object.assign(new HttpError(409, "runtime_busy", "The project has a run in progress; the scheduled execution waits for it."),
             { retryAfterMs: AUTOPILOT_INTERACTIVE_RETRY_MS });
         }
@@ -4230,6 +4231,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           weeklyLimit,
           runLimit,
         });
+        noteEpisodePlacement(interactive ? "interactive" : "bounded");
         const cleanupTarget = interactive ? null : runtimeManager.boundedRuntimeCleanupTarget(project);
         const releaseOwnRuntime = async () => cleanupTarget?.runId === episode.episodeId
           ? runtimeManager.endBoundedRuntime(project, episode.episodeId, cleanupTarget.generation) : false;
@@ -8760,6 +8762,27 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
     "Provider-side image uploads the kernel's adapter tried and the model gateway refused by design (images travel inline); not a gateway failure.",
     "counter",
     { value: modelGatewayFilesRefusals() },
+  );
+  addMetric(
+    lines,
+    "open_science_autopilot_episode_dispatches_total",
+    "Scheduled task executions placed since this process started, by where they ran: in the researcher's own open runtime (interactive) or in one reserved for them (bounded).",
+    "counter",
+    ["interactive", "bounded"].map((mode) => ({ value: episodePlacementCounts()[/** @type {"interactive" | "bounded"} */ (mode)], labels: { mode } })),
+  );
+  addMetric(
+    lines,
+    "open_science_autopilot_episode_waits_total",
+    "Scheduled task executions that found the open runtime busy with a run of the researcher's own and asked again soon.",
+    "counter",
+    { value: episodePlacementCounts().waiting },
+  );
+  addMetric(
+    lines,
+    "open_science_autopilot_interactive_scope_unreadable_total",
+    "Model calls, search calls and engine credentials refused because the spending limit of a scheduled execution in the researcher's runtime could not be read.",
+    "counter",
+    { value: episodePlacementCounts().unreadable },
   );
   addMetric(
     lines,

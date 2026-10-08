@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAutopilotRunScope, episodeScopeBlock, episodeVisibleText } from "../src/autopilotEpisodeScope.mjs";
+import { createAutopilotRunScope, episodePlacementCounts, episodeScopeBlock, episodeVisibleText } from "../src/autopilotEpisodeScope.mjs";
 
 const EPISODE = "episode-0123456789abcdef0123456789abcdef";
 
@@ -58,6 +58,7 @@ test("an ordinary run, and a bounded execution's run, are not scoped here, and t
 
 test("a scheduled execution whose cap cannot be read is refused, never run without one", async () => {
   const request = { userId: "u1", projectId: "p1", runId: "run_a" };
+  const unreadableBefore = episodePlacementCounts().unreadable;
   // Its episode is not there.
   await assert.rejects(() => scopeFixture({ ledger: [episodeRun], episodes: {} })(request), { code: "autopilot_episode_not_found" });
   // The episode says it is interactive and records no limit.
@@ -72,4 +73,5 @@ test("a scheduled execution whose cap cannot be read is refused, never run witho
   await assert.rejects(() => scopeFixture({ ledger: [episodeRun], episodes: { [EPISODE]: interactiveEpisode }, users: [] })(request), { code: "autopilot_account_unavailable" });
   // A run that is not in the ledger (deleted between attribution and here) is nobody's, and is not an execution.
   assert.equal(await scopeFixture({ ledger: [], episodes: {} })(request), null);
+  assert.equal(episodePlacementCounts().unreadable - unreadableBefore, 8, "each refusal is counted (open_science_autopilot_interactive_scope_unreadable_total)");
 });

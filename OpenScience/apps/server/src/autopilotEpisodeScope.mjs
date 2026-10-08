@@ -37,6 +37,20 @@
 import { autopilotLogicalDispatchId } from "./autopilotService.mjs";
 import { HttpError } from "./security.mjs";
 
+/**
+ * How the executions of scheduled tasks were placed since this process started, for `/api/ops/metrics`
+ * (`open_science_autopilot_episode_dispatches_total`, `…_interactive_scope_unreadable_total`): where they ran, how often an open
+ * runtime busy with the researcher's own run made one wait, and how often a cap could not be read (the call or credential was refused).
+ * Principle 15: a limit that changes what a run may do has a counter.
+ */
+const placements = { interactive: 0, bounded: 0, waiting: 0, unreadable: 0 };
+
+/** @param {"interactive" | "bounded" | "waiting"} placement */
+export function noteEpisodePlacement(placement) { placements[placement] += 1; }
+
+/** @returns {{ interactive: number, bounded: number, waiting: number, unreadable: number }} */
+export function episodePlacementCounts() { return { ...placements }; }
+
 /** The route reasons the control plane writes for a researcher's scheduled execution (`autopilot:<task type>`); never a re-check's. */
 const EPISODE_ROUTE_PREFIX = "autopilot:";
 
@@ -82,10 +96,8 @@ export function createAutopilotRunScope({ store, agentRuns, service, max = 5_000
     if (resolved.size > max) resolved.delete(/** @type {string} */ (resolved.keys().next().value));
     return value;
   };
-  return async function autopilotRunScope({ userId, projectId, runId }) {
-    const key = `${userId}\u0000${projectId}\u0000${runId}`;
-    if (resolved.has(key)) return resolved.get(key) ?? null;
-    if (!service) return null;
+  /** @param {string} key @param {{ userId: string, projectId: string, runId: string }} request */
+  async function resolveScope(key, { userId, projectId, runId }) {
     const user = await store.userById(userId);
     if (!user) throw new HttpError(404, "autopilot_account_unavailable", "Autopilot account is unavailable.");
     const project = await store.requireProject(user, projectId);
@@ -107,5 +119,12 @@ export function createAutopilotRunScope({ store, agentRuns, service, max = 5_000
       throw new HttpError(409, "autopilot_episode_state_conflict", "The interactive execution records no spending limit.");
     }
     return remember(key, { usageRunId: episodeId, runLimit });
+  }
+  return async function autopilotRunScope({ userId, projectId, runId }) {
+    const key = `${userId}\u0000${projectId}\u0000${runId}`;
+    if (resolved.has(key)) return resolved.get(key) ?? null;
+    if (!service) return null;
+    try { return await resolveScope(key, { userId, projectId, runId }); }
+    catch (error) { placements.unreadable += 1; throw error; }
   };
 }
