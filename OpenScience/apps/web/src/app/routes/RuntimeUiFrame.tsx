@@ -314,12 +314,18 @@ function SimulatedRechargeButton() {
  * `active` is the conversation surface being on screen in this project:
  * inactive frames keep their document and their lease and send nothing.
  */
-export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = true, suspended = false, onRelease }: {
+export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease }: {
   projectId: string;
   origin: string;
-  /** The conversation this surface should be showing, from the address. */
+  /** The conversation this surface should be showing: the chat address's, or the one a task's page asks for. */
   sessionId?: string | null;
   active?: boolean;
+  /**
+   * Whether the conversation on screen is the page's address. On the chat surface it is, and the address follows the kernel (an opened
+   * conversation is written to the URL). Placed over a task's pane it is not — the address is the task's, and the conversation is an
+   * execution of it — so an acknowledged opening must leave the address where it is.
+   */
+  mirrorAddress?: boolean;
   /** The address does not yet name a conversation and the shell is finding
    *  one: hold the opening request, but let the runtime warm up meanwhile. */
   suspended?: boolean;
@@ -426,7 +432,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     return () => { clearTimeout(preparingTimer.current); clearTimeout(roomTimer.current); roomTimer.current = undefined; };
   }, [projectId]);
 
-  const navigationKey = `${location.pathname}:${runtimeUiIntentFromState(location.state, projectId)?.requestId ?? ""}`;
+  // The conversation is part of what the frame was asked for: on a task's page the address stays while the execution changes.
+  const navigationKey = `${location.pathname}:${sessionId ?? ""}:${runtimeUiIntentFromState(location.state, projectId)?.requestId ?? ""}`;
   const previousNavigation = useRef(navigationKey);
   useEffect(() => {
     const changed = previousNavigation.current !== navigationKey;
@@ -863,7 +870,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         setFrameTask(message.sessionId);
         // Remove only this acknowledged request. A later navigation intent
         // must survive an acknowledgement from the previous operation.
-        if (intent?.requestId === request.requestId) {
+        if (mirrorAddress && intent?.requestId === request.requestId) {
           const nextState = { ...location.state };
           delete nextState.runtimeUiIntent;
           navigate(`/app/chat/${encodeURIComponent(message.sessionId)}`, { replace: true, state: nextState });
@@ -898,7 +905,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [binding, origin, projectId, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait]);
+  }, [binding, origin, projectId, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait, mirrorAddress]);
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;

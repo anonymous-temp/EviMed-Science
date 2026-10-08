@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
@@ -11,6 +12,7 @@ import { createFrameKit } from "../../../../../packages/harness-port/src/runtime
 import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runtimeUiFrame.mjs";
 import { apply as applyFrameTheme } from "../../../../../packages/harness-port/src/runtimeUiTheme.mjs";
 import { useUiStore } from "@/lib/store";
+import { registerTaskPane } from "@/lib/taskPane";
 import { forgetResearchBilling } from "@/lib/useResearchBilling";
 import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
 import { renderHook } from "@testing-library/react";
@@ -64,8 +66,24 @@ function PathProbe() {
   return <div><span data-testid="path">{location.pathname}</span><span data-testid="search">{location.search}</span><span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
     <button onClick={() => navigate("/app/chat/session-b")}>Open B</button>
     <button onClick={() => navigate("/app/files")}>Knowledge</button>
+    <button onClick={() => navigate("/app/autopilot/agenda-one")}>Task</button>
+    <button onClick={() => navigate("/app/chat")}>Bare chat</button>
     <button onClick={() => navigate(-1)}>Back</button>
   </div>;
+}
+/**
+ * What a task's page does for the frame: an empty pane at a place, and a request for the frame over it. The test sets where the
+ * pane is and which conversation it wants (none, for an execution a bounded runtime is still running) before it navigates there.
+ */
+const taskPane = { sessionId: "session-exec" as string | null, rect: { left: 300, top: 60, width: 700, height: 500 } };
+function TaskPaneProbe() {
+  const element = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const pane = element.current!;
+    pane.getBoundingClientRect = () => ({ ...taskPane.rect, x: taskPane.rect.left, y: taskPane.rect.top, right: taskPane.rect.left + taskPane.rect.width, bottom: taskPane.rect.top + taskPane.rect.height, toJSON: () => ({}) }) as DOMRect;
+    return taskPane.sessionId ? registerTaskPane({ element: pane, projectId: mocks.projectId, sessionId: taskPane.sessionId }) : undefined;
+  }, []);
+  return <div ref={element} data-testid="task-pane">task bar and pane</div>;
 }
 /**
  * The shell as the conversation surface sees it: the frame host above the
@@ -79,6 +97,7 @@ function mount(state: unknown = null, path = "/app/chat") {
     <Route path="/app/account/simulated/:page" element={<div>simulated wallet</div>} />
     <Route path="/app/files" element={<div>knowledge base</div>} />
     <Route path="/app/autopilot" element={<div>scheduled tasks</div>} />
+    <Route path="/app/autopilot/:taskId" element={<TaskPaneProbe />} />
     <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
   </Routes></MemoryRouter>);
 }
@@ -1991,5 +2010,129 @@ describe("虚拟临床研究 in the conversation", () => {
     expect(vcrPosts()).toHaveLength(0);
     expect(vcr.getVcrStudyOfProject).not.toHaveBeenCalled();
     view.unmount();
+  });
+});
+
+// 2026-10-08 (定时任务): the task's page is the other place the resident frame is shown. The page draws an empty pane and asks for the
+// frame over it; the shell's host places the same iframe there. These are the properties that make that safe: the document is never
+// reloaded, the address is never rewritten under the page, and going back to a chat does not leave the researcher in an execution.
+describe("the frame over a task's pane", () => {
+  const navigations = (post: { mock: { calls: unknown[][] } }) => post.mock.calls.map(([data]) => data as { type: string; requestId: string; intent: { kind: string; sessionId: string } }).filter(data => data.type === "evimed.runtime-ui.navigate");
+  async function openedChat() {
+    const view = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: navigations(post)[0].requestId, ok: true, sessionId: "session-a" });
+    return { ...view, frame, post };
+  }
+  beforeEach(() => { taskPane.sessionId = "session-exec"; taskPane.rect = { left: 300, top: 60, width: 700, height: 500 }; });
+
+  it("places the one resident frame over the pane, and opens the execution's conversation without writing it into the address", async () => {
+    const { container, frame, post } = await openedChat();
+    await userEvent.click(screen.getByText("Task"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/autopilot/agenda-one"));
+    // The same document, in the same place in the tree, at the pane's rectangle; the host takes no room and no clicks of its own.
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "task");
+    await waitFor(() => expect(container.querySelector("[data-task-frame]")).not.toBeNull());
+    const box = container.querySelector<HTMLElement>("[data-task-frame]")!;
+    expect(box.contains(frame)).toBe(true);
+    await waitFor(() => expect(box).toHaveStyle({ left: "300px", top: "60px", width: "700px", height: "500px" }));
+    expect(box).not.toHaveClass("hidden");
+    expect(container.querySelector("[data-session-surface]")).toHaveClass("pointer-events-none");
+    expect(mocks.create).toHaveBeenCalledTimes(1); expect(mocks.release).not.toHaveBeenCalled();
+    // The frame is asked for that execution's conversation, and the acknowledgement leaves the task's address where it is.
+    await waitFor(() => expect(navigations(post)).toHaveLength(2));
+    const request = navigations(post)[1];
+    expect(request.intent).toEqual({ kind: "open", sessionId: "session-exec" });
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: request.requestId, ok: true, sessionId: "session-exec" });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/autopilot/agenda-one");
+    expect(screen.getByTestId("state")).toHaveTextContent("null");
+  });
+
+  it("follows the pane when it moves or changes size, with the same document", async () => {
+    const { container, frame } = await openedChat();
+    await userEvent.click(screen.getByText("Task"));
+    await waitFor(() => expect(container.querySelector("[data-task-frame]")).not.toBeNull());
+    const box = container.querySelector<HTMLElement>("[data-task-frame]")!;
+    await waitFor(() => expect(box).toHaveStyle({ left: "300px", width: "700px" }));
+    // The sidebar closes: the pane is wider and starts further left.
+    taskPane.rect = { left: 40, top: 100, width: 960, height: 460 };
+    act(() => { window.dispatchEvent(new Event("resize")); });
+    await waitFor(() => expect(box).toHaveStyle({ left: "40px", top: "100px", width: "960px", height: "460px" }));
+    expect(container.querySelector("iframe")).toBe(frame); expect(mocks.create).toHaveBeenCalledTimes(1);
+    // A scroll of anything the pane sits in is heard too.
+    taskPane.rect = { left: 40, top: 20, width: 960, height: 460 };
+    act(() => { document.dispatchEvent(new Event("scroll")); });
+    await waitFor(() => expect(box).toHaveStyle({ top: "20px" }));
+  });
+
+  it("hides the frame, without unmounting it, when the page leaves, and is the chat surface again on a chat", async () => {
+    const { container, frame, post } = await openedChat();
+    await userEvent.click(screen.getByText("Task"));
+    await waitFor(() => expect(navigations(post)).toHaveLength(2));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: navigations(post)[1].requestId, ok: true, sessionId: "session-exec" });
+    await waitFor(() => expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "task"));
+    await userEvent.click(screen.getByText("Knowledge"));
+    await waitFor(() => expect(screen.getByText("knowledge base")).toBeInTheDocument());
+    expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "hidden");
+    expect(container.querySelector("iframe")).toBe(frame);
+    await userEvent.click(screen.getByText("Back"));
+    await userEvent.click(screen.getByText("Back"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a"));
+    expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "visible");
+    expect(container.querySelector("iframe")).toBe(frame); expect(mocks.create).toHaveBeenCalledTimes(1); expect(mocks.release).not.toHaveBeenCalled();
+    // The chat's own conversation is asked for again: the frame is not left on the execution.
+    await waitFor(() => expect(navigations(post).at(-1)!.intent).toEqual({ kind: "open", sessionId: "session-a" }));
+  });
+
+  it("is not shown at all while the page asks for no conversation: an execution still running in a bounded runtime", async () => {
+    taskPane.sessionId = null;
+    const { container } = mount(null, "/app/autopilot/agenda-one");
+    await waitFor(() => expect(screen.getByTestId("task-pane")).toBeInTheDocument());
+    expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "hidden");
+    expect(container.querySelector("iframe")).toBeNull(); expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("opens the frame when the page first asks for it, on a task page that was the first page of the visit", async () => {
+    const { container } = mount(null, "/app/autopilot/agenda-one");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(navigations(post)).toHaveLength(1));
+    expect(navigations(post)[0].intent).toEqual({ kind: "open", sessionId: "session-exec" });
+    expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "task");
+  });
+
+  // A bare /app/chat resumes what the researcher last worked in. That is the ledger's researcher runs, which an execution never is.
+  it("goes back to the researcher's last conversation, not the execution, when 新对话 resumes one", async () => {
+    mocks.me.mockResolvedValue({ lastSessionId: "session-last" });
+    const { container, frame, post } = await openedChat();
+    await userEvent.click(screen.getByText("Task"));
+    await waitFor(() => expect(navigations(post)).toHaveLength(2));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: navigations(post)[1].requestId, ok: true, sessionId: "session-exec" });
+    await userEvent.click(screen.getByText("Bare chat"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-last"));
+    await waitFor(() => expect(navigations(post).at(-1)!.intent).toEqual({ kind: "open", sessionId: "session-last" }));
+    expect(container.querySelector("iframe")).toBe(frame); expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("is not held suspended by a chat that was still looking for its conversation when the researcher left it", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.me.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const { container } = mount(null, "/app/chat");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await userEvent.click(screen.getByText("Task"));
+    await waitFor(() => expect(navigations(post)).toHaveLength(1));
+    expect(navigations(post)[0].intent).toEqual({ kind: "open", sessionId: "session-exec" });
+    finish({});
   });
 });

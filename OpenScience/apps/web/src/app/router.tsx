@@ -109,7 +109,10 @@ export const routes: RouteObject[] = [
         // source opens with its quotation marked.
         { path: "runs/:runId/files/*", element: <RunFilePage /> },
         { path: "files", element: <KnowledgePage /> },
-        { path: "autopilot", element: <AutopilotPage /> },
+        // 「定时任务」: the list at `/app/autopilot`, one task and its conversation at `/app/autopilot/:taskId`. One route, with or
+        // without the id, so opening a task from the list is not a remount (the kernel's frame is placed over the task's pane
+        // by `SessionFrameHost`). `?task=` and `?digest=` are the old addresses and are resolved by the page.
+        { path: "autopilot/:taskId?", element: <AutopilotPage /> },
         { path: "memory", element: <MemoryHubPage /> },
         // A share link and a delivery from the inbox (flywheel F17): the same preview, trial and import a file has, with no file.
         { path: "memory/shared/:token", element: <SharedCapsulePage /> },

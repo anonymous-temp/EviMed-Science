@@ -6,10 +6,17 @@ import { useProjectLabels } from "@/lib/projectNames";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Input, Textarea, Select } from "@/components/ui/Input";
-import { recurrence, scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, zoneName, type Recommendation } from "./taskPresentation";
+import { inLingdou, lingdou, recurrence, scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, zoneName, type Recommendation } from "./taskPresentation";
 
-export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorded, onBusyChange, onCancel }: {
+/**
+ * What to keep doing, and how often: the whole of a new task. The platform sets the budget and the stopping rules (the owner's rulings
+ * of 2026-09-19 and 2026-09-20), so the form does not ask for them — except when a budget is what stopped the task (`showBudgets`),
+ * where the one decision that is the researcher's to make is made in place. Any amount shown is in 灵豆.
+ */
+export function TaskForm({ projectId, agenda, recommendation, showBudgets = false, onSaved, onRecorded, onBusyChange, onCancel }: {
   projectId: string; agenda?: AgendaRecord; recommendation?: Recommendation;
+  /** A budget stopped this task (`budgetBlocks`): the caps are offered, in 灵豆, under 高级设置. */
+  showBudgets?: boolean;
   onSaved: (record: AgendaRecord) => void; onRecorded: (record: AgendaRecord) => void; onBusyChange: (busy: boolean) => void; onCancel: () => void;
 }) {
   const [title, setTitle] = useState(agenda?.payload.title ?? recommendation?.title ?? "");
@@ -20,7 +27,7 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
   const [taskTypes, setTaskTypes] = useState(agenda?.payload.taskTypes ?? ["literature-sentinel"]);
   // The defaults and the floor are the domain's, the ones the server holds the saved task to: the form cannot offer what the server refuses.
   const [budgets, setBudgets] = useState({ maxEpisodeCny: agenda?.payload.maxEpisodeCny ?? AGENDA_DEFAULT_BUDGETS.maxEpisodeCny, dailyBudgetCny: agenda?.payload.dailyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.dailyBudgetCny, weeklyBudgetCny: agenda?.payload.weeklyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.weeklyBudgetCny });
-  const minimum = `¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)}`;
+  const minimum = lingdou(AGENDA_MIN_EPISODE_BUDGET_CNY);
   const episodeTooSmall = budgets.maxEpisodeCny < AGENDA_MIN_EPISODE_BUDGET_CNY;
   const projectName = useProjectLabels().get(projectId);
   const [saving, setSaving] = useState(false);
@@ -28,7 +35,10 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
   const [conflict, setConflict] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const live = useRef(true);
+  const field = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
+  // A starting point leaves the cursor in the instruction, which is the first thing to read and change.
+  useEffect(() => { if (recommendation) field.current?.focus(); }, [recommendation]);
   let validZone = true;
   try { new Intl.DateTimeFormat("zh-CN", { timeZone: schedule.timeZone }); } catch { validZone = false; }
   const valid = prompt.trim().length > 0 && validZone && taskTypes.length > 0
@@ -66,13 +76,12 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
         if (!live.current) return;
         if (agenda) setConflict(true);
         setError("任务已被更新。请关闭编辑后重新打开，核对最新内容再修改。");
-      } else setError(`${record ? "任务已创建，启用未成功。" : ""}${productErrorMessage(caught)}`);
+      } else setError(`${record ? "任务已创建，启用未成功。" : ""}${inLingdou(productErrorMessage(caught))}`);
     } finally { if (live.current) { setSaving(false); onBusyChange(false); } }
   };
   return <form className="space-y-5" onSubmit={submit}>
     <fieldset disabled={saving || !!created || conflict} className="min-w-0 space-y-4">
-      <Input label="名称" value={title} maxLength={200} placeholder="为任务起个名字" onChange={event => setTitle(event.target.value)} />
-      <Textarea label="任务指令" required rows={5} maxLength={20000} value={prompt} placeholder="说明研究问题、关注范围和希望收到的结果…" onChange={event => setPrompt(event.target.value)} />
+      <Textarea ref={field} label="任务指令" required rows={4} maxLength={20000} value={prompt} placeholder="要持续做的事，说明研究问题、关注范围和希望收到的结果" onChange={event => setPrompt(event.target.value)} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select label="重复" value={schedule.kind} onChange={event => setSchedule({ ...schedule, kind: event.target.value as AgendaSchedule["kind"], weekdays: schedule.weekdays ?? [1] })}>
           <option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option>
@@ -81,18 +90,21 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
       </div>
       {schedule.kind === "once" && <Input label="日期" type="date" required value={schedule.date ?? ""} onChange={event => setSchedule({ ...schedule, date: event.target.value })} />}
       {schedule.kind === "weekly" && <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui font-medium text-text">星期</legend>{WEEKDAYS.map((day, index) => <label key={day} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={schedule.weekdays?.includes(index + 1) ?? false} onChange={event => setSchedule({ ...schedule, weekdays: event.target.checked ? [...(schedule.weekdays ?? []), index + 1].sort() : schedule.weekdays?.filter(value => value !== index + 1) })} />{day}</label>)}</fieldset>}
-      <Disclosure summary={<span>高级设置<span className="ml-2 text-caption text-text-3">{schedule.timeZone}</span></span>} defaultOpen={!validZone || episodeTooSmall}><div className="space-y-4 pt-2">
+      <Disclosure summary={<span>高级设置<span className="ml-2 text-caption text-text-3">{schedule.timeZone}</span></span>} defaultOpen={!validZone || showBudgets}><div className="space-y-4 pt-2">
+        <Input label="名称" value={title} maxLength={200} placeholder="不填则取指令的开头" onChange={event => setTitle(event.target.value)} />
         <Input label="时区" value={schedule.timeZone} error={validZone ? undefined : "请输入有效时区，例如 Asia/Shanghai"} required onChange={event => setSchedule({ ...schedule, timeZone: event.target.value })} />
         <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui font-medium text-text">任务类型</legend>{TASK_TYPES.map(([value, label]) => <label key={value} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={taskTypes.includes(value)} onChange={event => setTaskTypes(event.target.checked ? [...taskTypes, value] : taskTypes.filter(item => item !== value))} />{label}</label>)}</fieldset>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{([['maxEpisodeCny', '单次上限 ¥'], ['dailyBudgetCny', '每日上限 ¥'], ['weeklyBudgetCny', '每周上限 ¥']] as const).map(([key, label]) => <Input key={key} label={label} type="number" min={key === "maxEpisodeCny" ? String(AGENDA_MIN_EPISODE_BUDGET_CNY) : "0.01"} step="0.01" value={budgets[key]}
-          error={key === "maxEpisodeCny" && episodeTooSmall ? `单次上限不能低于 ${minimum}` : undefined} onChange={event => setBudgets({ ...budgets, [key]: Number(event.target.value) })} />)}</div>
-        <p className="text-caption text-text-3">单次上限最低 {minimum}：模型每次调用要先预留约 ¥1，预算再小，研究一开始就会被拒绝。单次 ≤ 每日 ≤ 每周。每日、每周按近 24 小时、近 7 天滚动计算，只计这个任务自己的花费，不含账户里的其他研究。</p>
+        {showBudgets && <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{([['maxEpisodeCny', '单次上限（灵豆）'], ['dailyBudgetCny', '每日上限（灵豆）'], ['weeklyBudgetCny', '每周上限（灵豆）']] as const).map(([key, label]) => <Input key={key} label={label} type="number" min={key === "maxEpisodeCny" ? String(AGENDA_MIN_EPISODE_BUDGET_CNY) : "0.01"} step="0.01" value={budgets[key]}
+            error={key === "maxEpisodeCny" && episodeTooSmall ? `单次上限不能低于 ${minimum}` : undefined} onChange={event => setBudgets({ ...budgets, [key]: Number(event.target.value) })} />)}</div>
+          <p className="text-caption text-text-3">单次上限最低 {minimum}：模型每次调用要先预留{lingdou(1, { estimate: true })}，预算再小，研究一开始就会被拒绝。单次 ≤ 每日 ≤ 每周。每日、每周按近 24 小时、近 7 天滚动计算，只计这个任务自己的花费，不含账户里的其他研究。</p>
+        </>}
       </div></Disclosure>
     </fieldset>
     {error && <p role="alert" className="text-ui text-error">{error}</p>}
-    {/* What saving will set up, in one line, changing as the fields do: where it runs, how often, in which zone, at what cost. */}
+    {/* What saving will set up, in one line, changing as the fields do: where it runs, how often, in which zone. */}
     <p className="text-caption text-text-3">{[projectName ? `在“${projectName}”运行` : "", schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule),
-      validZone ? zoneName(schedule.timeZone) : "", Number.isFinite(budgets.maxEpisodeCny) ? `单次最多 ¥${budgets.maxEpisodeCny}` : ""].filter(Boolean).join(" · ")}</p>
+      validZone ? zoneName(schedule.timeZone) : ""].filter(Boolean).join(" · ")}</p>
     <div className="flex justify-end gap-2 border-t border-border pt-4"><Button variant="secondary" disabled={saving} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button><Button type="submit" loading={saving} disabled={!valid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button></div>
   </form>;
 }
