@@ -44,7 +44,7 @@ describe("reading an evidence card", () => {
     expect(within(nav).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["前沿动态", "/app/frontier"], ["卒中研究", "/app/frontier/zones/ez_1"]]);
     expect(screen.queryByRole("navigation", { name: "前沿动态" })).toBeNull();
     expect(screen.queryByRole("link", { name: /^返回/ })).toBeNull();
-    expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: /试验药能预防卒中吗|卒中研究/ })).toBeNull();
     expect(screen.queryByText("学术证据")).toBeNull();
     expect(document.title).toContain("试验药能预防卒中吗");
   });

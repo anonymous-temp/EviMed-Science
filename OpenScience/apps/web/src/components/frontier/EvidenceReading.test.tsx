@@ -18,15 +18,31 @@ describe("evidence reading", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(screen.getByRole("link", { name: "论文" })).toHaveAttribute("href", "https://example.org/paper");
     expect(screen.queryByRole("link", { name: "不安全链接" })).not.toBeInTheDocument();
-    // A card that says nothing of who made it has no fold for it; and the card's own title is the page's, not an <h2> of the article.
+    // A card that says nothing of who made it has no fold for it; and the card's own title is the page's, not an <h2> of the article
+    // (the article's sections are the page's h2 since release 11, under its one h1).
     expect(container.querySelector("details")).toBeNull();
-    expect(screen.queryByRole("heading", { level: 2 })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "急诊证据" })).not.toBeInTheDocument();
     expect(screen.queryByText("学术证据")).not.toBeInTheDocument();
+  });
+
+  it("shows eight points first and folds a long body, rendered as Markdown, under its heading (release-11 walk: 50 000 px)", async () => {
+    const claims = Array.from({ length: 12 }, (_, index) => ({ ...richCard.claims[0], claimId: undefined, text: `第 ${index + 1} 条要点` }));
+    const body = `## 已逐字核对的结论\n\n${Array.from({ length: 90 }, (_, index) => `${index + 1}. 结论 ${index + 1} 在这一人群中成立，来源 [${index + 1}]`).join("\n")}`;
+    const { container } = render(<EvidenceReading evidence={{ ...richCard, claims, body }} />);
+    expect(screen.getByText("第 8 条要点")).toBeInTheDocument();
+    expect(screen.queryByText("第 9 条要点")).toBeNull();
+    screen.getByRole("button", { name: "展开其余 4 条" }).click();
+    expect(await screen.findByText("第 12 条要点")).toBeInTheDocument();
+    const folded = [...container.querySelectorAll("details")].find((details) => /补充说明|证据正文/.test(details.querySelector("summary")?.textContent ?? ""));
+    expect(folded).toBeDefined();
+    expect(folded?.open).toBe(false);
+    expect(folded?.textContent).not.toContain("##");
+    expect(within(folded as HTMLElement).getByRole("heading", { name: "已逐字核对的结论" })).toBeInTheDocument();
   });
 
   it("ends with the sources: nothing of the review, the discussion or the update record follows them", () => {
     const { container } = render(<EvidenceReading evidence={{ ...richCard, discussion: [{ author: "王医生", text: "有一个问题", createdAt: null }], revisions: [{ revision: 2, recordedAt: "2026-10-04T00:00:00Z", title: "新版", sourceFingerprint: "b", reviewStatus: null }, { revision: 1, recordedAt: "2026-10-01T00:00:00Z", title: "旧版", sourceFingerprint: "a", reviewStatus: null }] }} />);
-    const headings = within(container).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+    const headings = within(container).getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
     expect(headings.at(-1)).toBe("来源与引用");
     expect(screen.queryByText("有一个问题")).not.toBeInTheDocument();
     expect(screen.queryByText("更新记录")).not.toBeInTheDocument();

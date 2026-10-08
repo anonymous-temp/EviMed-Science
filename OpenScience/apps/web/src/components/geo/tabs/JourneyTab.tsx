@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
 import { GeoLineChart } from "./GeoCharts";
 import { StepPending, TabError, TabSkeleton, TD, TH, useGeoLoad } from "./geoTabKit";
+import { ScrollRegion } from "@/components/ui/ScrollRegion";
 
 type View = "journey" | "care" | "people";
 
@@ -109,7 +110,7 @@ function Stages({ stages }: { stages: GeoJourney["stages"] }) {
   return (
     <>
       {charted && (
-        <div className="mb-8 overflow-x-auto">
+        <ScrollRegion label="用户旅程情绪曲线" className="mb-8">
           <GeoLineChart
             className="min-w-[40rem]"
             series={[{ key: "emotion", values: scores }]}
@@ -120,9 +121,9 @@ function Stages({ stages }: { stages: GeoJourney["stages"] }) {
             domain={[0, 10]}
             maxLabels={16}
           />
-        </div>
+        </ScrollRegion>
       )}
-      <div className="overflow-x-auto">
+      <ScrollRegion label="用户旅程各阶段">
         <table className="w-full min-w-[40rem] border-collapse">
           <thead>
             <tr className="border-b border-border">
@@ -146,7 +147,7 @@ function Stages({ stages }: { stages: GeoJourney["stages"] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </>
   );
 }

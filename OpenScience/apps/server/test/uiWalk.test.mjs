@@ -17,7 +17,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  afterClickFindings, afterClickProbe, BACK_OFFICE, BUDGET_BY_PAGE, budgetKey, cleanupFindings, clickNamed, clickRowTitled, EXPECTED_REFUSALS, focusProbe,
+  afterClickFindings, afterClickProbe, BACK_OFFICE, BUDGET_BY_PAGE, budgetKey, cleanupFindings, cleanupNotices, clickNamed, clickRowTitled, EXPECTED_REFUSALS, focusProbe,
   frontierTargets, GEO_TABS, geoAnswerSnapshot, HEADING_ORDER_PAGES, keylessTitles, leftEdgeNotices, matrixFindings, matrixProbe, matrixRoute,
   measure, measureStructure, MISSING_RECORDS, pageFindings, pageProbe, PAGE_PROBES, pdfPreviewFindings, pdfProbe, pdfSourceTitle,
   pickVcrStudies, probeFindings, PROVISIONAL_PAGES, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown, rowProbe,
@@ -1188,8 +1188,13 @@ test("the new-skill drawer names its captions and its switch, names an empty fie
 });
 
 test("a start refused for cleanup shows a cover that says so and offers no allowance page; the alert after the wait offers 重试 and the way to what exists", () => {
-  const cover = { cover: "正在清理上一次任务的运行环境，完成后自动继续", quotaButtons: [], alertButtons: null };
+  const cover = { cover: "正在清理上一次任务的运行环境，完成后自动继续", booted: false, quotaButtons: [], alertButtons: null };
   assert.deepEqual(cleanupFindings(cover, null), []);
+  assert.deepEqual(cleanupNotices(cover), []);
+  // The runtime already up: the refused start is rightly ignored and the conversation stays; said, not failed (release-11 walk).
+  const up = { cover: null, booted: true, quotaButtons: [], alertButtons: null };
+  assert.deepEqual(cleanupFindings(up, up), []);
+  assert.deepEqual(cleanupNotices(up), ["chat@desktop: the runtime was already up, so a start refused for cleanup could not be shown"]);
   assert.deepEqual(cleanupFindings(cover, { ...cover, alertButtons: ["重试", "查看已有成果"] }), []);
   assert.deepEqual(cleanupFindings({ ...cover, cover: "正在打开", quotaButtons: ["查看科研额度"] }, null), [
     "chat@desktop: a start refused for cleanup does not say it is cleaning up (cover: “正在打开”)", "chat@desktop: a start refused for cleanup offers 查看科研额度"]);

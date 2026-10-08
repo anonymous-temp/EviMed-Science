@@ -175,11 +175,10 @@ export function EvidenceMatrixTable({
             trailing={typeSelect}
           />
         ) : typeSelect && <div className="min-w-0 grow basis-72">{typeSelect}</div>}
-        {state === "loading" ? (
-          <span role="status" className="sr-only">正在读取这些结论的核对结果</span>
-        ) : (
-          <p aria-live="polite" className="ml-auto shrink-0 text-caption tabular-nums text-text-3">显示 {shown.length} / {rows.length} 条</p>
-        )}
+        {/* The count is of rows, which are known before the checks are: it is shown while they load too (a matrix whose checks
+            never arrive — the runtime not started — still says how many rows a search left). */}
+        {state === "loading" && <span role="status" className="sr-only">正在读取这些结论的核对结果</span>}
+        <p aria-live="polite" className="ml-auto shrink-0 text-caption tabular-nums text-text-3">显示 {shown.length} / {rows.length} 条</p>
       </div>
 
       <div className={cn("overflow-hidden rounded-card border border-border bg-surface", className)}>

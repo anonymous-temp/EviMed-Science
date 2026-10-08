@@ -174,7 +174,8 @@ describe("EvidenceMatrixTable: the check says what is known", () => {
     expect(screen.queryByText("未核对")).toBeNull();
     // One quiet announcement, no tally and no filter on a check nobody has.
     expect(screen.getByRole("status")).toHaveTextContent("正在读取这些结论的核对结果");
-    expect(screen.queryByText(/显示 \d+ \/ \d+ 条/)).toBeNull();
+    // The count is of rows, known before the checks: it shows while they load too (release-11 walk).
+    expect(screen.getByText("显示 2 / 2 条")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "核对" })).toBeNull();
   });
 

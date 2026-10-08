@@ -28,6 +28,11 @@ export function trapTab(container: HTMLElement | null, event: KeyboardEvent): vo
     // Focus drifted out (a click on the backdrop, say) — pull it back in.
     event.preventDefault();
     first.focus();
+  } else if (active === container) {
+    // The layer itself holds focus (a drawer focuses its panel on open): Tab enters at the first element, Shift+Tab at the
+    // last, and neither leaves the layer.
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
   } else if (event.shiftKey && active === first) {
     event.preventDefault();
     last.focus();

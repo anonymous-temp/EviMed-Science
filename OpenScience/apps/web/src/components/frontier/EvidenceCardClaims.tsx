@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { EVIDENCE_AI_STEP_LABELS_ZH, EVIDENCE_CALCULATION_LABEL_ZH, EVIDENCE_CALCULATION_REASON_LABELS_ZH } from "@evimed/domain";
 import { Tag } from "@/components/ui/Tag";
 import type { EvidenceCard, EvidenceClaim, EvidenceClaimMark } from "@/lib/evidenceZoneClient";
@@ -5,6 +6,7 @@ import type { EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
 import { EvidenceChallenge } from "./EvidenceChallenge";
 import { EvidenceReferences } from "./EvidenceContent";
 import { evidenceDay } from "./evidenceDate";
+import { Button } from "@/components/ui/Button";
 
 /** What a ⚠ means for one quotation, in a sentence. */
 const STATUS_TEXT: Record<string, string> = {
@@ -95,16 +97,25 @@ function ClaimItem({ evidence, claim, challenges }: { evidence: EvidenceCard; cl
  * The card's claims, each with ✓ (its quotation was found in the source it names) or ⚠ (not found, or not checkable) and
  * the quotation beside it. A claim from an older card — a statement and nothing else — is shown as a plain line.
  */
+/** How many of a card's points are shown before 「展开其余」. */
+const CLAIMS_FIRST = 8;
+
 export function EvidenceClaims({ evidence, challenges }: { evidence: EvidenceCard; challenges?: EvidenceChallengeView[] }) {
+  const [all, setAll] = useState(false);
   if (!evidence.claims.length) return null;
+  // Eight first: a programme card holds dozens, each with its quotation, and every one shown at once made the page tens of
+  // thousands of pixels tall (release-11 walk). The rest are one press away, in place.
+  const shown = all ? evidence.claims : evidence.claims.slice(0, CLAIMS_FIRST);
+  const rest = evidence.claims.length - shown.length;
   return (
     <section>
-      <h3 className="mb-2 text-ui font-medium text-text">证据要点</h3>
+      <h2 className="mb-2 text-ui font-medium text-text">证据要点</h2>
       <ul className="space-y-3">
-        {evidence.claims.map((claim, index) => claim.claimId
+        {shown.map((claim, index) => claim.claimId
           ? <ClaimItem key={claim.claimId} evidence={evidence} claim={claim} challenges={challenges} />
           : <li key={index} className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">{claim.text}</li>)}
       </ul>
+      {rest > 0 && <Button variant="text" className="mt-2" onClick={() => setAll(true)}>展开其余 {rest} 条</Button>}
     </section>
   );
 }
@@ -128,7 +139,7 @@ export function EvidenceDisclosure({ evidence }: { evidence: EvidenceCard }) {
   if (!rows.length) return null;
   return (
     <section>
-      <h3 className="mb-2 text-ui font-medium text-text">披露</h3>
+      <h2 className="mb-2 text-ui font-medium text-text">披露</h2>
       <dl className="space-y-1 text-ui text-text-2">
         {rows.map(([label, value]) => (
           <div key={label} className="flex gap-4">

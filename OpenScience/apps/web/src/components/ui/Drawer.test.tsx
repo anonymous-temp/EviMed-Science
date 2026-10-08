@@ -27,7 +27,21 @@ describe("Drawer", () => {
     const dialog = screen.getByRole("dialog", { name: "自动化 Meta 分析" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAccessibleDescription("临床证据");
-    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
+    // The panel takes focus, not the corner 关闭: focusing the button showed its tooltip unasked, and the tooltip took the
+    // first Escape, so a drawer needed two presses to close (release-11 walk).
+    expect(dialog).toHaveFocus();
+    expect(document.querySelector("[role='tooltip']")).toBeNull();
+  });
+
+  it("closes on the first Escape after it opens", async () => {
+    const onClose = vi.fn();
+    render(<Harness onClose={onClose} />);
+    const trigger = screen.getByRole("button", { name: "打开" });
+    await userEvent.click(trigger);
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 
   it("keeps Tab inside and closes on Escape, returning focus to its trigger", async () => {
@@ -36,6 +50,9 @@ describe("Drawer", () => {
     const trigger = screen.getByRole("button", { name: "打开" });
     await userEvent.click(trigger);
 
+    // From the panel, Tab enters at the corner 关闭, then runs through the body and wraps.
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole("button", { name: "第一个" })).toHaveFocus();
     await userEvent.tab();

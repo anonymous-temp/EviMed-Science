@@ -46,7 +46,10 @@ export function Drawer({
 
   useEffect(() => {
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (closeRef.current) closeRef.current.focus();
+    // The panel itself takes focus, announced by its title. Focusing the corner 关闭 here showed that button's tooltip
+    // unasked, and the tooltip — the top layer while it is up — took the reader's first Escape, so every drawer needed
+    // two presses to close (the release-11 walk of the evidence matrix). Tab from the panel reaches 关闭 first.
+    if (panelRef.current) panelRef.current.focus();
     else focusableIn(panelRef.current)[0]?.focus();
     const onKey = (event: KeyboardEvent) => {
       // A dialog opened from inside the drawer (a confirmation, an edit form) is a modal layer of its
@@ -81,13 +84,14 @@ export function Drawer({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         aria-labelledby={bare ? undefined : titleId}
         aria-label={bare && typeof title === "string" ? title : undefined}
         aria-describedby={description && !bare ? descriptionId : undefined}
         className={cn(
           // Slides in 24 px; a pure fade under reduced motion (the distance
           // token is 0 there), which is why this is not `motion-safe:` only.
-          "flex h-full w-full flex-col border-l border-border bg-surface shadow-e3 animate-drawer-in",
+          "flex h-full w-full flex-col border-l border-border bg-surface shadow-e3 animate-drawer-in focus:outline-none",
           widthClassName,
           className,
         )}

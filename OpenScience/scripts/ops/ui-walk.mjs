@@ -1154,7 +1154,10 @@ export function skillDrawerProbe() {
   return {
     title: [...dialog.querySelectorAll("h1, h2, h3")].some((el) => words(el) === "新建技能"),
     captions: [...dialog.querySelectorAll("p")].filter((el) => visible(el) && (el.id ?? "").endsWith("-hint")).length,
-    switchLabel: [...dialog.querySelectorAll("[role='switch']")].map((el) => el.getAttribute("aria-label") || words(el.parentElement ?? el)).find((label) => label.startsWith("保存后在")) ?? null,
+    // A switch whose label is shown carries it as its own text (the `Switch` primitive's `showLabel`); one labelled from outside
+    // has it on the attribute or beside it. The parent alone read the whole form (release-11 walk: a present switch went unseen).
+    switchLabel: [...dialog.querySelectorAll("[role='switch']")].flatMap((el) => [el.getAttribute("aria-label") ?? "", words(el), words(el.parentElement ?? el)])
+      .find((label) => label.startsWith("保存后在")) ?? null,
     needName: text.includes("请填写名称"),
     needHow: text.includes("请写出这个技能怎么做"),
   };
@@ -1181,11 +1184,24 @@ export function cleanupProbe() {
   const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
   const cover = document.querySelector("[data-frame-skeleton]");
   const alert = [...document.querySelectorAll("[role='alert']")].find((el) => el.getBoundingClientRect().width > 0);
+  // The conversation frame on screen with no cover: the project's runtime was already up, and a refused start is then rightly
+  // ignored, so the cover cannot be exercised here (release-11 walk, the owner's runtime running).
+  const frame = [...document.querySelectorAll("iframe")].find((el) => { const box = el.getBoundingClientRect(); return box.width > 200 && box.height > 200; });
   return {
     cover: cover ? words(cover) : null,
+    booted: Boolean(frame) && !cover,
     quotaButtons: [...document.querySelectorAll("button")].map(words).filter((text) => text === "查看科研额度" || text === "查看用量"),
     alertButtons: alert ? [...alert.querySelectorAll("button, a")].map(words) : null,
   };
+}
+
+/**
+ * Said instead of judging when the cover could not be shown: the runtime was already up, so the start the walk refused was not
+ * needed and the page rightly kept the conversation. The cover itself is held by the page's own tests.
+ * @param {ReturnType<typeof cleanupProbe>} early @returns {string[]} notices
+ */
+export function cleanupNotices(early) {
+  return early.booted && !early.cover ? ["chat@desktop: the runtime was already up, so a start refused for cleanup could not be shown"] : [];
 }
 
 /**
@@ -1197,6 +1213,7 @@ export function cleanupProbe() {
  */
 export function cleanupFindings(early, late) {
   const failures = [];
+  if (cleanupNotices(early).length) return failures;
   if (!early.cover?.includes("正在清理上一次任务的运行环境")) failures.push(`chat@desktop: a start refused for cleanup does not say it is cleaning up (cover: “${early.cover ?? "none"}”)`);
   if (early.quotaButtons.length) failures.push(`chat@desktop: a start refused for cleanup offers ${early.quotaButtons.join(", ")}`);
   if (late) {
@@ -1659,7 +1676,7 @@ async function walkCleanupCover(context, base, waitMs) {
     await probe.waitForTimeout(10_000);
     const early = await probe.evaluate(cleanupProbe);
     let late = null;
-    if (waitMs > 0) {
+    if (waitMs > 0 && !cleanupNotices(early).length) {
       const deadline = Date.now() + waitMs;
       while (Date.now() < deadline) {
         await probe.waitForTimeout(5_000);
@@ -1667,7 +1684,7 @@ async function walkCleanupCover(context, base, waitMs) {
         if (late.alertButtons) break;
       }
     }
-    return { failures: cleanupFindings(early, late), read: { early, late } };
+    return { failures: cleanupFindings(early, late), notices: cleanupNotices(early), read: { early, late } };
   } finally {
     await probe.close().catch(() => {});
   }

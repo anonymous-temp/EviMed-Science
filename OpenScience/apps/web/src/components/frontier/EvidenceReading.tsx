@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import type { EvidenceCard } from "@/lib/evidenceZoneClient";
 import {
   EvidenceContent,
@@ -74,6 +75,9 @@ function EvidenceAuthoring({ evidence }: { evidence: EvidenceCard }) {
   );
 }
 
+/** Past this many characters a card's body is folded under its heading. */
+const LONG_BODY_CHARS = 1200;
+
 export function EvidenceReading({
   evidence,
   challenges,
@@ -117,7 +121,7 @@ export function EvidenceReading({
       </header>
       {(evidence.content?.answer || evidence.summary) && (
         <section className="rounded-card bg-accent-soft p-4">
-          <h3 className="mb-2 text-ui font-medium text-text">核心回答</h3>
+          <h2 className="mb-2 text-ui font-medium text-text">核心回答</h2>
           <p className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">
             {evidence.content?.answer || evidence.summary}
           </p>
@@ -130,19 +134,24 @@ export function EvidenceReading({
       <EvidenceCardViews evidence={evidence} />
       <EvidenceContent evidence={evidence} />
       {evidence.body && !redundantBody(evidence) && (
-        <section>
-          <h3 className="mb-2 text-ui font-medium text-text">
-            {evidence.content ? "补充说明" : "证据正文"}
-          </h3>
-          <p className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">
-            {evidence.body}
-          </p>
-        </section>
+        // Written in Markdown, and read as Markdown: it was printed as text, `##` and all. A long one is folded under its
+        // heading — a programme card's body listed its 58 conclusions again above the 证据要点 that list them, and the page
+        // ran to 50 000 px (release-11 walk).
+        evidence.body.length > LONG_BODY_CHARS ? (
+          <Disclosure summary={<h2 className="text-ui font-medium text-text">{evidence.content ? "补充说明" : "证据正文"}</h2>}>
+            <MarkdownViewer variant="document" className="text-ui text-text-2">{evidence.body}</MarkdownViewer>
+          </Disclosure>
+        ) : (
+          <section>
+            <h2 className="mb-2 text-ui font-medium text-text">{evidence.content ? "补充说明" : "证据正文"}</h2>
+            <MarkdownViewer variant="document" className="text-ui text-text-2">{evidence.body}</MarkdownViewer>
+          </section>
+        )
       )}
       <EvidenceClaims evidence={evidence} challenges={challenges} />
       {evidence.limitations && (
         <section>
-          <h3 className="mb-2 text-ui font-medium text-text">适用范围与局限</h3>
+          <h2 className="mb-2 text-ui font-medium text-text">适用范围与局限</h2>
           <p className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">
             {evidence.limitations}
           </p>
@@ -150,7 +159,7 @@ export function EvidenceReading({
       )}
       {evidence.content?.nextStep && (
         <section>
-          <h3 className="mb-2 text-ui font-medium text-text">下一步怎么用</h3>
+          <h2 className="mb-2 text-ui font-medium text-text">下一步怎么用</h2>
           <p className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">
             {evidence.content.nextStep}
           </p>
@@ -158,7 +167,7 @@ export function EvidenceReading({
       )}
       {evidence.sources.length > 0 && (
         <section>
-          <h3 className="mb-2 text-ui font-medium text-text">来源与引用</h3>
+          <h2 className="mb-2 text-ui font-medium text-text">来源与引用</h2>
           <ol className="space-y-3">
             {evidence.sources.map((source, index) => {
               const sourceCheck = evidence.editorial?.sourceChecks?.find(
