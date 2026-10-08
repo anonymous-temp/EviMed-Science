@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { CalendarClock } from "lucide-react";
 import { AUTOPILOT_BUDGET_ERROR_CODES } from "@evimed/domain";
 import { getWebProjectId, listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
@@ -14,6 +14,7 @@ import { snapshotHref } from "@/lib/readPages";
 import { splitArtifacts } from "@/lib/artifactNames";
 import { taskPath } from "@/lib/taskLocation";
 import { cn } from "@/lib/cn";
+import { buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
 import { FormDialog } from "@/components/ui/FormDialog";
@@ -87,6 +88,8 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const [editorSaving, setEditorSaving] = useState(false);
   const [editor, setEditor] = useState<{ agenda?: AgendaRecord } | null>(null);
   const [busy, setBusy] = useState(false);
+  // An execution asked to stop whose record still reads as running: the stop is on its way, and the button says so.
+  const [stopping, setStopping] = useState<string | null>(null);
   // The task a spent budget refused: its caps are the one thing the edit dialog then offers beside the rest (`budgetBlocks`).
   const [budgetRefused, setBudgetRefused] = useState<string | null>(null);
   const [refreshCycle, setRefreshCycle] = useState(0);
@@ -267,6 +270,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
         const episode = await cancelEpisode(current.id, action.episode!.id, action.requestId!);
         if (!live.current) return;
         recordEpisode(episode, current.id);
+        setStopping(inFlight(episode) ? episode.id : null);
         await Promise.all([load(), loadHistory()]);
       } else if (action.kind === "material") {
         let value = action.remove ? await removeAgendaMaterial(current.id, action.remove) : await addAgendaMaterials(current.id, { sourceIds: action.sourceIds });
@@ -333,7 +337,8 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   // the newest), the one that is on its way, and the newest result there is to read.
   const executions = selected && selectedEpisodes ? executionsOf(selected.id, selectedEpisodes) : [];
   const execution = executions.find(item => item.id === executionParam) ?? executions[executions.length - 1] ?? null;
-  const running = [...executions].reverse().find(inFlight) ?? null;
+  // On its way, for the primary button: waiting to start or running. One whose conclusions are being re-checked has run its course.
+  const running = [...executions].reverse().find(item => item.payload.status === "queued" || item.payload.status === "running") ?? null;
   const withResult = selected ? [...executions].reverse().map(item => {
     const refs = (item.payload.artifactRefs ?? []).filter(ref => ref.projectId === selected.projectId && ref.runId === item.payload.runId
       && ref.sessionId === item.payload.sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(ref.runId) && safeWorkspacePath(ref.path));
@@ -349,9 +354,11 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const main = !selectedId
     ? <EmptyState icon={CalendarClock} title="选择一项任务" description="任务的对话在这里打开。" className="min-h-0 flex-1" />
     : agendas === null ? <div className="px-6 py-6"><FilesSkeleton /></div>
-      : !selected ? <EmptyState icon={CalendarClock} title="未找到这个任务" description="它可能已经删除。从列表选择其他任务。" className="min-h-0 flex-1" />
+      : !selected ? <EmptyState icon={CalendarClock} title="未找到这个任务" description="它可能已经删除。从列表选择其他任务。" className="min-h-0 flex-1"
+        // Beside the list the way on is the list; without it the list is a link away.
+        action={split ? undefined : <Link to={taskPath(null, { search })} className={buttonClasses({ variant: "secondary" })}>回到定时任务</Link>} />
         : <>
-          <TaskBar agenda={selected} executions={executions} selected={execution} running={running} busy={busy} backTo={split ? undefined : taskPath(null, { search })}
+          <TaskBar agenda={selected} executions={executions} selected={execution} running={running} stopping={Boolean(running && stopping === running.id)} busy={busy} backTo={split ? undefined : taskPath(null, { search })}
             latestResultHref={withResult ? snapshotHref(withResult.episode.payload.runId ?? "", withResult.file!.path) : null}
             onResultOpened={() => openDigest(withResult?.episode.payload.digestId)}
             error={actionError ? { message: actionError, retry: retry ? () => void operate(retry) : undefined } : null}

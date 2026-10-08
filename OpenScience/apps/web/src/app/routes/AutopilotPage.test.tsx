@@ -353,6 +353,22 @@ describe("scheduled tasks", () => {
       // Pausing the task is another control, behind 「⋯」, with its honest confirmation: stopping one run is not it.
       expect(mocks.stopAgenda).not.toHaveBeenCalled(); expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     });
+    it("says the stop is on its way while the record still reads running, and is a run again once it ended", async () => {
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true })] });
+      mocks.cancelEpisode.mockResolvedValue(running({ interactive: true }));
+      fakeClock(); render(); await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+      await act(async () => { fireEvent.click(within(bar()).getByRole("button", { name: "停止本次" })); await vi.advanceTimersByTimeAsync(10); });
+      expect(within(bar()).getByRole("button", { name: "正在停止" })).toBeDisabled();
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true, status: "canceled" })] });
+      await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+      expect(within(bar()).getByRole("button", { name: "立即运行" })).toBeEnabled();
+    });
+    it("opens the conversation of an execution whose conclusions are being re-checked, and offers a run, not a stop", async () => {
+      mocks.listEpisodes.mockResolvedValue({ items: [running({ status: "verifying", interactive: false })] });
+      render();
+      await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("project-one:ses-live"));
+      expect(within(bar()).getByRole("button", { name: "立即运行" })).toBeEnabled(); expect(within(bar()).queryByRole("button", { name: "停止本次" })).not.toBeInTheDocument();
+    });
     it("shows an execution in a bounded runtime as its progress from the run ledger, never the frame, and moves to its conversation when it ends", async () => {
       mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: false })] });
       mocks.listWebAgentRuns.mockResolvedValue([{ id: "run-live", progress: { deliverables: [{ id: "d1", title: "证据综合报告", status: "delegated", attempts: 1 }], phaseCounts: { search: 6, screen: 0, fulltext: 0, claims: 0, write: 0, deliver: 0 }, currentPhase: "search", sources: { searched: 40, included: 9, fullText: 0 }, claims: { total: 0, verified: 0 }, children: [], startedAt: null, updatedAt: "2026-10-01T01:30:00Z" } }]);
@@ -529,6 +545,12 @@ describe("scheduled tasks", () => {
       await resize(940); expect(layout()).toBe("split"); expect(document.querySelector("[data-task-list]")).not.toBeNull();
       // The pane keeps its place through the change: the frame is not asked for twice.
       expect(screen.getByTestId("pane")).toHaveTextContent("project-one:ses-one");
+    });
+    it("gives the way back to the list when the task is not there and the list is not beside it", async () => {
+      identity.width = 800;
+      render("/app/autopilot/gone");
+      expect(await screen.findByText("未找到这个任务")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "回到定时任务" })).toHaveAttribute("href", "/app/autopilot");
     });
     it("shows an empty main area beside the list when no task is open", async () => {
       render("/app/autopilot");

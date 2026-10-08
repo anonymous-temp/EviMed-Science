@@ -13,25 +13,26 @@ const ITEM_STATE: Record<WebRunDeliverableStatus, string> = {
 };
 
 /**
- * Whether the kernel's conversation can be shown for an execution. One that ended has its conversation in the project's own runtime
- * (the one the researcher opens); one still on its way has it there only when it runs in that runtime (`interactive`). A bounded
- * runtime holds the project, so while one is on its way no conversation of the project can be opened at all (`lock`).
+ * Whether the kernel's conversation can be shown for an execution. One that has run its course has its conversation in the project's
+ * own runtime (the one the researcher opens) — including one whose conclusions are still being re-checked, which is the research's
+ * background and never the conversation. One still running has it there only when it runs in that runtime (`interactive`). A bounded
+ * runtime holds the project while it runs, so no conversation of the project can be opened then at all (`lock`).
  */
 export function conversationOf(execution: EpisodeRecord | null, lock: EpisodeRecord | null): string | null {
   const sessionId = execution?.payload.sessionId;
   if (!execution || !sessionId || lock) return null;
-  return !inFlight(execution) || execution.payload.interactive === true ? sessionId : null;
+  return execution.payload.status !== "running" || execution.payload.interactive === true ? sessionId : null;
 }
 
 /**
- * The bounded execution that holds this project's runtime, if one does: the newest that is running (or being checked afterwards)
- * and is not interactive. One still queued holds nothing — the runtime is reserved when it starts — so while it waits the
- * project's conversations open as they always do.
+ * The bounded execution that holds this project's runtime, if one does: the newest that is running and not interactive. One still
+ * queued holds nothing — the runtime is reserved when it starts — and one being re-checked afterwards runs in a scratch workspace of
+ * its own; while either waits, the project's conversations open as they always do. Executions before the field existed read as bounded.
  */
 export function boundedLock(episodes: readonly EpisodeRecord[]): EpisodeRecord | null {
   let newest: EpisodeRecord | null = null;
   for (const episode of episodes) {
-    if (!inFlight(episode) || episode.payload.status === "queued" || episode.payload.interactive === true) continue;
+    if (episode.payload.status !== "running" || episode.payload.interactive === true) continue;
     if (!newest || (episode.payload.createdAt ?? "") > (newest.payload.createdAt ?? "")) newest = episode;
   }
   return newest;

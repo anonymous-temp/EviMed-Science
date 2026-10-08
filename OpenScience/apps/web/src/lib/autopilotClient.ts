@@ -84,7 +84,7 @@ export function scheduleAgenda(id: string, date: string) { return productRequest
 export function listEpisodes(projectId: string, agendaId?: string) {
   return productRequest<ProductPage<EpisodeRecord>>(`/autopilot/episodes?projectId=${encodeURIComponent(projectId)}${agendaId ? `&agendaId=${encodeURIComponent(agendaId)}` : ""}`);
 }
-// A briefing is read through the run that produced it (主动科研, 2026-09-23):
+// A briefing is read through the run that produced it (定时任务, 2026-09-23):
 // its address resolves to that conversation, and opening a result records the
 // read the stopping rules count. The per-finding decisions left the page with
 // the briefing cards; the server keeps its routes.

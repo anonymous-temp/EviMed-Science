@@ -18,7 +18,11 @@ describe("which conversation a task page can ask the frame for", () => {
     expect(conversationOf(episode("a", { status: "canceled" }), null)).toBe("ses-a");
   });
 
-  it("is an execution that is on its way only when it runs in the researcher's own runtime", () => {
+  it("is also the conversation of one whose conclusions are being re-checked: that is the research's background, not the conversation", () => {
+    expect(conversationOf(episode("a", { status: "verifying" }), null)).toBe("ses-a");
+  });
+
+  it("is an execution that is running only when it runs in the researcher's own runtime", () => {
     expect(conversationOf(episode("a", { status: "running", interactive: true }), null)).toBe("ses-a");
     expect(conversationOf(episode("a", { status: "running", interactive: false }), null)).toBeNull();
     // Before the field existed every execution was bounded.
@@ -33,15 +37,16 @@ describe("which conversation a task page can ask the frame for", () => {
 });
 
 describe("the execution that holds the project's runtime", () => {
-  it("is the newest one that is running or being checked in a bounded runtime", () => {
+  it("is the newest one that is running in a bounded runtime, and one from before the field existed reads as bounded", () => {
     expect(boundedLock([])).toBeNull();
     expect(boundedLock([episode("a"), episode("b", { status: "failed" })])).toBeNull();
-    expect(boundedLock([episode("a", { status: "running" }), episode("b", { status: "verifying", createdAt: "2026-10-01T00:00:00Z" })])?.id).toBe("b");
+    expect(boundedLock([episode("a", { status: "running" }), episode("b", { status: "running", createdAt: "2026-10-01T00:00:00Z", interactive: false })])?.id).toBe("b");
   });
 
-  it("is not one that runs in the researcher's runtime, nor one still queued: it holds nothing yet", () => {
+  it("is not one that runs in the researcher's runtime, one still queued, or one being re-checked: they hold nothing of it", () => {
     expect(boundedLock([episode("a", { status: "running", interactive: true })])).toBeNull();
     expect(boundedLock([episode("a", { status: "queued", sessionId: null })])).toBeNull();
+    expect(boundedLock([episode("a", { status: "verifying" })])).toBeNull();
   });
 });
 

@@ -30,7 +30,7 @@ export interface TaskBarActions {
  * It states no budget and asks for no confirmation to run. A task that waits on the researcher says so in a line of its own, with the
  * way to give it. The conversation is the kernel's, below; the shell draws no input box of its own.
  */
-export function TaskBar({ agenda, executions, selected, running, latestResultHref, busy, actions, backTo, onResultOpened, error }: {
+export function TaskBar({ agenda, executions, selected, running, stopping = false, latestResultHref, busy, actions, backTo, onResultOpened, error }: {
   agenda: AgendaRecord;
   /** This task's executions, oldest first. */
   executions: readonly EpisodeRecord[];
@@ -38,6 +38,8 @@ export function TaskBar({ agenda, executions, selected, running, latestResultHre
   selected: EpisodeRecord | null;
   /** An execution of this task that is on its way: the primary button stops it. */
   running: EpisodeRecord | null;
+  /** That execution was asked to stop and has not yet ended. */
+  stopping?: boolean;
   /** The reader's address for the newest execution's file, when one has a file to read. */
   latestResultHref: string | null;
   busy: boolean;
@@ -71,7 +73,7 @@ export function TaskBar({ agenda, executions, selected, running, latestResultHre
           <Button variant="text" size="sm">{executionLabel(selected, ordinal(selected), zone)}<ChevronDown size={16} aria-hidden="true" /></Button>
         </Menu>}
         {running
-          ? <Button variant="secondary" disabled={busy} onClick={actions.stop}>停止本次</Button>
+          ? <Button variant="secondary" disabled={busy || stopping} onClick={actions.stop}>{stopping ? "正在停止" : "停止本次"}</Button>
           : <Button disabled={busy || !activeAgenda(agenda)} onClick={actions.run}>立即运行</Button>}
         <Menu label="更多" items={[
           { label: "研究进展", onSelect: actions.openProgress },
