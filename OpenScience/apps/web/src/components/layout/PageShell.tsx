@@ -14,9 +14,12 @@ import { cn } from "@/lib/cn";
  *
  * `width="wide"` is the dashboard column (1200, DESIGN.md): a data page
  * squeezed into a document column is half of why 循证 GEO looked cheap.
- * `width="full"` is for the page that lays itself out (a split view) and
- * still shares the gutter. The retired names `narrow` and `content` resolve
- * to the list column.
+ * `width="read"` is the reading column (720): a report, an evidence card, an
+ * event — prose that is read, not scanned. `width="full"` is for the page that
+ * lays itself out (a split view) and still shares the gutter.
+ *
+ * The gutter is 16 px below 768 and 24 above (design reference §5.1, V-1): at
+ * 390 px the body is 358 wide, not 342.
  *
  * ```tsx
  * <PageShell title="知识库" actions={<Button…/>}>
@@ -26,11 +29,17 @@ import { cn } from "@/lib/cn";
  */
 
 /**
- * `page` (1040) is the list column, `wide` (1200) the dashboard column, `full`
- * lets a page lay itself out. `narrow` and `content` are retired names of
- * `page`.
+ * `read` (720) is the reading column, `page` (1040) the list column, `wide`
+ * (1200) the dashboard column, `full` lets a page lay itself out.
  */
-export type PageWidth = "page" | "wide" | "full" | "narrow" | "content";
+export type PageWidth = "read" | "page" | "wide" | "full";
+
+const COLUMN: Readonly<Record<PageWidth, string>> = {
+  read: "max-w-read",
+  page: "max-w-page",
+  wide: "max-w-wide",
+  full: "max-w-none",
+};
 
 export function PageShell({
   title,
@@ -63,9 +72,9 @@ export function PageShell({
 }) {
   return (
     <div className={cn("h-full min-h-0 overflow-y-auto bg-bg", className)}>
-      {/* One box: the page gutter (24 px) and the one column, so the header
-          and the body cannot disagree about where the left edge is. */}
-      <div className={cn("mx-auto w-full px-6 py-6", width === "full" ? "max-w-none" : width === "wide" ? "max-w-wide" : "max-w-page")}>
+      {/* One box: the page gutter (16 px, 24 from `md`) and the one column, so
+          the header and the body cannot disagree about where the left edge is. */}
+      <div className={cn("mx-auto w-full px-4 py-6 md:px-6", COLUMN[width])}>
         {back && <div className="mb-2">{back}</div>}
         <PageHeader title={title} meta={meta} actions={actions} documentTitle={documentTitle} />
         <div className={cn("mt-6", contentClassName)}>{children}</div>

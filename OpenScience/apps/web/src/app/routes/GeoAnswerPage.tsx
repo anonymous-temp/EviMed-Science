@@ -79,7 +79,7 @@ export function GeoAnswerPage() {
 function Shell({ title, section = GEO_MONITORING_TITLE, back, header, children }: { title: string; section?: string; back?: ReactNode; header?: ReactNode; children: ReactNode }) {
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-bg">
-      <div className="mx-auto w-full max-w-page px-6 py-6">
+      <div className="mx-auto w-full max-w-page px-4 py-6 md:px-6">
         <PageTitle page={title} section={section} />
         {header ?? (
           <header className="flex min-h-8 items-center gap-2">

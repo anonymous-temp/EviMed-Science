@@ -15,7 +15,7 @@ import {
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { FilterSelect } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
@@ -108,7 +108,7 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
   if (state.kind !== "ready") {
     return (
       <EventFrame title="事件">
-        <div className="mt-6">
+        <div>
           {state.kind === "loading" && <FrontierSkeleton />}
           {state.kind === "error" && <LoadError message={state.message} onRetry={() => setAttempt((value) => value + 1)} />}
           {state.kind === "not-offered" && (
@@ -126,24 +126,34 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
   return <EventBody event={state.event} />;
 }
 
-/** The page's column, its way back and its one-line header, shared by every state of it. */
-function EventFrame({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
+/**
+ * The page's column (the reading column, 720: an event is read, R13 V-2), its way back and its one-line header, shared by every
+ * state of it. `facts` is the one line under the title, when the event has one; it sits close to the title and the body starts
+ * a section below it.
+ */
+function EventFrame({ title, actions, facts, children }: { title: string; actions?: ReactNode; facts?: ReactNode; children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const origin = (location.state as { frontierOrigin?: string } | null)?.frontierOrigin;
   const fromReader = origin === "/app/frontier" || (typeof origin === "string" && origin.startsWith("/app/frontier?"));
   return (
-    <div className="h-full min-h-0 overflow-y-auto bg-bg">
-      <div className="mx-auto w-full max-w-page px-6 py-6">
+    <PageShell
+      title={title}
+      documentTitle={`${title} · 前沿动态`}
+      width="read"
+      back={(
         <nav aria-label="返回">
           <Link to={fromReader ? origin! : "/app/frontier"} onClick={fromReader ? (event) => { event.preventDefault(); navigate(-1); } : undefined} className={cn(INLINE_ACTION, "-ml-1.5 gap-1 px-1.5 text-text-3 hover:text-text")}>
             <ChevronLeft size={16} aria-hidden="true" />前沿动态
           </Link>
         </nav>
-        <PageHeader className="mt-2" title={title} documentTitle={`${title} · 前沿动态`} actions={actions} />
-        {children}
-      </div>
-    </div>
+      )}
+      actions={actions}
+      contentClassName={facts ? "mt-1.5" : undefined}
+    >
+      {facts}
+      {children}
+    </PageShell>
   );
 }
 
@@ -164,16 +174,39 @@ function EventBody({ event }: { event: FrontierEvent }) {
   const heat = event.heat ?? null;
 
   return (
-    <EventFrame title={event.title} actions={<Button onClick={research}>深入研究</Button>}>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-3">
-        {event.sourceCount72h > 0 && <span>{event.sourceCount72h} 家机构报道</span>}
-        {event.sourceCount72h > 0 && updated && <span aria-hidden="true">·</span>}
-        {updated && <span>{updatedText(updated)}</span>}
-        {specialty && <Tag className="ml-1">{specialty.label}</Tag>}
-      </div>
+    <EventFrame
+      title={event.title}
+      actions={<Button onClick={research}>深入研究</Button>}
+      facts={(
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-3">
+          {event.sourceCount72h > 0 && <span>{event.sourceCount72h} 家机构报道</span>}
+          {event.sourceCount72h > 0 && updated && <span aria-hidden="true">·</span>}
+          {updated && <span>{updatedText(updated)}</span>}
+          {specialty && <Tag className="ml-1">{specialty.label}</Tag>}
+        </div>
+      )}
+    >
+      {/* One column: 720 holds a timeline or a side column, not both. The heat and where the reports come from are a strip above
+        * the summary, where a reader weighing the event looks first. */}
+      <div className="mt-6 flex flex-col gap-8">
+        <aside aria-label="热度与来源" className="flex flex-wrap items-start gap-x-10 gap-y-4">
+          {heat !== null && (
+            <div>
+              <p className="flex items-baseline gap-1">
+                <span className="text-display font-semibold tabular-nums text-text">{heat}</span>
+                <span className="text-caption text-text-3">热度</span>
+              </p>
+              <Sparkline points={event.trend} width={120} height={32} className="mt-2" />
+            </div>
+          )}
+          <dl className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-ui">
+            {institutions && <><dt className="text-text-3">机构</dt><dd className="text-text">{institutions}</dd></>}
+            {event.firstAt && <><dt className="text-text-3">首报</dt><dd className="tabular-nums text-text">{dateClock(event.firstAt)}</dd></>}
+            <dt className="text-text-3">一手材料</dt><dd className="text-text">{primaryHeld(event)}</dd>
+          </dl>
+        </aside>
 
-      <div className="mt-6 flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-12">
-        <div className="min-w-0 flex-1 space-y-8">
+        <div className="min-w-0 space-y-8">
           <section aria-labelledby="event-digest">
             <h2 id="event-digest" className="text-ui font-semibold text-text">概要</h2>
             <p className={cn("mt-2 max-w-measure whitespace-pre-line text-ui", event.digest ? "text-text" : "text-text-3")}>{event.digest ?? "暂无综述"}</p>
@@ -213,23 +246,6 @@ function EventBody({ event }: { event: FrontierEvent }) {
             </section>
           )}
         </div>
-
-        <aside aria-label="热度与来源" className="w-full shrink-0 lg:w-60">
-          {heat !== null && (
-            <div className="mb-4">
-              <p className="flex items-baseline gap-1">
-                <span className="text-display font-semibold tabular-nums text-text">{heat}</span>
-                <span className="text-caption text-text-3">热度</span>
-              </p>
-              <Sparkline points={event.trend} width={120} height={32} className="mt-2" />
-            </div>
-          )}
-          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-ui">
-            {institutions && <><dt className="text-text-3">机构</dt><dd className="text-text">{institutions}</dd></>}
-            {event.firstAt && <><dt className="text-text-3">首报</dt><dd className="tabular-nums text-text">{dateClock(event.firstAt)}</dd></>}
-            <dt className="text-text-3">一手材料</dt><dd className="text-text">{primaryHeld(event)}</dd>
-          </dl>
-        </aside>
       </div>
     </EventFrame>
   );

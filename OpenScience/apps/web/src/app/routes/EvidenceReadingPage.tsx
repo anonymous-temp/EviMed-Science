@@ -180,6 +180,7 @@ function EvidenceReadingContent({
   return (
     <PageShell
       title={question ?? "证据卡"}
+      width="read"
       back={<FrontierBack trail={[{ label: zone?.title || "专区", to: zonePath }]} />}
       actions={
         (askable || evidence?.canEdit) && (
