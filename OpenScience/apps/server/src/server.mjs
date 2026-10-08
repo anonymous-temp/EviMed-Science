@@ -8790,6 +8790,21 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
     "counter",
     { value: runtimeStats.background?.yieldFailures ?? 0 },
   );
+  // Background work in researchers' own projects holds at most one slot less than their ceiling (2026-10-08).
+  addMetric(
+    lines,
+    "open_science_runtime_background_in_researcher_projects",
+    "Runtimes started for background work (a programme step, an autopilot episode) in researchers' own projects, running or being reserved.",
+    "gauge",
+    { value: runtimeStats.background?.inResearcherProjects ?? 0 },
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_background_share_refusals_total",
+    "Background starts told to wait because the account's background work already held its share: one slot less than the per-account ceiling.",
+    "counter",
+    { value: runtimeStats.background?.shareRefusals ?? 0 },
+  );
   // A container removal that was not confirmed holds its project's start (`runtime_cleanup_required`)
   // until it is: how many are held, how long the oldest has been, and how the retries came out.
   const cleanup = runtimeStats.cleanup ?? {};
