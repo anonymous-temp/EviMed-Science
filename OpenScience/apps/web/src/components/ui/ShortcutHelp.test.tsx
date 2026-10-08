@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useUiStore } from "@/lib/store";
 import { ShortcutHelp } from "./ShortcutHelp";
 
 // Deterministic modifier labels — the real check sniffs the UA string.
@@ -76,5 +77,42 @@ describe("ShortcutHelp", () => {
 
     fireEvent.keyDown(window, { key: "?" });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+// WCAG 2.2 SC 2.1.4 (character key shortcuts): a shortcut that is one character can be turned off. Off, the key is left alone.
+describe("the single-character ? shortcut has an off switch", () => {
+  afterEach(() => {
+    window.localStorage.clear();
+    useUiStore.setState({ singleKeyShortcuts: true });
+  });
+
+  it("does nothing and is not swallowed while it is off, and works again once it is back on", () => {
+    useUiStore.getState().setSingleKeyShortcuts(false);
+    render(<ShortcutHelp />);
+    const pressed = new KeyboardEvent("keydown", { key: "?", bubbles: true, cancelable: true });
+    act(() => { window.dispatchEvent(pressed); });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Not preventDefault-ed: the key still types wherever it would have typed.
+    expect(pressed.defaultPrevented).toBe(false);
+
+    act(() => { useUiStore.getState().setSingleKeyShortcuts(true); });
+    fireEvent.keyDown(window, { key: "?" });
+    expect(screen.getByRole("dialog", { name: "键盘快捷键" })).toBeInTheDocument();
+  });
+
+  it("is kept in this browser like the theme, on unless it was turned off", () => {
+    expect(useUiStore.getState().singleKeyShortcuts).toBe(true);
+    useUiStore.getState().setSingleKeyShortcuts(false);
+    expect(window.localStorage.getItem("ai4s.shortcuts.single")).toBe("0");
+    useUiStore.getState().setSingleKeyShortcuts(true);
+    expect(window.localStorage.getItem("ai4s.shortcuts.single")).toBe("1");
+  });
+
+  it("does not take away the explicit toggle, which is a request and not a key", () => {
+    useUiStore.getState().setSingleKeyShortcuts(false);
+    render(<ShortcutHelp />);
+    act(() => { window.dispatchEvent(new Event("evimed:shortcut-help-toggle")); });
+    expect(screen.getByRole("dialog", { name: "键盘快捷键" })).toBeInTheDocument();
   });
 });

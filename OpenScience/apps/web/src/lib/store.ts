@@ -6,6 +6,7 @@ const THEME_KEY = "ai4s.theme";
 const SIDEBAR_WIDTH_KEY = "ai4s.sidebar.width";
 const SIDEBAR_COLLAPSED_KEY = "ai4s.sidebar.collapsed";
 const INSPECTOR_WIDTH_KEY = "ai4s.inspector.width";
+const SINGLE_KEY_SHORTCUTS_KEY = "ai4s.shortcuts.single";
 
 export const SIDEBAR_MIN = 184;
 export const SIDEBAR_MAX = 340;
@@ -23,6 +24,12 @@ function initialTheme(): Theme {
   const saved = window.localStorage.getItem(THEME_KEY);
   if (saved === "light" || saved === "dark" || saved === "system") return saved;
   return "system";
+}
+
+/** On unless this browser's reader turned it off (an absent key is the default: on). */
+function initialSingleKeyShortcuts(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(SINGLE_KEY_SHORTCUTS_KEY) !== "0";
 }
 
 function initialSidebarWidth(): number {
@@ -48,6 +55,14 @@ interface UiState {
   inspectorMaximized: boolean;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
+  /**
+   * Whether the shell answers to a shortcut that is a single character key
+   * (`?`). WCAG 2.2 SC 2.1.4 wants such a shortcut to be turned off, remapped
+   * or active only on focus; this is the switch (设置 · 外观). Chords with a
+   * modifier (⌘/Ctrl+B) are not character-key shortcuts and ignore it. This
+   * browser's preference, kept like the theme.
+   */
+  singleKeyShortcuts: boolean;
   /** One-shot text placed into the composer by another surface (e.g. the
    *  provenance Reproduce action) — consumed on the next composer render. */
   setTheme: (theme: Theme) => void;
@@ -58,6 +73,7 @@ interface UiState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
+  setSingleKeyShortcuts: (on: boolean) => void;
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -66,6 +82,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarCollapsed:
     typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1",
   sidebarWidth: initialSidebarWidth(),
+  singleKeyShortcuts: initialSingleKeyShortcuts(),
+  setSingleKeyShortcuts: (singleKeyShortcuts) => {
+    if (typeof window !== "undefined") window.localStorage.setItem(SINGLE_KEY_SHORTCUTS_KEY, singleKeyShortcuts ? "1" : "0");
+    set({ singleKeyShortcuts });
+  },
   setTheme: (theme) => {
     if (typeof window !== "undefined") window.localStorage.setItem(THEME_KEY, theme);
     set({ theme });

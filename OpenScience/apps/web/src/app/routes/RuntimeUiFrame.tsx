@@ -767,7 +767,9 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const ui = useUiStore.getState();
         const shortcuts: Record<string, () => void> = {
           sidebar: () => ui.toggleSidebar(),
-          shortcuts: () => window.dispatchEvent(new Event(SHORTCUT_HELP_TOGGLE_EVENT)),
+          // `?` is a single-character shortcut and has an off switch (设置 · 外观, WCAG 2.2 SC 2.1.4): off, the key the frame
+          // forwarded does nothing here either. The chord (sidebar) is not a character key and is never switched off.
+          shortcuts: () => { if (ui.singleKeyShortcuts) window.dispatchEvent(new Event(SHORTCUT_HELP_TOGGLE_EVENT)); },
         };
         const run = shortcuts[String(message.shortcut)];
         if (!run) return;

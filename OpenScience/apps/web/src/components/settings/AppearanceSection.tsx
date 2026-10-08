@@ -4,6 +4,7 @@ import { useUiStore } from "@/lib/store";
 import { Button } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
 import { Panel, PanelRow } from "@/components/ui/Panel";
+import { Switch } from "@/components/ui/Switch";
 import { tagClasses } from "@/components/ui/Tag";
 
 const THEMES = [
@@ -21,11 +22,17 @@ const THEMES = [
  * is this browser's, not the account's. The hints under each card — where the
  * theme is kept, that the language follows the deployment, that 「?」 opens
  * the shortcut list — explained the system and are gone.
+ *
+ * The `?` row carries the switch for that key (R13 V-8, WCAG 2.2 SC 2.1.4): a
+ * shortcut that is one character has to be able to be turned off. ⌘/Ctrl+B is
+ * a chord and has none.
  */
 export function AppearanceSection() {
   const theme = useUiStore((state) => state.theme);
   const setTheme = useUiStore((state) => state.setTheme);
   const current = THEMES.find((item) => item.value === theme) ?? THEMES[2];
+  const singleKey = useUiStore((state) => state.singleKeyShortcuts);
+  const setSingleKey = useUiStore((state) => state.setSingleKeyShortcuts);
   return (
     <div className="space-y-8">
       <Panel title="外观">
@@ -43,9 +50,18 @@ export function AppearanceSection() {
         <PanelRow label="语言" control="简体中文" />
       </Panel>
       <Panel title="快捷键">
-        {shortcuts().map((row) => (
-          <PanelRow key={row.keys} label={row.description} control={<kbd className={tagClasses({ className: "font-mono" })}>{row.keys}</kbd>} />
-        ))}
+        {shortcuts().map((row) => {
+          const key = <kbd className={tagClasses({ className: "font-mono" })}>{row.keys}</kbd>;
+          return row.keys === "?" ? (
+            <PanelRow
+              key={row.keys}
+              label={row.description}
+              control={<>{key}<Switch label="用 ? 键打开快捷键清单" checked={singleKey} onChange={setSingleKey} /></>}
+            />
+          ) : (
+            <PanelRow key={row.keys} label={row.description} control={key} />
+          );
+        })}
       </Panel>
     </div>
   );

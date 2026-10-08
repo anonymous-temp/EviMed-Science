@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { isMacPlatform } from "@/lib/platform";
 import { trapTab } from "@/lib/focusTrap";
+import { useUiStore } from "@/lib/store";
+import { IconButton } from "@/components/ui/IconButton";
 
 /** Toggles the cheat sheet from outside it: the chat frame forwards `?` when
  *  focus is inside it, where this component's own listener cannot hear it. */
@@ -9,7 +11,12 @@ export const SHORTCUT_HELP_TOGGLE_EVENT = "evimed:shortcut-help-toggle";
 
 /** Global `?` (Shift+/) cheat sheet. Lists every keyboard shortcut the shell
  *  binds so they are discoverable in-product; Esc/click-outside closes it and
- *  focus returns to whatever had it before. */
+ *  focus returns to whatever had it before.
+ *
+ *  `?` is a single-character shortcut, so it has an off switch (设置 · 外观;
+ *  WCAG 2.2 SC 2.1.4): off, the key is left alone — it types, and it is not
+ *  swallowed. The conversation frame's forwarded `?` is held to the same
+ *  switch where it is received (`RuntimeUiFrame`). */
 export function ShortcutHelp() {
   const [open, setOpen] = useState(false);
   // Mirror for the one-time global listener below (avoids re-binding per open).
@@ -23,6 +30,7 @@ export function ShortcutHelp() {
       // `?` is Shift+/ on US layouts; e.key already carries the shifted char.
       // Never steal it from a field the user is typing into.
       if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (!useUiStore.getState().singleKeyShortcuts) return;
         const el = e.target as HTMLElement | null;
         if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
         e.preventDefault();
@@ -89,13 +97,7 @@ export function ShortcutHelp() {
         >
           <header className="flex h-11 items-center gap-2 border-b border-border px-4">
             <h2 className="flex-1 text-ui font-medium text-text">键盘快捷键</h2>
-            <button
-              onClick={() => setOpen(false)}
-              aria-label="关闭快捷键面板"
-              className="grid h-8 w-8 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text"
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
+            <IconButton icon={X} label="关闭快捷键面板" size="sm" onClick={() => setOpen(false)} />
           </header>
           <ul className="px-4 py-3">
             {rows.map((row) => (
