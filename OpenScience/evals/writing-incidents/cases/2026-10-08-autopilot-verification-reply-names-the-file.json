@@ -1,0 +1,9 @@
+{
+  "id": "2026-10-08-autopilot-verification-reply-names-the-file",
+  "genre": "backstage-prose",
+  "observedIn": "owner screenshots of 2026-10-08 (the independent verifier's reply, in the conversation a researcher opens); triage record 'Seen in the shots'",
+  "verbatim": "weakened, refuted, verification.json, numbersReproduced, recomputed",
+  "whyItIsWrong": "The words are the verification file's name, fields and verdict values — back-office vocabulary of the system that reads the file, printed in the body of a reply a researcher reads (design reference §8.6).",
+  "caughtBy": "nobody",
+  "note": "The reply's full sentence was not preserved; verbatim is the list of words the triage recorded as printed. The fix is in the verifier's instruction (reply for the researcher, file vocabulary named as what not to say) and the check is evals/autopilot-verification-reply. Verify on a new conversation: an old one makes the model imitate its old format."
+}

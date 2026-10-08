@@ -198,6 +198,17 @@ export function verificationBrief(claim) {
 }
 
 /**
+ * Every name the verifier's file is written in: its own, its fields and the three words its verdict may be. They belong to the file and
+ * to the control plane that reads it, and to no sentence the researcher reads — the verifier's reply once printed `verification.json`,
+ * `numbersReproduced`, `weakened` and `refuted` in the body of a conversation they open (§8.6 of the design reference, E-10). Named once,
+ * here, because the instruction that keeps them out of the reply and the eval that checks it (`evals/autopilot-verification-reply`) both
+ * read this list, and a field added to the file without joining it would leak on the day it was added.
+ */
+export const VERIFICATION_FILE_VOCABULARY = Object.freeze([
+  VERIFICATION_ARTIFACT, "schemaVersion", "verdict", "numbersReproduced", "recomputed", "checkedSources", ...REFUTATION_VERDICTS,
+]);
+
+/**
  * The independent verifier's brief, in the words the run reads.
  *
  * Built from the projection and from nothing else, so the separation
@@ -238,6 +249,11 @@ export function verificationPrompt(brief) {
     '"stands" means the sources support the claim as written, "weakened" means they support less than it claims,',
     '"refuted" means they contradict it. List in checkedSources only the sources you actually opened.',
     "Stop when the budget is reached; an unfinished check is reported as it stands, never guessed.",
+    // The file is for the system; the reply is for a person. The verdict, the fields and the file's name stay in the file.
+    "Your reply is read by the researcher, who has never seen that file's format. Write it in the language of the claim, in plain sentences:",
+    "whether the sources support the claim as written, support less than it says, or contradict it, and where the claim states numbers",
+    "whether you could reproduce them. Do not name the file, its fields or their values in the reply",
+    `(${VERIFICATION_FILE_VOCABULARY.join(", ")}): say what they mean in the researcher's words instead.`,
   ].join("\n");
 }
 

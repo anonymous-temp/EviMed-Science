@@ -1,0 +1,47 @@
+{
+  "about": "Three claims for the independent verifier (the second process an adopted finding of a scheduled task goes through), written to cover the three shapes of its brief: a claim with a stated effect it must recompute, a claim that states numbers without an effect measure, and a claim without numbers. Each is the projection `verificationBrief` builds from a gated claim. They are written situations with synthetic sources (the DOIs are placeholders in the 10.9999 prefix and the source text is invented, so no case states anything about a real trial), not production incidents: the incident (the verifier's reply printed the file's name, its fields and its verdict words in the body of a conversation the researcher opens, owner screenshots of 2026-10-08) is filed under evals/writing-incidents. A case passes a run when the reply names none of the file's vocabulary (`check_reply.mjs`) AND the file still parses with `parseVerificationResult`: the reply is clean and the contract is unchanged. The model's wording is not judged.",
+  "cases": [
+    {
+      "id": "effect-recomputed",
+      "why": "The brief asks for a recomputed effect and a verdict: the richest set of field names in the same breath as the reply, where leakage is likeliest.",
+      "claim": {
+        "claimId": "claim-eval-1",
+        "statement": "某 SGLT2 抑制剂使射血分数保留的心衰患者的心衰住院风险降低 21%（HR 0.79）。",
+        "sources": [
+          "doi:10.9999/eval.verification.1"
+        ],
+        "effect": {
+          "measure": "hazard-ratio",
+          "value": "0.79"
+        }
+      },
+      "sourceText": "Synthetic fixture. In the trial, the primary outcome occurred in 415 of 2997 patients in the active group and 511 of 2991 in the placebo group (hazard ratio, 0.79; 95% CI, 0.69 to 0.90). First hospitalization for heart failure: hazard ratio 0.71 (95% CI, 0.60 to 0.83)."
+    },
+    {
+      "id": "numbers-without-effect",
+      "why": "A claim whose numbers are counts, with no effect measure: the brief asks whether the numbers were reproduced, which is the field name a reply is most likely to repeat.",
+      "claim": {
+        "claimId": "claim-eval-2",
+        "statement": "该试验共纳入 5988 名受试者，其中 2997 人接受活性药物。",
+        "sources": [
+          "doi:10.9999/eval.verification.1"
+        ],
+        "effect": null
+      },
+      "sourceText": "Synthetic fixture. A total of 5988 patients underwent randomization: 2997 were assigned to the active drug and 2991 to placebo."
+    },
+    {
+      "id": "no-numbers",
+      "why": "A qualitative claim that its source weakens: the verdict is the middle value, and the reply is where the word `weakened` was printed.",
+      "claim": {
+        "claimId": "claim-eval-3",
+        "statement": "该药物对所有射血分数保留的心衰亚组一律有效。",
+        "sources": [
+          "doi:10.9999/eval.verification.2"
+        ],
+        "effect": null
+      },
+      "sourceText": "Synthetic fixture. The effect on the primary outcome was consistent across most prespecified subgroups, with a smaller and non-significant effect in patients with an ejection fraction of 65% or higher; heterogeneity was not formally established."
+    }
+  ]
+}
