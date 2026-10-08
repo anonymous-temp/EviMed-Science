@@ -16,6 +16,8 @@ import type {
   GeoQuestions,
   GeoSourceAnswer,
   GeoSourceDetail,
+  GeoSourceHistoryPoint,
+  GeoSourcePage,
   GeoSourceRow,
   GeoSources,
   GeoStepKey,
@@ -385,4 +387,19 @@ export function sourceDetailOf(row: GeoSourceRow, { engine = null }: { engine?: 
     counts: { cited, wrongOurs: wrong, mentionsOurs: mentions },
     answers,
   };
+}
+
+/** The pages a source row's answers cited: `count` pages, the first the most cited, with a title (the third has none). */
+export function sourcePagesOf(domain: string, count: number): GeoSourcePage[] {
+  return Array.from({ length: count }, (_, index) => ({
+    url: `https://www.${domain}/p/${index + 1}`,
+    title: index === 2 ? null : `第 ${index + 1} 个页面`,
+    cited: Math.max(1, count - index),
+    wrongOurs: index === 0 ? 2 : 0,
+  }));
+}
+
+/** A source's counts for the last rounds, oldest first: `[date, cited, wrongOurs, coverage]` each. */
+export function sourceHistoryOf(rows: ReadonlyArray<readonly [string, number, number, string | null]>): GeoSourceHistoryPoint[] {
+  return rows.map(([day, cited, wrongOurs, coverage]) => ({ roundId: `round_${day}`, kind: "weekly", sampleDate: `2026-09-${day}`, coverage, cited, wrongOurs, mentionsOurs: 0 }));
 }

@@ -288,7 +288,7 @@ export function ListRow({
         </div>
       )}
       {aligned && (
-        <span aria-hidden="true" className={cn(MARK_WIDTH, "flex shrink-0 justify-end text-text-3", expanded ? "self-start pt-0.5" : "self-center", "max-sm:order-2")}>
+        <span aria-hidden="true" className={cn(MARK_WIDTH, "flex shrink-0 justify-end text-text-3", expanded || columns?.length ? "self-start pt-0.5" : "self-center", "max-sm:order-2")}>
           {mark && <MarkIcon size={16} className={cn("transition-transform duration-fast motion-reduce:transition-none", mark === "fold" && expanded && "rotate-180")} />}
         </span>
       )}

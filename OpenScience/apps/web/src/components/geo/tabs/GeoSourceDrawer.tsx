@@ -1,19 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, X } from "lucide-react";
-import { getGeoSource, type GeoProject, type GeoSourceAnswer, type GeoSourceDetail, type GeoSourceRow } from "@/lib/geoClient";
+import { getGeoSource, type GeoProject, type GeoSourceAnswer, type GeoSourceDetail, type GeoSourcePage, type GeoSourceRow } from "@/lib/geoClient";
+import { safeWebHref } from "@/lib/readPages";
+import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
-import { List, ListRow } from "@/components/ui/ListRow";
+import { List, ListHeader, ListRow } from "@/components/ui/ListRow";
+import { ScrollRegion } from "@/components/ui/ScrollRegion";
 import { Tag } from "@/components/ui/Tag";
 import { engineName, GEO_SOURCE_LAYER_WORDS, monthDay } from "../geoText";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { answerPath, sourceDraft, sourceKindWord, yuan } from "./geoTabText";
 import { TabError, useGeoLoad } from "./geoTabKit";
 import { ShowMore, useShowMore } from "./showMore";
+import { sourceHistoryModel } from "./sourceHistory";
 
 /** Answers listed before 「显示更多」 in each of the drawer's two lists, and how many each press adds. */
 const ANSWERS_SHOWN = 10;
 const ANSWERS_STEP = 20;
+/** Pages of the site listed before 「显示全部」. */
+const PAGES_SHOWN = 8;
 
 const CONDITION_WORDS: Array<{ key: keyof GeoSourceRow["conditions"]; label: string }> = [
   { key: "icp", label: "备案" },
@@ -30,8 +36,10 @@ export function unverifiedConditions(conditions: GeoSourceRow["conditions"] | nu
  * answers the row's three numbers count. The ones that misstate us come first, each as 「引擎 · 问题 · 日期」 with the wrong
  * sentence drawn the way the answer page draws it, and 「出自这个站」 on the sentence the engine's own marker puts on this site;
  * then the rest, the ones that name us marked. Every answer is the way into its page. A site nothing misstated still lists the
- * answers that cite it. The last lines are the three conditions and the price of an article there, and the one button hands a
- * draft to the project's conversation — never sent.
+ * answers that cite it. After the answers: the specific pages of the site those answers cited (R14 N-11, outside links, the most cited
+ * eight and then all of them), and the site's counts across the last few rounds — compared only where the rounds were measured over
+ * the same thing, a rule drawn where the coverage changed (N-4). The last lines are the three conditions and the price of an article
+ * there, and the one button hands a draft to the project's conversation — never sent.
  *
  * It is a record, so it is a drawer: the list stays where it was (page-structure rule 2).
  */
@@ -76,6 +84,8 @@ export function GeoSourceDrawer({
           {state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取引用它的回答</p>}
           {state.kind === "error" && <TabError message={state.message} onRetry={reload} />}
           {state.kind === "ready" && <Answers geoId={geoId} project={project} detail={state.data} focus={focus} />}
+          {state.kind === "ready" && <Pages detail={state.data} />}
+          {state.kind === "ready" && <History detail={state.data} />}
           <Conditions source={state.kind === "ready" ? state.data.source : source} />
         </div>
         <Footer project={project} source={source} detail={state.kind === "ready" ? state.data : null} />
@@ -135,6 +145,106 @@ function Answers({ geoId, project, detail, focus }: { geoId: string; project: Ge
         </section>
       )}
     </>
+  );
+}
+
+/** The address as a reader wants it: no scheme, no leading www. */
+function displayUrl(url: string): string {
+  return url.replace(/^[a-z][a-z0-9+.-]*:\/\//iu, "").replace(/^www\./u, "").replace(/\/$/u, "");
+}
+
+/**
+ * 被引用的页面 (R14 N-11): the specific pages of this site that the latest round's answers cited — the page's title, its address
+ * as an outside link, how many answers cited it and how many of those misstated us. The most cited eight, then all of them.
+ */
+function Pages({ detail }: { detail: GeoSourceDetail }) {
+  const pages = Array.isArray(detail.pages) ? detail.pages : [];
+  const [all, setAll] = useState(false);
+  if (pages.length === 0) return null;
+  const total = typeof detail.pagesTotal === "number" ? detail.pagesTotal : pages.length;
+  const shown = all ? pages : pages.slice(0, PAGES_SHOWN);
+  return (
+    <section aria-label="被引用的页面" data-geo-source-section="pages">
+      <h3 className="text-ui font-semibold text-text">
+        被引用的页面<span data-geo-source-count="pages" className="ml-1.5 font-normal tabular-nums text-text-3">{total.toLocaleString("zh-CN")}</span>
+      </h3>
+      <ListHeader label="页面的数字" columns={[{ key: "cited", label: "被引用" }, { key: "wrong", label: "讲错的回答" }]} className="mt-2 max-sm:hidden" />
+      <List divided label="被引用的页面">
+        {shown.map((page) => <PageRow key={page.url} page={page} />)}
+      </List>
+      {pages.length > PAGES_SHOWN && (
+        <div className="mt-2 flex justify-center">
+          <Button variant="text" size="sm" aria-expanded={all} onClick={() => setAll((value) => !value)}>
+            {all ? "收起" : `显示全部 ${pages.length.toLocaleString("zh-CN")} 个`}
+          </Button>
+        </div>
+      )}
+      {total > pages.length && <p className="mt-2 text-caption text-text-3">{`只列出被引用最多的 ${pages.length.toLocaleString("zh-CN")} 个，共 ${total.toLocaleString("zh-CN")} 个页面。`}</p>}
+    </section>
+  );
+}
+
+function PageRow({ page }: { page: GeoSourcePage }) {
+  const href = safeWebHref(page.url);
+  const address = displayUrl(page.url);
+  return (
+    <ListRow
+      title={<span className="line-clamp-2 break-words">{page.title ?? address}{href && <span className="sr-only">（在新标签页打开）</span>}</span>}
+      titleProps={{ "data-geo-source-page": page.url }}
+      href={href ?? undefined}
+      meta={page.title ? <span className="block truncate">{address}</span> : undefined}
+      columns={[
+        { key: "cited", label: "被引用", value: page.cited.toLocaleString("zh-CN") },
+        { key: "wrong", label: "讲错的回答", value: page.wrongOurs.toLocaleString("zh-CN"), ...(page.wrongOurs > 0 ? { tone: "danger" as const } : {}) },
+      ]}
+    />
+  );
+}
+
+/**
+ * The site's counts for the last few rounds (R14 N-11), one column per round, oldest first. A rule is drawn before a round that was
+ * measured over something else than the one before it — other engines answered, other questions, another surface — and nothing is
+ * compared across it: the sentence under the table compares the latest round with the previous one only where they share a
+ * coverage, and otherwise says they are not compared (N-4). A site no round cited, or one round alone, draws no trend.
+ */
+function History({ detail }: { detail: GeoSourceDetail }) {
+  const model = sourceHistoryModel(detail.history);
+  if (!model) return null;
+  const cell = (broken: boolean) => cn("px-3 py-1 text-right", broken && "border-l border-border-control");
+  return (
+    <section aria-label="近几轮" data-geo-source-section="history">
+      <h3 className="text-ui font-semibold text-text">近几轮</h3>
+      <ScrollRegion label="近几轮的被引用和讲错的回答" className="mt-2">
+        <table data-geo-source-history="" className="w-full min-w-max text-ui tabular-nums">
+          <caption className="sr-only">这个站在最近几轮里被引用的回答数，和其中讲错的回答数</caption>
+          <thead>
+            <tr>
+              <td />
+              {model.columns.map((column) => (
+                <th key={column.roundId} scope="col" data-geo-history-round={column.roundId} className={cn(cell(column.breakBefore), "pb-1 text-caption font-normal text-text-3")}>
+                  {column.label}
+                  {column.breakBefore && <span className="sr-only">（测量范围有变化，不与前一轮比较）</span>}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row" className="py-1 pr-3 text-left font-normal text-text-2">被引用</th>
+              {model.columns.map((column) => <td key={column.roundId} data-geo-history="cited" className={cn(cell(column.breakBefore), "text-text")}>{column.cited.toLocaleString("zh-CN")}</td>)}
+            </tr>
+            <tr>
+              <th scope="row" className="py-1 pr-3 text-left font-normal text-text-2">讲错的回答</th>
+              {model.columns.map((column) => (
+                <td key={column.roundId} data-geo-history="wrong" className={cn(cell(column.breakBefore), column.wrongOurs > 0 ? "text-danger" : "text-text")}>{column.wrongOurs.toLocaleString("zh-CN")}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </ScrollRegion>
+      {model.sentence && <p data-geo-history-note="" className="mt-2 text-caption text-text-3">{model.sentence}</p>}
+      {model.broken && <p data-geo-history-break="" className="mt-1 text-caption text-text-3">竖线两侧的轮次测量范围不同，不互相比较。</p>}
+    </section>
   );
 }
 
