@@ -4426,13 +4426,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
   const dataSemanticsGatewayHandler = createDataSemanticsGateway({ config, runtimeManager, store, service: dataSemantics });
   const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store, evaluationIsolation });
+  // The cap of a scheduled execution that runs in the researcher's own runtime (autopilotEpisodeScope.mjs), asked by every gateway
+  // that books a runtime's spend: the model gateway, the metered web search, and the engines' model credentials.
+  const autopilotRunScope = autopilotService ? createAutopilotRunScope({ store, agentRuns, service: autopilotService }) : null;
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
     attributeRun,
     runPurpose,
-    // The cap of a scheduled execution that runs in the researcher's own runtime (autopilotEpisodeScope.mjs).
-    runScope: autopilotService ? createAutopilotRunScope({ store, agentRuns, service: autopilotService }) : null,
+    runScope: autopilotRunScope,
   });
   // A specialist engine's spend, reported by its adapter when a job ends (X1
   // purpose `engine`): the runtime calls engines directly, so this is the one
@@ -4440,7 +4442,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const engineUsageHandler = createEngineUsageHandler({ config, usageLedger, attributeRun });
   // An engine job's credential for the model gateway, asked for by its
   // adapter at admission (gap E4; OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED).
-  const engineModelTokenHandler = createEngineModelTokenHandler({ config, runtimeManager, attributeRun,
+  const engineModelTokenHandler = createEngineModelTokenHandler({ config, runtimeManager, attributeRun, runScope: autopilotRunScope,
     resolveExecutionContext: createEngineExecutionContextResolver({ config, store, agentRuns, runtimeManager }),
   });
   // The evaluation corpus needs both arms to see byte-identical upstream
@@ -4525,6 +4527,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // Bailian's search is a paid Qwen call, booked like the kernel's.
     usageLedger,
     attributeRun,
+    runScope: autopilotRunScope,
   });
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
