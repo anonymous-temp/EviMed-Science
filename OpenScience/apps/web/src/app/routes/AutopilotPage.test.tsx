@@ -404,6 +404,19 @@ describe("scheduled tasks", () => {
       expect(within(header).queryByRole("combobox")).not.toBeInTheDocument();
     } finally { useProjectStore.setState({ projects: [] }); }
   });
+  it("tells the page's project from a namesake the way the sidebar does", async () => {
+    const year = new Date().getFullYear();
+    useProjectStore.setState({ projects: [
+      { id: "project-one", name: "波立维", createdAt: new Date(year, 8, 29, 14, 2).toISOString() } as never,
+      { id: "project-two", name: "波立维", createdAt: new Date(year, 9, 1, 9, 30).toISOString() } as never,
+    ] });
+    try {
+      render("/app/autopilot");
+      const header = screen.getByRole("heading", { name: "定时任务", level: 1 }).closest("header")!;
+      expect(within(header).getByText("波立维 · 9月29日")).toBeInTheDocument();
+      expect(within(header).queryByText("波立维 · 10月1日")).not.toBeInTheDocument();
+    } finally { useProjectStore.setState({ projects: [] }); }
+  });
   it("says in each row when it runs next and how its last run came out, or that it has not run", async () => {
     const quiet = { ...agenda, id: "quiet", payload: { ...agenda.payload, title: "还没运行的任务", schedule: { kind: "daily", timeZone: "Asia/Shanghai", time: "07:00" } } };
     const failed = { ...agenda, id: "failed", payload: { ...agenda.payload, title: "失败过的任务" } };

@@ -21,6 +21,7 @@ import type {
   GeoSourceLayer,
   GeoStepKey,
 } from "@/lib/geoClient";
+import { projectLabels } from "@/lib/projectNames";
 
 /* ------------------------------------------------------------- capabilities */
 
@@ -378,26 +379,17 @@ export function monthDay(value: string | Date | null | undefined): string | null
 
 /**
  * The names a list of projects is read by: two products can carry the same name (a re-run, a second window), and a list of
- * “波立维” and “波立维” tells nothing. A name that occurs more than once gets its start date after it — “波立维（9月29日）” — and
- * if two of those started the same day, their order in the list. The key is the project's id; a name that is alone stays as is.
+ * “波立维” and “波立维” tells nothing. It is the label every project picker uses (`projectLabels`: “波立维 · 9月29日”), told apart by
+ * the day the window started — or, when the list has no start for it, the day the project was made. The key is the project's id; a
+ * name that is alone stays as it is.
  */
 export function withStartDate(projects: ReadonlyArray<{ id: string; name: string; startedAt?: string | null; createdAt?: string | null }>): Map<string, string> {
-  const occurrences = new Map<string, number>();
-  for (const project of projects) occurrences.set(project.name, (occurrences.get(project.name) ?? 0) + 1);
-  const labels = new Map<string, string>();
-  const used = new Map<string, number>();
-  for (const project of projects) {
-    if ((occurrences.get(project.name) ?? 0) < 2) {
-      labels.set(project.id, project.name);
-      continue;
-    }
-    const date = monthDay(project.startedAt ?? project.createdAt ?? null);
-    const label = date ? `${project.name}（${date}）` : project.name;
-    const seen = (used.get(label) ?? 0) + 1;
-    used.set(label, seen);
-    labels.set(project.id, seen > 1 ? `${label} · 第 ${seen} 个` : label);
-  }
-  return labels;
+  return projectLabels(projects.map((project) => ({
+    id: project.id,
+    name: project.name,
+    // A bare start day is that day in the reader's calendar (`parseGeoDate`), carried as the instant it begins.
+    createdAt: parseGeoDate(project.startedAt ?? project.createdAt ?? null)?.toISOString() ?? null,
+  })));
 }
 
 /**

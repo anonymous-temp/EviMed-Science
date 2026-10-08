@@ -41,6 +41,21 @@
  *     whose chunk is gone (the state an open tab is in after a release) keeps
  *     the sidebar and says so in Chinese;
  *   - no call a page makes to the control plane's API is refused (4xx/5xx).
+ *
+ * R11 (the two front-end audits of 2026-10-07) added what each fix left behind to look for, in two kinds. A check that guards a
+ * defect the release fixed and is measured exactly — an element is there or not, an attribute, a computed width, an answer the walk
+ * stubs itself — fails: the sidebar is one landmark that is inert when closed and not a Tab stop, a region that scrolls sideways is a Tab
+ * stop or holds one, the heading levels of GEO's overview and the memory page go down one at a time, a phone's rail and
+ * study counts are folded and not cut off, a record that is not there says so and goes back to its list, 关注 is one sentence and one
+ * button, the memory page opens on a tab that holds something, a PDF's original opens wide and fit to width, the new-skill drawer
+ * names an empty field in place, the evidence matrix opens a dialog from a row and Escape returns the focus. What depends on the
+ * account's data or is a measure of taste is a NOTICE: a page more than twelve viewports tall, more rows on a first screen than the
+ * page's ceiling, a headline below 520 px on a phone, the title column of a page against the others'. Pages no walk has measured
+ * yet (`PROVISIONAL_PAGES`) report a number past their budget as a notice too. Nothing here writes: the steps that click only open a
+ * menu, a drawer, a tab or a row, the new-skill drawer's 保存 is pressed with every request that is not a read refused in the
+ * browser, and the chat's cleanup cover is the walk's own answer to `start_runtime` (asked for with the chat page; it waits up to
+ * 135 s for the shell to give up, which `OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips).
+ *
  * It also records, without failing on them, small click targets, decorative
  * SVGs without aria-hidden, console errors and other HTTP errors — the things
  * that need a person to judge — and, as a NOTICE, a page that sets its text in
@@ -82,6 +97,7 @@
  *   [OPEN_SCIENCE_WALK_CHROMIUM=/path/to/chrome] \
  *   [OPEN_SCIENCE_WALK_OUT=/tmp/ui-walk] \
  *   [OPEN_SCIENCE_WALK_CHAT=1] \
+ *   [OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0] \
  *   node scripts/ops/ui-walk.mjs
  *
  * Exit 0 when every assertion holds, 1 when one does not (the report names
@@ -103,17 +119,23 @@ export const ROUTES = [
   ["frontier-hot", "/app/frontier?view=hot"],
   ["frontier-daily", "/app/frontier?view=daily"],
   ["frontier-all", "/app/frontier?view=all"],
+  // 关注 (R11): what an account that follows nothing sees — one sentence and one way to start — and what one that follows something does.
+  ["frontier-following", "/app/frontier?view=following"],
   // The evidence zones' home (2026-10-01). A zone and a reading page are
   // content addresses with ids; the home is the one every account can open.
   ["frontier-zones", "/app/frontier/zones"],
   ["capabilities", "/app/capabilities"],
   // 循证 GEO's home — its one sentence where the account is not offered the
-  // module; one project's seven tabs are added when the account has one
-  // (`geoProjectRoutes`).
+  // module; one project's seven tabs (and an answer) are added when the
+  // account has one (`discoverRoutes`).
   ["geo", "/app/geo"],
   // 虚拟临床研究's home — its one sentence where the account is not offered
   // the module; one study's seven tabs are added when the account has one.
   ["virtual-research", "/app/virtual-research"],
+  // The home's three libraries (R11): the first live walk of R10 opened a study and never these tabs.
+  ["virtual-research-models", "/app/virtual-research?tab=models"],
+  ["virtual-research-precedents", "/app/virtual-research?tab=precedents"],
+  ["virtual-research-definitions", "/app/virtual-research?tab=definitions"],
   ["files", "/app/files"],
   ["memory", "/app/memory"],
   // The memory page's other three tabs (R10): one list each, and the growth
@@ -127,10 +149,21 @@ export const ROUTES = [
   ["account-usage", "/app/account?tab=usage"],
   ["account-connectors", "/app/account?tab=connectors"],
   ["account-projects", "/app/account?tab=projects"],
+  // 通知 (where Feishu is bound) and 运维 (an operator's; any other account is shown the first section, and the checks on it say so).
+  ["account-notifications", "/app/account?tab=notifications"],
+  ["account-ops", "/app/account?tab=ops"],
+  // The simulated wallet has two pages; membership and refunds are not among them and answer the not-found page (R11).
+  ["account-simulated-membership", "/app/account/simulated/membership"],
+  ["account-simulated-refunds", "/app/account/simulated/refunds"],
+  // A share link that does not exist: the page says so and offers the way back, not a retry (R11). Its own read answers 4xx by design.
+  ["memory-shared-missing", "/app/memory/shared/impeccable-audit-missing"],
   // The extension centre's two lists (2026-10-02), reached from 设置. Neither
   // was walked until 2026-10-03: the list above was written before they were.
   ["extensions-plugins", "/app/extensions/plugins"],
   ["extensions-skills", "/app/extensions/skills"],
+  // A plugin and a skill that are not there (R11): the drawer says so and goes back to its list instead of advising a retry.
+  ["extensions-plugin-missing", "/app/extensions/plugins/impeccable-audit-missing"],
+  ["extensions-skill-missing", "/app/extensions/skills/impeccable-audit-missing"],
   ["not-found", "/app/does-not-exist"],
 ];
 // 1512 is the owner's screen (2026-09-23 plan §3: measured at that width).
@@ -240,7 +273,38 @@ export const BUDGET_BY_PAGE = {
   // no route has, so the page kept the reading budget and failed on its ninth
   // control (2026-09-26 walk).
   files: DATA_BUDGET,
+  // R11 pages, walked for the first time with the release that built them. Their numbers are the designed ones (the feed's, a data
+  // page's), so they are in PROVISIONAL_PAGES: a number they exceed is a notice until a walk has measured them.
+  "frontier-following": FRONTIER_BUDGET, "frontier-zone": FRONTIER_BUDGET, "frontier-evidence": FRONTIER_BUDGET,
+  "frontier-author": FRONTIER_BUDGET, "frontier-event": FRONTIER_BUDGET,
+  "geo-answer": GEO_BUDGET,
+  "virtual-research-models": DATA_BUDGET, "virtual-research-precedents": DATA_BUDGET, "virtual-research-definitions": DATA_BUDGET,
+  "evidence-matrix": DATA_BUDGET,
 };
+
+/**
+ * Pages that no walk has measured yet: the numbers above are designed, not observed. What a page of this list spends past its budget
+ * — kinds of control, colour and border, left edges, kinds of section — is a NOTICE, with the page's numbers in the report; the
+ * checks that do not depend on a number (vocabulary, names, titles, one primary action, overflow, a refused call) stay failures.
+ * A page leaves the list when a walk has reported its numbers and the budget has been set from them (principle 4: a check ships as
+ * a notice until it has a distribution).
+ */
+export const PROVISIONAL_PAGES = new Set([
+  "frontier-following", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event",
+  "geo-answer",
+  "virtual-research-models", "virtual-research-precedents", "virtual-research-definitions",
+  "account-notifications", "account-ops", "memory-shared-missing", "extensions-plugin-missing", "extensions-skill-missing",
+  "evidence-matrix",
+]);
+
+/**
+ * The page a view is held to the budget of. The second study of the virtual-research walk is named `vcr-trial@2` and is the same
+ * page as `vcr-trial`.
+ * @param {string} name the report's page name
+ */
+export function budgetKey(name) {
+  return name.replace(/@\d+$/, "");
+}
 
 /**
  * What a page stacks (DESIGN.md 「页面结构」 rule 1: one page, one kind of
@@ -264,7 +328,7 @@ export const BUDGET_BY_PAGE = {
 export const SECTION_SHAPES_BY_PAGE = {
   files: 2,
   memory: 2, "memory-project": 2, "memory-methods": 2, "memory-growth": 2,
-  frontier: 3, "frontier-hot": 3, "frontier-daily": 3, "frontier-all": 3,
+  frontier: 3, "frontier-hot": 3, "frontier-daily": 3, "frontier-all": 3, "frontier-following": 3,
   capabilities: 2,
   "extensions-plugins": 2, "extensions-skills": 2,
   "virtual-research": 2,
@@ -282,40 +346,159 @@ export const ROW_CLICK_PAGES = new Set([
   "files", "memory", "memory-project", "memory-methods", "memory-growth",
   "frontier", "frontier-hot", "frontier-daily", "frontier-all",
   "extensions-plugins", "extensions-skills", "virtual-research",
+  // R11: a source opens its three conditions in place; a scheduled task opens its drawer. Both read what the row holds and write nothing.
+  "geo-sources", "autopilot",
 ]);
 /** The lists of one page the walk clicks at most; a skills page has six groups, and the first row of each is enough to prove the pattern. */
 const ROW_CLICK_LISTS_PER_PAGE = 8;
 
 /**
- * One GEO project's seven tabs, when the account has a GEO project to walk —
- * the first the list names. None when the module is off here or the account
- * has none: the home is walked either way. It walked three of the seven until
- * 2026-09-27, so four tabs had never been through the walk.
- * @param {any} context a logged-in browser context @param {string} base
- * @returns {Promise<Array<[string, string]>>}
+ * The 虚拟临床研究 studies to walk: the one with the most steps done (a step that is `done` or `minimal` has produced something to
+ * read), and the first other one. The walk used to open `studies[0]` only, which was a population-only study, so the trial,
+ * comparator, patients and matching pages of a study that had run never met it (R11). Ties go to the list's order.
+ * @param {unknown} studies `GET /api/vcr/studies` → `data.studies`
+ * @returns {{ primary: string | null, second: string | null }}
  */
-async function vcrStudyRoutes(context, base) {
-  const answer = await context.request.get(`${base}/api/vcr/studies`).catch(() => null);
-  if (!answer || !answer.ok()) return [];
-  const studies = (await answer.json().catch(() => null))?.data?.studies;
-  const id = Array.isArray(studies) && typeof studies[0]?.id === "string" ? studies[0].id : null;
-  if (!id) return [];
-  const at = `/app/virtual-research/${encodeURIComponent(id)}`;
-  return VCR_TABS_WALK.map(([name, segment]) => [name, `${at}${segment}`]);
+export function pickVcrStudies(studies) {
+  const rows = Array.isArray(studies) ? studies.filter((row) => typeof row?.id === "string") : [];
+  const produced = (row) => Object.values(row.steps ?? {}).filter((step) => ["done", "minimal"].includes(step?.status)).length;
+  let primary = null;
+  for (const row of rows) if (primary === null || produced(row) > produced(primary)) primary = row;
+  const second = rows.find((row) => row !== primary) ?? null;
+  return { primary: primary?.id ?? null, second: second?.id ?? null };
 }
 
 /**
- * @param {any} context a logged-in browser context @param {string} base
- * @returns {Promise<Array<[string, string]>>}
+ * The snapshot an answer page is walked for: the answer that holds the first listed wrong sentence, else the error's own snapshot.
+ * @param {unknown} diagnosis `GET /api/geo/projects/:id/diagnosis` → `data`
+ * @returns {string | null}
  */
-async function geoProjectRoutes(context, base) {
-  const answer = await context.request.get(`${base}/api/geo/projects`).catch(() => null);
-  if (!answer || !answer.ok()) return [];
-  const projects = (await answer.json().catch(() => null))?.data?.projects;
-  const id = Array.isArray(projects) && typeof projects[0]?.id === "string" ? projects[0].id : null;
-  if (!id) return [];
-  const at = `/app/geo/${encodeURIComponent(id)}`;
-  return GEO_TABS.map(([name, segment]) => [name, `${at}${segment}`]);
+export function geoAnswerSnapshot(diagnosis) {
+  const errors = Array.isArray(/** @type {any} */ (diagnosis)?.errors) ? /** @type {any} */ (diagnosis).errors : [];
+  for (const error of errors) {
+    for (const candidate of [error?.firstSnapshotId, error?.snapshotId]) if (typeof candidate === "string" && candidate) return candidate;
+  }
+  return null;
+}
+
+/**
+ * The ids of the 前沿动态 pages the walk opens, from the lists it reads: the first evidence zone, the first card of the first official
+ * zone, that card's author and the first event on the hot list. A missing id is a page not walked, with the reason in the notices.
+ * @param {{ zones?: any, cards?: any, links?: any, hot?: any }} read the `data` of each GET
+ * @returns {{ zoneId: string | null, official: string | null, cardId: string | null, authorId: string | null, eventId: string | null }}
+ */
+export function frontierTargets({ zones, cards, links, hot }) {
+  const text = (value) => (typeof value === "string" && value ? value : null);
+  const zoneList = Array.isArray(zones?.items) ? zones.items : [];
+  const cardList = Array.isArray(cards?.items) ? cards.items : [];
+  const events = Array.isArray(hot?.events) ? hot.events : [];
+  return {
+    zoneId: text(zoneList[0]?.id),
+    official: text(zoneList.find((zone) => zone?.kind === "official")?.id),
+    cardId: text(cardList[0]?.id),
+    authorId: text(links?.author?.id),
+    eventId: text(events[0]?.id),
+  };
+}
+
+/**
+ * The run and path of a finished evidence matrix, from the run list: the newest delivered `clinical-evidence-synthesis` deliverable,
+ * whose package holds `clinical-evidence-matrix.json` beside the report (the one capability that writes it).
+ * @param {unknown} runs `GET /api/agent-runs` → `data`
+ * @returns {string | null} the reader route, or null
+ */
+export function matrixRoute(runs) {
+  for (const run of Array.isArray(runs) ? runs : []) {
+    if (typeof run?.id !== "string") continue;
+    const done = (Array.isArray(run.deliverables) ? run.deliverables : [])
+      .find((item) => item?.capability === "clinical-evidence-synthesis" && ["accepted", "delivered"].includes(item?.status) && typeof item?.id === "string");
+    if (done) return `/app/runs/${encodeURIComponent(run.id)}/files/deliverables/${encodeURIComponent(done.id)}/clinical-evidence-matrix.json`;
+  }
+  return null;
+}
+
+/**
+ * The title of a finished PDF in the project's knowledge base, to open its original.
+ * @param {unknown} page `GET /api/sources` → `data`
+ * @returns {string | null}
+ */
+export function pdfSourceTitle(page) {
+  const items = Array.isArray(/** @type {any} */ (page)?.items) ? /** @type {any} */ (page).items : [];
+  const found = items.find((item) => item?.display?.format === "pdf" && item?.payload?.status === "complete" && typeof item?.display?.title === "string" && item.display.title.trim());
+  return found ? found.display.title.trim() : null;
+}
+
+/**
+ * The data sources that need no key and that nobody has given one: each reads 可选 in 设置 → 数据源, never 未配置 (that word is for a
+ * source a capability cannot work without).
+ * @param {unknown} connectors `GET /api/connectors` → `data`
+ * @returns {string[]}
+ */
+export function keylessTitles(connectors) {
+  return (Array.isArray(connectors) ? connectors : [])
+    .filter((item) => item?.keyless === true && item?.source === "none" && typeof item?.title === "string" && item.title)
+    .map((item) => item.title);
+}
+
+/** Read one JSON `data` from the deployment, or null: a page whose id cannot be read is not walked, and the walk says so. */
+async function readData(context, base, pathname) {
+  const answer = await context.request.get(`${base}${pathname}`).catch(() => null);
+  if (!answer || !answer.ok()) return null;
+  return (await answer.json().catch(() => null))?.data ?? null;
+}
+
+/**
+ * The pages whose address holds an id the deployment's own lists name, read from the same GET endpoints the pages use: one GEO
+ * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
+ * Each is None where the module is off for the account or the list is empty — the home pages are walked either way. A page left out
+ * for want of an id is a notice, never a pass that looks like a walk.
+ * @param {any} context a logged-in browser context @param {string} base @param {string[]} notices
+ * @returns {Promise<{ routes: Array<[string, string]>, matrix: string | null, pdfTitle: string | null, keyless: string[] }>}
+ */
+async function discoverRoutes(context, base, notices) {
+  /** @type {Array<[string, string]>} */
+  const routes = [];
+  const skip = (name, why) => notices.push(`${name}: not walked — ${why}`);
+
+  const geo = (await readData(context, base, "/api/geo/projects"))?.projects;
+  const geoId = Array.isArray(geo) && typeof geo[0]?.id === "string" ? geo[0].id : null;
+  if (geoId) {
+    const at = `/app/geo/${encodeURIComponent(geoId)}`;
+    routes.push(...GEO_TABS.map(([name, segment]) => /** @type {[string, string]} */ ([name, `${at}${segment}`])));
+    const snapshot = geoAnswerSnapshot(await readData(context, base, `/api/geo/projects/${encodeURIComponent(geoId)}/diagnosis`));
+    if (snapshot) routes.push(["geo-answer", `${at}/answers/${encodeURIComponent(snapshot)}`]);
+    else skip("geo-answer", "the first project lists no wrong sentence with an answer");
+  }
+
+  const { primary, second } = pickVcrStudies((await readData(context, base, "/api/vcr/studies"))?.studies);
+  for (const [id, suffix] of [[primary, ""], [second, "@2"]]) {
+    if (!id) continue;
+    const at = `/app/virtual-research/${encodeURIComponent(id)}`;
+    routes.push(...VCR_TABS_WALK.map(([name, segment]) => /** @type {[string, string]} */ ([`${name}${suffix}`, `${at}${segment}`])));
+  }
+  if (primary && !second) skip("vcr-*@2", "the account has one study");
+
+  const zones = await readData(context, base, "/api/frontier/zones");
+  const hot = await readData(context, base, "/api/frontier/hot");
+  const first = frontierTargets({ zones, hot });
+  const cards = first.official ? await readData(context, base, `/api/frontier/zones/${encodeURIComponent(first.official)}/evidence`) : null;
+  const cardId = frontierTargets({ cards }).cardId;
+  const links = cardId ? await readData(context, base, `/api/frontier/evidence/${encodeURIComponent(cardId)}/links`) : null;
+  const targets = { ...first, cardId, authorId: frontierTargets({ links }).authorId };
+  if (targets.zoneId) routes.push(["frontier-zone", `/app/frontier/zones/${encodeURIComponent(targets.zoneId)}`]);
+  else skip("frontier-zone", "the evidence zones are not offered to this account or the list is empty");
+  if (targets.official && targets.cardId) routes.push(["frontier-evidence", `/app/frontier/zones/${encodeURIComponent(targets.official)}/evidence/${encodeURIComponent(targets.cardId)}`]);
+  else skip("frontier-evidence", "no official zone holds a card");
+  if (targets.authorId) routes.push(["frontier-author", `/app/frontier/authors/${encodeURIComponent(targets.authorId)}`]);
+  else skip("frontier-author", "the first card names no author page");
+  if (targets.eventId) routes.push(["frontier-event", `/app/frontier/events/${encodeURIComponent(targets.eventId)}`]);
+  else skip("frontier-event", "the hot list is empty or not offered");
+
+  const matrix = matrixRoute(await readData(context, base, "/api/agent-runs"));
+  if (!matrix) skip("evidence-matrix", "no run of this account delivered a clinical-evidence package");
+  const pdfTitle = pdfSourceTitle(await readData(context, base, "/api/sources?projectId=default&limit=50"));
+  if (!pdfTitle) skip("files: the original of a PDF", "the knowledge base holds no finished PDF");
+  return { routes, matrix, pdfTitle, keyless: keylessTitles(await readData(context, base, "/api/connectors")) };
 }
 
 /**
@@ -352,8 +535,11 @@ export const TYPE_PAIR_NOTICE = 4;
  */
 export function pageFindings(name, viewportName, measured, httpErrors) {
   const current = `${name}@${viewportName}`;
+  const key = budgetKey(name);
   const failures = [];
   const notices = [];
+  // What a page spends past a designed number: a failure, except on a page no walk has measured yet (`PROVISIONAL_PAGES`).
+  const budgetFindings = [];
   // A page whose own API call is refused shows an error state and otherwise
   // measures clean: the 主动科研 page answered every load with a 400 through
   // two walks that passed (2026-09-24).
@@ -368,21 +554,42 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
   if ((measured.headerPrimaryActions?.length ?? 0) > 1) failures.push(`${current}: the page header has ${measured.headerPrimaryActions.length} primary actions (at most one): ${measured.headerPrimaryActions.join(" / ")}`);
   if (viewportName === "phone" && measured.overflowX) failures.push(`${current}: the page overflows horizontally at 390 px`);
   if (viewportName === "desktop") {
-    const budget = { ...BUDGET, ...(BUDGET_BY_PAGE[name] ?? {}) };
-    if (measured.controlKinds > budget.controls) failures.push(`${current}: ${measured.controlKinds} kinds of control (budget ${budget.controls})`);
-    if (measured.colorKinds > budget.colors) failures.push(`${current}: ${measured.colorKinds} text colours (budget ${budget.colors})`);
-    if (measured.borderKinds > budget.borders) failures.push(`${current}: ${measured.borderKinds} kinds of border (budget ${budget.borders})`);
-    if (measured.pageLefts.length > 1) failures.push(`${current}: the page's blocks start on ${measured.pageLefts.length} left edges (${measured.pageLefts.join(", ")})`);
+    const budget = { ...BUDGET, ...(BUDGET_BY_PAGE[key] ?? {}) };
+    if (measured.controlKinds > budget.controls) budgetFindings.push(`${current}: ${measured.controlKinds} kinds of control (budget ${budget.controls})`);
+    if (measured.colorKinds > budget.colors) budgetFindings.push(`${current}: ${measured.colorKinds} text colours (budget ${budget.colors})`);
+    if (measured.borderKinds > budget.borders) budgetFindings.push(`${current}: ${measured.borderKinds} kinds of border (budget ${budget.borders})`);
+    if (measured.pageLefts.length > 1) budgetFindings.push(`${current}: the page's blocks start on ${measured.pageLefts.length} left edges (${measured.pageLefts.join(", ")})`);
     for (const lefts of measured.rowTitleLefts) {
-      if (lefts.length > 1) failures.push(`${current}: a list's row titles start on ${lefts.length} left edges (${lefts.join(", ")})`);
+      if (lefts.length > 1) budgetFindings.push(`${current}: a list's row titles start on ${lefts.length} left edges (${lefts.join(", ")})`);
     }
-    const sectionBudget = SECTION_SHAPES_BY_PAGE[name];
+    const sectionBudget = SECTION_SHAPES_BY_PAGE[key];
     const shapes = measured.sectionShapes ?? [];
-    if (sectionBudget !== undefined && shapes.length > sectionBudget) failures.push(`${current}: the page stacks ${shapes.length} kinds of section (budget ${sectionBudget}): ${shapes.join(", ")}`);
+    if (sectionBudget !== undefined && shapes.length > sectionBudget) budgetFindings.push(`${current}: the page stacks ${shapes.length} kinds of section (budget ${sectionBudget}): ${shapes.join(", ")}`);
     const pairs = measured.sizeWeightPairs ?? [];
     if (pairs.length > TYPE_PAIR_NOTICE) notices.push(`${current}: ${pairs.length} font-size × weight pairs (rule ${TYPE_PAIR_NOTICE}): ${pairs.join(", ")}`);
   }
+  if (PROVISIONAL_PAGES.has(key)) notices.push(...budgetFindings.map((finding) => `${finding} — provisional: this page has not been measured by a walk yet`));
+  else failures.push(...budgetFindings);
   return { failures, notices };
+}
+
+/**
+ * The refusals of a page's own API calls that the page is walked to meet: a skill and a share link that do not exist answer 404
+ * (and a malformed or closed share, 400 and 410), and the page is expected to say so in words. Every other refusal stays a failure.
+ */
+export const EXPECTED_REFUSALS = {
+  "extensions-skill-missing": [404],
+  "memory-shared-missing": [400, 404, 410],
+};
+
+/**
+ * `<status> <path>` of the responses a page drew, without the refusals it was walked to meet (`EXPECTED_REFUSALS`).
+ * @param {string} name the report's page name @param {string[]} httpErrors
+ * @returns {string[]}
+ */
+export function unexpectedRefusals(name, httpErrors) {
+  const allowed = EXPECTED_REFUSALS[/** @type {keyof typeof EXPECTED_REFUSALS} */ (budgetKey(name))] ?? [];
+  return httpErrors.filter((entry) => !(allowed.includes(Number(entry.split(" ")[0])) && / \/api\//.test(entry)));
 }
 
 /**
@@ -414,6 +621,671 @@ export function rowClickFindings(name, rows) {
  */
 export function rowClickShown(before, after, popups, external = false) {
   return (after.dialog && !before.dialog) || after.path !== before.path || popups > 0 || after.expanded > before.expanded || external;
+}
+
+/* ------------------------------------------------------------------------- R11 */
+
+/**
+ * The structure of one page view, measured in the page (`page.evaluate`, so it reads nothing from this module): the sidebar
+ * landmark, the regions that scroll sideways, the order of the headings, the page's height and a few counts that the checks of
+ * `structureFindings` compare. Separate from `measure`, which is the style inventory.
+ */
+export function measureStructure() {
+  // `checkVisibility` is what says that the inside of a closed <details> is not there: its boxes keep their last size.
+  const rendered = (el) => {
+    const cs = getComputedStyle(el);
+    return cs.display !== "none" && cs.visibility !== "hidden" && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && rendered(el);
+  };
+  const main = document.querySelector("main");
+  const scope = main ?? document.body;
+  const hasAttribute = (el, name) => el.getAttribute(name) !== null;
+
+  // The sidebar is one landmark that holds its own divider; collapsed, it is inert (the column is 0 wide and clipped, not gone).
+  const sidebars = [...document.querySelectorAll("aside")].filter((el) => el.getAttribute("aria-label") === "侧栏");
+  const sidebar = sidebars[0] ?? null;
+  const side = {
+    landmarks: sidebars.length,
+    holdsDivider: sidebar ? [...sidebar.querySelectorAll("*")].some((el) => el.getAttribute("role") === "separator") : false,
+    chatLink: sidebar ? [...sidebar.querySelectorAll("a")].some((el) => el.getAttribute("href") === "/app/chat") : false,
+    closed: sidebar ? sidebar.getBoundingClientRect().width <= 1 : false,
+    inert: sidebar ? hasAttribute(sidebar, "inert") || sidebar.inert === true : false,
+  };
+
+  // Regions that scroll sideways must be reachable by the keyboard — focusable themselves, or holding something focusable — and a
+  // region that is a tab stop of its own needs a name (axe `scrollable-region-focusable`).
+  const scrollers = [];
+  let tallest = Math.max(document.documentElement?.scrollHeight ?? 0, document.body?.scrollHeight ?? 0);
+  for (const el of [...document.querySelectorAll("body *")]) {
+    const cs = getComputedStyle(el);
+    if (["auto", "scroll"].includes(cs.overflowY) && el.clientHeight > 0 && el.scrollHeight > tallest) tallest = el.scrollHeight;
+    if (!["auto", "scroll"].includes(cs.overflowX) || !scope.contains(el)) continue;
+    if (!(el.clientWidth > 0) || !(el.scrollWidth > el.clientWidth + 1) || !visible(el)) continue;
+    const stop = el.tabIndex >= 0;
+    const holds = [...el.querySelectorAll("*")].some((child) => child.tabIndex >= 0 && visible(child));
+    scrollers.push({
+      label: (el.getAttribute("aria-label") || el.getAttribute("class") || el.tagName.toLowerCase()).slice(0, 40),
+      reachable: stop || holds,
+      stop: stop && hasAttribute(el, "tabindex"),
+      named: Boolean(el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || el.getAttribute("title")),
+    });
+  }
+
+  // Heading levels go down one at a time: an h3 straight under the h1 is a heading the page skipped (axe `heading-order`). A heading
+  // that is only for screen readers counts, which is why this asks whether it is rendered, not whether it can be seen.
+  const headings = [...document.querySelectorAll("h1, h2, h3, h4, h5, h6")]
+    .filter((el) => rendered(el) && scope.contains(el) && !el.closest("[role='dialog']"));
+  const headingJumps = [];
+  let previous = 0;
+  for (const heading of headings) {
+    const level = Number(heading.tagName.slice(1));
+    if (previous > 0 && level > previous + 1) headingJumps.push(`h${previous}→h${level} “${(heading.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 24)}”`);
+    previous = level;
+  }
+
+  // The top-level rows of the page's lists, the row titles that read alike, and the labels of the study counts that are cut off.
+  const rows = [...scope.querySelectorAll("li")]
+    .filter((el) => visible(el) && !el.closest("[role='dialog'], nav, aside") && !el.parentElement?.closest("li")).length;
+  const titles = [...scope.querySelectorAll("[data-row-title]")].filter((el) => visible(el) && !el.closest("[role='dialog']"))
+    .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const duplicateTitles = [...new Set(titles.filter((title, index) => titles.indexOf(title) !== index))];
+  const truncatedCounts = [...document.querySelectorAll("[data-vcr-count]")].filter(visible)
+    .filter((el) => [el, el.previousElementSibling].some((part) => part && part.scrollWidth > part.clientWidth + 1)).length;
+
+  return {
+    sidebar: side,
+    scrollers,
+    headingJumps,
+    height: Math.round(tallest),
+    viewport: window.innerHeight,
+    rows,
+    duplicateTitles,
+    truncatedCounts,
+  };
+}
+
+/** The pages whose heading order was fixed in R11: a heading that skips a level there fails; elsewhere it is noticed. */
+export const HEADING_ORDER_PAGES = new Set(["geo-overview", "memory"]);
+/** Pages whose first screen of rows has a designed ceiling (R11: 准确与安全's cards, 信源's rows); more is noticed, since rows are data. */
+export const ROW_COUNT_NOTICE_BY_PAGE = { "geo-accuracy": 20, "geo-sources": 40 };
+/** A page this many viewports tall is noticed: GEO's answer page was 69,000 px (R11). */
+export const TALL_PAGE_VIEWPORTS = 12;
+/** The settings list in which two projects must not read alike. */
+export const PROJECT_LIST_PAGES = new Set(["account-projects"]);
+
+/**
+ * What the page-wide structure fails on, and what it is only noticed for. The structure that guards a defect R11 fixed and that is
+ * measured exactly (an element or an attribute is there or not) fails; the height and the row counts, which depend on the data, are
+ * notices.
+ * @param {string} name the report's page name @param {"desktop" | "phone"} viewportName
+ * @param {ReturnType<typeof measureStructure> | null | undefined} s
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function structureFindings(name, viewportName, s) {
+  const current = `${name}@${viewportName}`;
+  const key = budgetKey(name);
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (!s) return { failures, notices };
+  const side = s.sidebar;
+  if (side.landmarks !== 1) failures.push(`${current}: ${side.landmarks} sidebar landmarks named 侧栏 (exactly one)`);
+  else {
+    if (!side.holdsDivider) failures.push(`${current}: the sidebar landmark does not hold its divider`);
+    if (!side.chatLink) failures.push(`${current}: the sidebar has no link to the conversation`);
+    if (viewportName === "phone" && side.closed && !side.inert) failures.push(`${current}: the closed sidebar is not inert — its links are still tab stops`);
+  }
+  const unreachable = s.scrollers.filter((region) => !region.reachable);
+  if (unreachable.length) failures.push(`${current}: ${unreachable.length} region(s) scroll sideways and are no tab stop and hold none: ${unreachable.map((region) => region.label).join(", ")}`);
+  const unnamed = s.scrollers.filter((region) => region.stop && !region.named);
+  if (unnamed.length) failures.push(`${current}: ${unnamed.length} focusable scrolling region(s) without a name: ${unnamed.map((region) => region.label).join(", ")}`);
+  if (s.headingJumps.length) {
+    (HEADING_ORDER_PAGES.has(key) ? failures : notices).push(`${current}: heading levels skip: ${s.headingJumps.join(", ")}`);
+  }
+  if (s.viewport > 0 && s.height > TALL_PAGE_VIEWPORTS * s.viewport) {
+    notices.push(`${current}: the page is ${s.height} px tall, ${(s.height / s.viewport).toFixed(1)} viewports (notice above ${TALL_PAGE_VIEWPORTS})`);
+  }
+  const rowCeiling = ROW_COUNT_NOTICE_BY_PAGE[/** @type {keyof typeof ROW_COUNT_NOTICE_BY_PAGE} */ (key)];
+  if (viewportName === "desktop" && rowCeiling !== undefined && s.rows > rowCeiling) notices.push(`${current}: ${s.rows} rows on the first screen of data (notice above ${rowCeiling})`);
+  if (PROJECT_LIST_PAGES.has(key) && s.duplicateTitles.length) failures.push(`${current}: two projects read alike in the list: ${s.duplicateTitles.join(", ")}`);
+  if (viewportName === "phone" && s.truncatedCounts > 0) failures.push(`${current}: ${s.truncatedCounts} count label(s) of the study are cut off at 390 px`);
+  return { failures, notices };
+}
+
+/** Where keyboard focus is: what it names and whether it is inside the sidebar. */
+export function focusProbe() {
+  const el = document.activeElement;
+  if (!el || el === document.body) return { text: "", inSidebar: false };
+  return {
+    text: (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 30),
+    inSidebar: el.closest("[data-sidebar]") !== null,
+  };
+}
+
+/**
+ * The first two Tab stops of a page at 390 px. The first is the skip link; with the sidebar closed the second must not be in it —
+ * its forty-odd links were tab stops the reader could not see (2026-10-07 audit B-02).
+ * @param {string} name the report's page name
+ * @param {Array<{ text: string, inSidebar: boolean }>} stops the stops, in order @param {boolean} closed whether the sidebar is closed
+ * @returns {string[]} failures
+ */
+export function tabOrderFindings(name, stops, closed) {
+  if (!closed) return [];
+  const inside = stops.map((stop, index) => (stop.inSidebar ? `#${index + 1} “${stop.text}”` : null)).filter(Boolean);
+  return inside.length ? [`${name}@phone: with the sidebar closed, Tab reaches it: ${inside.join(", ")}`] : [];
+}
+
+/**
+ * A named control clicked in the page: a button, a menu item, a tab or a link, by its accessible name, inside `within` (a selector)
+ * when one is given. Used for clicks that only open or close something (a menu, a drawer, a tab) — never for a button that writes.
+ * @param {[("button" | "menuitem" | "tab" | "link"), string, (string | null)?]} args
+ * @returns {boolean} whether it was found and clicked
+ */
+export function clickNamed([role, name, within = null]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none" && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const root = within ? [...document.querySelectorAll(within)].find(visible) : document;
+  if (!root) return false;
+  const selector = { button: "button, [role='button']", menuitem: "[role='menuitem']", tab: "[role='tab']", link: "a" }[role] ?? "*";
+  const label = (el) => (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim();
+  const target = [...root.querySelectorAll(selector)].find((el) => visible(el) && label(el) === name);
+  if (!target) return false;
+  target.click();
+  return true;
+}
+
+/**
+ * The row of a list whose title holds `title`, clicked: the knowledge base's row for one document.
+ * @param {[string]} args @returns {boolean}
+ */
+export function clickRowTitled([title]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const row = [...document.querySelectorAll("main [data-row-title]")].find((el) => visible(el) && !el.closest("[role='dialog']") && (el.textContent ?? "").includes(title));
+  if (!row) return false;
+  (row.matches("a, button, [role='button']") ? row : row.querySelector("a, button, [role='button']") ?? row).click();
+  return true;
+}
+
+/**
+ * What a page of the R11 list shows that one measure of the style inventory cannot: read in the page, per `kind`, and judged by
+ * `probeFindings`. Each reads what a defect fixed in R11 left behind — an element, an attribute, a word of the product's own fixed
+ * copy — and nothing of the account's content.
+ * @param {[string, any?]} args the kind of probe and its argument
+ */
+export function pageProbe([kind, arg]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none" && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const main = document.querySelector("main") ?? document.body;
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const ownText = (el) => [...el.childNodes].filter((node) => node.nodeType === 3).map((node) => node.textContent).join("").trim();
+  const all = (selector, root = main) => [...root.querySelectorAll(selector)];
+  const outside = (el) => !el.closest("[role='dialog'], nav, aside");
+
+  if (kind === "geoRail") {
+    const folded = all("[data-rail-folded]");
+    const details = folded.flatMap((el) => all("details", el));
+    return { folded: folded.length, closed: details.length > 0 && details.every((el) => !el.open), steps: all("[data-rail-step]").filter(visible).length };
+  }
+  if (kind === "geoMarketOff") {
+    const el = all("[data-geo-market-off]")[0];
+    return el ? { present: true, top: Math.round(el.getBoundingClientRect().top), viewport: window.innerHeight } : { present: false };
+  }
+  if (kind === "followingEmpty") {
+    return {
+      adds: all("button").filter((el) => visible(el) && words(el) === "添加关注").length,
+      chips: all("[aria-pressed]").filter(visible).length,
+      noResults: words(main).includes("没有结果"),
+    };
+  }
+  if (kind === "eventGroups") {
+    const text = words(main);
+    return { primary: text.includes("一手材料"), other: text.includes("其他报道"), none: text.includes("暂无一手材料，以下均为转述报道。") };
+  }
+  if (kind === "firstRowTop") {
+    const title = all("[data-row-title]").find((el) => visible(el) && outside(el));
+    return { top: title ? Math.round(title.getBoundingClientRect().top) : null };
+  }
+  if (kind === "rowWidth") {
+    const widths = all("[data-row-title]").filter((el) => visible(el) && outside(el)).slice(0, 5).map((el) => Math.round(el.getBoundingClientRect().width));
+    return { widths, min: widths.length ? Math.min(...widths) : null };
+  }
+  if (kind === "capabilityCards") {
+    const stateWords = ["可运行", "已安装", "未验证"];
+    const spans = all("button span").filter(visible);
+    return {
+      hits: [...new Set(spans.map(words).filter((text) => stateWords.includes(text)))],
+      wraps: spans.filter((el) => el.classList.contains("mt-auto") && el.getBoundingClientRect().height > 1.9 * (parseFloat(getComputedStyle(el).lineHeight) || 16)).length,
+    };
+  }
+  if (kind === "memoryTabs") {
+    const names = ["关于你", "项目", "做法", "成长"];
+    const tabs = all("[role='tab']").filter(visible).map((el) => {
+      const text = words(el);
+      const name = names.find((candidate) => text.startsWith(candidate)) ?? text;
+      return { name, count: Number(/^\s*(\d+)/.exec(text.slice(name.length))?.[1] ?? 0), selected: el.getAttribute("aria-selected") === "true" };
+    });
+    const headline = /现在有\s*(\d+)\s*条记忆，学会\s*(\d+)\s*种做法/.exec(words(main));
+    return { tabs, headline: headline ? { memories: Number(headline[1]), practices: Number(headline[2]) } : null };
+  }
+  if (kind === "sharedMissing") {
+    const text = words(main);
+    const names = all("a, button").map(words);
+    return { title: text.includes("这个分享不能打开"), back: names.includes("回到记忆胶囊"), retry: names.includes("重试") };
+  }
+  if (kind === "inboxSafety") {
+    const heading = all("h2").map(words).map((text) => /^涉及临床安全 · 未读 (\d+) 条$/.exec(text)).find(Boolean);
+    const bell = [...document.querySelectorAll("button[aria-label], a[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.startsWith("收件箱"));
+    return { heading: heading ? Number(heading[1]) : null, bell: bell === undefined ? null : Number(/其中 (\d+) 条涉及临床安全/.exec(bell)?.[1] ?? 0) };
+  }
+  if (kind === "feishuRows") {
+    return { rows: all("*").filter((el) => ownText(el) === "飞书").length };
+  }
+  if (kind === "connectorRows") {
+    const titles = Array.isArray(arg) ? arg : [];
+    return {
+      rows: titles.map((title) => {
+        const label = all("*").find((el) => visible(el) && ownText(el) === title);
+        let row = label ?? null;
+        for (let up = 0; row && up < 4 && !/可选|已配置|未配置/.test(words(row)); up += 1) row = row.parentElement;
+        const text = row ? words(row) : "";
+        return { title, found: Boolean(row && /可选|已配置|未配置/.test(text)), optional: text.includes("可选"), configured: text.includes("已配置"), missing: text.includes("未配置") };
+      }),
+    };
+  }
+  if (kind === "opsOrder") {
+    const text = words(main);
+    const tokens = [...new Set(text.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) ?? [])].slice(0, 5);
+    return { health: text.indexOf("运行状况"), config: text.indexOf("部署配置检查"), tokens };
+  }
+  if (kind === "notFound") {
+    return { said: words(document.body).includes("页面不存在") };
+  }
+  if (kind === "missingRecord") {
+    const [sentence, back] = Array.isArray(arg) ? arg : ["", ""];
+    const dialog = [...document.querySelectorAll("[role='dialog']")].find(visible);
+    const text = dialog ? words(dialog) : "";
+    return { dialog: Boolean(dialog), said: Boolean(sentence) && text.includes(sentence), back: Boolean(dialog) && all("button", dialog).some((el) => visible(el) && words(el) === back), failedWord: words(document.body).includes("操作未完成") };
+  }
+  if (kind === "readingFolds") {
+    const text = words(main).toLowerCase();
+    return {
+      folds: all("details").map((el) => ({ label: words(el.querySelector("summary") ?? el).slice(0, 20), open: Boolean(el.open) }))
+        .filter((fold) => ["编写与核查", "评议与讨论", "更新记录"].some((label) => fold.label.startsWith(label))),
+      models: ["deepseek", "qwen", "千问"].filter((model) => text.includes(model)),
+    };
+  }
+  return null;
+}
+
+/** The pages R11 walks with a probe, by kind, and the viewports each is read at. */
+export const PAGE_PROBES = {
+  "geo-overview": [["geoRail", ["phone"]]],
+  "geo-actions": [["geoMarketOff", ["desktop", "phone"]]],
+  "frontier-following": [["followingEmpty", ["desktop", "phone"]]],
+  "frontier-event": [["eventGroups", ["desktop", "phone"]]],
+  frontier: [["firstRowTop", ["phone"]]],
+  "virtual-research": [["rowWidth", ["phone"]]],
+  capabilities: [["capabilityCards", ["desktop"]]],
+  memory: [["memoryTabs", ["desktop"]]],
+  "memory-project": [["memoryTabs", ["desktop"]]],
+  "memory-methods": [["memoryTabs", ["desktop"]]],
+  "memory-growth": [["memoryTabs", ["desktop"]]],
+  "memory-shared-missing": [["sharedMissing", ["desktop", "phone"]]],
+  inbox: [["inboxSafety", ["desktop"]]],
+  account: [["feishuRows", ["desktop"]]],
+  "account-notifications": [["feishuRows", ["desktop"]]],
+  "account-connectors": [["connectorRows", ["desktop"]]],
+  "account-ops": [["opsOrder", ["desktop"]]],
+  "account-simulated-membership": [["notFound", ["desktop", "phone"]]],
+  "account-simulated-refunds": [["notFound", ["desktop", "phone"]]],
+  "extensions-plugin-missing": [["missingRecord", ["desktop"]]],
+  "extensions-skill-missing": [["missingRecord", ["desktop"]]],
+  "frontier-evidence": [["readingFolds", ["desktop"]]],
+};
+
+/** The record that is not there on each walked missing-record address: what the drawer says, its button, and the list it returns to. */
+export const MISSING_RECORDS = {
+  "extensions-plugin-missing": { sentence: "找不到这个插件，它可能已被移除。", back: "回到插件列表", to: "/app/extensions/plugins" },
+  "extensions-skill-missing": { sentence: "找不到这个技能，它可能已被移除。", back: "回到技能列表", to: "/app/extensions/skills" },
+};
+
+/** The tabs a memory address names, and the one it must open on. */
+const MEMORY_TAB_OF = { "memory-project": "项目", "memory-methods": "做法", "memory-growth": "成长" };
+
+/**
+ * What a probe read, judged. A probe that returned nothing (a page that did not render what it looks for) is not a pass the walk
+ * can claim, but not a failure it can name either: the page's own findings (title, API, vocabulary) say when it did not load.
+ * @param {string} name the report's page name @param {"desktop" | "phone"} viewportName @param {string} kind
+ * @param {any} r what `pageProbe` returned
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function probeFindings(name, viewportName, kind, r) {
+  const current = `${name}@${viewportName}`;
+  const key = budgetKey(name);
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (!r) return { failures, notices };
+  switch (kind) {
+    case "geoRail":
+      if (r.folded === 0) failures.push(`${current}: the progress rail is not folded into one line`);
+      else if (!r.closed) failures.push(`${current}: the folded progress rail is open at first sight`);
+      if (r.steps > 0) failures.push(`${current}: ${r.steps} step(s) of the progress rail are on the first screen`);
+      break;
+    case "geoMarketOff":
+      if (r.present && r.top >= r.viewport) failures.push(`${current}: the sentence about placing being off is below the first screen (${r.top} px)`);
+      break;
+    case "followingEmpty":
+      if (r.noResults) failures.push(`${current}: 「没有结果」 is on the page, and nothing was searched or filtered`);
+      if (r.adds > 1) failures.push(`${current}: ${r.adds} buttons named 添加关注 (one)`);
+      if (r.adds === 1 && r.chips > 0) failures.push(`${current}: ${r.chips} filter chip(s) beside an empty follow list`);
+      break;
+    case "eventGroups":
+      if (!r.primary && !r.other && !r.none) failures.push(`${current}: the event page has neither report group nor the line that says there is no first-hand material`);
+      break;
+    case "firstRowTop":
+      if (viewportName === "phone" && r.top !== null && r.top > 520) notices.push(`${current}: the first headline starts at ${r.top} px (the aim is 520)`);
+      break;
+    case "rowWidth":
+      if (viewportName === "phone" && r.min !== null && r.min < 160) failures.push(`${current}: a study row's title is ${r.min} px wide (at least 160)`);
+      break;
+    case "capabilityCards":
+      if (r.hits.length) failures.push(`${current}: the tool cards still say ${r.hits.join(", ")}`);
+      if (r.wraps > 0) notices.push(`${current}: ${r.wraps} card footer(s) take two lines`);
+      break;
+    case "memoryTabs": {
+      const selected = r.tabs.find((tab) => tab.selected);
+      const count = (tabName) => r.tabs.find((tab) => tab.name === tabName)?.count ?? 0;
+      const wanted = MEMORY_TAB_OF[/** @type {keyof typeof MEMORY_TAB_OF} */ (key)];
+      if (wanted && selected && selected.name !== wanted) failures.push(`${current}: the address names ${wanted} and the page opens on ${selected.name}`);
+      if (key === "memory" && selected?.name === "关于你" && count("关于你") === 0 && (count("项目") > 0 || count("做法") > 0)) {
+        failures.push(`${current}: the page opens on an empty 关于你 while 项目 holds ${count("项目")} and 做法 ${count("做法")}`);
+      }
+      if (r.headline && r.headline.practices !== count("做法")) failures.push(`${current}: the growth line counts ${r.headline.practices} 做法 and the tab ${count("做法")}`);
+      break;
+    }
+    case "sharedMissing":
+      if (!r.title) failures.push(`${current}: a share that does not exist is not said to be unopenable`);
+      if (!r.back) failures.push(`${current}: no way back to the capsules`);
+      if (r.retry) failures.push(`${current}: 重试 is offered for a share that does not exist`);
+      break;
+    case "inboxSafety":
+      if (r.heading !== null && r.bell !== null && r.heading !== r.bell) failures.push(`${current}: the safety heading counts ${r.heading} unread and the bell ${r.bell}`);
+      break;
+    case "feishuRows":
+      if (key === "account" && r.rows > 0) failures.push(`${current}: the account section still has a 飞书 row (it is bound under 通知)`);
+      if (key === "account-notifications" && r.rows > 1) failures.push(`${current}: ${r.rows} 飞书 rows under 通知 (one)`);
+      break;
+    case "connectorRows":
+      for (const row of r.rows) {
+        if (row.found && row.missing) failures.push(`${current}: ${row.title} needs no key and reads 未配置`);
+        else if (!row.found) notices.push(`${current}: the row of ${row.title} was not found`);
+      }
+      break;
+    case "opsOrder":
+      if (r.health >= 0 && r.config >= 0 && r.health > r.config) failures.push(`${current}: 部署配置检查 comes before 运行状况`);
+      if (r.tokens.length) notices.push(`${current}: identifiers in the visible text: ${r.tokens.join(", ")}`);
+      break;
+    case "notFound":
+      if (!r.said) failures.push(`${current}: an address that is not a page does not say 页面不存在`);
+      break;
+    case "missingRecord": {
+      const expected = MISSING_RECORDS[/** @type {keyof typeof MISSING_RECORDS} */ (key)];
+      if (!r.dialog || !r.said) failures.push(`${current}: the missing record's drawer does not say “${expected?.sentence ?? ""}”`);
+      else if (!r.back) failures.push(`${current}: the missing record's drawer has no button ${expected?.back ?? ""}`);
+      if (r.failedWord) failures.push(`${current}: 「操作未完成」 on a record that is not there`);
+      break;
+    }
+    case "readingFolds":
+      for (const fold of r.folds) if (fold.open) failures.push(`${current}: the fold ${fold.label} is open at first sight`);
+      if (!r.folds.some((fold) => fold.label.startsWith("编写与核查"))) notices.push(`${current}: the card has no 编写与核查 fold`);
+      if (r.models.length) notices.push(`${current}: a model name on the reading page: ${r.models.join(", ")}`);
+      break;
+    default:
+  }
+  return { failures, notices };
+}
+
+/**
+ * What an opened row shows, read while it is open: the source's detail in place, the task's drawer. Per `kind`; judged by
+ * `afterClickFindings`.
+ * @param {[string]} args
+ */
+export function afterClickProbe([kind]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  if (kind === "sourceDetail") return { details: [...document.querySelectorAll("[data-geo-source-detail]")].filter(visible).length };
+  if (kind === "taskDrawer") {
+    const dialog = [...document.querySelectorAll("[role='dialog']")].find(visible);
+    const header = dialog ? [...dialog.querySelectorAll("header p")].find(visible) : null;
+    if (!dialog || !header) return { header: null };
+    const text = words(dialog);
+    const zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone").filter((zone) => zone.includes("/")) : [];
+    const files = [...dialog.querySelectorAll("a, button")].filter((el) => visible(el) && /\.py$/i.test(words(el)));
+    return {
+      header: words(header),
+      zoneIds: zones.filter((zone) => text.includes(zone)).slice(0, 3),
+      workingFilesOpen: files.filter((el) => !el.closest("details")).map(words).slice(0, 3),
+    };
+  }
+  return null;
+}
+
+/**
+ * @param {string} name the report's page name @param {string} kind @param {any} r what `afterClickProbe` returned
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function afterClickFindings(name, kind, r) {
+  const current = `${name}@desktop`;
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (!r) return { failures, notices };
+  if (kind === "sourceDetail" && r.details === 0) failures.push(`${current}: clicking the first source opened no detail in place`);
+  if (kind === "taskDrawer") {
+    if (r.header === null) notices.push(`${current}: the first row did not open a task drawer (no task, or a recommendation), so its header was not read`);
+    else {
+      if (!r.header.includes("单次上限 ¥")) failures.push(`${current}: the task drawer's header does not say what one run may spend`);
+      if (r.zoneIds.length) failures.push(`${current}: the task drawer's text names a time zone by its identifier: ${r.zoneIds.join(", ")}`);
+      if (r.workingFilesOpen.length) failures.push(`${current}: working files are listed outside 其他文件: ${r.workingFilesOpen.join(", ")}`);
+    }
+  }
+  return { failures, notices };
+}
+
+/**
+ * The title column of every desktop page, against the one most pages share. A page whose title starts on another left edge has lost
+ * the sidebar or its column (the 定时任务 page began at 0 px beside a sidebar that was not there).
+ * @param {Record<string, { pageLefts?: number[] }>} pages the report's pages
+ * @returns {string[]} notices
+ */
+export function leftEdgeNotices(pages) {
+  const edges = Object.entries(pages).filter(([view, page]) => view.endsWith("@desktop") && Array.isArray(page.pageLefts) && page.pageLefts.length > 0)
+    .map(([view, page]) => [view, /** @type {number[]} */ (page.pageLefts)[0]]);
+  const tally = new Map();
+  for (const [, left] of edges) tally.set(left, (tally.get(left) ?? 0) + 1);
+  const [common] = [...tally.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+  if (common === undefined) return [];
+  return edges.filter(([, left]) => left !== common).map(([view, left]) => `${view}: the title starts at ${left} px; most pages start at ${common} px`);
+}
+
+/**
+ * The pdf the knowledge base's drawer shows for a document's original: wide, and fit to the page's width with no thumbnail column.
+ * @param {{ width: number, src: string | null } | null} r @returns {string[]} failures
+ */
+export function pdfPreviewFindings(r) {
+  if (!r) return [];
+  const failures = [];
+  if (r.width <= 576) failures.push(`files@desktop: the original of a PDF opens in a ${r.width} px drawer (wider than 576)`);
+  if (r.src !== null && !r.src.endsWith("view=FitH&navpanes=0")) failures.push("files@desktop: the PDF is not opened fit to width without the thumbnail column");
+  return failures;
+}
+
+/** What the original of a PDF in the open drawer is shown in: the drawer's width and the address its viewer was given. */
+export function pdfProbe() {
+  const dialog = [...document.querySelectorAll("[role='dialog']")].find((el) => el.getBoundingClientRect().width > 0);
+  if (!dialog) return null;
+  const frame = [...dialog.querySelectorAll("iframe")].find((el) => (el.getAttribute("title") ?? "").includes("PDF"));
+  return { width: Math.round(dialog.getBoundingClientRect().width), src: frame ? frame.getAttribute("src") ?? "" : null };
+}
+
+/** What the new-skill drawer shows: its captions, the switch for this project, and the words a refused empty form puts beside its fields. */
+export function skillDrawerProbe() {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const dialog = [...document.querySelectorAll("[role='dialog']")].find(visible);
+  if (!dialog) return null;
+  const text = words(dialog);
+  return {
+    title: [...dialog.querySelectorAll("h1, h2, h3")].some((el) => words(el) === "新建技能"),
+    captions: [...dialog.querySelectorAll("p")].filter((el) => visible(el) && (el.id ?? "").endsWith("-hint")).length,
+    switchLabel: [...dialog.querySelectorAll("[role='switch']")].map((el) => el.getAttribute("aria-label") || words(el.parentElement ?? el)).find((label) => label.startsWith("保存后在")) ?? null,
+    needName: text.includes("请填写名称"),
+    needHow: text.includes("请写出这个技能怎么做"),
+  };
+}
+
+/**
+ * @param {any} opened the drawer as it opened @param {any} refused the drawer after 保存 with every field empty
+ * @param {string[]} writes the requests that would have changed the deployment, which the walk refused to send
+ * @returns {string[]} failures
+ */
+export function skillDrawerFindings(opened, refused, writes) {
+  const failures = [];
+  if (!opened) return ["extensions-skills@desktop: 新建技能 did not open a drawer"];
+  if (!opened.title) failures.push("extensions-skills@desktop: the new-skill drawer is not titled 新建技能");
+  if (opened.captions < 2) failures.push(`extensions-skills@desktop: the new-skill drawer has ${opened.captions} caption(s) under its fields (two)`);
+  if (!opened.switchLabel) failures.push("extensions-skills@desktop: the new-skill drawer has no switch for using the skill in this project");
+  if (refused && !(refused.needName && refused.needHow)) failures.push("extensions-skills@desktop: 保存 with empty fields does not say 请填写名称 and 请写出这个技能怎么做 in place");
+  if (writes.length) failures.push(`extensions-skills@desktop: 保存 with empty fields sent a request: ${writes.join(", ")}`);
+  return failures;
+}
+
+/** The whole-page cover and alert of a chat that cannot start because the previous runtime is being cleaned up. */
+export function cleanupProbe() {
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const cover = document.querySelector("[data-frame-skeleton]");
+  const alert = [...document.querySelectorAll("[role='alert']")].find((el) => el.getBoundingClientRect().width > 0);
+  return {
+    cover: cover ? words(cover) : null,
+    quotaButtons: [...document.querySelectorAll("button")].map(words).filter((text) => text === "查看科研额度" || text === "查看用量"),
+    alertButtons: alert ? [...alert.querySelectorAll("button, a")].map(words) : null,
+  };
+}
+
+/**
+ * A start the control plane refuses because the previous task's runtime is still being cleaned up (`runtime_cleanup_required`,
+ * answered by the walk itself): the cover says so and offers no allowance page; once the wait is spent the alert offers 重试 and the
+ * way to what the project already holds.
+ * @param {ReturnType<typeof cleanupProbe>} early @param {ReturnType<typeof cleanupProbe> | null} late null when the wait was not waited out
+ * @returns {string[]} failures
+ */
+export function cleanupFindings(early, late) {
+  const failures = [];
+  if (!early.cover?.includes("正在清理上一次任务的运行环境")) failures.push(`chat@desktop: a start refused for cleanup does not say it is cleaning up (cover: “${early.cover ?? "none"}”)`);
+  if (early.quotaButtons.length) failures.push(`chat@desktop: a start refused for cleanup offers ${early.quotaButtons.join(", ")}`);
+  if (late) {
+    if (!late.alertButtons) failures.push("chat@desktop: after the wait, a cleanup that did not finish raises no alert");
+    else {
+      for (const wanted of ["重试", "查看已有成果"]) if (!late.alertButtons.includes(wanted)) failures.push(`chat@desktop: the alert of a cleanup that did not finish has no ${wanted}`);
+      if (late.quotaButtons.length) failures.push(`chat@desktop: the alert of a cleanup that did not finish offers ${late.quotaButtons.join(", ")}`);
+    }
+  }
+  return failures;
+}
+
+/**
+ * The evidence matrix of a finished package, read in the page. `["state"]` — layout, the 核对 column and the marks; `["filtered"]` —
+ * the rows left and the count line; `["open"]` — click the first row and read the dialog; `["closed"]` — after Escape, whether the
+ * dialog is gone and focus is back in the row.
+ * @param {[string]} args
+ */
+export function matrixProbe([action]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none" && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const rows = () => [...document.querySelectorAll("tr, li")].filter((el) => /^matrix-CLM-\d{3,6}$/.test(el.id ?? "") && visible(el));
+  const idOf = (row) => row.id.slice("matrix-".length);
+  const search = [...document.querySelectorAll("input")].find((el) => el.getAttribute("aria-label") === "搜索结论" && visible(el)) ?? null;
+  if (action === "ready") return Boolean(search) && rows().length > 0;
+  const list = rows();
+  if (action === "state") {
+    const first = list[0] ?? null;
+    const mark = first ? (first.tagName === "TR" ? first.querySelectorAll("td")[0] : first.querySelectorAll("button span span")[1]) ?? null : null;
+    const box = mark?.getBoundingClientRect();
+    const headers = [...document.querySelectorAll("th")].filter((el) => el.getAttribute("scope") === "col" && visible(el)).map(words);
+    return {
+      overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+      rows: list.length,
+      firstId: first ? idOf(first) : null,
+      markInView: box ? box.width > 0 && box.left >= 0 && box.right <= window.innerWidth + 1 : null,
+      headers,
+      marks: list.map((row) => (row.tagName === "TR" ? row.querySelectorAll("td")[0] : row.querySelectorAll("button span span")[1]))
+        .filter(Boolean).map(words),
+    };
+  }
+  if (action === "filtered") {
+    const status = [...document.querySelectorAll("p")].map(words).find((text) => /^显示 \d+ \/ \d+ 条$/.test(text)) ?? null;
+    return { rows: list.length, status };
+  }
+  if (action === "open") {
+    const first = list[0];
+    if (!first) return null;
+    (first.tagName === "TR" ? first : first.querySelector("button") ?? first).click();
+    return true;
+  }
+  if (action === "dialog") {
+    const dialog = [...document.querySelectorAll("[role='dialog']")].find(visible) ?? null;
+    const name = dialog ? dialog.getAttribute("aria-label") || words(dialog.querySelector("h1, h2, h3") ?? dialog).slice(0, 60) : null;
+    return { open: Boolean(dialog), name };
+  }
+  if (action === "closed") {
+    const dialog = [...document.querySelectorAll("[role='dialog']")].find(visible);
+    const focused = document.activeElement;
+    return { open: Boolean(dialog), focusInRow: Boolean(focused && list.some((row) => row.contains(focused))) };
+  }
+  return null;
+}
+
+/**
+ * The evidence matrix as a reader meets it at one width.
+ * @param {"desktop" | "phone"} viewportName
+ * @param {{ state: any, filtered: any, dialog: any, closed: any }} read what `matrixProbe` returned at each step
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function matrixFindings(viewportName, { state, filtered, dialog, closed }) {
+  const current = `evidence-matrix@${viewportName}`;
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (!state || !state.firstId) return { failures, notices: [`${current}: no row to read`] };
+  if (state.overflow) failures.push(`${current}: the page overflows sideways`);
+  if (state.markInView === false) failures.push(`${current}: the 核对 text of the first claim is outside the screen`);
+  if (state.headers.length > 1 && state.headers[1] !== "核对") failures.push(`${current}: the second column is “${state.headers[1]}” (核对)`);
+  if (state.marks.includes("核对中") && state.marks.includes("未核对")) failures.push(`${current}: some claims read 未核对 while others read 核对中`);
+  if (filtered && (filtered.rows !== 1 || !/^显示 1 \/ \d+ 条$/.test(filtered.status ?? ""))) {
+    failures.push(`${current}: searching for ${state.firstId} leaves ${filtered.rows} row(s) and “${filtered.status ?? "no count"}”`);
+  }
+  if (dialog && (!dialog.open || !(dialog.name ?? "").includes(state.firstId))) failures.push(`${current}: clicking the first claim does not open a dialog named ${state.firstId} (“${dialog.name ?? "none"}”)`);
+  if (closed && (closed.open || !closed.focusInRow)) failures.push(`${current}: Escape ${closed.open ? "leaves the claim's dialog open" : "does not return focus to the claim's row"}`);
+  return { failures, notices };
 }
 
 function required(name) {
@@ -659,6 +1531,148 @@ export function rowProbe([action, index = 0]) {
   return true;
 }
 
+/** What the first row of a page's first list opened to, and the probe that reads it (`afterClickProbe`). */
+const AFTER_CLICK_KIND = { "geo-sources": "sourceDetail", autopilot: "taskDrawer" };
+
+/** How long the walk waits for a cleanup that never finishes to give up (`CLEANUP_WAIT_MS` of the shell, plus the margin of a slow start). */
+const CLEANUP_WALK_WAIT_MS = 135_000;
+
+/**
+ * Run one step of the walk that clicks through a page, and keep what it found. A step that cannot run — the page it needs is not
+ * there, a control did not answer — is a notice with the reason, never a failure of the release and never a silent pass.
+ * @param {any} report @param {string[]} failures @param {string[]} notices @param {string} name
+ * @param {() => Promise<{ failures: string[], notices?: string[], read?: any }>} step
+ */
+async function recordStep(report, failures, notices, name, step) {
+  try {
+    const result = await step();
+    failures.push(...result.failures);
+    notices.push(...(result.notices ?? []));
+    (report.steps ||= {})[name] = result.read ?? { ok: result.failures.length === 0 };
+  } catch (error) {
+    notices.push(`${name}: the step could not run (${String(error).slice(0, 140)})`);
+    (report.steps ||= {})[name] = { error: String(error).slice(0, 140) };
+  }
+}
+
+/** Load a page of the walk and wait until its route has rendered. */
+async function openRoute(page, base, route, settle = 1_500) {
+  await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
+  await page.waitForTimeout(settle);
+}
+
+/**
+ * The knowledge base's drawer for a PDF: its 原文 tab opens wide, fit to the page's width, without the viewer's thumbnails. The
+ * document is the first finished PDF the API lists; opening it and switching tabs read the original and write nothing.
+ */
+async function walkPdfPreview(page, base, route, title) {
+  await openRoute(page, base, route);
+  const opened = await page.evaluate(clickRowTitled, [title]);
+  if (!opened) return { failures: [], notices: [`files@desktop: the PDF “${title.slice(0, 24)}” was not among the rows on the first screen`] };
+  await page.waitForTimeout(1_500);
+  if (!await page.evaluate(clickNamed, ["tab", "原文", "[role='dialog']"])) return { failures: [], notices: ["files@desktop: the PDF's drawer has no 原文 tab"] };
+  await page.waitForTimeout(3_000);
+  const read = await page.evaluate(pdfProbe);
+  if (read && read.src === null) return { failures: [], notices: ["files@desktop: the original of the PDF showed no viewer within three seconds"], read };
+  return { failures: pdfPreviewFindings(read), read };
+}
+
+/**
+ * The new-skill drawer: opened from the 新建技能 menu, it says what its fields are for and offers to use the skill in this project,
+ * and 保存 with every field empty names what is missing in place. The save button writes, so every request that is not a read is
+ * refused in the browser before it leaves, and the step fails if one was tried.
+ */
+async function walkSkillDrawer(page, base, route) {
+  await openRoute(page, base, route);
+  /** @type {string[]} */ const writes = [];
+  const guard = (route) => {
+    if (["GET", "HEAD"].includes(route.request().method())) return route.continue();
+    writes.push(`${route.request().method()} ${new URL(route.request().url()).pathname.slice(0, 60)}`);
+    return route.abort();
+  };
+  await page.route("**/api/**", guard);
+  try {
+    if (!await page.evaluate(clickNamed, ["button", "新建技能"])) return { failures: [], notices: ["extensions-skills@desktop: no 新建技能 button to open"] };
+    await page.waitForTimeout(500);
+    if (!await page.evaluate(clickNamed, ["menuitem", "创建技能"])) return { failures: [], notices: ["extensions-skills@desktop: the 新建技能 menu has no 创建技能"] };
+    await page.waitForTimeout(800);
+    const opened = await page.evaluate(skillDrawerProbe);
+    let refused = null;
+    if (opened) {
+      await page.evaluate(clickNamed, ["button", "保存", "[role='dialog']"]);
+      await page.waitForTimeout(600);
+      refused = await page.evaluate(skillDrawerProbe);
+      await page.evaluate(clickNamed, ["button", "取消", "[role='dialog']"]);
+    }
+    return { failures: skillDrawerFindings(opened, refused, writes), read: { opened, refused, writes } };
+  } finally {
+    await page.unroute("**/api/**", guard).catch(() => {});
+  }
+}
+
+/**
+ * One evidence matrix at one width: the row for each claim, searched by its id, opened into a dialog that Escape closes and returns
+ * focus from. Only typing into the page's own search box, a click on a row and Escape: all of them read.
+ */
+async function walkMatrix(page, base, route, viewportName) {
+  await openRoute(page, base, route, 1_500);
+  const ready = await page.waitForFunction(matrixProbe, ["ready"], { timeout: 20_000 }).then(() => true).catch(() => false);
+  if (!ready) return { failures: [], notices: [`evidence-matrix@${viewportName}: the package's matrix did not appear within twenty seconds, so it was not read`] };
+  const state = await page.evaluate(matrixProbe, ["state"]);
+  /** @type {any} */ let filtered = null; /** @type {any} */ let dialog = null; /** @type {any} */ let closed = null;
+  if (state?.firstId) {
+    const search = page.getByRole("searchbox", { name: "搜索结论" });
+    await search.fill(state.firstId);
+    await page.waitForTimeout(500);
+    filtered = await page.evaluate(matrixProbe, ["filtered"]);
+    if (await page.evaluate(matrixProbe, ["open"])) {
+      await page.waitForTimeout(800);
+      dialog = await page.evaluate(matrixProbe, ["dialog"]);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(500);
+      closed = await page.evaluate(matrixProbe, ["closed"]);
+    }
+    await search.fill("");
+  }
+  const verdict = matrixFindings(viewportName, { state, filtered, dialog, closed });
+  return { ...verdict, read: { state: state && { ...state, marks: [...new Set(state.marks)] }, filtered, dialog, closed } };
+}
+
+/**
+ * The conversation page when the previous task's runtime is still being cleaned up. The walk answers the start itself with the
+ * refusal the control plane gives (503, `runtime_cleanup_required`, Retry-After 5), so the real runtime is not asked and nothing is
+ * started. The cover must say what is happening and offer no allowance page; once the shell has waited its two minutes the alert
+ * offers 重试 and the way to what the project already holds. The long wait is the shell's own and is skipped with
+ * `OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0`.
+ */
+async function walkCleanupCover(context, base, waitMs) {
+  const probe = await context.newPage();
+  try {
+    await probe.setViewportSize(VIEWPORTS[0][1]);
+    await probe.route(/\/api\/commands\/start_runtime(?:[/?]|$)/, (route) => route.fulfill({
+      status: 503,
+      headers: { "content-type": "application/json", "retry-after": "5" },
+      body: JSON.stringify({ error: "The previous runtime is still being cleaned up.", code: "runtime_cleanup_required" }),
+    }));
+    await probe.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await probe.waitForTimeout(10_000);
+    const early = await probe.evaluate(cleanupProbe);
+    let late = null;
+    if (waitMs > 0) {
+      const deadline = Date.now() + waitMs;
+      while (Date.now() < deadline) {
+        await probe.waitForTimeout(5_000);
+        late = await probe.evaluate(cleanupProbe);
+        if (late.alertButtons) break;
+      }
+    }
+    return { failures: cleanupFindings(early, late), read: { early, late } };
+  } finally {
+    await probe.close().catch(() => {});
+  }
+}
+
 async function main() {
   const base = required("OPEN_SCIENCE_WALK_BASE_URL").replace(/\/+$/, "");
   const username = required("OPEN_SCIENCE_WALK_USER");
@@ -709,7 +1723,9 @@ async function main() {
       return 2;
     }
     const leaks = [...LEAKS, ...shoutedCapabilityKeys([...ids, "open-domain-answer"])];
-    const routes = [...ROUTES, ...await geoProjectRoutes(context, base), ...await vcrStudyRoutes(context, base)];
+    const found = await discoverRoutes(context, base, notices);
+    const routes = [...ROUTES, ...found.routes];
+    report.discovered = { routes: found.routes.map(([name]) => name), evidenceMatrix: found.matrix !== null, pdf: found.pdfTitle !== null, keylessConnectors: found.keyless.length };
     const page = await context.newPage();
     // A row that opens a link in a new tab has shown something: the tab is
     // counted and closed.
@@ -767,9 +1783,48 @@ async function main() {
             RETIRED_NAMES.map((re) => [re.source, re.flags])]);
           report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
             runtimeStartsRefused: runtimeStartsRefused[current] ?? 0 };
-          const verdict = pageFindings(name, viewportName, measured, httpErrors[current] ?? []);
+          const refusals = unexpectedRefusals(name, httpErrors[current] ?? []);
+          const verdict = pageFindings(name, viewportName, measured, refusals);
           failures.push(...verdict.failures);
           notices.push(...verdict.notices);
+          // The page's structure (R11): the sidebar landmark, the regions that scroll sideways, the order of the headings, the height.
+          const structure = await page.evaluate(measureStructure);
+          report.pages[current].structure = structure;
+          const shape = structureFindings(name, viewportName, structure);
+          failures.push(...shape.failures);
+          notices.push(...shape.notices);
+          if (viewportName === "phone") {
+            // Focus order is read, never changed: two presses of Tab from the top of the page, and where each landed.
+            const stops = [];
+            for (let press = 0; press < 2; press += 1) {
+              await page.keyboard.press("Tab");
+              stops.push(await page.evaluate(focusProbe));
+            }
+            report.pages[current].tabStops = stops;
+            failures.push(...tabOrderFindings(name, stops, structure.sidebar.closed));
+          }
+          for (const [kind, viewports] of PAGE_PROBES[budgetKey(name)] ?? []) {
+            if (!viewports.includes(viewportName)) continue;
+            const record = MISSING_RECORDS[budgetKey(name)];
+            const arg = kind === "connectorRows" ? found.keyless : kind === "missingRecord" ? [record.sentence, record.back] : undefined;
+            if (kind === "connectorRows" && found.keyless.length === 0) {
+              notices.push(`${current}: no data source without a key is unset, so the 可选 rows were not read`);
+              continue;
+            }
+            const read = await page.evaluate(pageProbe, [kind, arg]);
+            (report.pages[current].probes ||= {})[kind] = read;
+            const judged = probeFindings(name, viewportName, kind, read);
+            failures.push(...judged.failures);
+            notices.push(...judged.notices);
+          }
+          if (viewportName === "desktop" && MISSING_RECORDS[name]) {
+            // The way back is a click that only navigates: the button names the list and the address must be that list's.
+            const record = MISSING_RECORDS[name];
+            const clicked = await page.evaluate(clickNamed, ["button", record.back, "[role='dialog']"]);
+            await page.waitForTimeout(1_500);
+            const where = await page.evaluate(() => location.pathname);
+            if (!clicked || where !== record.to) failures.push(`${current}: ${record.back} ${clicked ? `goes to ${where}` : "is not on the page"} (${record.to})`);
+          }
           if (viewportName === "desktop" && ROW_CLICK_PAGES.has(name)) {
             // Read-only by construction: a row's title opens a drawer, a page
             // or itself; nothing on these pages writes when it is clicked.
@@ -789,15 +1844,31 @@ async function main() {
               await page.waitForTimeout(1_500);
               const after = await page.evaluate(rowProbe, ["state"]);
               rows.push({ label: labels[index], shown: rowClickShown(before, after, popups, external === true) });
+              if (index === 0 && AFTER_CLICK_KIND[name]) {
+                // The first list's first row is open: read what it opened to, before the next load closes it.
+                const opened = await page.evaluate(afterClickProbe, [AFTER_CLICK_KIND[name]]);
+                rows[0].after = opened;
+                const judged = afterClickFindings(name, AFTER_CLICK_KIND[name], opened);
+                failures.push(...judged.failures);
+                notices.push(...judged.notices);
+              }
             }
             report.pages[current].rowClicks = rows;
             failures.push(...rowClickFindings(name, rows));
+            if (name === "files" && found.pdfTitle) await recordStep(report, failures, notices, "files-pdf", () => walkPdfPreview(page, base, route, found.pdfTitle));
+            if (name === "extensions-skills") await recordStep(report, failures, notices, "extensions-skills-create", () => walkSkillDrawer(page, base, route));
           }
         } catch (error) {
           failures.push(`${current}: did not load (${String(error).slice(0, 120)})`);
         }
       }
+      if (found.matrix) {
+        // A finished package's evidence matrix, read at this width (R11); it is a page of the run's own files, found from the run list.
+        current = `evidence-matrix@${viewportName}`;
+        await recordStep(report, failures, notices, current, () => walkMatrix(page, base, found.matrix, viewportName));
+      }
     }
+    notices.push(...leftEdgeNotices(report.pages));
     if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
       current = "chat@desktop";
       allowRuntimeStart = true;
@@ -814,6 +1885,10 @@ async function main() {
       if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
       else if (chat.retriedAfterNetworkChange) notices.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
       if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
+      // A start the control plane refuses for a cleanup in progress, answered by the walk (R11); it starts nothing.
+      const waitMs = process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS !== undefined ? Number(process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS) || 0 : CLEANUP_WALK_WAIT_MS;
+      allowRuntimeStart = false;
+      await recordStep(report, failures, notices, "chat-cleanup-cover", () => walkCleanupCover(context, base, waitMs));
     }
     // Log out for real: the request needs the shell's origin and the
     // session's CSRF token (under `data` in /api/me), and without them the

@@ -91,14 +91,14 @@ describe("循证 GEO home", () => {
 
   it("tells two projects of one name apart by the day each started, and leaves a single name alone", async () => {
     client.listGeoProjects.mockResolvedValue([
-      { ...GEO_SUMMARIES[0], id: "geo_a", name: "波立维", startedAt: "2026-09-29" },
-      { ...GEO_SUMMARIES[1], id: "geo_b", name: "波立维", startedAt: "2026-10-07" },
+      { ...GEO_SUMMARIES[0], id: "geo_a", name: "波立维", startedAt: `${new Date().getFullYear()}-09-29` },
+      { ...GEO_SUMMARIES[1], id: "geo_b", name: "波立维", startedAt: `${new Date().getFullYear()}-10-07` },
       { ...GEO_SUMMARIES[2], id: "geo_c", name: "玛仕度肽注射液" },
     ]);
     renderHome();
     const list = await screen.findByRole("list", { name: "循证 GEO 项目" });
-    expect(within(list).getByRole("link", { name: "波立维（9月29日）" })).toHaveAttribute("href", "/app/geo/geo_a");
-    expect(within(list).getByRole("link", { name: "波立维（10月7日）" })).toHaveAttribute("href", "/app/geo/geo_b");
+    expect(within(list).getByRole("link", { name: "波立维 · 9月29日" })).toHaveAttribute("href", "/app/geo/geo_a");
+    expect(within(list).getByRole("link", { name: "波立维 · 10月7日" })).toHaveAttribute("href", "/app/geo/geo_b");
     expect(within(list).getByRole("link", { name: "玛仕度肽注射液" })).toBeInTheDocument();
   });
 

@@ -465,7 +465,12 @@ the account's default runtime from every page) and counts them in its report;
 only the chat page, walked when `OPEN_SCIENCE_WALK_CHAT=1`, may start the
 runtime it needs. Report and screenshots go to
 `/srv/evimed-science/shared/ui-walk/<release>/`; `NOTICE` lines (more than four
-font-size × weight pairs on a page) are recorded, never failed on. The base URL
+font-size × weight pairs on a page, a page more than twelve viewports tall, a
+budget past by a page no walk has measured yet, a page that could not be walked
+for want of an id the account's lists do not name) are recorded, never failed
+on. With the chat page asked for, the walk also waits up to 135 s for the shell
+to give up on a cleanup the walk itself reports as unfinished
+(`OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips the wait). The base URL
 must be the public origin — logout is checked against it — so if this host
 cannot reach its own public address, add that name to the host's `/etc/hosts`.
 

@@ -90,4 +90,16 @@ describe("the task form's summary line", () => {
     await userEvent.clear(zone); await userEvent.type(zone, "Mars/Base");
     expect(screen.getByText("2031年2月3日 · 仅一次 08:30 · 单次最多 ¥7")).toBeInTheDocument();
   });
+
+  it("names the project the way every picker does, so a namesake is told apart", () => {
+    const year = new Date().getFullYear();
+    useProjectStore.setState({ projects: [
+      { id: "project-one", name: "波立维", createdAt: new Date(year, 8, 29, 14, 2).toISOString() } as never,
+      { id: "project-two", name: "波立维", createdAt: new Date(year, 9, 1, 9, 30).toISOString() } as never,
+    ] });
+    try {
+      render(<TaskForm projectId="project-two" agenda={task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:00" })} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
+      expect(screen.getByText(/^在“波立维 · 10月1日”运行 · 每天 07:00 · /)).toBeInTheDocument();
+    } finally { useProjectStore.setState({ projects: [] }); }
+  });
 });

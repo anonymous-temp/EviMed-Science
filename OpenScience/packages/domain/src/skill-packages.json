@@ -766,11 +766,11 @@
       "id": "capability/method-distillation",
       "name": "method-distillation",
       "origin": "capability",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "source": {"kind":"release"},
-      "digest": "sha256:0d2af1766f1a35142115f88dfa29f7af076fa4a23c611fdfbc74c6241c6a4abb",
+      "digest": "sha256:c78dc2af2d333118a18025958a368fa07e3003b7d632e1cc964cb7c73a59a284",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"5723b8898011341ba72f06d4b482b7971cbdb7d1976df03d3c6b7533db029c8d"}],
+      "references": [{"path":"capability.yaml","sha256":"082f6c9f54385875b1aac7cce394f3ffa9d3af5c9c86f847eb02b9b6b2a2184f"}],
       "operations": [
         {
           "name": "method-candidate",
