@@ -16,8 +16,13 @@ import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
  * - the verification of what `edit` wrote — numbers (`frontierNumbers.mjs`),
  *   vocabularies, lengths, links, Chinese prose, entity caps — is code. A
  *   failed verification is sent back once with the specific issues; a second
- *   failure keeps the title (if it passed on its own) and drops the summary.
- *   Nothing is softened (principle 5).
+ *   failure keeps the title (if it passed on its own) and drops the summary —
+ *   unless the summary's length was the only thing wrong with the answer, in
+ *   which case its leading whole sentences that fit the limit are kept and
+ *   verified again (2026-10-08: the summary was 211 of the 216 fields first
+ *   answers failed on, with published summaries pressed against the limit).
+ *   Nothing is softened (principle 5): a kept text is a verbatim prefix and
+ *   passes every check an answer passes.
  *
  * Hidden knowledge:
  *
@@ -466,6 +471,49 @@ export function buildModelInput(item, { timeZone = DISPLAY_TIME_ZONE } = {}) {
 // ───────────────────────── verification ─────────────────────────
 
 /**
+ * Why a Chinese text (title, summary) failed its check: the closed set the
+ * counters are labelled with. `number` is a figure the source does not state.
+ */
+export const FRONTIER_PROSE_ISSUE_KINDS = Object.freeze(["empty", "length", "link", "language", "number"]);
+
+/**
+ * @typedef {"empty" | "length" | "link" | "language" | "number"} FrontierProseIssueKind
+ * @typedef {{ field: "title_zh" | "summary_zh", kind: FrontierProseIssueKind }} FrontierProseIssue
+ */
+
+/**
+ * The issue for a text over its limit, with the measured length and how much
+ * to cut: a model cannot count characters, so a bare limit is overshot again.
+ * @param {string} field @param {number} length @param {number} limit
+ */
+function lengthIssue(field, length, limit) {
+  return `${field} 太长：现在 ${length} 个字，不能超过 ${limit} 个字，请删掉至少 ${length - limit} 个字（可以删去次要的限定语或英文全称，保留数字与结论）。`;
+}
+
+/**
+ * The longest prefix of whole sentences of a text that fits a limit (code
+ * points), or null when not even the first sentence fits. A sentence ends at
+ * 。！？； or at the ASCII !?; or . when whitespace or the end follows (an ASCII
+ * full stop after a Latin letter — vs., et al., an abbreviation — is not an
+ * end), together with any closing quote or bracket right after it. This is a
+ * fixed punctuation set, not a reading of the prose (principles 1 and 5). A
+ * kept text that ends on a semicolon ends on a full stop instead.
+ * @param {string} text whitespace-normalised, as `verifyEdit` reads it
+ * @param {number} limit
+ * @returns {string | null}
+ */
+export function trimToWholeSentences(text, limit) {
+  const sentenceEnd = /(?:[。！？；]|[!?;](?=\s|$)|(?<![A-Za-z])\.(?=\s|$))[”’」』）】)\]"]*/gu;
+  let kept = null;
+  for (const match of text.matchAll(sentenceEnd)) {
+    const prefix = text.slice(0, match.index + match[0].length).trim();
+    if (codePoints(prefix) > limit) break;
+    kept = prefix;
+  }
+  return kept?.replace(/[；;]([”’」』）】)\]"]*)$/u, "。$1") ?? null;
+}
+
+/**
  * @typedef {{ titleZh: string | null, summaryZh: string | null, lane: string | null,
  *             specialties: string[], evidenceType: string | null,
  *             entities: { drugs: string[], trials: string[], orgs: string[], diseases: string[] },
@@ -475,11 +523,14 @@ export function buildModelInput(item, { timeZone = DISPLAY_TIME_ZONE } = {}) {
 /**
  * What one edit answer says, checked field by field. `issues` are the
  * specific problems in Chinese, for the rewrite and the log; `failed` names
- * the fields that failed, so a second failure can keep what passed.
+ * the fields that failed, so a second failure can keep what passed; `kinds`
+ * says why each Chinese text (title, summary) failed, from the closed set
+ * `FRONTIER_PROSE_ISSUE_KINDS` — what the counters count, so an alert can say
+ * why and not only which field.
  * @param {any} answer the model's parsed JSON (or null)
  * @param {FrontierEditItem} item
  * @param {string} modelInput
- * @returns {{ output: FrontierEditOutput, issues: string[], failed: Set<string>,
+ * @returns {{ output: FrontierEditOutput, issues: string[], failed: Set<string>, kinds: FrontierProseIssue[],
  *             numbers: { checked: number, missing: Array<{ field: string, raw: string }>, unitMismatches: Array<{ field: string, raw: string }> } }}
  */
 export function verifyEdit(answer, item, modelInput) {
@@ -487,8 +538,12 @@ export function verifyEdit(answer, item, modelInput) {
   const issues = [];
   /** @type {Set<string>} */
   const failed = new Set();
+  /** @type {FrontierProseIssue[]} */
+  const kinds = [];
   /** @param {string} field @param {string} issue */
   const fail = (field, issue) => { failed.add(field); issues.push(issue); };
+  /** @param {"title_zh" | "summary_zh"} field @param {FrontierProseIssueKind} kind @param {string} issue */
+  const failProse = (field, kind, issue) => { fail(field, issue); kinds.push({ field, kind }); };
   const value = answer && typeof answer === "object" ? answer : {};
   if (!answer) fail("answer", "没有读到 JSON 对象，请只输出一个 JSON 对象。");
 
@@ -497,10 +552,15 @@ export function verifyEdit(answer, item, modelInput) {
   /** @param {"title_zh" | "summary_zh"} field @param {number} limit @param {boolean} [optional] */
   const prose = (field, limit, optional = false) => {
     const text = typeof value[field] === "string" ? value[field].replace(/\s+/g, " ").trim() : "";
-    if (!text) { if (!optional) fail(field, `${field} 不能为空。`); return null; }
-    if (codePoints(text) > limit) fail(field, `${field} 太长：不能超过 ${limit} 个字。`);
-    if (LINK.test(text)) fail(field, `${field} 里不能出现链接或网址。`);
-    if (!isChineseProse(text)) fail(field, `${field} 要用中文写。`);
+    if (!text) { if (!optional) failProse(field, "empty", `${field} 不能为空。`); return null; }
+    // The model cannot count characters: it is told how long its text was and
+    // by how much to cut, not only the limit (2026-10-08: published summaries
+    // had a median of 113 code points and 16% sat at 130 or more, Latin
+    // letters of drug and gene names counting one each).
+    const length = codePoints(text);
+    if (length > limit) failProse(field, "length", lengthIssue(field, length, limit));
+    if (LINK.test(text)) failProse(field, "link", `${field} 里不能出现链接或网址。`);
+    if (!isChineseProse(text)) failProse(field, "language", `${field} 要用中文写。`);
     return text;
   };
   const titleZh = item.isChinese ? String(item.titleRaw ?? "").trim().slice(0, 200) : prose("title_zh", FRONTIER_TEXT_LIMITS.title);
@@ -514,7 +574,8 @@ export function verifyEdit(answer, item, modelInput) {
     summary_zh: summaryZh ?? "",
   }, modelInput);
   for (const { field, raw } of numbers.missing) {
-    fail(field, `${field} 里的数字「${raw}」在原文里找不到相等的数字：只能使用原文出现过的数字，找不到就删去这个数字。`);
+    failProse(/** @type {"title_zh" | "summary_zh"} */ (field), "number",
+      `${field} 里的数字「${raw}」在原文里找不到相等的数字：只能使用原文出现过的数字，找不到就删去这个数字。`);
   }
 
   const allowed = item.allowedLanes?.length ? item.allowedLanes : [...FRONTIER_LANES];
@@ -586,8 +647,30 @@ export function verifyEdit(answer, item, modelInput) {
     output: { titleZh, summaryZh, lane, specialties, evidenceType, entities, scores, flags },
     issues,
     failed,
+    kinds,
     numbers,
   };
+}
+
+/**
+ * The verified edit of an answer whose summary is over its limit and nothing
+ * else is wrong with it: no other field failed, and the summary failed on
+ * length alone (not empty, no link, Chinese, every number in the source). Its
+ * leading whole sentences that fit are kept, and the answer is verified again
+ * with them. Null when any of that does not hold, or no whole sentence fits.
+ * @param {any} answer the model's parsed JSON
+ * @param {ReturnType<typeof verifyEdit>} verified that answer, verified
+ * @param {FrontierEditItem} item @param {string} modelInput
+ * @returns {ReturnType<typeof verifyEdit> | null}
+ */
+function trimOverlongSummary(answer, verified, item, modelInput) {
+  if (verified.failed.size !== 1 || !verified.failed.has("summary_zh")) return null;
+  const summaryKinds = verified.kinds.filter(({ field }) => field === "summary_zh");
+  if (!summaryKinds.length || summaryKinds.some(({ kind }) => kind !== "length")) return null;
+  const kept = verified.output.summaryZh ? trimToWholeSentences(verified.output.summaryZh, FRONTIER_TEXT_LIMITS.summary) : null;
+  if (!kept) return null;
+  const again = verifyEdit({ ...answer, summary_zh: kept }, item, modelInput);
+  return again.issues.length ? null : again;
 }
 
 // ───────────────────────── the editor ─────────────────────────
@@ -926,7 +1009,18 @@ export class FrontierEditor {
       // rate of the number check is a launch metric, and a rewrite is a second
       // paid call — the fields say which instruction to sharpen).
       firstPassFailures: /** @type {Record<string, number>} */ ({}),
+      // …and why, for the two Chinese texts: field → kind → first answers that
+      // failed it (a field counts once per answer per kind). `finalIssues` is
+      // the same for the answer an item was left title-only on, which is what
+      // the title-only alert is about — the first answer's reason is not always
+      // the one the rewrite fails on.
+      firstPassIssues: /** @type {Record<string, Record<string, number>>} */ ({}),
+      finalIssues: /** @type {Record<string, Record<string, number>>} */ ({}),
       verification: { passed: 0, repaired: 0, "title-only": 0, pending: 0 },
+      // Edits published `repaired` with the whole sentences of a summary that fit its
+      // limit, because its length was the only thing wrong with the answer (a subset
+      // of `verification.repaired`).
+      summaryTrimmed: 0,
       numbersChecked: 0, numberFailures: 0, unitMismatches: 0, numberCheck: { first: 0, firstFailed: 0 },
       // The wave-two calls: clustering's adjudication, profiles, abstracts.
       sameEventCalls: 0, sameEventFailures: 0, profileCalls: 0, profileFailures: 0, profilePhrasesDropped: 0, abstractCalls: 0,
@@ -1180,7 +1274,9 @@ export class FrontierEditor {
 
   /**
    * Edit one item: one call, verified; one rewrite with the specific issues
-   * when the verification fails; title-only when the rewrite fails too.
+   * when the verification fails; title-only when the rewrite fails too — or,
+   * when a summary's length is the only fault left, `repaired` with the
+   * whole sentences of it that fit (`counters.summaryTrimmed`).
    * `pending` means no answer could be had (the call failed twice, the budget
    * is spent, the editor is unconfigured): the pipeline publishes the item
    * title-only and edits it later.
@@ -1229,7 +1325,9 @@ export class FrontierEditor {
     }
     if (!singleAttempt) this.counters.rewrites += 1;
     for (const field of first.failed) this.counters.firstPassFailures[field] = (this.counters.firstPassFailures[field] ?? 0) + 1;
+    this.#countIssues(this.counters.firstPassIssues, first.kinds);
     let second = null;
+    let lastAnswer = answer;
     try {
       if (!singleAttempt) {
       const again = await ask([
@@ -1243,6 +1341,7 @@ export class FrontierEditor {
       ]);
       second = verifyEdit(again, item, modelInput);
       this.#countNumbers(second.numbers);
+      lastAnswer = again;
       }
     } catch (error) {
       result.error = errorCode(error);
@@ -1255,10 +1354,24 @@ export class FrontierEditor {
       this.counters.verification.repaired += 1;
       return result;
     }
+    const last = second ?? first;
+    // A summary whose only fault is its length keeps the whole sentences that
+    // fit (principle 19: the verified part stands). The kept text goes through
+    // the same verification as any answer, numbers included.
+    const trimmed = trimOverlongSummary(lastAnswer, last, item, modelInput);
+    if (trimmed) {
+      result.verification = "repaired";
+      result.output = trimmed.output;
+      result.numbers = trimmed.numbers;
+      result.issues = last.issues;
+      this.counters.verification.repaired += 1;
+      this.counters.summaryTrimmed += 1;
+      return result;
+    }
     // Title-only: the summary is dropped; what passed its own checks is kept —
     // the title only if it passed on its own, structure from the latest
     // answer where it passed, else the screening verdict.
-    const last = second ?? first;
+    this.#countIssues(this.counters.finalIssues, last.kinds);
     const defaults = item.defaults ?? {};
     const keep = (/** @type {string} */ field) => !last.failed.has(field) && !last.failed.has("answer");
     const titleZh = item.isChinese ? last.output.titleZh
@@ -1287,6 +1400,17 @@ export class FrontierEditor {
     Object.assign(result,providerFailureMetadata(error));
     this.counters.verification.pending += 1;
     return result;
+  }
+
+  /** @param {Record<string, Record<string, number>>} table @param {FrontierProseIssue[]} kinds */
+  #countIssues(table, kinds) {
+    const seen = new Set();
+    for (const { field, kind } of kinds) {
+      if (seen.has(`${field}:${kind}`)) continue;
+      seen.add(`${field}:${kind}`);
+      const row = (table[field] ??= {});
+      row[kind] = (row[kind] ?? 0) + 1;
+    }
   }
 
   /** @param {{ checked: number, missing: unknown[], unitMismatches: unknown[] }} numbers */
