@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { migrateProductStore } from './productPersistence.mjs'
 import { HttpError } from './security.mjs'
 
+/** How long a job for a project with no runtime waits before it asks again. */
+export const NO_RUNTIME_RECHECK_SECONDS = 60
+
 /** Applies personal text/resources at the same exclusive project boundary as plugins.
  * No package manager, live edit, skill injection or second registry exists here. */
 export class PersonalSkillGenerationWorker {
@@ -20,10 +23,10 @@ export class PersonalSkillGenerationWorker {
       .finally(() => { this.running = null })
     return this.running
   }
-  /** @param {any} job */
-  defer(job) {
+  /** @param {any} job @param {number} [seconds] when to ask again */
+  defer(job, seconds = 5) {
     return this.jobs.withLease(job.userId, job.id, job.leaseToken, client => client.query(`UPDATE evimed_product.jobs SET status='queued',
-      attempts=GREATEST(0,attempts-1),lease_token=NULL,lease_expires_at=NULL,run_after=clock_timestamp()+interval '5 seconds' WHERE id=$1`, [job.id]))
+      attempts=GREATEST(0,attempts-1),lease_token=NULL,lease_expires_at=NULL,run_after=clock_timestamp()+($2::integer*interval '1 second') WHERE id=$1`, [job.id, seconds]))
   }
   async run() {
     await migrateProductStore(this.database)
@@ -67,7 +70,11 @@ export class PersonalSkillGenerationWorker {
             if (liveScope.accountCreatedAt !== scope.accountCreatedAt || liveScope.projectCreatedAt !== scope.projectCreatedAt) throw new HttpError(409, 'plugin_generation_changed', 'Project ownership changed.')
           }
           await guard()
-          if (!this.runtime.runtimeGeneration(project) || await this.service.plugins.hasPendingPrompts(project)
+          // A project with no runtime has nothing to apply to until it is opened, which can be days: the start
+          // itself mounts the desired generation and this job then proves it. Asked every five seconds, eleven
+          // unopened projects of one account were claimed about two times a second for eighteen hours (2026-10-08).
+          if (!this.runtime.runtimeGeneration(project)) return this.defer(job, NO_RUNTIME_RECHECK_SECONDS)
+          if (await this.service.plugins.hasPendingPrompts(project)
             || await this.ledgerBusy(project) || await this.runtime.pluginRuntimeBusy(project)) return this.defer(job)
           if (!candidate.reference) {
             const prepared = await this.service.reconcile(await this.service.resolveUser(project), project)

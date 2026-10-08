@@ -3,6 +3,7 @@ import { HttpError } from "./security.mjs";
 import { PLUGIN_ID, defaultConfiguration, exportPluginPayload, pluginEntry, projectPluginId } from "./pluginService.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { EXTENSION_GENERATION_JOB_VARIANT } from "./extensionGenerationWorker.mjs";
+import { NO_RUNTIME_RECHECK_SECONDS } from "./personalSkillGenerationWorker.mjs";
 
 /**
  * The plugin one queued job is about.
@@ -230,9 +231,11 @@ export class PluginApplyWorker {
     return this.jobs.withLease(job.userId, job.id, job.leaseToken, async client => {
       await client.query(`UPDATE evimed_product.plugin_application_state SET phase=$4,error=NULL,error_detail=NULL
         WHERE user_id=$1 AND id=$2 AND desired_revision=$3`, [job.userId, jobDocumentId(job, job.projectId, this.service.registry), job.payload.revision, phase]);
-      // Waiting for user work or first launch is not a failed attempt.
+      // Waiting for user work or first launch is not a failed attempt. A project with no runtime (`saved`) waits for
+      // someone to open it, which can be days, and is asked again less often (`NO_RUNTIME_RECHECK_SECONDS`).
       await client.query(`UPDATE evimed_product.jobs SET status='queued',attempts=GREATEST(0,attempts-1),
-        lease_token=NULL,lease_expires_at=NULL,run_after=clock_timestamp()+interval '5 seconds' WHERE id=$1`, [job.id]);
+        lease_token=NULL,lease_expires_at=NULL,run_after=clock_timestamp()+($2::integer*interval '1 second') WHERE id=$1`,
+      [job.id, phase === "saved" ? NO_RUNTIME_RECHECK_SECONDS : 5]);
     });
   }
   async run() {

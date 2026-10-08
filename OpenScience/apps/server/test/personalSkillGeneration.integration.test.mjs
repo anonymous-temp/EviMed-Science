@@ -388,3 +388,24 @@ test('failed restoration of a still-permitted retired generation performs one bo
     assert.equal((await generations.current(project)).payload.effective, null)
   } finally { await worker.close() }
 })
+
+// 2026-10-08, live: eleven unopened projects of one account were claimed about twice a second for eighteen hours.
+test('an apply for a project with no runtime is asked again in a minute; one waiting on a busy runtime in seconds', options, async () => {
+  const latest = (await database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND kind='personal-skill-apply' ORDER BY created_at DESC LIMIT 1", [user.id])).rows[0]
+  assert.ok(latest)
+  const requeue = () => database.query("UPDATE evimed_product.jobs SET status='queued',run_after=clock_timestamp()-interval '1 second',lease_token=NULL,lease_expires_at=NULL,attempts=0,finished_at=NULL WHERE id=$1", [latest.id])
+  const desired = (await generations.current(project)).payload.desired
+  await database.query("UPDATE evimed_product.jobs SET payload=payload || jsonb_build_object('generationHash',$2::text,'selectionRevision',$3::integer) WHERE id=$1",
+    [latest.id, desired.reference?.generationHash ?? null, desired.selectionRevision])
+  const waitSeconds = async () => Number((await database.query("SELECT extract(epoch FROM run_after - clock_timestamp()) AS s FROM evimed_product.jobs WHERE id=$1 AND status='queued'", [latest.id])).rows[0]?.s)
+  await requeue()
+  const closed = new PersonalSkillGenerationWorker({ service: generations, runtime: { runtimeGeneration: () => null }, resolveProject: async () => project, ledgerBusy: async () => false })
+  await closed.tick(); await closed.close()
+  assert.ok(await waitSeconds() > 50, 'no runtime: about a minute')
+  await requeue()
+  const busy = new PersonalSkillGenerationWorker({ service: generations, runtime: { runtimeGeneration: () => 'fixture-runtime', pluginRuntimeBusy: async () => true },
+    resolveProject: async () => project, ledgerBusy: async () => false })
+  await busy.tick(); await busy.close()
+  const seconds = await waitSeconds()
+  assert.ok(seconds > 0 && seconds < 10, `busy runtime: seconds, not ${seconds}`)
+})
