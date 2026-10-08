@@ -6,6 +6,7 @@ import { isChatPath } from "@/lib/runLocation";
 import { isMacPlatform } from "@/lib/platform";
 import { isEmbeddedShell } from "@/app/layout/embed";
 import { SessionFrameHost } from "@/app/layout/SessionFrameHost";
+import { useRouteFocus } from "@/app/layout/routeFocus";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { IconButton } from "@/components/ui/IconButton";
 import { ShortcutHelp } from "@/components/ui/ShortcutHelp";
@@ -136,6 +137,10 @@ export function AppShell() {
       active = false;
     };
   }, []);
+
+  // A new page's heading takes focus when the path changes (spec §5.3). Called here, above the early returns, because it is a hook;
+  // it waits until there is a page to move focus into.
+  useRouteFocus(location.pathname, mainRef, authState === "authenticated");
 
   const isMac = isMacPlatform();
 

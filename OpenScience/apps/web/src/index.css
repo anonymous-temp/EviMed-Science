@@ -604,6 +604,13 @@ select:focus-visible,
   outline-offset: 0;
 }
 
+/* The heading the shell focuses after a route change (`useRouteFocus`, spec §5.3) is not a control, so it takes focus for the
+   reader's technology without a ring. The outline is transparent rather than none, so forced colours can still paint it. */
+h1[data-route-focus]:focus-visible {
+  outline: var(--focus-ring-width) solid transparent;
+  outline-offset: 0;
+}
+
 /* Reduced motion (spec §9.5, appendix E #6). Nothing travels, zooms or grows:
    only colour and opacity may still change, and never for longer than the
    fast step — a fade is not movement, and it is how a reader notices that
