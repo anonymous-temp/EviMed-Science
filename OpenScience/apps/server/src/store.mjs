@@ -168,13 +168,21 @@ async function ensureScopedDir(rootDir, targetDir) {
 // read-only mode); removing the tree then fails with EACCES and the account or project cannot be deleted
 // (2026-10-06, an acceptance account's `__pycache__`). Deletion gives the owner back write access on the
 // directories inside the tree it removes — never following a link out of it — and removes again.
+// A project's runtime has just been stopped when its tree is removed, and the
+// writers of its ledger (the runtime events, the run monitor's last poll) can
+// still add a file for a moment: a directory emptied and then written into
+// answers ENOTEMPTY, and the deletion answered 500 while a study's runs were
+// ending (2026-10-08; the same request succeeded seconds later). `fs.rm` asks
+// again for exactly those codes, with a growing pause.
+const REMOVE_TREE_RETRIES = Object.freeze({ maxRetries: 6, retryDelay: 150 });
+
 async function removeTree(target) {
   try {
-    await fs.rm(target, { recursive: true, force: true });
+    await fs.rm(target, { recursive: true, force: true, ...REMOVE_TREE_RETRIES });
   } catch (err) {
     if (err?.code !== "EACCES" && err?.code !== "EPERM") throw err;
     await restoreOwnerAccess(target);
-    await fs.rm(target, { recursive: true, force: true });
+    await fs.rm(target, { recursive: true, force: true, ...REMOVE_TREE_RETRIES });
   }
 }
 

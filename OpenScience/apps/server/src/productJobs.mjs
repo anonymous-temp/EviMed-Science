@@ -36,7 +36,15 @@ export class ProductJobs {
         run_after=CASE WHEN $9::boolean AND jobs.status='failed' THEN excluded.run_after ELSE jobs.run_after END,
         updated_at=CASE WHEN $9::boolean AND jobs.status='failed' THEN clock_timestamp() ELSE jobs.updated_at END
       WHERE jobs.kind=excluded.kind AND jobs.payload=excluded.payload AND jobs.project_id IS NOT DISTINCT FROM excluded.project_id
-      RETURNING *`, values);
+      RETURNING *`, values).catch((/** @type {any} */ error) => {
+      // The project was deleted while this job was being asked for (2026-10-08, live: a job for a project deleted a
+      // moment before failed on the foreign key, unclassified): nothing is left to do it for, and the caller hears it
+      // as the project being gone.
+      if (error?.code === "23503" && projectId != null && String(error?.constraint ?? "").includes("project")) {
+        throw new HttpError(404, "project_not_found", "Project not found.");
+      }
+      throw error;
+    });
     if (!result.rows[0]) throw new HttpError(409, "product_job_idempotency_conflict", "This request key already names a different job.");
     return job(result.rows[0]);
   }

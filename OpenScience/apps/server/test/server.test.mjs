@@ -6550,3 +6550,12 @@ test("connector credentials are a named absence on a file-store deployment, and 
     assert.equal((await evidence.json()).code, "connector_credentials_unavailable");
   });
 });
+
+test("an unclassified failure is recorded with the code underneath it and never its message", async () => {
+  const { errorCause } = await import("../src/server.mjs");
+  assert.equal(errorCause(Object.assign(new Error("ENOTEMPTY: directory not empty, rmdir '/data/users/alice/projects/p-1'"), { code: "ENOTEMPTY" })), "ENOTEMPTY");
+  assert.equal(errorCause(Object.assign(new Error("deadlock detected"), { code: "40P01" })), "40P01");
+  assert.equal(errorCause(new TypeError("Cannot read properties of undefined (reading 'id')")), "TypeError");
+  assert.equal(errorCause({ code: "has spaces and /paths" }), "unknown");
+  assert.equal(errorCause(null), "unknown");
+});

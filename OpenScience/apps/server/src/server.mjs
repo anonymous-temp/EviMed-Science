@@ -8300,7 +8300,7 @@ function safeLogId(value) {
   return typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(value) ? value : null;
 }
 
-async function appendErrorRecord(config, req, pathname, { status, code, requestId = null, truncated = false, upstream = null }) {
+async function appendErrorRecord(config, req, pathname, { status, code, requestId = null, truncated = false, upstream = null, cause = null }) {
   const projectHeader = req.headers["x-open-science-project"];
   const projectId = safeLogId(Array.isArray(projectHeader) ? projectHeader[0] : projectHeader);
   const record = {
@@ -8320,6 +8320,8 @@ async function appendErrorRecord(config, req, pathname, { status, code, requestI
     ...(upstream && typeof upstream.host === "string" && /^[a-z0-9.-]{1,253}$/i.test(upstream.host)
       && Number.isSafeInteger(upstream.status)
       ? { upstream: { host: upstream.host.toLowerCase(), status: upstream.status } } : {}),
+    // What an unclassified failure was underneath (`errorCause`): only a code, never a message.
+    ...(cause ? { cause } : {}),
   };
   const file = path.join(config.dataDir, ".openscience", "errors.jsonl");
   await trackLedgerWrite(
@@ -8328,12 +8330,33 @@ async function appendErrorRecord(config, req, pathname, { status, code, requestI
   );
 }
 
+/**
+ * The code underneath a failure that is not one of ours — a file system code
+ * (ENOTEMPTY), a PostgreSQL state (40P01), an error's class name — and never
+ * its message, which can carry a path, a value or a key. Until 2026-10-08 a 500
+ * recorded only `internal_error`: a project deletion and two account deletions
+ * failed that way and left nothing to tell why.
+ * @param {unknown} err
+ */
+export function errorCause(err) {
+  const value = /** @type {any} */ (err);
+  for (const candidate of [value?.code, value?.cause?.code, value?.name]) {
+    if (typeof candidate === "string" && /^[A-Za-z0-9_]{1,48}$/.test(candidate)) return candidate;
+  }
+  return "unknown";
+}
+
 async function errorAudit(config, req, pathname, err, details = {}) {
   if (!pathname.startsWith("/api/")) return;
+  const classified = err instanceof HttpError;
+  const cause = classified ? null : errorCause(err);
+  // The process log too, so `docker logs` says it at the time it happened.
+  if (cause) process.stderr.write(`request failed: ${req.method ?? "?"} ${routePattern(pathname)} ${cause}${details.requestId ? ` ${details.requestId}` : ""}\n`);
   await appendErrorRecord(config, req, pathname, {
-    status: err instanceof HttpError ? err.status : 500,
-    code: err instanceof HttpError ? err.code : "internal_error",
+    status: classified ? err.status : 500,
+    code: classified ? err.code : "internal_error",
     requestId: details.requestId ?? null,
+    cause,
   });
 }
 
