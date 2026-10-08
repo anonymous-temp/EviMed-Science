@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
@@ -41,7 +41,7 @@ function serve(main: api.InboxPageResult, safety?: api.InboxPageResult) {
     : main);
 }
 
-const router: { navigate: ReturnType<typeof useNavigate> | null } = { navigate: null };
+const router = { navigate: (() => Promise.resolve()) as unknown as ReturnType<typeof useNavigate> };
 function Where() {
   const location = useLocation();
   router.navigate = useNavigate();
@@ -301,13 +301,34 @@ it("reads one page for a pages value that is not a small number, and keeps the p
   expect(screen.getByRole("button", { name: "加载更多" })).toBeInTheDocument();
 });
 
+it("comes back to the place in the list the reader had scrolled to, and a new visit opens at the top", async () => {
+  const notice = runNotice({ id: "follow", readAt: at(0) });
+  serve({ items: [notice], nextCursor: null, unreadTotal: 1 });
+  const { container } = open("?filter=unread");
+  const scroller = () => container.querySelector<HTMLElement>(".overflow-y-auto")!;
+  await screen.findByRole("link", { name: /已完成/ });
+  // The reader scrolls the page ground, then opens the row.
+  scroller().scrollTop = 240;
+  fireEvent.scroll(scroller());
+  await userEvent.click(screen.getByRole("link", { name: /已完成/ }));
+  expect(screen.getByTestId("where")).toHaveTextContent("/app/runs?run=run_follow");
+  await act(async () => { await router.navigate(-1); });
+  await screen.findByRole("link", { name: /已完成/ });
+  expect(scroller().scrollTop).toBe(240);
+  // A fresh visit is another entry: no offset.
+  await act(async () => { await router.navigate("/app/runs?run=elsewhere"); });
+  await act(async () => { await router.navigate("/app/inbox?filter=unread"); });
+  await screen.findByRole("link", { name: /已完成/ });
+  expect(scroller().scrollTop).toBe(0);
+});
+
 it("comes back from the row's destination to the list as it was", async () => {
   const notice = runNotice({ id: "follow", readAt: at(0) });
   serve({ items: [notice], nextCursor: null, unreadTotal: 1 });
   open("?filter=unread&pages=1");
   await userEvent.click(await screen.findByRole("link", { name: /已完成/ }));
   expect(screen.getByTestId("where")).toHaveTextContent("/app/runs?run=run_follow");
-  await act(async () => { await router.navigate!(-1); });
+  await act(async () => { await router.navigate(-1); });
   expect(await screen.findByRole("button", { name: /^未读\s*1$/ })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?filter=unread");
 });

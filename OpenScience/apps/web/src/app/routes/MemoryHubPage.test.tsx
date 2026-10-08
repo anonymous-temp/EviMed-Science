@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -771,6 +771,19 @@ describe("记忆胶囊", () => {
     await user.keyboard("{Escape}");
     expect(box).toHaveValue("");
     expect(where()).toBe("/app/memory");
+  });
+
+  it("comes back to the place in the list the reader had scrolled to after a visit elsewhere", async () => {
+    const { container } = openInHistory();
+    await screen.findByRole("button", { name: /药学背景/ });
+    const scroller = () => container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    scroller().scrollTop = 180;
+    fireEvent.scroll(scroller());
+    await act(async () => { await router.navigate!("/away"); });
+    expect(await screen.findByText("别处")).toBeInTheDocument();
+    await act(async () => { await router.navigate!(-1); });
+    await screen.findByRole("button", { name: /药学背景/ });
+    expect(scroller().scrollTop).toBe(180);
   });
 
   it("keeps the notice's deep links working: the record's tab, project and row land in the address", async () => {

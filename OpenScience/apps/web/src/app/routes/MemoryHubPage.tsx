@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useAddressOpen, useAddressText, withParam } from "@/lib/addressState";
+import { usePageScroll } from "@/lib/pageScroll";
 import { Brain } from "lucide-react";
 import { fetchMemoryProfile, searchMemories, type WebStructuredMemory } from "@/lib/apiClient";
 import { listAllHandbooks } from "@/lib/handbooksClient";
@@ -187,6 +188,7 @@ export function MemoryHubPage() {
   }, [data, params, setParams, facts, records, entries, everyPractice]);
 
   const loading = data === null;
+  const scrollAnchor = usePageScroll(!loading);
   const unread = (Object.entries(data ?? {}) as [string, unknown][]).filter(([, value]) => value === null).map(([name]) => name);
   const tabUnread = SOURCES_OF[tab].some((name) => unread.includes(name));
 
@@ -306,6 +308,7 @@ export function MemoryHubPage() {
       title="记忆胶囊"
       actions={<MemoryControls onReset={reload} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} />}
     >
+      <span ref={scrollAnchor} hidden />
       {/* One row: the tabs, and the search box at its end; on a phone the box takes its own line. */}
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-border">
         <Tabs label="记忆" items={tabs} value={tab} onChange={chooseTab} className="min-w-0 flex-1 border-b-0" />

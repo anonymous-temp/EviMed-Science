@@ -27,6 +27,7 @@ import {
 import { inboxWhen, orderInbox, severityOf } from "@/lib/inboxGroups";
 import { splitNoticeBody } from "@/lib/qualityNotices";
 import { withParam } from "@/lib/addressState";
+import { usePageScroll } from "@/lib/pageScroll";
 import { toast } from "@/lib/toast";
 import { useOperator } from "@/lib/useOperator";
 import { cn } from "@/lib/cn";
@@ -247,6 +248,7 @@ export function InboxPage() {
     }
   };
 
+  const scrollAnchor = usePageScroll(items !== null);
   const order = items ? orderInbox(items, safety?.items) : null;
   // The heading says what the bell says; the loaded rows can only be fewer than the count, never more.
   const safetyUnread = order ? Math.max(safety?.total ?? 0, order.pinned.length) : 0;
@@ -285,6 +287,7 @@ export function InboxPage() {
         </Button>
       )}
     >
+      <span ref={scrollAnchor} hidden />
       <FilterChips
         label="消息筛选"
         value={filter}
