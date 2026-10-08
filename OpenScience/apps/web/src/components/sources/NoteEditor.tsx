@@ -8,7 +8,7 @@ import { toast } from "@/lib/toast";
 
 /**
  * A note's own text, editable: a title and the text under it. 「保存」 writes the note's next version and it is read
- * again; the drawer then shows the document that now stands. A note nobody changed is saved as nothing.
+ * again; the page then follows the document that now stands. A note nobody changed is saved as nothing.
  */
 export function NoteEditor({ source, onSaved }: { source: SourceRecord; onSaved: (source: SourceRecord) => void }) {
   const [stored, setStored] = useState<{ title: string; body: string } | null>(null);

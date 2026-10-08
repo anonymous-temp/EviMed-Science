@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Navigate, useLocation, useNavigate, useNavigationType, useSearchParams } from "react-router";
 import { Cloud, FileUp, Folder, Globe, Plus, Search, StickyNote, Upload } from "lucide-react";
 import { SOURCE_KINDS } from "@evimed/domain";
 import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
@@ -10,7 +10,7 @@ import { addToLibrary, decideDuplicateGroup, listDuplicateCandidates, listSource
 import { productErrorMessage } from "@/lib/productClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { legacySourceParam, listParams, readListState, readerPath, recallListPosition, rememberListPosition, scopeOf, scopeParam, type KnowledgeListState, type ListPosition } from "@/lib/knowledgeNav";
 import { useFileDrop } from "@/lib/useFileDrop";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -28,9 +28,8 @@ import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialo
 import { DriveImportDrawerBody } from "@/components/sources/DriveImport";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
 import { KnowledgeScopeMenu } from "@/components/sources/KnowledgeScopeMenu";
-import { SourceDrawer } from "@/components/sources/SourceDrawer";
 import { SourceRow } from "@/components/sources/SourceRow";
-import { fileNameOf, isReading } from "@/components/sources/sourceView";
+import { isReading } from "@/components/sources/sourceView";
 
 /** The folder an upload lands in, under the project's base folder. */
 const KNOWLEDGE_ROOT = "knowledge-base";
@@ -71,9 +70,12 @@ function useNarrow(): boolean {
  * The header is the title, the scope (choosing it changes this page's list and nothing else: it does not move the
  * tab to that project), a search and one primary action, 「添加」, which holds the four ways in. Under it, one row of
  * chips by what a document is, counted by the server over the whole scope and the search — not over the page — and
- * one list. A row says what the document is called, one line of what it says and where it came from; it opens a
- * drawer with the document's content and its original. A page is fifty documents; the rest load as the list is
- * scrolled, and the search runs where the documents are, so the fifty-first is as findable as the first.
+ * one list. A row says what the document is called, one line of what it says and where it came from; it is a link
+ * to the document's own page (`/app/files/:sourceId`), where its original and what it says are side by side. The
+ * scope, the type and the search are in the address, so a reload, the back button and a link all land on the list as
+ * it was, and coming back from a document puts the list back where it was left. A page is fifty documents; the rest
+ * load as the list is scrolled, and the search runs where the documents are, so the fifty-first is as findable as the
+ * first.
  *
  * A row says a state only while the document cannot be used yet (「正在读取」, a few seconds) or when it could not be
  * read (「没能读取 · 重试」). Reading state is not a filter: nobody comes to the knowledge base to look for documents
@@ -84,24 +86,55 @@ export function SourcesPage() {
   // still owns in-flight requests.
   useProjectStore((state) => state.currentId);
   const projectId = getWebProjectId();
+  const [params] = useSearchParams();
+  // A document is opened at its own address. `?source=<id>` is not one of the list's parameters, but it names a
+  // document, so it lands on that document's page (the drawer it used to open had no address at all).
+  const legacy = legacySourceParam(params);
+  if (legacy) return <Navigate to={readerPath(legacy, readListState(params))} replace />;
   return <KnowledgeBase key={projectId} currentProjectId={projectId} />;
 }
 
 function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const projects = useProjectStore((state) => state.projects);
-  const select = useProjectStore((state) => state.select);
-  const [scope, setScope] = useState<SourceScope>({ kind: "project", projectId: currentProjectId });
-  const [kind, setKind] = useState<SourceKind | null>(null);
-  const [query, setQuery] = useState("");
-  const search = useDebounced(query.trim(), SEARCH_DEBOUNCE_MS);
+  // The scope, the type and the search live in the address (E-8): a reload, the back button and a link all land on the
+  // list as it was, and a document opened from it comes back to it.
+  const [params, setParams] = useSearchParams();
+  const listState = useMemo(() => readListState(params), [params]);
+  const scope = useMemo(() => scopeOf(listState, currentProjectId), [listState, currentProjectId]);
+  const kind = listState.kind;
+  const update = useCallback((patch: Partial<KnowledgeListState>) => {
+    setParams((current) => {
+      const next = { ...readListState(current), ...patch };
+      return listParams(next);
+    }, { replace: true });
+  }, [setParams]);
+  const setScope = (next: SourceScope) => update({ scope: scopeParam(next, currentProjectId), kind: null });
+  const setKind = (next: SourceKind | null) => update({ kind: next });
+  // What is typed is the box's own until the researcher stops; the address follows, and an address changed from outside
+  // (the back button between two lists) moves the box.
+  const [query, setQuery] = useState(listState.q);
+  const settled = useDebounced(query.trim(), SEARCH_DEBOUNCE_MS);
+  const written = useRef(listState.q);
+  useEffect(() => {
+    if (settled === written.current) return;
+    written.current = settled;
+    update({ q: settled });
+  }, [settled, update]);
+  useEffect(() => {
+    if (listState.q === written.current) return;
+    written.current = listState.q;
+    setQuery(listState.q);
+  }, [listState.q]);
+  const search = listState.q;
   const narrow = useNarrow();
   const [items, setItems] = useState<SourceRecord[] | null>(null);
   const [counts, setCounts] = useState<SourceCounts | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [opened, setOpened] = useState<SourceRecord | null>(null);
   const [deleting, setDeleting] = useState<SourceRecord | null>(null);
   const [duplicatesFor, setDuplicatesFor] = useState<string | null>(null);
   const [dialog, setDialog] = useState<"link" | "note" | null>(null);
@@ -122,9 +155,9 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   // A scope whose project is gone (deleted elsewhere) falls back to the project the tab is in.
   useEffect(() => {
     if (scope.kind === "project" && projects.length > 0 && !projects.some((project) => project.id === scope.projectId)) {
-      setScope({ kind: "project", projectId: currentProjectId });
+      update({ scope: null });
     }
-  }, [projects, scope, currentProjectId]);
+  }, [projects, scope, update]);
 
   const shared = scope.kind === "shared";
   const scopeProjectId = scope.kind === "project" ? scope.projectId : null;
@@ -133,17 +166,41 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const addProjectId = scopeProjectId ?? currentProjectId;
   const projectNames = useMemo(() => projectLabels(projects), [projects]);
 
+  const pageRoot = useRef<HTMLDivElement>(null);
   const generation = useRef(0);
   const loaded = useRef(0);
+  // Coming back to a list (the back button, or 「知识库」 on a document's page) puts it where it was left: the same
+  // documents loaded and the same scroll, once. A visit of its own — the sidebar, a typed address — starts at the top.
+  const restore = useRef<ListPosition | null>(
+    navigationType === "POP" || (location.state as { kbRestore?: boolean } | null)?.kbRestore === true ? recallListPosition(listState) : null,
+  );
+  const pendingScroll = useRef<number | null>(null);
   const load = useCallback(async (background = false) => {
     const current = ++generation.current;
     if (!background) { setItems(null); setNextCursor(null); setError(null); }
+    const position = background ? null : restore.current;
     try {
-      const page = await listSources(scope, { ...(kind ? { kind } : {}), q: search, limit: background ? Math.min(100, Math.max(PAGE_SIZE, loaded.current)) : PAGE_SIZE });
+      const page = await listSources(scope, { ...(kind ? { kind } : {}), q: search,
+        limit: background ? Math.min(100, Math.max(PAGE_SIZE, loaded.current)) : position ? Math.min(100, Math.max(PAGE_SIZE, position.count)) : PAGE_SIZE });
       if (generation.current !== current) return;
       setCounts(page.counts ?? null);
       setError(null);
-      if (!background) { setItems(page.items); setNextCursor(page.nextCursor); return; }
+      if (!background) {
+        // The pages the reader had open are read again until the document they opened is among them (bounded).
+        let loadedItems = page.items;
+        let cursor = page.nextCursor;
+        for (let more = 0; position && loadedItems.length < position.count && cursor && more < 10; more += 1) {
+          const next = await listSources(scope, { ...(kind ? { kind } : {}), q: search, cursor, limit: PAGE_SIZE });
+          if (generation.current !== current) return;
+          const known = new Set(loadedItems.map((item) => item.id));
+          loadedItems = [...loadedItems, ...next.items.filter((item) => !known.has(item.id))];
+          cursor = next.nextCursor;
+        }
+        if (position) { restore.current = null; pendingScroll.current = position.scroll; }
+        setItems(loadedItems);
+        setNextCursor(cursor);
+        return;
+      }
       // A refresh of the head of the list: what it holds replaces those rows, and what was loaded beyond it stays.
       setItems((previous) => {
         if (!previous || !page.nextCursor) { setNextCursor(page.nextCursor); return page.items; }
@@ -162,6 +219,14 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   }, [scope, kind, search]);
   useEffect(() => { void load(); return () => { generation.current += 1; }; }, [load]);
   useEffect(() => { loaded.current = items?.length ?? 0; }, [items]);
+  // The place a list is brought back to is set once its rows are on the page: before, there is nothing to scroll.
+  useLayoutEffect(() => {
+    if (pendingScroll.current === null || items === null) return;
+    const top = pendingScroll.current;
+    pendingScroll.current = null;
+    const scroller = pageRoot.current?.querySelector<HTMLElement>(".overflow-y-auto");
+    if (scroller) scroller.scrollTop = top;
+  }, [items]);
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
@@ -238,20 +303,16 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     if (source.display.origin === "link") {
       const result = await refetchSource(source.id);
       toast.success(result.changed ? "页面有更新，正在重新读取" : "页面没有变化");
-      setOpened((current) => (current?.id === source.id ? result.source : current));
     } else await retrySource(source.id, source.revision);
   });
   const toggleShared = (source: SourceRecord) => void mutate(async () => {
-    if (source.display.shared) {
-      await removeFromLibrary(source.id);
-      // In the shared scope the document leaves the list: its drawer has nothing left to show.
-      if (shared) setOpened(null);
-    } else await addToLibrary(source.id);
+    if (source.display.shared) await removeFromLibrary(source.id);
+    else await addToLibrary(source.id);
   });
 
   /** Something was added: show where it landed. The shared scope holds nothing new, so the page moves to the project. */
   const added = () => {
-    if (shared) setScope({ kind: "project", projectId: currentProjectId });
+    if (shared) update({ scope: null, kind: null });
     else void load(true);
   };
 
@@ -279,19 +340,19 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const { dragging, dropProps } = useFileDrop({ disabled: !hasWebApi, onDrop: (files) => void uploadFiles(files) });
 
   const onLinkAdded = () => { setDialog(null); toast.success("已添加，正在读取"); added(); };
-  const onNoteAdded = (source: SourceRecord) => { setDialog(null); added(); setOpened(source); };
+  // A note just written opens on its own page, where its editor is; the list it came from is the way back (the shared
+  // scope holds nothing new, so a note written from it was filed in the project the tab is in).
+  const onNoteAdded = (source: SourceRecord) => {
+    setDialog(null);
+    navigate(readerPath(source.id, shared ? { scope: null, kind: null, q: "" } : listState));
+  };
 
-  // 「在对话中使用」: the document's own project when it is a project's (the conversation reads that project's
-  // knowledge base), else the project the tab is in (a shared document is readable from every project). The question
-  // is left in the composer unsent.
-  const openInConversation = (source: SourceRecord) => {
-    const title = source.display.title;
-    const name = fileNameOf(source);
-    const draft = `请阅读知识库里的这份资料，并据此回答我的问题，引用时标出处。\n\n资料：${title}${name !== title ? `（${name}）` : ""}\n\n我的问题：`;
-    const target = shared ? currentProjectId : source.projectId;
-    void select(target, () => {
-      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: newRuntimeUiIntent(draft) } });
-    }).catch((failure) => toast.error(webErrorMessage(failure)));
+  // A document's own page, and what the list keeps of its place as the page is followed: how far it was scrolled and
+  // how many documents it had loaded, which is what brings the reader back to the same row.
+  const readerLink = (source: SourceRecord) => readerPath(source.id, listState);
+  const keepPlace = () => {
+    const scroller = pageRoot.current?.querySelector<HTMLElement>(".overflow-y-auto");
+    rememberListPosition(listState, { scroll: scroller?.scrollTop ?? 0, count: items?.length ?? PAGE_SIZE });
   };
 
   const kindOptions: FilterOption<SourceKind | "all">[] = useMemo(() => {
@@ -303,7 +364,6 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     ];
   }, [counts, kind]);
   const kindsPresent = kindOptions.length - 1;
-  const liveOpened = opened ? items?.find((item) => item.id === opened.id) ?? opened : null;
   const duplicateOpen = duplicatesFor ? groups.filter((group) => !group.decision && group.sourceIds.includes(duplicatesFor)) : [];
   const filtered = kind !== null || search !== "";
 
@@ -328,7 +388,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   );
 
   return (
-    <div {...dropProps} className="relative h-full">
+    <div {...dropProps} ref={pageRoot} className="relative h-full">
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg">
           <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui font-medium text-accent">
@@ -340,9 +400,9 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       <PageShell
         title="知识库"
         width="wide"
-        meta={<KnowledgeScopeMenu scope={scope} onChange={(next) => { setScope(next); setKind(null); setOpened(null); }} />}
+        meta={<KnowledgeScopeMenu scope={scope} onChange={setScope} />}
         actions={<>
-          <SearchInput label="搜索资料和内容" value={query} onChange={(event) => setQuery(event.target.value)} className="w-60" />
+          <SearchInput label="搜索资料和内容" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-60" />
           {addMenu}
         </>}
       >
@@ -359,7 +419,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
             {items.map((source) => (
               <SourceRow key={source.id} source={source} showShared={!shared} {...rowActions(source)}
                 projectName={shared ? projectNames.get(source.projectId) ?? null : null}
-                onOpen={() => setOpened(source)} />
+                to={readerLink(source)} onOpen={keepPlace} />
             ))}
             {nextCursor && (
               <li ref={sentinel} className="flex justify-center py-3">
@@ -369,12 +429,6 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
           </List>
         )}
       </PageShell>
-      {liveOpened && (
-        <SourceDrawer key={liveOpened.id} source={liveOpened} {...rowActions(liveOpened)}
-          onClose={() => setOpened(null)}
-          onUse={() => openInConversation(liveOpened)}
-          onNoteSaved={(source) => { setOpened(source); void load(true); }} />
-      )}
       {connecting && driveOffered && (
         <Drawer title="从网盘导入" onClose={() => setConnecting(false)} widthClassName="max-w-2xl">
           <DriveImportDrawerBody projectId={addProjectId} refreshToken={folderRefresh}
@@ -390,7 +444,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       )}
       {deleting && <ConfirmDialog title="删除这份资料？" body="删除后不再用于回答。"
         confirmLabel="删除" onCancel={() => setDeleting(null)}
-        onConfirm={() => void mutate(async () => { await removeSource(deleting.id, deleting.revision); setOpened((current) => (current?.id === deleting.id ? null : current)); })} />}
+        onConfirm={() => void mutate(async () => { await removeSource(deleting.id, deleting.revision); })} />}
     </div>
   );
 }

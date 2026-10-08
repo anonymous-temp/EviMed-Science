@@ -1,5 +1,5 @@
 import { knownErrorCodeMessage } from "@evimed/domain";
-import type { SourceMaterialsLedger } from "@/lib/sourceMaterials";
+import type { SourceMaterialsLedger, SourceMaterialsResult } from "@/lib/sourceMaterials";
 import { invokeCommand, type WebMe } from "./apiClient";
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
 
@@ -197,6 +197,14 @@ export function sourceFailureMessage(error?: { code: string; message?: string } 
     ?? `本版本还没有为这个原因准备说明。把这个代号交给管理员即可定位：${error.code}`;
 }
 
+/** One document by its id, wherever it lives in the account: what the reader page opens. 404 for one that is gone or not the account's, the same answer for both. */
+export function getSource(id: string) {
+  return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}`);
+}
+/** The structured materials of the current capture: the ledger and every table and figure with the page it was placed on (`materials: null` when none was extracted). */
+export function getSourceMaterials(id: string) {
+  return productRequest<SourceMaterialsResult>(`/sources/${encodeURIComponent(id)}/materials`);
+}
 export function getSourceUnderstanding(id: string) {
   return productRequest<SourceUnderstandingResult>(`/sources/${encodeURIComponent(id)}/understanding`);
 }

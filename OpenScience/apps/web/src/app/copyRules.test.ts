@@ -86,7 +86,7 @@ describe("copy follows the writing rules", () => {
     for (const name of [
       "components/ui/Toaster.tsx", "components/sidebar/ProjectBrowser.tsx", "components/settings/ProjectsSection.tsx", "lib/format.ts",
       // The areas that were held out until 2026-09-27: they are read now.
-      "app/routes/SourcesPage.tsx", "lib/knowledgeBaseFiles.ts", "components/sources/SourceDrawer.tsx", "components/sources/SourceContent.tsx",
+      "app/routes/SourcesPage.tsx", "lib/knowledgeBaseFiles.ts", "app/routes/SourceReaderPage.tsx", "components/sources/SourceKeyPoints.tsx", "components/sources/SourceOriginal.tsx",
       "components/settings/ConnectorsSection.tsx", "lib/sourceClient.ts",
     ]) {
       expect(names).toContain(name);
