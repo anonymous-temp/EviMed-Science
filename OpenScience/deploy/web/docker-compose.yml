@@ -386,6 +386,11 @@ services:
       # What a project's datasets mean (dataSemanticsService.mjs): the interpretation a repeat analysis starts from.
       # Value-less: unset, the code's default (on, with Postgres) holds.
       OPEN_SCIENCE_DATA_SEMANTICS_ENABLED:
+      # Scheduled tasks made and changed from a conversation (taskToolsGateway.mjs; `schedule_task` / `update_task`): the form's twin
+      # with the platform's default budget, and the most tasks one project may hold before the conversation is told to delete or
+      # pause one. Off, the runtime is given no route and the 定时任务 page is unchanged.
+      OPEN_SCIENCE_TASK_TOOLS_ENABLED: ${OPEN_SCIENCE_TASK_TOOLS_ENABLED:-true}
+      OPEN_SCIENCE_TASK_TOOLS_MAX_TASKS: ${OPEN_SCIENCE_TASK_TOOLS_MAX_TASKS:-30}
       # Truthful capability availability (availabilityModule.mjs): the collector's off switch and how often it
       # looks for runs the finish hook missed. A label, never a gate; value-less, so the code's default holds.
       OPEN_SCIENCE_AVAILABILITY_ENABLED:

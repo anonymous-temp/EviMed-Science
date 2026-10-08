@@ -62,11 +62,12 @@ export const KERNEL_TOOL_VIEW_NAMES = /** @type {readonly string[]} */ (Object.f
  * @property {string} verb        the Chinese verb phrase, alone on the row when nothing names a subject
  * @property {readonly string[]} subject argument keys tried in order for the subject
  * @property {'text' | 'host'} [subjectKind] how the subject is read; `host` keeps only a URL's host
+ * @property {'task'} [card] the call is drawn as the card of what it made — a scheduled task, with its way to open — and not as a line
  */
 
-/** @param {string} verb @param {readonly string[]} [subject] @param {'text' | 'host'} [subjectKind] @returns {ToolViewPhrase} */
-function phrase(verb, subject = [], subjectKind = 'text') {
-  return Object.freeze({ verb, subject: Object.freeze([...subject]), subjectKind })
+/** @param {string} verb @param {readonly string[]} [subject] @param {'text' | 'host'} [subjectKind] @param {'task'} [card] @returns {ToolViewPhrase} */
+function phrase(verb, subject = [], subjectKind = 'text', card = undefined) {
+  return Object.freeze({ verb, subject: Object.freeze([...subject]), subjectKind, ...(card ? { card } : {}) })
 }
 
 /**
@@ -143,6 +144,9 @@ const PHRASES = Object.freeze({
   evidence_pool: phrase('合并证据参数', ['parameter']),
   research_calculate: phrase('计算研究数据', ['method']),
   dataset_semantics: phrase('读写数据含义'),
+  // 定时任务 made and changed from a conversation: drawn as the task's card once it answers (a name, when it runs, 「打开」).
+  schedule_task: phrase('安排定时任务', ['title', 'instruction'], 'text', 'task'),
+  update_task: phrase('修改定时任务', ['title', 'instruction'], 'text', 'task'),
   // the kernel's own
   bash: phrase('运行脚本'),
 })
@@ -182,5 +186,5 @@ export const TOOL_VIEW_PHRASE_NAMES = /** @type {readonly string[]} */ (Object.f
 export function toolViewPhrase(name) {
   const table = toolViewPhraseTable()
   const entry = table[String(name ?? '')]
-  return entry ? Object.freeze({ verb: entry.verb, subject: entry.subject, subjectKind: entry.subjectKind }) : null
+  return entry ? Object.freeze({ verb: entry.verb, subject: entry.subject, subjectKind: entry.subjectKind, ...(entry.card ? { card: entry.card } : {}) }) : null
 }

@@ -6,6 +6,7 @@ import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 import { SOURCE_CHANGE_ERROR_MESSAGES } from "./sourceChange.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
 import { DATA_SEMANTICS_ERROR_CODES, DATA_SEMANTICS_ERROR_MESSAGE_ZH } from "./dataSemantics.mjs";
+import { TASK_TOOL_ERROR_CODES, TASK_TOOL_ERROR_MESSAGE_ZH, TASK_TOOL_RUN_FIXES } from "./taskTools.mjs";
 import { EVIDENCE_CARD_ERROR_MESSAGES_ZH } from "./evidenceCard.mjs";
 import { EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH } from "./evidenceUpkeep.mjs";
 import { GENE_EXPRESSION_ERROR_MESSAGE_ZH, GENE_EXPRESSION_LIMITATION_ERROR_CODES, GENE_EXPRESSION_LIMIT_MESSAGE_ZH, GENE_EXPRESSION_RUN_FIX_ERROR_CODES } from "./geneExpression.mjs";
@@ -215,6 +216,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // did not have the recorded interpretation. The two codes a malformed call earns are the run's to fix and sit
   // in the terminal set below.
   ...DATA_SEMANTICS_ERROR_CODES.filter((code) => !DATA_SEMANTICS_RUN_FIXES.includes(code)),
+  // The two tools that schedule and change a task from a conversation (schedule_task / update_task → taskToolsGateway.mjs)
+  // not answering: the feature off, a project at its task limit, an outage, an execution (which may not make tasks).
+  // The conversation tells the researcher plainly and the page's own form still works. The codes a malformed call earns
+  // are the run's to fix and sit in the terminal set below.
+  ...TASK_TOOL_ERROR_CODES.filter((code) => !TASK_TOOL_RUN_FIXES.includes(code)),
   // NCBI Gene Expression Omnibus (gene_expression_series / gene_expression_differential, 2026-10-04): an input over one of
   // the six limits, identities that do not agree, a series with no matrix or one that cannot be read, an engine that is
   // not there. Each refuses that one retrieval or computation, the report says so, and the rest goes on. The codes a
@@ -584,6 +590,9 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "kb_search_request_invalid",
   "kb_search_request_too_large",
   ...DATA_SEMANTICS_RUN_FIXES,
+  // And for a task tool: an instruction, title, schedule or id the run built wrongly, a task that is not this project's, a change
+  // that changes nothing.
+  ...TASK_TOOL_RUN_FIXES,
   // The same for a gene-expression call: an accession, group, path or output directory the run built wrongly, a capture it
   // edited, a result directory that already holds a different analysis (its own results are kept).
   ...GENE_EXPRESSION_RUN_FIX_ERROR_CODES,
@@ -2563,6 +2572,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
   [/^semantics_/, DATA_SEMANTICS_ERROR_MESSAGE_ZH],
+  [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],
   // The engine protocol's per-field issues (`VCR_PROTOCOL_ISSUE_CODES`), last so
   // no earlier family can take one of them. Three families, because each is

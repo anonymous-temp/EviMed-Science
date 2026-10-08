@@ -146,6 +146,10 @@ class ToolContractTests(unittest.TestCase):
             # What a project's datasets mean, and the deterministic checks of
             # its files against that (`data_semantics.py`, 2026-10-04).
             "dataset_semantics",
+            # A scheduled task made and changed from a conversation, through the
+            # control plane's task service (`task_tools.py`, 2026-10-09).
+            "schedule_task",
+            "update_task",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:

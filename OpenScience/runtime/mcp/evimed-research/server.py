@@ -39,6 +39,7 @@ import geo_probe
 import web_search
 import kb_search
 import frontier_search
+import task_tools
 import geo_platform
 import vcr_platform
 import research_calculate
@@ -971,6 +972,9 @@ TOOL_DEFINITIONS.extend(kb_search.tool_definitions())
 # The feed of recent medical developments (「前沿动态」, 2026-09-22): leads a
 # model may look up when a question is about what is new, never evidence.
 TOOL_DEFINITIONS.extend(frontier_search.tool_definitions())
+# A scheduled task made and changed from a conversation (2026-10-09, N-13): offered only where the control plane gave the runtime its
+# address (`EVIMED_TASKS_GATEWAY_URL`), and never inside a scheduled execution.
+TOOL_DEFINITIONS.extend(task_tools.tool_definitions())
 # 「循证 GEO」's platform data and social channel (2026-09-25): offered only where
 # the module is on and open to the account (EVIMED_GEO_GATEWAY_URL), and used by
 # the GEO capabilities' runs.
@@ -1073,7 +1077,10 @@ def disabled_tools():
 # (`OPEN_SCIENCE_VCR_ENABLED`, off by default), and its six tools answer
 # `vcr_disabled` without asking where it is not open to this account; every
 # research question is answered without them (2026-09-28).
-OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "geo_read", "geo_write", "social_posts_search",
+# schedule_task, update_task: scheduling a task from a conversation needs the product ledger and its own switch
+# (`OPEN_SCIENCE_TASK_TOOLS_ENABLED`); without them the 定时任务 page is where a task is made, and every research question is
+# answered without the tools (2026-10-09).
+OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "schedule_task", "update_task", "geo_read", "geo_write", "social_posts_search",
                             "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", "research_calculate"})
 
 
@@ -2162,6 +2169,13 @@ def _dispatch(name, arguments, execution_context=None):
             return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
+    if name in task_tools.TOOL_NAMES:
+        try:
+            # No provenance wrapper: this is a change to the researcher's own tasks, not evidence a report may cite, and the
+            # wrapper would echo the account and project into the answer.
+            return task_tools.call(name, arguments)
+        except task_tools.TaskToolError as error:
+            return failure(error.code, str(error), error.retryable, error.stop_reason(), [error.next_action()])
     if name == "dataset_semantics":
         try:
             result = data_semantics.call(arguments)
