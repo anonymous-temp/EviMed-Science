@@ -70,9 +70,12 @@ function useNarrow(): boolean {
  * The header is the title, the scope (choosing it changes this page's list and nothing else: it does not move the
  * tab to that project), a search and one primary action, 「添加」, which holds the four ways in. Under it, one row of
  * chips by what a document is, counted by the server over the whole scope and the search — not over the page — and
- * one list. A row says what the document is called, one line of what it says and where it came from; it opens a
- * drawer with the document's content and its original. A page is fifty documents; the rest load as the list is
- * scrolled, and the search runs where the documents are, so the fifty-first is as findable as the first.
+ * one list. A row says what the document is called, one line of what it says and where it came from; it is a link
+ * to the document's own page (`/app/files/:sourceId`), where its original and what it says are side by side. The
+ * scope, the type and the search are in the address, so a reload, the back button and a link all land on the list as
+ * it was, and coming back from a document puts the list back where it was left. A page is fifty documents; the rest
+ * load as the list is scrolled, and the search runs where the documents are, so the fifty-first is as findable as the
+ * first.
  *
  * A row says a state only while the document cannot be used yet (「正在读取」, a few seconds) or when it could not be
  * read (「没能读取 · 重试」). Reading state is not a filter: nobody comes to the knowledge base to look for documents

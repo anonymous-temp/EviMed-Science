@@ -43,7 +43,7 @@ export function AddLinkDialog({ projectId, onClose, onAdded }: {
   );
 }
 
-/** 「新建笔记」: a title and the text. The note opens in its drawer once it is written. */
+/** 「新建笔记」: a title and the text. The note opens on its own page, where its editor is, once it is written. */
 export function NewNoteDialog({ projectId, onClose, onAdded }: {
   projectId: string;
   onClose: () => void;
