@@ -118,6 +118,27 @@ export function shellStylesheet(pin, operator = false) {
     // Operators retain native statistics by the owner's 2026-09-29 decision.
     // This changes presentation only; the proxy still owns session authorization.
     operator ? '' : '[data-composer-stats]{display:none !important}',
+    // The context ring beside the statistics is the same kind of number — how
+    // full the model's window is — and goes with them (2026-09-29's ruling that
+    // session statistics are an operator's, extended in E-17; the owner may
+    // object and it comes back). The kernel renders it outside any slot, in
+    // the dock row under the card: a `span` holding one button that opens a
+    // dialog and is named by the locale key `context.aria` — 「上下文已用 20%」
+    // in `zh` (which this pack falls back to), 「20% of context used」 in `en`.
+    // Hidden by that name, and as the whole wrapper so the row keeps no gap.
+    operator ? '' : '[class$="_dock"] > span:has(> button[aria-haspopup="dialog"][aria-label^="上下文已用"]),[class$="_dock"] > span:has(> button[aria-haspopup="dialog"][aria-label$="of context used"]){display:none !important}',
+    // The room under the composer. The kernel leaves 4 px between the card's
+    // row of controls and the window's edge (`.root{padding:0 16px 4px}`), and
+    // nothing of the shell's adds any: with the statistics, the ring and the
+    // tool chip all in the row under the card, the lowest control sat about
+    // 4 px from the bottom (R12 walk, owner 2026-10-08: 「一点没有底部的空白」).
+    // The chip is in the toolbar now; this keeps at least 16 px — or the
+    // device's bottom inset when that is larger — under the card for the
+    // composer of a conversation (the one that has a dock row under its card;
+    // the blank conversation's hero composer is centred and needs none).
+    // `env()` is the browser's own and is zero in a frame that is not given an
+    // inset, so the shell gives the frame's container the inset itself.
+    '[class$="_root"]:not([class*="_hero"]):has(> [class$="_card"] ~ [class$="_dock"]){padding-bottom:max(16px,env(safe-area-inset-bottom)) !important}',
     // A finished turn's footer (`data-turn-tail`) keeps copy, branch and its
     // time. Its usage pill (「用量 860K tok」) and duration pill (「用时 …」,
     // with tok/s and TTFT behind it) are the footer's only dialog triggers,

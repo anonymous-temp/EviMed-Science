@@ -14,8 +14,12 @@ import { FRAME_VOCABULARY } from '../../src/runtimeUiFrame.mjs';
  * @param {Record<string, { kind: string }>} declared slot name → contract, as the kernel would have declared them
  */
 export function fakeSlots(declared) {
-  /** @type {{ name: string, options: Record<string, any>, component: any }[]} */
+  /** @type {{ name: string, options: Record<string, any>, component: any, inject?: any, store?: any, locale?: string }[]} */
   const registrations = [];
+  /** @type {Map<string, Set<() => void>>} */
+  const watchers = new Map();
+  /** @param {string} name */
+  const changed = (name) => { for (const watcher of [...(watchers.get(name) ?? [])]) watcher(); };
   /** @type {string[]} */
   const injected = [];
   const slots = {
@@ -29,7 +33,8 @@ export function fakeSlots(declared) {
       if (result && typeof result[Symbol.iterator] === 'function' && typeof result !== 'function') {
         for (const _ of result) { /* drain the registration set */ }
       }
-      return () => {};
+      // The registry hands back the disposer of the effect it ran.
+      return typeof result === 'function' ? result : () => {};
     },
     /** @param {Record<string, any>} options @param {any} component */
     register(options, component) {
@@ -53,8 +58,24 @@ export function fakeSlots(declared) {
         }
       }
       if (contract.kind === 'chain' && options.select === undefined) throw new Error(`chain slot "${options.name}" requires options.select`);
-      registrations.push({ name: options.name, options, component });
-      return () => {};
+      // The kernel's registry keeps `inject`, `store` and `locale` on the entry
+      // itself, beside `options` (`StoredEntry`), and hands the same objects
+      // back from `entries()` until a registration changes.
+      const stored = { name: options.name, options, component, inject: options.inject, store: options.store, locale: options.locale };
+      registrations.push(stored);
+      changed(options.name);
+      return () => {
+        const at = registrations.indexOf(stored);
+        if (at >= 0) registrations.splice(at, 1);
+        changed(options.name);
+      };
+    },
+    /** The registry's change notification for one slot. @param {string} name @param {() => void} watcher */
+    subscribe(name, watcher) {
+      const set = watchers.get(name) ?? new Set();
+      set.add(watcher);
+      watchers.set(name, set);
+      return () => { set.delete(watcher); };
     },
     /**
      * The ledger's inspection view, lowest priority first as the kernel keeps
@@ -63,7 +84,6 @@ export function fakeSlots(declared) {
      */
     entries(name) {
       return registrations.filter((entry) => entry.name === name)
-        .map((entry) => ({ component: entry.component, options: entry.options }))
         .sort((a, b) => (a.options.priority ?? 0) - (b.options.priority ?? 0));
     },
   };
@@ -71,14 +91,32 @@ export function fakeSlots(declared) {
 }
 
 /**
+ * The hooks the pinned `ui-chat` registers its rows with (`inject: () => ({ hooks })`,
+ * read off `registerChatNodeRenderers` at 0.1.7-rc.2). The renderer hands a
+ * render the props of the entry that WINS, so a takeover that does not carry
+ * the shipped entry's `inject` gets none of them — `usePresentation` among
+ * them — and the shipped row it draws throws (E-11).
+ */
+export const SHIPPED_ROW_HOOKS = Object.freeze({
+  'conversation.chat.node': Object.freeze({
+    'assistant-step': () => ({ hooks: { presentation: 'presentation' } }),
+    'turn-tail': () => ({ hooks: { performanceUsage: 'performanceUsage' } }),
+  }),
+});
+
+/**
  * A kernel that has declared every slot in the pinned table, with the shipped
  * entries of the keyed ones already registered at priority 0 — so a takeover
- * that forgets to go below them fails here as it would in the page.
+ * that forgets to go below them fails here as it would in the page, and one
+ * that forgets what they inject does too.
  */
 export function kernelSlots() {
   const slots = fakeSlots(FRAME_VOCABULARY.slots);
   for (const [name, contract] of Object.entries(FRAME_VOCABULARY.slots)) {
-    for (const key of /** @type {any} */ (contract).shippedKeys ?? []) slots.registrations.push({ name, options: { name, key }, component: 'shipped' });
+    for (const key of /** @type {any} */ (contract).shippedKeys ?? []) {
+      const inject = /** @type {Record<string, any>} */ (SHIPPED_ROW_HOOKS)[name]?.[key];
+      slots.registrations.push({ name, options: { name, key }, component: 'shipped', ...(inject ? { inject } : {}) });
+    }
   }
   return slots;
 }

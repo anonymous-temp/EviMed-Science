@@ -104,9 +104,12 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   // must hold itself to the composer's width, as the kernel's queue dock does.
   'conversation.input.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // Below the composer card, one centred row: `ui-chat` holds the session
-  // statistics there (`stats`, order 0, hidden by the shell stylesheet); the
-  // tool chip sits after them. Declared by the composer bar's own children
-  // table.
+  // statistics there (`stats`, order 0), and the kernel draws its context ring
+  // after the slot — both an operator's, hidden for a researcher by the shell
+  // stylesheet. Nothing of ours sits there since E-17 (2026-10-08): the tool
+  // chip moved into the toolbar (`conversation.input.left`), because this row
+  // is 4 px from the window's edge. Declared by the composer bar's own
+  // children table.
   'conversation.composer.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // The composer: `conversation.composer.bar`'s children table.
   'conversation.composer.bar': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
@@ -114,8 +117,12 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   'conversation.input.attachments': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
   'conversation.input.right': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // The transcript: the `chat` view's children table. `assistant-step` is
-  // taken over twice, each below the last — the reply check at -1, the
-  // delivered files at -2 — and each draws the entry it shadows first.
+  // taken over three times, each below the last — the reply check at -1, the
+  // delivered files at -2, the source cards at -3 — and each draws the entry it
+  // shadows first. The kernel registers that row with an `inject` (its
+  // `usePresentation` hook), and the renderer hands a render the props of the
+  // entry that wins, so each takeover is made over the shipped entry
+  // (`kit.occupyOver`) and carries that `inject` with it (E-11).
   'conversation.chat.node': Object.freeze({ kind: 'keyed', scope: 'session', declaredBy: 'ui-chat', shippedKeys: CHAT_NODE_KINDS }),
   // One tool call's row: ui-tool's `tool-call` chat node declares it.
   'tool.call.toolview': Object.freeze({ kind: 'keyed', scope: 'session', declaredBy: 'ui-tool', shippedKeys: SHIPPED_TOOL_VIEW_KEYS }),

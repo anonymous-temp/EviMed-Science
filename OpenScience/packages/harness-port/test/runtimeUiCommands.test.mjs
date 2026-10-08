@@ -1,12 +1,13 @@
-// The research tools' entry points: the chip under the composer for the tool
-// a conversation runs, its starters while the conversation is blank, the
-// `/工具` command, and `@` references to the knowledge base. The blank
-// conversation itself carries none of them.
+// The research tools' entry points: the chip in the composer's toolbar for the
+// tool a conversation runs (with its menu of settings for the two modules),
+// its starters while the conversation is blank, the `/工具` command, and `@`
+// references to the knowledge base. The blank conversation itself carries none
+// of them.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  apply, BODY, capabilityOptions, knowledgeCandidates, knowledgeReference, knowledgeSerialization, toolPageModel,
+  apply, BODY, capabilityOptions, chipSuffix, knowledgeCandidates, knowledgeReference, knowledgeSerialization, toolPageModel,
 } from '../src/runtimeUiCommands.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 import { FRAME_VOCABULARY } from '../src/runtimeUiFrame.mjs';
@@ -99,21 +100,25 @@ test('/工具 binds the conversation it was typed in, and writes nothing into th
   assert.equal(BODY.name, 'commands');
 });
 
-test('the blank conversation is the headline and the composer; a chosen tool is a chip under the composer, with its starters', () => {
+/** The toolbar seat: after the kernel's `+` and the paperclip, inside the composer card. */
+const toolbarChip = (/** @type {any} */ f) => f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.input.left' && entry.options.id === 'evimed-tool');
+
+test('the blank conversation is the headline and the composer; a chosen tool is a chip in the toolbar, with its starters on the hero', () => {
   const f = frame();
   // Nothing between the headline and the composer until a tool is chosen,
   // and no page of the tool then either (2026-09-22: it stretched the
-  // composer to the frame's edge): the hero seat carries the same chip and
-  // starters the composer dock does, held to the composer's width.
+  // composer to the frame's edge): the hero seat carries the starters, held
+  // to the composer's width.
   const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
   assert.equal(hero.options.priority, -1);
   assert.equal(renderStatic(hero.component), '', 'nothing between the headline and the composer');
   assert.equal(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.input.dock'), false);
-  const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
-  assert.ok(chip, 'in the row under the composer, where the kernel keeps its (hidden) statistics');
-  assert.ok(chip.options.order > 0, "after the kernel's stats pill (order 0)");
-  // The starters live on the hero only: under a reply they would be noise.
-  assert.equal(f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock').length, 1);
+  // E-17: nothing of ours is in the row under the composer card.
+  assert.equal(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock'), false,
+    'the row under the card is the kernel\'s: statistics and the context ring');
+  const chip = toolbarChip(f);
+  assert.ok(chip, 'in the toolbar inside the card, where the kernel keeps its + and our paperclip');
+  assert.equal(chip.options.order, 10, "after the paperclip (order -100)");
   assert.equal(renderStatic(chip.component), '', 'no tool, no chip');
   // The shell reports what the control plane bound this conversation to.
   f.kit.hub.deliver('capability', { capabilityId: 'clinical-evidence-synthesis', sessionId: 'session-a' });
@@ -121,16 +126,26 @@ test('the blank conversation is the headline and the composer; a chosen tool is 
   assert.match(drawn, /临床证据深度分析/);
   // The tool's name alone: its duration and summary were said on 科研工具.
   assert.doesNotMatch(drawn, /分钟|围绕一个临床问题|你会拿到|做不到/);
-  assert.match(drawn, /aria-label="移除「临床证据深度分析」"/);
-  assert.match(drawn, /title="移除"/);
+  // One click removes it; a native tooltip would be a second name for the same button.
+  assert.match(drawn, /aria-label="移除“临床证据深度分析”"/);
+  assert.doesNotMatch(drawn, /title=/);
+  // A tool with no settings has no menu.
+  assert.doesNotMatch(drawn, /aria-haspopup|<select/);
   assert.doesNotMatch(drawn, /0\.5px/, 'every edge is one 1 px hairline, or none');
-  // The hero seat draws the chip and the starters within the composer's width.
+  // In the toolbar the chip takes what the row has left and gives way with an
+  // ellipsis, rather than wrapping the toolbar at 390 px (measured, 0.1.7-rc.2).
+  assert.match(drawn, /data-evimed-chip-placement="bar"/);
+  assert.match(drawn, /max-width:max\(56px, ?calc\(100cqw - 194px\)\)/);
+  assert.match(drawn, /flex:0 1 auto/);
+  // The hero seat draws the chip (there is no toolbar yet in a static render) and
+  // the starters within the composer's width.
   const heroDrawn = renderStatic(hero.component);
   assert.match(heroDrawn, /max-width:var\(--dsh-composer-card-max-width, ?952px\)/);
   assert.match(heroDrawn, /临床证据深度分析/);
+  assert.match(heroDrawn, /data-evimed-chip-placement="hero"/);
   assert.match(heroDrawn, /≥70 岁人群阿司匹林一级预防/);
   assert.doesNotMatch(heroDrawn, /flex:1 1 100%|你会拿到/);
-  // Something asked: the chip stays under the composer.
+  // Something asked: the chip stays in the toolbar.
   f.kit.hub.deliver('session', { sessionId: 'session-a', running: true });
   f.kit.hub.deliver('capability', { capabilityId: 'clinical-evidence-synthesis', sessionId: 'session-a' });
   assert.match(renderStatic(chip.component), /临床证据深度分析/);
@@ -203,12 +218,12 @@ test('a GEO conversation reads 「循证 GEO」 whichever of its capabilities it
   }
   assert.equal(toolPageModel(CATALOGUE, 'geo-insight'), null, 'without the vocabulary it is an unknown tool');
   const f = frame();
-  const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
+  const chip = toolbarChip(f);
   f.kit.hub.deliver('capability', { capabilityId: 'geo-insight', sessionId: 'session-a' });
   const drawn = renderStatic(chip.component);
   assert.match(drawn, /循证 GEO/);
-  assert.match(drawn, /aria-label="移除「循证 GEO」"/);
-  assert.doesNotMatch(drawn, /覆盖周期/, 'no controls before the shell has found the project');
+  assert.match(drawn, /aria-label="移除“循证 GEO”"/);
+  assert.doesNotMatch(drawn, /覆盖周期|aria-haspopup/, 'no settings before the shell has found the project');
 });
 
 test('/工具 never offers the GEO capabilities, even when the catalogue lists them', () => {
@@ -218,32 +233,67 @@ test('/工具 never offers the GEO capabilities, even when the catalogue lists t
     ['clinical-evidence-synthesis', 'comprehensive-drug-evaluation', 'research-topic-selection']);
 });
 
-test('the GEO chip carries 覆盖周期 and AI 引擎 once the shell has found the project, and six single-step starters on the blank conversation', () => {
+test('the GEO chip carries 覆盖周期 and AI 引擎 in its menu once the shell has found the project, and six single-step starters on the blank conversation', () => {
   const f = frame();
-  const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
+  const chip = toolbarChip(f);
   const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
   f.kit.hub.deliver('capability', { capabilityId: 'geo-insight', sessionId: 'session-a' });
   f.kit.hub.deliver('geo', GEO_OPTIONS);
-  const docked = renderStatic(chip.component);
-  assert.match(docked, /<select aria-label="覆盖周期"/);
-  assert.deepEqual([...docked.matchAll(/<option value="(\d+)"[^>]*>([^<]+)</g)].map((match) => [match[1], match[2]]),
-    [['30', '覆盖 30 天'], ['60', '覆盖 60 天'], ['90', '覆盖 90 天'], ['180', '覆盖 180 天']]);
-  assert.match(docked, /<option value="90" selected="">覆盖 90 天/);
-  assert.match(docked, /5 个 AI 引擎/);
-  assert.equal([...docked.matchAll(/type="checkbox" checked=""/g)].length, 5);
-  assert.doesNotMatch(docked, /完整方案/, 'the starters live on the blank conversation only');
+  const drawn = renderStatic(chip.component);
+  // The settings are a menu behind the chip, closed until asked for; no native select is as wide as its longest option.
+  assert.match(drawn, /aria-haspopup="dialog"/);
+  assert.match(drawn, /aria-expanded="false"/);
+  assert.match(drawn, /aria-label="循证 GEO，设置"/);
+  assert.doesNotMatch(drawn, /<select|<option|覆盖周期|AI 引擎/);
+  // At the defaults the chip says nothing more than its name.
+  assert.doesNotMatch(drawn, / · /);
+  assert.doesNotMatch(drawn, /完整方案/, 'the starters live on the blank conversation only');
+  // Off its defaults the chip names what changed, briefly.
+  f.kit.hub.deliver('geo', { ...GEO_OPTIONS, coverageDays: 180 });
+  assert.match(renderStatic(chip.component), /aria-label="循证 GEO · 180 天，设置"/);
+  f.kit.hub.deliver('geo', { ...GEO_OPTIONS, engines: ['doubao', 'kimi', 'deepseek'] });
+  assert.match(renderStatic(chip.component), /aria-label="循证 GEO · 3 个引擎，设置"/);
+  f.kit.hub.deliver('geo', { ...GEO_OPTIONS, coverageDays: 30, engines: ['doubao'] });
+  assert.match(renderStatic(chip.component), /aria-label="循证 GEO · 2 项设置，设置"/);
+  f.kit.hub.deliver('geo', GEO_OPTIONS);
   const blank = renderStatic(hero.component);
   assert.match(blank, /循证 GEO/);
-  assert.match(blank, /覆盖周期/);
   const labels = [...blank.matchAll(/<button type="button" title="[^"]+"[^>]*><span[^>]*>([^<]+)<\/span><\/button>/g)].map((match) => match[1]);
   assert.deepEqual(labels, ['完整方案', 'AI 怎么说我的产品', '信源分析与预期', '优化已有稿件', '去 AI 味', '持续监测']);
   // A conversation in a project that is not a GEO project: the chip and the
-  // starters, no options to write anywhere.
+  // starters, no settings to write anywhere.
   f.kit.hub.deliver('geo', { ...GEO_OPTIONS, controls: false });
-  assert.doesNotMatch(renderStatic(chip.component), /覆盖周期/);
+  assert.doesNotMatch(renderStatic(chip.component), /aria-haspopup/);
   // Another conversation: the options go with the tool until the shell speaks.
   f.kit.hub.deliver('session', { sessionId: 'session-b' });
   assert.equal(renderStatic(chip.component), '');
+});
+
+test('what the chip leaves unsaid is the platform\'s default, and a setting the reader may not change is never named', () => {
+  const defaults = FRAME_VOCABULARY.chipDefaults;
+  const geo = { geo: true };
+  const vcr = { vcr: true };
+  // The defaults come from the domain, not from a number written here.
+  assert.deepEqual([defaults.geo.coverageDays, [...defaults.geo.engines]], [90, ['doubao', 'qianwen', 'deepseek', 'yuanbao', 'kimi']]);
+  assert.deepEqual({ ...defaults.vcr }, { start: 'auto', intendedUse: 'exploratory' });
+  assert.equal(chipSuffix(null, GEO_OPTIONS, null, defaults), '');
+  assert.equal(chipSuffix(geo, GEO_OPTIONS, null, defaults), '');
+  assert.equal(chipSuffix(geo, { ...GEO_OPTIONS, coverageDays: 60 }, null, defaults), '60 天');
+  // The same five engines in another order are the defaults; a sixth is not.
+  assert.equal(chipSuffix(geo, { ...GEO_OPTIONS, engines: [...GEO_OPTIONS.engines].reverse() }, null, defaults), '');
+  assert.equal(chipSuffix(geo, { ...GEO_OPTIONS, engines: [...GEO_OPTIONS.engines, 'baidu'] }, null, defaults), '6 个引擎');
+  assert.equal(chipSuffix(geo, { ...GEO_OPTIONS, coverageDays: 30, engines: ['kimi'] }, null, defaults), '2 项设置');
+  assert.equal(chipSuffix(geo, { ...GEO_OPTIONS, controls: false, coverageDays: 30 }, null, defaults), '', 'no project, nothing is set');
+  assert.equal(chipSuffix(vcr, null, VCR_OPTIONS, defaults), '');
+  assert.equal(chipSuffix(vcr, null, { ...VCR_OPTIONS, start: 'cohort' }, defaults), '队列');
+  assert.equal(chipSuffix(vcr, null, { ...VCR_OPTIONS, intendedUse: 'design_support' }, defaults), '研究设计支持');
+  assert.equal(chipSuffix(vcr, null, { ...VCR_OPTIONS, start: 'trial', intendedUse: 'design_support' }, defaults), '2 项设置');
+  // A reader who may not write cannot have changed the start, nor one who is not the lead the use.
+  assert.equal(chipSuffix(vcr, null, { ...VCR_OPTIONS, start: 'cohort', startOptions: [] }, defaults), '');
+  assert.equal(chipSuffix(vcr, null, { ...VCR_OPTIONS, intendedUse: 'design_support', canSetUse: false }, defaults), '');
+  assert.equal(chipSuffix(vcr, null, { ...VCR_OPTIONS, controls: false, start: 'cohort' }, defaults), '');
+  // With no defaults to compare to, it says nothing rather than guess.
+  assert.equal(chipSuffix(geo, { ...GEO_OPTIONS, coverageDays: 30 }, null, {}), '');
 });
 
 // 虚拟临床研究: the same chip through its five capabilities, and — once the shell has
@@ -267,43 +317,47 @@ test('a 虚拟临床研究 conversation reads 「虚拟临床研究」 whichever
   assert.equal(/** @type {any} */ (toolPageModel(CATALOGUE, 'vcr-protocol', vcr)).vcr, false,
     'the vocabulary alone claims no controls: the body claims them');
   const f = frame();
-  const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
+  const chip = toolbarChip(f);
   f.kit.hub.deliver('capability', { capabilityId: 'vcr-analysis', sessionId: 'session-a' });
   const drawn = renderStatic(chip.component);
   assert.match(drawn, /虚拟临床研究/);
-  assert.match(drawn, /aria-label="移除「虚拟临床研究」"/);
-  assert.doesNotMatch(drawn, /起点|预期用途/, 'no controls before the shell has found the study');
+  assert.match(drawn, /aria-label="移除“虚拟临床研究”"/);
+  assert.doesNotMatch(drawn, /起点|预期用途|aria-haspopup/, 'no settings before the shell has found the study');
 });
 
-test('the 虚拟临床研究 chip carries 起点 and 预期用途 once the shell has found the study, and six single-task starters on the blank conversation', () => {
+test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu once the shell has found the study, and six single-task starters on the blank conversation', () => {
   const f = frame();
-  const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
+  const chip = toolbarChip(f);
   const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
   f.kit.hub.deliver('capability', { capabilityId: 'vcr-protocol', sessionId: 'session-a' });
   f.kit.hub.deliver('vcr', VCR_OPTIONS);
-  const docked = renderStatic(chip.component);
-  assert.match(docked, /<select aria-label="起点"/);
-  assert.deepEqual([...docked.matchAll(/<option value="([a-z_]+)"[^>]*>(起点：[^<]+)</g)].map((match) => [match[1], match[2]]),
-    [['auto', '起点：自动'], ['cohort', '起点：队列'], ['patients', '起点：患者'], ['comparator', '起点：对照'], ['trial', '起点：试验']]);
-  assert.match(docked, /<option value="auto" selected="">起点：自动/);
-  assert.match(docked, /<select aria-label="预期用途"/);
-  assert.match(docked, /<option value="exploratory" selected="">预期用途：探索/);
-  assert.doesNotMatch(docked, /覆盖周期|AI 引擎/, 'GEO\'s controls are GEO\'s');
-  assert.doesNotMatch(docked, /估算样本量/, 'the starters live on the blank conversation only');
+  const drawn = renderStatic(chip.component);
+  assert.match(drawn, /aria-haspopup="dialog"/);
+  assert.match(drawn, /aria-label="虚拟临床研究，设置"/);
+  assert.doesNotMatch(drawn, /<select|<option|起点|预期用途/, 'a closed menu, and no native select sized by its longest option');
+  assert.doesNotMatch(drawn, /覆盖周期|AI 引擎/, 'GEO\'s settings are GEO\'s');
+  assert.doesNotMatch(drawn, /估算样本量/, 'the starters live on the blank conversation only');
+  // Off its defaults the chip says so, briefly: 「虚拟临床研究 · 队列」.
+  f.kit.hub.deliver('vcr', { ...VCR_OPTIONS, start: 'cohort' });
+  assert.match(renderStatic(chip.component), /aria-label="虚拟临床研究 · 队列，设置"/);
+  f.kit.hub.deliver('vcr', { ...VCR_OPTIONS, start: 'cohort', intendedUse: 'design_support' });
+  assert.match(renderStatic(chip.component), /aria-label="虚拟临床研究 · 2 项设置，设置"/);
+  f.kit.hub.deliver('vcr', VCR_OPTIONS);
   const blank = renderStatic(hero.component);
   assert.match(blank, /虚拟临床研究/);
-  assert.match(blank, /起点/);
   const labels = [...blank.matchAll(/<button type="button" title="[^"]+"[^>]*><span[^>]*>([^<]+)<\/span><\/button>/g)].map((match) => match[1]);
   assert.deepEqual(labels, ['估算样本量', '外部对照可行性', '找先例和参数', '生成合成数据', '匹配患者', '完整研究']);
 
-  // A reader who is not the lead changes the start and not the intended use.
+  // A reader who may neither write nor lead has no menu at all: the settings
+  // are not theirs, and a control the server would refuse is not offered.
+  f.kit.hub.deliver('vcr', { ...VCR_OPTIONS, startOptions: [], canSetUse: false });
+  assert.doesNotMatch(renderStatic(chip.component), /aria-haspopup/);
+  // One who may write but is not the lead still has the menu (for the start).
   f.kit.hub.deliver('vcr', { ...VCR_OPTIONS, canSetUse: false });
-  const viewer = renderStatic(chip.component);
-  assert.match(viewer, /aria-label="起点"/);
-  assert.doesNotMatch(viewer, /预期用途/);
+  assert.match(renderStatic(chip.component), /aria-haspopup="dialog"/);
   // A conversation in a project that is not a study: the chip and the starters, nothing to write to.
   f.kit.hub.deliver('vcr', { ...VCR_OPTIONS, controls: false });
-  assert.doesNotMatch(renderStatic(chip.component), /起点/);
+  assert.doesNotMatch(renderStatic(chip.component), /aria-haspopup/);
   assert.match(renderStatic(hero.component), /估算样本量/);
   // Another conversation: the options go with the tool until the shell speaks.
   f.kit.hub.deliver('session', { sessionId: 'session-b' });
@@ -315,6 +369,6 @@ test('without the command or trigger services the rest still stands', () => {
   const f = frame({ commandUi: false, inputTriggers: false });
   assert.equal(f.commands.length, 0);
   assert.equal(f.sources.length, 0);
-  assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool'));
+  assert.ok(toolbarChip(f));
   assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset'));
 });

@@ -42,14 +42,14 @@ test('only a problem is said: while checking, after a failed check and when ever
   assert.equal(replyCheckSummary({ status: 'done', verdicts: [check.verdicts[0], check.verdicts[3]], cautions: [] }), null, 'supported and undecided sentences are no problem to report');
   assert.equal(replyCheckSummary({ status: 'done', verdicts: [], cautions: [] }), null);
   const model = /** @type {any} */ (replyCheckSummary(check));
-  assert.equal(model.text, '⚠ 2 处引用待核对 · 用药提示 1 条');
+  assert.equal(model.text, '复核：2 处引用可能不支持所述结论 · 用药提示 1 条');
   assert.deepEqual(model.items.map((/** @type {any} */ item) => item.sentence), ['华法林与布洛芬合用无妨 [2]。', '某药可用于儿童 [3]。']);
   assert.equal(model.items[0].reason, '来源不支持（用药说法与来源相反）：来源说增加出血');
   assert.equal(model.items[0].evidence, 'NSAIDs increased the risk of major bleeding', "the source's own words the verdict rests on");
   assert.equal(model.items[0].url, '', 'never a script link');
   assert.equal(model.items[1].url, 'https://example.org/label');
   // A pharmacist caution alone is still said.
-  assert.equal(/** @type {any} */ (replyCheckSummary({ status: 'done', verdicts: [], cautions: check.cautions })).text, '⚠ 用药提示 1 条');
+  assert.equal(/** @type {any} */ (replyCheckSummary({ status: 'done', verdicts: [], cautions: check.cautions })).text, '用药提示 1 条', 'a caution is not a re-check and does not borrow the word');
 });
 
 /** @param {any} [frameOptions] */
@@ -70,7 +70,8 @@ test('the answer with a problem gets one line after the kernel draws it; the mec
   const checked = renderStatic(f.ours.component, { node: { kind: 'assistant-step', data: { finalNode: { seq: 12 } } } });
   assert.match(checked, /^<div data-kernel-assistant="12">answer<\/div>/, 'the kernel draws the answer first, as it would without this body');
   assert.match(checked, /data-evimed-reply-check="warn"/);
-  assert.match(checked, /⚠ 2 处引用待核对 · 用药提示 1 条/);
+  assert.match(checked, /复核：2 处引用可能不支持所述结论 · 用药提示 1 条/);
+  assert.doesNotMatch(checked, /⚠/, 'the re-check row never wears the quote check\'s mark');
   assert.match(checked, /aria-expanded="false"/, 'the detail opens on demand');
   assert.doesNotMatch(checked, /依据核对|独立审查|逐句核对|✓/);
   for (const seq of [30, 31, 99]) {
@@ -79,6 +80,17 @@ test('the answer with a problem gets one line after the kernel draws it; the mec
   }
   assert.deepEqual(f.target.warnings, []);
   assert.equal(BODY.name, 'reply-checks');
+});
+
+test('a turn whose process is folded draws the answer node twice; the row follows the response only', () => {
+  const f = frame();
+  f.kit.hub.deliver('reply-check', { sessionId: 's1', checks: [check] });
+  const node = { kind: 'assistant-step', data: { finalNode: { seq: 12 } } };
+  for (const groupPart of [undefined, 'response']) {
+    assert.match(renderStatic(f.ours.component, { node, groupPart }), /data-evimed-reply-check="warn"/);
+  }
+  assert.equal(renderStatic(f.ours.component, { node, groupPart: 'reasoning' }), '<div data-kernel-assistant="12">answer</div>',
+    'inside the fold the kernel draws the reasoning part, and the row would otherwise appear there too');
 });
 
 test('outside a frame nothing is taken over', () => {

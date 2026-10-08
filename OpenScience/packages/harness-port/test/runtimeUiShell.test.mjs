@@ -123,6 +123,39 @@ test("operators can use native kernel statistics while ordinary reader chrome st
   assert.ok(!sheet.textContent.includes('[data-turn-tail] span:has(> button[aria-haspopup="dialog"]){display:none !important}'));
 });
 
+test('the context ring goes with the session statistics for a researcher, and an operator keeps both', () => {
+  const ring = '[class$="_dock"] > span:has(> button[aria-haspopup="dialog"][aria-label^="上下文已用"])';
+  const ringEnglish = '[class$="_dock"] > span:has(> button[aria-haspopup="dialog"][aria-label$="of context used"])';
+  const researcher = shellStylesheet(GEOMETRY_KERNEL_PIN);
+  const operator = shellStylesheet(GEOMETRY_KERNEL_PIN, true);
+  // The ring is the kernel's, outside any slot: found by its stable button
+  // (a dialog trigger) and the name the locale key `context.aria` gives it, in
+  // `zh` (which the product's pack falls back to) and in `en`. The wrapper goes,
+  // so the row keeps no gap.
+  assert.ok(researcher.includes(ring) && researcher.includes(ringEnglish));
+  assert.ok(researcher.includes(`${ring},${ringEnglish}{display:none !important}`));
+  assert.ok(!operator.includes('上下文已用') && !operator.includes('of context used'), 'an operator keeps the ring beside the statistics');
+  assert.ok(!operator.includes('[data-composer-stats]{display:none !important}'));
+  // Never the whole dock, which the kernel fills with other things, and never by a hashed class.
+  assert.doesNotMatch(researcher, /_dock"\]\{display:none/);
+  assert.doesNotMatch(researcher, /\.[A-Za-z0-9]{6}_[A-Za-z]/);
+});
+
+test('the composer keeps at least 16 px, or the device inset when that is larger, under its card', () => {
+  // E-17: the kernel's own `.root{padding:0 16px 4px}` is all there was (measured
+  // on 0.1.7-rc.2: 4 px under the lowest control), and the shell added none.
+  for (const css of [shellStylesheet(GEOMETRY_KERNEL_PIN), shellStylesheet(GEOMETRY_KERNEL_PIN, true)]) {
+    const rule = css.split('\n').find((line) => line.includes('padding-bottom:max(16px,env(safe-area-inset-bottom))'));
+    assert.ok(rule, 'one placement rule, in the shell stylesheet');
+    // The composer of a conversation: the root that holds the card and the dock row; never the hero composer, which is centred.
+    assert.ok(rule.startsWith('[class$="_root"]:not([class*="_hero"]):has(> [class$="_card"] ~ [class$="_dock"]){'));
+    assert.ok(rule.endsWith('!important}'));
+    // Suffix classes and stable attributes only: the kernel's hashes are not ours.
+    assert.doesNotMatch(rule, /\.[A-Za-z0-9]{6}_[A-Za-z]/);
+  }
+  assert.equal(shellStylesheet(GEOMETRY_KERNEL_PIN).split('\n').filter((line) => line.includes('safe-area-inset-bottom')).length, 1, 'stated once');
+});
+
 test('a slot the kernel refuses costs that slot, never the rest of the body', () => {
   const f = fixture();
   const register = f.ctx.slots.register;

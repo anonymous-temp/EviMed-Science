@@ -1,8 +1,14 @@
 /**
  * The reply check (L1) as a row under the answer it is about — and only when
- * the check found something: 「⚠ 2 处引用待核对」, opened into one entry per
- * flagged sentence with the reviewer's verdict, its one-line reason, the
- * source's own words and the source.
+ * the check found something: 「复核：2 处引用可能不支持所述结论」, opened into one
+ * entry per flagged sentence with the reviewer's verdict, its one-line reason,
+ * the source's own words and the source.
+ *
+ * The row says in words that it is a re-check and carries no ⚠ (E-14, design
+ * reference §8.2): in a conversation ⚠ means one thing only, the verbatim quote
+ * check the report's 「依据」 marks make — a deterministic result — and this row
+ * is a reviewer model's judgement of whether a quotation supports the sentence
+ * beside it. Two judgements of different standing must not share a mark.
  *
  * Until 2026-09-23 the row was there for every checked answer — 「依据核对
  * ✓ 3 · ⚠ 1」, 「依据核对中…」 while the reviewer worked, 「依据核对没有完成」
@@ -90,8 +96,9 @@ export function replyCheckSummary(check) {
     .map((/** @type {any} */ caution) => ({ title: String(caution?.title ?? ''), message: String(caution?.message ?? '') }))
     .filter((/** @type {{ title: string, message: string }} */ caution) => caution.title || caution.message);
   if (!items.length && !cautions.length) return null;
-  const parts = [items.length ? `${items.length} 处引用待核对` : null, cautions.length ? `用药提示 ${cautions.length} 条` : null].filter(Boolean);
-  return { text: `⚠ ${parts.join(' · ')}`, items, cautions };
+  // The re-check is named as one; a pharmacist caution is not a model's judgement and does not borrow the word.
+  const parts = [items.length ? `复核：${items.length} 处引用可能不支持所述结论` : null, cautions.length ? `用药提示 ${cautions.length} 条` : null].filter(Boolean);
+  return { text: parts.join(' · '), items, cautions };
 }
 
 /**
@@ -137,11 +144,13 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     let model = null;
     try { model = replyCheckSummary(replyCheckFor(state, props?.node)); } catch { model = null; }
     const own = Shadowed ? h(Shadowed, props) : null;
-    if (!model) return own;
+    // One answer node is drawn twice when the turn's process is folded — its
+    // reasoning inside the fold, then the response; the row follows the response.
+    if (!model || props?.groupPart === 'reasoning') return own;
     return h(react.Fragment, null, own, h(ReplyCheckRow, { model }));
   }
 
-  kit.guarded('reply check row', () => kit.occupy({ slot, key: 'assistant-step', priority: -1, locale: 'chat' }, AssistantStep));
+  kit.guarded('reply check row', () => kit.occupyOver({ slot, key: 'assistant-step', priority: -1, locale: 'chat' }, AssistantStep));
 }
 
 /** The body as the socket's build composes it. */

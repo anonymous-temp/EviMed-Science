@@ -36,6 +36,7 @@ import {
   CONTRACT_KIND_LABELS,
   EVIDENCE_SOURCE_TYPE_LABELS_ZH,
   EVIDENCE_SOURCE_TYPES,
+  GEO_DEFAULT_ENGINES,
   KNOWLEDGE_DIR,
   RUN_ACTIVITY_PHASE_LABELS_ZH,
   RUN_ACTIVITY_PHASES,
@@ -44,6 +45,7 @@ import {
   SOURCE_UPDATE_WEIGHT,
   STUDY_BADGE_KINDS,
   toolViewPhraseTable,
+  VCR_INTENDED_USES,
 } from '@evimed/domain';
 
 import { BODY as BRIDGE } from './runtimeUiBridge.mjs';
@@ -119,11 +121,20 @@ export const FRAME_VOCABULARY = Object.freeze({
   // 虚拟临床研究's capabilities, read the same way: a conversation bound to any of
   // the five carries 「虚拟临床研究」 on its chip, and none of them is offered by
   // `/工具` — the module is entered from its own sidebar row (build plan
-  // 2026-09-28 §9.3). Unlike GEO's, this entry carries no frame controls:
-  // a study's settings are cards on its own page, not chips on the composer.
+  // 2026-09-28 §9.3). The chip carries the study's two settings in its menu once
+  // the shell has found the study (`vcr`).
   vcr: Object.freeze({
     title: '虚拟临床研究',
     capabilities: Object.freeze(['vcr-protocol', 'vcr-evidence', 'vcr-analysis', 'vcr-matching', 'vcr-package']),
+  }),
+  // What a module's chip leaves unsaid: the settings it names only when they
+  // are not these (E-17). 循证 GEO measures 90 days on the default five engines
+  // until told otherwise (the server's own default, `geoService.createProject`);
+  // a 虚拟临床研究 study starts from 自动 and is for the first intended use,
+  // 探索. A test holds the shell's own copies of these to the same values.
+  chipDefaults: Object.freeze({
+    geo: Object.freeze({ coverageDays: 90, engines: GEO_DEFAULT_ENGINES }),
+    vcr: Object.freeze({ start: 'auto', intendedUse: VCR_INTENDED_USES[0] }),
   }),
   // What a tool call says in the conversation, by the name its row is keyed
   // on: 「检索说明书 · 玛仕度肽」 rather than `mcp__evimed__drug_label_search`

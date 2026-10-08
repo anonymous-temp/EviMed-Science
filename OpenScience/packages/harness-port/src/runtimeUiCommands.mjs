@@ -1,9 +1,9 @@
 /**
- * The research tools, offered where the typing happens: a chip under the
- * composer for the one you picked (on 科研工具, or with `/工具`), its example
- * questions beside it while the conversation is still blank, a `/工具` command
- * in the kernel's own slash menu, and `@` references to the researcher's
- * knowledge base.
+ * The research tools, offered where the typing happens: a chip in the
+ * composer's own toolbar for the one you picked (on 科研工具, or with `/工具`),
+ * its example questions under the headline while the conversation is still
+ * blank, a `/工具` command in the kernel's own slash menu, and `@` references to
+ * the researcher's knowledge base.
  *
  * The blank conversation is the kernel's own: a headline and one composer, as
  * in DeepSeek, ChatGPT, Claude and Gemini. It carried a grid of eight tool
@@ -17,6 +17,27 @@
  * from. So: a chip, the starters as small pills while there is nothing to
  * read yet, and the composer keeps the kernel's own width.
  *
+ * Where the chip sits (E-17, 2026-10-08). It stood in the row under the
+ * composer card, after the kernel's session statistics, with the two modules'
+ * options as native selects beside it; on 2026-10-08 the owner saw that row
+ * and said everything was 「堆到了最底下」 with 「一点没有底部的空白」: the
+ * kernel gives that row 4 px above the window's edge, and a select is as wide
+ * as its longest option. The chip is now in the toolbar inside the card
+ * (`conversation.input.left`, after the paperclip), as ChatGPT keeps a chosen
+ * tool, with its one-click 「×」; the two modules' options are the chip's own
+ * menu, which opens upward, and the chip names an option only when it is not
+ * at its default (「虚拟临床研究 · 队列」). Nothing of ours is under the card.
+ *
+ * The blank conversation. The toolbar's seats render when the composer has a
+ * session (`conversation.input.left` needs one), and a conversation the shell
+ * has created has its session from the first moment — measured on a booted
+ * 0.1.7-rc.2: the blank hero composer carries the paperclip and the chip in its
+ * toolbar, and a chip in the hero seat as well made two. So the chip is in the
+ * toolbar from the start, as it stays once the conversation has begun (it does
+ * not jump), and the hero seat carries it only for a composer with no toolbar —
+ * a frame that has no session yet — together with the starters, which are the
+ * hero's alone.
+ *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client:
  *
  *  - `ctx.commandUi.register({ name, description, available, ui })`
@@ -29,12 +50,17 @@
  *    whose name collides with a host command fails loud at candidate synthesis
  *    and takes the whole menu with it; host commands are ASCII identifiers, and
  *    this one's name is not.
- *  - `conversation.composer.dock` is a list seat directly under the composer
- *    card: one centred row, where the kernel keeps its session statistics
- *    (`stats`, order 0 — hidden by the shell stylesheet). The chip sits there,
- *    at the composer's own width by construction — the seat above the card
- *    (`conversation.input.dock`) spans the frame and put the chip at the left
- *    edge beside a centred composer.
+ *  - `conversation.input.left` is a list seat in the toolbar inside the card,
+ *    after the kernel's own `+` and our paperclip. Its container is a flex
+ *    item that may shrink (`min-width: 0`) in a row that WRAPS and measures
+ *    its children's natural widths (`observeControlRow`: it collapses the model
+ *    name to an icon when they do not fit on a line, and the row wraps only
+ *    when even that does not help). A chip as wide as its label would wrap the
+ *    toolbar at 390 px, so its width is held to what is left of the row: the
+ *    row is a size container (`container-type: inline-size`), and the chip's
+ *    `max-width` is a function of `100cqw`.
+ *  - `conversation.composer.dock`, directly under the card, is the kernel's
+ *    (session statistics, the context ring) and is not ours.
  *  - `ctx.inputTriggers.registerSource({ trigger: '@', … })` adds a group to
  *    the `@` menu. A pick inserts a reference chip; `codec.serialize` is what
  *    the model receives for it at send time. The page cannot read the
@@ -46,17 +72,17 @@
  * 「循证 GEO」 on its chip whether or not the catalogue lists the capability —
  * the module hides them from 科研工具 — and, once the shell has found the
  * GEO project this conversation belongs to (`geo`), carries two optional
- * controls beside the chip, 覆盖周期 and AI 引擎, which report a change back
+ * settings in the chip's menu, 覆盖周期 and AI 引擎, which report a change back
  * (`geo-options`) for the shell to write to the project; its starters are the
  * module's single steps, a short name on each pill and a whole sentence into
  * the composer, never sent. The composer bar itself has no seat on the blank
- * conversation (`conversation.input.left/right` render only with a session),
- * so the controls sit where the chip does: in the hero seat, and under the
- * composer once the conversation has started.
+ * conversation (`conversation.input.left` renders only with a session), so the
+ * chip and its menu sit in the hero seat there, and in the toolbar once the
+ * conversation has started.
  *
  * A 虚拟临床研究 conversation reads 「虚拟临床研究」 on its chip the same way and, once
  * the shell has found the study this conversation belongs to (`vcr`), carries
- * two optional controls beside the chip — 起点 (自动 / 队列 / 患者 / 对照 / 试验)
+ * two optional settings in the chip's menu — 起点 (自动 / 队列 / 患者 / 对照 / 试验)
  * and 预期用途 (默认「探索」) — which report a change back (`vcr-options`) for
  * the shell to write to the study, and six single-task starters: a short name
  * on each pill and a whole sentence into the composer, never sent. There is
@@ -192,6 +218,47 @@ export function knowledgeSerialization(ref, knowledgeDir) {
   const reference = knowledgeReference(ref);
   if (!reference) throw new Error('知识库引用无法识别');
   return `【知识库文献 ${reference.id}：「${reference.title}」，解析后的正文在工作区 ${knowledgeDir}/.evimed-derived/${reference.id}/ 下】`;
+}
+
+/**
+ * What a module's chip says beyond its name: nothing while every setting is at
+ * its default, the one setting that is not (「队列」, 「180 天」, 「3 个引擎」), and
+ * 「2 项设置」 when both are — so the chip stays short and a reader still sees
+ * that this conversation is not on the defaults.
+ *
+ * The defaults are the platform's (`FRAME_VOCABULARY.chipDefaults`, from the
+ * domain); a setting the reader may not change is never named, because it is
+ * not the reader's.
+ * @param {{ geo?: boolean, vcr?: boolean } | null} model
+ * @param {any} geoOptions the shell's `geo` message
+ * @param {any} vcrOptions the shell's `vcr` message
+ * @param {{ geo?: { coverageDays?: number, engines?: readonly string[] }, vcr?: { start?: string, intendedUse?: string } }} [defaults]
+ * @returns {string}
+ */
+export function chipSuffix(model, geoOptions, vcrOptions, defaults = {}) {
+  if (!model) return '';
+  /** @type {string[]} */
+  const changed = [];
+  /** @param {unknown} list @param {unknown} id */
+  const labelOf = (list, id) => {
+    const hit = (Array.isArray(list) ? list : []).find((/** @type {any} */ choice) => choice && choice.id === id);
+    return hit ? String(hit.label) : '';
+  };
+  if (model.vcr && vcrOptions && vcrOptions.controls) {
+    const base = defaults.vcr ?? {};
+    const mayStart = Array.isArray(vcrOptions.startOptions) && vcrOptions.startOptions.length > 0;
+    if (mayStart && base.start && vcrOptions.start && vcrOptions.start !== base.start) changed.push(labelOf(vcrOptions.startOptions, vcrOptions.start));
+    if (vcrOptions.canSetUse && base.intendedUse && vcrOptions.intendedUse && vcrOptions.intendedUse !== base.intendedUse) changed.push(labelOf(vcrOptions.useOptions, vcrOptions.intendedUse));
+  } else if (model.geo && geoOptions && geoOptions.controls) {
+    const base = defaults.geo ?? {};
+    if (base.coverageDays && Number.isInteger(geoOptions.coverageDays) && geoOptions.coverageDays !== base.coverageDays) changed.push(`${geoOptions.coverageDays} 天`);
+    const engines = Array.isArray(geoOptions.engines) ? geoOptions.engines : [];
+    const standard = Array.isArray(base.engines) ? base.engines : [];
+    if (standard.length && engines.length && (engines.length !== standard.length || engines.some((/** @type {string} */ engine) => !standard.includes(engine)))) changed.push(`${engines.length} 个引擎`);
+  }
+  const named = changed.filter(Boolean);
+  if (!named.length) return '';
+  return named.length === 1 ? named[0] : `${named.length} 项设置`;
 }
 
 /**
@@ -374,120 +441,221 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     // The chip: a 24 px capsule in the accent's soft fill — the page's one
     // accent (整改方案 §4) — with no outline.
     const chipStyle = {
-      display: 'inline-flex', alignItems: 'center', gap: '2px', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box',
+      display: 'inline-flex', alignItems: 'center', gap: '2px', minWidth: 0, boxSizing: 'border-box',
       height: '24px', padding: '0 4px 0 8px', borderRadius: '999px', fontSize: '12px', lineHeight: '24px',
       background: 'var(--dsw-alias-state-business-tertiary)', color: 'var(--dsw-alias-state-business-primary)',
     };
+    // In the toolbar the chip may take what the row has left and no more: the
+    // row (`.row`, a size container) holds the `+`, the paperclip, the model
+    // and the send button, which the kernel shrinks to icons when the line is
+    // short, so about 194 px of the row's width is not the chip's (measured on
+    // 0.1.7-rc.2 at 390 px: 70 for `+` and the paperclip, 8 and 12 of gaps, 96
+    // for the collapsed model and the send button, and 4 to spare). Past that
+    // the label gives way with an ellipsis instead of wrapping the toolbar.
+    const barChipBudget = 'max(56px, calc(100cqw - 194px))';
     // A starter: a 32 px capsule with the one hairline, in the secondary ink.
     const starterStyle = {
       ...textStyle, display: 'inline-flex', alignItems: 'center', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box',
       height: '32px', padding: '0 12px', borderRadius: '999px', cursor: 'pointer', fontFamily: 'inherit',
       border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent', color: 'var(--dsw-alias-label-secondary)',
     };
+    // The defaults the chip leaves unnamed (`FRAME_VOCABULARY`, from the domain).
+    const defaults = kit.vocabulary?.chipDefaults ?? {};
 
-    /**
-     * The chip under the composer: which tool this conversation runs, and the
-     * way out of it. In a session the hero is gone, so this is the only place
-     * that says it. Its name alone: what the tool does and how long it takes
-     * were said on 科研工具, where it was chosen. Under the composer card it
-     * keeps the 8 px the kernel's own dock row kept there.
-     * @param {{ docked?: boolean }} props
-     */
-    const ToolChip = ({ docked = false }) => {
-      const id = useTool();
-      const model = modelOf(id);
-      if (!model) return null;
-      return h('span', { 'data-evimed-tool-chip': model.id, style: docked ? { ...chipStyle, marginTop: '8px' } : chipStyle },
-        h('span', { style: { ...starterText, fontWeight: 500 } }, model.title),
-        h('button', {
-          type: 'button', 'aria-label': `移除「${model.title}」`, title: '移除',
-          style: { ...textButton, height: '20px', lineHeight: '20px', padding: '0 4px', borderRadius: '999px', fontSize: '14px' },
-          onClick: () => bind(null),
-        }, '×'));
-    };
-
-    // 循证 GEO's two options beside its chip: quiet 24 px text controls in the
-    // secondary ink, as the kernel's own composer controls are.
-    const optionStyle = {
-      ...textButton, display: 'inline-flex', alignItems: 'center', gap: '2px', height: '24px', lineHeight: '24px',
-      padding: '0 8px', borderRadius: '999px', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)',
-    };
-    const popoverStyle = {
-      position: 'absolute', top: '28px', left: 0, zIndex: 20, minWidth: '144px', boxSizing: 'border-box',
-      display: 'flex', flexDirection: 'column', gap: '2px', padding: '6px', borderRadius: '12px',
+    // The chip's menu: a small popover that opens upward, in the kernel's own
+    // menu surface. Each setting is a labelled group of choices — a radio group
+    // of pills, or (the engines) a list of checkboxes — so nothing is as wide
+    // as its longest option.
+    const menuStyle = {
+      position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 40, boxSizing: 'border-box',
+      width: 'max-content', minWidth: '224px', maxWidth: 'min(320px, calc(100vw - 16px))',
+      display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px', borderRadius: '12px',
       border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-specific-menu, var(--dsw-alias-bg-layer-3))',
-      color: 'var(--dsw-alias-label-primary)', fontSize: '12px', lineHeight: '24px', textAlign: 'left',
+      color: 'var(--dsw-alias-label-primary)', fontSize: '12px', lineHeight: '20px', textAlign: 'left',
+      boxShadow: 'var(--dsw-elevation-panel, 0 4px 16px rgba(0,0,0,.12))',
     };
+    const groupLabelStyle = { color: 'var(--dsw-alias-label-secondary)', fontSize: '12px', lineHeight: '20px', marginBottom: '4px' };
+    const choiceStyle = {
+      ...textButton, display: 'inline-flex', alignItems: 'center', height: '24px', lineHeight: '24px', padding: '0 10px',
+      borderRadius: '999px', fontSize: '12px', color: 'var(--dsw-alias-label-primary)',
+      background: 'var(--dsw-alias-interactive-bg-hover)',
+    };
+    const chosenStyle = { background: 'var(--dsw-alias-state-business-tertiary)', color: 'var(--dsw-alias-state-business-primary)', fontWeight: 600 };
 
     /**
-     * 覆盖周期 and AI 引擎, for a 循证 GEO conversation whose project the shell
-     * has found. Both optional: a project that is never touched here measures
-     * 90 days on the default five engines. The engine list is a native
-     * disclosure — a keyboard opens it like any other — and one engine always
-     * stays chosen.
+     * One setting: its name, and its choices as a radio group. The chosen one
+     * is the group's value, so a reader sees the setting, not only its change.
+     * @param {{ name: string, choices: { id: string, label: string }[], value: string | null, onPick: (id: string) => void }} props
      */
-    const GeoControls = () => {
-      const id = useTool();
+    const ChoiceGroup = ({ name, choices, value, onPick }) => h('div', { role: 'radiogroup', 'aria-label': name },
+      h('div', { style: groupLabelStyle, 'aria-hidden': 'true' }, name),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '4px' } }, choices.map((choice) => {
+        const chosen = choice.id === value;
+        return h('button', {
+          key: choice.id, type: 'button', role: 'radio', 'aria-checked': chosen, onClick: () => { if (!chosen) onPick(choice.id); },
+          style: chosen ? { ...choiceStyle, ...chosenStyle } : choiceStyle,
+        }, choice.label);
+      })));
+
+    /** 循证 GEO's two settings: 覆盖周期, and which AI 引擎 to measure (one always stays on). */
+    const GeoMenu = () => {
       const options = useGeoOptions();
-      const model = modelOf(id);
-      if (!model || !model.geo || !options || !options.controls) return null;
+      if (!options || !options.controls) return null;
       const engines = Array.isArray(options.engines) ? options.engines : [];
+      const offered = Array.isArray(options.offered) ? options.offered : [];
       /** @param {string} engine */
       const toggle = (engine) => {
         const next = engines.includes(engine) ? engines.filter((/** @type {string} */ item) => item !== engine) : [...engines, engine];
-        const order = options.offered.map((/** @type {any} */ item) => item.id);
+        const order = offered.map((/** @type {any} */ item) => item.id);
         if (next.length) changeGeo({ engines: order.filter((/** @type {string} */ item) => next.includes(item)) });
       };
-      return h('span', { 'data-evimed-geo-options': '', style: { display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0 } },
-        h('select', {
-          'aria-label': '覆盖周期', value: String(options.coverageDays ?? ''), style: { ...optionStyle, appearance: 'auto' },
-          onChange: (/** @type {any} */ event) => changeGeo({ coverageDays: Number(event.target.value) }),
-        }, options.coverageOptions.map((/** @type {number} */ days) => h('option', { key: days, value: String(days) }, `覆盖 ${days} 天`))),
-        h('details', { 'data-evimed-geo-engines': '', style: { position: 'relative' } },
-          h('summary', { style: { ...optionStyle, listStyle: 'none' } }, `${engines.length} 个 AI 引擎`, h('span', { 'aria-hidden': 'true' }, ' ▾')),
-          h('div', { role: 'group', 'aria-label': 'AI 引擎', style: popoverStyle },
-            options.offered.map((/** @type {{ id: string, name: string }} */ engine) => {
-              const checked = engines.includes(engine.id);
-              return h('label', { key: engine.id, style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '0 6px', borderRadius: '8px', cursor: 'pointer' } },
-                h('input', { type: 'checkbox', checked, disabled: checked && engines.length === 1, onChange: () => toggle(engine.id) }),
-                engine.name);
-            }))));
+      return h(React.Fragment, null,
+        h(ChoiceGroup, {
+          name: '覆盖周期', value: String(options.coverageDays ?? ''),
+          choices: (Array.isArray(options.coverageOptions) ? options.coverageOptions : []).map((/** @type {number} */ days) => ({ id: String(days), label: `${days} 天` })),
+          onPick: (/** @type {string} */ id) => changeGeo({ coverageDays: Number(id) }),
+        }),
+        h('div', { role: 'group', 'aria-label': 'AI 引擎' },
+          h('div', { style: groupLabelStyle, 'aria-hidden': 'true' }, 'AI 引擎'),
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px' } }, offered.map((/** @type {{ id: string, name: string }} */ engine) => {
+            const checked = engines.includes(engine.id);
+            return h('label', { key: engine.id, style: { display: 'flex', alignItems: 'center', gap: '8px', minHeight: '24px', cursor: 'pointer' } },
+              h('input', { type: 'checkbox', checked, disabled: checked && engines.length === 1, onChange: () => toggle(engine.id) }),
+              engine.name);
+          }))));
     };
 
     /**
-     * 起点 and 预期用途, for a 虚拟临床研究 conversation whose study the shell has
-     * found. Both optional: a study that is never touched here starts from
-     * 自动 and is for 探索. Each is a native select, worded as the pill reads
-     * (「起点：自动」), so the chosen value is what the control shows. 预期用途
-     * is the lead's to change (`canSetUse`), so a reader who is not the lead
-     * is not offered a control the server would refuse.
+     * 虚拟临床研究's two settings: 起点, and 预期用途. Each is offered only to a
+     * reader who may change it (`startOptions` is empty for one who may not
+     * write; 预期用途 is the lead's, `canSetUse`), so the menu never offers a
+     * control the server would refuse.
      */
-    const VcrControls = () => {
-      const id = useTool();
+    const VcrMenu = () => {
       const options = useVcrOptions();
-      const model = modelOf(id);
-      if (!model || !model.vcr || !options || !options.controls) return null;
+      if (!options || !options.controls) return null;
       const startOptions = Array.isArray(options.startOptions) ? options.startOptions : [];
       const useOptions = Array.isArray(options.useOptions) ? options.useOptions : [];
-      return h('span', { 'data-evimed-vcr-options': '', style: { display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0 } },
-        startOptions.length ? h('select', {
-          'aria-label': '起点', value: String(options.start ?? ''), style: { ...optionStyle, appearance: 'auto' },
-          onChange: (/** @type {any} */ event) => changeVcr({ start: String(event.target.value) }),
-        }, startOptions.map((/** @type {{ id: string, label: string }} */ choice) => h('option', { key: choice.id, value: choice.id }, `起点：${choice.label}`))) : null,
-        options.canSetUse && useOptions.length ? h('select', {
-          'aria-label': '预期用途', value: String(options.intendedUse ?? ''), style: { ...optionStyle, appearance: 'auto' },
-          onChange: (/** @type {any} */ event) => changeVcr({ intendedUse: String(event.target.value) }),
-        }, useOptions.map((/** @type {{ id: string, label: string }} */ choice) => h('option', { key: choice.id, value: choice.id }, `预期用途：${choice.label}`))) : null);
+      return h(React.Fragment, null,
+        startOptions.length ? h(ChoiceGroup, { name: '起点', choices: startOptions, value: options.start ?? null, onPick: (/** @type {string} */ id) => changeVcr({ start: id }) }) : null,
+        options.canSetUse && useOptions.length ? h(ChoiceGroup, { name: '预期用途', choices: useOptions, value: options.intendedUse ?? null, onPick: (/** @type {string} */ id) => changeVcr({ intendedUse: id }) }) : null);
     };
 
-    /** The chip, and beside it a module conversation's own options. */
-    const DockedChip = () => {
-      const model = modelOf(useTool());
-      if (!model || (!model.geo && !model.vcr)) return h(ToolChip, { docked: true });
-      return h('span', { style: { display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', minWidth: 0, maxWidth: '100%', marginTop: '8px' } },
-        h(ToolChip), h(GeoControls), h(VcrControls));
+    /**
+     * The chip: which tool this conversation runs, the way out of it, and for
+     * the two modules the menu of its settings. In a session the hero is gone,
+     * so this is the only place that says it. The name alone: what the tool
+     * does and how long it takes were said on 科研工具, where it was chosen.
+     *
+     * `placement` is where it is drawn: `bar` (the toolbar inside the composer
+     * card, width held to what the row has left) or `hero` (the blank
+     * conversation's seat). The 「×」 is its own button — one click removes the
+     * tool — and the menu is the label's: a second button, so a click on the
+     * name never removes anything.
+     * @param {{ placement?: 'bar' | 'hero' }} props
+     */
+    const ToolChip = ({ placement = 'bar' }) => {
+      const id = useTool();
+      const geoState = useGeoOptions();
+      const vcrState = useVcrOptions();
+      const model = modelOf(id);
+      const [open, setOpen] = React.useState(false);
+      const wrap = React.useRef(null);
+      const trigger = React.useRef(null);
+      const menuRef = React.useRef(null);
+      const menuId = React.useId();
+      // The menu is anchored to the chip, which sits to the right of `+` and the
+      // paperclip; on a narrow screen that would put its right edge past the
+      // window's. It is slid back inside the window once it is measured.
+      const [slide, setSlide] = React.useState(0);
+      const settings = model && model.geo ? geoState : model && model.vcr ? vcrState : null;
+      const hasMenu = Boolean(model && settings && settings.controls
+        && (model.geo || (Array.isArray(settings.startOptions) && settings.startOptions.length) || (settings.canSetUse && Array.isArray(settings.useOptions) && settings.useOptions.length)));
+      const menuOpen = open && hasMenu;
+      const suffix = model ? chipSuffix(model, geoState, vcrState, defaults) : '';
+      const label = model ? (suffix ? `${model.title} · ${suffix}` : model.title) : '';
+      React.useLayoutEffect(() => {
+        const menu = menuRef.current;
+        if (!menuOpen || !menu || typeof menu.getBoundingClientRect !== 'function') { setSlide(0); return; }
+        const width = Number(target.innerWidth) || 0;
+        if (!width) return;
+        // Measured with no slide applied (the style below is only ever the last one set).
+        const rect = menu.getBoundingClientRect();
+        const margin = 8;
+        let by = 0;
+        if (rect.right - slide > width - margin) by = (width - margin) - (rect.right - slide);
+        if (rect.left - slide + by < margin) by = margin - (rect.left - slide);
+        setSlide(Math.round(by));
+      }, [menuOpen, label]);
+      React.useEffect(() => {
+        if (!menuOpen) return undefined;
+        const doc = target.document;
+        if (!doc || typeof doc.addEventListener !== 'function') return undefined;
+        /** @param {any} event */
+        const outside = (event) => { if (wrap.current && !wrap.current.contains(event.target)) setOpen(false); };
+        /** @param {any} event */
+        const escape = (event) => {
+          if (event.key !== 'Escape') return;
+          event.stopPropagation();
+          setOpen(false);
+          if (trigger.current && typeof trigger.current.focus === 'function') trigger.current.focus();
+        };
+        doc.addEventListener('pointerdown', outside, true);
+        doc.addEventListener('keydown', escape, true);
+        return () => { doc.removeEventListener('pointerdown', outside, true); doc.removeEventListener('keydown', escape, true); };
+      }, [menuOpen]);
+      if (!model) return null;
+      // The name gives way first on a short line: the suffix is what says the
+      // conversation is not on the defaults, and it is short.
+      const labelNode = h('span', { style: { display: 'inline-flex', minWidth: 0, fontWeight: 500 } },
+        h('span', { style: starterText }, model.title),
+        suffix ? h('span', { style: { flex: 'none', whiteSpace: 'nowrap' } }, ` · ${suffix}`) : null);
+      return h('span', {
+        ref: wrap, 'data-evimed-tool-chip': model.id, 'data-evimed-chip-placement': placement,
+        style: { ...chipStyle, position: 'relative', flex: '0 1 auto', maxWidth: placement === 'bar' ? barChipBudget : '100%' },
+      },
+      hasMenu
+        ? h('button', {
+          ref: trigger, type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': menuOpen, 'aria-controls': menuOpen ? menuId : undefined,
+          'aria-label': `${label}，设置`,
+          style: { ...textButton, display: 'inline-flex', alignItems: 'center', gap: '2px', flex: '0 1 auto', minWidth: 0, height: '24px', lineHeight: '24px', padding: 0, color: 'inherit', fontSize: '12px' },
+          onClick: () => setOpen(!menuOpen),
+        }, labelNode,
+        h('svg', { width: 12, height: 12, viewBox: '0 0 12 12', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true',
+          style: { flex: 'none', transform: menuOpen ? 'rotate(180deg)' : 'none' } }, h('path', { d: 'M3 4.5 6 7.5 9 4.5' })))
+        : labelNode,
+      h('button', {
+        type: 'button', 'aria-label': `移除“${model.title}”`,
+        style: { ...textButton, flex: 'none', height: '20px', lineHeight: '20px', padding: '0 4px', borderRadius: '999px', fontSize: '14px' },
+        onClick: () => bind(null),
+      }, '×'),
+      menuOpen ? h('div', { ref: menuRef, id: menuId, role: 'dialog', 'aria-label': `${model.title}设置`, 'data-evimed-chip-menu': model.id, style: { ...menuStyle, left: `${slide}px` } },
+        model.geo ? h(GeoMenu) : h(VcrMenu)) : null);
     };
-    kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool', order: 10 }, DockedChip));
+
+    // Whether a composer toolbar is on the page to carry the chip: the hero seat
+    // draws the chip only when there is none, so a blank conversation that has a
+    // session (and so a toolbar) shows it once. A count, because the kernel may
+    // keep more than one composer mounted.
+    const toolbars = { count: 0 };
+    /** @type {Set<() => void>} */
+    const toolbarListeners = new Set();
+    const useToolbar = () => React.useSyncExternalStore(
+      (/** @type {() => void} */ listener) => { toolbarListeners.add(listener); return () => { toolbarListeners.delete(listener); }; },
+      () => toolbars.count > 0, () => false,
+    );
+    /** @param {number} by */
+    const toolbarSeats = (by) => {
+      toolbars.count += by;
+      for (const listener of [...toolbarListeners]) { try { listener(); } catch { /* a listener must not stop the others */ } }
+    };
+
+    // The toolbar seat: after the kernel's `+` and the paperclip.
+    const BarChip = () => {
+      React.useLayoutEffect(() => { toolbarSeats(1); return () => { toolbarSeats(-1); }; }, []);
+      return h(ToolChip, { placement: 'bar' });
+    };
+    kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.input.left', id: 'evimed-tool', order: 10 }, BarChip));
 
     /**
      * The tool's example questions, as pills the reader can start from. Drawn
@@ -524,22 +692,25 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     };
 
     /**
-     * The chip and the starters on the blank conversation. The composer dock
-     * renders only inside a session (`variant === "composer" && sessionId`),
-     * so on the hero — where a tool chosen on 科研工具 lands — the seat under
-     * the headline carries the chip instead, with the starters beside it,
-     * held to the composer's width and centred, so nothing there can stretch
-     * the composer again. The hero seat renders only while the conversation
-     * is blank, so the chip never shows twice.
+     * The starters on the blank conversation, and the chip when the composer
+     * has no toolbar to carry it. The toolbar seats render only inside a
+     * session (`input !== undefined && sessionId !== undefined`); with one —
+     * which is what a conversation the shell created has, blank or not — the
+     * chip is in the toolbar and this seat holds the starters alone. Without
+     * one, a tool chosen on 科研工具 lands here, the chip with its menu (which
+     * opens upward over the headline) and the starters beside it, held to the
+     * composer's width and centred, so nothing there can stretch the composer
+     * again. The hero seat renders only while the conversation is blank.
      */
     const HeroTools = () => {
       const id = useTool();
+      const hasToolbar = useToolbar();
       const model = modelOf(id);
       if (!model) return null;
       return h('div', {
         'data-evimed-hero-tools': model.id,
         style: { width: '100%', maxWidth: 'var(--dsh-composer-card-max-width, 952px)', margin: '8px auto 0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 },
-      }, h(ToolChip), h(GeoControls), h(VcrControls), h(Starters));
+      }, hasToolbar ? null : h(ToolChip, { placement: 'hero' }), h(Starters));
     };
     kit.guarded('hero tools', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, HeroTools));
   }
@@ -582,5 +753,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'commands',
   inject,
-  parts: Object.freeze([frameStyles, mainViewSession, capabilityOptions, toolPageModel, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
+  parts: Object.freeze([frameStyles, mainViewSession, capabilityOptions, toolPageModel, chipSuffix, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
 });
