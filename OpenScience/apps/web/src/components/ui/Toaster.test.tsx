@@ -12,6 +12,12 @@ describe("Toaster", () => {
     vi.useRealTimers();
   });
 
+  it("sits at least 1.5 rem above the window's bottom, and above the device's safe area where it reports one", () => {
+    toast.success("saved");
+    const { container } = render(<Toaster />);
+    expect(container.firstElementChild).toHaveClass("bottom-[max(1.5rem,env(safe-area-inset-bottom))]");
+  });
+
   it("announces success politely and errors assertively", () => {
     toast.success("saved");
     toast.error("broken");

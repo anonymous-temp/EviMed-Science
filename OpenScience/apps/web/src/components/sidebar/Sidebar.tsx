@@ -216,7 +216,7 @@ export function Sidebar() {
           * plan §5.2). The count of data sources without a credential used to
           * sit here — a standing fact about the deployment, not the reader's
           * work; 设置 → 数据源 lists what needs setting. */}
-        <div className="flex items-center gap-2 px-4 py-3">
+        <div className="flex items-center gap-2 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <span
             aria-hidden="true"
             className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-caption font-medium text-accent-fg"

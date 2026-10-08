@@ -19,7 +19,7 @@ export function Toaster() {
   const { toasts, dismiss, pause, resume } = useToastStore();
   if (toasts.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-toast flex flex-col items-center gap-2">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-toast flex flex-col items-center gap-2">
       {toasts.map((t) => (
         <ToastCard
           key={t.id}
