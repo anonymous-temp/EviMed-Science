@@ -354,7 +354,7 @@ async function bailianSearch(config, request, fetcher, signal, onDispatch = () =
  * A reservation the caps refuse leaves Bailian out of this search — the other
  * engines still answer.
  *
- * @param {{ config: any, request: any, fetcher: typeof fetch, signal: AbortSignal, usageLedger: any, caller: any, attributeRun: any, runPurpose: any }} options
+ * @param {{ config: any, request: any, fetcher: typeof fetch, signal: AbortSignal, usageLedger: any, caller: any, attributeRun: any, runPurpose: any, runScope?: any }} options
  * @returns {Promise<any[]>}
  */
 async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun, runPurpose, runScope = null }) {
@@ -429,7 +429,7 @@ async function meteredBailianSearch({ config, request, fetcher, signal, usageLed
 
 /**
  * @param {any} config @param {any} runtimeManager
- * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, evaluationIsolation?: any, runPurpose?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null }} [options]
+ * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, evaluationIsolation?: any, runPurpose?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null, runScope?: ((request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>) | null }} [options]
  *   `usageLedger` / `attributeRun`: what the Bailian call is booked in and
  *   which run it is charged to, as for the model gateway
  */
