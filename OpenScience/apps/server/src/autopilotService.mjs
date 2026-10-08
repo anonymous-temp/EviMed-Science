@@ -1035,14 +1035,13 @@ export class AutopilotService {
    * Cancel one execution of a task, and nothing else: the task keeps its schedule (this is not a pause).
    *
    * Three states, three meanings:
-   *  - waiting (`queued`, or `failed` before it ever had a run — the queue may still retry it): its job is canceled and the
-   *    episode is `canceled`. A worker that already claimed the job meets the canceled episode at its dispatch guard, or, if it
+   *  - waiting (`queued`): its job is canceled and the episode is `canceled`. A worker that already claimed the job meets the canceled episode at its dispatch guard, or, if it
    *    is past the guard, at `markEpisodeDispatched`'s refusal, which cancels the run it just started (`queueDispatchedCancellation`);
    *  - `running`: the run is stopped the way the run's own cancel stops it (`stopRun`, the control plane's
    *    `stopRunForUser`), which ends the run as canceled by the researcher; the run's completion then folds into the episode
    *    (`completeRun` → `finishCompletion`) and the episode ends `canceled`, with the same bookkeeping as any ended execution.
    *    The episode is not written here: a stop that races a finishing run must leave whichever outcome the run really had;
-   *  - ended (`merged`, `canceled`, `verifying`, or `failed` with a run): returned unchanged. Asking twice is asking once.
+   *  - ended (`merged`, `canceled`, `verifying`, `failed`): returned unchanged. Asking twice is asking once.
    *
    * @param {string} userId @param {string} agendaId @param {string} episodeId
    * @param {{ stopRun?: ((input: { runId: string, sessionId: string | null }) => Promise<unknown>) | null }} [options]
@@ -1056,9 +1055,9 @@ export class AutopilotService {
       }
       return episode;
     };
-    const hasRun = (/** @type {any} */ item) => Boolean(item.payload.runId || item.payload.completion || item.payload.digestId);
-    const ended = (/** @type {any} */ item) => ["merged", "canceled", "verifying"].includes(item.payload.status)
-      || (item.payload.status === "failed" && hasRun(item));
+    // `failed` is over as far as the page is concerned: it says what went wrong and offers no stop. (The queue may still retry a dispatch
+    // that failed for a transient reason; then the episode is going again and the next cancel stops it.)
+    const ended = (/** @type {any} */ item) => ["merged", "canceled", "verifying", "failed"].includes(item.payload.status);
     // Waiting. Its queue job first, so nothing claims it after the episode is marked; then the episode. A worker that dispatches
     // it in between turns it into a running one, which the next pass stops.
     let queueCleared = false;

@@ -196,6 +196,12 @@ test("a waiting execution is canceled on its own: its job is canceled, the task 
 
   const again = await service.cancelEpisode(owner, agenda.id, episode.id);
   assert.equal(again.revision, canceled.revision, "asking twice is asking once");
+  // A failed execution is over: it keeps what went wrong.
+  const failed = await service.runNow(owner, agenda.id, { requestId: requestId() });
+  await service.markEpisodeFailed(owner, failed.episode.id, { code: "runtime_prompt_rejected" });
+  const stillFailed = await service.cancelEpisode(owner, agenda.id, failed.episode.id);
+  assert.equal(stillFailed.payload.status, "failed");
+  assert.equal(stillFailed.payload.error.code, "runtime_prompt_rejected");
   await assert.rejects(() => service.cancelEpisode(owner, agenda.id, "episode-unknown"), { status: 404, code: "autopilot_episode_not_found" });
   const other = await startedAgenda(service, { title: "另一个任务" });
   await assert.rejects(() => service.cancelEpisode(owner, other.id, episode.id), { status: 404, code: "autopilot_episode_not_found" },
@@ -237,7 +243,7 @@ test("a going execution is stopped through the run's own stop and folds as cance
   assert.equal(stopped.length, 1);
 });
 
-test("an execution whose agenda is stopped while it is being canceled still ends canceled, and its re-checks end with it", options, async () => {
+test("an execution whose task is paused while it is being canceled still ends canceled, with nothing left half-folded", options, async () => {
   const service = new AutopilotService({ documents, jobs, usage, planner, now: () => now });
   const agenda = await startedAgenda(service, { title: "被停止的任务" });
   const { episode } = await service.runNow(owner, agenda.id, { requestId: requestId() });
