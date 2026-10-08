@@ -183,41 +183,55 @@ export function claimVerificationSummary(verification: ClaimVerification | null 
 }
 
 /**
- * Whether a report's claim checks have been read: still being read, read, or
- * not readable (the read failed, or the report was never checked). The matrix
- * must tell the three apart — a column reading 「未核对」 while the checks are
- * still on their way is a claim about the report that nobody has made.
+ * Whether a report's claim checks have been read: still being read (`loading`),
+ * read (`ready`), could not be read (`failed` — the read itself failed and can
+ * be asked again), or there are none (`unavailable` — this report was never
+ * checked). The matrix must tell them apart: a column that says something
+ * while the checks are still on their way is a claim about the report that
+ * nobody has made.
  */
-export type ClaimCheckState = "loading" | "ready" | "unavailable";
+export type ClaimCheckState = "loading" | "ready" | "unavailable" | "failed";
 
-export type ClaimCheckKind = "verified" | "attention" | "derived" | "checking" | "unavailable" | "unchecked";
+export type ClaimCheckKind = "verified" | "attention" | "derived" | "checking" | "unavailable" | "failed" | "unchecked";
 
-/** A claim's overall check as one short mark: a word and a symbol, never a colour alone. */
+/**
+ * A claim's overall check as one short mark: a word and a symbol, never a
+ * colour alone — or nothing at all. `text` is empty where there is no check
+ * to report (a derived claim, a claim the read checks do not name, checks that
+ * were never made or could not be read): a column that says 「未核对」 or
+ * 「暂无核对结果」 in every row tells the reader less than a blank one, and the
+ * reason is said once, where the whole read failed (v2.1 §29.2: a sentence
+ * with no check record carries no mark).
+ */
 export interface ClaimCheckMark {
   kind: ClaimCheckKind;
   text: string;
   tone: "ok" | "warn" | "muted";
 }
 
+/**
+ * The words of the marks. The ✓ and ⚠ are the ones the source cards and the
+ * 依据 popover say (`SourceCards.STATUS_MARK`, held equal by a test), so a
+ * quotation reads the same in the matrix, in the popover and on the card.
+ */
 const CHECK_MARKS: Record<string, ClaimCheckMark> = {
-  verified: { kind: "verified", text: "✓ 已核对", tone: "ok" },
-  quote_not_found: { kind: "attention", text: "⚠ 原文中未找到", tone: "warn" },
-  source_unavailable: { kind: "attention", text: "⚠ 原文未保存", tone: "warn" },
-  no_quote: { kind: "attention", text: "⚠ 无引文", tone: "warn" },
-  derived: { kind: "derived", text: "推导，无引文", tone: "muted" },
+  verified: { kind: "verified", text: "✓ 引文已核对", tone: "ok" },
+  quote_not_found: { kind: "attention", text: "⚠ 引文未在原文中找到", tone: "warn" },
+  source_unavailable: { kind: "attention", text: "⚠ 原文未保存，无法核对", tone: "warn" },
+  no_quote: { kind: "attention", text: "⚠ 没有可核对的引文", tone: "warn" },
+  derived: { kind: "derived", text: "", tone: "muted" },
 };
 
-/** What one source's own check found, in the same words as a claim's. */
+/** What one source's own check found, in the same words as a claim's; nothing where it has no check. */
 export function sourceCheckMark(status: string | undefined): ClaimCheckMark {
-  return (status ? CHECK_MARKS[status] : undefined) ?? { kind: "unchecked", text: "未核对", tone: "muted" };
+  return (status ? CHECK_MARKS[status] : undefined) ?? { kind: "unchecked", text: "", tone: "muted" };
 }
 
 /**
- * The mark a claim wears in the matrix. A check the control plane made always
- * speaks for itself; without one the mark says why: 「核对中」 while the checks
- * are being read, 「暂无核对结果」 when they could not be, and 「未核对」 only
- * when they were read and this claim is not among them. A derived claim has no
- * quotation to check, which is true whatever the state.
+ * The mark a claim wears in the matrix: ✓, ⚠ or nothing. A check the control
+ * plane made always speaks for itself; without one the mark is blank — except
+ * 「核对中」 while the checks are being read, which is the one thing a reader is
+ * waiting on. A derived claim has no quotation to check, whatever the state.
  */
 export function claimCheckMark(
   claim: Pick<ClaimEvidence, "claimType">,
@@ -227,8 +241,9 @@ export function claimCheckMark(
   if (check) return sourceCheckMark(String(check.status));
   if (claim.claimType === "derived") return CHECK_MARKS.derived;
   if (state === "loading") return { kind: "checking", text: "核对中", tone: "muted" };
-  if (state === "unavailable") return { kind: "unavailable", text: "暂无核对结果", tone: "muted" };
-  return { kind: "unchecked", text: "未核对", tone: "muted" };
+  if (state === "failed") return { kind: "failed", text: "", tone: "muted" };
+  if (state === "unavailable") return { kind: "unavailable", text: "", tone: "muted" };
+  return { kind: "unchecked", text: "", tone: "muted" };
 }
 
 /** Whether a claim is one to look at again: not found, not preserved, unquoted, or never checked. */

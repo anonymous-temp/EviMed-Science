@@ -66,7 +66,7 @@ export interface SourceCardEntry {
   resultVersionId?: string;
 }
 
-const STATUS_MARK: Record<string, { mark: string; label: string; className: string }> = {
+export const STATUS_MARK: Record<string, { mark: string; label: string; className: string }> = {
   verified: { mark: "✓", label: "引文已核对", className: "text-verify-ok" },
   quote_not_found: { mark: "⚠", label: "引文未在原文中找到", className: "text-verify-pending" },
   source_unavailable: { mark: "⚠", label: "原文未保存，无法核对", className: "text-verify-pending" },

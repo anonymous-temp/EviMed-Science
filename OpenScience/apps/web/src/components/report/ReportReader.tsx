@@ -85,7 +85,7 @@ export function ReportReader({
   /** Historical bytes may only read evidence captured for the same version. */
   immutableVersion?: ResultVersion;
 }) {
-  const { document: matrix, verification, verified, verificationState } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
+  const { document: matrix, verification, verified, verificationState, retry: retryChecks } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
   const [view, setView] = useState<"report" | "matrix">("report");
   const [toc, setToc] = useState<TocEntry[]>([]);
   const [active, setActive] = useState<string | null>(null);
@@ -292,6 +292,7 @@ export function ReportReader({
         claims={matrix.claims}
         verified={verified}
         verificationState={verificationState}
+        onRetry={immutableVersion ? undefined : retryChecks}
         runId={reading.runId}
         ground={layout === "pane" ? "surface-2" : "bg"}
         className="max-sm:rounded-none max-sm:border-x-0"

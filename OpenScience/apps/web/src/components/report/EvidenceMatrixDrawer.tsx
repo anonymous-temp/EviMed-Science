@@ -33,7 +33,8 @@ function checkExplanation(claim: ClaimEvidence, check: VerifiedClaim | undefined
   if (check) return claimGuidance(claim, check) ?? CLAIM_STATUS_TEXT[String(check.status)]?.label ?? "这条结论还没有核对结果。";
   if (mark.kind === "derived") return CLAIM_STATUS_TEXT.derived.label;
   if (mark.kind === "checking") return "正在读取这条结论的核对结果。";
-  if (mark.kind === "unavailable") return "这份报告的核对结果暂时读取不到，引文仍可逐条对照来源。";
+  if (mark.kind === "failed") return "这份报告的核对结果暂时读取不到，引文仍可逐条对照来源。";
+  if (mark.kind === "unavailable") return "这份报告还没有核对结果，引文仍可逐条对照来源。";
   return "这条结论没有出现在核对结果里。";
 }
 
@@ -73,7 +74,7 @@ export function EvidenceMatrixDrawer({
     // The check is under the id, where it is seen before anything is scrolled: three quotations are a long panel.
     <Drawer
       title={claim.claimId}
-      description={<span className={MARK_TONE_CLASS[mark.tone]}>{mark.text}</span>}
+      description={mark.text ? <span className={MARK_TONE_CLASS[mark.tone]}>{mark.text}</span> : undefined}
       onClose={onClose}
       widthClassName="max-w-2xl"
     >
@@ -143,7 +144,7 @@ function SourceBlock({ source, index, sourceCount, check, runId }: {
       ) : (
         <p className="text-caption text-text-3">没有给出引文</p>
       )}
-      {sourceCount > 1 && own && <p className={cn("text-caption", MARK_TONE_CLASS[own.tone])}>{own.text}</p>}
+      {sourceCount > 1 && own?.text && <p className={cn("text-caption", MARK_TONE_CLASS[own.tone])}>{own.text}</p>}
       {place && <p className="text-caption text-text-3" data-source-location>位置：{place}</p>}
       {source.supportQuote && runId && source.artifactPath ? (
         <Link

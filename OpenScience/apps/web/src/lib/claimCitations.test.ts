@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { STATUS_MARK } from "@/components/report/SourceCards";
 import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
 import {
   CLAIM_STATUS_TEXT, claimCheckMark, claimGuidance, claimIdsFromHref, claimMatrixPathFor, claimMatrixSearchText, claimNeedsReview, claimSources, claimStatuses,
@@ -206,25 +207,32 @@ describe("the matrix's check mark", () => {
 
   it("lets a check speak for itself, in any state", () => {
     for (const state of ["loading", "ready", "unavailable"] as const) {
-      expect(claimCheckMark(direct, check("verified"), state)).toMatchObject({ kind: "verified", text: "✓ 已核对", tone: "ok" });
+      expect(claimCheckMark(direct, check("verified"), state)).toMatchObject({ kind: "verified", text: "✓ 引文已核对", tone: "ok" });
     }
-    expect(claimCheckMark(direct, check("quote_not_found"))).toMatchObject({ kind: "attention", text: "⚠ 原文中未找到", tone: "warn" });
-    expect(claimCheckMark(direct, check("source_unavailable"))).toMatchObject({ kind: "attention", text: "⚠ 原文未保存" });
-    expect(claimCheckMark(direct, check("no_quote"))).toMatchObject({ kind: "attention", text: "⚠ 无引文" });
+    expect(claimCheckMark(direct, check("quote_not_found"))).toMatchObject({ kind: "attention", text: "⚠ 引文未在原文中找到", tone: "warn" });
+    expect(claimCheckMark(direct, check("source_unavailable"))).toMatchObject({ kind: "attention", text: "⚠ 原文未保存，无法核对" });
+    expect(claimCheckMark(direct, check("no_quote"))).toMatchObject({ kind: "attention", text: "⚠ 没有可核对的引文" });
   });
 
-  // 「未核对」 is a statement about the report: it may be made only once the checks were read and this claim is not among them.
-  it("says 未核对 only when the checks were read and this claim is not among them", () => {
-    expect(claimCheckMark(direct, undefined, "loading").text).toBe("核对中");
-    expect(claimCheckMark(direct, undefined, "unavailable").text).toBe("暂无核对结果");
-    expect(claimCheckMark(direct, undefined, "ready")).toMatchObject({ kind: "unchecked", text: "未核对" });
+  // The column is ✓, ⚠ or blank: the one word besides is 「核对中」, for the checks that are on their way (design reference §8.2).
+  it("is blank, not 未核对 or 暂无核对结果, wherever there is no check to report", () => {
+    expect(claimCheckMark(direct, undefined, "loading")).toMatchObject({ kind: "checking", text: "核对中" });
+    expect(claimCheckMark(direct, undefined, "failed")).toMatchObject({ kind: "failed", text: "" });
+    expect(claimCheckMark(direct, undefined, "unavailable")).toMatchObject({ kind: "unavailable", text: "" });
+    expect(claimCheckMark(direct, undefined, "ready")).toMatchObject({ kind: "unchecked", text: "" });
     // A status this table does not know reads as unchecked, never as verified.
-    expect(claimCheckMark(direct, check("something_new"))).toMatchObject({ kind: "unchecked", text: "未核对" });
+    expect(claimCheckMark(direct, check("something_new"))).toMatchObject({ kind: "unchecked", text: "" });
   });
 
-  it("knows a derived claim has no quotation to check, whatever the state", () => {
-    for (const state of ["loading", "ready", "unavailable"] as const) {
-      expect(claimCheckMark({ claimType: "derived" }, undefined, state)).toMatchObject({ kind: "derived", text: "推导，无引文" });
+  it("knows a derived claim has no quotation to check and wears no mark, whatever the state", () => {
+    for (const state of ["loading", "ready", "unavailable", "failed"] as const) {
+      expect(claimCheckMark({ claimType: "derived" }, undefined, state)).toMatchObject({ kind: "derived", text: "" });
+    }
+  });
+
+  it("uses the words the source cards and the 依据 popover use", () => {
+    for (const status of ["verified", "quote_not_found", "source_unavailable", "no_quote"]) {
+      expect(claimCheckMark(direct, check(status)).text).toBe(`${STATUS_MARK[status].mark} ${STATUS_MARK[status].label}`);
     }
   });
 
@@ -233,7 +241,7 @@ describe("the matrix's check mark", () => {
     expect(claimNeedsReview(claimCheckMark({ claimType: "derived" }, check("derived")))).toBe(false);
     expect(claimNeedsReview(claimCheckMark(direct, check("quote_not_found")))).toBe(true);
     expect(claimNeedsReview(claimCheckMark(direct, undefined, "ready"))).toBe(true);
-    expect(sourceCheckMark(undefined).text).toBe("未核对");
+    expect(sourceCheckMark(undefined).text).toBe("");
   });
 
   it("names the kind of claim, and folds everything a reader might type into one lower-case string", () => {

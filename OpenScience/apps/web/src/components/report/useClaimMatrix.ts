@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ResultVersion } from "@/lib/resultProvenance";
 import type { FileRoot } from "@ai4s/shared";
 import { readArtifact, readClaimVerification } from "@/lib/artifactFile";
@@ -20,10 +20,11 @@ import type { VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
  * Best effort on both counts: without the matrix the report still reads, and
  * a report nobody checked shows no marks rather than wrong ones.
  *
- * `verificationState` says which of three things an empty `verified` means:
+ * `verificationState` says which of four things an empty `verified` means:
  * the checks are still being read (`loading`), they were read (`ready` — a
- * claim missing from them was not checked), or they cannot be read
- * (`unavailable`: the read failed, or this report was never checked).
+ * claim missing from them was not checked), the read failed (`failed` — and
+ * `retry` asks again), or there are none (`unavailable`: this report was never
+ * checked, or it has no matrix to check).
  */
 export function useClaimMatrix(path: string, root: FileRoot | undefined, enabled = true, immutableVersion?: ResultVersion): {
   matrixPath: string | null;
@@ -31,11 +32,15 @@ export function useClaimMatrix(path: string, root: FileRoot | undefined, enabled
   verification: ClaimVerification | null;
   verified: Map<string, VerifiedClaim>;
   verificationState: ClaimCheckState;
+  /** Reads the matrix and its checks again; for the 「重试」 of a failed read. */
+  retry: () => void;
 } {
   const matrixPath = enabled ? (isClaimMatrixPath(path) ? path : claimMatrixPathFor(path)) : null;
   const [document, setDocument] = useState<ClaimMatrixDocument | null>(null);
   const [verification, setVerification] = useState<ClaimVerification | null>(null);
   const [readState, setReadState] = useState<ClaimCheckState>("loading");
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
   useEffect(() => {
     setDocument(null);
@@ -61,13 +66,13 @@ export function useClaimMatrix(path: string, root: FileRoot | undefined, enabled
             setVerification(found);
             setReadState(found ? "ready" : "unavailable");
           })
-          // Unchecked: the citations still open, and the matrix says the checks could not be read.
-          .catch(() => { if (!cancelled) setReadState("unavailable"); });
+          // The citations still open; the matrix says the checks could not be read, and offers to read them again.
+          .catch(() => { if (!cancelled) setReadState("failed"); });
       })
       // No matrix, no citations; the report itself is unaffected.
       .catch(() => { if (!cancelled) setReadState("unavailable"); });
     return () => { cancelled = true; };
-  }, [matrixPath, root]);
+  }, [matrixPath, root, attempt]);
 
   const frozenDocument = useMemo(() => {
     if (!immutableVersion?.review?.matrixText || immutableVersion.review.status !== "available") return null;
@@ -89,5 +94,5 @@ export function useClaimMatrix(path: string, root: FileRoot | undefined, enabled
   const verificationState: ClaimCheckState = immutableVersion
     ? (selectedVerification ? "ready" : "unavailable")
     : readState;
-  return { matrixPath, document: immutableVersion ? frozenDocument : document, verification: selectedVerification, verified, verificationState };
+  return { matrixPath, document: immutableVersion ? frozenDocument : document, verification: selectedVerification, verified, verificationState, retry };
 }
