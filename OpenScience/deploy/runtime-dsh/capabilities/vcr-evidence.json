@@ -1,6 +1,6 @@
 {
   "id": "vcr-evidence",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "title": "Virtual Clinical Research — Evidence Parameterization",
   "description": "Turn a research question into versioned assumption cards — find trial precedents, extract every number with the sentence and field position it came from, hand the verified values to the platform's pooling engine, and write the pooled value, heterogeneity and prediction interval into the distribution a simulation draws from, with the applicability strata and the gaps stated.",
   "whenToUse": "「虚拟临床研究」要把参数做出来时交给我：按 PICO 找同类试验、从登记记录与文献里逐项抽数（每个数都带原文位置）、把核对通过的值交给平台的合并引擎、再把合并值、异质性与预测区间写成假设卡，并说明来源人群与本研究人群的差别。用户问「对照组的事件率该取多少」「这个病种入组要多久」也走我。不要自己算合并值，也不要自己写数。",
