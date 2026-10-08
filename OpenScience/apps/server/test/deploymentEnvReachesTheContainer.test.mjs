@@ -328,6 +328,10 @@ const operatorLevers = {
   OPEN_SCIENCE_VCR_INTAKE_MEMORY: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_VCR_INTAKE_CONCURRENCY: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_VCR_DIGITIZE_MAX_PIXELS: ["open-science-web", "open-science-runtime-controller"],
+  // How long a vcr_simulate call waits for its own job (2026-10-08): the plan that
+  // writes it into a runtime is built by the controller as well as the web API, and
+  // a lever that reached only one would be a wait the other never applied.
+  OPEN_SCIENCE_VCR_STATUS_WAIT_SECONDS: ["open-science-web", "open-science-runtime-controller"],
   // The largest table the API takes from an upload is the largest one an import
   // may produce: the controller hands it to the converter as its table ceiling.
   OPEN_SCIENCE_VCR_DATA_MAX_BYTES: ["open-science-web", "open-science-runtime-controller"],

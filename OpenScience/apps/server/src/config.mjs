@@ -924,6 +924,11 @@ function vcrSettings(overrides) {
     // A figure larger than this many pixels is not decoded: a 10 MB PNG can hold
     // far more pixels than the container's memory holds arrays for.
     vcrDigitizeMaxPixels: integer("vcrDigitizeMaxPixels", "OPEN_SCIENCE_VCR_DIGITIZE_MAX_PIXELS", 24_000_000, 100_000, 100_000_000),
+    // How long one `vcr_simulate` start/status call itself waits, in seconds, for the job it just queued to finish, so a
+    // computation of seconds needs no second call and a longer one is left to finish by itself (the researcher gets the
+    // notice). 0 turns the wait off. Forwarded to the runtime as EVIMED_VCR_STATUS_WAIT_SECONDS (runtimeManager.mjs);
+    // the tool reads it clamped to the same 0 to 60 (vcr_platform.py).
+    vcrStatusWaitSeconds: integer("vcrStatusWaitSeconds", "OPEN_SCIENCE_VCR_STATUS_WAIT_SECONDS", 20, 0, 60),
   };
 }
 
