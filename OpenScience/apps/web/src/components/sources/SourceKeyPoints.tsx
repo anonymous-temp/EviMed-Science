@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { LoadError } from "@/components/cards/LoadError";
+import { getWebProjectId } from "@/lib/apiClient";
 import { formatDay } from "@/lib/format";
 import { productErrorMessage } from "@/lib/productClient";
+import { chatPath } from "@/lib/runLocation";
 import {
-  getSourceFamily, getSourceMaterials, getSourceUnderstanding, sourceFailureMessage,
-  type SourceAnchor, type SourceFamily, type SourceRecord, type SourceUnderstanding, type SourceUnderstandingResult,
+  getSourceFamily, getSourceMaterials, getSourceUnderstanding, getSourceUses, sourceFailureMessage,
+  type SourceAnchor, type SourceFamily, type SourceRecord, type SourceUnderstanding, type SourceUnderstandingResult, type SourceUse,
 } from "@/lib/sourceClient";
 import { coverageGap, materialEntries, type MaterialEntry, type SourceMaterialsStructure } from "@/lib/sourceMaterials";
 import { labelFor } from "@/lib/statusLabel";
@@ -55,10 +57,25 @@ const flat = (text: string) => text.replace(/\s+/g, " ").trim();
  * A table has its data's meaning (`DatasetMeaningPanel`) where the key points would be. A sentence cut out of the summary
  * is never put in for 「包含什么」 or 「局限」: where the reading has none, the page has none, and 「重新读取」 produces them.
  */
-export function SourceKeyPoints({ source, busy, versionPath, onShowPage, onRetry }: {
+export function SourceKeyPoints(props: {
   source: SourceRecord;
   busy: boolean;
   /** The address of the page of another version of this document. */
+  versionPath: (sourceId: string) => string;
+  onShowPage: (page: number) => void;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <KeyPointsBody {...props} />
+      <UsedBy source={props.source} />
+    </div>
+  );
+}
+
+function KeyPointsBody({ source, busy, versionPath, onShowPage, onRetry }: {
+  source: SourceRecord;
+  busy: boolean;
   versionPath: (sourceId: string) => string;
   onShowPage: (page: number) => void;
   onRetry: () => void;
@@ -223,6 +240,41 @@ function TextList({ title, items }: { title: string; items: readonly string[] | 
           <li key={`${index}:${item}`} className="flex gap-2">
             <span className="w-5 shrink-0 text-center text-text-3" aria-hidden="true">·</span>
             <span className="min-w-0 max-w-measure">{item}</span>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+/**
+ * 「用过它的对话」: the conversations that consulted this document — a passage of it came back from a search, or a run read its
+ * text — newest first, each a link into the conversation, and last in the column. Nothing is said where there are none: the
+ * record begins with the release that made it, and a document nothing used (or that a run read by a path that did not name
+ * it) is not told it was unused. A conversation of another project opens through the run's own address, which finds it.
+ */
+function UsedBy({ source }: { source: SourceRecord }) {
+  const [items, setItems] = useState<SourceUse[]>([]);
+  const { generation } = source.payload;
+  useEffect(() => {
+    setItems([]);
+    let active = true;
+    getSourceUses(source.id).then(
+      (result) => { if (active) setItems(Array.isArray(result.items) ? result.items : []); },
+      () => { /* the list is an addition; the rest of the column stands without it */ },
+    );
+    return () => { active = false; };
+  }, [source.id, generation]);
+  if (items.length === 0) return null;
+  const here = getWebProjectId();
+  return (
+    <Section title="用过它的对话">
+      <ul className="space-y-1">
+        {items.map((item) => (
+          <li key={item.sessionId} className="flex min-w-0 items-baseline gap-2">
+            <Link to={item.projectId === here ? chatPath(item.sessionId) : `/app/runs?run=${encodeURIComponent(item.runId)}`}
+              className="min-w-0 truncate text-link hover:underline">{item.title || "一段对话"}</Link>
+            <span className="shrink-0 text-caption text-text-3 tabular-nums">{formatDay(item.lastUsedAt)}</span>
           </li>
         ))}
       </ul>

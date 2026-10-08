@@ -6,7 +6,7 @@ import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/a
 import { projectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { addToLibrary, decideDuplicateGroup, listDuplicateCandidates, listSources, openListOffered, refetchSource, removeFromLibrary,
-  removeSource, retrySource, type DuplicateGroup, type SourceCounts, type SourceKind, type SourceRecord, type SourceScope } from "@/lib/sourceClient";
+  removeSource, retrySource, type DuplicateGroup, type SourceCounts, type SourceKind, type SourcePassage, type SourceRecord, type SourceScope } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
@@ -132,6 +132,9 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const narrow = useNarrow();
   const [items, setItems] = useState<SourceRecord[] | null>(null);
   const [counts, setCounts] = useState<SourceCounts | null>(null);
+  // Where the search matched inside documents' text, by document: what the server answers with a page of the list while
+  // something is searched for, shown under each row.
+  const [passages, setPassages] = useState<Record<string, SourcePassage[]>>({});
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -185,6 +188,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       if (generation.current !== current) return;
       setCounts(page.counts ?? null);
       setError(null);
+      setPassages((previous) => (background ? { ...previous, ...(page.passages ?? {}) } : page.passages ?? {}));
       if (!background) {
         // The pages the reader had open are read again until the document they opened is among them (bounded).
         let loadedItems = page.items;
@@ -195,6 +199,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
           const known = new Set(loadedItems.map((item) => item.id));
           loadedItems = [...loadedItems, ...next.items.filter((item) => !known.has(item.id))];
           cursor = next.nextCursor;
+          if (next.passages) setPassages((previous) => ({ ...previous, ...next.passages }));
         }
         if (position) { restore.current = null; pendingScroll.current = position.scroll; }
         setItems(loadedItems);
@@ -239,6 +244,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
         const known = new Set((previous ?? []).map((item) => item.id));
         return [...(previous ?? []), ...page.items.filter((item) => !known.has(item.id))];
       });
+      if (page.passages) setPassages((previous) => ({ ...previous, ...page.passages }));
       setNextCursor(page.nextCursor);
     } catch (loadError) {
       toast.error(`无法加载更多：${productErrorMessage(loadError)}`);
@@ -419,7 +425,9 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
             {items.map((source) => (
               <SourceRow key={source.id} source={source} showShared={!shared} {...rowActions(source)}
                 projectName={shared ? projectNames.get(source.projectId) ?? null : null}
-                to={readerLink(source)} onOpen={keepPlace} />
+                to={readerLink(source)} onOpen={keepPlace}
+                passages={passages[source.id]} query={search}
+                passageTo={(passage) => readerPath(source.id, listState, passage.page ? { tab: "original", page: passage.page } : { tab: null, page: null })} />
             ))}
             {nextCursor && (
               <li ref={sentinel} className="flex justify-center py-3">

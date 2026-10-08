@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { ListRow } from "@/components/ui/ListRow";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
@@ -5,9 +6,9 @@ import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 import { formatDay } from "@/lib/format";
-import { sourceFailureMessage, type SourceRecord } from "@/lib/sourceClient";
+import { sourceFailureMessage, type SourcePassage, type SourceRecord } from "@/lib/sourceClient";
 import { useOperator } from "@/lib/useOperator";
-import { RETRYABLE, isReading, isUsable, kindIcon, metaLine, stateLabel } from "./sourceView";
+import { RETRYABLE, highlightParts, isReading, isUsable, kindIcon, metaLine, stateLabel } from "./sourceView";
 
 /**
  * What one can do to a document, in the order a menu offers it: read it again, make it available to every project
@@ -38,8 +39,12 @@ export function sourceMenuItems(source: SourceRecord, {
  * opens in a new tab and keeps its address; `onOpen` runs as it is followed, which is where the list keeps its place.
  * A state is said only while the document cannot be used yet (「正在读取」, a few seconds) or could not be read
  * (「没能读取 · 重试」), in the line where what it says would be.
+ *
+ * When the list's search matched inside the document's own text, the matches are under the row, grouped under their
+ * document: each is the page it is on and one line around the match, with what was typed marked, and is a link that opens
+ * the document at that page (`passageTo`).
  */
-export function SourceRow({ source, busy, duplicate, showShared, projectName, to, onOpen, onRetry, onShare, onDuplicates, onDelete }: {
+export function SourceRow({ source, busy, duplicate, showShared, projectName, to, onOpen, passages = [], query = "", passageTo, onRetry, onShare, onDuplicates, onDelete }: {
   source: SourceRecord;
   busy: boolean;
   duplicate: boolean;
@@ -50,6 +55,12 @@ export function SourceRow({ source, busy, duplicate, showShared, projectName, to
   /** The document's page. */
   to: string;
   onOpen?: () => void;
+  /** Where the search matched inside the document's text, when it did. */
+  passages?: readonly SourcePassage[];
+  /** What was typed, for marking the match in each line. */
+  query?: string;
+  /** The address of the document opened at a passage. */
+  passageTo?: (passage: SourcePassage) => string;
   onRetry: () => void;
   onShare: () => void;
   onDuplicates: () => void;
@@ -70,6 +81,19 @@ export function SourceRow({ source, busy, duplicate, showShared, projectName, to
           <span className="min-w-0 truncate">{[metaLine(source, { showShared }), projectName].filter(Boolean).join(" · ")}</span>
           {duplicate && <Tag>疑似重复</Tag>}
         </span>
+        {passages.length > 0 && (
+          <ul aria-label="正文里的匹配" className="mt-1 space-y-0.5">
+            {passages.map((passage) => (
+              <li key={`${passage.start}:${passage.end}`} className="relative z-10 flex min-w-0 gap-2">
+                {passageTo ? (
+                  <Link to={passageTo(passage)} onClick={onOpen} className="flex min-w-0 gap-2 rounded text-text-2 hover:text-text">
+                    <PassageLine passage={passage} query={query} />
+                  </Link>
+                ) : <PassageLine passage={passage} query={query} />}
+              </li>
+            ))}
+          </ul>
+        )}
       </>}
       trailing={<span className="tabular-nums">{formatDay(source.createdAt)}</span>}
       menu={<Menu label={`“${display.title}”的操作`} items={menu} />}
@@ -103,4 +127,18 @@ function SourceLine({ source, busy, onRetry }: { source: SourceRecord; busy: boo
   if (label) return <span className="block">{label}</span>;
   if (source.display.gist) return <span className="block truncate text-text-2">{source.display.gist}</span>;
   return null;
+}
+
+/** One match inside a document's text: the page, then the line around it with what was typed marked. */
+function PassageLine({ passage, query }: { passage: SourcePassage; query: string }) {
+  return (
+    <>
+      <span className="w-14 shrink-0 text-text-3 tabular-nums">{passage.page ? `第 ${passage.page} 页` : "正文"}</span>
+      <span className="min-w-0 truncate">
+        {highlightParts(passage.snippet, query).map((part, index) => (
+          part.match ? <span key={index} className="bg-highlight text-text">{part.text}</span> : <span key={index}>{part.text}</span>
+        ))}
+      </span>
+    </>
+  );
 }

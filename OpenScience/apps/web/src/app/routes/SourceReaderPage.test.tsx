@@ -11,7 +11,7 @@ import { TWO_COLUMN_MIN_WIDTH } from "@/components/sources/useReaderBox";
 import { SourceReaderPage } from "./SourceReaderPage";
 
 const mocks = vi.hoisted(() => ({
-  getSource: vi.fn(), getSourceUnderstanding: vi.fn(), getSourceMaterials: vi.fn(), getSourceFamily: vi.fn(),
+  getSource: vi.fn(), getSourceUnderstanding: vi.fn(), getSourceMaterials: vi.fn(), getSourceFamily: vi.fn(), getSourceUses: vi.fn(),
   retrySource: vi.fn(), removeSource: vi.fn(), refetchSource: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
   downloadArtifact: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(),
@@ -21,7 +21,7 @@ const context = vi.hoisted(() => ({ projectId: "default" }));
 const layout = vi.hoisted(() => ({ width: 1200, observers: new Set<() => void>() }));
 
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
-  ["getSource", "getSourceUnderstanding", "getSourceMaterials", "getSourceFamily", "retrySource", "removeSource", "refetchSource", "getSourceNote", "saveSourceNote",
+  ["getSource", "getSourceUnderstanding", "getSourceMaterials", "getSourceFamily", "getSourceUses", "retrySource", "removeSource", "refetchSource", "getSourceNote", "saveSourceNote",
     "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
@@ -155,6 +155,7 @@ describe("a document's page", () => {
     mocks.getSourceUnderstanding.mockResolvedValue(understanding());
     mocks.getSourceMaterials.mockResolvedValue({ sourceId: "src_guideline", generation: 1, materials: null, reason: "not_extracted" });
     mocks.getSourceFamily.mockResolvedValue({ sourceId: "src_guideline", familyId: null, currentVersion: 1, items: [], nextCursor: null });
+    mocks.getSourceUses.mockResolvedValue({ items: [] });
     mocks.listDuplicateCandidates.mockResolvedValue({ items: [], scanned: 0, truncated: false });
     mocks.retrySource.mockResolvedValue(guideline);
     mocks.removeSource.mockResolvedValue(guideline);
@@ -399,6 +400,59 @@ describe("a document's page", () => {
       expect(text()).not.toMatch(/研究信息|研究设计|尚不明确|原文未涉及|给出处理建议/);
       // There is nothing in the reading to put under these, and no record of who used the document: they are not on the page.
       expect(text()).not.toMatch(/包含什么|局限|用过它的对话|遗漏|抽查|查看历史|方法草稿/);
+    });
+
+    // N-16: the conversations that used the document, last in the column.
+    const used = (over: Record<string, unknown> = {}) => ({ sessionId: "ses_1", projectId: "default", runId: "run_1", title: "SGLT2 抑制剂与心衰再住院", kinds: ["search"], uses: 2,
+      firstUsedAt: "2020-10-06T08:00:00Z", lastUsedAt: "2020-10-06T08:05:00Z", ...over });
+
+    it("end with the conversations that used the document, each a link into the conversation, and only when there are some", async () => {
+      mocks.getSourceUses.mockResolvedValue({ items: [used(), used({ sessionId: "ses_2", runId: "run_2", title: null, kinds: ["read"], lastUsedAt: "2020-09-01T08:00:00Z" }),
+        used({ sessionId: "ses_3", projectId: "paper-1", runId: "run_3", title: "另一个项目里的对话", lastUsedAt: "2020-08-01T08:00:00Z" })] });
+      mocks.getSource.mockResolvedValue({ ...withCoverage(guideline, {}), payload: { ...guideline.payload, familyId: "fam_1", version: 2 } });
+      mocks.getSourceFamily.mockResolvedValue({ sourceId: "src_guideline", familyId: "fam_1", currentVersion: 2, nextCursor: null,
+        items: [{ ...guideline, payload: { ...guideline.payload, version: 2 } }, { ...guideline, id: "src_guideline_v1", payload: { ...guideline.payload, version: 1 }, createdAt: "2019-12-01T08:00:00" }] });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("SGLT2 抑制剂与心衰再住院");
+      // After everything else the column says, the folds included.
+      order("讲了什么", "要点", "完整摘要", "以前的版本（1）", "用过它的对话", "SGLT2 抑制剂与心衰再住院", "一段对话", "另一个项目里的对话");
+      const points = columnOf("points")!;
+      expect(within(points).getByRole("link", { name: "SGLT2 抑制剂与心衰再住院" })).toHaveAttribute("href", "/app/chat/ses_1");
+      expect(within(points).getByRole("link", { name: "一段对话" })).toHaveAttribute("href", "/app/chat/ses_2");
+      // A conversation of another project is opened through the run's address, which finds the project it is in.
+      expect(within(points).getByRole("link", { name: "另一个项目里的对话" })).toHaveAttribute("href", "/app/runs?run=run_3");
+      expect(points.textContent).toContain("2020-10-06");
+      // No count, no kind of use, no run or session identifier: only the conversation and the day.
+      expect(points.textContent).not.toMatch(/ses_|run_|用过 ?\d|检索|读取/);
+      expect(mocks.getSourceUses).toHaveBeenCalledWith("src_guideline");
+    });
+
+    it("say nothing about use where the record has none, or cannot be read", async () => {
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toContain("用过它的对话");
+      cleanup();
+      mocks.getSourceUses.mockRejectedValue(new WebApiError("down", { status: 503 }));
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toContain("用过它的对话");
+      expect(within(columnOf("points")!).queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("show the conversations even for a document the reading failed on or is still reading, which a run may have read the text of", async () => {
+      mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_broken"), current: null, status: "failed" });
+      mocks.getSource.mockResolvedValue(broken);
+      mocks.getSourceUses.mockResolvedValue({ items: [used()] });
+      renderReader(readerAt("src_broken"));
+      await screen.findByRole("heading", { level: 1, name: broken.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      expect(await within(columnOf("points")!).findByText("SGLT2 抑制剂与心衰再住院")).toBeInTheDocument();
     });
 
     // N-17: what the document contains and what limits it, written by the reading from the document, for every type.

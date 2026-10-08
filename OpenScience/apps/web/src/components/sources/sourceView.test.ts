@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceDisplay, SourceRecord } from "@/lib/sourceClient";
-import { conversationDraft, fileNameOf, isEditableNote, isReading, isUsable, kindIcon, metaLine, originalPathOf, readerMeta, stateLabel } from "./sourceView";
+import { conversationDraft, fileNameOf, highlightParts, isEditableNote, isReading, isUsable, kindIcon, metaLine, originalPathOf, readerMeta, stateLabel } from "./sourceView";
 
 const display = (overrides: Partial<SourceDisplay> = {}): SourceDisplay => ({
   title: "幽门螺杆菌感染处理第六次全国共识报告", gist: null, docType: "review-guideline", typeLabel: "综述或指南", typeShort: "指南", kind: "literature",
@@ -94,5 +94,21 @@ describe("a file's name and icon", () => {
     expect(fileNameOf(source({ paths: ["knowledge-base/links/nmpa.gov.cn-notice-1a2b3c4d.md"] }))).toBe("nmpa.gov.cn-notice-1a2b3c4d.md");
     expect(fileNameOf(source({ paths: [] }))).toBe("src_one");
     for (const kind of ["literature", "table", "document", "page", "note", "image", "something-else"]) expect(kindIcon(kind)).toBeTruthy();
+  });
+});
+
+describe("marking what was typed in a line", () => {
+  it("cuts the line at each word, in any case, and changes nothing in it", () => {
+    expect(highlightParts("…达比加群酯为另一选择…", "达比加群")).toEqual([{ text: "…", match: false }, { text: "达比加群", match: true }, { text: "酯为另一选择…", match: false }]);
+    expect(highlightParts("Empagliflozin 10 mg", "EMPAGLI mg")).toEqual([{ text: "Empagli", match: true }, { text: "flozin 10 ", match: false }, { text: "mg", match: true }]);
+    expect(highlightParts("ab", "ab ab a").map((part) => part.text).join("")).toBe("ab");
+  });
+
+  it("is one plain part where there is nothing to mark, and takes a word with pattern characters as it is", () => {
+    expect(highlightParts("一行文字", "")).toEqual([{ text: "一行文字", match: false }]);
+    expect(highlightParts("一行文字", "没有")).toEqual([{ text: "一行文字", match: false }]);
+    expect(highlightParts("a.b (c) [d]", "(c) [d]")).toEqual([{ text: "a.b ", match: false }, { text: "(c)", match: true }, { text: " ", match: false }, { text: "[d]", match: true }]);
+    expect(highlightParts("anything", ".*").map((part) => part.match)).toEqual([false]);
+    expect(highlightParts("", "x")).toEqual([{ text: "", match: false }]);
   });
 });
