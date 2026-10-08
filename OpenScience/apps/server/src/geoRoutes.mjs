@@ -373,6 +373,13 @@ export function createGeoRoutes(dependencies) {
       return reply(result);
     }
     if (parts.length === 4 && method === "GET" && tab === "answers") return reply(await service.answer(user, id, parts[3]));
+    // What a source row stands for: the answers of the latest round that cite the site, one engine's when the page's filter names it.
+    if (parts.length === 4 && method === "GET" && tab === "sources") {
+      if (!ID.test(parts[3])) throw new HttpError(404, "geo_source_not_found", "Source not found.");
+      const engine = url.searchParams.get("engine");
+      if (engine != null && engine !== "" && !ID.test(engine)) throw new HttpError(400, "geo_engines_invalid", "engine must be one engine's id.");
+      return reply(await service.source(user, id, parts[3], { engine: engine || null }));
+    }
     if (parts.length === 4 && method === "GET" && tab === "screenshots") {
       const file = await service.screenshotPath(user, id, parts[3]);
       const info = await stat(file).catch(() => null);

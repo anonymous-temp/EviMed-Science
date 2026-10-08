@@ -15,6 +15,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoService, geoScreenshotPath } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
+import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { createGeoRoutes } from "../src/geoRoutes.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { sendError } from "../src/security.mjs";
@@ -529,7 +530,7 @@ test("another account's GEO project is a 404 on every route, reads and writes al
     ["GET", `/api/geo/projects/${id}/evidence`], ["GET", `/api/geo/projects/${id}/journey`], ["GET", `/api/geo/projects/${id}/questions`],
     ["POST", `/api/geo/projects/${id}/questions/gq_x/unmeasure`, {}], ["GET", `/api/geo/projects/${id}/diagnosis`],
     ["GET", `/api/geo/projects/${id}/answers/s-x`], ["GET", `/api/geo/projects/${id}/screenshots/${"c".repeat(64)}`],
-    ["GET", `/api/geo/projects/${id}/sources`], ["POST", `/api/geo/projects/${id}/tier`, { tier: "1" }], ["GET", `/api/geo/projects/${id}/articles`],
+    ["GET", `/api/geo/projects/${id}/sources`], ["GET", `/api/geo/projects/${id}/sources/gsrc_x`], ["POST", `/api/geo/projects/${id}/tier`, { tier: "1" }], ["GET", `/api/geo/projects/${id}/articles`],
     ["POST", `/api/geo/projects/${id}/articles/${articles.ids[0]}/withdraw`, {}], ["POST", `/api/geo/projects/${id}/articles/${articles.ids[1]}/release`, {}],
     ["GET", `/api/geo/projects/${id}/distribution`], ["PUT", `/api/geo/projects/${id}/budget`, { totalCny: 10, dailyCny: 1 }],
     ["POST", `/api/geo/projects/${id}/orders/o-x/cancel`, {}], ["GET", `/api/geo/projects/${id}/monitoring`],
@@ -646,4 +647,91 @@ test("composed marketplace read hooks expose local records over guarded HTTP wit
       assert.equal((await call("GET", `/api/geo/market/settlement?${query}`, { user: OPS })).status, 400);
     }
   } finally { hooks.market = previous; }
+});
+
+test("a source's detail lists the answers its row counts: the three numbers are one tally, an engine narrows both, a foreign id is a 404", options, async () => {
+  const { project } = await seededProject();
+  const id = project.id;
+  const questions = (await store.questionMap(id, 1)).flatMap((group) => group.questions);
+  const [q1, q2] = questions;
+  const insert = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => database.query(sql, values);
+  const round = (/** @type {string} */ rid, /** @type {string} */ day) => insert(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version,
+      engines, status, planned, done, sample_date, finished_at) VALUES ($1, $2, $3, 'weekly', 1, ARRAY['deepseek','kimi','doubao'], 'done', 10, 10, $4::date, $5::timestamptz)`,
+  [rid, ALICE, id, day, `${day}T12:00:00Z`]);
+  await round(`old-${id}`, "2026-09-14");
+  await round(`new-${id}`, "2026-09-21");
+  const news = [{ url: "https://www.news.example.org/a", domain: "www.news.example.org", title: "a" }];
+  const both = [...news, { url: "https://39.net/b", domain: "39.net", title: "b" }];
+  const other = [{ url: "https://39.net/b", domain: "39.net", title: "b" }, ...news];
+  /** @param {string} key @param {string} round @param {string} engine @param {string} question @param {string} text @param {unknown[]} citations @param {string} status */
+  const answer = async (key, round, engine, question, text, citations, status = "valid") => insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id,
+      geo_project_id, question_id, engine, asked_at, status, answer_text, citations) VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8, $9, $10::jsonb)`,
+  [`${key}-${id}`, ALICE, round, id, question, engine, `2026-09-21T0${key.length}:00:00Z`, status, text, JSON.stringify(citations)]);
+  const facts = (/** @type {string} */ key, /** @type {string} */ mode, /** @type {boolean} */ mentions, /** @type {string[]} */ wrong = []) => insert(
+    `INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours, statements) VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+    [`${key}-${id}`, ALICE, id, mode, mentions, JSON.stringify(wrong.map((text) => ({ text, verdict: "wrong", errorType: "number", severity: "S3" })))]);
+  // a1: misstates us, and the engine's marker [1] beside the wrong sentence is the news site. a2: misstates us, marker [1] is 39.net.
+  await answer("a1", `new-${id}`, "deepseek", q1.id, "玛仕度肽每天注射一次[1]。需要长期使用。", both);
+  await facts("a1", "wrong_ours", true, ["玛仕度肽每天注射一次"]);
+  await answer("a2", `new-${id}`, "kimi", q1.id, "玛仕度肽每日三次[1]。", other);
+  await facts("a2", "wrong_ours", true, ["玛仕度肽每日三次"]);
+  // a3 names us and gets nothing wrong; a4 cites only 39.net and does not name us; a5 was never a valid answer; a6 belongs to an older round.
+  await answer("a3", `new-${id}`, "doubao", q2.id, "玛仕度肽用于成人肥胖。", news);
+  await facts("a3", "none", true);
+  await answer("a4", `new-${id}`, "deepseek", q2.id, "可以咨询医生。", [{ url: "https://39.net/c", domain: "39.net", title: "c" }]);
+  await facts("a4", "omitted", false);
+  await answer("a5", `new-${id}`, "doubao", q1.id, "请登录", news, "suspect");
+  await facts("a5", "wrong_ours", true, ["不会被数到"]);
+  await answer("a6", `old-${id}`, "doubao", q1.id, "每天注射一次[1]。", news);
+  await facts("a6", "wrong_ours", true, ["每天注射一次"]);
+  const sourceRow = (/** @type {any} */ data, /** @type {string} */ domain) => data.sources.find((/** @type {any} */ row) => row.domain === domain);
+  await insert(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain, name, kind, wrong_ours, cited) VALUES
+    ('gsrc_news_${run}', $1, $2, 'news.example.org', '某新闻网', 'news', 99, '{"doubao":{"P1":99}}'::jsonb),
+    ('gsrc_idle_${run}', $1, $2, 'idle.example.org', null, null, 7, '{}'::jsonb)`, [ALICE, id]);
+
+  const listed = (await call("GET", `/api/geo/projects/${id}/sources`)).payload.data;
+  const row = sourceRow(listed, "news.example.org");
+  // The row is counted from the latest round's answers, not from the counter a stale refresh left on the table (99 here), and `www.` is folded.
+  assert.deepEqual([row.cited, row.wrongOurs, row.mentionsOurs], [{ deepseek: 1, kimi: 1, doubao: 1 }, 2, 3]);
+  assert.deepEqual([row.wrongOursByEngine, row.mentionsOursByEngine], [{ deepseek: 1, kimi: 1, doubao: 0 }, { deepseek: 1, kimi: 1, doubao: 1 }]);
+  const flat = sourceRow(listed, "39.net");
+  assert.deepEqual([flat.cited, flat.wrongOurs, flat.mentionsOurs], [{ deepseek: 2, kimi: 1 }, 2, 2]);
+  assert.deepEqual([sourceRow(listed, "idle.example.org").wrongOurs, sourceRow(listed, "idle.example.org").cited], [0, {}], "a site the round did not cite has nothing counted");
+
+  const detail = (await call("GET", `/api/geo/projects/${id}/sources/${row.id}`)).payload.data;
+  assert.equal(detail.source.domain, "news.example.org");
+  assert.deepEqual(detail.round, { id: `new-${id}`, kind: "weekly", sampleDate: "2026-09-21" });
+  assert.deepEqual(detail.counts, { cited: 3, wrongOurs: row.wrongOurs, mentionsOurs: row.mentionsOurs }, "the detail's numbers are the row's");
+  assert.deepEqual(detail.answers.map((/** @type {any} */ entry) => entry.snapshotId), [`a1-${id}`, `a2-${id}`, `a3-${id}`],
+    "misstating answers first (the one the engine's marker puts on this site leading), then the one that names us");
+  assert.equal(detail.answers.filter((/** @type {any} */ entry) => entry.misstated).length, row.wrongOurs, "as many misstating answers as the row says");
+  const [first, second, third] = detail.answers;
+  assert.deepEqual([first.engine, first.question, first.mentionsOurs, first.misstated], ["deepseek", q1.text, true, true]);
+  assert.deepEqual(first.wrong, [{ text: "玛仕度肽每天注射一次", fromThisSite: true }]);
+  assert.deepEqual(second.wrong, [{ text: "玛仕度肽每日三次", fromThisSite: false }], "co-occurrence is not attribution: the marker points at another site");
+  assert.deepEqual([third.misstated, third.wrong, third.question], [false, [], q2.text]);
+  assert.ok(first.askedAt);
+  for (const entry of detail.answers) assert.equal((await call("GET", `/api/geo/projects/${id}/answers/${entry.snapshotId}`)).status, 200, "every listed answer has its page");
+
+  // A site nothing misstated still lists the answers that cite it, and the idle one lists none.
+  const quiet = (await call("GET", `/api/geo/projects/${id}/sources/${flat.id}?engine=deepseek`)).payload.data;
+  assert.equal(quiet.engine, "deepseek");
+  assert.deepEqual(quiet.counts, { cited: flat.cited.deepseek, wrongOurs: flat.wrongOursByEngine.deepseek, mentionsOurs: flat.mentionsOursByEngine.deepseek });
+  assert.deepEqual(quiet.answers.map((/** @type {any} */ entry) => entry.snapshotId), [`a1-${id}`, `a4-${id}`]);
+  const idle = (await call("GET", `/api/geo/projects/${id}/sources/gsrc_idle_${run}`)).payload.data;
+  assert.deepEqual([idle.counts, idle.answers], [{ cited: 0, wrongOurs: 0, mentionsOurs: 0 }, []]);
+
+  // The counter the end of a round writes is the same tally.
+  const measure = new GeoMeasureStore(database);
+  await measure.refreshSourceCitations({ roundId: `new-${id}`, geoProjectId: id, userId: ALICE, now: new Date() });
+  const stored = (await database.query(`SELECT domain, mentions_ours, wrong_ours FROM evimed_geo.sources WHERE geo_project_id = $1 AND domain = 'news.example.org'`, [id])).rows[0];
+  assert.deepEqual([stored.wrong_ours, stored.mentions_ours], [row.wrongOurs, row.mentionsOurs]);
+  const after = sourceRow((await call("GET", `/api/geo/projects/${id}/sources`)).payload.data, "news.example.org");
+  assert.deepEqual([after.cited, after.wrongOurs, after.mentionsOurs], [row.cited, row.wrongOurs, row.mentionsOurs]);
+
+  refused(await call("GET", `/api/geo/projects/${id}/sources/gsrc_missing`), 404, "geo_source_not_found");
+  refused(await call("GET", `/api/geo/projects/${id}/sources/${row.id}?engine=${encodeURIComponent("../x")}`), 400, "geo_engines_invalid");
+  refused(await call("GET", `/api/geo/projects/${id}/sources/${row.id}`, { user: MALLORY }), 404, "geo_project_not_found");
+  const other2 = await seededProject();
+  refused(await call("GET", `/api/geo/projects/${other2.project.id}/sources/${row.id}`), 404, "geo_source_not_found");
 });

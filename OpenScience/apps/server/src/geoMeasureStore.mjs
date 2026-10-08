@@ -36,6 +36,7 @@ import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
  */
 
 import { migrateGeo } from "./geoPersistence.mjs";
+import { roundAnswers, tallySources } from "./geoSourceAnswers.mjs";
 import { geoOwnedLinkKey } from "./geoStore.mjs";
 import { randomId } from "./security.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
@@ -1062,30 +1063,13 @@ export class GeoMeasureStore {
   /**
    * Refresh `sources.cited`, `mentions_ours` and `wrong_ours` from one round's
    * answers: every cited domain gets a row (the strategy run fills in what it
-   * is), and the counts are this round's.
+   * is), and the counts are this round's. The counting is `geoSourceAnswers`'
+   * — the sources page and a source's detail read the same tally, so the
+   * stored counters are only what the other readers of the table see.
    * @param {{ roundId: string, geoProjectId: string, userId: string, now: Date }} input
    */
   async refreshSourceCitations({ roundId, geoProjectId, userId, now }) {
-    const result = await this.query(`SELECT s.engine, coalesce(q.pool, g.pool) AS pool, s.citations, f.mentions_ours, f.failure_mode
-      FROM evimed_geo.snapshots s JOIN evimed_geo.facts f ON f.snapshot_id = s.id
-        LEFT JOIN evimed_geo.questions q ON q.id = s.question_id LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id
-      WHERE s.round_id = $1 AND s.status IN ('valid', 'refusal')`, [roundId]);
-    /** @type {Map<string, { cited: Record<string, Record<string, number>>, mentionsOurs: number, wrongOurs: number }>} */
-    const byDomain = new Map();
-    for (const row of result.rows) {
-      // `www.` is the same site; any other subdomain is kept as cited.
-      const domains = new Set(list(row.citations).map((citation) => String(citation?.domain ?? "").toLowerCase().replace(/^www\./u, "")).filter(Boolean));
-      for (const domain of domains) {
-        const entry = byDomain.get(domain) ?? { cited: {}, mentionsOurs: 0, wrongOurs: 0 };
-        const engine = String(row.engine);
-        const pool = String(row.pool ?? "none");
-        entry.cited[engine] ??= {};
-        entry.cited[engine][pool] = (entry.cited[engine][pool] ?? 0) + 1;
-        if (row.mentions_ours) entry.mentionsOurs += 1;
-        if (row.failure_mode === "wrong_ours") entry.wrongOurs += 1;
-        byDomain.set(domain, entry);
-      }
-    }
+    const byDomain = tallySources(await roundAnswers(this, roundId));
     await this.transaction(async (client) => {
       // A domain this round did not cite has no citations in it.
       await client.query(`UPDATE evimed_geo.sources SET cited = '{}'::jsonb, mentions_ours = 0, wrong_ours = 0, updated_at = $2

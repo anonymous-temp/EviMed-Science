@@ -48,6 +48,8 @@ import {
   GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoCellRows,
 } from "@evimed/domain";
 import { geoLockCheck, geoProgramMinimal } from "./geoWrites.mjs";
+import { answersCiting, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
+import { geoSourceFromRow } from "./geoStore.mjs";
 import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs";
 import { HttpError } from "./security.mjs";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, projectMoney } from "./geoMarketStore.mjs";
@@ -1117,6 +1119,69 @@ export class GeoService {
     return geoScreenshotPath(String(this.config.dataDir ?? ""), sha256);
   }
 
+  /**
+   * The latest round the sources are counted from: the newest finished headline round (baseline, weekly, single step) — the round
+   * `refreshSourceCitations` counts at its end, so a row and its detail speak of the same answers.
+   * @param {string} geoId
+   */
+  async #latestSourceRound(geoId) {
+    return (await this.store.query(`SELECT id, kind, sample_date, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
+      AND status IN ('done', 'partial') ORDER BY finished_at DESC NULLS LAST, created_at DESC LIMIT 1`, [geoId, [...GEO_HEADLINE_ROUND_KINDS]])).rows[0] ?? null;
+  }
+
+  /**
+   * `GET …/:id/sources/:sourceId[?engine=]`: what a source row stands for. The answers of the latest round that cite the site — the
+   * answers the row's three numbers count — each with its question, its engine and date, whether it misstates us and whether it names
+   * us; for a misstating answer, the wrong sentences, each marked when the engine's inline marker puts it on this site. Misstating
+   * answers come first, then the ones that name us, then the rest. The counts are `tallySources` over those same answers.
+   * @param {{ id: string }} user @param {string} id @param {string} sourceId @param {{ engine?: string | null }} [options]
+   */
+  async source(user, id, sourceId, { engine = null } = {}) {
+    const project = await this.requireProject(user, id);
+    const row = (await this.store.query(`SELECT * FROM evimed_geo.sources WHERE geo_project_id = $1 AND id = $2`, [project.id, sourceId])).rows[0];
+    if (!row) throw failure(404, "geo_source_not_found", "Source not found.");
+    const source = geoSourceFromRow(row);
+    const domain = source.domain.toLowerCase();
+    const round = await this.#latestSourceRound(project.id);
+    const citing = round ? answersCiting(await roundAnswers(this.store, String(round.id)), domain, engine) : [];
+    const counted = tallySources(citing).get(domain) ?? null;
+    const detail = new Map((citing.length === 0 ? [] : (await this.store.query(`SELECT s.id, q.text AS question_text,
+        CASE WHEN f.failure_mode = 'wrong_ours' THEN s.answer_text END AS answer_text,
+        CASE WHEN f.failure_mode = 'wrong_ours' THEN f.statements END AS statements
+      FROM evimed_geo.snapshots s JOIN evimed_geo.facts f ON f.snapshot_id = s.id LEFT JOIN evimed_geo.questions q ON q.id = s.question_id
+      WHERE s.geo_project_id = $1 AND s.id = ANY($2::text[])`, [project.id, citing.map((answer) => answer.id)])).rows).map((/** @type {any} */ entry) => [String(entry.id), entry]));
+    const answers = citing.map((answer) => {
+      const entry = detail.get(answer.id);
+      const statements = Array.isArray(entry?.statements) ? entry.statements : [];
+      const sentences = [...new Set(statements.filter((/** @type {any} */ statement) => statement?.verdict === "wrong" && typeof statement.text === "string")
+        .map((/** @type {any} */ statement) => statement.text.trim()).filter(Boolean))];
+      const view = { answerText: text(entry?.answer_text), citations: answer.citations };
+      return {
+        snapshotId: answer.id, engine: answer.engine, questionId: answer.questionId, question: text(entry?.question_text), askedAt: iso(answer.askedAt),
+        mentionsOurs: answer.mentionsOurs, misstated: answer.wrongOurs,
+        wrong: sentences.map((sentence) => ({ text: sentence, fromThisSite: sentenceSource(view, sentence, domain) })),
+      };
+    });
+    const rank = (/** @type {typeof answers[number]} */ answer) => (answer.misstated ? (answer.wrong.some((sentence) => sentence.fromThisSite) ? 0 : 1) : answer.mentionsOurs ? 2 : 3);
+    answers.sort((left, right) => rank(left) - rank(right) || String(right.askedAt ?? "").localeCompare(String(left.askedAt ?? "")) || left.engine.localeCompare(right.engine));
+    return {
+      source: {
+        id: source.id, domain: source.domain, name: source.name, kind: source.kind, layer: source.layer,
+        conditions: { icp: source.icpMatches, newsIndexed: source.newsIndexed, medical: source.medicalVertical },
+        impostor: source.impostor,
+        market: source.market ? { price: num(source.market.price ?? source.market.priceCny), resourceId: text(source.market.resourceId) } : null,
+      },
+      round: round ? { id: String(round.id), kind: String(round.kind), sampleDate: round.sample_date ? rowDay(round, this.timeZone) : null } : null,
+      engine,
+      counts: {
+        cited: Object.values(counted?.byEngine ?? {}).reduce((sum, count) => sum + count.cited, 0),
+        wrongOurs: counted?.wrongOurs ?? 0,
+        mentionsOurs: counted?.mentionsOurs ?? 0,
+      },
+      answers,
+    };
+  }
+
   /** `GET …/:id/sources`. @param {{ id: string }} user @param {string} id */
   async sources(user, id) { return this.sourcesOf(await this.requireProject(user, id)); }
 
@@ -1156,21 +1221,32 @@ export class GeoService {
       };
     });
     await this.#attachSnapshotIds(project.id, expectations.map((entry) => ({ cell: entry.retrieval, row: retrievalByEngine.get(entry.engine) })));
-    const latestFull = (await this.store.query(`SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
-      AND status IN ('done', 'partial') ORDER BY finished_at DESC NULLS LAST, created_at DESC LIMIT 1`, [project.id, [...GEO_HEADLINE_ROUND_KINDS]])).rows[0];
+    const latestFull = await this.#latestSourceRound(project.id);
     const linklessEngines = latestFull ? await this.#linklessEngines(String(latestFull.id)) : [];
+    // The three numbers of a row are counted from the latest round's answers, the answers a source's detail lists (`geoSourceAnswers`).
+    const tally = latestFull ? tallySources(await roundAnswers(this.store, String(latestFull.id))) : null;
     const groupNames = await this.#battlefieldNames(project.id, Array.isArray(battlefield.groups) ? battlefield.groups : []);
     return {
       linklessEngines,
-      sources: sources.map((source) => ({
-        id: source.id, domain: source.domain, name: source.name, kind: source.kind, layer: source.layer,
-        conditions: { icp: source.icpMatches, newsIndexed: source.newsIndexed, medical: source.medicalVertical },
-        impostor: source.impostor,
-        cited: Object.fromEntries(Object.entries(source.cited).map(([engine, pools]) => [engine,
-          pools && typeof pools === "object" ? Object.values(pools).reduce((/** @type {number} */ sum, value) => sum + (Number(value) || 0), 0) : Number(pools) || 0])),
-        mentionsOurs: source.mentionsOurs, wrongOurs: source.wrongOurs,
-        market: source.market ? { price: num(source.market.price ?? source.market.priceCny), resourceId: text(source.market.resourceId) } : null,
-      })),
+      sources: sources.map((source) => {
+        // Without a counted round (nothing measured yet) the counters the table holds are all there is.
+        const counted = tally ? tally.get(source.domain.toLowerCase()) ?? null : undefined;
+        const cited = counted === undefined ? source.cited : counted?.cited ?? {};
+        const byEngine = counted?.byEngine ?? {};
+        return {
+          id: source.id, domain: source.domain, name: source.name, kind: source.kind, layer: source.layer,
+          conditions: { icp: source.icpMatches, newsIndexed: source.newsIndexed, medical: source.medicalVertical },
+          impostor: source.impostor,
+          cited: Object.fromEntries(Object.entries(cited).map(([engine, pools]) => [engine,
+            pools && typeof pools === "object" ? Object.values(pools).reduce((/** @type {number} */ sum, value) => sum + (Number(value) || 0), 0) : Number(pools) || 0])),
+          mentionsOurs: counted === undefined ? source.mentionsOurs : counted?.mentionsOurs ?? 0,
+          wrongOurs: counted === undefined ? source.wrongOurs : counted?.wrongOurs ?? 0,
+          // The same two counts for one engine: the engine filter of the page narrows every column, and so does the detail it opens.
+          mentionsOursByEngine: Object.fromEntries(Object.entries(byEngine).map(([engine, count]) => [engine, count.mentionsOurs])),
+          wrongOursByEngine: Object.fromEntries(Object.entries(byEngine).map(([engine, count]) => [engine, count.wrongOurs])),
+          market: source.market ? { price: num(source.market.price ?? source.market.priceCny), resourceId: text(source.market.resourceId) } : null,
+        };
+      }),
       expectations,
       // `groups` is what the run wrote (a group's id or its name — the orchestrator accepts both); `groupNames` is what a page prints.
       battlefield: { groups: Array.isArray(battlefield.groups) ? battlefield.groups : [], groupNames, reason: text(battlefield.reason) },
