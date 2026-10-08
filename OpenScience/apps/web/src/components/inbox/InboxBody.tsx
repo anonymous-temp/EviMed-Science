@@ -30,7 +30,7 @@ export function InboxBody({ body, open = false, operator = false, className }: {
       {showTechnical && (
         // Above the row's stretched link, so the disclosure opens rather than
         // following the row.
-        <div className="relative z-10 mt-1">
+        <div className="relative z-sticky mt-1">
           <Disclosure summary={<>另有 {technical.length} 条技术原文（仅运维账号可见）</>} summaryClassName="text-caption">
             <ul className="space-y-1 font-mono text-caption text-text-3">
               {technical.map((line, index) => <li key={index} className="break-words">{line}</li>)}

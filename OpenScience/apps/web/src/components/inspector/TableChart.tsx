@@ -118,7 +118,7 @@ export function TableChart({ table }: { table: ParsedTable }) {
       </div>
 
       <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-        <svg viewBox={`0 0 ${W} ${H}`} className="h-auto max-h-full w-full max-w-content">
+        <svg viewBox={`0 0 ${W} ${H}`} className="h-auto max-h-full w-full max-w-read">
           {/* y gridlines */}
           {[0, 0.25, 0.5, 0.75, 1].map((f) => {
             const v = yMin + f * ySpan;

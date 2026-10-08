@@ -35,10 +35,10 @@ export function RunsSkeleton({ filter = true }: { filter?: boolean }) {
     <div className="animate-pulse" aria-hidden>
       {filter && (
         <div className="flex flex-wrap items-center gap-2 px-2 py-2">
-          <Bar className="h-8 min-w-[12rem] flex-1 rounded" />
-          <Bar className="h-6 w-16 rounded-full" />
-          <Bar className="h-6 w-16 rounded-full" />
-          <Bar className="h-6 w-36 rounded-full" />
+          <Bar className="h-control min-w-[12rem] flex-1 rounded" />
+          <Bar className="h-sm w-16 rounded-full" />
+          <Bar className="h-sm w-16 rounded-full" />
+          <Bar className="h-sm w-36 rounded-full" />
         </div>
       )}
       <div className="mt-2 px-2 py-2">

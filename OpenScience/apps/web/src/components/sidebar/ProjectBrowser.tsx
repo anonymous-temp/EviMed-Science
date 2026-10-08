@@ -409,7 +409,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
       aria-labelledby={headingId}
       className="mt-4 flex min-h-0 flex-1 flex-col"
     >
-      <div className="flex h-9 shrink-0 items-center gap-0.5 px-3">
+      <div className="flex h-control shrink-0 items-center gap-0.5 px-3">
         {/* The heading stays in the tree while the search box has the row:
           * it is the section's name either way. */}
         <h2

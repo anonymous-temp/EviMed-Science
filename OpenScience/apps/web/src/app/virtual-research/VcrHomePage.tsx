@@ -173,7 +173,7 @@ function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly Vc
         {study.conclusion?.text && <p data-vcr-latest="" className="mt-2.5 text-ui text-text">{study.conclusion.text}</p>}
         {need && (
           // Above the stretched title, so the link stays a link.
-          <p data-vcr-todo="" className="relative z-10 mt-2 flex flex-wrap items-baseline gap-x-3 text-caption text-warn-strong">
+          <p data-vcr-todo="" className="relative z-sticky mt-2 flex flex-wrap items-baseline gap-x-3 text-caption text-warn-strong">
             <span>{todos.length > 1 ? `${need.title}，另有 ${todos.length - 1} 件待办` : need.title}</span>
             {need.action && (
               <Link to={vcrTabPath(study.id, need.action.tab ?? "matching")} className="text-link hover:underline">{need.action.label}</Link>

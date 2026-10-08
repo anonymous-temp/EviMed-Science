@@ -93,7 +93,7 @@ export function VcrStudySkeleton() {
 export function VcrTabSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <div data-vcr-loading="tab" className="animate-pulse" aria-hidden="true">
-      <Bar className="h-8 w-48 rounded-full" />
+      <Bar className="h-sm w-48 rounded-full" />
       {Array.from({ length: rows }, (_, index) => (
         <div key={index} className="mt-4 flex flex-col gap-2 border-b border-faint pb-4">
           <Bar className={cn("h-3.5", index % 2 ? "w-2/3" : "w-3/4")} />

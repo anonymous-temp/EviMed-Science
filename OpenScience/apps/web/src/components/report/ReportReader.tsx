@@ -302,7 +302,7 @@ export function ReportReader({
   return (
     <>
       {layout === "page" ? (
-        <div className="mx-auto flex w-full max-w-content-full gap-8 px-6 py-6 max-sm:px-0 max-sm:py-3">
+        <div className="mx-auto flex w-full max-w-page gap-8 px-6 py-6 max-sm:px-0 max-sm:py-3">
           {wide && view === "report" && toc.length > 0 && (
             <aside className="sticky top-4 max-h-[calc(100vh-6rem)] w-56 shrink-0 self-start overflow-y-auto" data-print-hide="">
               <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={16} aria-hidden="true" />目录</p>
@@ -317,7 +317,7 @@ export function ReportReader({
               </button>
             </aside>
           )}
-          <div className={cn("min-w-0 flex-1 space-y-4", view === "report" && "max-w-content")}>
+          <div className={cn("min-w-0 flex-1 space-y-4", view === "report" && "max-w-read")}>
             <div className="space-y-3 max-sm:px-4">
               {toolbar}
               {/* No column for them on a narrower page: the contents fold
@@ -333,7 +333,7 @@ export function ReportReader({
         </div>
       ) : (
         <div className="min-h-full space-y-4 px-6 py-6 max-sm:px-0 max-sm:py-3">
-          <div className="mx-auto max-w-content space-y-3 max-sm:px-4">
+          <div className="mx-auto max-w-read space-y-3 max-sm:px-4">
             {toolbar}
             {view === "report" && toc.length > 0 && (
               <Disclosure summary={<>目录 · {toc.length} 节</>} className="rounded-input border border-border bg-surface px-3 py-2">
@@ -341,7 +341,7 @@ export function ReportReader({
               </Disclosure>
             )}
           </div>
-          <div className={cn("mx-auto", view === "report" ? "max-w-content" : "max-w-none")}>{body}</div>
+          <div className={cn("mx-auto", view === "report" ? "max-w-read" : "max-w-none")}>{body}</div>
         </div>
       )}
       {printing && <PrintCopy facts={isReport ? facts : []} text={text} matrix={matrix} statuses={statuses} reading={reading} />}

@@ -139,7 +139,7 @@ function RailMark({ state }: { state: RailState }) {
       aria-hidden="true"
       data-status-mark=""
       className={cn(
-        "relative z-10 block h-3.5 w-3.5 rounded-full",
+        "relative z-sticky block h-3.5 w-3.5 rounded-full",
         state === "done" && "bg-accent",
         state === "active" && "border-2 border-accent bg-surface",
         state === "waiting" && "border-2 border-accent bg-surface ring-4 ring-accent-soft",

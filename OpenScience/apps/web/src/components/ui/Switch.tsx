@@ -48,7 +48,7 @@ export function Switch({
       >
         <span
           className={cn(
-            "absolute h-4 w-4 rounded-full bg-surface shadow-pop transition-transform duration-fast",
+            "absolute h-4 w-4 rounded-full bg-surface shadow-e2 transition-transform duration-fast",
             checked ? "translate-x-[18px]" : "translate-x-0.5",
           )}
         />

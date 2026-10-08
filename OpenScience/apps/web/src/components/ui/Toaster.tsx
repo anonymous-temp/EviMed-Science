@@ -54,7 +54,7 @@ function ToastCard({
       onMouseLeave={onResume}
       onFocus={onPause}
       onBlur={onResume}
-      className="pointer-events-auto flex min-h-9 max-w-[70vw] animate-toast-in items-center gap-2 rounded-card border border-border bg-surface px-3 py-2 text-ui text-text shadow-e2"
+      className="pointer-events-auto flex min-h-control max-w-[70vw] animate-toast-in items-center gap-2 rounded-card border border-border bg-surface px-3 py-2 text-ui text-text shadow-e2"
     >
       {isError ? (
         <XCircle size={16} className="shrink-0 text-error" aria-hidden="true" />

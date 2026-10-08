@@ -80,8 +80,8 @@ function Bar({ className }: { className: string }) {
 export function TabSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div data-geo-tab-loading="" className="animate-pulse" aria-hidden="true">
-      <div className="flex h-8 items-center gap-2">
-        <Bar className="h-8 w-16 rounded-full" />
+      <div className="flex h-sm items-center gap-2">
+        <Bar className="h-sm w-16 rounded-full" />
         <Bar className="h-4 w-12" />
         <Bar className="h-4 w-12" />
       </div>

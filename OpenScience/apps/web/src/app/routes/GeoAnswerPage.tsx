@@ -306,7 +306,7 @@ function AnswerBody({
   };
 
   return (
-    <div className="flex max-w-content flex-col gap-4 text-body text-text">
+    <div className="flex max-w-read flex-col gap-4 text-body text-text">
       {snapshot.status === "refusal" && <p><Tag>{SNAPSHOT_STATUS_WORDS.refusal}</Tag></p>}
       {marked.paragraphs.map((paragraph, index) => (
         <Fragment key={index}>

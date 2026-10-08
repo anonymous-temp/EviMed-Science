@@ -221,7 +221,7 @@ export function AppShell() {
             * bell) is either account-wide or follows `currentId` itself.
             * On the conversation surface the route renders overlays only, so
             * it floats above the frame and lets pointer events through. */}
-          <div className={cn(onChat && "pointer-events-none absolute inset-0 z-20", !onChat && "h-full")}>
+          <div className={cn(onChat && "pointer-events-none absolute inset-0 z-sticky", !onChat && "h-full")}>
             <Suspense fallback={onChat ? null : <RouteFallback />}>
               <Outlet key={onChat ? "chat" : currentProjectId} />
             </Suspense>

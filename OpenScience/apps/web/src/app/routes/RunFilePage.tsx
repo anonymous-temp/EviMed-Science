@@ -157,7 +157,7 @@ export function RunFilePage() {
             </p>
           )}
           {!showVersions && !locating && path && readsText && !loading && error && (
-            <div role="alert" className="mx-auto mt-8 max-w-content rounded-card border border-border bg-surface p-5 text-ui text-text max-sm:mx-4"><p>{error}</p><Button variant="secondary" className="mt-3" onClick={() => setReload((current) => current + 1)}>重试</Button></div>
+            <div role="alert" className="mx-auto mt-8 max-w-read rounded-card border border-border bg-surface p-5 text-ui text-text max-sm:mx-4"><p>{error}</p><Button variant="secondary" className="mt-3" onClick={() => setReload((current) => current + 1)}>重试</Button></div>
           )}
           {!showVersions && !locating && path && readsText && !loading && text !== null && (
             isClaimMatrixPath(path)
@@ -184,7 +184,7 @@ function MatrixPage({ path, runId }: { path: string; runId: string }) {
   const { document, verified, verificationState } = useClaimMatrix(path, "workspace");
   return (
     // Edge to edge on a phone, where each claim is a card.
-    <div className="mx-auto w-full max-w-content-full px-6 py-6 max-sm:px-0 max-sm:py-3">
+    <div className="mx-auto w-full max-w-page px-6 py-6 max-sm:px-0 max-sm:py-3">
       {document
         ? <EvidenceMatrixTable claims={document.claims} verified={verified} verificationState={verificationState} runId={runId} className="max-sm:rounded-none max-sm:border-x-0" />
         : <p className="text-ui text-muted max-sm:px-4">这个证据矩阵里没有可读的结论。</p>}

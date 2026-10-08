@@ -29,7 +29,7 @@ export function EvolutionDecisionCard({ id }: { id: string }) {
   if (!access.enabled || !access.operator) return null;
   const recommended = row?.payload.options.find(item => item.id === row.payload.recommended);
   const tried = (row?.payload.attemptedPaths ?? []).map(path => PATH_LABELS[path]).filter((label): label is string => Boolean(label));
-  return <div className="relative z-10 mt-3 space-y-3">
+  return <div className="relative z-sticky mt-3 space-y-3">
     {error && <LoadError message={error} onRetry={() => void load()} />}
     {!row ? !error && <FilesSkeleton /> : <>
       {tried.length > 0 && <p className="text-caption text-text-3">已尝试：{tried.join('；')}</p>}
