@@ -140,7 +140,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   ) : null;
 
   return (
-    <PageShell title="插件与技能" actions={<><SearchInput label="搜索" value={query} onChange={event => setQuery(event.target.value)} />{action}</>}>
+    <PageShell title="插件与技能" actions={<><SearchInput label="搜索" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery("")} />{action}</>}>
       <Tabs label="插件与技能" className="mb-6" value={tab} onChange={next => { setQuery(""); setOpen(null); navigate(`/app/extensions/${next}`); }}
         items={[{ value: "skills", label: "技能", count: skillCount ?? undefined }, { value: "plugins", label: "插件", count: pluginCount ?? undefined }]} />
       {tab === "skills" ? (

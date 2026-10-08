@@ -53,6 +53,7 @@ export function VcrPrecedentsPanel() {
             setQuery(event.target.value);
             if (!event.target.value.trim()) setAsked("");
           }}
+          onClear={() => { setQuery(""); setAsked(""); }}
           onKeyDown={(event) => { if (event.key === "Enter") setAsked(query.trim()); }}
         />
       </VcrToolbar>

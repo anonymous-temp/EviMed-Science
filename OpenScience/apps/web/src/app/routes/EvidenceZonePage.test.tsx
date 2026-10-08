@@ -110,7 +110,7 @@ describe("a zone's page", () => {
     expect(await screen.findByText("3 条证据")).toBeInTheDocument();
     expect(screen.queryByText(/匹配|已发布/)).toBeNull();
     client.listZoneEvidence.mockResolvedValue({ items: [card], total: 1, nextCursor: null });
-    await userEvent.type(screen.getByRole("textbox", { name: "搜索当前专区证据" }), "卒中");
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索当前专区证据" }), "卒中");
     await userEvent.click(screen.getByRole("button", { name: "搜索" }));
     expect(await screen.findByText("1 条匹配证据")).toBeInTheDocument();
     reader.unmount();
@@ -159,7 +159,7 @@ describe("a zone with no evidence yet", () => {
     expect(screen.getByRole("button", { name: "关注" })).toBeInTheDocument();
     expect(screen.getByText("卒中的预防与治疗证据。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "问这个专区" })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: "搜索当前专区证据" })).toBeNull();
+    expect(screen.queryByRole("searchbox", { name: "搜索当前专区证据" })).toBeNull();
     expect(screen.queryByText(/条匹配证据|条已发布证据|条证据|专区暂无证据/)).toBeNull();
     expect(screen.queryByRole("button", { name: /用作当前项目的参考/ })).toBeNull();
   });

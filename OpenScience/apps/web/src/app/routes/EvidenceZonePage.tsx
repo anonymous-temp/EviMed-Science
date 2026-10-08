@@ -25,7 +25,8 @@ import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
-import { Input, Textarea } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Input";
+import { SearchInput } from "@/components/ui/SearchInput";
 import {
   fetchEvidenceZoneDetail,
   publishEvidenceZone,
@@ -394,12 +395,13 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                       setQuery(q.trim());
                     }}
                   >
-                    <Input
+                    <SearchInput
                       disabled={editing || adding}
-                      aria-label="搜索当前专区证据"
-                      placeholder="搜索当前专区证据"
+                      label="搜索当前专区证据"
+                      className="flex-1"
                       value={q}
                       onChange={(event) => setQ(event.target.value)}
+                      onClear={() => { setQ(""); setQuery(""); }}
                     />
                     <Button
                       disabled={editing || adding}

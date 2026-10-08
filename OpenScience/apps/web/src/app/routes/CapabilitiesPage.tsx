@@ -153,7 +153,7 @@ export function CapabilitiesPage() {
   return (
     <PageShell
       title="科研工具"
-      actions={<SearchInput label="搜索工具" value={query} onChange={(event) => setQuery(event.target.value)} className="w-72" />}
+      actions={<SearchInput label="搜索工具" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-72" />}
     >
       {/* Only a balance just read: while it is being read again, or could not be, the one held is not drawn. */}
       {!billing.loading && !billing.error && <SimulatedAllowanceNotice allowance={billing.allowance} className="mb-6" />}

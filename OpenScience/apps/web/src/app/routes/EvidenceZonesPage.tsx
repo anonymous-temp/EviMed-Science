@@ -192,6 +192,7 @@ export function EvidenceZonesPage() {
             value={q}
             maxLength={200}
             onChange={(event) => setQ(event.target.value)}
+            onClear={() => { setQ(""); setQuery(""); }}
             onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); setQuery(q.trim()); } }}
             onCompositionStart={() => { composing.current = true; }}
             onCompositionEnd={(event) => { composing.current = false; setQ(event.currentTarget.value); setComposed((value) => value + 1); }}
