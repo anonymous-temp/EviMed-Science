@@ -106,7 +106,7 @@ function Articles({ geoId, project, articles, notice, onChanged }: { geoId: stri
         <FilterRow summary={`${needle ? "匹配 " : ""}${matching.length} 篇`}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 max-sm:w-full">
             <FilterChips label="稿件层级" options={options} value={current} onChange={setLayer} />
-            <SearchInput label="搜索稿件" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} className="w-52 max-sm:w-full" />
+            <SearchInput label="搜索稿件" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-52 max-sm:w-full" />
           </div>
         </FilterRow>
         {matching.length === 0 ? (

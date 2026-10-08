@@ -20,8 +20,8 @@ type KindFilter = "all" | keyof typeof CLAIM_SOURCE_KIND_WORDS;
  * every fact that may be said about it, with its source, level, whether it is
  * inside the label and when it was last checked against the source.
  *
- * A claim opens in place to show the verbatim quote it rests on. A retired
- * claim is not listed; an expired one is, marked, until it is re-checked.
+ * A claim that carries its verbatim quote opens in place to show it; one that
+ * carries none is not a button. A retired claim is not listed; an expired one is, marked, until it is re-checked.
  */
 export function EvidenceTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const { state, reload } = useGeoLoad(`evidence:${geoId}`, () => getGeoEvidence(geoId));
@@ -110,7 +110,7 @@ function Claims({ claims }: { claims: GeoClaim[] }) {
       <FilterRow summary={`${needle ? "匹配 " : ""}${matching.length} 条结论`}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 max-sm:w-full">
           <FilterChips label="出处类型" options={options} value={kind} onChange={setKind} />
-          <SearchInput label="搜索结论" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} className="w-52 max-sm:w-full" />
+          <SearchInput label="搜索结论" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-52 max-sm:w-full" />
         </div>
       </FilterRow>
       {matching.length === 0 ? (
@@ -124,8 +124,9 @@ function Claims({ claims }: { claims: GeoClaim[] }) {
                 <ListRow
                   key={claim.id}
                   title={claim.statement}
-                  onOpen={() => setOpen(expanded ? null : claim.id)}
-                  expanded={expanded}
+                  // What a conclusion opens to is its quotation; one that has none has nothing to open and is not a button.
+                  onOpen={claim.quote ? () => setOpen(expanded ? null : claim.id) : undefined}
+                  expanded={claim.quote ? expanded : undefined}
                   muted={claim.status === "expired"}
                   meta={(
                     <>

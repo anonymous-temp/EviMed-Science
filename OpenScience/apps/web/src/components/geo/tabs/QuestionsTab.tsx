@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
 import { ChevronRight } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
@@ -14,8 +13,10 @@ import {
 import { safeWebHref } from "@/lib/readPages";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
-import { Button, buttonClasses } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { Menu } from "@/components/ui/Menu";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Tag } from "@/components/ui/Tag";
 import { GEO_POOL_KINDS, GEO_POOL_NAMES, GEO_POOLS, groupName, monthDay, platformName } from "../geoText";
@@ -141,7 +142,7 @@ function QuestionMap({
               />
             ) : undefined}
           />
-          <SearchInput label="搜索问题" size="sm" value={query} maxLength={80} onChange={(event) => search(event.target.value)} className="w-52 max-sm:w-full" />
+          <SearchInput label="搜索问题" size="sm" value={query} maxLength={80} onChange={(event) => search(event.target.value)} onClear={() => search("")} className="w-52 max-sm:w-full" />
         </div>
       </FilterRow>
       {needle && found.length === 0 && (
@@ -266,11 +267,11 @@ function GroupRow({
             </p>
           )}
           {measured.length > 0 && (
-            <ul aria-label="测量问句" className="flex flex-col">
+            <List label="测量问句">
               {measured.map((question) => (
                 <MeasuredRow key={question.id} geoId={geoId} question={question} editable={editable} onChanged={onChanged} />
               ))}
-            </ul>
+            </List>
           )}
           {phrasings.length > 0 && <Phrasings phrasings={phrasings} />}
         </div>
@@ -279,6 +280,11 @@ function GroupRow({
   );
 }
 
+/**
+ * One measured question. Its row is the way to the answer it last got — the whole row, not a word at its end: the title is the
+ * link and the row says so with its mark and its 「看回答」. A question nothing has answered yet has nothing to open, so its row is
+ * not drawn as something that opens (no hover, no link). 「移出测量问句」 stays a control of its own.
+ */
 function MeasuredRow({ geoId, question, editable, onChanged }: { geoId: string; question: GeoQuestion; editable: boolean; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const remove = () => {
@@ -294,25 +300,15 @@ function MeasuredRow({ geoId, question, editable, onChanged }: { geoId: string; 
   // The answer it last got: the first engine of the project's order; the answer page lists the other engines' answers beside it.
   const answered = Array.isArray(question.answers) ? question.answers.find((answer) => answer?.snapshotId) : null;
   return (
-    <li data-geo-question={question.id} className="flex flex-col gap-1 rounded px-2 py-2 hover:bg-surface-1 sm:flex-row sm:items-start sm:gap-3">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="max-w-measure text-ui text-text">{question.text}</span>
-        <span className="text-caption text-text-3">
-          {[KIND_WORDS[question.kind] ?? null, platformName(question.platform)].filter(Boolean).join(" · ")}
-        </span>
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
-        {answered && (
-          <Link to={answerPath(geoId, answered.snapshotId)} className={buttonClasses({ variant: "text", size: "sm", className: "text-accent hover:text-accent" })}>
-            看回答
-            <span className="sr-only">{`：${question.text}`}</span>
-          </Link>
-        )}
-        {editable && (
-          <Button variant="text" size="sm" loading={busy} onClick={remove}>移出测量问句</Button>
-        )}
-      </div>
-    </li>
+    <ListRow
+      title={<span className="max-w-measure">{question.text}{answered && <span className="sr-only">，看回答</span>}</span>}
+      titleProps={{ "data-geo-question": question.id }}
+      to={answered ? answerPath(geoId, answered.snapshotId) : undefined}
+      meta={[KIND_WORDS[question.kind] ?? null, platformName(question.platform)].filter(Boolean).join(" · ")}
+      trailing={answered ? <span aria-hidden="true" className="max-sm:hidden">看回答</span> : undefined}
+      // The row's own control, always shown: one 「⋯」, which on a phone leaves the question its width (a text button took half of it).
+      menu={editable ? <Menu label={`“${question.text}”的操作`} items={[{ label: "移出测量问句", disabled: busy, onSelect: remove }]} /> : undefined}
+    />
   );
 }
 
