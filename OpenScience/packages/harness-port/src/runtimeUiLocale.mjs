@@ -74,7 +74,7 @@ export function evimedDictionaries() {
       'placeholder.default': '继续提问…',
       // Shown while the composer waits for its workspace; here the control
       // plane binds it, so there is nothing to choose.
-      'placeholder.workspace': '正在连接…',
+      'placeholder.workspace': '正在连接',
       // The generic row title of the kernel's code-execution tool.
       'tool.title.code': '运行代码',
       // The send button's tooltip and accessible name while a typed message
@@ -85,8 +85,9 @@ export function evimedDictionaries() {
     },
     chat: {
       // The working indicator under the last message. The kernel's copy is its
-      // vendor's Chinese name plus 中; the product's own name goes there.
-      'chat.deepDiving': 'EviMed 思考中…',
+      // vendor's Chinese name plus 中; the product's own name goes there, as
+      // 正在 + a verb with no ellipsis (design reference §7.3, E-13).
+      'chat.deepDiving': 'EviMed 正在思考',
       // The folded process of a finished turn counts its delegations by this
       // name (「171 次工具调用 · 3 个子任务」).
       'message.turnProcess.subagents.one': '{count} 个子任务',
@@ -100,8 +101,8 @@ export function evimedDictionaries() {
       // A retry says that it is retrying. The row keeps its state words and
       // drops the attempt count and the countdown.
       'message.retry.status': '{label}',
-      'message.retry.active': '正在重试…',
-      'message.retry.scheduled': '正在重试…',
+      'message.retry.active': '正在重试',
+      'message.retry.scheduled': '正在重试',
       'message.retry.started': '已重试',
       'message.retry.cancelled': '已取消重试',
     },
@@ -112,7 +113,7 @@ export function evimedDictionaries() {
       'count.running.other': '{count} 个子任务，正在运行',
       'switcher.aria': '切换子任务：{title}',
       'tree.aria': '子任务会话',
-      'loading.label': '正在加载子任务…',
+      'loading.label': '正在加载子任务',
       'loading.aria': '正在加载子任务',
       'load.error': '无法加载子任务',
       'branch.collapse': '收起 {label} 的下级子任务',

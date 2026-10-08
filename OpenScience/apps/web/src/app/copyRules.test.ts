@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { EVIMED_DICTIONARIES } from "../../../../packages/harness-port/src/runtimeUiLocale.mjs";
 
 /**
  * The writing rules a string can be checked for mechanically (spec §5.5,
@@ -24,6 +25,12 @@ import { describe, expect, it } from "vitest";
  * with TypeScript — so a comment quoting old copy, a regular expression or an
  * identifier cannot trip it. “失败/错误 as the subject” is a judgement about a
  * sentence, not a pattern, and stays with review.
+ *
+ * The conversation page's language pack (`zh-x-evimed`, in `harness-port`) is
+ * copy the shell ships too — the working line under a reply, the connection and
+ * retry states, the sub-task loader — so its values are read by the same four
+ * rules (design reference E-13). The kernel's own `zh` dictionary is upstream's
+ * and stays out of scope; only what the pack overrides is ours.
  *
  * The whole shell is in scope. The knowledge-base pages, the settings row that
  * imports from a network drive, 循证 GEO and its charts were held out while
@@ -126,12 +133,33 @@ describe("copy follows the writing rules", () => {
     expect(offenders((text) => WEIGHT_500_OR_700.test(text), geoSources)).toEqual([]);
   });
 
+  it("holds the conversation language pack to the same rules", () => {
+    const values = Object.entries(EVIMED_DICTIONARIES).flatMap(([namespace, dictionary]) =>
+      Object.entries(dictionary as Record<string, string>).map(([key, text]) => ({ where: `${namespace}.${key}`, text })));
+    // Prove the walk walked: the five status strings that carried an ellipsis
+    // are in the set it reads, in their new shape.
+    expect(values.length).toBeGreaterThan(30);
+    const byKey = new Map(values.map(({ where, text }) => [where, text]));
+    expect(byKey.get("chat.chat.deepDiving")).toBe("EviMed 正在思考");
+    expect(byKey.get("conversation.placeholder.workspace")).toBe("正在连接");
+    expect(byKey.get("chat.message.retry.active")).toBe("正在重试");
+    expect(byKey.get("chat.message.retry.scheduled")).toBe("正在重试");
+    expect(byKey.get("subagent.loading.label")).toBe("正在加载子任务");
+    const broken = (rule: (text: string) => boolean) => values.filter(({ text }) => rule(text)).map(({ where, text }) => `${where}  ${text}`);
+    expect(broken((text) => CORNER_QUOTES.test(text))).toEqual([]);
+    expect(broken((text) => STATUS_ELLIPSIS.test(text))).toEqual([]);
+    expect(broken((text) => IDLE_STATUS.test(text))).toEqual([]);
+    expect(broken((text) => UNSPACED.test(text.replace(DATE_PARTS, "")))).toEqual([]);
+  });
+
   it("reads strings, not comments, and would see a string that breaks a rule", () => {
     const probe = join(SRC, "app/copyRules.test.ts");
     const own = strings(probe).map(({ text }) => text);
     expect(own.some((text) => text.includes("正在"))).toBe(true);
     expect(CORNER_QUOTES.test("搜索「阿司匹林」")).toBe(true);
     expect(STATUS_ELLIPSIS.test("加载中…")).toBe(true);
+    expect(STATUS_ELLIPSIS.test("EviMed 思考中…")).toBe(true);
+    expect(STATUS_ELLIPSIS.test("正在重试…")).toBe(true);
     expect(STATUS_ELLIPSIS.test("正在读取 报告.pdf…")).toBe(true);
     expect(IDLE_STATUS.test("加载中")).toBe(true);
     expect(WEIGHT_500_OR_700.test("text-ui font-medium text-text")).toBe(true);

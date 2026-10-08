@@ -93,18 +93,31 @@ test('the strings written for a coding agent on a laptop are rephrased for a hos
   // What to type, and nothing about the machinery.
   assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.hero'], '描述你的研究问题…');
   assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.default'], '继续提问…');
-  assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.workspace'], '正在连接…');
+  assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.workspace'], '正在连接');
   assert.equal(EVIMED_DICTIONARIES.chat['message.maxTokens.hint'], '发送“继续”接着写');
   assert.doesNotMatch(EVIMED_DICTIONARIES.chat['message.maxTokens'], /token/i);
   assert.equal(EVIMED_DICTIONARIES.chat['message.failure.auth'], '服务暂时不可用，请稍后重试', 'a hosted runtime holds no key the reader could fix');
-  assert.equal(EVIMED_DICTIONARIES.chat['chat.deepDiving'], 'EviMed 思考中…');
+  assert.equal(EVIMED_DICTIONARIES.chat['chat.deepDiving'], 'EviMed 正在思考');
   assert.equal(EVIMED_DICTIONARIES.conversation['hero.preview'], '');
   // A retry says that it is retrying — no attempt count, no countdown.
   assert.equal(EVIMED_DICTIONARIES.chat['message.retry.status'], '{label}');
-  assert.equal(EVIMED_DICTIONARIES.chat['message.retry.active'], '正在重试…');
-  assert.equal(EVIMED_DICTIONARIES.chat['message.retry.scheduled'], '正在重试…');
+  assert.equal(EVIMED_DICTIONARIES.chat['message.retry.active'], '正在重试');
+  assert.equal(EVIMED_DICTIONARIES.chat['message.retry.scheduled'], '正在重试');
   // The kernel's record format is not the reader's business.
   assert.doesNotMatch(EVIMED_DICTIONARIES.subagent['diagnostic.unsupported'], /版本/);
+});
+
+test('status copy is 正在 + a verb with no ellipsis and never 思考中 (design reference §7.3, E-13)', () => {
+  // The five strings that carried one, now said as the shell says its own.
+  assert.equal(EVIMED_DICTIONARIES.subagent['loading.label'], '正在加载子任务');
+  assert.equal(EVIMED_DICTIONARIES.subagent['loading.aria'], '正在加载子任务');
+  for (const dict of Object.values(EVIMED_DICTIONARIES)) {
+    for (const [key, value] of Object.entries(dict)) {
+      assert.doesNotMatch(value, /加载中|处理中|思考中/, `${key} says a state with 中`);
+      // A status ends in its verb; a placeholder (「继续提问…」) is not a status.
+      assert.doesNotMatch(value, /(?:正在[^…\n]{0,16}|[\u3400-\u9fff]中)(?:…|\.\.\.)/u, `${key} is a status with an ellipsis`);
+    }
+  }
 });
 
 test('what Enter does while a run works is the send button\'s tooltip', () => {
