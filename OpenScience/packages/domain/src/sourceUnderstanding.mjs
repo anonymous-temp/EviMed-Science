@@ -56,7 +56,11 @@ export function normalizeSourceText(value) {
  * schema's own `limitations` slot (paper, general) stays the one anchored statement. An output without the field is an
  * understanding written before it existed or by a run that left it out, and is valid: the reader shows nothing for it, which
  * is different from an empty list (nothing to list, or nothing the document states). Bounds are the reader's, so a longer
- * list or a longer item is a shape the contract refuses rather than one the page would cut. */
+ * list or a longer item is a shape the contract refuses rather than one the page would cut.
+ *
+ * Understandings that already exist are NOT re-read to fill these in. That would be a model run per source, spent on the
+ * researcher's account without their asking; an old source shows neither list, and 「重新读取」 — which re-runs the
+ * understanding — produces them. Nothing derives them from the summary or the claims to make an old source look current. */
 export const SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS = 5
 export const SOURCE_UNDERSTANDING_CONTENTS_ITEM_MAX_CHARS = 200
 export const SOURCE_UNDERSTANDING_LIMITATIONS_MAX_ITEMS = 5

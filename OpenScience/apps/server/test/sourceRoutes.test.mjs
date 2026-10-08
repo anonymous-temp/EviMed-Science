@@ -8,7 +8,7 @@ import { createSourceRoutes } from "../src/sourceRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 import { startFakeOpenList } from "./fakeOpenList.mjs";
 
-async function fixture(t, { withOpenList = false, connector = null, withKnowledge = true } = {}) {
+async function fixture(t, { withOpenList = false, connector = null, withKnowledge = true, uses = null, passages = null } = {}) {
   const calls = [];
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
@@ -62,7 +62,7 @@ async function fixture(t, { withOpenList = false, connector = null, withKnowledg
     saveNote: async (input) => { calls.push({ method: "saveNote", sourceId: input.source.id, title: input.title, body: input.body }); return { source: { id: "src_note_2", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: false, changed: true, job: null }; },
     refetchLink: async (input) => { calls.push({ method: "refetchLink", sourceId: input.source.id }); return { source: { id: "src_link", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: true, changed: false, job: null }; },
   } : null;
-  const route = createSourceRoutes({ store, service, openList, knowledge, maxJsonBytes: 64 * 1024 });
+  const route = createSourceRoutes({ store, service, openList, knowledge, uses, passages, maxJsonBytes: 64 * 1024 });
   const server = createServer((req, res) => {
     route(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error));
   });
@@ -206,6 +206,58 @@ test("one document is read with whether the account library holds it, which the 
   service.get = async () => ({ id: "src_other", projectId: "other-project" });
   service.isShared = async () => { throw new Error("must not be asked for a project the caller does not own"); };
   assert.equal((await fetch(`${base}/api/sources/src_other`, { headers })).status, 404);
+});
+
+test("a document's page asks which conversations used it, through the account that holds it", async t => {
+  const asked = [];
+  const { base, headers, service } = await fixture(t, { uses: { list: async (user, sourceId) => { asked.push([user.id, sourceId]); return [{ sessionId: "s1", projectId: "owned-project", runId: "r1", title: "对话", kinds: ["read"] }]; } } });
+  const response = await fetch(`${base}/api/sources/src_one/uses`, { headers });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data.items.map((item) => item.sessionId), ["s1"]);
+  assert.deepEqual(asked, [["owner", "src_one"]]);
+  // A read only, and unauthenticated nothing is asked.
+  assert.equal((await fetch(`${base}/api/sources/src_one/uses`, { method: "POST", headers, body: "{}" })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/src_one/uses`)).status, 401);
+  assert.equal(asked.length, 1);
+  // The document's own project is checked before the uses are read: a source of a project the caller does not own is not found.
+  service.get = async () => ({ id: "src_other", projectId: "other-project" });
+  assert.equal((await fetch(`${base}/api/sources/src_other/uses`, { headers })).status, 404);
+  assert.equal(asked.length, 1);
+});
+
+test("without a store of uses a document's page is told there are none", async t => {
+  const { base, headers } = await fixture(t);
+  assert.deepEqual((await (await fetch(`${base}/api/sources/src_one/uses`, { headers })).json()).data, { items: [] });
+});
+
+test("the box's search of the documents' text decides which documents the list holds, and says where each match is", async t => {
+  const found = [];
+  const passages = { find: async request => { found.push(request); return { shas: ["a".repeat(64), "b".repeat(64)], bySha: { ["a".repeat(64)]: [{ page: 2, snippet: "…达比加群酯…", start: 10, end: 20 }] } }; } };
+  const { base, headers, calls, service } = await fixture(t, { passages });
+  service.list = async (userId, options) => { calls.push({ method: "list", userId, options });
+    return { items: [{ id: "src_a", kind: "source", projectId: "owned-project", payload: { fingerprint: { sha256: "a".repeat(64) }, paths: [], status: "complete" } },
+      { id: "src_c", kind: "source", projectId: "owned-project", payload: { fingerprint: { sha256: "c".repeat(64) }, paths: [], status: "complete" } }], nextCursor: null, counts: { all: 2 } }; };
+  const body = await (await fetch(`${base}/api/sources?projectId=owned-project&q=${encodeURIComponent("达比加群")}`, { headers })).json();
+  assert.deepEqual(found, [{ userId: "owner", projectId: "owned-project", shared: false, q: "达比加群" }]);
+  const listed = calls.filter(call => call.method === "list").at(-1).options;
+  assert.deepEqual(listed.bodyShas, ["a".repeat(64), "b".repeat(64)]);
+  assert.equal(listed.q, "达比加群");
+  // The passages are those of the rows of this page, by their ids; a row with no match has none.
+  assert.deepEqual(body.data.passages, { src_a: [{ page: 2, snippet: "…达比加群酯…", start: 10, end: 20 }] });
+  assert.equal(body.data.counts.all, 2);
+  // The shared scope is asked for with no project.
+  await fetch(`${base}/api/sources?scope=shared&q=x`, { headers });
+  assert.deepEqual(found.at(-1), { userId: "owner", projectId: null, shared: true, q: "x" });
+  // No box, no search of the text; a box the index cannot answer is the list's own search.
+  const before = found.length;
+  const plain = await (await fetch(`${base}/api/sources?projectId=owned-project`, { headers })).json();
+  assert.equal(found.length, before);
+  assert.equal("passages" in plain.data, false);
+  passages.find = async () => { throw new Error("index down"); };
+  const degraded = await fetch(`${base}/api/sources?projectId=owned-project&q=abc`, { headers });
+  assert.equal(degraded.status, 200);
+  assert.equal("passages" in (await degraded.json()).data, false);
+  assert.equal("bodyShas" in calls.filter(call => call.method === "list").at(-1).options, false);
 });
 
 test("source mutations require CSRF and reject browser-supplied ownership", async (t) => {
