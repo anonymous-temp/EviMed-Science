@@ -138,7 +138,7 @@ test("a ¥7.30 run on 5 gifted (ending in 2 days) and 1 purchased takes 5 + 1, r
   // With nothing available, new work waits exactly as before: refused with the amount it needs.
   await assert.rejects(w.service.assertBalanceForStart(w.userId, "adr-analysis"), (/** @type {any} */ error) => {
     assert.deepEqual([error.status, error.code], [402, "simulated_credits_exhausted"]);
-    assert.match(error.readerMessage, /^模拟额度不足，这次没有开始：可用模拟额度 ¥0\.00，这件事预计至少需要 ¥\d+\.\d{2}。/);
+    assert.match(error.readerMessage, /^模拟额度不足，这次没有开始：可用模拟额度 0\.00 灵豆，这件事预计至少需要 \d+\.\d{2} 灵豆。/);
     return true;
   });
   await assert.rejects(w.service.assertBalanceForStart(w.userId, "open-domain-answer"), { status: 402 }, "a plain question needs something to spend");

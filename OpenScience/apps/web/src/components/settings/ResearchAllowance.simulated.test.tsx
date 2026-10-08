@@ -91,7 +91,7 @@ describe("科研额度 on a deployment whose wallet is simulated", () => {
     const group = screen.getByRole("heading", { name: "科研额度" }).closest("section") as HTMLElement;
     expect(within(group).getAllByText(SIMULATED_WALLET_LABEL)).toHaveLength(1);
     expect(within(group.querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
-    for (const [label, amount] of [["可用科研额度", "¥200.00"], ["本月研究消费", "¥4.00"], ["本月待结算", "¥2.00"]] as const) {
+    for (const [label, amount] of [["可用科研额度", "200.00 灵豆"], ["本月研究消费", "4.00 灵豆"], ["本月待结算", "2.00 灵豆"]] as const) {
       expect(within(row(label)).getByText(amount)).toBeInTheDocument();
       expect(within(row(label)).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     }
@@ -110,7 +110,7 @@ describe("科研额度 on a deployment whose wallet is simulated", () => {
     mocks.statements.mockResolvedValue({ simulated: false, items: [{ ...charge, simulated: false }], nextCursor: null });
     open({ ...real, available: 0 });
     expect(await statementRows()).toHaveLength(1);
-    expect(within(row("可用科研额度")).getByText("¥0.00")).toBeInTheDocument();
+    expect(within(row("可用科研额度")).getByText("0.00 灵豆")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看充值" })).toBeInTheDocument();
     expect(marks()).toEqual([]);
     expect(screen.queryAllByText(/模拟/)).toEqual([]);
@@ -122,7 +122,7 @@ describe("科研额度 on a deployment whose wallet is simulated", () => {
     expect(screen.getByText("科研额度暂不可用")).toBeInTheDocument();
     expect(screen.getByText("模拟数据，不涉及真实资金")).toBeInTheDocument();
     expect(marks()).toEqual([]);
-    expect(screen.queryByText(/¥/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/灵豆/)).not.toBeInTheDocument();
   });
 });
 
@@ -130,7 +130,7 @@ describe("the low-allowance prompt", () => {
   it("says a low allowance is running out, marked, with the way to the simulated recharge page", async () => {
     open({ ...simulated, available: 12 });
     const prompt = screen.getByRole("status");
-    expect(prompt).toHaveTextContent("科研额度即将用完，还剩 ¥12.00。");
+    expect(prompt).toHaveTextContent("科研额度即将用完，还剩 12.00 灵豆。");
     expect(within(prompt).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
     // At the top of the section: before the allowance itself.
     expect(prompt.compareDocumentPosition(screen.getByRole("heading", { name: "科研额度" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -155,7 +155,7 @@ describe("the low-allowance prompt", () => {
     await statementRows();
     at.unmount();
     open({ ...simulated, available: SIMULATED_LOW_CREDITS + 1 });
-    expect(within(row("可用科研额度")).getByText("¥21.00")).toBeInTheDocument();
+    expect(within(row("可用科研额度")).getByText("21.00 灵豆")).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await statementRows();
   });
@@ -211,7 +211,7 @@ describe("充值与订单 on a deployment whose wallet is simulated", () => {
 
   it("draws no placeholder row, and no group, when the server gave no destination", async () => {
     open({ ...simulated, commerce: { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null } });
-    expect(within(row("可用科研额度")).getByText("¥200.00")).toBeInTheDocument();
+    expect(within(row("可用科研额度")).getByText("200.00 灵豆")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^充值与/ })).not.toBeInTheDocument();
     expect(screen.queryAllByText(/尚未开放/)).toEqual([]);
     expect(screen.queryByRole("link", { name: /^查看/ })).not.toBeInTheDocument();
@@ -244,18 +244,18 @@ describe("the statement list", () => {
     expect(rows).toHaveLength(3);
 
     expect(within(rows[0]).getByText("模拟充值")).toBeInTheDocument();
-    expect(within(rows[0]).getByText("+¥100.00")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("+100.00 灵豆")).toBeInTheDocument();
     expect(within(rows[0]).getByText("已入账")).toBeInTheDocument();
     expect(within(rows[0]).queryByRole("link")).not.toBeInTheDocument();
 
     expect(within(rows[1]).getByRole("link", { name: "文献研究" })).toHaveAttribute("href", "/app/runs?run=run_1");
     expect(within(rows[1]).getByText("已结算")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("¥4.00")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("4.00 灵豆")).toBeInTheDocument();
     expect(within(rows[1]).queryByText("已入账")).not.toBeInTheDocument();
     expect(within(rows[1]).queryByText(/\+/)).not.toBeInTheDocument();
 
     expect(within(rows[2]).getByText("模拟初始额度")).toBeInTheDocument();
-    expect(within(rows[2]).getByText("+¥200.00")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("+200.00 灵豆")).toBeInTheDocument();
     expect(within(rows[2]).getByText("已入账")).toBeInTheDocument();
     expect(within(rows[2]).queryByRole("link")).not.toBeInTheDocument();
 
@@ -269,7 +269,7 @@ describe("the statement list", () => {
     mocks.statements.mockResolvedValue({ simulated: true, items: [{ ...topUp, runId: "run_9", waivedCny: "0.00000000" }], nextCursor: null });
     open(simulated);
     const [only] = await statementRows();
-    expect(within(only).getByText("+¥100.00")).toBeInTheDocument();
+    expect(within(only).getByText("+100.00 灵豆")).toBeInTheDocument();
     expect(within(only).queryByRole("link")).not.toBeInTheDocument();
     expect(within(only).queryByText(/已减免/)).not.toBeInTheDocument();
   });
@@ -279,7 +279,7 @@ describe("the statement list", () => {
     open(simulated);
     const [only] = await statementRows();
     expect(within(only).getByText("已入账")).toBeInTheDocument();
-    expect(within(only).queryByText(/¥/)).not.toBeInTheDocument();
+    expect(within(only).queryByText(/灵豆/)).not.toBeInTheDocument();
   });
 
   // A row says for itself whether its wallet is simulated; one that says
@@ -304,7 +304,7 @@ describe("the statement list", () => {
     // …and where nothing says so — an older control plane — it is a charge of a real wallet.
     open(real);
     rows = await statementRows();
-    expect(within(rows[0]).getByText("¥4.00")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("4.00 灵豆")).toBeInTheDocument();
     expect(within(rows[0]).getByRole("link", { name: "文献研究" })).toBeInTheDocument();
     expect(within(rows[0]).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
   });

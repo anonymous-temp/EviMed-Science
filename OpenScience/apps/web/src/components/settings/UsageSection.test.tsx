@@ -75,7 +75,7 @@ function expectNoResearchBilling() {
 describe("用量 on a deployment without research billing", () => {
   it("is the month's usage and 「明细」, with no word of research billing", async () => {
     open();
-    expect(await screen.findByText("¥116.96")).toBeInTheDocument();
+    expect(await screen.findByText("116.96 灵豆")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "本月用量" })).toBeInTheDocument();
     expect(screen.getByText("9 月 · 9,040 次模型调用")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "明细" })).toBeInTheDocument();
@@ -103,17 +103,17 @@ describe("用量 on a deployment without research billing", () => {
     expect(rows).toHaveLength(3);
     expect(within(rows[0]).getByText("9月22日")).toBeInTheDocument();
     expect(within(rows[0]).getByRole("link", { name: "中医药治疗儿童疳证的 Meta 分析检索" })).toHaveAttribute("href", "/app/runs?run=run_b");
-    expect(within(rows[0]).getByText("¥4.81")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("4.81 灵豆")).toBeInTheDocument();
     expect(within(rows[1]).getByText("未命名的研究")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("不足 ¥0.01")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("不足 0.01 灵豆")).toBeInTheDocument();
     expect(within(rows[2]).getByText("其他")).toBeInTheDocument();
-    expect(within(rows[2]).getByText("¥1.23")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("1.23 灵豆")).toBeInTheDocument();
     // Tokens are an operator's; the unreported calls are one small line at the foot.
     expect(screen.queryByText(/token/)).not.toBeInTheDocument();
     expect(screen.getByText("另有 161 次调用未回报用量，未计入金额。")).toHaveClass("text-caption");
     expectNoResearchBilling();
     await user.click(screen.getByRole("button", { name: "本月用量" }));
-    expect(await screen.findByText("¥116.96")).toBeInTheDocument();
+    expect(await screen.findByText("116.96 灵豆")).toBeInTheDocument();
   });
 
   it("shows an operator the per-model split in calls and money, and not the allowance page's supplier-cost panel", async () => {
@@ -122,7 +122,7 @@ describe("用量 on a deployment without research billing", () => {
     open();
     expect(await screen.findByText("deepseek-v4-pro")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "模型调用" })).toBeInTheDocument();
-    expect(screen.getByText("9040 次 · ¥116.96")).toBeInTheDocument();
+    expect(screen.getByText("9040 次 · 116.96 灵豆")).toBeInTheDocument();
     expect(screen.queryByText(/token/)).not.toBeInTheDocument();
     expectNoResearchBilling();
     // One read of the month's usage: the supplier-cost panel would have been a second.
@@ -146,7 +146,7 @@ describe("用量 on a deployment without research billing", () => {
     mocks.runs.mockResolvedValue({ ...runs, items: [], other: { calls: 0, cost: 0 } });
     open();
     expect(await screen.findByText("9 月 · 还没有模型调用")).toBeInTheDocument();
-    expect(screen.getByText("¥0.00")).toBeInTheDocument();
+    expect(screen.getByText("0.00 灵豆")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "明细" }));
     expect(await screen.findByText("本月还没有用量")).toBeInTheDocument();
   });
@@ -155,7 +155,7 @@ describe("用量 on a deployment without research billing", () => {
     mocks.usage.mockRejectedValue(new WebApiError("HTTP 503", { status: 503, code: "runtime_unavailable" }));
     open();
     expect(await screen.findByText(/无法读取用量：运行时出现问题，稍后重试。/)).toBeInTheDocument();
-    expect(screen.queryByText("¥0.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("0.00 灵豆")).not.toBeInTheDocument();
   });
 
   // The ledger measures spend over rolling 24-hour and 7-day windows, so
@@ -177,10 +177,10 @@ describe("用量 on a deployment without research billing", () => {
 
   it("is not held up by another read of the allowance when it is opened again", async () => {
     const first = open();
-    expect(await screen.findByText("¥116.96")).toBeInTheDocument();
+    expect(await screen.findByText("116.96 灵豆")).toBeInTheDocument();
     first.unmount();
     open();
-    expect(await screen.findByText("¥116.96")).toBeInTheDocument();
+    expect(await screen.findByText("116.96 灵豆")).toBeInTheDocument();
     // The deployment's setting is final for the page, so the answer is asked for once.
     expect(mocks.allowance).toHaveBeenCalledTimes(1);
   });
@@ -194,19 +194,19 @@ describe("科研额度 on a deployment that bills research", () => {
   });
 
   it("separates tiny confirmed charges, pending and supplier charges", async () => {
-    open(); expect(await screen.findByText("¥20.00")).toBeInTheDocument();
+    open(); expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "科研额度" })).toBeInTheDocument();
     expect(screen.queryByText("占用额度")).not.toBeInTheDocument();
     expect(screen.getByText("本月待结算")).toBeInTheDocument();
-    expect(screen.getByText("¥1.23")).toBeInTheDocument();
+    expect(screen.getByText("1.23 灵豆")).toBeInTheDocument();
     const rows = within(await screen.findByRole("list", { name: "研究消费记录" })).getAllByRole("listitem");
-    expect(within(rows[0]).getByText("¥0.004")).toBeInTheDocument(); // a charge under a cent is drawn with its first significant digits, never as nothing
+    expect(within(rows[0]).getByText("0.004 灵豆")).toBeInTheDocument(); // a charge under a cent is drawn with its first significant digits, never as nothing
     expect(within(rows[1]).getByText("结算中")).toBeInTheDocument();
-    expect(screen.queryByText("¥99.00")).not.toBeInTheDocument(); expect(mocks.usage).not.toHaveBeenCalled();
+    expect(screen.queryByText("99.00 灵豆")).not.toBeInTheDocument(); expect(mocks.usage).not.toHaveBeenCalled();
   });
 
   it("is the allowance page, not the month's usage", async () => {
-    open(); expect(await screen.findByText("¥20.00")).toBeInTheDocument();
+    open(); expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "本月用量" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "明细" })).not.toBeInTheDocument();
     expect(screen.queryByText(/次模型调用/)).not.toBeInTheDocument();
@@ -216,7 +216,7 @@ describe("科研额度 on a deployment that bills research", () => {
   // Four rows reading 「尚未开放」 under 「充值与会员」 were the page presenting a
   // checkout this deployment does not have: what is not there is not drawn.
   it("does not invent commerce or membership: no row, and no group, for what the deployment does not have", async () => {
-    open(); expect(await screen.findByText("¥20.00")).toBeInTheDocument();
+    open(); expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "科研额度" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "充值与会员" })).not.toBeInTheDocument();
     for (const gone of [/尚未开放/, /充值/, /会员/, /订单/, /退款/]) expect(screen.queryAllByText(gone)).toEqual([]);
@@ -226,8 +226,8 @@ describe("科研额度 on a deployment that bills research", () => {
   it("keeps confirmed monthly charges readable when the wallet is unavailable", async () => {
     mocks.allowance.mockResolvedValue({ ...allowance, status: "unavailable", available: null, month: { ...allowance.month, paid: 4.27 } });
     open(); expect(await screen.findByText("科研额度暂不可用")).toBeInTheDocument();
-    expect(screen.getByText("¥4.27")).toBeInTheDocument();
-    expect(screen.queryByText("¥20.00")).not.toBeInTheDocument();
+    expect(screen.getByText("4.27 灵豆")).toBeInTheDocument();
+    expect(screen.queryByText("20.00 灵豆")).not.toBeInTheDocument();
   });
 
   // The server answers `month: null` when it could not read the ledger. Unknown
@@ -237,7 +237,7 @@ describe("科研额度 on a deployment that bills research", () => {
     open(); expect(await screen.findByText("科研额度暂不可用")).toBeInTheDocument();
     for (const gone of [/本月研究消费/, /本月待结算/, /研究消费明细/, /还没有研究消费记录/]) expect(screen.queryAllByText(gone)).toEqual([]);
     expect(screen.queryByRole("list", { name: "研究消费记录" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/¥/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/灵豆/)).not.toBeInTheDocument();
     await act(async () => {});
     expect(mocks.statements).not.toHaveBeenCalled();
   });
@@ -273,7 +273,7 @@ describe("科研额度 on a deployment that bills research", () => {
   ])("shows no simulated mark, line or prompt on a deployment that %s", async (_, fields) => {
     mocks.allowance.mockResolvedValue({ ...allowance, available: 0, ...fields });
     mocks.statements.mockResolvedValue({ items: [settled], nextCursor: null });
-    open(); expect(await screen.findByText("¥0.00")).toBeInTheDocument();
+    open(); expect(await screen.findByText("0.00 灵豆")).toBeInTheDocument();
     expect(await screen.findByText("文献研究")).toBeInTheDocument();
     expect(screen.queryAllByText(/模拟/)).toEqual([]);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -294,7 +294,7 @@ describe("科研额度 on a deployment that bills research", () => {
   // With billing on, `status` says how far this account's wallet is linked.
   it.each([["unlinked", "尚未关联科研额度账户"], ["unavailable", "科研额度暂不可用"]])("states %s honestly", async (status, copy) => {
     mocks.allowance.mockResolvedValue({ ...allowance, status }); open();
-    expect(await screen.findByText(copy)).toBeInTheDocument(); expect(screen.queryByText("¥20.00")).not.toBeInTheDocument();
+    expect(await screen.findByText(copy)).toBeInTheDocument(); expect(screen.queryByText("20.00 灵豆")).not.toBeInTheDocument();
   });
 
   it("retries a failed later page without losing existing statements", async () => {
@@ -309,12 +309,12 @@ describe("科研额度 on a deployment that bills research", () => {
 
   it("shows waived amounts without exposing pricing internals", async () => {
     mocks.statements.mockResolvedValue({ items: [{ ...settled, amount: 0, waivedCny: "0.04", pricingVersion: "legacy-v1", settlementPrecision: "legacy-integer-floor" }], nextCursor: null });
-    open(); expect(await screen.findByText(/已减免 ¥0.04/)).toBeInTheDocument();
+    open(); expect(await screen.findByText(/已减免 0.04 灵豆/)).toBeInTheDocument();
     expect(screen.queryByText(/legacy/)).not.toBeInTheDocument();
   });
 
   it("labels operator supplier costs, and has no per-model split of the month's usage", async () => {
-    mocks.operator = true; open(); expect(await screen.findByText("¥120.00")).toBeInTheDocument(); expect(screen.getByText("平台运行成本")).toBeInTheDocument();
+    mocks.operator = true; open(); expect(await screen.findByText("120.00 灵豆")).toBeInTheDocument(); expect(screen.getByText("平台运行成本")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "模型调用" })).not.toBeInTheDocument();
     expect(screen.queryByText("deepseek-v4-pro")).not.toBeInTheDocument();
   });
@@ -322,28 +322,28 @@ describe("科研额度 on a deployment that bills research", () => {
   // The numbers move, so opening the section reads them again; until they come
   // it is a skeleton, as it always was, and not last time's balance.
   it("reads the numbers again when it opens, with a skeleton until they come", async () => {
-    const first = open(); expect(await screen.findByText("¥20.00")).toBeInTheDocument();
+    const first = open(); expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
     first.unmount();
     let answer!: (value: object) => void;
     mocks.allowance.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
     const { container } = open();
     expect(container.querySelector(".animate-pulse")).not.toBeNull();
-    expect(screen.queryByText("¥20.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("20.00 灵豆")).not.toBeInTheDocument();
     await act(async () => { answer({ ...allowance, available: 35 }); });
-    expect(await screen.findByText("¥35.00")).toBeInTheDocument();
-    expect(screen.queryByText("¥20.00")).not.toBeInTheDocument();
+    expect(await screen.findByText("35.00 灵豆")).toBeInTheDocument();
+    expect(screen.queryByText("20.00 灵豆")).not.toBeInTheDocument();
     expect(mocks.allowance).toHaveBeenCalledTimes(2);
   });
 
   it("says so when the numbers cannot be read again, rather than showing the ones it held", async () => {
-    const first = open(); expect(await screen.findByText("¥20.00")).toBeInTheDocument();
+    const first = open(); expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
     first.unmount();
     mocks.allowance.mockRejectedValueOnce(new Error("network"));
     open();
     expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
-    expect(screen.queryByText("¥20.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("20.00 灵豆")).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "重试" }));
-    expect(await screen.findByText("¥20.00")).toBeInTheDocument();
+    expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
   });
 });
 
@@ -353,7 +353,7 @@ describe("the section while the deployment's answer is read", () => {
     mocks.allowance.mockReturnValue(new Promise(() => {}));
     const { container } = open();
     expect(container.querySelector(".animate-pulse")).not.toBeNull();
-    expect(screen.queryByText("¥0.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("0.00 灵豆")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
     expectNoResearchBilling();
     // Neither page's data is read on a guess: an operator would see the wrong panel for a moment.
@@ -366,7 +366,7 @@ describe("the section while the deployment's answer is read", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("操作未完成，请重试。");
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
-    expect(screen.queryByText("¥0.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("0.00 灵豆")).not.toBeInTheDocument();
     expectNoResearchBilling();
     expect(mocks.usage).not.toHaveBeenCalled();
   });
@@ -374,7 +374,7 @@ describe("the section while the deployment's answer is read", () => {
   it("retries into the usage page when the deployment turns out not to bill", async () => {
     mocks.allowance.mockRejectedValueOnce(new Error("network")); open();
     await userEvent.setup().click(await screen.findByRole("button", { name: "重试" }));
-    expect(await screen.findByText("¥116.96")).toBeInTheDocument();
+    expect(await screen.findByText("116.96 灵豆")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "明细" })).toBeInTheDocument();
     expectNoResearchBilling();
   });
@@ -382,7 +382,7 @@ describe("the section while the deployment's answer is read", () => {
   it("retries into the allowance page when it does, without showing zero", async () => {
     mocks.allowance.mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce(allowance); open();
     await userEvent.setup().click(await screen.findByRole("button", { name: "重试" }));
-    expect(await screen.findByText("¥20.00")).toBeInTheDocument();
+    expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "明细" })).not.toBeInTheDocument();
   });
 });

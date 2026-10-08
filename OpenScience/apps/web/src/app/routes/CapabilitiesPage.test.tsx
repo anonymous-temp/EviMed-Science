@@ -460,10 +460,10 @@ describe("CapabilitiesPage", () => {
       // A capability its own module opens is not listed, so it is not asked about either.
       mocks.listWebResearchAgents.mockResolvedValue([...agents, { ...agents[3], id: "geo-insight", skill: "geo-insight", runtimeAgent: "evimed-geo-insight" }]);
       renderPage();
-      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 ¥4～8 额度"));
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 4～8 灵豆"));
       expect(within(card("药品安全性分析")).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
       // One figure where the two ends meet, still after the duration.
-      expect(card(title("off-label-analysis"))).toHaveTextContent(/分钟 · 约 ¥3 额度/);
+      expect(card(title("off-label-analysis"))).toHaveTextContent(/分钟 · 约 3 灵豆/);
       expect(within(card(title("off-label-analysis"))).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
       expect(mocks.estimates).toHaveBeenCalledTimes(1);
       expect(mocks.estimates).toHaveBeenCalledWith(LISTED);
@@ -475,21 +475,21 @@ describe("CapabilitiesPage", () => {
         items: [estimate("adr-analysis", 4.05, 7.02), estimate("off-label-analysis", 0.2, 0.6), estimate("peer-review", 2.4, 2.6)],
       });
       renderPage();
-      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 ¥4～8 额度"));
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 4～8 灵豆"));
       // Under one credit the cents are the figure.
-      expect(card(title("off-label-analysis"))).toHaveTextContent("约 ¥0.2～0.6 额度");
+      expect(card(title("off-label-analysis"))).toHaveTextContent("约 0.2～0.6 灵豆");
       // Two ends that round to different whole credits stay a range.
-      expect(card(title("peer-review"))).toHaveTextContent("约 ¥2～3 额度");
+      expect(card(title("peer-review"))).toHaveTextContent("约 2～3 灵豆");
     });
 
     it("is left out for a tool nothing supports an estimate of, which gets no mark and no zero", async () => {
       renderPage();
-      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("额度"));
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("灵豆"));
       // `basis: "none"`, and a tool the answer does not carry at all.
       for (const id of ["meta-analysis", "peer-review"]) {
         const tool = card(title(id));
         expect(tool).toHaveTextContent(/约 \d+～\d+ 分钟/);
-        expect(tool).not.toHaveTextContent(/额度|¥/);
+        expect(tool).not.toHaveTextContent(/灵豆/);
         expect(within(tool).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
       }
     });
@@ -504,21 +504,21 @@ describe("CapabilitiesPage", () => {
       mocks.estimates.mockResolvedValue({ ...estimates, items: [item, estimate("peer-review", 1, 2)] });
       renderPage();
       // The read was answered and drawn: the other tool has its price.
-      await waitFor(() => expect(card(title("peer-review"))).toHaveTextContent("约 ¥1～2 额度"));
+      await waitFor(() => expect(card(title("peer-review"))).toHaveTextContent("约 1～2 灵豆"));
       expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟");
-      expect(card("药品安全性分析")).not.toHaveTextContent(/额度|¥/);
+      expect(card("药品安全性分析")).not.toHaveTextContent(/灵豆/);
       expect(within(card("药品安全性分析")).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     });
 
     it("is not asked for again by a search or a category, which filter what is already here", async () => {
       renderPage();
-      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度"));
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆"));
       await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "氨甲环酸");
       expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
       await userEvent.clear(screen.getByRole("searchbox", { name: "搜索工具" }));
       await userEvent.click(within(screen.getByRole("group", { name: "分类" })).getByRole("button", { name: "药学评价" }));
       // The card comes back with the price it had.
-      expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 ¥4～8 额度");
+      expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 4～8 灵豆");
       await act(async () => {});
       expect(mocks.estimates).toHaveBeenCalledTimes(1);
     });
@@ -530,7 +530,7 @@ describe("CapabilitiesPage", () => {
       expect(mocks.estimates).toHaveBeenCalledTimes(1);
       for (const id of LISTED) {
         expect(card(title(id))).toHaveTextContent(/约 \d+～\d+ 分钟/);
-        expect(card(title(id))).not.toHaveTextContent(/额度|¥/);
+        expect(card(title(id))).not.toHaveTextContent(/灵豆/);
       }
       expect(card("药品安全性分析")).toHaveTextContent(CAPABILITY_DISPLAY["adr-analysis"].description);
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -549,7 +549,7 @@ describe("CapabilitiesPage", () => {
           </Routes>
         </MemoryRouter>,
       );
-      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度"));
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆"));
       await userEvent.click(card("药品安全性分析"));
       await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
       expect(screen.getByTestId("capability")).toHaveTextContent("adr-analysis");
@@ -567,7 +567,7 @@ describe("CapabilitiesPage", () => {
       await settled();
       // The cards are there, as they always were…
       expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟");
-      for (const id of LISTED) expect(card(title(id))).not.toHaveTextContent(/额度|¥/);
+      for (const id of LISTED) expect(card(title(id))).not.toHaveTextContent(/灵豆/);
       // …and nothing of the simulated allowance is.
       expect(mocks.estimates).not.toHaveBeenCalled();
       expect(screen.queryAllByText(/模拟/)).toEqual([]);
@@ -591,7 +591,7 @@ describe("CapabilitiesPage", () => {
       mocks.allowance.mockResolvedValue({ ...simulatedWallet, available: 5 });
       renderPage();
       const prompt = await screen.findByRole("status");
-      expect(prompt).toHaveTextContent("科研额度即将用完，还剩 ¥5.00。");
+      expect(prompt).toHaveTextContent("科研额度即将用完，还剩 5.00 灵豆。");
       expect(within(prompt).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
       expect(within(prompt).getByRole("link", { name: "去模拟充值" })).toHaveAttribute("href", SIMULATED_WALLET_PAGES.recharge);
       await settled();
@@ -611,7 +611,7 @@ describe("CapabilitiesPage", () => {
       mocks.allowance.mockResolvedValue(simulatedWallet);
       renderPage();
       // The allowance was read and is a simulated one: the cards carry prices.
-      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度"));
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆"));
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
@@ -620,7 +620,7 @@ describe("CapabilitiesPage", () => {
     it("is drawn from the balance just read, not from the one held", async () => {
       mocks.allowance.mockResolvedValue({ ...simulatedWallet, available: 5 });
       const first = renderPage();
-      expect(await screen.findByRole("status")).toHaveTextContent("还剩 ¥5.00");
+      expect(await screen.findByRole("status")).toHaveTextContent("还剩 5.00 灵豆");
       first.unmount();
 
       let answer!: (value: object) => void;
@@ -632,7 +632,7 @@ describe("CapabilitiesPage", () => {
       // A top-up happened in between: nothing is prompted.
       await act(async () => { answer({ ...simulatedWallet, available: 105 }); });
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
-      expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度");
+      expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆");
     });
 
     it("is not drawn from the balance held when the read that would replace it fails", async () => {
@@ -647,7 +647,7 @@ describe("CapabilitiesPage", () => {
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       // The deployment is still the one that said its wallet is simulated: the prices stay.
-      expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度");
+      expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆");
     });
   });
 });

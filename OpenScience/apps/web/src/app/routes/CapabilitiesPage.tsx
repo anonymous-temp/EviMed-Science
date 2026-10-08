@@ -41,9 +41,9 @@ function durationText([min, max]: [number, number]): string | null {
 }
 
 /**
- * What a tool usually takes out of the allowance: 「约 ¥4～8 额度」, in whole
+ * What a tool usually takes out of the allowance: 「约 4～8 灵豆」, in whole
  * credits (one credit is one CNY) — the low end floored, the high end rounded
- * up, because it is an 「约」 figure and `¥4.05～7.02` only wraps the card. A
+ * up, because it is an 「约」 figure and `4.05～7.02` only wraps the card. A
  * range that stays under one credit keeps its cents. Null when the estimate
  * names no range — nothing supports one (`basis: "none"`), or the two ends are
  * not a range — so a price nobody estimated is left out, never shown as zero.
@@ -53,7 +53,7 @@ function allowanceText(estimate: WebResearchEstimate | undefined): string | null
   const { low, high } = estimate;
   if (typeof low !== "number" || typeof high !== "number" || !Number.isFinite(low) || !Number.isFinite(high) || low < 0 || low > high) return null;
   const [from, to] = high < 1 ? [low, high] : [Math.floor(low), Math.ceil(high)];
-  return `约 ¥${from === to ? formatNumber(to) : formatRange(from, to)} 额度`;
+  return `约 ${from === to ? formatNumber(to) : formatRange(from, to)} 灵豆`;
 }
 
 /**

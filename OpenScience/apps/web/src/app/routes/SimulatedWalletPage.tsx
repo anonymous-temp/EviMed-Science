@@ -161,7 +161,7 @@ function Recharge({ allowance, toppedUp, onToppedUp }: {
       {toppedUp && (
         <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 text-ui text-text">
           <SimulatedMark />
-          <span>{toppedUp.duplicate ? "这笔模拟充值此前已经入账，没有重复入账。" : `模拟充值 ${allowanceText(toppedUp.order.amount, "nearest")} 已入账。`}</span>
+          <span>{toppedUp.duplicate ? "这笔模拟充值此前已经入账，没有重复入账。" : `模拟充值 ${allowanceText(toppedUp.order.amount, "nearest")}已入账。`}</span>
           <Link to={SIMULATED_WALLET_PAGES.orders} className={buttonClasses({ variant: "secondary", size: "sm" })}>查看模拟订单</Link>
         </div>
       )}
@@ -178,7 +178,7 @@ function Recharge({ allowance, toppedUp, onToppedUp }: {
         <div className="flex flex-wrap gap-2">
           {SIMULATED_TOPUP_PACKAGES.map((item) => (
             <Button key={item.id} variant="secondary" loading={pending === item.id} disabled={pending !== null} onClick={() => topUp(item.id)}>
-              ¥{item.credits}
+              {item.credits} 灵豆
             </Button>
           ))}
         </div>

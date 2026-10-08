@@ -10,7 +10,7 @@ import {
   type WebUsageRuns,
   type WebUsageSummary,
 } from "@/lib/apiClient";
-import { formatCny } from "@/lib/format";
+import { formatLingdou } from "@/lib/format";
 import { useOperator } from "@/lib/useOperator";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -80,7 +80,7 @@ export function MonthlyUsage() {
           <PanelRow label={<span className="text-text-3">正在读取</span>} />
         ) : (
           <PanelRow
-            label={<span className="text-title font-semibold tabular-nums">{formatCny(usage.cost) || "¥0.00"}</span>}
+            label={<span className="text-title font-semibold tabular-nums">{formatLingdou(usage.cost) || "0.00 灵豆"}</span>}
             description={usage.calls > 0 ? `${month} 月 · ${count(usage.calls)} 次模型调用` : `${month} 月 · 还没有模型调用`}
             control={(
               <Button variant="text" onClick={() => setDetail(true)}>
@@ -95,7 +95,7 @@ export function MonthlyUsage() {
         // researcher's bill does not need (DESIGN.md: no model names in the body).
         <Panel title="模型调用">
           {usage.byModel.map((row) => (
-            <PanelRow key={row.model} label={<span className="font-mono">{row.model}</span>} control={<span className="tabular-nums">{row.calls} 次 · {formatCny(row.cost) || "¥0.00"}</span>} />
+            <PanelRow key={row.model} label={<span className="font-mono">{row.model}</span>} control={<span className="tabular-nums">{row.calls} 次 · {formatLingdou(row.cost) || "0.00 灵豆"}</span>} />
           ))}
         </Panel>
       )}
@@ -137,7 +137,7 @@ function UsageDetail({ usage, operator, onBack }: { usage: WebUsageSummary | nul
                       title={item.title ?? "未命名的研究"}
                       to={`/app/runs?run=${encodeURIComponent(item.runId)}`}
                       meta={operator ? `${count(item.calls)} 次调用` : undefined}
-                      trailing={<span className="text-ui tabular-nums text-text-2">{formatCny(item.cost)}</span>}
+                      trailing={<span className="text-ui tabular-nums text-text-2">{formatLingdou(item.cost)}</span>}
                     />
                   ))}
                   {runs.other.cost > 0 && (
@@ -145,7 +145,7 @@ function UsageDetail({ usage, operator, onBack }: { usage: WebUsageSummary | nul
                       leading={<span className="w-20" />}
                       title="其他"
                       meta={operator ? `${count(runs.other.calls)} 次调用` : undefined}
-                      trailing={<span className="text-ui tabular-nums text-text-2">{formatCny(runs.other.cost)}</span>}
+                      trailing={<span className="text-ui tabular-nums text-text-2">{formatLingdou(runs.other.cost)}</span>}
                     />
                   )}
                 </List>

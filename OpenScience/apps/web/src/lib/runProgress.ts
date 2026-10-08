@@ -8,7 +8,7 @@ import type {
   WebRunUsage,
 } from "@/lib/apiClient";
 import type { RunStreamEvent } from "@/lib/runEvents";
-import { formatCny } from "@/lib/format";
+import { formatLingdou } from "@/lib/format";
 
 /**
  * A run's progress, from whichever source is freshest.
@@ -210,7 +210,7 @@ export function claimSummaryLine(summary: WebAgentRun["claimSummary"]): string |
     : `${summary.total} 条结论，引文全部已核对`;
 }
 
-/** 「¥0.42」 — what this run cost, when the ledger attributed it. */
+/** 「0.42 灵豆」 — what this run cost, when the ledger attributed it. */
 export function runCostText(usage: WebRunUsage | null | undefined): string {
-  return usage ? formatCny(usage.costCny) : "";
+  return usage ? formatLingdou(usage.costCny) : "";
 }
