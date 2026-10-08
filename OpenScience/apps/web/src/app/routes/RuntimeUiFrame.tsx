@@ -1079,36 +1079,45 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           kernel's frame, never inside it, with the credential form in place and
           a 继续 that asks for the skipped part in the same conversation. */}
       {active && !error && <ConnectorNeedNotice run={boundRun} />}
-      <div className="relative min-h-0 flex-1">
-        {error ? (
-          <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-ui text-error">
-            <p>{error.text}</p>
-            {error.retryable && <Button ref={retryButton} variant="ghost" onClick={retry}>重试</Button>}
-            {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
-            {/* A cleanup that outlasted the wait: what the project already holds needs no runtime. */}
-            {error.recovery === "wait" && <Button variant="ghost" onClick={() => { void openExistingResults(); }}>查看已有成果</Button>}
-            {error.recovery === "autopilot" && <Button variant="ghost" onClick={() => navigate("/app/autopilot")}>查看定时任务</Button>}
-            {/* The usage section of settings, where a spend ceiling is stated — or,
-                for a simulated allowance that ran out, the page that tops it up. */}
-            {error.recovery === "spend" && (error.code === SIMULATED_CREDITS_EXHAUSTED ? <SimulatedRechargeButton /> : <UsageButton />)}
-          </div>
-        ) : (
-          <>
-            {navigated && (connectionNotice || !ready) && (
-              <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
-                <p>{waiting === "cleanup" ? CLEANUP_LINE : connectionNotice ?? "正在重连"}</p>
-                {connectionNotice && waiting !== "cleanup" && <Button variant="ghost" onClick={reconnect} disabled={renewing}>重新连接</Button>}
-              </div>
-            )}
-            {cover}
-            {binding && <iframe
-              key={binding.frameId} ref={iframe} src={binding.frameUrl} title="对话"
-              className="absolute inset-0 h-full w-full border-0"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
-              allow="clipboard-read; clipboard-write"
-            />}
-          </>
-        )}
+      {/* The frame's container keeps the device's bottom inset (E-17). The composer
+          inside the frame leaves at least max(16px, env(safe-area-inset-bottom))
+          under its card, but `env()` is the browser's to fill and a frame on
+          another origin is not promised an inset of its own (it reads 0 unless
+          the top-level page asks for the full screen, and this page does not),
+          so the inset is this container's: padding the frame never draws into,
+          and no second 16 px, because the frame already adds its own. */}
+      <div className="min-h-0 flex-1" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <div className="relative h-full w-full">
+          {error ? (
+            <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-ui text-error">
+              <p>{error.text}</p>
+              {error.retryable && <Button ref={retryButton} variant="ghost" onClick={retry}>重试</Button>}
+              {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
+              {/* A cleanup that outlasted the wait: what the project already holds needs no runtime. */}
+              {error.recovery === "wait" && <Button variant="ghost" onClick={() => { void openExistingResults(); }}>查看已有成果</Button>}
+              {error.recovery === "autopilot" && <Button variant="ghost" onClick={() => navigate("/app/autopilot")}>查看定时任务</Button>}
+              {/* The usage section of settings, where a spend ceiling is stated — or,
+                  for a simulated allowance that ran out, the page that tops it up. */}
+              {error.recovery === "spend" && (error.code === SIMULATED_CREDITS_EXHAUSTED ? <SimulatedRechargeButton /> : <UsageButton />)}
+            </div>
+          ) : (
+            <>
+              {navigated && (connectionNotice || !ready) && (
+                <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
+                  <p>{waiting === "cleanup" ? CLEANUP_LINE : connectionNotice ?? "正在重连"}</p>
+                  {connectionNotice && waiting !== "cleanup" && <Button variant="ghost" onClick={reconnect} disabled={renewing}>重新连接</Button>}
+                </div>
+              )}
+              {cover}
+              {binding && <iframe
+                key={binding.frameId} ref={iframe} src={binding.frameUrl} title="对话"
+                className="absolute inset-0 h-full w-full border-0"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
+                allow="clipboard-read; clipboard-write"
+              />}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
