@@ -2439,7 +2439,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     '这个任务近 7 天的花费已达它自己设定的“每周上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
     + '等预算随时间释放，或在“编辑任务”里调高每周上限即可。',
   autopilot_episode_budget_too_small:
-    `“单次上限”不能低于 ¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)}：一次模型调用要先预留约 ¥1 才能发出，预算低于 ¥${MIN_RUN_BUDGET_CNY.toFixed(2)} 的研究一开始就会被拒绝。`
+    `“单次上限”不能低于 ${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)} 灵豆：一次模型调用要先预留约 1 灵豆才能发出，预算低于 ${MIN_RUN_BUDGET_CNY.toFixed(2)} 灵豆的研究一开始就会被拒绝。`
     + '在“编辑任务”里调高单次上限即可，每日、每周上限也不能低于它。',
   library_item_not_found: '这份资料不在个人资料库里。',
   library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',

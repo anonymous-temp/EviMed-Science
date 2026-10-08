@@ -220,11 +220,14 @@ export function tabPath(geoId: string, tab: string): string {
 
 /* ---------------------------------------------------------------- numbers */
 
-/** “¥8,000”; null reads “—”. */
+/**
+ * “8,000 灵豆”; null reads “—”. The platform has one unit for money on screen (one 灵豆 is one yuan, design reference E-7),
+ * so a media budget is written in it too; the name stays because every caller hands it yuan.
+ */
 export function yuan(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   const rounded = Math.round(value * 100) / 100;
-  return `¥${rounded.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+  return `${rounded.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} 灵豆`;
 }
 
 /** “+12”“-3”“0” — a change on the metric's own scale. */

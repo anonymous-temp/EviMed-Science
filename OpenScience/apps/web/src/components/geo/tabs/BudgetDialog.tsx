@@ -108,7 +108,7 @@ export function BudgetDialog({
         <form className="mt-4 flex flex-col gap-4" onSubmit={submit} noValidate>
           <Input
             ref={firstRef}
-            label="总预算（元）"
+            label="总预算（灵豆）"
             inputMode="decimal"
             autoComplete="off"
             value={total}
@@ -116,7 +116,7 @@ export function BudgetDialog({
             error={error?.field === "total" ? error.message : undefined}
           />
           <Input
-            label="每天最多（元）"
+            label="每天最多（灵豆）"
             inputMode="decimal"
             autoComplete="off"
             value={daily}

@@ -20,7 +20,7 @@ import { shellSources, sourceStrings } from "@/test/sourceStrings";
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 
 /** Files another work package still owns; empty this when it has converted its words. */
-const PENDING = new Set(["components/autopilot/taskPresentation.ts"]);
+const PENDING = new Set<string>([]);
 
 const sources = shellSources(SRC);
 const OLD = /核验/;

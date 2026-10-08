@@ -26,13 +26,7 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
 const DOMAIN_SRC = fileURLToPath(new URL("../../../../packages/domain/src", import.meta.url));
 
 /** Amounts owned by other packages; remove each once that package has moved to 灵豆. */
-const PENDING = new Set([
-  "web:app/routes/AutopilotPage.tsx",
-  "web:components/autopilot/TaskForm.tsx",
-  "web:components/autopilot/taskPresentation.ts",
-  "web:components/geo/tabs/geoTabText.ts",
-  "domain:errorCodes.mjs",
-]);
+const PENDING = new Set<string>([]);
 
 const SIGN = /[¥￥]/;
 /** The shape this replaced; the scan must see it in a string (below), which is how it is known to read strings. */

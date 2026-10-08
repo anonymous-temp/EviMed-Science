@@ -25,14 +25,7 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
 const NOT_A_PRODUCT_PAGE = new Set(["app/routes/GalleryPage.tsx"]);
 
 /** Boxes wired by the package that owns the page, not by this test's author. */
-const PENDING = new Set([
-  "app/routes/AutopilotPage.tsx",
-  "app/routes/SourcesPage.tsx",
-  "components/geo/tabs/ContentTab.tsx",
-  "components/geo/tabs/EvidenceTab.tsx",
-  "components/geo/tabs/QuestionsTab.tsx",
-  "components/geo/tabs/SourcesTab.tsx",
-]);
+const PENDING = new Set<string>([]);
 
 function files(path: string): string[] {
   if (!statSync(path).isDirectory()) return [path];

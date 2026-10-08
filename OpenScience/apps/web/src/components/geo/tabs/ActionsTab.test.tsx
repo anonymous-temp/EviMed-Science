@@ -136,7 +136,7 @@ describe("行动: the market", () => {
     client.getGeoDistribution.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(distributionFilled);
     renderTab(<ActionsTab {...props()} />);
     await userEvent.click(await screen.findByRole("button", { name: /重试/ }));
-    expect(await screen.findByText("¥2,460")).toBeInTheDocument();
+    expect(await screen.findByText("2,460 灵豆")).toBeInTheDocument();
     expect(screen.getByText("稿件1")).toBeInTheDocument();
   });
 
@@ -253,15 +253,15 @@ describe("行动: 投放", () => {
     withData({ ...distributionFilled, budget: null, orders: [], market: { configured: true } });
     await userEvent.click(await screen.findByRole("button", { name: "设置投放预算" }));
     const dialog = screen.getByRole("dialog", { name: "设置投放预算" });
-    expect(within(dialog).getByLabelText("总预算（元）")).toHaveValue("8000");
-    expect(within(dialog).getByLabelText("每天最多（元）")).toHaveValue("800");
-    await userEvent.clear(within(dialog).getByLabelText("每天最多（元）"));
-    await userEvent.type(within(dialog).getByLabelText("每天最多（元）"), "9000");
+    expect(within(dialog).getByLabelText("总预算（灵豆）")).toHaveValue("8000");
+    expect(within(dialog).getByLabelText("每天最多（灵豆）")).toHaveValue("800");
+    await userEvent.clear(within(dialog).getByLabelText("每天最多（灵豆）"));
+    await userEvent.type(within(dialog).getByLabelText("每天最多（灵豆）"), "9000");
     await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
     expect(within(dialog).getByText("每天最多花的钱不能超过总预算。")).toBeInTheDocument();
     expect(client.setGeoBudget).not.toHaveBeenCalled();
-    await userEvent.clear(within(dialog).getByLabelText("每天最多（元）"));
-    await userEvent.type(within(dialog).getByLabelText("每天最多（元）"), "500");
+    await userEvent.clear(within(dialog).getByLabelText("每天最多（灵豆）"));
+    await userEvent.type(within(dialog).getByLabelText("每天最多（灵豆）"), "500");
     await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
     await waitFor(() => expect(client.setGeoBudget).toHaveBeenCalledWith("geo_1", { totalCny: 8000, dailyCny: 500 }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -270,7 +270,7 @@ describe("行动: 投放", () => {
   it("offers 撤单 only before the outlet accepted", async () => {
     client.cancelGeoOrder.mockResolvedValue({});
     withData(distributionFilled);
-    await screen.findByText("¥2,460");
+    await screen.findByText("2,460 灵豆");
     const submitted = document.querySelector("[data-geo-order='ord_3']") as HTMLElement;
     const accepted = document.querySelector("[data-geo-order='ord_2']") as HTMLElement;
     const verified = document.querySelector("[data-geo-order='ord_1']") as HTMLElement;

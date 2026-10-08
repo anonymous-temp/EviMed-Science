@@ -372,7 +372,7 @@ describe("信源", () => {
     expect(within(rowOf("dxy.com")).getByText("健康媒体")).toBeInTheDocument();
     // Tier words and prices are the drawer's; the row keeps 自有 alone.
     expect(within(rowOf("dxy.com")).queryByText("覆盖")).not.toBeInTheDocument();
-    expect(within(rowOf("39.net")).queryByText("¥120/篇")).not.toBeInTheDocument();
+    expect(within(rowOf("39.net")).queryByText("120 灵豆/篇")).not.toBeInTheDocument();
     expect(document.querySelector("[data-geo-condition]")).toBeNull();
     // A row that opens something says so, and shows it under the pointer.
     expect(rowOf("baike.baidu.com").className).toMatch(/hover:bg-surface-2/);

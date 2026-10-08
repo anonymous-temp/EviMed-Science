@@ -50,7 +50,7 @@ describe("方案", () => {
     expect(await screen.findByText("档二：综合可见度指数 55")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "档二（已选）" })).toBeInTheDocument();
     expect(screen.getByRole("rowheader", { name: "品牌提及率（增量）" })).toBeInTheDocument();
-    expect(screen.getByText("¥15,000")).toBeInTheDocument();
+    expect(screen.getByText("15,000 灵豆")).toBeInTheDocument();
   });
 
   it("chooses the target tier here, and reads the new choice back", async () => {
