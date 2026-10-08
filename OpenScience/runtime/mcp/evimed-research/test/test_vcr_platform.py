@@ -106,7 +106,11 @@ class _Gateway(BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers.get("content-length") or 0))
         type(self).seen.append({"path": self.path, "authorization": self.headers.get("authorization"), "body": json.loads(body)})
         operation = self.path.rsplit("/", 1)[-1]
-        status, payload = type(self).answers.get(operation, (404, {"error": "Not found.", "code": "not_found"}))
+        answer = type(self).answers.get(operation, (404, {"error": "Not found.", "code": "not_found"}))
+        # A list is a scripted sequence: each request takes the next answer, and the last one stays.
+        if isinstance(answer, list):
+            answer = answer.pop(0) if len(answer) > 1 else answer[0]
+        status, payload = answer
         encoded = payload if isinstance(payload, bytes) else json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("content-type", "application/json")
@@ -137,6 +141,8 @@ class _GatewayCase(unittest.TestCase):
             "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": base + "/internal/sources/v1/fetch",
             "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(token_file),
             "EVIMED_DISABLED_TOOLS": "",
+            # A queued job is not waited for in these tests (the wait has its own, with a clock that does not sleep).
+            vcr_platform.STATUS_WAIT_ENV: "0",
         }
         patcher = mock.patch.dict(os.environ, environment)
         patcher.start()
@@ -495,6 +501,165 @@ class VcrSimulateTests(_GatewayCase):
         cancelled = self.server.call_tool("vcr_simulate", {"action": "cancel", "jobId": "job_4"})
         self.assertEqual(cancelled["status"], "warning")
         self.assertEqual(_Gateway.seen[0]["body"], {"action": "cancel", "jobId": "job_4"})
+
+
+class _Clock:
+    """A clock that only moves when the code under test sleeps: the wait is measured without taking any time."""
+
+    def __init__(self):
+        self.now = 1000.0
+        self.slept = []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+class VcrJobWaitTests(_GatewayCase):
+    """What a queued job's answer tells the run, and how long the tool itself waits for it (`vcr_platform._wait_for_job`)."""
+
+    def setUp(self):
+        super().setUp()
+        self.clock = _Clock()
+        for target, replacement in (("_clock", self.clock.monotonic), ("_sleep", self.clock.sleep)):
+            patcher = mock.patch.object(vcr_platform, target, replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def start(self, **extra):
+        return self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_simulation", "scenario": {}, **extra})
+
+    def wait_for(self, seconds):
+        patcher = mock.patch.dict(os.environ, {vcr_platform.STATUS_WAIT_ENV: seconds})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def job(state, **extra):
+        return (200, {"data": {"action": "status", "jobId": "job_1", "state": state, **extra}})
+
+    def asked_status(self):
+        return [seen["body"] for seen in _Gateway.seen if seen["body"].get("action") == "status"]
+
+    def test_a_running_job_s_answer_asks_for_no_status_loop_and_says_where_the_result_will_be(self):
+        for action in ("start", "status"):
+            _Gateway.answers["simulate"] = self.job("running", progress={"done": 3, "total": 10})
+            arguments = {"action": "start", "kind": "design_simulation", "scenario": {}} if action == "start" else {"action": "status", "jobId": "job_1"}
+            result = self.server.call_tool("vcr_simulate", arguments)
+            self.assertEqual(result["status"], "success")
+            self.assertIn("job_1 is running (3/10)", result["summary"])
+            advice = " ".join(result["next_actions"])
+            self.assertNotIn("Call again", advice)
+            self.assertNotIn("action status", advice)
+            self.assertIn("Do not wait for it in this turn", advice)
+            self.assertIn("no status loop, no sleep or wait command", advice)
+            self.assertIn("study page", advice)
+            self.assertIn("notice", advice)
+            self.assertIn("end the turn", advice)
+            self.assertIn("vcr_read (what: results)", advice)
+
+    def test_a_job_that_finishes_during_the_wait_comes_back_finished_from_one_start(self):
+        self.wait_for("20")
+        _Gateway.answers["simulate"] = [
+            (200, {"data": {"action": "start", "jobId": "job_1", "state": "queued", "progress": {}}}),
+            self.job("running", progress={"done": 1, "total": 4}),
+            self.job("succeeded", result={"power": 0.81}),
+        ]
+        result = self.start()
+        self.assertEqual(result["status"], "success")
+        self.assertIn("job_1 succeeded", result["summary"])
+        self.assertEqual(result["data"]["result"], {"power": 0.81})
+        self.assertEqual(result["data"]["action"], "start")
+        self.assertTrue(any("vcr_read (what: results)" in action for action in result["next_actions"]))
+        self.assertEqual(self.asked_status(), [{"action": "status", "jobId": "job_1"}] * 2)
+        self.assertEqual(self.clock.slept, [4.0, 4.0])
+
+    def test_a_start_keeps_the_fields_only_the_start_answers_with(self):
+        self.wait_for("20")
+        _Gateway.answers["simulate"] = [
+            (200, {"data": {"action": "start", "jobId": "job_1", "state": "queued", "refused": [{"study": "a", "reason": "no quote"}], "refusedCount": 1}}),
+            self.job("succeeded", pooling={"pooled": 0.71}),
+        ]
+        result = self.server.call_tool("evidence_pool", {"action": "start", "parameter": "hazard_ratio", "endpointKey": "os"})
+        self.assertIn("job_1 succeeded", result["summary"])
+        self.assertEqual(result["data"]["refusedCount"], 1)
+        self.assertEqual(result["data"]["pooling"], {"pooled": 0.71})
+
+    def test_a_job_still_running_after_the_wait_answers_running_and_the_asking_is_bounded(self):
+        self.wait_for("10")
+        _Gateway.answers["simulate"] = [
+            (200, {"data": {"action": "start", "jobId": "job_1", "state": "queued", "progress": {}}}),
+            self.job("running", progress={"done": 2, "total": 10}),
+        ]
+        result = self.start()
+        self.assertIn("job_1 is running (2/10)", result["summary"])
+        self.assertNotIn("Call again", " ".join(result["next_actions"]))
+        self.assertEqual(sum(self.clock.slept), 10.0)
+        self.assertEqual(len(self.asked_status()), 3)
+        self.assertLessEqual(len(_Gateway.seen), 1 + 3)
+
+    def test_a_status_call_waits_the_same_way(self):
+        self.wait_for("20")
+        _Gateway.answers["simulate"] = [self.job("running"), self.job("failed", error={"code": "cpu_budget_exhausted", "message": "The CPU budget ran out."})]
+        result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_1"})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("job_1 failed", result["summary"])
+
+    def test_the_wait_is_clamped_to_a_minute_and_falls_back_to_twenty_seconds(self):
+        for configured, expected in (("500", 60.0), ("-5", 0.0), ("nan", 20.0), ("not a number", 20.0), ("", 20.0), ("7.5", 7.5)):
+            with mock.patch.dict(os.environ, {vcr_platform.STATUS_WAIT_ENV: configured}):
+                self.assertEqual(vcr_platform._status_wait_seconds(), expected, configured)
+        with mock.patch.dict(os.environ):
+            del os.environ[vcr_platform.STATUS_WAIT_ENV]
+            self.assertEqual(vcr_platform._status_wait_seconds(), 20.0)
+        self.wait_for("500")
+        _Gateway.answers["simulate"] = self.job("running")
+        self.start()
+        self.assertEqual(sum(self.clock.slept), 60.0)
+
+    def test_a_wait_of_zero_makes_no_second_request(self):
+        self.wait_for("0")
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "start", "jobId": "job_1", "state": "queued", "progress": {}}})
+        result = self.start()
+        self.assertIn("job_1 is queued", result["summary"])
+        self.assertEqual(len(_Gateway.seen), 1)
+        self.assertEqual(self.clock.slept, [])
+
+    def test_an_error_while_waiting_returns_the_last_good_answer_not_an_error(self):
+        self.wait_for("20")
+        for failure in ((503, {"error": "busy", "code": "vcr_gateway_unavailable"}), (200, b"not json")):
+            _Gateway.seen = []
+            self.clock.slept = []
+            _Gateway.answers["simulate"] = [
+                (200, {"data": {"action": "start", "jobId": "job_1", "state": "queued", "progress": {}}}),
+                self.job("running", progress={"done": 1, "total": 4}),
+                failure,
+            ]
+            result = self.start()
+            self.assertNotIn("error", result)
+            self.assertEqual(result["status"], "success")
+            self.assertIn("job_1 is running (1/4)", result["summary"])
+            self.assertEqual(len(self.asked_status()), 2)
+
+    def test_nothing_is_waited_for_unless_a_job_is_computing(self):
+        self.wait_for("20")
+        for answer in (
+            {"action": "start", "state": "not_started", "reason": "no_evidence"},
+            {"action": "start", "jobId": "job_1", "state": "awaiting_budget", "awaitingBudget": True},
+            {"action": "start", "jobId": "job_1", "state": "succeeded", "result": {}},
+        ):
+            _Gateway.seen = []
+            _Gateway.answers["simulate"] = (200, {"data": answer})
+            self.start()
+            self.assertEqual(len(_Gateway.seen), 1, answer)
+        _Gateway.seen = []
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "cancel", "jobId": "job_1", "state": "running"}})
+        self.server.call_tool("vcr_simulate", {"action": "cancel", "jobId": "job_1"})
+        self.assertEqual(len(_Gateway.seen), 1, "a cancel is answered, not waited on")
+        self.assertEqual(self.clock.slept, [])
 
 
 class CurveDigitizeTests(_GatewayCase):

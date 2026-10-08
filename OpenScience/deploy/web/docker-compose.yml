@@ -656,6 +656,10 @@ services:
       OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS:
       OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:
       OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET:
+      # How long a vcr_simulate call waits for the job it queued, written into
+      # every runtime by whichever service builds its launch plan (here and in
+      # the runtime controller below). Unset: 20 seconds.
+      OPEN_SCIENCE_VCR_STATUS_WAIT_SECONDS:
       # The data plane's own directory: patient-level rows live here and
       # nowhere a runtime is mounted (plan §8.1). Set exactly when the host
       # directory is bound below, so the path the config names is always a
@@ -2023,6 +2027,9 @@ services:
       # delegation limits come from its environment, not the web API's.
       OPEN_SCIENCE_MAX_CHILDREN_TOTAL:
       OPEN_SCIENCE_MAX_CONCURRENT_CHILDREN:
+      # The wait a vcr_simulate call makes for its own job, written into every
+      # runtime by the plan the controller builds.
+      OPEN_SCIENCE_VCR_STATUS_WAIT_SECONDS:
       # And its compaction settings, including the request-size guard, which is
       # a share of the web API's model gateway body limit.
       OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY:

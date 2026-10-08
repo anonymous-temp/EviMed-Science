@@ -1646,6 +1646,8 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     const vcrGatewayUrl = gateways ? String(gateways.vcr ?? "") : vcrGatewayProviderUrl(config);
     if (vcrGatewayUrl && vcrAudienceAllows(config, { id: String(project.userId ?? "") })) {
       environment.EVIMED_VCR_GATEWAY_URL = vcrGatewayUrl;
+      // How long a `vcr_simulate` call waits for its own job (config.mjs `vcrStatusWaitSeconds`); with none, the tool's default holds.
+      if (config.vcrStatusWaitSeconds != null) environment.EVIMED_VCR_STATUS_WAIT_SECONDS = String(config.vcrStatusWaitSeconds);
     }
   }
   // Keyless-public Unpaywall tier: when the operator configured an email, the

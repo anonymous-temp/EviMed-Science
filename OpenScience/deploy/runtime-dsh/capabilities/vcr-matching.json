@@ -1,6 +1,6 @@
 {
   "id": "vcr-matching",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "title": "Virtual Clinical Research — Matching and Recruitment",
   "description": "Two-way eligibility matching for a trial protocol — structure the criteria, locate each patient fact in its source text with a character span and a visibility time, answer the language-only criteria with a quote, and hand back the computed four-state judgment set with its evidence gaps, plus draft pre-screening and referral material for the study team to review.",
   "whenToUse": "「虚拟临床研究」要做患者匹配、预筛材料或招募协作时交给我：把方案的入排条件结构化，为每位候选人从病历里定位证据（带原文区间与可见时间），把只能靠语言理解的条件给出引用原句，再交回逐条判定与待补证据清单。判定由平台代码做，我不改判；联系患者一律等协调员逐人确认。用户只问“这个人能不能入组”时也走我。",

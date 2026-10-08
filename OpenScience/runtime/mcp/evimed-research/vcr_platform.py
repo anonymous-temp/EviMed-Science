@@ -20,7 +20,12 @@ Six tools a 虚拟临床研究 capability's run uses; none is ever forced into a
 - ``vcr_simulate`` queues a frozen scenario on the deterministic engine and
   reports where it got to (``start`` / ``status`` / ``cancel``, the same shape
   as ``meta_analysis``). The model never computes a statistic itself; it states
-  the scenario and reads the result. ``shape`` is the one action that asks the
+  the scenario and reads the result. A queued job is asked after a few times
+  inside the call itself (``EVIMED_VCR_STATUS_WAIT_SECONDS``, 20 s by default),
+  so a computation of seconds comes back finished from one ``start``; one that
+  outlasts the wait is the engine's to finish -- its result is filed under its
+  study object and the researcher is told when it is done, so the run is told
+  to end its turn, not to loop on ``status``. ``shape`` is the one action that asks the
   platform nothing: it renders, from ``vcr_scenario_help.json`` (generated from
   the domain's scenario schemas), every key a job kind's scenario reads, and a
   refused start carries the keys of the place it was refused from the same file.
@@ -35,7 +40,7 @@ Six tools a 虚拟临床研究 capability's run uses; none is ever forced into a
   person's selection, with the algorithm version and the quality of the trace.
 - ``evidence_pool`` asks the platform to pool this study's *verified*
   extractions of one parameter into an assumption distribution, and returns
-  the job to poll. What is pooled is what the study already holds, checked
+  the job. What is pooled is what the study already holds, checked
   against its source (quote and locator) -- a run names the parameter, never
   the numbers; the pooling is the engine's (DL / REML / HKSJ with a
   prediction interval), not the model's.
@@ -52,8 +57,10 @@ from.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 
@@ -116,6 +123,17 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # Reads, writes and job submissions answer within ten seconds server-side; the
 # client's ceiling leaves room for one retry under the kernel's 180 s limit.
 TIMEOUT_SECONDS = 30
+# How long one `start` or `status` call may itself wait for a job to leave the queue and finish, so a computation of
+# seconds needs no second call and a longer one is left to finish by itself. The bound is the deployment's
+# (`OPEN_SCIENCE_VCR_STATUS_WAIT_SECONDS` in the control plane, forwarded as the variable below); 0 turns the wait off. It
+# sits well under the kernel's 180 s tool limit together with the request ceiling above.
+STATUS_WAIT_ENV = "EVIMED_VCR_STATUS_WAIT_SECONDS"
+STATUS_WAIT_DEFAULT_SECONDS = 20.0
+STATUS_WAIT_MAX_SECONDS = 60.0
+STATUS_ASK_INTERVAL_SECONDS = 4.0
+# The wait's clock and sleep; a test replaces them so that it does not sleep.
+_clock = time.monotonic
+_sleep = time.sleep
 GATEWAY_CODE = re.compile(r"^(?:vcr|registry|engine)_[a-z0-9_]{1,60}$")
 ID = {"type": "string", "minLength": 1, "maxLength": 160, "pattern": r"^[A-Za-z0-9_.:@-]+$"}
 
@@ -900,7 +918,50 @@ def simulate(arguments: dict) -> dict:
         if hint:
             raise VcrPlatformError(error.code, "%s %s" % (error, hint), error.retryable, error.issues) from error
         raise
+    if action in ("start", "status"):
+        data = _wait_for_job(data)
     return _job_answer(data, action)
+
+
+def _status_wait_seconds() -> float:
+    """The deployment's bound on one call's own wait: a number of seconds from 0 (no wait) to a minute, 20 when unset or unreadable."""
+    try:
+        value = float(os.environ.get(STATUS_WAIT_ENV, str(STATUS_WAIT_DEFAULT_SECONDS)))
+    except ValueError:
+        return STATUS_WAIT_DEFAULT_SECONDS
+    if not math.isfinite(value):
+        return STATUS_WAIT_DEFAULT_SECONDS
+    return min(max(value, 0.0), STATUS_WAIT_MAX_SECONDS)
+
+
+def _is_computing(data: dict) -> bool:
+    return str(data.get("state") or "queued") in ("queued", "running")
+
+
+def _wait_for_job(first: dict) -> dict:
+    """Ask the platform again, every few seconds, for a job that was just queued or is still running, until it leaves
+    that state or the bound runs out; return what the last answer said. A job that finishes within the bound comes back
+    finished from the one call. Whatever goes wrong while waiting only ends the waiting: the answer already in hand was
+    a success and stays one."""
+    job_id = first.get("jobId")
+    bound = _status_wait_seconds()
+    if bound <= 0 or not isinstance(job_id, str) or not job_id or not _is_computing(first):
+        return first
+    started = _clock()
+    answer = first
+    while True:
+        remaining = bound - (_clock() - started)
+        if remaining <= 0:
+            return answer
+        _sleep(min(STATUS_ASK_INTERVAL_SECONDS, remaining))
+        try:
+            fresh = _post("simulate", {"action": "status", "jobId": job_id})
+        except Exception:  # noqa: BLE001 - the start succeeded; a failed look at it must not turn that into an error
+            return answer
+        # The start's own fields (the studies a pool left out, the other calibres' jobs) stay; the state is the latest.
+        answer = {**first, **{key: value for key, value in fresh.items() if key != "action"}}
+        if not _is_computing(answer):
+            return answer
 
 
 def _job_answer(data: dict, action: str) -> dict:
@@ -939,7 +1000,14 @@ def _job_answer(data: dict, action: str) -> dict:
             "summary": "Job %s is %s%s." % (job_id, state, where),
             "data": data,
             "warnings": [],
-            "next_actions": ["Call again with action status and this jobId; do other work while it runs."],
+            "next_actions": [
+                "The engine computes this without you: the result is saved under its study object and shown on the study page, "
+                "and the researcher gets a notice when it finishes.",
+                "Do not wait for it in this turn -- no status loop, no sleep or wait command. Tell the researcher what is "
+                "computing, where the result will appear and how far it got, answer with what you already have, and end the turn "
+                "(or go on with work that does not need this result).",
+                "In a later turn, when asked, read the result with vcr_read (what: results).",
+            ],
         }
     if state == "failed":
         error = data.get("error") if isinstance(data.get("error"), dict) else {}

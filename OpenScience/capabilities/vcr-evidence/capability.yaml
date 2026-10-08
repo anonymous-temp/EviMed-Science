@@ -15,7 +15,7 @@
 # writes what a patient reads, is the clinical one.
 id: vcr-evidence
 visibility: public
-version: 1.2.1
+version: 1.2.2
 title: Virtual Clinical Research — Evidence Parameterization
 category: Clinical Research
 description: Turn a research question into versioned assumption cards — find trial precedents, extract every

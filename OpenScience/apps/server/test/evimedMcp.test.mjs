@@ -366,6 +366,29 @@ test("循证 GEO's tools reach a runtime only where the module is on and open to
   }
 });
 
+// How long a `vcr_simulate` call waits for the job it queued is the deployment's
+// (config.mjs `vcrStatusWaitSeconds`); the runtime's tool reads it as
+// EVIMED_VCR_STATUS_WAIT_SECONDS, and only a runtime that has the module is given it.
+test("a runtime that has 虚拟临床研究 is handed the deployment's wait for a queued job", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-vcr-wait-"));
+  try {
+    const { project, plan } = await fixture(tmp);
+    const environment = (overrides) => dshProfileInput(dshConfig({
+      publicSourceGatewayInternalUrl: "https://gateway.internal/internal/sources/v1/fetch",
+      vcrEnabled: true, vcrAudience: "all", ...overrides,
+    }), project, plan, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
+    assert.equal(environment({ vcrStatusWaitSeconds: 35 }).EVIMED_VCR_STATUS_WAIT_SECONDS, "35");
+    assert.equal(environment({ vcrStatusWaitSeconds: 0 }).EVIMED_VCR_STATUS_WAIT_SECONDS, "0", "zero is a setting, not an absence");
+    assert.equal(environment({}).EVIMED_VCR_STATUS_WAIT_SECONDS, undefined, "unset, the tool's own default holds");
+    assert.equal(environment({ vcrEnabled: false, vcrStatusWaitSeconds: 35 }).EVIMED_VCR_STATUS_WAIT_SECONDS, undefined, "module off, no route and no wait");
+    assert.equal(loadConfig({ rootDir: repoRoot }).vcrStatusWaitSeconds, 20, "the config default is the tool's");
+    assert.equal(loadConfig({ rootDir: repoRoot, vcrStatusWaitSeconds: 0 }).vcrStatusWaitSeconds, 0);
+    assert.throws(() => loadConfig({ rootDir: repoRoot, vcrStatusWaitSeconds: 61 }), /OPEN_SCIENCE_VCR_STATUS_WAIT_SECONDS must be a whole number from 0 to 60/);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("the generated patch mounts the research MCP and hands it a token, never a key", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-"));
   try {
