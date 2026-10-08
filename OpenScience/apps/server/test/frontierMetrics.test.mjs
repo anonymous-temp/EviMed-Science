@@ -63,3 +63,29 @@ test("weekly and notification metrics distinguish unavailable delivery and scan 
   assert.deepEqual(family(families, "open_science_frontier_notifications_available").series, [{ value: 0 }]);
   assert.ok(family(families, "open_science_frontier_notifications_total").series.some(row => row.labels.outcome === "scanGaps" && row.value === 2));
 });
+
+test("the edit failures are exported by kind as well as by field, and the trimmed summaries are counted", () => {
+  const view = snapshot(null);
+  view.editor = { counters: {
+    editCalls: 9, rewrites: 4, numberCheck: { first: 9, firstFailed: 1 },
+    firstPassFailures: { summary_zh: 4, title_zh: 1 },
+    firstPassIssues: { summary_zh: { length: 3, number: 1 }, title_zh: { link: 1 } },
+    finalIssues: { summary_zh: { length: 1 } },
+    summaryTrimmed: 2,
+  } };
+  const families = frontierMetricFamilies(true, view);
+  assert.deepEqual(family(families, "open_science_frontier_edit_first_pass_issues_total")?.series, [
+    { labels: { field: "summary_zh", kind: "length" }, value: 3 },
+    { labels: { field: "summary_zh", kind: "number" }, value: 1 },
+    { labels: { field: "title_zh", kind: "link" }, value: 1 },
+  ]);
+  assert.deepEqual(family(families, "open_science_frontier_edit_final_issues_total")?.series,
+    [{ labels: { field: "summary_zh", kind: "length" }, value: 1 }]);
+  assert.deepEqual(family(families, "open_science_frontier_edit_summary_trimmed_total")?.series, [{ value: 2 }]);
+  assert.equal(family(families, "open_science_frontier_edit_summary_trimmed_total")?.type, "counter");
+  assert.deepEqual(family(families, "open_science_frontier_edit_first_pass_failures_total")?.series.length, 2, "the field counter stays");
+  // A fresh process has counted nothing: the families exist with no series, as the field counter's does.
+  const fresh = frontierMetricFamilies(true, { ...snapshot(null), editor: { counters: { editCalls: 0, rewrites: 0, firstPassFailures: {}, firstPassIssues: {}, finalIssues: {}, summaryTrimmed: 0 } } });
+  assert.deepEqual(family(fresh, "open_science_frontier_edit_first_pass_issues_total")?.series, []);
+  assert.deepEqual(family(fresh, "open_science_frontier_edit_summary_trimmed_total")?.series, [{ value: 0 }]);
+});

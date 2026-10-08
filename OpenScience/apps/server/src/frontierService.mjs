@@ -1717,6 +1717,18 @@ export function frontierMetricFamilies(enabled, snapshot) {
     ]);
     add("edit_first_pass_failures_total", "First answers that failed a check, by the field that failed.", "counter",
       Object.entries(editor.counters.firstPassFailures ?? {}).map(([field, value]) => ({ labels: { field }, value: Number(value) })));
+    // Why, for the two Chinese texts: the closed kinds of `FRONTIER_PROSE_ISSUE_KINDS`.
+    // `first_pass` is every first answer that failed a check; `final` is the answer
+    // an item was left title-only on — the alert on title-only is about that one.
+    /** @param {Record<string, Record<string, number>> | undefined} table */
+    const issueRows = (table) => Object.entries(table ?? {}).flatMap(([field, kinds]) =>
+      Object.entries(kinds).map(([kind, value]) => ({ labels: { field, kind }, value: Number(value) })));
+    add("edit_first_pass_issues_total", "First answers that failed a check on the title or the summary, by field and kind (empty, length, link, language, number; an answer counts once per kind).", "counter",
+      issueRows(editor.counters.firstPassIssues));
+    add("edit_final_issues_total", "Answers an item was left title-only on, by the field and kind the title or the summary failed (an answer counts once per kind).", "counter",
+      issueRows(editor.counters.finalIssues));
+    add("edit_summary_trimmed_total", "Edits published repaired with the whole sentences of a summary that fit its limit, because the length was the only fault left.", "counter",
+      [{ value: Number(editor.counters.summaryTrimmed ?? 0) }]);
     add("edit_number_check_total", "First edit answers by whether every number was found in the source (plan §10.5.8's first-pass rate).", "counter", [
       { labels: { outcome: "first-pass" }, value: Number(editor.counters.numberCheck?.first ?? 0) - Number(editor.counters.numberCheck?.firstFailed ?? 0) },
       { labels: { outcome: "first-fail" }, value: Number(editor.counters.numberCheck?.firstFailed ?? 0) },
