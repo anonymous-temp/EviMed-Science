@@ -985,8 +985,10 @@ test("C2-13 a hybrid control's historical counts are `aggregate` only when verif
   assert.equal(typed.result.diagnostics.inputsAssumed, true);
   const page = await pages(module).tab({ id: typed.study.userId }, typed.study.id, "comparator");
   assert.match(page.headline, /输入为假设/);
-  assert.ok(page.diagnostics.some((/** @type {any} */ row) => row.key === "map_mean" && row.value.source === "assumed"), "the MAP prior's numbers are on the page, each with its source");
-  assert.ok(page.diagnostics.some((/** @type {any} */ row) => row.key === "prior_effective_sample_size_moment"));
+  // The prior's own numbers are a card of their own (`prior`, release 11), apart from the weighting rows (`diagnostics`).
+  assert.ok(page.prior.some((/** @type {any} */ row) => row.key === "map_mean" && row.value.source === "assumed"), "the MAP prior's numbers are on the page, each with its source");
+  assert.ok(page.prior.some((/** @type {any} */ row) => row.key === "prior_effective_sample_size_moment"));
+  assert.ok(!page.diagnostics.some((/** @type {any} */ row) => row.key === "map_mean"), "and only there");
 
   const held = await build("held", true);
   assert.deepEqual([...new Set(held.result.measures.map((/** @type {any} */ measure) => measure.source))], ["aggregate"], "the same counts, each backed by a verified extraction");

@@ -103,7 +103,9 @@ export function vcrPageSentence(message) {
  */
 export function vcrFailureSentence(error) {
   const recorded = object(error);
-  return vcrPageSentence(recorded.message) ?? namedFailureSentence(recorded) ?? knownErrorCodeMessage(String(recorded.code ?? "")) ?? VCR_FAILED_SENTENCE;
+  // The named sentence first: a job's recorded message is the code's sentence with the engine's detail in brackets
+  // (`vcrErrorFromIssues`), and the bracket is exactly what `vcrPageSentence` drops — with the name in it (vcr-seam C2-1).
+  return namedFailureSentence(recorded) ?? vcrPageSentence(recorded.message) ?? knownErrorCodeMessage(String(recorded.code ?? "")) ?? VCR_FAILED_SENTENCE;
 }
 
 /**
