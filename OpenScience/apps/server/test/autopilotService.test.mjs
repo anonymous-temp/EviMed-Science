@@ -1301,6 +1301,154 @@ test("a run that ends without a result after its agenda was stopped is recorded 
   for (const claim of claims) assert.deepEqual(stateOf(claim), { status: "unavailable", reason: "agenda_stopped", code: "verification_canceled_by_stop" });
 });
 
+/**
+ * An agenda with an episode dispatched and a result about to be folded into it: `fold()` is the run's
+ * completion, so a test can have the stop land at a chosen point inside it.
+ */
+async function foldingEpisode(f, { count = 3, runId = "run-one" } = {}) {
+  const created = await f.service.create("user-one", agendaInput);
+  const active = await f.service.start("user-one", created.id, { expectedRevision: created.revision });
+  const { episode } = await f.service.schedule("user-one", active.id, { date: "2026-09-06" });
+  await f.service.markEpisodeDispatched("user-one", episode.id, { runId, sessionId: `session-${runId}` });
+  const report = "reports/evidence.md";
+  const claims = Array.from({ length: count }, (_, index) => ({
+    id: `claim-${index}`, statement: `心衰再入院下降 ${index}`, type: "direct", tier: "unverified",
+    sources: [`doi:10.1000/example-${index}`], provenance: { episodeId: episode.id, artifact: report },
+  }));
+  const stop = async () => {
+    const current = await f.service.get("user-one", active.id);
+    await f.service.stop("user-one", current.id, { expectedRevision: current.revision });
+  };
+  const fold = () => f.service.completeRun("user-one", { projectId: "project-one", runId, status: "succeeded", deltaSchemaVersion: 1,
+    artifacts: [report], costCny: 3, claims });
+  return { agenda: active, episode, stop, fold, ids: claims.map((_, index) => verificationIdFor(episode.id, index)) };
+}
+
+/** What a stop that landed inside a fold must leave, however it landed: the claims the fold booked are ended everywhere they are read. */
+async function assertFoldClosedByStop(f, { agenda, episode, ids }, digest) {
+  const ended = { status: "unscheduled", reason: "agenda_stopped" };
+  const briefed = await f.service.getDigest("user-one", digest.id);
+  assert.deepEqual([...briefed.payload.headlines, ...briefed.payload.leads].map(stateOf), ids.map(() => ended), "the briefing reads no re-check as queued");
+  const held = await f.service.getEpisode("user-one", episode.id);
+  assert.equal(held.payload.status, "canceled", "the stop's decision about the episode stands");
+  assert.equal(held.payload.digestId, digest.id, "the episode names the briefing its claims are in");
+  assert.equal(held.payload.completion ?? null, null, "the fold is done: nothing is left for a replay to find");
+  assert.deepEqual(held.payload.claims.map(stateOf), ids.map(() => ended), "and holds the claims, ended");
+  for (const id of ids) assert.equal(await f.service.verificationPending("user-one", episode.id, id), false, id);
+  // Replayable: a second sweep of the stop writes nothing.
+  await f.service.sweepStop("user-one", agenda.id);
+  assert.equal((await f.service.getEpisode("user-one", episode.id)).revision, held.revision, "no churn on replay");
+  // A restart revives none of them.
+  const stopped = await f.service.get("user-one", agenda.id);
+  await f.service.start("user-one", stopped.id, { expectedRevision: stopped.revision });
+  for (const id of ids) assert.equal(await f.service.verificationPending("user-one", episode.id, id), false, id);
+}
+
+test("a stop that lands while the result is being folded ends the re-checks the fold booked, wherever in the fold it lands", async (t) => {
+  await t.test("after the briefing and the jobs are written, before the fold reads its episode again", async () => {
+    const f = fixture();
+    const folding = await foldingEpisode(f);
+    const enqueue = f.jobs.enqueue.bind(f.jobs);
+    let stopped = false;
+    f.jobs.enqueue = async (...args) => {
+      const job = await enqueue(...args);
+      if (args[1] === "verify" && !stopped && f.jobs.items.filter((item) => item.kind === "verify").length === 3) { stopped = true; await folding.stop(); }
+      return job;
+    };
+    const digest = await folding.fold();
+    assert.equal(stopped, true);
+    await assertFoldClosedByStop(f, folding, digest);
+  });
+
+  await t.test("between the fold reading its episode and writing it, so that its write conflicts", async () => {
+    const f = fixture();
+    const folding = await foldingEpisode(f);
+    const put = f.documents.put.bind(f.documents);
+    let stopped = false;
+    f.documents.put = async (userId, kind, id, payload, options) => {
+      if (kind === "episode" && payload.status === "merged" && !stopped) { stopped = true; await folding.stop(); }
+      return put(userId, kind, id, payload, options);
+    };
+    const digest = await folding.fold();
+    assert.equal(stopped, true);
+    await assertFoldClosedByStop(f, folding, digest);
+  });
+
+  await t.test("before the fold has written anything but its frozen result", async () => {
+    const f = fixture();
+    const folding = await foldingEpisode(f);
+    const put = f.documents.put.bind(f.documents);
+    let stopped = false;
+    // The agenda reads active when the fold starts, and is stopped by the time it writes its first record.
+    f.documents.put = async (userId, kind, id, payload, options) => {
+      if (kind === "agenda" && payload.outcomes?.length && !stopped) { stopped = true; await folding.stop(); }
+      return put(userId, kind, id, payload, options);
+    };
+    const digest = await folding.fold();
+    assert.equal(stopped, true);
+    await assertFoldClosedByStop(f, folding, digest);
+  });
+});
+
+test("a fold the stop cancelled and the process never finished is finished by the reconcile timer, the re-checks ended with the stop", async () => {
+  const f = fixture();
+  const folding = await foldingEpisode(f);
+  const enqueue = f.jobs.enqueue.bind(f.jobs);
+  // The stop lands after the briefing is written, and the process dies before the fold reads its episode again.
+  f.jobs.enqueue = async (...args) => {
+    if (args[1] === "verify") { await folding.stop(); throw Object.assign(new Error("process died"), { code: "product_job_unavailable" }); }
+    return enqueue(...args);
+  };
+  await assert.rejects(() => folding.fold(), /process died/);
+  f.jobs.enqueue = enqueue;
+  const stranded = await f.service.getEpisode("user-one", folding.episode.id);
+  assert.equal(stranded.payload.status, "canceled");
+  assert.equal(stranded.payload.completion.runId, "run-one", "the stop kept the frozen result it interrupted");
+  assert.deepEqual(stranded.payload.claims ?? [], [], "and the episode never got its claims");
+  const [briefing] = (await f.documents.list("user-one", "digest", { projectId: "project-one" })).items;
+  assert.deepEqual([...briefing.payload.headlines, ...briefing.payload.leads].map((claim) => claim.verification.status), ["queued", "queued", "queued"],
+    "the briefing is the only place the booked re-checks are written down");
+
+  /** @type {string[]} */ const queries = [];
+  f.documents.database = { query: async (sql) => {
+    queries.push(sql.replace(/\s+/g, " ").trim());
+    if (!sql.includes("payload->'completion' IS NOT NULL")) return { rows: [] };
+    // The scan's own predicate, as the database applies it: a fold left unfinished by a stop is as much one as a fold left in `verifying`.
+    return { rows: [...f.documents.rows.values()]
+      .filter((row) => row.kind === "episode" && (row.payload.status === "verifying" || row.payload.status === "canceled") && row.payload.completion && typeof row.payload.completion === "object")
+      .map((row) => ({ user_id: row.userId, id: row.id, project_id: row.projectId, payload: row.payload, revision: row.revision })) };
+  } };
+  await f.service.reconcileStopWork();
+  assert.match(queries[0], /payload->>'status'='canceled' AND jsonb_typeof\(payload->'completion'\)='object'/, "the scan looks for a cancelled episode that still holds its result");
+  await assertFoldClosedByStop(f, folding, briefing);
+  assert.equal(f.jobs.items.filter((item) => item.kind === "verify").length, 0, "a cancelled episode books no re-check it would only have to skip");
+
+  // The timer comes round again: nothing is selected, and were the row handed back stale nothing would be written twice.
+  const settled = await f.service.getEpisode("user-one", folding.episode.id);
+  await f.service.reconcileStopWork();
+  assert.equal((await f.service.getEpisode("user-one", folding.episode.id)).revision, settled.revision);
+});
+
+test("a paused agenda does not cancel the fold: the episode merges, and the worker ends its re-checks naming the pause", async () => {
+  const f = fixture();
+  const folding = await foldingEpisode(f);
+  const put = f.documents.put.bind(f.documents);
+  let paused = false;
+  f.documents.put = async (userId, kind, id, payload, options) => {
+    if (kind === "episode" && payload.status === "merged" && !paused) {
+      paused = true;
+      const current = await f.service.get("user-one", folding.agenda.id);
+      await put("user-one", "agenda", current.id, { ...current.payload, enabled: false, status: "paused" }, { expectedRevision: current.revision, projectId: current.projectId });
+    }
+    return put(userId, kind, id, payload, options);
+  };
+  await folding.fold();
+  assert.equal((await f.service.getEpisode("user-one", folding.episode.id)).payload.status, "merged");
+  assert.deepEqual((await f.service.getEpisode("user-one", folding.episode.id)).payload.claims.map(stateOf), folding.ids.map(() => ({ status: "queued" })));
+  await f.service.endVerificationsOfAgenda("user-one", folding.episode.id, "agenda_paused", folding.ids[0]);
+  assert.deepEqual((await f.service.getEpisode("user-one", folding.episode.id)).payload.claims.map(stateOf)[0], { status: "unscheduled", reason: "agenda_paused" });
+});
+
 test("a re-check that failed for its own reason while the agenda ran keeps that reason", async () => {
   const f = fixture();
   const { episode } = await completedEpisode(f, { count: 2 });

@@ -1103,9 +1103,25 @@ export class AutopilotService {
     return this.finishCompletion(userId, episode);
   }
 
+  /**
+   * Fold a frozen result into its briefing, and the episode into its end state.
+   *
+   * The agenda's stop can land anywhere in this: `sweepStop` cancels the episodes still `verifying`, and it does
+   * so without the claims, which this fold has not written to the episode yet. The briefing and the re-check
+   * jobs are this fold's, so what it books is the only thing left to end them: the episode that is cancelled
+   * under it is written with its claims all the same -- still `canceled`, the stop's decision stands -- and
+   * they are ended the way the stop ends every other waiting re-check (`endVerificationsOfAgenda`). Written
+   * before they are ended, so a process that dies in between leaves a stopped agenda with a claim that reads
+   * `queued`, which `reconcileStopWork` already sweeps; and one that dies before this write leaves a
+   * cancelled episode that still holds its result, which `reconcileStopWork` hands back here.
+   *
+   * @param {string} userId @param {{id:string,projectId:string,revision:number,payload:any}} episode
+   */
   async finishCompletion(userId, episode) {
     const completion = episode.payload.completion;
-    if (episode.payload.status !== "verifying" || !completion) {
+    // A cancelled episode is folded only for the result it was cancelled holding.
+    const foldable = completion && (episode.payload.status === "verifying" || episode.payload.status === "canceled");
+    if (!foldable) {
       if (episode.payload.digestId) return this.getDigest(userId, episode.payload.digestId);
       return null;
     }
@@ -1121,18 +1137,29 @@ export class AutopilotService {
     // Before the episode leaves `verifying`: an enqueue that fails here leaves
     // the fold replayable, and `reconcileStopWork` runs it again. Enqueueing
     // after the episode is merged would lose the second opinion silently.
-    await this.enqueueVerifications(userId, { agenda, episode, digest, claims: completion.claims });
-    const latest = await this.getEpisode(userId, episode.id);
-    if (latest.payload.status === "verifying") {
-      await this.documents.put(userId, "episode", latest.id, {
-        ...latest.payload,
-        status: completion.outcomeStatus === "succeeded" ? "merged" : completion.outcomeStatus,
-        claims: completion.claims, artifactRefs: completion.artifactRefs ?? [], rejectedClaims: completion.rejectedClaims,
-        deltaErrorCode: completion.deltaErrorCode, costCny: completion.costCny,
-        digestId: digest.id, completion: null, updatedAt: this.now().toISOString(),
-      }, { expectedRevision: latest.revision, projectId: latest.projectId }).catch((error) => {
+    // None for an episode the stop already cancelled: its re-checks are ended below, not run.
+    if (episode.payload.status === "verifying") await this.enqueueVerifications(userId, { agenda, episode, digest, claims: completion.claims });
+    let latest = await this.getEpisode(userId, episode.id);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const stopped = latest.payload.status === "canceled" && latest.payload.completion?.runId === completion.runId;
+      if (latest.payload.status !== "verifying" && !stopped) break;
+      try {
+        await this.documents.put(userId, "episode", latest.id, {
+          ...latest.payload,
+          status: stopped ? "canceled" : completion.outcomeStatus === "succeeded" ? "merged" : completion.outcomeStatus,
+          claims: completion.claims, artifactRefs: completion.artifactRefs ?? [], rejectedClaims: completion.rejectedClaims,
+          deltaErrorCode: completion.deltaErrorCode, costCny: completion.costCny,
+          digestId: digest.id, completion: null, updatedAt: this.now().toISOString(),
+        }, { expectedRevision: latest.revision, projectId: latest.projectId });
+      } catch (error) {
         if (!isConflict(error)) throw error;
-      });
+        // Someone wrote the episode since it was read: the stop, a fold of the same result, a dispatch record.
+        // What it is now decides, rather than assuming the write that won was this fold's.
+        latest = await this.getEpisode(userId, episode.id);
+        continue;
+      }
+      if (stopped) await this.endVerificationsOfAgenda(userId, latest.id, "agenda_stopped");
+      break;
     }
     return digest;
   }
@@ -1633,9 +1660,11 @@ export class AutopilotService {
   async reconcileStopWork() {
     const database = this.documents.database;
     if (!database) return { scanned: 0, enqueued: 0 };
+    // Folds left unfinished: an episode still `verifying`, and one the agenda's stop cancelled while it was (`finishCompletion`).
+    // `completion` is a JSON null once a fold is written, which `IS NOT NULL` does not tell from a result.
     const completions = await database.query(`SELECT user_id,id,project_id,payload,revision FROM evimed_product.documents
-      WHERE kind='episode' AND deleted_at IS NULL AND payload->>'status'='verifying'
-      AND payload->'completion' IS NOT NULL ORDER BY updated_at,id LIMIT 100`);
+      WHERE kind='episode' AND deleted_at IS NULL AND ((payload->>'status'='verifying' AND payload->'completion' IS NOT NULL)
+        OR (payload->>'status'='canceled' AND jsonb_typeof(payload->'completion')='object')) ORDER BY updated_at,id LIMIT 100`);
     const continuations = await database.query(`SELECT user_id,id FROM evimed_product.documents
       WHERE kind='episode' AND deleted_at IS NULL AND payload->'continuationBinding' IS NOT NULL
       AND ($1::text IS NULL OR (user_id,id)>($1::text,$2::text))

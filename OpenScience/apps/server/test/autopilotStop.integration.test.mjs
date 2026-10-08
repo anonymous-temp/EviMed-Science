@@ -107,6 +107,54 @@ test("a stopped agenda whose sweep is over still has its waiting re-checks ended
   assert.equal(await service.verificationPending(owner, episodeId, verificationIdFor(episodeId, 0)), false);
 });
 
+test("a fold the stop cancelled and the process never finished is found by the reconcile scan, and its re-checks end with the stop", options, async () => {
+  now = new Date("2026-09-30T01:00:00Z");
+  const created = await service.create(owner, { projectId: "project-test", title: "Stop in a fold", prompt: "Preserve the instruction.",
+    taskTypes: ["evidence-update"], schedule: { kind: "daily", timeZone: "UTC", time: "07:35" },
+    dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 16 });
+  const active = await service.start(owner, created.id, { expectedRevision: created.revision });
+  const { episode } = await service.runNow(owner, active.id, { requestId: `request-${randomUUID()}` });
+  const runId = `run-${randomUUID()}`;
+  await service.markEpisodeDispatched(owner, episode.id, { runId, sessionId: `session-${runId}` });
+  // The stop lands once the fold has written the briefing and begun to book its re-checks, and the process dies there.
+  const enqueue = jobs.enqueue.bind(jobs);
+  jobs.enqueue = async (...args) => {
+    if (args[1] !== "verify") return enqueue(...args);
+    const current = await service.get(owner, active.id);
+    await service.stop(owner, current.id, { expectedRevision: current.revision });
+    throw new Error("process died");
+  };
+  try {
+    await assert.rejects(() => service.completeRun(owner, { projectId: "project-test", runId, status: "succeeded", deltaSchemaVersion: 1,
+      artifacts: ["reports/evidence.md"], costCny: 2, claims: [0, 1, 2].map((index) => ({
+        id: `claim-${index}`, statement: `结论 ${index}`, type: "direct", tier: "unverified", sources: [`doi:10.1000/fold-${index}`],
+        provenance: { episodeId: episode.id, artifact: "reports/evidence.md" } })) }), /process died/);
+  } finally { jobs.enqueue = enqueue; }
+
+  const stranded = await documents.get(owner, "episode", episode.id);
+  assert.equal(stranded.payload.status, "canceled");
+  assert.equal(stranded.payload.completion.runId, runId, "the stop kept the result it interrupted");
+  assert.deepEqual(stranded.payload.claims ?? [], []);
+  const digestRow = (await documents.list(owner, "digest", { projectId: "project-test", filter: { agendaId: active.id } })).items[0];
+  assert.deepEqual([...digestRow.payload.headlines, ...digestRow.payload.leads].map((claim) => claim.verification.status), ["queued", "queued", "queued"]);
+
+  await service.reconcileStopWork();
+  const folded = await documents.get(owner, "episode", episode.id);
+  assert.equal(folded.payload.status, "canceled", "the stop's decision about the episode stands");
+  assert.equal(folded.payload.digestId, digestRow.id);
+  assert.equal(folded.payload.completion, null);
+  assert.deepEqual((await claimsOf(episode.id)).map((item) => [item.status, item.reason]), Array(3).fill(["unscheduled", "agenda_stopped"]));
+  const briefing = await documents.get(owner, "digest", digestRow.id);
+  assert.deepEqual([...briefing.payload.headlines, ...briefing.payload.leads].map((claim) => [claim.verification.status, claim.verification.reason]),
+    Array(3).fill(["unscheduled", "agenda_stopped"]), "no re-check reads queued in the briefing either");
+  const jobsBooked = await database.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND kind='verify' AND payload->>'episodeId'=$2", [owner, episode.id]);
+  assert.equal(jobsBooked.rows.length, 0, "a cancelled episode books no re-check it would only have to skip");
+
+  // Folded once: the scan no longer selects it, and a second timer tick writes nothing.
+  await service.reconcileStopWork();
+  assert.equal((await documents.get(owner, "episode", episode.id)).revision, folded.revision);
+});
+
 test("a verify job claimed while the agenda is stopped ends its claim before it is skipped", options, async () => {
   const { agendaId, episodeId } = await mergedEpisode();
   const stopped = await service.get(owner, agendaId);
