@@ -149,9 +149,36 @@ describe("a trend line", () => {
     expect(line.last).toEqual({ x: 94, y: 2 });
   });
 
-  it("keeps a missing reading's place on the time axis, and draws a flat line in the middle", () => {
-    expect(sparkline(points([10, null, 30]), 96, 28)!.path).toBe("M2 26 L94 2");
+  it("draws a flat line in the middle", () => {
     expect(sparkline(points([5, 5]), 96, 28)!.path).toBe("M2 14 L94 14");
+  });
+
+  // §11.2: a gap is shown, never joined over. The missing reading keeps its place on the time axis and the line is two segments.
+  it("breaks at a missing reading: two segments, nothing drawn across the gap", () => {
+    const line = sparkline(points([10, 20, null, 30, 40]), 96, 28)!;
+    expect(line.path).toBe("M2 26 L25 18 M71 10 L94 2");
+    expect(line.path.match(/M/g)).toHaveLength(2);
+    expect(line.dots).toEqual([]);
+    expect(line.last).toEqual({ x: 94, y: 2 });
+    // The same readings without the gap are one line.
+    expect(sparkline(points([10, 20, 25, 30, 40]), 96, 28)!.path.match(/M/g)).toHaveLength(1);
+  });
+
+  it("breaks at every gap, however long, and leaves a reading with a gap on both sides as a dot, not a line", () => {
+    const line = sparkline(points([10, null, null, 20, 30, null, 40]), 96, 28)!;
+    expect(line.path.match(/M/g)).toHaveLength(1);
+    expect(line.path).toBe("M48 18 L63.3 10");
+    expect(line.dots).toEqual([{ x: 2, y: 26 }, { x: 94, y: 2 }]);
+    expect(line.last).toEqual({ x: 94, y: 2 });
+    // Two readings with nothing between them drawn are still two readings: dots, and no path to stroke.
+    const apart = sparkline(points([10, null, 30]), 96, 28)!;
+    expect(apart.path).toBe("");
+    expect(apart.dots).toEqual([{ x: 2, y: 26 }, { x: 94, y: 2 }]);
+  });
+
+  it("still says nothing is drawn from fewer than two readings, gaps or not", () => {
+    expect(sparkline(points([null, null, 12, null]), 96, 28)).toBeNull();
+    expect(sparkline(points([]), 96, 28)).toBeNull();
   });
 });
 
