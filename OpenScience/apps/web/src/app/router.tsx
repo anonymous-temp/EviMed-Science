@@ -21,6 +21,7 @@ import { RouteError } from "./routes/RouteError";
  */
 const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
+const SourceReaderPage = lazy(() => import("./routes/SourceReaderPage").then((m) => ({ default: m.SourceReaderPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
@@ -108,7 +109,11 @@ export const routes: RouteObject[] = [
         // tabs land (`open-artifact`, contract C9) and where a claim's preserved
         // source opens with its quotation marked.
         { path: "runs/:runId/files/*", element: <RunFilePage /> },
+        // 「知识库」: the list, with its scope, type and search in the address, and one document on a page of its own
+        // (`files/:sourceId`) — the original beside what it says. A link by `?source=<id>` is answered by the list, which
+        // sends it to the document's page.
         { path: "files", element: <KnowledgePage /> },
+        { path: "files/:sourceId", element: <SourceReaderPage /> },
         { path: "autopilot", element: <AutopilotPage /> },
         { path: "memory", element: <MemoryHubPage /> },
         // A share link and a delivery from the inbox (flywheel F17): the same preview, trial and import a file has, with no file.

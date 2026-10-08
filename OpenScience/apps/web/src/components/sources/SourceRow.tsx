@@ -11,8 +11,8 @@ import { RETRYABLE, isReading, isUsable, kindIcon, metaLine, stateLabel } from "
 
 /**
  * What one can do to a document, in the order a menu offers it: read it again, make it available to every project
- * (or only this one), settle a suspected duplicate, delete. The row's 「⋯」 and the drawer's carry the same four, so
- * they cannot disagree.
+ * (or only this one), settle a suspected duplicate, delete. The row's 「⋯」 and the reader page's carry the same four,
+ * so they cannot disagree.
  */
 export function sourceMenuItems(source: SourceRecord, {
   duplicate, busy, onRetry, onShare, onDuplicates, onDelete,
@@ -34,11 +34,12 @@ export function sourceMenuItems(source: SourceRecord, {
 
 /**
  * One document, as a list row: what it is called, one line of what it says, and under it what it is, how long, and
- * where it came from; the day it arrived at the end. The whole row opens the drawer. A state is said only while the
- * document cannot be used yet (「正在读取」, a few seconds) or could not be read (「没能读取 · 重试」), in the line where
- * what it says would be.
+ * where it came from; the day it arrived at the end. The whole row is a link to the document's own page (`to`), so it
+ * opens in a new tab and keeps its address; `onOpen` runs as it is followed, which is where the list keeps its place.
+ * A state is said only while the document cannot be used yet (「正在读取」, a few seconds) or could not be read
+ * (「没能读取 · 重试」), in the line where what it says would be.
  */
-export function SourceRow({ source, busy, duplicate, showShared, projectName, onOpen, onRetry, onShare, onDuplicates, onDelete }: {
+export function SourceRow({ source, busy, duplicate, showShared, projectName, to, onOpen, onRetry, onShare, onDuplicates, onDelete }: {
   source: SourceRecord;
   busy: boolean;
   duplicate: boolean;
@@ -46,7 +47,9 @@ export function SourceRow({ source, busy, duplicate, showShared, projectName, on
   showShared: boolean;
   /** The project a document of the shared scope belongs to. */
   projectName: string | null;
-  onOpen: () => void;
+  /** The document's page. */
+  to: string;
+  onOpen?: () => void;
   onRetry: () => void;
   onShare: () => void;
   onDuplicates: () => void;
@@ -59,6 +62,7 @@ export function SourceRow({ source, busy, duplicate, showShared, projectName, on
     <ListRow
       leading={<span className="grid h-8 w-8 place-items-center rounded bg-surface-2 text-text-3"><Icon size={16} aria-hidden="true" /></span>}
       title={<Tooltip content={display.title} kind="label" whenTruncated><span className="block truncate">{display.title}</span></Tooltip>}
+      to={to}
       onOpen={onOpen}
       meta={<>
         <SourceLine source={source} busy={busy} onRetry={onRetry} />

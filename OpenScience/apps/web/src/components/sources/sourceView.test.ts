@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceDisplay, SourceRecord } from "@/lib/sourceClient";
-import { drawerMeta, fileNameOf, isReading, isUsable, kindIcon, metaLine, stateLabel } from "./sourceView";
+import { conversationDraft, fileNameOf, isEditableNote, isReading, isUsable, kindIcon, metaLine, originalPathOf, readerMeta, stateLabel } from "./sourceView";
 
 const display = (overrides: Partial<SourceDisplay> = {}): SourceDisplay => ({
   title: "幽门螺杆菌感染处理第六次全国共识报告", gist: null, docType: "review-guideline", typeLabel: "综述或指南", typeShort: "指南", kind: "literature",
@@ -32,11 +32,38 @@ describe("a row's meta line", () => {
   });
 });
 
-describe("a drawer's meta line", () => {
-  it("names where a paper was published, and when", () => {
-    expect(drawerMeta(source({ metadata: { source: "中华消化杂志", publicationDate: "2022-03-15" } }))).toBe("指南 · 中华消化杂志 2022 · 18 页");
-    expect(drawerMeta(source())).toBe("指南 · 18 页");
-    expect(drawerMeta(source({}, { typeShort: "网页", site: "nmpa.gov.cn", pages: null }))).toBe("网页 · nmpa.gov.cn");
+describe("a document page's meta line", () => {
+  // A day in an earlier year is dated with its year, so these do not depend on the clock.
+  const earlier = { createdAt: "2020-10-03T08:00:00Z" };
+  it("says what the document is, how big, how long, where it came from and when", () => {
+    expect(readerMeta(source({}, {}, earlier))).toBe("指南 · 2.1 MB · 18 页 · 上传 · 2020-10-03");
+    expect(readerMeta(source({}, { typeShort: "网页", kind: "page", origin: "link", site: "nmpa.gov.cn", pages: null, size: 9000 }, earlier))).toBe("网页 · nmpa.gov.cn · 8.8 KB · 链接 · 2020-10-03");
+    expect(readerMeta(source({}, { typeShort: "数据表", kind: "table", origin: "conversation", pages: null, size: 48_000, shared: true }, earlier))).toBe("数据表 · 47 KB · 对话产出 · 所有项目可用 · 2020-10-03");
+  });
+
+  it("leaves out what is not known, and is never an id or a status word", () => {
+    expect(readerMeta(source({ status: "needs_attention" }, { typeShort: "笔记", kind: "note", origin: "note", pages: null, size: null }, earlier))).toBe("笔记 · 笔记 · 2020-10-03");
+  });
+});
+
+describe("what 「在对话中使用」 leaves in the composer", () => {
+  it("names the document by its title and its file, and never by an id or a path", () => {
+    const draft = conversationDraft(source({ paths: ["knowledge-base/共识.pdf"] }));
+    expect(draft).toContain("资料：幽门螺杆菌感染处理第六次全国共识报告（共识.pdf）");
+    expect(draft.endsWith("我的问题：")).toBe(true);
+    expect(draft).not.toMatch(/src_|knowledge-base|\.evimed/);
+    expect(conversationDraft(source({ paths: ["knowledge-base/notes/10月3日组会.md"] }, { title: "10月3日组会.md" }))).toContain("资料：10月3日组会.md\n");
+  });
+});
+
+describe("where a document's original is", () => {
+  it("is its own file, the text read from it for a cloud-drive document, and a note's editor for a note", () => {
+    expect(originalPathOf(source())).toBe("knowledge-base/共识.pdf");
+    expect(originalPathOf(source({ outputs: { artifactPath: "knowledge-base/.evimed-derived/src_one/index.md" } }, { origin: "drive" }))).toBe("knowledge-base/.evimed-derived/src_one/index.md");
+    expect(originalPathOf(source({ paths: [], outputs: {} }, { origin: "drive" }))).toBeNull();
+    expect(isEditableNote(source({}, { kind: "note", origin: "note" }))).toBe(true);
+    expect(isEditableNote(source({}, { kind: "note", origin: "upload" }))).toBe(false);
+    expect(isEditableNote(source())).toBe(false);
   });
 });
 

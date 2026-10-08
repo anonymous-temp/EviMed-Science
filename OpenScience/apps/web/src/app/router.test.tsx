@@ -73,6 +73,10 @@ describe("every address people already have still arrives", () => {
     ["/app/ops", "/app/account?tab=ops"],
     ["/app/chat/session-7", "/app/chat/session-7"],
     ["/app/inbox", "/app/inbox"],
+    // 知识库: the list with its scope, type and search in the address, and one document on a page of its own, which
+    // carries the list it was opened from, the tab and the page of its original.
+    ["/app/files?scope=paper-1&kind=table&q=%E7%96%B3", "/app/files?scope=paper-1&kind=table&q=%E7%96%B3"],
+    ["/app/files/src_1a2b?scope=shared&tab=original&page=5", "/app/files/src_1a2b?scope=shared&tab=original&page=5"],
     // 前沿动态 and one of its events, with the view in the address (a daily
     // notification links to `?view=daily&day=…`).
     ["/app/frontier", "/app/frontier"],
@@ -117,6 +121,17 @@ describe("every address people already have still arrives", () => {
     findRunSession.mockResolvedValue(null);
     landOn("/app/runs?run=run_gone");
     expect(await screen.findByTestId("landed")).toHaveTextContent(/^\/app\/chat$/);
+  });
+});
+
+describe("知识库's addresses", () => {
+  it("has the list at /app/files and one document at /app/files/:sourceId, which is a page and not a drawer", () => {
+    const leaf = (path: string) => matchRoutes(routes, path)?.at(-1);
+    expect(leaf("/app/files")?.route.path).toBe("files");
+    expect(leaf("/app/files/src_1a2b")?.route.path).toBe("files/:sourceId");
+    expect(leaf("/app/files/src_1a2b")?.params).toEqual({ sourceId: "src_1a2b" });
+    // An id with a slash in it is not a second path segment.
+    expect(leaf("/app/files/a/b")?.route.path).toBe("*");
   });
 });
 

@@ -1,6 +1,6 @@
 import { BookOpen, FileText, Globe, Image as ImageIcon, Sheet, StickyNote, type LucideIcon } from "lucide-react";
 import { SOURCE_KINDS, SOURCE_ORIGINS, sourceDocTypeLabel } from "@evimed/domain";
-import { humanSize } from "@/lib/format";
+import { formatDay, humanSize } from "@/lib/format";
 import type { SourceKind, SourceRecord } from "@/lib/sourceClient";
 
 /** Whether the assistant can use a document now: the server's `readable`, true as soon as the text is read,
@@ -44,10 +44,34 @@ export function kindIcon(kind: string): LucideIcon {
   return KIND_ICON[kind as SourceKind] ?? FileText;
 }
 
+/**
+ * Where a document's original is read from: its own file, or — for a document that lives in the cloud drive, whose
+ * original is not in the project — the text that was read from it.
+ */
+export function originalPathOf(source: SourceRecord): string | null {
+  if (source.display.origin === "drive") return source.payload.outputs?.artifactPath ?? null;
+  return source.payload.paths[0] ?? null;
+}
+
+/** A note the researcher wrote here: its original is its editor, and saving it makes the next version. */
+export function isEditableNote(source: SourceRecord): boolean {
+  return source.display.kind === "note" && source.display.origin === "note";
+}
+
 /** A document's file name, never its id. */
 export function fileNameOf(source: SourceRecord): string {
   const file = source.payload.paths[0] ?? source.id;
   return file.slice(file.lastIndexOf("/") + 1) || source.id;
+}
+
+/**
+ * 「在对话中使用」: the question left in the composer, unsent. It names the document by its title and its file name and
+ * nothing else — no id, no path — and the model finds the document by what it is called (design reference §6.4, §18.4).
+ */
+export function conversationDraft(source: SourceRecord): string {
+  const title = source.display.title;
+  const name = fileNameOf(source);
+  return `请阅读知识库里的这份资料，并据此回答我的问题，引用时标出处。\n\n资料：${title}${name !== title ? `（${name}）` : ""}\n\n我的问题：`;
 }
 
 /**
@@ -67,18 +91,20 @@ export function metaLine(source: SourceRecord, { showShared = true }: { showShar
 }
 
 /**
- * The line under a drawer's title: the kind of document and where it was published (a journal and a year, when the
- * parser read them), its length, and the site of a saved page.
+ * The grey line after a document page's title: what it is, how big, how long, where it came from and the day it
+ * arrived — 「指南 · 3.1 MB · 38 页 · 上传 · 10月5日」. A saved page names its site; a document the account made
+ * available to every project says so.
  */
-export function drawerMeta(source: SourceRecord): string {
+export function readerMeta(source: SourceRecord): string {
   const { display } = source;
-  const metadata = source.payload.metadata;
-  const year = metadata?.publicationDate?.match(/\d{4}/)?.[0] ?? "";
-  const published = [metadata?.source?.trim(), year].filter(Boolean).join(" ");
   return [
     display.typeShort,
-    published || display.site || "",
-    display.pages ? `${display.pages} 页` : display.site ? "" : humanSize(display.size),
+    display.site ?? "",
+    humanSize(display.size),
+    display.pages ? `${display.pages} 页` : "",
+    ORIGIN_LABEL[display.origin] ?? "上传",
+    display.shared ? "所有项目可用" : "",
+    formatDay(source.createdAt),
   ].filter(Boolean).join(" · ");
 }
 
