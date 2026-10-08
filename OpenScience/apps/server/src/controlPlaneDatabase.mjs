@@ -73,6 +73,11 @@ CREATE INDEX IF NOT EXISTS research_sessions_updated_at_idx
 INSERT INTO ${schema}.schema_migrations(version) VALUES (1)
 ON CONFLICT (version) DO NOTHING;
 
+-- 2026-10-09 (design reference N-14). A conversation can be limited to some of the knowledge base's documents (the
+-- ones the researcher brought into it from the knowledge base): their ids, or null for all of them. It belongs to the
+-- conversation, so a reload, a second window and the runtime all see the same scope.
+ALTER TABLE ${schema}.research_sessions ADD COLUMN IF NOT EXISTS source_scope jsonb;
+
 -- 2026-09-18 (contract C4). A project can be archived rather than deleted:
 -- out of the way, still whole, still exportable.
 ALTER TABLE ${schema}.projects ADD COLUMN IF NOT EXISTS archived_at timestamptz;

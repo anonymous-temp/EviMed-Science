@@ -121,6 +121,19 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     const aliceFromSecond = await second.app.store.userById("alice");
     const paperFromFirst = await first.app.store.requireProject(aliceFromFirst, "paper1");
     const paperFromSecond = await second.app.store.requireProject(aliceFromSecond, "paper1");
+    // Design reference N-14: a conversation's source scope is a column of its session row, shared across instances,
+    // kept when the session is bound again, and lifted by null.
+    const scopedTo = `src_${"d".repeat(32)}`;
+    const scoped = await first.app.store.setResearchSessionSourceScope(paperFromFirst, "ses_shared", [scopedTo]);
+    assert.deepEqual([...scoped.sourceScope], [scopedTo]);
+    assert.deepEqual([...(await second.app.store.getResearchSession(paperFromSecond, "ses_shared")).sourceScope], [scopedTo]);
+    const reboundAt = new Date().toISOString();
+    const rebound = await first.app.store.putResearchSession(paperFromFirst, {
+      sessionId: "ses_shared", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null, createdAt: reboundAt, updatedAt: reboundAt,
+    }, { maximum: 2 });
+    assert.deepEqual([...rebound.sourceScope], [scopedTo], "binding the conversation again leaves its scope alone");
+    assert.equal((await first.app.store.setResearchSessionSourceScope(paperFromFirst, "ses_shared", null)).sourceScope, null);
+    await assert.rejects(() => first.app.store.setResearchSessionSourceScope(paperFromFirst, "ses_unknown", null), (error) => error.code === "research_session_not_found");
     const createdAt = new Date().toISOString();
     const competingSessions = await Promise.allSettled([
       first.app.store.putResearchSession(paperFromFirst, {
