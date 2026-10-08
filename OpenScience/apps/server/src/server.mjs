@@ -4204,6 +4204,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // the task's caps become — the episode's budget, or what the task has left
         // if less.
         const { dailyLimit, weeklyLimit, runLimit } = autopilotService.runScope(agenda, Math.min(Number(episode.budgetCny), allowance.remainingCny));
+        // What the researcher sees as this execution's first message: their own words. The rest is the platform's brief. Read before a
+        // runtime is reserved, so a failure here leaves nothing to release.
+        const visibleText = episodeVisibleText((await autopilotService.getEpisode(user.id, episode.episodeId)).payload, episode.prompt);
         // A project whose runtime is already open for the researcher takes the execution in that runtime — the conversation they
         // are looking at — rather than reserving a bounded one, as a 虚拟临床研究 step and a GEO step do. The two exclusions go
         // with it: an open conversation tab no longer makes 立即运行 wait for the runtime to go idle, and the project's
@@ -4232,8 +4235,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           ? runtimeManager.endBoundedRuntime(project, episode.episodeId, cleanupTarget.generation) : false;
         // Where the run lives and what it may spend, written with the binding to the episode. Every write of that binding carries it.
         const bindingOf = (/** @type {string} */ runId) => ({ runId, sessionId: session.id, interactive, runLimitCny: runLimit });
-        // What the researcher sees as this execution's first message: their own words. The rest is the platform's brief.
-        const visibleText = episodeVisibleText((await autopilotService.getEpisode(user.id, episode.episodeId)).payload, episode.prompt);
         try {
           await researchSessions.put(project, session.id, {
             mode: "specialist", agentId: selected.id, agentVersion: selected.version,
