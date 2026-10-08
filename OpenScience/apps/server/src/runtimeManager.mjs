@@ -3505,6 +3505,8 @@ export class RuntimeManager {
      *  deployment at its ceiling (`makeRoomFor`): how many, and the last time
      *  (`open_science_runtime_background_yielded_total`). */
     this.backgroundYields = { total: 0, failed: 0, lastAt: /** @type {string | null} */ (null) };
+    /** Bounded starts in a researcher's own projects refused for the account's background share (`assertBackgroundShare`). */
+    this.backgroundShareRefusals = 0;
     /** Projects whose start found every slot taken and has not started since,
      *  by project key (`noteRoomRefusal`): when it began, when it last asked
      *  and whose it is. */
@@ -3894,6 +3896,9 @@ export class RuntimeManager {
       || this.pendingModelGatewayScopes.has(key) || warm?.modelGatewayScope || this.activeProxyCountForProject(project) > 0) {
       throw busy();
     }
+    // Asked before the reservation below and with no await between them, so two
+    // steps of one account reserving at once cannot both pass it.
+    this.assertBackgroundShare(project);
     // Reserve admission before awaiting the idle proof. A disconnected warm
     // container is a cache, not a running research task; the scheduled episode
     // must not wait for its twelve-hour cache timeout. Connected, working or
@@ -5432,6 +5437,10 @@ export class RuntimeManager {
         limit: backgroundRuntimeLimit(positiveLimit(this.config.maxRunningRuntimes), positiveLimit(this.config.maxRunningRuntimesPerUser)),
         yielded: this.backgroundYields.total,
         yieldFailures: this.backgroundYields.failed,
+        // Background work in researchers' own projects, and the starts it was told to wait for their share.
+        inResearcherProjects: [...new Set([...this.runtimes.keys(), ...this.pendingModelGatewayScopes.keys()])]
+          .filter((key) => !this.isBackgroundKey(key) && (this.pendingModelGatewayScopes.has(key) || this.runtimes.get(key)?.modelGatewayScope)).length,
+        shareRefusals: this.backgroundShareRefusals,
         lastYieldedAt: this.backgroundYields.lastAt,
       },
       roomWaits: this.roomWaitsSnapshot(),
@@ -5502,12 +5511,54 @@ export class RuntimeManager {
   }
 
   /**
+   * Background work in a researcher's own projects — a 虚拟临床研究 or 循证 GEO
+   * step, an autopilot episode: a run reserved a bounded runtime for — holds at
+   * most one slot less than their ceiling, so a conversation they open always
+   * has one (owner, 2026-10-08). That day two background analysis runs of one
+   * account held both of its slots, and its third study's conversation waited
+   * for them. The platform's internal projects are not the account's slots and
+   * are not counted (`backgroundRuntimeLimit` holds those). A ceiling of one
+   * leaves the background its one slot: no share of it would let a programme
+   * run at all.
+   *
+   * Refused as a place in line (`runtime_capacity_full`): every worker defers
+   * on it and asks again on its next pass, which is when a finished step has
+   * given its slot back.
+   * @param {Record<string, any>} project
+   */
+  assertBackgroundShare(project) {
+    if (this.isBackgroundProject(project.userId, project.id)) return;
+    const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
+    if (maxPerUser == null) return;
+    const share = Math.max(1, maxPerUser - 1);
+    if (this.backgroundRuntimeCountForUser(project.userId, this.key(project)) < share) return;
+    this.backgroundShareRefusals += 1;
+    throw this.roomFull(project, `Background work already holds this account's share of runtimes (${share} of ${maxPerUser}); it waits so the researcher keeps one.`, 60, { background: true });
+  }
+
+  /**
+   * How many of an account's own projects have a runtime started, or being
+   * reserved, for a bounded run (`assertBackgroundShare`).
+   * @param {string} userId @param {string} [except] a project key that is not one of them
+   */
+  backgroundRuntimeCountForUser(userId, except = "") {
+    const prefix = `${userId}:`;
+    let count = 0;
+    for (const key of new Set([...this.runtimes.keys(), ...this.pendingModelGatewayScopes.keys()])) {
+      if (key === except || !key.startsWith(prefix) || this.isBackgroundKey(key)) continue;
+      if (this.pendingModelGatewayScopes.has(key) || this.runtimes.get(key)?.modelGatewayScope) count += 1;
+    }
+    return count;
+  }
+
+  /**
    * The refusal of a start that found no room, and the first line of its wait
    * on the operator's books (`noteRoomRefusal`).
    * @param {Record<string, any>} project @param {string} message @param {number} retryAfterSeconds
+   * @param {{ background?: boolean }} [options] `background`: the start is background work whatever project it is in
    */
-  roomFull(project, message, retryAfterSeconds) {
-    this.noteRoomRefusal(project);
+  roomFull(project, message, retryAfterSeconds, { background = false } = {}) {
+    this.noteRoomRefusal(project, { background });
     return new HttpError(429, ROOM_FULL_CODE, message, { retryAfterSeconds });
   }
 
@@ -5521,14 +5572,14 @@ export class RuntimeManager {
    * (`settleRoomWaits`). A warm-up that guessed at a project is no wait.
    * @param {Record<string, any>} project
    */
-  noteRoomRefusal(project) {
+  noteRoomRefusal(project, { background = false } = {}) {
     const key = this.key(project);
     if (this.speculativeStarts.has(key)) return;
     const now = Date.now();
     this.settleRoomWaits(now);
     const wait = this.roomWaits.get(key);
     if (wait) wait.lastAt = now;
-    else this.roomWaits.set(key, { since: now, lastAt: now, audience: this.isBackgroundProject(project.userId, project.id) ? "background" : "researcher" });
+    else this.roomWaits.set(key, { since: now, lastAt: now, audience: background || this.isBackgroundProject(project.userId, project.id) ? "background" : "researcher" });
   }
 
   /** A project's runtime came up: whatever wait it had is over. @param {Record<string, any>} project */
