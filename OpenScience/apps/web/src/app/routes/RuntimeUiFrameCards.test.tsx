@@ -7,6 +7,8 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
 import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runtimeUiFrame.mjs";
+import { GEO_DEFAULT_COVERAGE_DAYS, GEO_DEFAULT_ENGINES } from "@/components/geo/geoText";
+import { VCR_START_OPTIONS, frameVcrOptions } from "@/components/vcr/frameVcrOptions";
 import { apply as applyToolviews } from "../../../../../packages/harness-port/src/runtimeUiToolviews.mjs";
 import { apply as applyPanels } from "../../../../../packages/harness-port/src/runtimeUiPanels.mjs";
 import { apply as applyReplyChecks } from "../../../../../packages/harness-port/src/runtimeUiReplyChecks.mjs";
@@ -259,7 +261,7 @@ describe("the tools on a blank conversation", () => {
     fireEvent.click(heroView.getByRole("button", { name: "≥70 岁人群阿司匹林一级预防的获益与出血风险。" }));
     heroView.unmount();
     act(() => kit.hub.deliver("session", { sessionId: "session-b" }));
-    // In a session the chip alone sits under the composer; the starters stay on the hero.
+    // In a session the chip is in the composer's toolbar; the starters stay on the hero.
     expect(components.has("evimed-tool-starters")).toBe(false);
     const Chip = components.get("evimed-tool") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<Chip />);
@@ -269,9 +271,18 @@ describe("the tools on a blank conversation", () => {
     // The tool's name alone: how long it takes was said on 科研工具.
     expect(view.container.textContent).toBe("临床证据深度分析×");
     expect(screen.queryByRole("button", { name: "≥70 岁人群阿司匹林一级预防的获益与出血风险。" })).toBeNull();
-    // Leaving the tool is the chip's ×: the shell is told, with the draft.
-    const leave = screen.getByRole("button", { name: "移除「临床证据深度分析」" });
-    expect(leave).toHaveAttribute("title", "移除");
+    // The blank conversation of a session has this toolbar too: the hero seat
+    // then holds the starters alone, so the chip is on the page once.
+    const withToolbar = render(<Hero />);
+    expect(withToolbar.container.querySelector("[data-evimed-tool-chip]")).toBeNull();
+    expect(withToolbar.container.querySelector("[data-evimed-hero-tools]")).not.toBeNull();
+    expect(document.querySelectorAll("[data-evimed-tool-chip]")).toHaveLength(1);
+    withToolbar.unmount();
+    // A tool with no settings has no menu: just its name and the way out.
+    expect(view.container.querySelector("[aria-haspopup]")).toBeNull();
+    // Leaving the tool is the chip's ×, one click: the shell is told, with the draft.
+    const leave = screen.getByRole("button", { name: "移除“临床证据深度分析”" });
+    expect(leave).not.toHaveAttribute("title");
     fireEvent.click(leave);
     expect(sent.at(-1)).toEqual(["bind-capability", { capabilityId: null, sessionId: "session-a", draft: "老年房颤该不该抗凝？" }]);
   });
@@ -295,6 +306,8 @@ describe("the 循证 GEO chip", () => {
     const target = {
       __EVIMED_FRAME__: { version: 1, frameId: "f", projectId: "p", shellOrigin: "https://app.example", cwd: "/workspace", capabilities: [] },
       parent: { postMessage() {} }, addEventListener() {}, removeEventListener() {}, console,
+      // The menu closes on Escape and on a press outside it: it listens on the page.
+      document,
     };
     const kit = createFrameKit(ctx, target, (id: string) => (id === "react" ? React : undefined), FRAME_VOCABULARY);
     const sent: Array<[string, Record<string, unknown>]> = [];
@@ -309,28 +322,43 @@ describe("the 循证 GEO chip", () => {
     return { components, drafts, kit, sent, options };
   }
 
-  it("says 「循证 GEO」 and changes the coverage window and the engines through the shell, never sending the composer", () => {
+  it("says 「循证 GEO」 and changes the coverage window and the engines from the chip's menu through the shell, never sending the composer", () => {
     const f = geoFrame();
     const Hero = f.components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<Hero />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "geo-insight", sessionId: "session-a" }));
     expect(view.getByText("循证 GEO")).toBeInTheDocument();
-    expect(view.queryByRole("combobox", { name: "覆盖周期" })).toBeNull();
+    // Without the project's options there is nothing to set: the chip is a name and a way out.
+    expect(view.container.querySelector("[aria-haspopup]")).toBeNull();
     act(() => f.kit.hub.deliver("geo", f.options));
 
-    const coverage = view.getByRole("combobox", { name: "覆盖周期" });
-    expect(coverage).toHaveValue("90");
-    fireEvent.change(coverage, { target: { value: "180" } });
+    // At the defaults the chip says nothing more; the settings are one click away, in a menu.
+    const trigger = view.getByRole("button", { name: "循证 GEO，设置" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(view.queryByRole("radiogroup", { name: "覆盖周期" })).toBeNull();
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const menu = view.getByRole("dialog", { name: "循证 GEO设置" });
+    const coverage = within(menu).getByRole("radiogroup", { name: "覆盖周期" });
+    expect(within(coverage).getByRole("radio", { name: "90 天" })).toBeChecked();
+    fireEvent.click(within(coverage).getByRole("radio", { name: "180 天" }));
     expect(f.sent.at(-1)).toEqual(["geo-options", { sessionId: "session-a", coverageDays: 180 }]);
-    expect(coverage).toHaveValue("180");
+    expect(within(coverage).getByRole("radio", { name: "180 天" })).toBeChecked();
+    // One setting off its default is named on the chip.
+    expect(view.getByRole("button", { name: "循证 GEO · 180 天，设置" })).toBeInTheDocument();
 
-    expect(view.getByText("5 个 AI 引擎")).toBeInTheDocument();
-    const engines = view.getByRole("group", { name: "AI 引擎" });
+    const engines = within(menu).getByRole("group", { name: "AI 引擎" });
     fireEvent.click(within(engines).getByRole("checkbox", { name: "百度" }));
     expect(f.sent.at(-1)).toEqual(["geo-options", { sessionId: "session-a", engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi", "baidu"] }]);
-    expect(view.getByText("6 个 AI 引擎")).toBeInTheDocument();
     fireEvent.click(within(engines).getByRole("checkbox", { name: "Kimi" }));
     expect(f.sent.at(-1)).toEqual(["geo-options", { sessionId: "session-a", engines: ["doubao", "qianwen", "deepseek", "yuanbao", "baidu"] }]);
+    // Both settings off their defaults: a count, not a sentence.
+    expect(view.getByRole("button", { name: "循证 GEO · 2 项设置，设置" })).toBeInTheDocument();
+
+    // Escape closes the menu and puts focus back on the chip.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(view.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(view.getByRole("button", { name: "循证 GEO · 2 项设置，设置" }));
 
     // A starter fills the composer; nothing is sent.
     fireEvent.click(view.getByRole("button", { name: "完整方案" }));
@@ -344,10 +372,28 @@ describe("the 循证 GEO chip", () => {
     const view = render(<Chip />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "geo-content", sessionId: "session-a" }));
     act(() => f.kit.hub.deliver("geo", { ...f.options, engines: ["doubao"] }));
+    fireEvent.click(view.getByRole("button", { name: /循证 GEO.*设置/ }));
     const only = within(view.getByRole("group", { name: "AI 引擎" })).getByRole("checkbox", { name: "豆包" });
     expect(only).toBeChecked();
     expect(only).toBeDisabled();
     // The starters are the blank conversation's: not under the composer.
     expect(view.queryByRole("button", { name: "完整方案" })).toBeNull();
+  });
+});
+
+describe("what a module's chip leaves unsaid", () => {
+  // The frame names a setting on its chip only when it is not the default, and
+  // knows the defaults as data (`FRAME_VOCABULARY.chipDefaults`). The shell holds
+  // its own copies of the same facts; if they ever differ, a chip would say 「180 天」
+  // for a project the shell shows at its default, or say nothing for one that is not.
+  it("agrees with the defaults the shell shows", () => {
+    const defaults = FRAME_VOCABULARY.chipDefaults;
+    expect(defaults.geo.coverageDays).toBe(GEO_DEFAULT_COVERAGE_DAYS);
+    expect([...defaults.geo.engines]).toEqual([...GEO_DEFAULT_ENGINES]);
+    expect(defaults.vcr.start).toBe(VCR_START_OPTIONS[0].id);
+    // A study nobody has touched is for exploration, on the first of the intended uses.
+    const untouched = frameVcrOptions("session-a", null);
+    expect(defaults.vcr.intendedUse).toBe(untouched.intendedUse);
+    expect(defaults.vcr.intendedUse).toBe(untouched.useOptions[0].id);
   });
 });
