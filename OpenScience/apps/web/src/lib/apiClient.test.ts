@@ -280,7 +280,21 @@ describe("apiClient", () => {
     });
 
     expect(ended).toHaveBeenCalledTimes(1);
+    // A session that simply ended is not a sign-out: the login page may bring the person back to the page they were on.
+    expect((ended.mock.calls[0][0] as CustomEvent).detail).toEqual({ deliberate: false });
     expect(client.getWebProjectId()).toBe("default");
+  });
+
+  it("tells a deliberate sign-out from an expired session, so only the second is asked to come back", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({ data: { csrfToken: "csrf_x", user: { id: "alice" }, ok: true } }), { headers: { "Content-Type": "application/json" } }),
+    );
+    const client = await loadClient("https://science.example");
+    const ended = vi.fn();
+    window.addEventListener(client.WEB_SESSION_ENDED_EVENT, ended, { once: true });
+    await client.logoutWeb();
+    expect(ended).toHaveBeenCalledTimes(1);
+    expect((ended.mock.calls[0][0] as CustomEvent).detail).toEqual({ deliberate: true });
   });
 
   it("logs in to the web API with credentials", async () => {
@@ -353,9 +367,11 @@ describe("apiClient", () => {
     expect(client.getWebOidcStartUrl("/app/settings?tab=account")).toBe(
       "https://science.example/api/auth/oidc/start?returnTo=%2Fapp%2Fsettings%3Ftab%3Daccount",
     );
-    expect(client.getWebOidcStartUrl("https://evil.example")).toBe(
-      "https://science.example/api/auth/oidc/start?returnTo=%2Fapp%2Fsettings",
-    );
+    // Only an address inside the app is asked for; the server applies the same rule again.
+    for (const hostile of ["https://evil.example", "//evil.example", "/\\evil.example", "/settings", "/app/%2e%2e/login", "/app//evil.example"]) {
+      expect(client.getWebOidcStartUrl(hostile)).toBe("https://science.example/api/auth/oidc/start?returnTo=%2Fapp%2Fchat");
+    }
+    expect(client.getWebOidcStartUrl()).toBe("https://science.example/api/auth/oidc/start?returnTo=%2Fapp%2Fchat");
   });
 
   // Contract C4: a project is created from its name, in any language; the

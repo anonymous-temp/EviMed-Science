@@ -7,7 +7,7 @@
  * false and a code path nothing can reach.
  */
 import { formatDuration } from "./format";
-import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage } from "@evimed/domain";
+import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage, safeAppReturnPath } from "@evimed/domain";
 import { rememberConversationTitles } from "./conversationTitles";
 
 const rawWebApiBase = import.meta.env.VITE_OPEN_SCIENCE_API_URL?.trim() ?? "";
@@ -1072,9 +1072,14 @@ function clearWebSessionState(): void {
   }
 }
 
-function notifyWebSessionEnded(): void {
+/**
+ * `deliberate`: the person ended it (signing out, deleting the account), so
+ * the login page they land on is not asked to bring them back to the page they
+ * left; a session that merely expired is (`detail.deliberate` is false).
+ */
+function notifyWebSessionEnded(deliberate = false): void {
   clearWebSessionState();
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(WEB_SESSION_ENDED_EVENT));
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(WEB_SESSION_ENDED_EVENT, { detail: { deliberate } }));
 }
 
 function notifyWebSessionStarted(): void {
@@ -1250,7 +1255,7 @@ export async function logoutWeb(): Promise<void> {
   if (!hasWebApi) throw new BackendUnavailableError("auth.logout");
   const res = await fetchWithWebAuth(apiUrl("/auth/logout"), { method: "POST" });
   await parseApiResponse<boolean>(res);
-  notifyWebSessionEnded();
+  notifyWebSessionEnded(true);
 }
 
 /**
@@ -1277,8 +1282,14 @@ export async function fetchWebAuthMethods(): Promise<WebAuthMethods> {
   return parseApiResponse<WebAuthMethods>(res);
 }
 
-export function getWebOidcStartUrl(returnTo = "/app/settings"): string {
-  const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/app/settings";
+/**
+ * The identity provider's start route, asking to come back to `returnTo` after
+ * the sign-in — an address inside the app, by the domain's one rule (the server
+ * applies the same rule again to what it is sent and to what the flow cookie
+ * carried back). Anything else asks for the front door.
+ */
+export function getWebOidcStartUrl(returnTo = "/app/chat"): string {
+  const safeReturnTo = safeAppReturnPath(returnTo) ?? "/app/chat";
   return `${apiUrl("/auth/oidc/start")}?returnTo=${encodeURIComponent(safeReturnTo)}`;
 }
 
@@ -2161,7 +2172,7 @@ export async function deleteWebAccount(confirm: string, password?: string): Prom
     }),
   });
   await parseApiResponse<{ id: string }>(res);
-  notifyWebSessionEnded();
+  notifyWebSessionEnded(true);
 }
 
 export async function createWebTask(

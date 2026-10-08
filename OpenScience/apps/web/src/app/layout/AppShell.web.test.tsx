@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { createMemoryRouter, RouterProvider, useLocation } from "react-router";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./AppShell";
 
@@ -45,10 +45,15 @@ vi.mock("@/components/command-palette/CommandPalette", () => ({ CommandPalette: 
 vi.mock("@/components/ui/Toaster", () => ({ Toaster: () => null }));
 // The login-time connector prompt has its own test; here it is a slot.
 
+function LoginProbe() {
+  const location = useLocation();
+  return <main>账号密码登录<output aria-label="登录页地址">{location.pathname}{location.search}</output></main>;
+}
+
 function renderRoute(path = "/app/chat") {
   const router = createMemoryRouter(
     [
-      { path: "/login", element: <main>账号密码登录</main> },
+      { path: "/login", element: <LoginProbe /> },
       {
         path: "/app",
         element: <AppShell />,
@@ -85,6 +90,34 @@ describe("AppShell hosted authentication gate", () => {
 
     expect(screen.getByLabelText("正在检查登录状态")).toBeInTheDocument();
     expect(await screen.findByText("账号密码登录")).toBeInTheDocument();
+  });
+
+  // Design reference §16.3: from a deep link to the login page, and back to it after the sign-in.
+  it("sends a browser without a session to the login page with the address it asked for", async () => {
+    mocks.fetchWebMe.mockResolvedValue(null);
+    renderRoute("/app/chat?run=run_1#CLM-001");
+    expect(await screen.findByText("账号密码登录")).toBeInTheDocument();
+    const address = screen.getByLabelText("登录页地址").textContent ?? "";
+    expect(address).toBe("/login?next=%2Fapp%2Fchat%3Frun%3Drun_1%23CLM-001");
+    expect(new URLSearchParams(address.split("?")[1]).get("next")).toBe("/app/chat?run=run_1#CLM-001");
+  });
+
+  it("brings a session that ended in the middle of the work back to the page it was on", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+    renderRoute("/app/settings?tab=account");
+    expect(await screen.findByText("账户")).toBeInTheDocument();
+    fireEvent(window, new CustomEvent("open-science:web-session-ended", { detail: { deliberate: false } }));
+    expect(await screen.findByText("账号密码登录")).toBeInTheDocument();
+    expect(screen.getByLabelText("登录页地址")).toHaveTextContent("/login?next=%2Fapp%2Fsettings%3Ftab%3Daccount");
+  });
+
+  it("does not ask to come back to the page a person left by signing out", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+    renderRoute("/app/settings");
+    expect(await screen.findByText("账户")).toBeInTheDocument();
+    fireEvent(window, new CustomEvent("open-science:web-session-ended", { detail: { deliberate: true } }));
+    expect(await screen.findByText("账号密码登录")).toBeInTheDocument();
+    expect(screen.getByLabelText("登录页地址")).toHaveTextContent(/^\/login$/);
   });
 
   it("renders the workbench once the account answers", async () => {

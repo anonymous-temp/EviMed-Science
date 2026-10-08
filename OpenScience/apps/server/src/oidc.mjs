@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import * as oidc from "openid-client";
+import { safeAppReturnPath } from "@evimed/domain";
 import {
   appendSetCookie,
   HttpError,
@@ -195,12 +196,19 @@ export function openOidcFlow(value, settings, now = Date.now()) {
   }
 }
 
-function safeReturnTo(value) {
-  if (typeof value !== "string" || value.length > 2048) return "/settings";
-  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\") || /[\0\r\n]/.test(value)) {
-    return "/settings";
-  }
-  return value;
+/** Where a finished sign-in lands when the request named no address inside the app. */
+export const OIDC_DEFAULT_RETURN_PATH = "/app/chat";
+
+/**
+ * The address the callback redirects to: the in-app path the sign-in was asked
+ * to return to (`?returnTo=` on the start route, sealed into the flow cookie),
+ * or the app's front door. The rule is the domain's one `safeAppReturnPath`,
+ * the same one the login page applies to the address it was sent from, so the
+ * 303's `Location` can only ever be a path under `/app/` on this origin.
+ * @param {unknown} value
+ */
+export function safeReturnTo(value) {
+  return safeAppReturnPath(value) ?? OIDC_DEFAULT_RETURN_PATH;
 }
 
 function appendFlowCookie(res, value, req, config, maxAgeSeconds) {
