@@ -194,7 +194,9 @@ export function EvidenceMatrixTable({
                 <button
                   type="button"
                   aria-haspopup="dialog"
-                  onClick={() => setOpenId(claim.claimId)}
+                  // Focused first, as the table row focuses its own button: the drawer returns focus to what held it when it
+                  // opened, and a tap does not focus a button on every phone (iOS Safari), so Escape left focus in the search box.
+                  onClick={(event) => { event.currentTarget.focus(); setOpenId(claim.claimId); }}
                   className="block w-full px-4 py-3 text-left hover:bg-surface-2"
                 >
                   <span className="flex items-baseline justify-between gap-3">

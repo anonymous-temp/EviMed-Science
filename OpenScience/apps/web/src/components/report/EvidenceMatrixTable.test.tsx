@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -234,11 +234,23 @@ describe("EvidenceMatrixTable: a claim in the drawer", () => {
     opener.focus();
     await userEvent.keyboard("{Enter}");
     expect(await screen.findByRole("dialog", { name: "CLM-003" })).toBeInTheDocument();
-    // Focus arrived by keyboard, so the close button's tooltip is up: the first Escape dismisses it, the next closes the drawer.
-    await userEvent.keyboard("{Escape}");
+    // The drawer focuses its panel, so no tooltip is up and one Escape closes it (release-11 walk).
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(opener).toHaveFocus();
+  });
+
+  it("gives the focus back to a card on a phone, where a tap does not focus the button it lands on", async () => {
+    phone();
+    renderMatrix();
+    const search = screen.getByRole("searchbox", { name: "搜索结论" });
+    search.focus();
+    // A tap that leaves focus where it was (iOS Safari): the click event alone, no focus change.
+    fireEvent.click(document.getElementById("matrix-CLM-003")!.querySelector("button")!);
+    await screen.findByRole("dialog", { name: "CLM-003" });
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.getElementById("matrix-CLM-003")!.querySelector("button")).toHaveFocus();
   });
 
   it("returns the focus to the row's button also when the row was clicked elsewhere", async () => {

@@ -266,7 +266,7 @@ export function InboxPage() {
                 )}
                 {order.rest.length > 0 && <List label="消息">{order.rest.map(row)}</List>}
                 {cursor && (
-                  <Button variant="secondary" className="mt-4" loading={loadingMore} onClick={() => void loadMore()}>加载更多</Button>
+                  <Button variant="text" className="mt-4" loading={loadingMore} onClick={() => void loadMore()}>加载更多</Button>
                 )}
               </>
             )}
