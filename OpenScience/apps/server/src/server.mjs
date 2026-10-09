@@ -242,6 +242,7 @@ import { cancelAutopilotVerification, AutopilotService, VERIFICATION_ARTIFACT, V
   autopilotLogicalDispatchId, isUnsentAutopilotLeaseLoss, verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
 import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
+import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { AutopilotPlanner, autopilotPlannerMetricFamily } from "./autopilotNextAction.mjs";
@@ -408,6 +409,11 @@ import {
 // expressed as counts of this interval, so it has to be stated once rather than
 // repeated as a literal at each call site.
 const AGENT_RUN_MONITOR_INTERVAL_MS = 500;
+
+// How soon a scheduled execution that found its project's runtime busy with a run of the researcher's own asks again. The wait is
+// for a turn to end, not for the runtime's idle timeout (which is what `busyDelayMs` is sized for), so it is minutes, not half an hour.
+// It only shortens a retry the worker would make anyway; no run is refused or started because of it.
+const AUTOPILOT_INTERACTIVE_RETRY_MS = 120_000;
 
 function originFor(value) {
   if (!value) return null;
@@ -1824,7 +1830,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await resultImpacts.assertContinuation(userId, projectId, binding);
     },
   }) : null;
-  const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes });
+  const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes,
+    // One execution's own stop: the run is stopped the way its own cancel stops it (`stopRunForUser`), so the episode folds as
+    // canceled through the ordinary completion. A run that is no longer running is not stopped again.
+    stopRun: async (project, runId) => {
+      const run = (await agentRuns.list(project)).find((/** @type {any} */ item) => item.id === runId);
+      if (!run || run.status !== "running") return false;
+      await stopRunForUser(project, run);
+      return true;
+    } });
   // 「前沿动态」 (frontierService.mjs): composed only when switched on and a
   // product database exists; otherwise its routes answer 404
   // `frontier_not_enabled` and nothing of it runs. Its model calls are billed
@@ -4190,15 +4204,39 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // the task's caps become — the episode's budget, or what the task has left
         // if less.
         const { dailyLimit, weeklyLimit, runLimit } = autopilotService.runScope(agenda, Math.min(Number(episode.budgetCny), allowance.remainingCny));
-        const session = await runtimeManager.reserveBoundedRuntimeSession(project, {
+        // What the researcher sees as this execution's first message: their own words. The rest is the platform's brief. Read before a
+        // runtime is reserved, so a failure here leaves nothing to release.
+        const visibleText = episodeVisibleText((await autopilotService.getEpisode(user.id, episode.episodeId)).payload, episode.prompt);
+        // A project whose runtime is already open for the researcher takes the execution in that runtime — the conversation they
+        // are looking at — rather than reserving a bounded one, as a 虚拟临床研究 step and a GEO step do. The two exclusions go
+        // with it: an open conversation tab no longer makes 立即运行 wait for the runtime to go idle, and the project's
+        // conversation is no longer refused while an execution runs. Researcher-owned agendas only: the platform's own
+        // programme never has a researcher's runtime to join. A run already in progress in the project keeps the one-run-per-
+        // project rule the other two modules hold (they share the workspace's run state), and the worker asks again soon,
+        // because what it waits for is a turn, not the runtime's idle timeout.
+        //
+        // The cap. A bounded runtime is capped by its token; this runtime's token names no run. The model gateway holds the
+        // execution to `runLimit` by the run it attributes each call to (`autopilotEpisodeScope.mjs`), from the figure
+        // `markEpisodeDispatched` records below, before the prompt exists. No budget marker is sent here: the gateway refuses
+        // one in an interactive runtime, and a marker left in the conversation's history would cap what the researcher says next.
+        const interactive = !programmeOwned && runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
+        if (interactive && (await agentRuns.activeRuns(project)).length > 0) {
+          noteEpisodePlacement("waiting");
+          throw Object.assign(new HttpError(409, "runtime_busy", "The project has a run in progress; the scheduled execution waits for it."),
+            { retryAfterMs: AUTOPILOT_INTERACTIVE_RETRY_MS });
+        }
+        const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, {
           runId: episode.episodeId,
           dailyLimit,
           weeklyLimit,
           runLimit,
         });
-        const cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(project);
+        noteEpisodePlacement(interactive ? "interactive" : "bounded");
+        const cleanupTarget = interactive ? null : runtimeManager.boundedRuntimeCleanupTarget(project);
         const releaseOwnRuntime = async () => cleanupTarget?.runId === episode.episodeId
           ? runtimeManager.endBoundedRuntime(project, episode.episodeId, cleanupTarget.generation) : false;
+        // Where the run lives and what it may spend, written with the binding to the episode. Every write of that binding carries it.
+        const bindingOf = (/** @type {string} */ runId) => ({ runId, sessionId: session.id, interactive, runLimitCny: runLimit });
         try {
           await researchSessions.put(project, session.id, {
             mode: "specialist", agentId: selected.id, agentVersion: selected.version,
@@ -4206,7 +4244,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const run = await agentRuns.dispatch(project, {
             sessionId: session.id,
             dispatchId,
-            question: episode.prompt,
+            // The researcher's words are the question the run is listed and titled by; the whole brief is what the delivery gate
+            // and the run's injected context read (`brief`).
+            question: visibleText,
+            brief: episode.prompt,
             ...(agenda.payload.acceptanceFixture === true ? {automated:true} : {}),
             effectiveAgentId: selected.id,
             effectiveAgentVersion: selected.version,
@@ -4219,7 +4260,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
             else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
             try {
-              await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
+              await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, bindingOf(dispatchedRun.id));
             } catch (error) {
               if (["autopilot_paused", "autopilot_stopped"].includes(error?.code)) {
                 await autopilotService.markEpisodeCanceled(user.id, episode.episodeId);
@@ -4229,7 +4270,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               await autopilotService.queueDispatchedCancellation(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
               throw error;
             }
-            const promptText = typeof repairText === "string" && repairText.trim() ? repairText : episode.prompt;
             let memories = [];
             try { memories = await memorySubstrate.recall(user.id, episode.prompt, { projectId: project.id, sessionId: session.id }); }
             catch (error) {
@@ -4256,13 +4296,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (prepared.memories.length > 0) {
               await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
             }
-            const budgetMarker = issueModelGatewayBudgetMarker({
+            // A bounded runtime verifies the prompt against its token: the episode tag and the signed budget scope ride in the run
+            // context, which the socket injects as platform context a researcher's conversation does not draw. An interactive
+            // execution carries neither (see where `interactive` is decided).
+            const budgetMarker = interactive ? null : issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
               runId: episode.episodeId, dailyLimit,
               weeklyLimit, runLimit,
             });
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
             else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
+            // The researcher's words go in the conversation as they wrote them; a gate repair round is the gate's words, under its tag.
+            const text = typeof repairText === "string" && repairText.trim() ? `${repairText}\n\n<evimed-repair>${dispatchedRun.id}</evimed-repair>` : visibleText;
             return runtimeManager.dispatchPrompt(project, session.id, {
               recordPromptActor: async request => {
                 if (typeof episode.assertDispatchAllowed !== "function") throw new HttpError(409, "product_job_lease_lost", "Autopilot dispatch authority is unavailable.");
@@ -4270,15 +4315,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
                 await store.requireProject(user, project.id);
                 await recordExtensionPromptActor(user, project, request);
               },
-              // The question first, markers last (see the verification above).
-              text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
-              system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
-              model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
+              text,
+              system: `${prepared.system}${episodeContextBlock({ brief: episode.prompt, episodeId: episode.episodeId, marker: budgetMarker })}`,
+              memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
+              model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
           });
           if (run.status === "running") {
-            await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: run.id, sessionId: session.id });
+            await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, bindingOf(run.id));
           }
           return { runId: run.id, sessionId: session.id };
         } catch (error) {
@@ -4296,7 +4341,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               return { runId: existing.id, sessionId: session.id };
             }
             try {
-              await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: existing.id, sessionId: session.id });
+              await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, bindingOf(existing.id));
               return { runId: existing.id, sessionId: session.id };
             } catch (bindingError) {
               try {
@@ -4384,11 +4429,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
   const dataSemanticsGatewayHandler = createDataSemanticsGateway({ config, runtimeManager, store, service: dataSemantics });
   const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store, evaluationIsolation });
+  // The cap of a scheduled execution that runs in the researcher's own runtime (autopilotEpisodeScope.mjs), asked by every gateway
+  // that books a runtime's spend: the model gateway, the metered web search, and the engines' model credentials.
+  const autopilotRunScope = autopilotService ? createAutopilotRunScope({ store, agentRuns, service: autopilotService }) : null;
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
     attributeRun,
     runPurpose,
+    runScope: autopilotRunScope,
   });
   // A specialist engine's spend, reported by its adapter when a job ends (X1
   // purpose `engine`): the runtime calls engines directly, so this is the one
@@ -4396,7 +4445,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const engineUsageHandler = createEngineUsageHandler({ config, usageLedger, attributeRun });
   // An engine job's credential for the model gateway, asked for by its
   // adapter at admission (gap E4; OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED).
-  const engineModelTokenHandler = createEngineModelTokenHandler({ config, runtimeManager, attributeRun,
+  const engineModelTokenHandler = createEngineModelTokenHandler({ config, runtimeManager, attributeRun, runScope: autopilotRunScope,
     resolveExecutionContext: createEngineExecutionContextResolver({ config, store, agentRuns, runtimeManager }),
   });
   // The evaluation corpus needs both arms to see byte-identical upstream
@@ -4481,6 +4530,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // Bailian's search is a paid Qwen call, booked like the kernel's.
     usageLedger,
     attributeRun,
+    runScope: autopilotRunScope,
   });
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
@@ -8712,6 +8762,27 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
     "Provider-side image uploads the kernel's adapter tried and the model gateway refused by design (images travel inline); not a gateway failure.",
     "counter",
     { value: modelGatewayFilesRefusals() },
+  );
+  addMetric(
+    lines,
+    "open_science_autopilot_episode_dispatches_total",
+    "Scheduled task executions placed since this process started, by where they ran: in the researcher's own open runtime (interactive) or in one reserved for them (bounded).",
+    "counter",
+    ["interactive", "bounded"].map((mode) => ({ value: episodePlacementCounts()[/** @type {"interactive" | "bounded"} */ (mode)], labels: { mode } })),
+  );
+  addMetric(
+    lines,
+    "open_science_autopilot_episode_waits_total",
+    "Scheduled task executions that found the open runtime busy with a run of the researcher's own and asked again soon.",
+    "counter",
+    { value: episodePlacementCounts().waiting },
+  );
+  addMetric(
+    lines,
+    "open_science_autopilot_interactive_scope_unreadable_total",
+    "Model calls, search calls and engine credentials refused because the spending limit of a scheduled execution in the researcher's runtime could not be read.",
+    "counter",
+    { value: episodePlacementCounts().unreadable },
   );
   addMetric(
     lines,

@@ -354,10 +354,10 @@ async function bailianSearch(config, request, fetcher, signal, onDispatch = () =
  * A reservation the caps refuse leaves Bailian out of this search — the other
  * engines still answer.
  *
- * @param {{ config: any, request: any, fetcher: typeof fetch, signal: AbortSignal, usageLedger: any, caller: any, attributeRun: any, runPurpose: any }} options
+ * @param {{ config: any, request: any, fetcher: typeof fetch, signal: AbortSignal, usageLedger: any, caller: any, attributeRun: any, runPurpose: any, runScope?: any }} options
  * @returns {Promise<any[]>}
  */
-async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun, runPurpose }) {
+async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun, runPurpose, runScope = null }) {
   if (!usageLedger) {
     if (config.requireDurableUsageLedger === true) {
       throw gatewayError(503, "web_search_unavailable", "The Bailian search is unavailable: its spend cannot be recorded right now.");
@@ -370,7 +370,16 @@ async function meteredBailianSearch({ config, request, fetcher, signal, usageLed
   const attributed = caller.runId == null && attributeRun
     ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: null }).catch(() => null)
     : null;
-  const runId = caller.runId ?? attributed ?? null;
+  let runId = caller.runId ?? attributed ?? null;
+  let runLimit = caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0);
+  // A scheduled execution in the researcher's own runtime is booked under its episode and held to its limit, as its model calls are
+  // (`autopilotEpisodeScope.mjs`). A scope that cannot be read makes this search unavailable rather than uncapped.
+  if (caller.runId == null && attributed && runScope) {
+    const scope = await runScope({ userId: caller.userId, projectId: caller.projectId, runId: attributed }).catch(() => {
+      throw gatewayError(503, "web_search_unavailable", "The Bailian search is unavailable: the spending limit of this run cannot be read.");
+    });
+    if (scope) { runId = scope.usageRunId; runLimit = Number(scope.runLimit) || 0; }
+  }
   // Asking can fail (the run ledger is a file): the model gateway books `kernel` then rather
   // than costing the call, and so does this one — a search is never lost for a column it writes.
   const purpose = runPurpose && await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel") === "evolution" ? "evolution" : "web-search";
@@ -384,7 +393,7 @@ async function meteredBailianSearch({ config, request, fetcher, signal, usageLed
       estimatedCost: estimate.cost,
       dailyLimit: purpose === "evolution" ? Number(config.evolutionDailyBudgetCny) || 0 : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
       weeklyLimit: purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
-      runLimit: purpose === "evolution" ? 0 : caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0),
+      runLimit: purpose === "evolution" ? 0 : runLimit,
       now: at,
     });
   } catch (error) {
@@ -420,11 +429,11 @@ async function meteredBailianSearch({ config, request, fetcher, signal, usageLed
 
 /**
  * @param {any} config @param {any} runtimeManager
- * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, evaluationIsolation?: any, runPurpose?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null }} [options]
+ * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, evaluationIsolation?: any, runPurpose?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null, runScope?: ((request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>) | null }} [options]
  *   `usageLedger` / `attributeRun`: what the Bailian call is booked in and
  *   which run it is charged to, as for the model gateway
  */
-export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch, edge = null, edgeFetchImpl = null, usageLedger = null, attributeRun = null, evaluationIsolation = null, runPurpose = null } = {}) {
+export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch, edge = null, edgeFetchImpl = null, usageLedger = null, attributeRun = null, evaluationIsolation = null, runPurpose = null, runScope = null } = {}) {
   const throughEdge = edgeFetchImpl ?? ((url, init) => edgeFetch(/** @type {any} */ (edge), /** @type {URL} */ (url), /** @type {any} */ (init)));
   return async function webSearchGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
@@ -468,7 +477,7 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
         return searxngSearch(searchEndpoint(localUrl), request, fetchImpl, controller.signal);
       })() : Promise.resolve(null);
       const bailian = bailianOn
-        ? meteredBailianSearch({ config, request, fetcher: fetchImpl, signal: controller.signal, usageLedger, caller, attributeRun, runPurpose })
+        ? meteredBailianSearch({ config, request, fetcher: fetchImpl, signal: controller.signal, usageLedger, caller, attributeRun, runPurpose, runScope })
         : Promise.resolve(null);
       const [searxOutcome, bailianOutcome] = await Promise.allSettled([searx, bailian]);
       const bailianAnswered = bailianOn && bailianOutcome.status === "fulfilled";

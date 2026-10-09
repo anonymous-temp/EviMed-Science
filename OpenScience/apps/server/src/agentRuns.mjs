@@ -142,6 +142,9 @@ const dispatchFields = new Set([
   "waitForRoom",
   "estimatedMinutes",
   "question",
+  // The platform's whole brief, when it is not the question the reader asked: a scheduled task's execution shows the
+  // researcher's instruction as its question and holds the episode's brief here, for the delivery gate and the run's context.
+  "brief",
   "effectiveAgentId",
   "effectiveAgentVersion",
   "effectiveRuntimeAgent",
@@ -345,8 +348,10 @@ function normalizeDispatchInput(input) {
     question: questionPreview(input.question),
     // The whole brief, for the delivery gate. Never serialized: it is held in
     // memory on the store (dispatchedBriefs) and passed straight to
-    // validateClinicalEvidencePackage.
-    briefText: typeof input.question === "string" && input.question.trim() ? input.question : null,
+    // validateClinicalEvidencePackage. It is the question unless the dispatcher
+    // says the brief is more than what the reader asked (`brief`).
+    briefText: typeof input.brief === "string" && input.brief.trim() ? input.brief
+      : typeof input.question === "string" && input.question.trim() ? input.question : null,
     effectiveAgentId: input.effectiveAgentId ?? null,
     effectiveAgentVersion: input.effectiveAgentVersion ?? null,
     effectiveRuntimeAgent: input.effectiveRuntimeAgent ?? null,

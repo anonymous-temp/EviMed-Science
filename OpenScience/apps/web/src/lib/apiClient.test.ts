@@ -1390,8 +1390,8 @@ describe("productClient budget refusals", () => {
       { error: "This project runtime is completing bounded proactive research.", code: "runtime_reserved_for_autopilot" },
       423, { "Retry-After": "600" },
     )).resolves.toBe(
-      "这个项目的运行时正在执行你自己设定的主动研究任务，暂时不接受交互提问。"
-      + "等这一轮结束后即可继续，或在“主动研究”里先暂停它。请在约 10 分钟后重试。",
+      "这个项目的运行环境正在执行你设定的定时任务，暂时不接受提问。"
+      + "等这次执行结束后即可继续，或在“定时任务”里先停止这次执行。请在约 10 分钟后重试。",
     );
   });
 

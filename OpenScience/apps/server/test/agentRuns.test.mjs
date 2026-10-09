@@ -5469,6 +5469,33 @@ test("the brief reaches the gate and the workspace, and never the run ledger", a
   }
 });
 
+test("a dispatch whose brief is more than the question lists the run by the question and gives the gate and the workspace the whole brief", async () => {
+  // A scheduled task's execution (2026-10-08): the researcher's instruction is what the run is listed and titled by, and the episode's
+  // brief — id, budget, planned focus, progress — is what the gate reads and the run is injected with.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-brief-field-"));
+  try {
+    const project = { id: "project-1", userId: "user-1", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_brief_field", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-pro", readSessionHistory: async () => [], monitorIntervalMs: 60_000 });
+    const instruction = "每周检索 SGLT2 抑制剂心衰再入院的新证据。";
+    const brief = `Run the literature-sentinel proactive research episode for agenda "心衰证据追踪".\nEpisode ID: episode-1.\n${instruction}\nMaximum episode budget: CNY 6.00.`;
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId, dispatchId: "turn_brief_field", question: instruction, brief,
+      effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+    assert.equal(run.question, instruction, "listed by what the researcher wrote");
+    assert.equal(store.dispatchedBriefs.get(run.id), brief, "the gate reads the whole brief");
+    assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "research-brief.md"), "utf8"), brief, "and so does the run");
+    const ledger = await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8");
+    assert.ok(!ledger.includes("Maximum episode budget"), "the brief still never reaches the ledger");
+    await store.cancelSession(project, binding.sessionId);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 // --- the delivery decision on the shared package -----------------------------
 
 /** Deliver the shared fixture package through the store and return the terminal

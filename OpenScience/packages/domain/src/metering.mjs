@@ -491,7 +491,7 @@ export function spendingPermission(account) {
     return { interactive: true, autopilot: false, reason: '本周额度上限已到。', code: 'credits_weekly_limit_reached' }
   }
   if (account.dailyLimit > 0 && account.balance < account.dailyLimit) {
-    return { interactive: true, autopilot: false, reason: '余额不足一天的用量，主动科研已暂停。', code: null }
+    return { interactive: true, autopilot: false, reason: '余额不足一天的用量，定时任务已暂停。', code: null }
   }
   return { interactive: true, autopilot: true, reason: null, code: null }
 }

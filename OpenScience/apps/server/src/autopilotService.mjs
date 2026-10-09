@@ -198,6 +198,17 @@ export function verificationBrief(claim) {
 }
 
 /**
+ * Every name the verifier's file is written in: its own, its fields and the three words its verdict may be. They belong to the file and
+ * to the control plane that reads it, and to no sentence the researcher reads — the verifier's reply once printed `verification.json`,
+ * `numbersReproduced`, `weakened` and `refuted` in the body of a conversation they open (§8.6 of the design reference, E-10). Named once,
+ * here, because the instruction that keeps them out of the reply and the eval that checks it (`evals/autopilot-verification-reply`) both
+ * read this list, and a field added to the file without joining it would leak on the day it was added.
+ */
+export const VERIFICATION_FILE_VOCABULARY = Object.freeze([
+  VERIFICATION_ARTIFACT, "schemaVersion", "verdict", "numbersReproduced", "recomputed", "checkedSources", ...REFUTATION_VERDICTS,
+]);
+
+/**
  * The independent verifier's brief, in the words the run reads.
  *
  * Built from the projection and from nothing else, so the separation
@@ -238,6 +249,11 @@ export function verificationPrompt(brief) {
     '"stands" means the sources support the claim as written, "weakened" means they support less than it claims,',
     '"refuted" means they contradict it. List in checkedSources only the sources you actually opened.',
     "Stop when the budget is reached; an unfinished check is reported as it stands, never guessed.",
+    // The file is for the system; the reply is for a person. The verdict, the fields and the file's name stay in the file.
+    "Your reply is read by the researcher, who has never seen that file's format. Write it in the language of the claim, in plain sentences:",
+    "whether the sources support the claim as written, support less than it says, or contradict it, and where the claim states numbers",
+    "whether you could reproduce them. Do not name the file, its fields or their values in the reply",
+    `(${VERIFICATION_FILE_VOCABULARY.join(", ")}): say what they mean in the researcher's words instead.`,
   ].join("\n");
 }
 
@@ -776,11 +792,11 @@ export class AutopilotService {
   /**
    * The runs an agenda has made: one episode per scheduled date, newest
    * first, each naming the conversation it ran in (`sessionId`) and the
-   * briefing it merged into (`digestId`). What 主动科研 lists as a task's
+   * briefing it merged into (`digestId`). What the task page lists as a task's
    * history (2026-09-22): the result of a scheduled run is a finished
    * conversation the researcher opens, not a number on a dashboard. One
    * page of the store's, which is at most 100: a limit of 200 was a 400 on
-   * every read, and 主动科研 read this on opening (2026-09-24).
+   * every read, and the task page read this on opening (2026-09-24).
    * @param {string} userId @param {{projectId:string, agendaId?:string|null}} options
    */
   async listEpisodes(userId, { projectId, agendaId = null }) {
@@ -791,7 +807,15 @@ export class AutopilotService {
       || right.id.localeCompare(left.id));
     // The prompt is the run's brief, not the researcher's: the list carries
     // what happened, when, and where to open it.
-    return { ...page, items: items.map((item) => ({ ...item, payload: Object.fromEntries(Object.entries(item.payload).filter(([key]) => key !== "prompt")) })) };
+    return { ...page, items: items.map((item) => this.projectEpisode(item)) };
+  }
+
+  /**
+   * An episode as a route returns it: the brief is the run's, not the reader's, so it is left out.
+   * @param {{payload: Record<string, any>}} episode
+   */
+  projectEpisode(episode) {
+    return { ...episode, payload: Object.fromEntries(Object.entries(episode.payload).filter(([key]) => key !== "prompt")) };
   }
 
   /** @param {string} userId @param {string} digestId */
@@ -880,7 +904,15 @@ export class AutopilotService {
     return page.items[0] ?? null;
   }
 
-  /** @param {string} userId @param {string} episodeId @param {{runId:string,sessionId:string}} input */
+  /**
+   * Bind the episode to the run that carries it, before the prompt goes out.
+   *
+   * `interactive` says where the run lives: in the researcher's own open runtime (true) or in a runtime reserved for it (false).
+   * `runLimitCny` is the most the run may spend, which is what the model gateway holds an interactive run to
+   * (`autopilotEpisodeScope.mjs`); a bounded run is capped by its token and the figure is only recorded. Written in the same
+   * document write as the binding, so no model call of the run can precede the cap that governs it.
+   * @param {string} userId @param {string} episodeId
+   * @param {{runId:string,sessionId:string,interactive?:boolean,runLimitCny?:number}} input */
   async markEpisodeDispatched(userId, episodeId, input) {
     const episode = await this.getEpisode(userId, episodeId);
     if (episode.payload.status === "running" && episode.payload.runId === input.runId) return episode;
@@ -892,9 +924,11 @@ export class AutopilotService {
     if (!agenda.payload.enabled || agenda.payload.status !== "active") {
       throw new HttpError(409, agenda.payload.status === "stopped" ? "autopilot_stopped" : "autopilot_paused", "This research agenda is no longer active.");
     }
+    const runLimitCny = Number(input.runLimitCny);
     return this.documents.put(userId, "episode", episode.id, {
       ...episode.payload, resourceDeferrals: { ...episode.payload.resourceDeferrals, episode: null }, status: "running", runId: text(input.runId, "run id", 160),
-      sessionId: text(input.sessionId, "session id", 160), updatedAt: this.now().toISOString(),
+      sessionId: text(input.sessionId, "session id", 160), interactive: input.interactive === true,
+      ...(Number.isFinite(runLimitCny) && runLimitCny > 0 ? { runLimitCny } : {}), updatedAt: this.now().toISOString(),
     }, { expectedRevision: episode.revision, projectId: episode.projectId });
   }
 
@@ -917,7 +951,9 @@ export class AutopilotService {
       } else if ((episode.payload.runId && episode.payload.runId !== run.id) || episode.payload.digestId || episode.payload.completion
         || episode.payload.status === "canceled" || episode.payload.status === "merged") return episode;
       try {
-        return await this.documents.put(userId, "episode", episode.id, { ...episode.payload,
+        // The attempt that never sent a prompt leaves no run and no place it ran in: both marks go with the binding.
+        const { interactive: _interactive, runLimitCny: _runLimitCny, ...kept } = episode.payload;
+        return await this.documents.put(userId, "episode", episode.id, { ...(verificationId ? episode.payload : kept),
           ...(!verificationId ? { status: "queued", runId: null, sessionId: null, error: null } : {}),
           unsentAttempts: [...(episode.payload.unsentAttempts ?? []), fact].slice(-10), updatedAt: this.now().toISOString(),
         }, { expectedRevision: episode.revision, projectId: episode.projectId });
@@ -993,6 +1029,54 @@ export class AutopilotService {
     return this.documents.put(userId, "episode", episode.id, {
       ...episode.payload, status: "canceled", updatedAt: this.now().toISOString(),
     }, { expectedRevision: episode.revision, projectId: episode.projectId });
+  }
+
+  /**
+   * Cancel one execution of a task, and nothing else: the task keeps its schedule (this is not a pause).
+   *
+   * Three states, three meanings:
+   *  - waiting (`queued`): its job is canceled and the episode is `canceled`. A worker that already claimed the job meets the canceled episode at its dispatch guard, or, if it
+   *    is past the guard, at `markEpisodeDispatched`'s refusal, which cancels the run it just started (`queueDispatchedCancellation`);
+   *  - `running`: the run is stopped the way the run's own cancel stops it (`stopRun`, the control plane's
+   *    `stopRunForUser`), which ends the run as canceled by the researcher; the run's completion then folds into the episode
+   *    (`completeRun` → `finishCompletion`) and the episode ends `canceled`, with the same bookkeeping as any ended execution.
+   *    The episode is not written here: a stop that races a finishing run must leave whichever outcome the run really had;
+   *  - ended (`merged`, `canceled`, `verifying`, `failed`): returned unchanged. Asking twice is asking once.
+   *
+   * @param {string} userId @param {string} agendaId @param {string} episodeId
+   * @param {{ stopRun?: ((input: { runId: string, sessionId: string | null }) => Promise<unknown>) | null }} [options]
+   */
+  async cancelEpisode(userId, agendaId, episodeId, { stopRun = null } = {}) {
+    const agenda = await this.get(userId, agendaId);
+    const owned = async () => {
+      const episode = await this.getEpisode(userId, episodeId);
+      if (episode.projectId !== agenda.projectId || episode.payload.agendaId !== agenda.id) {
+        throw new HttpError(404, "autopilot_episode_not_found", "Research episode is unavailable.");
+      }
+      return episode;
+    };
+    // `failed` is over as far as the page is concerned: it says what went wrong and offers no stop. (The queue may still retry a dispatch
+    // that failed for a transient reason; then the episode is going again and the next cancel stops it.)
+    const ended = (/** @type {any} */ item) => ["merged", "canceled", "verifying", "failed"].includes(item.payload.status);
+    // Waiting. Its queue job first, so nothing claims it after the episode is marked; then the episode. A worker that dispatches
+    // it in between turns it into a running one, which the next pass stops.
+    let queueCleared = false;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const episode = await owned();
+      if (ended(episode)) return episode;
+      if (episode.payload.status === "running" && episode.payload.runId) {
+        if (stopRun) await stopRun({ runId: episode.payload.runId, sessionId: episode.payload.sessionId ?? null });
+        return owned();
+      }
+      if (!queueCleared) {
+        queueCleared = true;
+        await this.jobs.cancelQueued?.(userId, "episode", { episodeId: episode.id });
+        continue;
+      }
+      try { return await this.markEpisodeCanceled(userId, episode.id); }
+      catch (error) { if (!isConflict(error)) throw error; }
+    }
+    throw new HttpError(409, "autopilot_episode_state_conflict", "The episode changed while it was being canceled.");
   }
 
   async queueDispatchedCancellation(userId, episodeId, input) {
@@ -1083,7 +1167,7 @@ export class AutopilotService {
         // The episode's own day, which is the agenda's local one. This was the
         // UTC day, so the briefing of a 07:00 Asia/Shanghai episode was dated
         // yesterday — in the digest, and in the memory an adopted finding
-        // becomes ("已采纳（<date> 主动科研简报）"). Seen on production 2026-10-05.
+        // becomes ("已采纳（<date> 定时任务简报）"). Seen on production 2026-10-05.
         // An episode always has one; the fallback is the agenda's day too, never the UTC one.
         date: validAgendaDate(episode.payload.date) ? episode.payload.date
           : agendaLocalDate(normalizeAgendaSchedule((await this.get(userId, episode.payload.agendaId)).payload).timeZone, this.now()),
@@ -1415,7 +1499,7 @@ export class AutopilotService {
       // Best effort and idempotent: an unreachable capsule must not stop the
       // researcher from being told, and a replay must not undo their own answer.
       await this.capsules.retractNote(userId, entryId, {
-        reason: `${digest.payload.date} 主动科研简报：独立复核未能复现这条结论`,
+        reason: `${digest.payload.date} 定时任务简报：独立复核未能复现这条结论`,
       }).catch(() => null);
     }
     if (!this.notifications) return null;
@@ -2117,7 +2201,7 @@ export class AutopilotService {
     // Best effort: an inbox that cannot be reached must not undo the stop, and a
     // replay of the same occurrence says nothing twice.
     if (this.notifications && selection.stopKind !== RESEARCHER_PAUSE_KIND) await this.notifications.create(userId, {
-      noticeType: "notify", title: `主动科研已暂停：${agenda.payload.title}`.slice(0, 150),
+      noticeType: "notify", title: `定时任务已暂停：${agenda.payload.title}`.slice(0, 150),
       body: String(selection.reason).slice(0, 1000), projectId: agenda.projectId,
       source: { type: "system", id: `autopilot-stop-${agenda.id}` }, idempotencyKey: `autopilot-stop:${agenda.id}:${episodeId}`,
     }).catch(() => null);
@@ -2151,7 +2235,7 @@ export class AutopilotService {
     }
     // Best effort, once per cap: the researcher is not looking at the page when the timer runs.
     if (this.notifications) await this.notifications.create(userId, {
-      noticeType: "notify", title: `主动科研已暂停：${agenda.payload.title}`.slice(0, 150), body: reason, projectId: agenda.projectId,
+      noticeType: "notify", title: `定时任务已暂停：${agenda.payload.title}`.slice(0, 150), body: reason, projectId: agenda.projectId,
       source: { type: "system", id: `autopilot-budget-floor-${agenda.id}` },
       idempotencyKey: `autopilot-budget-floor:${agenda.id}:${agenda.payload.maxEpisodeCny}`,
     }).catch(() => null);
@@ -2259,7 +2343,7 @@ export class AutopilotService {
     // opened and says nothing (2026-10-07 review). The digest above and the episode stay recorded — the 简报 is where a
     // quiet day is written down — and only the notice is withheld, so a day with a finding or a lead notifies as before.
     if (this.notifications && !this.programme?.owns(userId, agenda.projectId) && (headlines.length > 0 || leads.length > 0)) await this.notifications.create(userId, {
-      noticeType: "review", title: `主动科研简报：${agenda.payload.title}`,
+      noticeType: "review", title: `定时任务简报：${agenda.payload.title}`,
       body: `${headlines.length} 条重点发现，${leads.length} 条待验证线索。`, projectId: agenda.projectId,
       source: { type: "digest", id: digest.id }, idempotencyKey: `autopilot-digest:${digest.id}`,
       actions: [{ id: "open", label: "查看简报" }],
@@ -2314,8 +2398,8 @@ export class AutopilotService {
     const statement = String(claim.statement ?? "").slice(0, 4000);
     if (!statement.trim()) return { status: "skipped", reason: "empty_claim" };
     const entry = decision.action === "adopt"
-      ? { factKind: "decision", content: `已采纳（${digest.payload.date} 主动科研简报）：${statement}` }
-      : { factKind: "preference", content: `不再按这个方向（${digest.payload.date} 主动科研简报驳回）：${statement}${decision.note ? `。理由：${decision.note}` : ""}` };
+      ? { factKind: "decision", content: `已采纳（${digest.payload.date} 定时任务简报）：${statement}` }
+      : { factKind: "preference", content: `不再按这个方向（${digest.payload.date} 定时任务简报驳回）：${statement}${decision.note ? `。理由：${decision.note}` : ""}` };
     try {
       const saved = await this.capsules.note(userId, digest.projectId, {
         ...entry, provenance: [{ type: "user", id: `digest:${digest.id}` }],

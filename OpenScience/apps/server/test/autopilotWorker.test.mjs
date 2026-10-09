@@ -126,6 +126,27 @@ test("an occupied project waits past the runtime idle window before consuming an
   assert.equal(calls.find(call => call.method === "deferral").args[2].code, "runtime_busy");
 });
 
+test("a project busy with the researcher's own run is asked again as soon as the dispatcher says, never later than the idle window", async () => {
+  const hinted = (/** @type {number} */ retryAfterMs) => {
+    const error = Object.assign(new Error("a run is in progress"), { code: "runtime_busy", retryAfterMs });
+    return fixture({ dispatchError: error });
+  };
+  const soon = hinted(120_000);
+  await soon.worker.tick();
+  const failure = soon.calls.find((call) => call.method === "jobFail");
+  assert.equal(failure.args[4].delayMs, 120_000, "a turn ends in minutes: the retry follows it, not the runtime's idle timeout");
+  assert.equal(failure.args[4].retry, true);
+  assert.equal(failure.args[4].refundAttempt, true, "waiting for the project is not an attempt");
+  assert.equal(soon.calls.find((call) => call.method === "deferral").args[2].retryAt !== null, true);
+
+  // A hint can only shorten the wait: a dispatcher asking for a day does not get one, and a nonsense hint is ignored.
+  for (const retryAfterMs of [86_400_000, 0, -5, Number.NaN, 200]) {
+    const attempt = hinted(retryAfterMs);
+    await attempt.worker.tick();
+    assert.equal(attempt.calls.find((call) => call.method === "jobFail").args[4].delayMs, 31 * 60_000, String(retryAfterMs));
+  }
+});
+
 test("a durable cancellation job terminates one runtime session and records completion", async () => {
   const { calls, worker } = fixture({ cancelJob: true });
   await worker.tick();

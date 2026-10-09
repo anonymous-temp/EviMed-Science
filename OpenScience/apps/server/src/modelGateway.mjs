@@ -931,14 +931,23 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
  * @param {Record<string, any>} config @param {any} runtimeManager
  * @param {{ fetchImpl?: typeof fetch, usageLedger?: any,
  *           attributeRun?: (caller: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
- *           runPurpose?: (request: { userId: string, projectId: string, runId: string | null }) => Promise<string> }} [options]
+ *           runPurpose?: (request: { userId: string, projectId: string, runId: string | null }) => Promise<string>,
+ *           runScope?: (request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null> }} [options]
  *   `attributeRun` names the ledger run an interactive runtime's request
  *   belongs to (see below); a bounded runtime's token already carries one.
  *   `runPurpose` says what that run's requests are for in the usage ledger:
  *   `kernel`, unless the run is source understanding (`usagePurposeOfRun`).
+ *   `runScope` is the cap a token cannot carry: an interactive runtime's token
+ *   is per project, so a run the control plane started *inside* it (a scheduled
+ *   task's execution in the researcher's open runtime) would otherwise spend
+ *   under no limit at all. Asked only for a request attributed to a running
+ *   ledger run; the control plane answers from its own record of that run —
+ *   never from the conversation's text — with the run id the spend is booked
+ *   under and the limit it is held to, or null for an ordinary run. It may
+ *   throw to refuse the call (a run whose cap cannot be read is not run).
  */
 export function createModelGatewayHandler(config, runtimeManager, {
-  fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null,
+  fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null, runScope = null,
 } = {}) {
   const prefixes = new PromptPrefixMemo();
   return async function modelGatewayHandler(req, res, onFailure) {
@@ -1076,7 +1085,23 @@ export function createModelGatewayHandler(config, runtimeManager, {
         const attributed = caller.runId == null && attributeRun && !caller.engine
           ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: kernelSessionId(req) }).catch(() => null)
           : null;
-        const runId = caller.runId ?? attributed ?? null;
+        let runId = caller.runId ?? attributed ?? null;
+        let runLimit = caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0);
+        // An execution the control plane started in the researcher's own runtime: booked under its own id, held to its own
+        // cap. Keyed by the run the kernel's session belongs to, so a later turn the researcher types into the same
+        // conversation is a different run and is neither capped by it nor charged to it.
+        if (caller.runId == null && attributed && runScope && !caller.engine) {
+          // Fail closed. A run whose cap cannot be read is not run: the alternative is a scheduled execution that spends under no
+          // limit because a lookup failed, which is the one outcome this hook exists to make impossible.
+          const scope = await runScope({ userId: caller.userId, projectId: caller.projectId, runId: attributed }).catch((cause) => {
+            throw gatewayError(503, "model_gateway_run_scope_unavailable",
+              `The spending limit of this run could not be read; nothing was sent to the provider (${typeof cause?.code === "string" ? cause.code : "unreadable"}).`);
+          });
+          if (scope) {
+            runId = scope.usageRunId;
+            runLimit = Number(scope.runLimit) || 0;
+          }
+        }
         // A call with no run yet keeps its session, so the run can be named once
         // it is known (`UsageLedger.attributeSession`): the first calls of a
         // conversation typed into the kernel's own window, a subagent's first
@@ -1098,7 +1123,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
           estimatedCost: estimate.cost,
           dailyLimit: purpose === "evolution" ? minimumPositive(caller.dailyLimit, config.evolutionDailyBudgetCny) : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
           weeklyLimit: purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
-          runLimit: caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0),
+          runLimit,
           now: requestStartedAt,
         });
       }

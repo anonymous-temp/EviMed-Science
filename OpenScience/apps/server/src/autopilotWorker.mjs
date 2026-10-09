@@ -188,8 +188,12 @@ export class AutopilotWorker {
         await holdsLease();
         const unstartedResource = code === "runtime_busy" || RUNTIME_ROOM_REFUSAL_CODES.includes(code) || AUTOPILOT_PROGRAMME_WAIT_CODES.includes(code);
         const retry = unstartedResource || job.attempts < Number(job.maxAttempts ?? 3);
+        // A dispatcher that knows what it waits for says when to ask again: a researcher's own run in the project ends in minutes, not
+        // when the runtime's idle timeout would have freed it. Only a shorter wait is taken from it; never a longer one.
+        const hinted = Number(error?.retryAfterMs);
+        const busyDelay = Number.isFinite(hinted) && hinted >= 1000 ? Math.min(this.busyDelayMs, hinted) : this.busyDelayMs;
         const delayMs = code === "autopilot_dispatch_pending" ? Math.min(300_000, 30_000 * Math.max(1, job.attempts))
-          : code === "runtime_busy" ? this.busyDelayMs : AUTOPILOT_RESOURCE_BACKOFF_MS[Math.min(Math.max(0, job.attempts - 1), AUTOPILOT_RESOURCE_BACKOFF_MS.length - 1)];
+          : code === "runtime_busy" ? busyDelay : AUTOPILOT_RESOURCE_BACKOFF_MS[Math.min(Math.max(0, job.attempts - 1), AUTOPILOT_RESOURCE_BACKOFF_MS.length - 1)];
         const at = new Date();
         // The leased queue write is the durable refusal even if recording its
         // reader-facing episode detail meets a later storage outage.

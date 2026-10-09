@@ -9,8 +9,13 @@ async function bodyOf(req, limit, allowed) {
   return body;
 }
 
-/** @param {{store:any,service:any,maxJsonBytes:number}} dependencies */
-export function createAutopilotRoutes({ store, service, maxJsonBytes }) {
+/**
+ * @param {{store:any,service:any,maxJsonBytes:number,
+ *   stopRun?: ((project: any, runId: string) => Promise<unknown>) | null}} dependencies
+ *   `stopRun` stops one run the way the run's own cancel does (the control plane's `stopRunForUser`); the cancel route of one
+ *   execution hands it the run of an execution that is going.
+ */
+export function createAutopilotRoutes({ store, service, maxJsonBytes, stopRun = null }) {
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -61,6 +66,19 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes }) {
       await requireProject(agenda.projectId);
       if (method === "DELETE") return reply(service.projectAgenda(await service.removeMaterial(user.id, agenda.id, parts[3])));
       return reply(service.projectAgenda(await service.addMaterials(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["sourceIds", "sha256"]))));
+    }
+    // One execution of a task, canceled on its own: the task keeps its schedule. Idempotent for an execution that is over.
+    if (parts[0] === "agendas" && parts.length === 5 && parts[2] === "episodes" && parts[4] === "cancel" && method === "POST") {
+      const agenda = await service.get(user.id, parts[1]);
+      const project = await store.requireProject(user, await requireProject(agenda.projectId));
+      const body = await bodyOf(req, maxJsonBytes, ["requestId"]);
+      if (typeof body.requestId !== "string" || !body.requestId.trim() || body.requestId.length > 160) {
+        throw new HttpError(400, "autopilot_payload_invalid", "Canceling an execution needs a request id of 1 to 160 characters.");
+      }
+      const canceled = await service.cancelEpisode(user.id, agenda.id, parts[3], {
+        stopRun: stopRun ? ({ runId }) => stopRun(project, runId) : null,
+      });
+      return reply(service.projectEpisode(canceled));
     }
     if (parts[0] === "agendas" && parts.length === 3 && method === "POST") {
       const agenda = await service.get(user.id, parts[1]);

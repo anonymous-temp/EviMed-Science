@@ -63,7 +63,7 @@ export function routeReasonText(reason, agentId) {
   else if (rest.startsWith("matched:named:")) sentence = `你在问题里点名了${named(agentId)}`;
   else if (rest === "matched:clinical-evidence-synthesis:safety-medicine") sentence = `问题提到了需要核对用药安全的药品，交给${named(agentId)}`;
   else if (rest.startsWith("matched:")) sentence = `按问题里的交付要求交给${named(agentId)}`;
-  else if (rest.startsWith("autopilot:")) sentence = "主动科研任务";
+  else if (rest.startsWith("autopilot:")) sentence = "由你设定的定时任务发起";
   if (!sentence) return adopted ? `${adopted}${fallback}` : null;
   return `${adopted ? `${adopted}，` : ""}${sentence}${fallback}`;
 }

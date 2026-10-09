@@ -23,7 +23,7 @@ test("every route reason the router mints reads as one Chinese sentence, and an 
     ["matched:clinical-evidence-synthesis:safety-medicine", "clinical-evidence-synthesis", /^问题提到了需要核对用药安全的药品，交给「临床证据深度分析」$/],
     ["matched:adr-analysis", "adr-analysis", /^按问题里的交付要求交给「.+」$/],
     ["matched:adr-analysis:classifier:empty_content", "adr-analysis", /^按问题里的交付要求交给「.+」（路由判断没有给出结论，按规则处理）$/],
-    ["autopilot:literature-sentinel", "clinical-evidence-synthesis", /^主动科研任务$/],
+    ["autopilot:literature-sentinel", "clinical-evidence-synthesis", /^由你设定的定时任务发起$/],
     ["adopted:runtime-ui", null, /^来自对话窗口$/],
     ["adopted:runtime-ui:llm:0.91", "clinical-evidence-synthesis", /^来自对话窗口，按问题内容交给「临床证据深度分析」$/],
     // The conversation window's assistant decides whether to deliver; the

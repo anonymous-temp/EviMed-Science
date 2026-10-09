@@ -68,8 +68,8 @@ function runtimeManager({ bounded = null, live = true } = {}) {
 }
 
 async function requestToken(t, { cfg = config(), manager = runtimeManager(), attributeRun = async () => "run_going",
-  body = { v: 1, kind: "bibliometric-analysis", jobId }, signature, bearer = "live-workload-token", resolveExecutionContext = null } = {}) {
-  const base = await listen(t, createEngineModelTokenHandler({ config: cfg, runtimeManager: manager, attributeRun, resolveExecutionContext }));
+  body = { v: 1, kind: "bibliometric-analysis", jobId }, signature, bearer = "live-workload-token", resolveExecutionContext = null, runScope = null } = {}) {
+  const base = await listen(t, createEngineModelTokenHandler({ config: cfg, runtimeManager: manager, attributeRun, resolveExecutionContext, runScope }));
   const raw = JSON.stringify(body);
   return fetch(`${base}${ENGINE_MODEL_TOKEN_PATH}`, {
     method: "POST",
@@ -103,6 +103,33 @@ test("a signed request from a live workload gets a credential naming the running
   });
   const lifetime = (Date.parse(data.expiresAt) - Date.now()) / 1000;
   assert.ok(lifetime > 21_500 && lifetime <= 21_600, String(lifetime));
+});
+
+test("a job of a scheduled execution in the researcher's runtime carries the episode and its limit, and no credential is issued if the limit cannot be read", async (t) => {
+  // The execution's engine jobs spend through their own credential; without this they would be booked under the ledger run with the
+  // account's per-run default, outside the episode's cap and the task's own caps (R13, E-20).
+  const scoped = await requestToken(t, { runScope: async (request) => {
+    assert.deepEqual(request, { userId: "user-1", projectId: "project-1", runId: "run_going" });
+    return { usageRunId: "episode-one", runLimit: 2.5 };
+  } });
+  assert.equal(scoped.status, 200);
+  const { data } = await scoped.json();
+  assert.equal(data.runId, "episode-one");
+  const caller = verifyEngineModelToken(data.token, { secret: gatewaySecret });
+  assert.equal(caller.runId, "episode-one");
+  assert.equal(caller.runLimit, 2.5);
+
+  // An ordinary run is left as it was.
+  const ordinary = await requestToken(t, { runScope: async () => null });
+  assert.equal((await ordinary.json()).data.runId, "run_going");
+
+  const unreadable = await requestToken(t, { runScope: async () => { throw Object.assign(new Error("episode unreadable"), { code: "autopilot_episode_not_found" }); } });
+  assert.equal(unreadable.status, 503, "an uncapped credential is not issued in its place");
+
+  // A bounded runtime's scope is its own; the hook is not asked.
+  const bounded = await requestToken(t, { manager: runtimeManager({ bounded: { runId: "episode_1", dailyLimit: 3, weeklyLimit: 9, runLimit: 0.5 } }),
+    runScope: async () => assert.fail("a bounded runtime carries its scope") });
+  assert.equal(bounded.status, 200);
 });
 
 test("a bounded run's jobs carry that run's own budget, and two running runs stay unattributed", async (t) => {

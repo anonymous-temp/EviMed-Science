@@ -30,6 +30,7 @@ import path from "node:path";
 import test from "node:test";
 import { carriesPlatformContext } from "@evimed/domain";
 import { splitEpisodeBudget, verificationIdFor, verificationWorkspacePath } from "../src/autopilotService.mjs";
+import { episodePlacementCounts } from "../src/autopilotEpisodeScope.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { DISTILL_TRIGGER, FeedbackEvents, deliverableSubjectId } from "../src/feedbackEvents.mjs";
@@ -1200,9 +1201,12 @@ test("an episode is signed with the account's day and week and a run limit of wh
   assert.equal((await app.autopilotWorker.dispatchEpisode(episode)).runId, "run-episode");
   assert.deepEqual(reserved[0], { runId: EPISODE_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 5 },
     "the account has no cap, so a figure no run reaches; the run's limit is what the task has left (¥8 less ¥3), the smaller of that and the episode's ¥6");
-  const marker = String(prompts[0].text).match(/<evimed-budget-scope>([^<.]+)\./)?.[1];
+  // The scope rides in the run context the socket injects, not in the message the researcher sees (2026-10-08).
+  assert.doesNotMatch(String(prompts[0].text), /evimed-budget-scope|evimed-autopilot-episode/, "the conversation's first message carries neither");
+  const marker = String(prompts[0].system).match(/<evimed-budget-scope>([^<.]+)\./)?.[1];
   const signed = JSON.parse(Buffer.from(String(marker), "base64url").toString("utf8"));
   assert.deepEqual([signed.runId, signed.dailyLimit, signed.weeklyLimit, signed.runLimit], [EPISODE_ID, 1_000_000, 1_000_000, 5], "and the same scope is what the gateway is signed with");
+  assert.match(String(prompts[0].system), new RegExp(`<evimed-autopilot-episode>${EPISODE_ID}</evimed-autopilot-episode>`), "with the episode tag the gateway checks it against");
 
   // Room beyond the episode's own budget: the episode's budget is the limit.
   reserved.length = 0;
@@ -1217,6 +1221,128 @@ test("an episode is signed with the account's day and week and a run limit of wh
   fixture.pool.daySpendCny = 8;
   await assert.rejects(() => app.autopilotWorker.dispatchEpisode(episode), { status: 402, code: "autopilot_daily_budget_spent" });
   assert.equal(reserved.length, 0);
+});
+
+// A scheduled execution shows the researcher their own words and runs where the researcher already is (R13: E-18 server half, E-20).
+function executionHarness(app, { sessionId = "session-episode" } = {}) {
+  /** @type {any[]} */ const reserved = [];
+  /** @type {any[]} */ const prompts = [];
+  /** @type {any[]} */ const dispatches = [];
+  app.memorySubstrate.recall = async () => [];
+  app.runtimeManager.reserveBoundedRuntimeSession = async (/** @type {any} */ _project, /** @type {any} */ scope) => {
+    reserved.push(scope);
+    return { id: sessionId, kernel: "dsh" };
+  };
+  app.runtimeManager.dispatchPrompt = async (/** @type {any} */ _project, /** @type {string} */ session, /** @type {any} */ request) => {
+    prompts.push({ session, ...request });
+    return { accepted: true };
+  };
+  app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
+  app.agentRuns.dispatch = async (/** @type {any} */ _project, /** @type {any} */ input, /** @type {any} */ sendPrompt) => {
+    dispatches.push(input);
+    await sendPrompt({ sessionId: input.sessionId }, { id: "run-episode", kernelRequestIds: [] });
+    return { id: "run-episode", status: "running" };
+  };
+  return { reserved, prompts, dispatches };
+}
+
+const INSTRUCTION = "每周检索 SGLT2 抑制剂心衰再入院的新证据，只看随机对照试验。";
+const BRIEF = `Run the literature-sentinel proactive research episode for agenda "心衰证据追踪".\nEpisode ID: ${EPISODE_ID}.\nResearcher's original instruction (preserve its scope):\n${INSTRUCTION}\nMaximum episode budget: CNY 6.00.`;
+const episodeRequest = (/** @type {Record<string, any>} */ extra = {}) => ({
+  userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID, dispatchId: EPISODE_ID,
+  taskType: "literature-sentinel", budgetCny: 6, prompt: BRIEF, assertDispatchAllowed: async () => {}, ...extra,
+});
+function seedEpisode(/** @type {any} */ fixture, /** @type {Record<string, any>} */ payload = {}) {
+  for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
+  const row = fixture.pool.documents.get(`episode:${EPISODE_ID}`);
+  row.payload = { ...row.payload, trigger: "manual", instruction: INSTRUCTION, prompt: BRIEF, ...payload };
+}
+
+test("a bounded execution opens with the researcher's own instruction; the brief, the episode tag and the signed scope are the run's context", async (t) => {
+  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  seedEpisode(fixture);
+  const { reserved, prompts, dispatches } = executionHarness(fixture.app);
+  const placed = episodePlacementCounts();
+
+  assert.equal((await fixture.app.autopilotWorker.dispatchEpisode(episodeRequest())).runId, "run-episode");
+  assert.equal(episodePlacementCounts().bounded - placed.bounded, 1, "counted by where it ran");
+  assert.equal(reserved.length, 1, "no runtime was open: one is reserved for the execution, as before");
+  assert.equal(prompts[0].text, INSTRUCTION, "the first message is what the researcher wrote, and nothing else");
+  assert.equal(prompts[0].allowBounded, true);
+  assert.equal(dispatches[0].question, INSTRUCTION, "the run is listed and titled by their words");
+  assert.equal(dispatches[0].brief, BRIEF, "and the delivery gate and the run's brief read the whole of what the platform asked");
+  assert.match(String(prompts[0].system), /<evimed-budget-scope>/, "the signed scope is in the run context");
+  assert.ok(String(prompts[0].system).includes(`<evimed-autopilot-brief>\n${BRIEF}\n</evimed-autopilot-brief>`), "and so is the whole brief, in the per-session context a remote runtime receives");
+  const stored = fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload;
+  assert.equal(stored.interactive, false);
+  assert.equal(stored.runLimitCny, 6);
+  assert.equal(stored.status, "running");
+  assert.equal(stored.runId, "run-episode");
+  assert.equal(stored.sessionId, "session-episode");
+});
+
+test("a follow-up execution opens with the note the researcher wrote, and an execution made before the split still opens as it did", async (t) => {
+  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  seedEpisode(fixture, { trigger: "follow-up", followUpNote: "再看一下老年人亚组。", replyToEpisodeId: null });
+  const { prompts } = executionHarness(fixture.app);
+  await fixture.app.autopilotWorker.dispatchEpisode(episodeRequest());
+  assert.equal(prompts[0].text, "再看一下老年人亚组。");
+
+  seedEpisode(fixture, { instruction: undefined });
+  await fixture.app.autopilotWorker.dispatchEpisode(episodeRequest());
+  assert.equal(prompts[1].text, BRIEF, "an execution with no recorded instruction shows its brief, which is what it always showed");
+});
+
+test("with the runtime open for the researcher, an execution runs in it: no reserved runtime, no marker, the cap recorded before the prompt exists", async (t) => {
+  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  seedEpisode(fixture);
+  const { app } = fixture;
+  const { reserved, prompts, dispatches } = executionHarness(app);
+  const placed = episodePlacementCounts();
+  const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
+  // The researcher's conversation page is open: the project's runtime is up, and nothing has reserved it. A stand-in the app's own
+  // shutdown must not meet: it is taken away again before the test ends.
+  app.runtimeManager.runtimes.set(app.runtimeManager.key(project), { workspaceDir: project.workspaceDir });
+  /** @type {any} */ let outcome;
+  try { outcome = await app.autopilotWorker.dispatchEpisode(episodeRequest()); }
+  finally { app.runtimeManager.runtimes.delete(app.runtimeManager.key(project)); }
+  assert.equal(outcome.runId, "run-episode");
+  assert.match(outcome.sessionId, /^session_/, "a session of its own, opened in the researcher's runtime");
+  assert.equal(episodePlacementCounts().interactive - placed.interactive, 1, "counted by where it ran");
+  assert.equal(reserved.length, 0, "nothing is reserved, so nothing waits for the runtime to go idle");
+  assert.equal(prompts[0].allowBounded, false, "the project's conversation is not locked out while it runs");
+  assert.equal(prompts[0].text, INSTRUCTION);
+  assert.doesNotMatch(`${prompts[0].text}\n${prompts[0].system}`, /evimed-budget-scope|evimed-autopilot-episode/,
+    "the gateway refuses a marker in an interactive runtime, and one left in the history would cap what the researcher says next");
+  assert.ok(String(prompts[0].system).includes(`<evimed-autopilot-brief>\n${BRIEF}\n</evimed-autopilot-brief>`), "the brief is in the run context all the same");
+  assert.equal(dispatches[0].sessionId, outcome.sessionId);
+  assert.equal(dispatches[0].effectiveRouteReason, "autopilot:literature-sentinel", "the route reason is what the gateway's cap lookup recognises it by");
+  const stored = fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload;
+  assert.equal(stored.interactive, true, "the page can tell it may open the live conversation");
+  assert.equal(stored.runLimitCny, 6, "the cap the gateway holds the execution to");
+  assert.equal(stored.sessionId, outcome.sessionId);
+});
+
+test("an open runtime that is busy with the researcher's own run makes the execution wait minutes, not the runtime's idle window", async (t) => {
+  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  seedEpisode(fixture);
+  const { app } = fixture;
+  const { reserved, prompts } = executionHarness(app);
+  const placed = episodePlacementCounts();
+  const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
+  app.runtimeManager.runtimes.set(app.runtimeManager.key(project), { workspaceDir: project.workspaceDir });
+  app.agentRuns.activeRuns = async () => [{ id: "run-chat", sessionId: "session-chat" }];
+
+  try {
+    await assert.rejects(() => app.autopilotWorker.dispatchEpisode(episodeRequest()), (/** @type {any} */ error) => {
+      assert.equal(error.code, "runtime_busy");
+      assert.equal(error.retryAfterMs, 120_000);
+      return true;
+    });
+  } finally { app.runtimeManager.runtimes.delete(app.runtimeManager.key(project)); }
+  assert.equal(episodePlacementCounts().waiting - placed.waiting, 1, "the wait is counted");
+  assert.equal(reserved.length + prompts.length, 0, "nothing was reserved or sent");
+  assert.equal(fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload.status, "queued", "the execution keeps its place");
 });
 
 // ---------------------------------------------------------------------------

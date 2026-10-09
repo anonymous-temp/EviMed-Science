@@ -36,6 +36,15 @@ const USER_WORDS = [
     count: 2,
     why: "the chat route and a question from a messaging channel: what the researcher typed, or the delivery gate's repair round under its own tag",
   },
+  {
+    file: "server.mjs",
+    text: 'typeof repairText === "string" && repairText.trim() ? `${repairText}\\n\\n<evimed-repair>${dispatchedRun.id}</evimed-repair>` : visibleText',
+    count: 1,
+    why: "a scheduled task's execution (2026-10-08): the first message is the task's own instruction or the follow-up note the researcher wrote, "
+      + "not the platform's brief — the brief and the bounded runtime's episode tag travel in the run context. The memory extractor still refuses "
+      + "the dispatch by the request that carried it (`conversationMemorySources`, `dispatchedRequestIds`), so a daily task's instruction is not "
+      + "observed again every day",
+  },
 ];
 
 /**
@@ -213,7 +222,9 @@ test("every dispatch site carries a registered platform tag on every path, or is
 
 test("each tag a dispatcher writes is one the extractor refuses", () => {
   const written = new Set(sites.flatMap((site) => site.tags.filter((tag) => TAG_ROLES.get(tag) === "injected")));
-  for (const tag of ["evimed-autopilot-episode", "evimed-autopilot-verification", "evimed-source-understanding", "evimed-repair"]) {
+  // `evimed-autopilot-episode` is no longer one of them: a scheduled execution's first message is the researcher's own words, and the
+  // tag rides in the run context (`autopilotEpisodeScope.mjs`, held by memoryVocabulary.test.mjs and the execution tests).
+  for (const tag of ["evimed-autopilot-verification", "evimed-source-understanding", "evimed-repair"]) {
     assert.ok(written.has(tag), `no dispatch site writes ${tag}`);
   }
   for (const tag of written) {
