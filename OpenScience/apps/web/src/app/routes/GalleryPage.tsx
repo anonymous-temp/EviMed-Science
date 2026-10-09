@@ -379,9 +379,15 @@ export function GalleryPage() {
         </Stage>
       </Row>
 
-      <Row name="Drawer" note="从右侧 24 px 滑入；关闭是 36 px 的图标按钮。">
+      <Row name="Drawer" note="从右侧 24 px 滑入；关闭是 36 px 的图标按钮；底栏贴底，离窗口底不少于 16 px。">
         <Stage label="抽屉示例">
-          <Drawer title="科研工具" description="系统综述与 Meta 分析" onClose={() => {}} widthClassName="max-w-sm">
+          <Drawer
+            title="科研工具"
+            description="系统综述与 Meta 分析"
+            onClose={() => {}}
+            widthClassName="max-w-sm"
+            footer={<div className="flex justify-end gap-2"><Button variant="secondary">取消</Button><Button>开始研究</Button></div>}
+          >
             <p className="text-ui text-text-2">写下研究主题、目标人群与关注的结局。</p>
           </Drawer>
         </Stage>

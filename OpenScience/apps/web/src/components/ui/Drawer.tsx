@@ -13,6 +13,13 @@ import { IconButton } from "@/components/ui/IconButton";
  * open and trapped while open, Escape and the backdrop close it, and focus
  * goes back to whatever opened it. The shell had four hand-rolled overlays
  * that each did some of this.
+ *
+ * `footer` is the one bar stuck to the panel's bottom (a primary action, a
+ * short edit's 保存): below the scrolling body, a hairline above it, and at
+ * least 16 px — or the device's safe area where it reports one — above the
+ * window's bottom edge (design reference §5.2, R13 V-12). `env()` is 0 unless
+ * the page's viewport meta says `viewport-fit=cover`, which this shell does
+ * not; the `max()` keeps the 16 either way.
  */
 export function Drawer({
   title,
@@ -20,6 +27,7 @@ export function Drawer({
   onClose,
   children,
   actions,
+  footer,
   className,
   widthClassName = "max-w-xl",
   bare = false,
@@ -32,6 +40,8 @@ export function Drawer({
   children: ReactNode;
   /** Controls placed in the header, left of the close button. */
   actions?: ReactNode;
+  /** The bar stuck to the bottom of the panel, below the scrolling body. */
+  footer?: ReactNode;
   className?: string;
   widthClassName?: string;
   /** The content brings its own header and close control (a file preview, say). */
@@ -111,6 +121,9 @@ export function Drawer({
 
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">{children}</div>
+            {footer && (
+              <footer className="shrink-0 border-t border-border bg-surface px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</footer>
+            )}
           </>
         )}
       </div>

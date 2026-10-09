@@ -70,7 +70,8 @@ describe("an event", () => {
     const title = await screen.findByRole("heading", { level: 1, name: "不饱和磷脂多层多囊脂质体实现亲水药物超缓释" });
     expect(screen.getByRole("link", { name: "前沿动态" })).toHaveAttribute("href", "/app/frontier");
     expect(title.closest("header")).toContainElement(screen.getByRole("button", { name: "深入研究" }));
-    const facts = title.closest("header")!.nextElementSibling!;
+    // The line of facts is the first thing in the page body, directly under the header.
+    const facts = title.closest("header")!.nextElementSibling!.firstElementChild!;
     expect(facts).toHaveTextContent("2 家机构报道·3 小时前更新药学");
     expect(within(facts as HTMLElement).getByText("药学")).toHaveClass("rounded-tag");
     // No explanation under any heading: the old cards each said how they were made.
@@ -104,7 +105,7 @@ describe("an event", () => {
     expect(screen.getByRole("link", { name: "同类缓释制剂的早先报道" })).toHaveAttribute("href", "/app/frontier/events/ev0");
   });
 
-  it("says in one line that nobody's own text is among the reports, and 「暂无」 in the column", async () => {
+  it("says in one line that nobody's own text is among the reports, and 「暂无」 in the strip", async () => {
     const reports = event().items.map((item) => ({ ...item, role: "report" as const }));
     client.fetchFrontierEvent.mockResolvedValue(event({ items: reports, hasPrimary: false, primary: null }));
     renderEvent();
@@ -117,7 +118,7 @@ describe("an event", () => {
     expect(within(side).getAllByRole("definition").at(-1)).toHaveTextContent("暂无");
   });
 
-  it("carries the heat, its trend and where the reports come from in the right column", async () => {
+  it("carries the heat, its trend and where the reports come from in a strip above the summary", async () => {
     renderEvent();
     const side = await screen.findByRole("complementary", { name: "热度与来源" });
     expect(side).toHaveTextContent("38热度");
@@ -127,7 +128,7 @@ describe("an event", () => {
     expect(facts).toEqual(["期刊 1 · 媒体 1", "9月22日 18:01", "有论文原文"]);
   });
 
-  it("keeps the column honest on a server that sends no heat yet", async () => {
+  it("keeps the strip honest on a server that sends no heat yet", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ heat: undefined, trend: undefined, institutions72h: undefined, primary: undefined, hasPrimary: undefined, sourceCount72h: 7 }));
     renderEvent();
     const side = await screen.findByRole("complementary", { name: "热度与来源" });

@@ -86,7 +86,7 @@ export function RightPane({
   if (inspectorMaximized) {
     // The pane header stays the top row — PaneTitlebarInset (rendered inside
     // each header) clears the macOS traffic lights, so no extra strip here.
-    return <div className="fixed inset-0 z-40 bg-surface">{children}</div>;
+    return <div className="fixed inset-0 z-drawer bg-surface">{children}</div>;
   }
 
   // Below lg a split would crush the conversation, so the pane degrades to a
@@ -127,7 +127,7 @@ export function RightPane({
         onPointerMove={onDividerPointerMove}
         onPointerUp={onDividerPointerUp}
         onPointerCancel={onDividerPointerUp}
-        className="group absolute inset-y-0 left-0 z-10 w-[5px] cursor-col-resize outline-none"
+        className="group absolute inset-y-0 left-0 z-sticky w-[5px] cursor-col-resize outline-none"
       >
         <div
           className={cn(
@@ -192,7 +192,7 @@ function OverlayPane({
       role="dialog"
       aria-modal="true"
       aria-label="右栏"
-      className="fixed inset-0 z-40 bg-surface"
+      className="fixed inset-0 z-drawer bg-surface"
     >
       {children}
     </div>

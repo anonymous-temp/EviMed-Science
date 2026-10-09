@@ -32,13 +32,67 @@ import {
   colorRole,
   resolveColor,
 } from '../src/index.mjs'
-import { contrastFailures, contrastRatio, measureContrast, quotedContrast } from '../src/contrast.mjs'
+import {
+  CONTRAST_RULES,
+  contrastFailures,
+  contrastRatio,
+  measureContrast,
+  quotedContrast,
+  roleColor,
+  sharedWithGraphic,
+  staleNotes,
+} from '../src/contrast.mjs'
 import { designTokensCss } from '../src/css.mjs'
 import { dtcgColor, tailwindPreset } from '../src/artifacts.mjs'
 import { kernelThemeTokens } from '../src/kernel.mjs'
 
 test('every contrast promise in the table is measured and kept', () => {
   assert.deepEqual(contrastFailures(), [])
+})
+
+test('a run-state dot is a graphic at 3:1 on the canvas, a card and the sidebar, in both schemes (R13 V-3)', () => {
+  const dots = Object.keys(COLOR_ROLES).filter((role) => role.startsWith('dot-'))
+  // Five dots, and every one is listed on all three grounds: the walk is
+  // proved to have walked before anything it did not find is trusted.
+  assert.deepEqual(dots.sort(), ['dot-canceled', 'dot-done', 'dot-failed', 'dot-review', 'dot-running'])
+  for (const dot of dots) {
+    for (const ground of ['bg', 'surface', 'surface-1']) {
+      assert.ok(CONTRAST_RULES.some((rule) => rule.fg === dot && rule.bg === ground && rule.min === 3), `${dot} on ${ground} is not a rule`)
+      for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+        const ratio = contrastRatio(roleColor(dot, scheme), roleColor(ground, scheme))
+        assert.ok(ratio >= 3, `${dot} on ${ground} (${scheme}) is ${ratio.toFixed(2)}:1`)
+      }
+    }
+  }
+  // The stopped dot was text-graphic's own grey, 2.69 light and 2.71 dark.
+  assert.equal(quotedContrast(roleColor('dot-canceled', 'light'), roleColor('bg', 'light')), 3.21)
+  assert.equal(quotedContrast(roleColor('dot-canceled', 'dark'), roleColor('bg', 'dark')), 3.28)
+})
+
+test('text-graphic is decorative: it keeps a floor, a status mark may not wear it, and its figure is the documented one', () => {
+  assert.ok(CONTRAST_RULES.some((rule) => rule.fg === 'text-graphic' && rule.bg === 'bg' && rule.min === 2.5))
+  assert.equal(quotedContrast(roleColor('text-graphic', 'light'), roleColor('bg', 'light')), 2.69)
+  assert.deepEqual(sharedWithGraphic(), [])
+  // The check finds what it is for: the old table, where 已停止 borrowed the grey.
+  const old = { 'text-graphic': { light: '#939ca6', dark: '#535b64' }, 'dot-canceled': { light: '#939ca6', dark: '#535b64' }, 'dot-done': { light: '#1c7347', dark: '#7cc0a0' } }
+  assert.equal(sharedWithGraphic(old).length, 2, 'light and dark; the more-contrast layer moves the decoration away from the dot')
+  assert.match(sharedWithGraphic(old)[0], /--dot-canceled is the same colour as --text-graphic/)
+})
+
+test('the note check sees a stale figure when there is one (R13 V-4)', () => {
+  // The notes that were fiction before the check read all four phrases.
+  const stale = {
+    bg: { light: '#fafbfc', dark: '#0f1318' },
+    'surface-1': { light: '#f5f7f9', dark: '#161b21' },
+    'accent-soft': { light: '#eef4fc', dark: '#0a1f3e' },
+    accent: { light: '#0a5dc1', dark: '#5f97e0', note: '6.05 on the page; white on it 6.24' },
+    'accent-strong': { light: '#0c3e7f', dark: '#8fb5ea', note: 'on accent-soft: 9.93' },
+    'text-graphic': { light: '#939ca6', dark: '#535b64', note: 'graphics only, 2.90 on the page' },
+  }
+  assert.deepEqual(staleNotes(stale).map((line) => line.split(':')[0]), ['--accent', '--accent-strong', '--text-graphic'])
+  assert.match(staleNotes(stale)[0], /measures 6\.27/)
+  assert.match(staleNotes(stale)[1], /measures 9\.44/)
+  assert.match(staleNotes(stale)[2], /measures 2\.69/)
 })
 
 test('the type scale is closed: no rung invents a size', () => {
@@ -320,16 +374,9 @@ test('the artifacts carry the values, not a copy of them', () => {
 
 test('every contrast figure the table quotes is the figure it measures', () => {
   // The `note` fields were prose until 2026-09-26 and two of them were already
-  // fiction. A number a reader can quote has to be one the code can reproduce,
-  // or the table is documentation of itself.
-  const mismatched = []
-  for (const [role, entry] of Object.entries(COLOR_ROLES)) {
-    const quoted = /(\d+\.\d+) on the page/.exec(entry.note ?? '')
-    if (!quoted) continue
-    const measured = quotedContrast(resolveColor(colorRole(role, 'light')), resolveColor(colorRole('bg', 'light')))
-    if (Math.abs(measured - Number(quoted[1])) > 0.005) {
-      mismatched.push(`--${role}: note says ${quoted[1]}, measures ${measured.toFixed(2)}`)
-    }
-  }
-  assert.deepEqual(mismatched, [])
+  // fiction; by 2026-10-08 six more were. A number a reader can quote has to be
+  // one the code can reproduce, or the table is documentation of itself. All
+  // four phrases a note may use are read back (`staleNotes`), not only "on the
+  // page".
+  assert.deepEqual(staleNotes(), [])
 })

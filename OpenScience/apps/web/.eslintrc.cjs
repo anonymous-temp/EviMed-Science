@@ -24,7 +24,29 @@ const tokenRules = [
   // Two tiers and a hairline (appendix D §9.3): the static-card shadow is gone.
   ...banned(
     "/\\bshadow-card\\b/",
-    "shadow-card was retired: a static card has no shadow, its 1px border-border is its whole edge. Floating layers use shadow-pop (menus, popovers) or shadow-modal (dialogs, drawers).",
+    "shadow-card was retired: a static card has no shadow, its 1px border-border is its whole edge. Floating layers use shadow-e2 (menus, popovers) or shadow-e3 (dialogs, drawers).",
+  ),
+  // The two older names of e2 and e3. The tailwind preset still resolves them
+  // (a published name outlives its last call site), but nothing in the shell
+  // calls them any more, and a name with two spellings is how a layer ends up
+  // with two shadows.
+  ...banned(
+    "/(^|[\\s:])shadow-(pop|modal)($|\\s)/",
+    "shadow-pop and shadow-modal are the old names of shadow-e2 (menus, popovers, the composer, toasts) and shadow-e3 (dialogs, drawers). Use the new names (see @evimed/design-tokens).",
+  ),
+  // A numeric z-index is a fight with another number: a menu and a dialog were
+  // both 50 and a drawer 40, so what covered what was render order. The tiers
+  // have names in the preset, and a layer that is hidden is put in the right
+  // tier, not given a larger number.
+  ...banned(
+    "/(^|[\\s:])-?z-(\\d+|\\[[^\\]]*\\])($|\\s)/",
+    "A numeric z-index is banned. Stack by named tier: z-sticky (10: sticky headers, tabs, a lift above a sibling), z-drawer (40), z-modal (50), z-popover (60: a menu opened in a dialog is still above it), z-toast (70), z-tooltip (80), z-skip (90) — Z_INDEX in @evimed/design-tokens.",
+  ),
+  // Retired widths of the container table. `max-w-read` is a reading page (720),
+  // `max-w-page` a list (1040); `max-w-content-narrow` (560) is current.
+  ...banned(
+    "/(^|[\\s:])max-w-content(-wide|-full)?($|\\s)/",
+    "max-w-content, max-w-content-wide and max-w-content-full are retired names of max-w-read (720, a reading page) and max-w-page (1040, a list). Use PageShell width=\"read\" / \"page\", or the max-w-read / max-w-page classes inside a component.",
   ),
   // `bg-accent/10`, `text-muted/50`, `border-error/30` … emit no CSS at all:
   // the tokens are `var()` colours, and Tailwind 3 can only apply an opacity
@@ -34,7 +56,7 @@ const tokenRules = [
   // slash is written `\x2F` because an esquery regex literal cannot contain
   // one.
   ...banned(
-    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-1|surface-2|scrim|border|border-hairline|border-faint|border-control|faint|strong|text|text-2|text-3|muted|accent|accent-fg|accent-soft|accent-strong|accent-pressed|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info|info-soft|verify-ok|verify-pending|highlight|focus|unread|unread-fg|text-graphic|border-light|member-from|member-to|chart-own|chart-grid|chart-axis|chart-band|chart-target|dot-[a-z]+)\\x2F\\d+/",
+    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-1|surface-2|surface-3|scrim|border|border-hairline|border-faint|border-control|faint|strong|text|text-2|text-3|muted|accent|accent-fg|accent-soft|accent-strong|accent-pressed|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info|info-soft|verify-ok|verify-pending|highlight|focus|badge|badge-fg|text-graphic|border-light|member-from|member-to|chart-own|chart-grid|chart-axis|chart-band|chart-target|dot-[a-z]+)\\x2F\\d+/",
     "An opacity modifier on a design-token colour generates no CSS (the tokens are var() colours). Use a solid token or its -soft / -strong partner from src/index.css.",
   ),
   ...banned(

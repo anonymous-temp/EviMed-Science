@@ -245,7 +245,7 @@ export function ClaimCitation({ ids, claims, statuses, reading }: {
           align="start"
           sideOffset={6}
           collisionPadding={12}
-          className="z-50 max-h-96 w-96 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-card border border-border bg-surface p-3 text-left shadow-pop"
+          className="z-popover max-h-96 w-96 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-card border border-border bg-surface p-3 text-left shadow-e2"
         >
           <ClaimEvidenceList ids={ids} claims={claims} statuses={statuses} reading={reading} />
           <Popover.Arrow className="fill-surface" />

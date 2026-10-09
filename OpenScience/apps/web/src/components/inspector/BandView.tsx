@@ -76,7 +76,7 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
       <div className="flex min-h-0 flex-1 items-center justify-center p-4">
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="h-auto max-h-full w-full max-w-content"
+          className="h-auto max-h-full w-full max-w-read"
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
         >

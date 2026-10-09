@@ -116,7 +116,7 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
       </div>
 
       <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-        <div className="relative w-full max-w-content" style={{ aspectRatio: `${W} / ${H}` }}>
+        <div className="relative w-full max-w-read" style={{ aspectRatio: `${W} / ${H}` }}>
           <canvas
             ref={canvasRef}
             className="absolute inset-0 h-full w-full rounded-sm"

@@ -254,14 +254,14 @@ export function ListRow({
       {(trailing || actions || menu) && (
         // Above the stretched title, so a control stays clickable; what is only text lets the press through to the row.
         // An open row keeps its controls on its first line, beside the title.
-        <div className={cn("pointer-events-none relative z-10 flex shrink-0 items-center gap-1", expanded ? "self-start" : "self-center")}>
+        <div className={cn("pointer-events-none relative z-sticky flex shrink-0 items-center gap-1", expanded ? "self-start" : "self-center")}>
           {actions && <div className="pointer-events-auto flex items-center gap-1">{actions}</div>}
           {trailing && <div className={cn("flex items-center gap-2 text-caption text-text-3", CONTROLS)}>{trailing}</div>}
           {menu && <div className="pointer-events-auto flex">{menu}</div>}
         </div>
       )}
       {columns && columns.length > 0 && (
-        <div className="pointer-events-none relative z-10 flex shrink-0 items-start gap-3 text-ui tabular-nums max-sm:order-last max-sm:basis-full max-sm:gap-4">
+        <div className="pointer-events-none relative z-sticky flex shrink-0 items-start gap-3 text-ui tabular-nums max-sm:order-last max-sm:basis-full max-sm:gap-4">
           {columns.map((cell) => {
             // The name is in the cell for a screen reader, and for a phone, where the header gives way: a button reads 「讲错的回答 14」.
             const body = (

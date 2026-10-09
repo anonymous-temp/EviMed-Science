@@ -271,7 +271,7 @@ const RENEW_RETRY_MS = [1_000, 3_000, 10_000, 30_000] as const;
  */
 export function FrameSkeleton({ title = null, line = "正在打开" }: { title?: string | null; line?: string }) {
   return (
-    <div role="status" aria-live="polite" data-frame-skeleton="" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg px-6 text-center">
+    <div role="status" aria-live="polite" data-frame-skeleton="" className="absolute inset-0 z-sticky flex flex-col items-center justify-center gap-2 bg-bg px-6 text-center">
       {title && <p className="line-clamp-2 max-w-content-narrow text-ui font-medium text-text">{title}</p>}
       <p className="text-ui text-muted">{line}</p>
     </div>
@@ -774,7 +774,9 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const ui = useUiStore.getState();
         const shortcuts: Record<string, () => void> = {
           sidebar: () => ui.toggleSidebar(),
-          shortcuts: () => window.dispatchEvent(new Event(SHORTCUT_HELP_TOGGLE_EVENT)),
+          // `?` is a single-character shortcut and has an off switch (设置 · 外观, WCAG 2.2 SC 2.1.4): off, the key the frame
+          // forwarded does nothing here either. The chord (sidebar) is not a character key and is never switched off.
+          shortcuts: () => { if (ui.singleKeyShortcuts) window.dispatchEvent(new Event(SHORTCUT_HELP_TOGGLE_EVENT)); },
         };
         const run = shortcuts[String(message.shortcut)];
         if (!run) return;
@@ -1110,7 +1112,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           ) : (
             <>
               {navigated && (connectionNotice || !ready) && (
-                <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
+                <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-sticky flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
                   <p>{waiting === "cleanup" ? CLEANUP_LINE : connectionNotice ?? "正在重连"}</p>
                   {connectionNotice && waiting !== "cleanup" && <Button variant="ghost" onClick={reconnect} disabled={renewing}>重新连接</Button>}
                 </div>

@@ -1,5 +1,5 @@
 {
-  "$description": "EviMed 2.1.2 — motion, for prefers-reduced-motion.",
+  "$description": "EviMed 2.1.3 — motion, for prefers-reduced-motion.",
   "duration": {
     "fast": {
       "$type": "duration",

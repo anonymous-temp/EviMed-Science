@@ -105,6 +105,13 @@ describe("Sidebar landmark and collapse", () => {
     expect(screen.getAllByRole("complementary")).toHaveLength(1);
   });
 
+  it("keeps the account row at least 1 rem above the window's bottom, or the device's safe area (R13 V-12)", async () => {
+    renderSidebar();
+    const landmark = await screen.findByRole("complementary", { name: "侧栏" });
+    const row = within(landmark).getByRole("link", { name: "设置" }).parentElement!;
+    expect(row).toHaveClass("pb-[max(1rem,env(safe-area-inset-bottom))]");
+  });
+
   it("is live while open", async () => {
     renderSidebar();
     expect(await screen.findByRole("complementary", { name: "侧栏" })).not.toHaveAttribute("inert");

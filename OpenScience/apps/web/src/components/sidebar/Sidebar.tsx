@@ -176,7 +176,7 @@ export function Sidebar() {
         // U1). There it becomes an overlay drawer above the content, capped at
         // most of the viewport so it never pushes the page sideways; from `lg`
         // up it is the resizable column it has always been.
-        "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:max-w-[85vw] max-lg:shadow-pop",
+        "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-drawer max-lg:max-w-[85vw] max-lg:shadow-e2",
         !dragging && "transition-[width] duration-base ease-standard",
       )}
       style={{ width: sidebarCollapsed ? 0 : width }}
@@ -216,7 +216,7 @@ export function Sidebar() {
           * plan §5.2). The count of data sources without a credential used to
           * sit here — a standing fact about the deployment, not the reader's
           * work; 设置 → 数据源 lists what needs setting. */}
-        <div className="flex items-center gap-2 px-4 py-3">
+        <div className="flex items-center gap-2 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <span
             aria-hidden="true"
             className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-caption font-medium text-accent-fg"
@@ -272,7 +272,7 @@ export function Sidebar() {
         onPointerUp={onDividerPointerUp}
         onPointerCancel={onDividerPointerUp}
         className={cn(
-          "group absolute inset-y-0 right-0 z-10 w-[5px] cursor-col-resize outline-none",
+          "group absolute inset-y-0 right-0 z-sticky w-[5px] cursor-col-resize outline-none",
           sidebarCollapsed && !dragging && "pointer-events-none",
         )}
       >

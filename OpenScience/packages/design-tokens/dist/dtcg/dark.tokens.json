@@ -1,5 +1,5 @@
 {
-  "$description": "EviMed 2.1.2 — the dark theme: every role resolved to a value. One Figma mode.",
+  "$description": "EviMed 2.1.3 — the dark theme: every role resolved to a value. One Figma mode.",
   "role": {
     "bg": {
       "$type": "color",
@@ -172,7 +172,7 @@
         "alpha": 1,
         "hex": "#8d96a0"
       },
-      "$description": "5.48 on the page, 4.76 on surface-1 — nothing lighter carries text"
+      "$description": "5.48 on the page, 5.29 on the sidebar — nothing lighter carries text"
     },
     "text-graphic": {
       "$type": "color",
@@ -186,7 +186,7 @@
         "alpha": 1,
         "hex": "#535b64"
       },
-      "$description": "graphics only, 2.90 — never text"
+      "$description": "decorative graphics only, 2.69 on the page — never text, never a status"
     },
     "accent": {
       "$type": "color",
@@ -200,7 +200,7 @@
         "alpha": 1,
         "hex": "#5f97e0"
       },
-      "$description": "6.05 on the page; white on it 6.24"
+      "$description": "6.05 on the page; white on it 6.27"
     },
     "accent-fg": {
       "$type": "color",
@@ -253,7 +253,7 @@
         "alpha": 1,
         "hex": "#8fb5ea"
       },
-      "$description": "on accent-soft: 9.93"
+      "$description": "on accent-soft: 9.44"
     },
     "ok": {
       "$type": "color",
@@ -319,7 +319,7 @@
         "alpha": 1,
         "hex": "#e0b169"
       },
-      "$description": "on warn-soft: 7.92"
+      "$description": "on warn-soft: 6.87"
     },
     "error": {
       "$type": "color",
@@ -386,7 +386,7 @@
         "alpha": 1,
         "hex": "#e0877f"
       },
-      "$description": "on danger-soft: 8.13"
+      "$description": "on danger-soft: 6.97"
     },
     "info": {
       "$type": "color",
@@ -479,7 +479,7 @@
         "alpha": 1,
         "hex": "#5f97e0"
       },
-      "$description": "2 px ring, 6.24 light"
+      "$description": "2 px ring, 6.05 on the page"
     },
     "badge": {
       "$type": "color",
@@ -493,7 +493,7 @@
         "alpha": 1,
         "hex": "#bc342a"
       },
-      "$description": "unread count; white on it 5.49 — the dark scheme keeps the same step because white on danger-400 is 4.00"
+      "$description": "unread count; white on it 5.73 — the dark scheme keeps the same step because white on danger-400 is 4.00"
     },
     "badge-fg": {
       "$type": "color",
@@ -591,12 +591,12 @@
       "$value": {
         "colorSpace": "srgb",
         "components": [
-          0.3255,
-          0.3569,
-          0.3922
+          0.3725,
+          0.4078,
+          0.4353
         ],
         "alpha": 1,
-        "hex": "#535b64"
+        "hex": "#5f686f"
       }
     },
     "chart-grid": {

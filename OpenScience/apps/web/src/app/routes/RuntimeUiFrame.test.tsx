@@ -346,6 +346,35 @@ describe("native frame identity and readiness", () => {
     window.removeEventListener(SHORTCUT_HELP_TOGGLE_EVENT, help);
   });
 
+  it("forwards a shell shortcut from the frame only as far as the single-character switch allows: ? is off, the sidebar chord is not", async () => {
+    // WCAG 2.2 SC 2.1.4: the frame's `?` is the same single-character shortcut as the shell's own, so turning it off silences both.
+    const { useUiStore } = await import("@/lib/store");
+    const { SHORTCUT_HELP_TOGGLE_EVENT } = await import("@/components/ui/ShortcutHelp");
+    useUiStore.setState({ sidebarCollapsed: false, singleKeyShortcuts: false });
+    try {
+      const { container } = mount();
+      await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+      const command = post.mock.calls[0][0];
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: command.requestId, ok: true, sessionId: command.intent.sessionId });
+      const help = vi.fn();
+      window.addEventListener(SHORTCUT_HELP_TOGGLE_EVENT, help);
+      emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 3, shortcut: "shortcuts" });
+      expect(help).not.toHaveBeenCalled();
+      emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 4, shortcut: "sidebar" });
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+      useUiStore.setState({ singleKeyShortcuts: true });
+      emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 5, shortcut: "shortcuts" });
+      expect(help).toHaveBeenCalledTimes(1);
+      window.removeEventListener(SHORTCUT_HELP_TOGGLE_EVENT, help);
+    } finally {
+      useUiStore.setState({ singleKeyShortcuts: true });
+    }
+  });
+
   describe("a conversation opened while the project's runtime settings are being applied", () => {
     // 2026-10-04: the first conversation after a release met 423
     // `plugin_apply_in_progress` for the ten to forty seconds an apply took, and

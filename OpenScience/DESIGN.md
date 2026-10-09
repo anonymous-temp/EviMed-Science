@@ -54,7 +54,10 @@ Every contrast figure below is **recomputed at build time** by
 `packages/design-tokens/src/contrast.mjs`, which fails the build on a shortfall — in both themes,
 under the more-contrast layer too, and for the rival greys a chart draws. The comparison is
 unrounded: a pair at 4.4995 does not pass a 4.5 floor. The notes used to be typed by hand and went
-stale silently; two of them were already fiction when the check first ran.
+stale silently; two of them were already fiction when the check first ran, and eight more by
+2026-10-08 — so the build now reads back every figure a note quotes ("N on the page", "N on the
+sidebar", "white on it N", "on <role>: N") and fails on a stale one. 47 rules × light / dark ×
+standard / more contrast.
 
 ### Roles
 
@@ -72,7 +75,7 @@ stale silently; two of them were already fiction when the check first ran.
 | `text` | `#1a1f25` | `#eef1f4` | body and headings, 16.00:1 |
 | `text-2` | `#3e454d` | `#c3cad2` | secondary lines, 9.37:1 |
 | `text-3` | `#5f686f` | `#8d96a0` | metadata, 5.48:1 — **nothing lighter carries text** |
-| `text-graphic` | `#939ca6` | `#535b64` | icons and rules only, 2.69:1 — **never a word** |
+| `text-graphic` | `#939ca6` | `#535b64` | icons and rules only, 2.69:1 — **never a word, and never a status** (a mark that says something wears a `dot-*` or `border-control` step; the build fails a `dot-*` that borrows this grey) |
 | `accent` | `#0a5dc1` | `#5f97e0` | primary action, link, focus ring, selected row, the ✓ verified mark, and "our" chart series |
 | `accent-soft` | `#eef4fc` | `#0a1f3e` | selected row background, the verified chip. Never text |
 | `accent-pressed` | `#0a4da0` | `#8fb5ea` | the pressed state of an accent surface |
@@ -128,7 +131,9 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
 Five run states, one rule (`runState`), one component (`RunStatusDot`): running (pulsing circle,
 brand — `dot-running`), finished (filled circle, **green** — `dot-done`), finished with something
 to check (diamond, amber), not finished (square, red), cancelled (hollow circle, grey). All ≥3:1
-as graphics, the word always printed beside them.
+as graphics — measured on the canvas, on a card and on the sidebar, in both themes — the word
+always printed beside them. The cancelled dot is `n-control` (light) / `n-500` (dark): it was
+`text-graphic`'s own grey (2.69:1) until 2.1.3.
 
 Eight categorical chart slots in a fixed order, never cycled, shared with `@ai4s/shared`'s
 `CHART_PALETTE_*` and `runtime/skills/core/publication-figures/openscience.mplstyle`. **Change
@@ -249,7 +254,7 @@ times are set in tabular numbers.
 ## Space, containers, radii, heights
 
 **Base 4. Ten steps: 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64** — 8 inside a group, 16–24 between
-groups, 32–48 between sections. Card padding 16, grid gap 12, page gutter 24. Separate by space
+groups, 32–48 between sections. Card padding 16, grid gap 12, page gutter 16 below 768 and 24 from there. Separate by space
 first, then a quiet ground, and draw a line last.
 
 ### Containers — a page has one left edge
@@ -262,9 +267,9 @@ first, then a quiet ground, and draw a line last.
 | `max-w-page` | **1040** | a list: tools, the frontier feed, capsules, settings |
 | `max-w-wide` | **1200** (1280 at ≥1440) | a dashboard: GEO, the evidence zone, the three-column knowledge base |
 | `max-w-measure` / `max-w-measure-body` | 560 / 640 | a paragraph's line length |
-| `max-w-content` | *retired* → 720 | an unmigrated reading column converges here |
+| `max-w-content` | *retired* → 720 | no call site is left and ESLint refuses it; the preset keeps the name for the Vue shell until a major release |
 | `max-w-content-narrow` | 560 | a form inside a drawer |
-| `max-w-content-wide`, `-full` | *retired* → 1040 | an unmigrated call site converges here |
+| `max-w-content-wide`, `-full` | *retired* → 1040 | the same: no call site, refused by ESLint |
 
 The single 960 column of 2026-09-23 is gone: it made a reading page too wide and a dashboard too
 narrow, and a dashboard squeezed into a document column is the structural half of why 循证 GEO
@@ -273,10 +278,13 @@ would redefine Tailwind's own `max-w-full` as a pixel width.
 
 Sidebar 280, collapsed 56 — the kernel's constants.
 
-**Use `PageShell`.** It puts the title, the actions and the body inside the same box, because
+**Use `PageShell`** (`width` `read` · `page` · `wide` · `full`; the reading pages — the evidence card
+and the event — use `read`). It puts the title, the actions and the body inside the same box, because
 three pages shipped with five different left edges (327 / 356 / 388 / 440 / 461 px) when each
 page chose its own, and on 2026-09-23 the inbox still sat 126 px right of the rest. A page that
-must lay itself out takes `width="full"` and still shares the gutter.
+must lay itself out takes `width="full"` and still shares the gutter: **16 px below 768, 24 from
+there** (`px-4 md:px-6`), so the body is 358 wide at 390 px. A page that draws its own column (the
+answer page, the handoff page) wears the same two classes.
 
 **A page header is one line**: the title, optionally a grey count or update time, and at the
 right at most one primary button and two icon buttons or a search box. **No subtitle** — nothing
@@ -293,8 +301,10 @@ no rule under a card's title.
 ### Heights
 
 **28 small · 36 the default · 44 for a primary action** · a tag is 22 — the token heights
-`h-sm` / `h-control` / `h-form-primary` / `h-tag`, not steps of the spacing scale. Controls on one
-line share a height. Icons are **16 inline / 20 in the chrome**, one stroke (1.5, read from
+`h-sm` / `h-control` / `h-form-primary` / `h-tag`, not steps of the spacing scale (a skeleton that stands
+in for a control takes the same token, so nothing jumps when it arrives). Controls on one line share a
+height. Written in the scale on purpose: a menu item (`h-8`, 32), a tab (`h-10`, 40), and the
+`min-h-6` floor that keeps a text link a 24 px target (WCAG 2.5.8). Icons are **16 inline / 20 in the chrome**, one stroke (1.5, read from
 `--icon-stroke` on `svg.lucide`; it splits the difference between the kernel's 1.75 and EviMed's
 hand-drawn 1.4). Minimum hit area 24×24 CSS px (WCAG 2.2 SC 2.5.8); under a finger
 (`coarse:`, `pointer: coarse`) an `IconButton` and a filter chip widen their hit area to 40 with an invisible box and keep
@@ -310,7 +320,8 @@ with `size="sm"` in a table, toolbar or filter row) and 8 px round. Filter chips
 
 Stacking is by named tier (`z-*`), never by a larger number: page 0 · sticky 10 · drawer 40 ·
 modal 50 · popover 60 (a menu opened in a dialog is still above it) · toast 70 · tooltip 80 ·
-skip link 90. Opacity is spent on a disabled control (`opacity-disabled`, 0.4), the scrim (a
+skip link 90. A numeric `z-10`…`z-50` or `z-[…]` is an ESLint error; `z-sticky` is also the small
+lift of one thing over its sibling inside a component. Opacity is spent on a disabled control (`opacity-disabled`, 0.4), the scrim (a
 colour role) and a dragged item (0.8), never on a colour's pale version. Tooltips show after
 300 ms (at once on keyboard focus) and hide 100 ms after the pointer leaves — `Tooltip` reads
 `TOOLTIP_DELAYS`; nothing uses the browser's `title` for an icon's name. Toasts stay 5 s, 10 s when they carry an action,
@@ -335,8 +346,9 @@ bordered pill or bordered `<button>` outside it:
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has |
 
-Plus the infrastructure a page needs: `Menu`, `Switch`, `SearchInput`, `Input`, `Drawer`,
-`ConfirmDialog`, `Toaster`, `Disclosure`. A card (`Card`) is for unlike content — a hot list
+Plus the infrastructure a page needs: `Menu`, `Switch`, `SearchInput`, `Input`, `Drawer`
+(its `footer` is the one bar stuck to the panel's bottom), `ConfirmDialog`, `FormDialog` (a form in a
+16 px panel on the modal tier — no page draws its own), `Toaster`, `Disclosure`. A card (`Card`) is for unlike content — a hot list
 above a feed, a tool in a grid — and never for a list of like things.
 
 ### 页面结构 (2026-10-07)
@@ -377,7 +389,7 @@ and the walk fail on them — and a search reads them as the new names until 202
 **Flat.** Structure is 1 px hairlines and the surface ladder. A static card has **no shadow** —
 its border is its whole edge. Only what genuinely floats casts one: `shadow-e1` (a card that must
 lift), `shadow-e2` (the composer, menus, popovers, toasts), `shadow-e3` (dialogs, drawers);
-`shadow-pop` and `shadow-modal` are retired names of `e2` and `e3`. One brand moment per page, no
+`shadow-pop` and `shadow-modal` are retired names of `e2` and `e3` and ESLint refuses them. One brand moment per page, no
 tinted cards, no coloured
 icon tiles, no sparkles, no shimmer. A list beats a wall of cards.
 
@@ -406,6 +418,14 @@ animation off (ECharts does not read the setting).
 ### Accessibility
 
 A **skip link** (“跳到主要内容”) is the first thing Tab reaches on every page, on the skip tier.
+After a route change the shell moves focus to the new page's `h1` — once its title is in place —
+(`useRouteFocus`: `tabindex="-1"`, no ring, no scroll); it does not on the first load, for a change of
+query alone (a filter, a tab, a page number), on the conversation surface, off a control the reader is
+working in, or while a dialog is open. The `?` shortcut is a single character key and can be turned off
+(设置 · 外观 · 快捷键, WCAG 2.2 SC 2.1.4; also for a `?` forwarded from the conversation frame); ⌘/Ctrl+B
+is a chord and has no switch. What is stuck to the window's bottom — a drawer's footer, the toasts, the
+sidebar's account row — keeps `max(16px, env(safe-area-inset-bottom))` above the edge (`env()` is 0
+unless the viewport meta says `viewport-fit=cover`, which it does not; the `max()` keeps the 16).
 The token CSS carries a **forced-colours layer**: Element Plus inputs and selects get a real
 border and a Highlight outline (their edge and focus were shadows), floating layers a system
 border, and selected / current / pressed states an underline, because forced colours remove
@@ -441,8 +461,8 @@ status and error code to Chinese before it reaches the screen (`labelFor`, `webE
 `instanceof Error ? … : String(…)` shape.
 
 Breakpoints are Tailwind's (`sm 640` · `md 768` · `lg 1024` · `xl 1280` · `2xl 1536`). Below
-1024 the sidebar becomes a drawer over the content; below 768 prose gets 16 px side padding and
-tables scroll horizontally with the first column frozen. No page may scroll horizontally at
+1024 the sidebar becomes a drawer over the content; below 768 every page has a 16 px gutter
+(`PageShell`) and tables scroll horizontally with the first column frozen. No page may scroll horizontally at
 390 px. Figures inside a report keep a white background in both themes; printing mounts a print
 copy of the report re-scoped to the light tokens, so “打印 / 存为 PDF” gives the report and its
 facts on white paper, never the shell.
@@ -499,8 +519,11 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
 
 ## Known gaps
 
-- `max-w-content-full` and `text-ui-sm` are aliases, not errors, until the page rewrites drop
-  their call sites. The ESLint serif ban stays scoped to the primitives on purpose now: the serif
+- `text-ui-sm` is an alias, not an error, until the page rewrites drop its call sites. The
+  `max-w-content` family has none left (ESLint refuses it) but the preset still carries the names:
+  removing a published name is a major release of the token package, for the Vue shell to adopt.
+- `text-graphic` is also the data mark of a rival in `ShareBar` (rival 2, lighter than rival 3), in
+  `DataTable`'s rival bar, and in two `VcrDiagrams` marks — graphics that carry a value at 2.69:1. The ESLint serif ban stays scoped to the primitives on purpose now: the serif
   is a page's brand moment, so the ban is where a button lives, not everywhere.
 - The kernel frame's own geometry (radii, spacing) has no token family upstream; the little of it
   the shell touches lives in a stylesheet pinned to the kernel version. Only colour and type

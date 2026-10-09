@@ -111,4 +111,28 @@ describe("Drawer", () => {
     fireEvent.click(screen.getByRole("dialog").parentElement!);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  // Design reference §5.2 (R13 V-12): a bar stuck to the bottom keeps at least 16 px, or the device's safe area, above the window's edge.
+  describe("footer", () => {
+    it("is a bar under the scrolling body, with a hairline over it and the safe-area padding under it", () => {
+      render(
+        <Drawer title="任务" onClose={() => {}} footer={<button type="button">保存</button>}>
+          <p>正文</p>
+        </Drawer>,
+      );
+      const dialog = screen.getByRole("dialog", { name: "任务" });
+      const bar = dialog.querySelector("footer") as HTMLElement;
+      expect(bar).toContainElement(screen.getByRole("button", { name: "保存" }));
+      // Outside the scroller, so it stays put while the body scrolls, and last in the panel.
+      expect(bar.parentElement).toBe(dialog);
+      expect(bar).toBe(dialog.lastElementChild);
+      expect(screen.getByText("正文").closest(".overflow-y-auto")).not.toContainElement(bar);
+      expect(bar).toHaveClass("border-t", "pb-[max(1rem,env(safe-area-inset-bottom))]");
+    });
+
+    it("draws nothing when there is none", () => {
+      render(<Drawer title="任务" onClose={() => {}}><p>正文</p></Drawer>);
+      expect(screen.getByRole("dialog").querySelector("footer")).toBeNull();
+    });
+  });
 });

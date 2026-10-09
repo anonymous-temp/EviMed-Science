@@ -390,7 +390,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   return (
     <div {...dropProps} ref={pageRoot} className="relative h-full">
       {dragging && (
-        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg">
+        <div className="pointer-events-none absolute inset-0 z-drawer flex items-center justify-center bg-bg">
           <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui font-medium text-accent">
             <Upload size={16} aria-hidden="true" />
             松开即可上传

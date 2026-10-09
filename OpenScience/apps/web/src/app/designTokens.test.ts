@@ -247,6 +247,30 @@ describe("the primitives draw focus with an outline, never a ring (appendix E #1
   });
 });
 
+// The ESLint list of colour names that refuse an opacity modifier was typed, and went stale in both directions: it lacked
+// `surface-3`, `badge` and `badge-fg` (so `bg-surface-3/50` generated no CSS and passed lint) and named an `unread` that no
+// role has (R13 V-4). It is read back from the config here.
+describe("the lint list of colours that refuse an opacity modifier", () => {
+  const config = readFileSync(join(SRC, "..", ".eslintrc.cjs"), "utf8");
+  const line = config.split("\n").find((candidate) => candidate.includes("(bg|text|border|")) ?? "";
+  const names = (/\)-\(([^)]+)\)\\\\x2F/.exec(line)?.[1] ?? "").split("|");
+  // Fragments of the older border names, and the pattern that stands for the five run-state dots.
+  const FRAGMENTS = ["border", "faint", "strong", "muted", "dot-[a-z]+"];
+
+  it("names every colour role", () => {
+    // Prove the line was found before trusting what is missing from it.
+    expect(names.length).toBeGreaterThan(40);
+    const missing = Object.keys(COLOR_ROLES).filter((role) => !role.startsWith("dot-") && !names.includes(role));
+    expect(missing).toEqual([]);
+  });
+
+  it("names nothing that is not a colour the preset defines", () => {
+    // A role, or one of the data colours a class can reach (`chart-own`).
+    const strangers = names.filter((name) => !FRAGMENTS.includes(name) && !(name in (theme.colors ?? {})));
+    expect(strangers).toEqual([]);
+  });
+});
+
 describe("the table keeps its own promises", () => {
   it("measures every contrast pair it claims, in both themes", () => {
     // The `note` fields used to be typed and went stale silently. They are

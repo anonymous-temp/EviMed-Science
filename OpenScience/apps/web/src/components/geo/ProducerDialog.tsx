@@ -1,9 +1,9 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { patchGeoProject, type GeoProducer } from "@/lib/geoClient";
-import { trapTab } from "@/lib/focusTrap";
 import { Button } from "@/components/ui/Button";
 import { FilterChips } from "@/components/ui/FilterChips";
+import { FormDialog } from "@/components/ui/FormDialog";
 import { Input } from "@/components/ui/Input";
 
 const KIND_OPTIONS: ReadonlyArray<{ value: "enterprise" | "doctor"; label: string }> = [
@@ -24,20 +24,6 @@ export function ProducerDialog({ geoId, initial, onSaved, onCancel }: { geoId: s
   const [specialty, setSpecialty] = useState(initial?.specialty ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  const cancel = useRef(onCancel);
-  cancel.current = onCancel;
-
-  useEffect(() => {
-    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") cancel.current();
-      if (event.key === "Tab") trapTab(dialogRef.current, event);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); trigger?.focus(); };
-  }, []);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -60,27 +46,23 @@ export function ProducerDialog({ geoId, initial, onSaved, onCancel }: { geoId: s
   };
 
   return (
-    <div role="presentation" className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
-      onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-sm rounded-card border border-border bg-surface p-6 shadow-modal">
-        <h2 id={titleId} className="text-ui font-semibold text-text">出品方</h2>
-        <form className="mt-4 flex flex-col gap-4" onSubmit={submit} noValidate>
-          <FilterChips<"enterprise" | "doctor"> label="出品方类型" options={KIND_OPTIONS} value={kind} onChange={(next) => { if (next) setKind(next); }} />
-          <Input label={kind === "doctor" ? "医生姓名" : "企业名称（可留空，用说明书上的持证商）"} autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} />
-          {kind === "doctor" && (
-            <>
-              <Input label="医院" autoComplete="off" value={hospital} onChange={(event) => setHospital(event.target.value)} />
-              <Input label="科室" autoComplete="off" value={department} onChange={(event) => setDepartment(event.target.value)} />
-              <Input label="专业" autoComplete="off" value={specialty} onChange={(event) => setSpecialty(event.target.value)} />
-            </>
-          )}
-          {error && <p role="alert" className="text-ui text-danger">{error}</p>}
-          <div className="mt-2 flex justify-end gap-2">
-            <Button variant="secondary" onClick={onCancel}>取消</Button>
-            <Button type="submit" loading={saving}>保存</Button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <FormDialog title="出品方" onClose={onCancel} busy={saving}>
+      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+        <FilterChips<"enterprise" | "doctor"> label="出品方类型" options={KIND_OPTIONS} value={kind} onChange={(next) => { if (next) setKind(next); }} />
+        <Input label={kind === "doctor" ? "医生姓名" : "企业名称（可留空，用说明书上的持证商）"} autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} />
+        {kind === "doctor" && (
+          <>
+            <Input label="医院" autoComplete="off" value={hospital} onChange={(event) => setHospital(event.target.value)} />
+            <Input label="科室" autoComplete="off" value={department} onChange={(event) => setDepartment(event.target.value)} />
+            <Input label="专业" autoComplete="off" value={specialty} onChange={(event) => setSpecialty(event.target.value)} />
+          </>
+        )}
+        {error && <p role="alert" className="text-ui text-danger">{error}</p>}
+        <div className="mt-2 flex justify-end gap-2">
+          <Button variant="secondary" onClick={onCancel}>取消</Button>
+          <Button type="submit" loading={saving}>保存</Button>
+        </div>
+      </form>
+    </FormDialog>
   );
 }

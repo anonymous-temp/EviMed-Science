@@ -179,7 +179,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
       <div ref={containerRef} className="absolute inset-0" aria-label={`${filename} 三维分子视图`} />
 
       <div
-        className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-pop backdrop-blur"
+        className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-e2 backdrop-blur"
         data-molecule-controls="true"
       >
         <div className="flex items-center gap-1 px-1.5 text-caption font-medium text-muted">
@@ -203,13 +203,13 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
         <IconButton icon={RotateCcw} label="重置视图" size="sm" onClick={resetView} />
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-pop backdrop-blur">
+      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-e2 backdrop-blur">
         <span className="font-medium text-text">{format.toUpperCase()}</span>
         {atomCount !== null && <span className="ml-2">{atomCount} 个原子</span>}
       </div>
 
       {(rendering || error) && (
-        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-pop backdrop-blur">
+        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-e2 backdrop-blur">
           {rendering ? "正在渲染结构" : error}
         </div>
       )}

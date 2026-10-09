@@ -60,7 +60,7 @@ export function HandoffRoute() {
     return (
       <>
         <PageTitle page="转为深度研究" />
-        <div className="mx-auto w-full max-w-read px-6 py-12">
+        <div className="mx-auto w-full max-w-read px-4 py-12 md:px-6">
           <LoadError message="无法转入深度研究。" onRetry={() => { setFailed(false); setAttempt((value) => value + 1); }} />
         </div>
       </>

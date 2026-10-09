@@ -73,7 +73,7 @@ it("sits in the one page column with a one-line header and no subtitle", async (
   const { container } = open();
   const heading = await screen.findByRole("heading", { level: 1, name: "收件箱" });
   expect(container.querySelector(".max-w-page")).toContainElement(heading);
-  expect(container.querySelector(".max-w-content")).toBeNull();
+  expect(container.querySelector(".max-w-read")).toBeNull();
   expect(screen.queryByText(/研究完成、需要你决定/)).not.toBeInTheDocument();
   // 「全部已读」 is a text button in the header, not a bordered one.
   const banner = screen.getByRole("banner");

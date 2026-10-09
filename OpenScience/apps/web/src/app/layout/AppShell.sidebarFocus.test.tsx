@@ -119,6 +119,18 @@ describe("the sidebar's focus and the page behind it", () => {
     expect(screen.getByRole("link", { name: "新对话" })).toHaveFocus();
   });
 
+  it("keeps Ctrl+B whatever the single-character switch says: a chord is not a character key (WCAG 2.2 SC 2.1.4)", async () => {
+    useUiStore.setState({ singleKeyShortcuts: false });
+    try {
+      await renderShell();
+      fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+      expect(await screen.findByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+    } finally {
+      useUiStore.setState({ singleKeyShortcuts: true });
+    }
+  });
+
   describe("below lg, where it is a drawer over the page", () => {
     beforeEach(() => { viewport(true); });
 

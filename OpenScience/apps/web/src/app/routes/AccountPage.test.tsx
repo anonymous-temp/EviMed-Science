@@ -243,4 +243,21 @@ describe("设置", () => {
     await user.click(await screen.findByRole("menuitemradio", { name: "深色" }));
     expect(useUiStore.getState().theme).toBe("dark");
   });
+
+  it("turns the single-character ? shortcut off and on from the shortcuts group, and says nothing of the chord's", async () => {
+    // WCAG 2.2 SC 2.1.4: one-character shortcuts can be turned off. ⌘/Ctrl+B is a chord and has no switch.
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    useUiStore.setState({ singleKeyShortcuts: true });
+    open("/app/account?tab=appearance");
+    const toggle = await screen.findByRole("switch", { name: "用 ? 键打开快捷键清单" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(useUiStore.getState().singleKeyShortcuts).toBe(false);
+    expect(window.localStorage.getItem("ai4s.shortcuts.single")).toBe("0");
+    await user.click(toggle);
+    expect(useUiStore.getState().singleKeyShortcuts).toBe(true);
+  });
 });

@@ -62,12 +62,40 @@ export function quotedContrast(a, b) {
  */
 
 /**
+ * The grounds a status dot is drawn on: the canvas, a card, and the sidebar
+ * (`surface-1`), where a conversation row carries one. A dot was measured on
+ * the canvas only, and a graphic that clears 3:1 there can fail on the ground
+ * next to it — 已停止 was 2.59:1 on the sidebar before 2.1.3.
+ */
+const DOT_GROUNDS = /** @type {const} */ (['bg', 'surface', 'surface-1'])
+const GROUND_NAMES = /** @type {const} */ ({ bg: 'the canvas', surface: 'a card', 'surface-1': 'the sidebar' })
+
+/**
+ * The run-state dots (`RunStatusDot`): graphics that carry a meaning, so each
+ * is a non-text graphic at 3:1 (WCAG 1.4.11) on every ground it sits on.
+ */
+const DOT_RULES = /** @type {const} */ ([
+  ['dot-running', 'the running dot'],
+  ['dot-done', 'the finished dot'],
+  ['dot-review', 'the finished-with-something-to-check dot'],
+  ['dot-failed', 'the failed dot'],
+  ['dot-canceled', 'the stopped dot'],
+]).flatMap(([fg, what]) => DOT_GROUNDS.map((bg) => ({ fg, bg, min: 3, what: `${what} on ${GROUND_NAMES[bg]}` })))
+
+/**
  * What the design language promises, as checkable pairs.
  *
  * 4.5 is WCAG AA for body text, 3.0 is AA for large text and for the visible
- * boundary of a control (1.4.11). A graphic that carries no meaning on its own
- * — a chart gridline, the `text-graphic` rule colour — is not listed, because
- * it is not making a promise.
+ * boundary of a control (1.4.11), and for a graphic that carries a meaning —
+ * the run-state dots.
+ *
+ * `text-graphic` is the one grey that makes no 3:1 promise, and it says so
+ * rather than being left out: it is for icons and hairline rules that mean
+ * nothing on their own, never for a word and never for a status. It gets a
+ * floor (2.5:1, so that a decoration stays perceivable and cannot be lightened
+ * into nothing) and a structural rule (`sharedWithGraphic`: no `dot-*` role may
+ * resolve to its colour — that was the 已停止 defect). Its documented figure,
+ * 2.69 on the page, is held by the note check (`staleNotes`).
  *
  * @type {readonly ContrastRule[]}
  */
@@ -105,9 +133,9 @@ export const CONTRAST_RULES = Object.freeze([
   { fg: 'border-control', bg: 'bg', min: 3, what: 'the edge of an input on the canvas' },
   { fg: 'border-control', bg: 'surface-1', min: 3, what: 'the edge of an input on the sidebar' },
   { fg: 'focus', bg: 'bg', min: 3, what: 'the focus ring' },
-  { fg: 'dot-running', bg: 'bg', min: 3, what: 'the running dot' },
-  { fg: 'dot-failed', bg: 'bg', min: 3, what: 'the failed dot' },
-  { fg: 'dot-done', bg: 'bg', min: 3, what: 'the finished dot' },
+  ...DOT_RULES,
+  { fg: 'text-graphic', bg: 'bg', min: 2.5, what: 'a decorative icon or rule on the canvas — never text, never a status' },
+  { fg: 'text-graphic', bg: 'surface', min: 2.5, what: 'a decorative icon or rule on a card — never text, never a status' },
 ])
 
 /**
@@ -201,7 +229,79 @@ export function contrastFailures() {
       ({ rule, ratio }) =>
         `${rule.scheme}: ${rule.what} — --${rule.name} (${rule.color}) on --${rule.bg} is ${ratio.toFixed(2)}:1, needs ${rule.min}:1`,
     )
-  return [...roles, ...data]
+  return [...roles, ...data, ...sharedWithGraphic(), ...staleNotes()]
+}
+
+/**
+ * Every `dot-*` role that resolves to `text-graphic`'s colour in some scheme
+ * and contrast variant. A dot says something (running, stopped, failed); the
+ * decorative grey says nothing, and a mark that borrows it inherits a contrast
+ * that was never promised — 已停止 did, at 2.69:1 and 2.71:1.
+ * @param {Readonly<Record<string, import('./index.mjs').ColorRole>>} [roles] the table to read; the real one by default
+ * @returns {string[]}
+ */
+export function sharedWithGraphic(roles = COLOR_ROLES) {
+  /** @type {string[]} */
+  const shared = []
+  /** @param {string} role @param {'light' | 'dark'} scheme @param {'standard' | 'more'} variant */
+  const colour = (role, scheme, variant) => {
+    const override = variant === 'more' ? COLOR_ROLES_MORE_CONTRAST[role] : undefined
+    return resolveColor((override ?? roles[role])[scheme])
+  }
+  for (const variant of /** @type {const} */ (['standard', 'more'])) {
+    for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+      const decoration = colour('text-graphic', scheme, variant)
+      for (const role of Object.keys(roles).filter((name) => name.startsWith('dot-'))) {
+        if (colour(role, scheme, variant) === decoration) {
+          shared.push(`${scheme}${variant === 'more' ? ' (more contrast)' : ''}: --${role} is the same colour as --text-graphic (${decoration}); a status mark cannot wear the decorative grey`)
+        }
+      }
+    }
+  }
+  return shared
+}
+
+/**
+ * A role's `note` quotes figures ("6.05 on the page; white on it 6.27"). They
+ * were typed, and four of them were fiction before anything checked them. The
+ * four phrases a note may use are read back and measured, light scheme, and
+ * compared at the two decimals they quote:
+ *
+ *  - "N on the page"      the role on `bg`
+ *  - "N on the sidebar"   the role on `surface-1`
+ *  - "white on it N"      `#ffffff` on the role
+ *  - "on <role>: N"       the role on that role
+ *
+ * @param {Readonly<Record<string, import('./index.mjs').ColorRole>>} [roles] the table to read; the real one by default
+ * @returns {string[]} one line per quoted figure that is not the measured one
+ */
+export function staleNotes(roles = COLOR_ROLES) {
+  /** @param {string} role */
+  const light = (role) => resolveColor(roles[role].light)
+  /** @type {string[]} */
+  const stale = []
+  /**
+   * @param {string} role
+   * @param {string} quoted
+   * @param {string} fg
+   * @param {string} bg
+   * @param {string} phrase
+   */
+  const check = (role, quoted, fg, bg, phrase) => {
+    const measured = quotedContrast(fg, bg).toFixed(2)
+    if (measured !== quoted) stale.push(`--${role}: its note says "${phrase}" and it measures ${measured}`)
+  }
+  for (const [role, { note }] of Object.entries(roles)) {
+    if (!note) continue
+    const own = light(role)
+    for (const match of note.matchAll(/(\d+\.\d+) on the page/g)) check(role, match[1], own, light('bg'), match[0])
+    for (const match of note.matchAll(/(\d+\.\d+) on the sidebar/g)) check(role, match[1], own, light('surface-1'), match[0])
+    for (const match of note.matchAll(/white on it (\d+\.\d+)/g)) check(role, match[1], '#ffffff', own, match[0])
+    for (const match of note.matchAll(/on ([a-z0-9-]+): (\d+\.\d+)/g)) {
+      if (roles[match[1]]) check(role, match[2], own, light(match[1]), match[0])
+    }
+  }
+  return stale
 }
 
 /**
