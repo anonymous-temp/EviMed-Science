@@ -254,7 +254,7 @@ function ByPool({ geoId, diagnosis, loading }: { geoId: string; diagnosis: GeoDi
           { key: "pool", header: "问句池", rowHeader: true, cell: (row) => GEO_POOL_KINDS[row.pool] ?? "—" },
           {
             key: "bar",
-            header: "",
+            header: <span className="sr-only">品牌提及率图示</span>,
             width: "w-32",
             cell: (row) => <InlineBar value={readGeoCell(row.mention).value} max={top} tone="own" label={`${GEO_POOL_KINDS[row.pool] ?? row.pool} 的品牌提及率`} />,
           },

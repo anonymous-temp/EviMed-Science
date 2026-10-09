@@ -285,7 +285,7 @@ function UsedBy({ source }: { source: SourceRecord }) {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="text-caption text-text-3">{title}</h3>
+      <h2 className="text-caption text-text-3">{title}</h2>
       {children}
     </section>
   );

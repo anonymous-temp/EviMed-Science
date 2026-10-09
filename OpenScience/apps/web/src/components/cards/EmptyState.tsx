@@ -10,12 +10,14 @@ import { cn } from "@/lib/cn";
 export function EmptyState({
   icon: Icon,
   title,
+  titleAs: Title = "p",
   description,
   action,
   className,
 }: {
   icon?: LucideIcon;
   title: string;
+  titleAs?: "p" | "h1" | "h2" | "h3";
   description?: React.ReactNode;
   /** Primary action slot — usually a single button or link. */
   action?: React.ReactNode;
@@ -24,7 +26,7 @@ export function EmptyState({
   return (
     <div className={cn("flex flex-col items-center justify-center px-6 py-12 text-center", className)}>
       {Icon && <Icon size={20} className="text-muted" aria-hidden />}
-      <p className={cn("text-ui font-medium text-text", Icon && "mt-3")}>{title}</p>
+      <Title className={cn("text-ui font-medium text-text", Icon && "mt-3")}>{title}</Title>
       {description && <div className="mt-2 max-w-sm text-caption text-muted">{description}</div>}
       {action && <div className="mt-6">{action}</div>}
     </div>

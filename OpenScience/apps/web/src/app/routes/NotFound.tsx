@@ -17,6 +17,7 @@ export function NotFound() {
       <EmptyState
         icon={Compass}
         title="页面不存在"
+        titleAs="h1"
         action={<Link to="/" className={buttonClasses({ variant: "secondary" })}>返回首页</Link>}
       />
     </div>

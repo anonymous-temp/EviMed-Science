@@ -168,7 +168,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
   const publicLink =
     features.publicPages && zone?.state === "published" && zone.visibility === "internet" ? (
       <a
-        className="text-accent"
+        className="text-accent underline"
         href={`${features.publicBasePath ?? DEFAULT_PUBLIC_BASE_PATH}/z/${encodeURIComponent(zone.id)}`}
         target="_blank"
         rel="noopener noreferrer"

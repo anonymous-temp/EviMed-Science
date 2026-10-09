@@ -199,12 +199,6 @@ async function main() {
     projectCreated = true;
     scoped = { ...auth, "X-Open-Science-Project": projectId };
 
-    // There is no hand-written memory to seed any more: the notes composer and
-    // its routes were deleted on 2026-09-20, and what a researcher wants
-    // remembered they say in a conversation. So memory is proven the way it is
-    // now written — the preference this run states is extracted, then found
-    // again by the same search the memory page uses (below).
-
     await jsonFetch(`${base}/api/files/upload`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...scoped },

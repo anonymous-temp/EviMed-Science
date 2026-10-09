@@ -467,7 +467,7 @@ describe("a document's page", () => {
       resize(TWO_COLUMN_MIN_WIDTH);
       await within(columnOf("points")!).findByText("仅纳入单中心回顾性病例");
       order("讲了什么", "研究信息", "随机对照试验", "包含什么", "表 3 推荐等级汇总", "合并糖尿病时的用药调整", "局限", "仅纳入单中心回顾性病例", "随访不足一年", "要点", "一线经验治疗推荐铋剂四联方案");
-      const sections = within(columnOf("points")!).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+      const sections = within(columnOf("points")!).getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
       expect(sections.indexOf("包含什么")).toBeLessThan(sections.indexOf("要点"));
     });
 
