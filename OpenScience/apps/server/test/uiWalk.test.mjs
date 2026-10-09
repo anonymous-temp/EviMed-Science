@@ -23,7 +23,7 @@ import {
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings, PROVISIONAL_PAGES,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, ROW_LINK_BY_PAGE, ROW_REVEAL_BY_PAGE, rowClickFindings, rowClickShown,
   rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
-  taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  composerFindings, composerProbe, COMPOSER_BOTTOM_PX, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -284,9 +284,9 @@ test("a visually hidden control is not a kind of control on the page", () => {
  * descendant chain, a tag, `.class`, `[attr]`, `[attr='value']`, `*`, and the
  * one `:scope > li [data-row-title]`.
  */
-function node(tag, { attrs = {}, text = "", w = 600, h = 24, left = 0, style = {}, scrollW = w, scrollH = h, tabIndex = -1, open = false, value = null } = {}, children = []) {
+function node(tag, { attrs = {}, text = "", w = 600, h = 24, left = 0, top = 0, style = {}, scrollW = w, scrollH = h, tabIndex = -1, open = false, value = null } = {}, children = []) {
   const el = {
-    tag, text, attrs, children, parent: null, tagName: tag.toUpperCase(), clicks: 0, value, rect: { width: w, height: h, left },
+    tag, text, attrs, children, parent: null, tagName: tag.toUpperCase(), clicks: 0, value, rect: { width: w, height: h, left, top },
     clientWidth: w, clientHeight: h, scrollWidth: scrollW, scrollHeight: scrollH, tabIndex, open,
     get previousElementSibling() { return el.parent ? el.parent.children[el.parent.children.indexOf(el) - 1] ?? null : null; },
     style: {
@@ -300,7 +300,7 @@ function node(tag, { attrs = {}, text = "", w = 600, h = 24, left = 0, style = {
     get parentElement() { return el.parent; },
     classList: { contains: (name) => (attrs.class ?? "").split(/\s+/).includes(name) },
     getAttribute: (name) => attrs[name] ?? null,
-    getBoundingClientRect: () => ({ ...el.rect, top: 0, right: el.rect.left + el.rect.width }),
+    getBoundingClientRect: () => ({ ...el.rect, right: el.rect.left + el.rect.width, bottom: el.rect.top + el.rect.height }),
     computedStyleMap: () => ({ get: () => ({ toString: () => "auto" }) }),
     click() { el.clicks += 1; },
     contains: (other) => { for (let at = other; at; at = at.parent) if (at === el) return true; return false; },
@@ -584,6 +584,14 @@ function probe(kind, arg, search) {
 let skillProbes = 0;
 let cleanupProbes = 0;
 let knowledgeStates = 0;
+// The composer as the kernel's frame draws it. FAKE_COMPOSER=low|hero|wrap|chips|onechip|stats: a control too near the bottom, the blank conversation,
+// a toolbar that wraps on a phone, two chips (one in the dock), one chip in the toolbar, the statistics and the ring visible.
+function composerRead(operator, narrow) {
+  const mode = process.env.FAKE_COMPOSER || "";
+  const chips = mode === "chips" ? { total: 2, bar: 2, hero: 0, inTools: 1, inDock: 1 } : mode === "onechip" ? { total: 1, bar: 1, hero: 0, inTools: 1, inDock: 0 } : { total: 0, bar: 0, hero: 0, inTools: 0, inDock: 0 };
+  return { composer: true, hero: mode === "hero", operator, window: { width: narrow ? 390 : 1512, height: narrow ? 844 : 945 }, gapCard: 40, gapLowest: mode === "low" ? 4 : 24,
+    rowLines: mode === "wrap" && narrow ? 2 : 1, rowHeight: mode === "wrap" && narrow ? 82 : 42, scrollsSideways: false, chips, stats: { present: 1, visible: mode === "stats" ? 1 : 0 }, ring: mode === "stats" ? 1 : 0 };
+}
 function context() {
   const routes = [];
   const fire = async (url) => {
@@ -623,7 +631,13 @@ function context() {
         if (process.env.FAKE_NO_MATRIX && url.endsWith("clinical-evidence-matrix.json")) throw Error("no matrix");
         routeSettled = true;
       },
-      frames: () => [{ url: () => "https://evimed.example.org/__evimed/f/x", evaluate: async () => ({ composer: !chatFailing(), stats: [] }) }],
+      frames: () => [{
+        url: () => "https://evimed.example.org/__evimed/f/x",
+        evaluate: async (fn, arg) => {
+          if (typeof fn === "function" && fn.name === "composerProbe") return composerRead(Boolean(arg && arg[0] && arg[0].operator), phone);
+          return { composer: !chatFailing(), stats: [] };
+        },
+      }],
       getByRole: (role, { name }) => locator(role, name),
       async goto(target, options) {
         url = target; routeSettled = false; dialogOpen = false; log({ goto: target });
@@ -748,7 +762,7 @@ function context() {
         if (url.endsWith("/api/agent-runs")) return json(200, { data: [{ id: "run_1", deliverables: [{ id: "pkg", capability: "clinical-evidence-synthesis", status: "delivered" }] }] });
         if (url.includes("/api/sources?")) return json(200, { data: { items: [{ id: "src_1", display: { format: "pdf", title: "一份指南" }, payload: { status: "complete" } }] } });
         if (url.endsWith("/api/connectors")) return json(200, { data: [{ title: "Semantic Scholar", keyless: true, source: "none" }, { title: "PubMed", keyless: false, source: "none" }] });
-        if (url.endsWith("/api/me")) return loggedIn ? json(200, { data: { csrfToken: "t" } }) : json(401, {});
+        if (url.endsWith("/api/me")) return loggedIn ? json(200, { data: { csrfToken: "t", operator: process.env.FAKE_OPERATOR === "1" } }) : json(401, {});
         return json(404, {});
       },
     },
@@ -1668,6 +1682,125 @@ test("a page whose id the lists do not name is not walked, and the notice says w
   const { code, report } = await walk({ FAKE_NO_MATRIX: "1" });
   assert.equal(code, 0);
   assert.ok(report.notices.some((notice) => /^evidence-matrix@desktop: the step could not run/.test(notice)), report.notices.join("\n"));
+});
+
+/**
+ * The composer as the kernel's frame draws it: a root holding the card (the editable and the toolbar's row, with its tools and its send key) and the dock
+ * under the card. The kernel's classes end in a stable suffix (`InputBar_card`), which is how the shell's own stylesheet and the probe find them.
+ */
+function composerDom({ chipsInBar = 0, chipsInDock = 0, hero = false, dock = true, researcher = true, wrap = false, gap = 24 } = {}) {
+  const chip = (placement) => node("span", { attrs: { "data-evimed-tool-chip": "vcr-protocol", "data-evimed-chip-placement": placement }, w: 120, h: 24, top: 945 - gap - 28 });
+  const lowest = 945 - gap;
+  const send = node("button", { attrs: { "aria-label": "发送" }, w: 32, h: 32, top: lowest - 32 });
+  const tools = node("div", { attrs: { class: "InputBar_tools" }, top: lowest - 32 }, [
+    node("button", { attrs: { "aria-label": "添加" }, w: 32, h: 32, top: lowest - 32 }),
+    ...Array.from({ length: chipsInBar }, () => chip("bar")),
+  ]);
+  const row = node("div", { attrs: { class: "InputBar_row" }, top: lowest - 32 }, [tools, node("div", { attrs: { class: "InputBar_trailing" }, top: wrap ? lowest : lowest - 32 }, [send])]);
+  const card = node("div", { attrs: { class: "InputBar_card" }, top: lowest - 100, h: 100 }, [node("div", { attrs: { contenteditable: "true" }, top: lowest - 100, h: 60 }), row]);
+  const hidden = researcher ? { display: "none" } : {};
+  const dockEl = node("div", { attrs: { class: "InputBar_dock" }, top: lowest, h: 24 }, [
+    node("span", { attrs: { "data-composer-stats": "" }, text: "用量 12K", style: hidden, top: lowest - 24 }),
+    node("span", {}, [node("button", { attrs: { "aria-haspopup": "dialog", "aria-label": "上下文已用 20%" }, style: hidden, top: lowest - 60 })]),
+    ...Array.from({ length: chipsInDock }, () => chip("bar")),
+  ]);
+  return node("body", {}, [node("div", { attrs: { class: hero ? "InputBar_root InputBar_hero" : "InputBar_root" } }, [card, ...(dock ? [dockEl] : [])])]);
+}
+
+test("the composer is read inside the kernel's frame: the room under it, the chips by where they are drawn, the toolbar's lines, the statistics and the ring", () => {
+  assert.equal(COMPOSER_BOTTOM_PX, 16);
+  const read = (options, dom = {}) => inPage(composerDom(dom), () => composerProbe([options]));
+  const normal = read({ operator: false });
+  assert.deepEqual(normal, {
+    composer: true, hero: false, operator: false, window: { width: 1512, height: 945 }, gapCard: 24, gapLowest: 24, rowLines: 1, rowHeight: 24, scrollsSideways: false,
+    chips: { total: 0, bar: 0, hero: 0, inTools: 0, inDock: 0 }, stats: { present: 1, visible: 0 }, ring: 0,
+  });
+  // The lowest control is the one nearest the bottom, wherever it is; the card's own edge is read beside it.
+  assert.equal(read({}, { gap: 4 }).gapLowest, 4);
+  assert.equal(read({}, { gap: 40 }).gapCard, 40);
+  // A chip is counted where it is drawn: in the toolbar, or in the dock under the card.
+  assert.deepEqual(read({}, { chipsInBar: 1 }).chips, { total: 1, bar: 1, hero: 0, inTools: 1, inDock: 0 });
+  assert.deepEqual(read({}, { chipsInBar: 1, chipsInDock: 1 }).chips, { total: 2, bar: 2, hero: 0, inTools: 1, inDock: 1 });
+  // The statistics and the ring are in the document for a researcher and hidden; an operator's are drawn.
+  const operator = read({ operator: true }, { researcher: false });
+  assert.deepEqual([operator.operator, operator.stats, operator.ring], [true, { present: 1, visible: 1 }, 1]);
+  // The blank conversation has no dock under its card; a toolbar whose children start on two lines took two.
+  assert.equal(read({}, { dock: false }).hero, true);
+  assert.equal(read({}, { hero: true }).hero, true);
+  assert.equal(read({}, { wrap: true }).rowLines, 2);
+  // The tools and the send key are centred in the row and a few pixels apart (the kernel's measured: 888 and 885): still one line.
+  const centred = composerDom();
+  const trailing = descendants(centred).find((el) => el.attrs.class === "InputBar_trailing");
+  trailing.rect.top -= 3;
+  assert.equal(inPage(centred, () => composerProbe([{}])).rowLines, 1);
+  // A class list that merely ends in another class is not the kernel's card: the editable of a page without one has no composer.
+  const stray = node("body", {}, [node("div", { attrs: { class: "InputBar_card other" } }, [node("div", { attrs: { contenteditable: "true" } })])]);
+  assert.equal(inPage(stray, () => composerProbe([{}])).composer, false);
+  assert.equal(inPage(page(header()), () => composerProbe([])).composer, false);
+
+  // Judged: every verdict a notice, each "not observable" with its reason.
+  const none = "chat@desktop: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)";
+  assert.deepEqual(composerFindings("desktop", normal), { failures: [], notices: [none] });
+  assert.deepEqual(composerFindings("desktop", read({}, { gap: 15 })).notices, ["chat@desktop: the lowest control of the composer is 15 px above the bottom of the window (at least 16)", none]);
+  assert.deepEqual(composerFindings("desktop", read({}, { gap: 16 })).notices, [none]);
+  assert.deepEqual(composerFindings("desktop", read({}, { chipsInBar: 1 })), { failures: [], notices: [] });
+  assert.deepEqual(composerFindings("desktop", read({}, { chipsInBar: 2 })).notices, ["chat@desktop: 2 tool chip(s) are drawn in the toolbar (exactly one)"]);
+  assert.deepEqual(composerFindings("desktop", read({}, { chipsInBar: 1, chipsInDock: 1 })).notices, [
+    "chat@desktop: 2 tool chip(s) are drawn in the toolbar (exactly one)",
+    "chat@desktop: 2 chip(s) say they are in the toolbar and 1 are inside it",
+    "chat@desktop: 1 tool chip(s) are drawn in the dock under the card (none)",
+  ]);
+  assert.deepEqual(composerFindings("desktop", read({ operator: true }, { researcher: false, chipsInBar: 1 })).notices,
+    ["chat@desktop: not observable: the account is an operator's, whose session statistics and context ring are drawn by design, so their absence was not judged"]);
+  assert.deepEqual(composerFindings("desktop", read({ operator: false }, { researcher: false, chipsInBar: 1 })).notices,
+    ["chat@desktop: 1 session statistics line(s) are visible to a researcher", "chat@desktop: the context ring is visible to a researcher"]);
+  assert.deepEqual(composerFindings("desktop", read({}, { hero: true, chipsInBar: 1 })).notices,
+    ["chat@desktop: not observable: the conversation is the blank one, whose composer is centred with no dock under it, so the room under it was not judged"]);
+  assert.deepEqual(composerFindings("desktop", { ...normal, gapLowest: null, chips: { ...normal.chips, total: 1, bar: 1, inTools: 1 } }).notices,
+    ["chat@desktop: not observable: the composer holds no control, so the room under it was not judged"]);
+  assert.deepEqual(composerFindings("desktop", { composer: false }).notices, ["chat@desktop: not observable: no composer was found in the conversation's frame, so its room, chips and statistics were not read"]);
+  assert.deepEqual(composerFindings("phone", null).notices.length, 1);
+  // At 390 px the toolbar is one line and nothing scrolls sideways; the desktop does not look at either.
+  const phone = { ...read({}, { chipsInBar: 1 }), window: { width: 390, height: 844 } };
+  assert.deepEqual(composerFindings("phone", phone), { failures: [], notices: [] });
+  assert.deepEqual(composerFindings("phone", { ...phone, rowLines: 2, scrollsSideways: true }).notices,
+    ["chat@phone: the toolbar takes 2 lines at 390 px (one)", "chat@phone: the conversation scrolls sideways at 390 px"]);
+  assert.deepEqual(composerFindings("desktop", { ...phone, rowLines: 2, scrollsSideways: true }).notices, []);
+});
+
+test("with the chat asked for, the walk reads the composer at both widths, restores the window, and fails nothing", async () => {
+  const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
+  assert.equal(code, 0, stdout + stderr);
+  const none = (width) => `chat@${width}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)`;
+  assert.ok(report.notices.includes(none("desktop")) && report.notices.includes(none("phone")), report.notices.join("\n"));
+  assert.deepEqual(Object.keys(report.steps["chat-composer"]), ["desktop", "phone"]);
+  assert.deepEqual([report.steps["chat-composer"].desktop.window, report.steps["chat-composer"].phone.window], [{ width: 1512, height: 945 }, { width: 390, height: 844 }]);
+  assert.deepEqual(report.failures, []);
+  // Without the chat page the walk does not look.
+  assert.equal((await walk()).report.steps?.["chat-composer"], undefined);
+  // A control too near the bottom, a toolbar that wraps, two chips, the statistics and the ring: notices, never failures.
+  const low = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "low" });
+  assert.equal(low.code, 0, low.stdout + low.stderr);
+  assert.ok(low.report.notices.includes("chat@desktop: the lowest control of the composer is 4 px above the bottom of the window (at least 16)"));
+  const wrap = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "wrap" });
+  assert.equal(wrap.code, 0);
+  assert.ok(wrap.report.notices.includes("chat@phone: the toolbar takes 2 lines at 390 px (one)"));
+  assert.ok(!wrap.report.notices.some((notice) => notice.startsWith("chat@desktop: the toolbar")));
+  const chips = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "chips" });
+  assert.equal(chips.code, 0);
+  assert.ok(chips.report.notices.includes("chat@desktop: 1 tool chip(s) are drawn in the dock under the card (none)"));
+  const stats = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "stats" });
+  assert.equal(stats.code, 0);
+  assert.ok(stats.report.notices.includes("chat@desktop: the context ring is visible to a researcher"));
+  // An operator's statistics are by design: said, not judged.
+  const operator = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "stats", FAKE_OPERATOR: "1" });
+  assert.equal(operator.code, 0);
+  assert.ok(operator.report.notices.includes("chat@desktop: not observable: the account is an operator's, whose session statistics and context ring are drawn by design, so their absence was not judged"));
+  assert.ok(!operator.report.notices.some((notice) => /visible to a researcher|context ring is visible/.test(notice)));
+  // The blank conversation is not judged for its bottom room.
+  const hero = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "hero" });
+  assert.ok(hero.report.notices.some((notice) => notice.includes("the conversation is the blank one")));
+  void log;
 });
 
 test("with the chat asked for, the walk answers a start with the cleanup refusal itself, reads the cover and the alert after the wait, and starts nothing", async () => {

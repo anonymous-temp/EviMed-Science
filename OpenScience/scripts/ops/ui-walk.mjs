@@ -2165,6 +2165,10 @@ async function main() {
       return 2;
     }
     const leaks = [...LEAKS, ...shoutedCapabilityKeys([...ids, "open-domain-answer"])];
+    // Whether this account is an operator's: its conversation draws session statistics and the context ring by design (R13 E-17), a
+    // researcher's does not. Presentation only, as in the app (`useOperator`): an unreadable answer is a researcher.
+    const meAtStart = await context.request.get(`${base}/api/me`).catch(() => null);
+    const operator = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data?.operator === true : false;
     const found = await discoverRoutes(context, base, notices);
     const routes = [...ROUTES, ...found.routes];
     report.discovered = { routes: found.routes.map(([name]) => name), evidenceMatrix: found.matrix !== null, pdf: found.pdfTitle !== null, keylessConnectors: found.keyless.length };
@@ -2306,6 +2310,8 @@ async function main() {
       if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
       else if (chat.retriedAfterNetworkChange) notices.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
       if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
+      // The composer's room, chips and statistics at both widths (R13 E-17, A20), read through the frame that just loaded.
+      if (chat.loaded) await recordStep(report, failures, notices, "chat-composer", () => walkComposer(page, operator));
       // A start the control plane refuses for a cleanup in progress, answered by the walk (R11); it starts nothing.
       const waitMs = process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS !== undefined ? Number(process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS) || 0 : CLEANUP_WALK_WAIT_MS;
       allowRuntimeStart = false;
@@ -2337,6 +2343,142 @@ async function main() {
   return failures.length ? 1 : 0;
 }
 
+/* ------------------------------------------------------------------------- R13: the composer */
+
+/** A control sits at least this far above the bottom of the conversation's window (R13 E-17: `max(16px, the device's bottom inset)`). */
+export const COMPOSER_BOTTOM_PX = 16;
+
+/**
+ * The composer of the conversation, read inside the kernel's frame (`frame.evaluate`; it reads nothing from this module). The kernel's
+ * classes end in a stable suffix — `…_card`, `…_row`, `…_tools`, `…_dock`, `…_root` — which the shell's own stylesheet addresses by
+ * `[class$="…"]`; they are found the same way here, from the editable the reader types in. Read: whether there is a composer and whether
+ * it is the blank conversation's (centred, with no dock under it), the lowest control and how far it is above the bottom of the window,
+ * how many lines the toolbar's row takes, whether the page scrolls sideways, the tool chips by where they are drawn (the toolbar,
+ * the hero's seat, the dock), and the session statistics and the context ring, which are drawn for an operator and hidden (not removed)
+ * for a researcher.
+ * @param {[{ operator?: boolean }?]} args
+ */
+export function composerProbe([options] = [{}]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  // `[class$="_card"]` matches the whole attribute, so a class list that ends in another class is not a match.
+  const endsWith = (el, suffix) => String(el.getAttribute("class") ?? "").endsWith(suffix);
+  const ancestor = (el, suffix) => { for (let at = el; at; at = at.parentElement) if (endsWith(at, suffix)) return at; return null; };
+  const within = (root, suffix) => (root ? [...root.querySelectorAll("*")].find((el) => endsWith(el, suffix)) ?? null : null);
+  const bottomOf = (el) => (el ? Math.round(el.getBoundingClientRect().bottom) : null);
+  const editable = [...document.querySelectorAll("[contenteditable='true']")].filter(visible).pop() ?? null;
+  const card = editable ? ancestor(editable, "_card") : null;
+  const root = card ? card.parentElement : null;
+  const row = within(card, "_row");
+  const tools = within(card, "_tools");
+  const dock = within(root, "_dock");
+  const height = window.innerHeight;
+  const controls = root ? [...root.querySelectorAll("button, select, summary, input, [role='button']")].filter(visible) : [];
+  const lowest = controls.reduce((max, el) => Math.max(max, el.getBoundingClientRect().bottom), 0);
+  const chips = [...document.querySelectorAll("[data-evimed-tool-chip]")].filter(visible);
+  const placed = (placement) => chips.filter((el) => el.getAttribute("data-evimed-chip-placement") === placement).length;
+  // The toolbar's lines: children that overlap vertically are on one line (the tools and the send key are centred in a row, a few px apart),
+  // and a child that starts below the line before it wrapped onto its own.
+  let lines = null;
+  if (row) {
+    const boxes = [...row.children].filter(visible).map((el) => el.getBoundingClientRect()).sort((a, b) => a.top - b.top);
+    lines = 0;
+    let lineBottom = -Infinity;
+    for (const box of boxes) {
+      if (box.top >= lineBottom - 1) { lines += 1; lineBottom = box.bottom; } else lineBottom = Math.max(lineBottom, box.bottom);
+    }
+  }
+  const ring = [...document.querySelectorAll("button[aria-haspopup='dialog']")].filter((el) => visible(el)
+    && (String(el.getAttribute("aria-label") ?? "").startsWith("上下文已用") || String(el.getAttribute("aria-label") ?? "").endsWith("of context used")));
+  return {
+    composer: Boolean(card),
+    // The blank conversation's composer is centred and has no dock under it; the room under it is not the rule's.
+    hero: Boolean(root && String(root.getAttribute("class") ?? "").includes("_hero")) || (Boolean(card) && !dock),
+    operator: Boolean(options && options.operator),
+    window: { width: window.innerWidth, height },
+    gapCard: bottomOf(card) === null ? null : height - /** @type {number} */ (bottomOf(card)),
+    gapLowest: controls.length ? Math.round(height - lowest) : null,
+    rowLines: lines,
+    rowHeight: row ? Math.round(row.getBoundingClientRect().height) : null,
+    scrollsSideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+    chips: {
+      total: chips.length, bar: placed("bar"), hero: placed("hero"),
+      inTools: tools ? chips.filter((el) => tools.contains(el)).length : 0,
+      inDock: dock ? chips.filter((el) => dock.contains(el)).length : 0,
+    },
+    stats: { present: document.querySelectorAll("[data-composer-stats]").length, visible: [...document.querySelectorAll("[data-composer-stats]")].filter(visible).length },
+    ring: ring.length,
+  };
+}
+
+/**
+ * The composer as a reader meets it at one width (R13 E-17, A20): the lowest control is at least 16 px above the bottom of the window;
+ * a conversation that runs a tool draws exactly one chip in the toolbar and none in the dock; a researcher sees neither the session
+ * statistics nor the context ring; at 390 px the toolbar's row is one line and the page does not scroll sideways. Every verdict is a
+ * NOTICE (new in R13). Each says "not observable" and why when what it looks at is not there: the walk's conversation runs no tool (a
+ * tool is bound by the 科研工具 page, whose cards write), may be the blank conversation, and may belong to an operator.
+ * @param {"desktop" | "phone"} viewportName @param {any} r what `composerProbe` returned
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function composerFindings(viewportName, r) {
+  const current = `chat@${viewportName}`;
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (!r || !r.composer) {
+    notices.push(`${current}: not observable: no composer was found in the conversation's frame, so its room, chips and statistics were not read`);
+    return { failures, notices };
+  }
+  if (r.hero) notices.push(`${current}: not observable: the conversation is the blank one, whose composer is centred with no dock under it, so the room under it was not judged`);
+  else if (r.gapLowest === null) notices.push(`${current}: not observable: the composer holds no control, so the room under it was not judged`);
+  else if (r.gapLowest < COMPOSER_BOTTOM_PX) notices.push(`${current}: the lowest control of the composer is ${r.gapLowest} px above the bottom of the window (at least ${COMPOSER_BOTTOM_PX})`);
+  if (r.chips.total === 0) notices.push(`${current}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)`);
+  else {
+    if (r.chips.bar !== 1) notices.push(`${current}: ${r.chips.bar} tool chip(s) are drawn in the toolbar (exactly one)`);
+    if (r.chips.inTools !== r.chips.bar) notices.push(`${current}: ${r.chips.bar} chip(s) say they are in the toolbar and ${r.chips.inTools} are inside it`);
+    if (r.chips.inDock > 0) notices.push(`${current}: ${r.chips.inDock} tool chip(s) are drawn in the dock under the card (none)`);
+  }
+  if (r.operator) notices.push(`${current}: not observable: the account is an operator's, whose session statistics and context ring are drawn by design, so their absence was not judged`);
+  else {
+    if (r.stats.visible > 0) notices.push(`${current}: ${r.stats.visible} session statistics line(s) are visible to a researcher`);
+    if (r.ring > 0) notices.push(`${current}: the context ring is visible to a researcher`);
+  }
+  if (viewportName === "phone") {
+    if (r.rowLines !== null && r.rowLines > 1) notices.push(`${current}: the toolbar takes ${r.rowLines} lines at ${r.window.width} px (one)`);
+    if (r.scrollsSideways) notices.push(`${current}: the conversation scrolls sideways at ${r.window.width} px`);
+  }
+  return { failures, notices };
+}
+
+/** The kernel's frame holding a composer, read with `composerProbe`; null when none of the shell's frames has one. */
+async function readComposer(page, operator) {
+  for (const frame of page.frames()) {
+    if (!frame.url().includes("/__evimed/f/")) continue;
+    const read = await frame.evaluate(composerProbe, [{ operator }]).catch(() => null);
+    if (read?.composer) return read;
+  }
+  return null;
+}
+
+/**
+ * The conversation's composer at the desktop width and at 390 px (R13 E-17, A20), through the frame the chat step already loaded. The
+ * window is made narrow and then made what it was; nothing is typed, clicked or sent.
+ * @param {any} page @param {boolean} operator whether the walk's account is an operator's
+ */
+async function walkComposer(page, operator) {
+  const desktop = await readComposer(page, operator);
+  await page.setViewportSize(VIEWPORTS[1][1]);
+  await page.waitForTimeout(1_500);
+  const phone = await readComposer(page, operator);
+  await page.setViewportSize(VIEWPORTS[0][1]);
+  await page.waitForTimeout(500);
+  const a = composerFindings("desktop", desktop);
+  const b = composerFindings("phone", phone);
+  return { failures: [...a.failures, ...b.failures], notices: [...a.notices, ...b.notices], read: { desktop, phone } };
+}
+
 /**
  * Open the conversation page and wait for the kernel frame's composer.
  *
@@ -2363,7 +2505,8 @@ async function walkChat(page, base) {
         if (!frame.url().includes("/__evimed/f/")) continue;
         const seen = await frame.evaluate(() => ({
           composer: document.querySelectorAll("textarea, [contenteditable='true']").length > 0,
-          stats: [...document.querySelectorAll("[data-composer-stats]")].map((node) => node.textContent?.trim() ?? ""),
+          // On screen: a researcher's statistics are in the document and hidden (R13 E-17), and are not what this records.
+          stats: [...document.querySelectorAll("[data-composer-stats]")].filter((node) => node.getClientRects().length > 0).map((node) => node.textContent?.trim() ?? ""),
         })).catch(() => null);
         if (seen?.composer) return { loaded: true, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
       }
