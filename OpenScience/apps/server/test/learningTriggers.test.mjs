@@ -44,6 +44,16 @@ const routineOf = (lessons) => lessons.find((lesson) => lesson.trigger === "rout
 
 const triggers = (lessons) => lessons.map((lesson) => lesson.trigger);
 
+test('clinical source dependencies stay outside shared lessons, including routine peers and later corrections',async()=>{
+  const home=projectOf('vcr-project');const clinical=run({id:'clinical',corrections:1}),ordinary=run({id:'ordinary'});
+  const jobs={enqueue:async()=>{throw new Error('Clinical text must not reach the queue');}};
+  const worker=new LearningTriggers({jobs,agentRuns:{list:async()=>[clinical,ordinary]},canReuseRun:async(_home,entry)=>entry.id!=='clinical'});
+  assert.deepEqual(await worker.afterRun(home,clinical),{queued:[],skipped:'clinical_context'});
+  assert.deepEqual(await worker.afterCorrection(home,{runId:clinical.id,event:{}}),{queued:[],skipped:'clinical_context'});
+  const ledgers=await worker.ledgersFor(home,[clinical,ordinary],ordinary,ordinary.effectiveAgentId);
+  assert.deepEqual(ledgers[0].runs.map(entry=>entry.id),['ordinary']);
+});
+
 test("a finished delivery is a lesson by itself; one that needed repairs in its own turn is the repair lesson", () => {
   const clean = run();
   assert.deepEqual(triggers(learningTriggersFor({ run: clean, runs: [clean] })), ["delivered"]);

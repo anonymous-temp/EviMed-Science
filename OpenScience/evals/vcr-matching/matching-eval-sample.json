@@ -2,7 +2,7 @@
   "schemaVersion": "1.0.0",
   "label": "vcr-matching 合成示例评测集",
   "synthetic": true,
-  "note": "合成数据，不是真实病历：七份人工编写的中文病程摘要，用来让评测函数可跑、可回归。真实基线按方案 §7.4 与 AC-36 用合作方的真实病例、两位医生独立判定产生，本文件不代表任何真实人群的表现，也不构成准确率承诺。goldJudgments 的 state 是裁决后的标签，raterA / raterB 是两位阅片者各自的标签，二者的一致率就是这一批能达到的上限。",
+  "note": "Authored synthetic Chinese regression cases, not real medical records or an independently clinician-labeled validation set. Rater labels in this fixture exercise agreement calculations; agreement is a property of the reference set, not a universal accuracy ceiling. Clinical validation requires independently labeled partner cases and a frozen patient-level holdout.",
   "asOf": "2026-09-28T00:00:00Z",
   "protocolVersionId": "prt-demo-v1",
   "criteria": [

@@ -1,0 +1,21 @@
+{
+  "version": "evimed-lab-units-1",
+  "scope": "Selected analyte conversions only; this is not a UCUM parser or a diagnostic reference range.",
+  "references": [
+    "https://ucum.org/ucum",
+    "https://www.labcorp.com/test-menu/resources/si-unit-conversion-table"
+  ],
+  "aliases": {
+    "umol/L": ["umol/L", "umol/l", "µmol/L", "μmol/L", "µmol/l", "μmol/l"],
+    "mmol/L": ["mmol/L", "mmol/l"],
+    "mg/dL": ["mg/dL", "mg/dl"],
+    "g/L": ["g/L", "g/l"],
+    "g/dL": ["g/dL", "g/dl"]
+  },
+  "conversions": [
+    {"analyte":"creatinine","from":"mg/dL","to":"umol/L","factor":88.4,"basis":"Labcorp serum creatinine conversion"},
+    {"analyte":"bilirubin","from":"mg/dL","to":"umol/L","factor":17.1,"basis":"Labcorp serum total/direct bilirubin conversion"},
+    {"analyte":"glucose","from":"mmol/L","to":"mg/dL","factor":18.016,"basis":"Existing EviMed factor retained for replay; Labcorp rounds this to 18.02"},
+    {"analyte":"hemoglobin","from":"g/dL","to":"g/L","factor":10,"basis":"Metric decilitre to litre scale"}
+  ]
+}

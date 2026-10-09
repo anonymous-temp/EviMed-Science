@@ -1,3 +1,4 @@
+import { ClinicalTimeline, MatchingPanelControls } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState } from "react";
 import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock, TriangleAlert } from "lucide-react";
@@ -100,8 +101,9 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const [view, setView] = useState<View>("matching");
   const [direction, setDirection] = useState<Direction>("trial_to_patient");
   const [candidate, setCandidate] = useState<string | null>(null);
-  const { state, reload } = useVcrLoad(`${studyId}:matching:${view}:${direction}`, () => getVcrMatching(studyId, {
-    view, direction, ...(view === "matching" && candidate ? { candidate } : {}),
+  const [protocolVersionId, setProtocolVersionId] = useState<string | null>(null);
+  const { state, reload } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => getVcrMatching(studyId, {
+    view, direction, ...(protocolVersionId ? { protocolVersionId } : {}), ...(view === "matching" && candidate ? { candidate } : {}),
   }));
   const pick = (id: string) => {
     setCandidate(id);
@@ -133,12 +135,16 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   // Every sub-view counts: a referral ledger with no candidate list is a
   // study whose matching has already run, and offering 「让 AI 做」 there
   // would ask for work that is done.
+  const controls = view === 'matching' ? <MatchingPanelControls studyId={studyId} data={data}
+    canRun={study.abilities.includes('run') && study.abilities.includes('read_patient_level')}
+    onProtocol={setProtocolVersionId} onCandidate={pick} onReload={reload} /> : null;
   const nothing = data.candidates.length === 0 && !data.forecast && !data.pendingReview
     && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0;
   if (nothing) {
     return (
       <div className="flex flex-col gap-6">
         {toolbar()}
+        {controls}
         <VcrStepPending studyId={studyId} study={study} step="matching" />
       </div>
     );
@@ -146,6 +152,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   return (
     <div className="flex flex-col gap-6">
       {toolbar(partnerLine(data))}
+      {controls}
       {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
       {view === "matching" && (
         <MatchingView
@@ -160,6 +167,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       {view === "referral" && <ReferralView studyId={studyId} data={data} abilities={study.abilities} />}
       {view === "sites" && <SitesView data={data} />}
       {view === "followup" && <FollowupView data={data} />}
+      {view === "matching" && <ClinicalTimeline studyId={studyId} data={data} mayReadOriginal={study.abilities.includes("read_patient_level")} />}
       <VcrCountsBand counts={data.counts} />
     </div>
   );

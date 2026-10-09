@@ -683,3 +683,17 @@ test("a reservation is estimated in tokens, not bytes, and a conversation's repe
   const over = estimateModelReservation(body, {}, new Date("2026-09-18T02:00:00Z"), { cachedTokens: 10 * cold.promptTokens });
   assert.equal(over.cacheHitTokens, cold.promptTokens, "never more cached than the prompt holds");
 });
+
+test('a revoked source permission refuses the provider request before any external bytes are sent', async t => {
+  let sent = 0;
+  const gateway = createServer(createModelGatewayHandler(config('https://provider.invalid'), runtimeManager(), {
+    assertModelAccess: async () => { throw Object.assign(new Error('Source permission revoked'), { status: 403, code: 'vcr_cloud_processing_not_authorized' }); },
+    fetchImpl: async () => { sent++; return new Response('{}'); },
+  }));
+  const base = await listen(gateway); t.after(() => close(gateway));
+  const response = await fetch(`${base}/internal/model/v1/chat/completions`, { method:'POST',
+    headers:{ authorization:'Bearer runtime-token','content-type':'application/json' },
+    body:JSON.stringify({ messages:[{role:'user',content:'Previously admitted clinical context'}] }) });
+  assert.equal(response.status, 403);
+  assert.equal(sent, 0);
+});

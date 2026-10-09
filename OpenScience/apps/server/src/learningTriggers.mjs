@@ -346,10 +346,11 @@ export class LearningTriggers {
    * @param {{ jobs: any, agentRuns: any, memory?: any, internalAgent?: (agentId: string) => boolean | Promise<boolean>,
    *   sessionState?: ((userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null } | null>) | null,
    *   audit?: (event: string, detail: Record<string, any>) => Promise<void>,
+   *   canReuseRun?: ((project:any,run:any)=>Promise<boolean>) | null,
    *   projects?: ((userId: string) => Promise<readonly any[]>) | null, routinePeriodDays?: number }} dependencies
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
-    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS }) {
+    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS, canReuseRun = null }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -358,6 +359,7 @@ export class LearningTriggers {
     this.sessionState = sessionState;
     this.audit = audit;
     this.projects = projects;
+    this.canReuseRun = canReuseRun;
     this.periodMs = routinePeriodMs(routinePeriodDays);
   }
 
@@ -376,15 +378,19 @@ export class LearningTriggers {
    */
   async ledgersFor(project, runs, run, capabilityId) {
     const period = routinePeriodOf(run, this.periodMs);
-    const cut = (/** @type {readonly any[]} */ ledger) => ledger.filter((item) => String(item?.effectiveAgentId ?? "") === capabilityId
-      && routinePeriodOf(item, this.periodMs) === period);
+    const cut = async (/** @type {any} */ home, /** @type {readonly any[]} */ ledger) => {
+      const selected = ledger.filter((item) => String(item?.effectiveAgentId ?? "") === capabilityId
+        && routinePeriodOf(item, this.periodMs) === period);
+      const allowed = await Promise.all(selected.map(item => this.canReuseRun ? this.canReuseRun(home,item) : true));
+      return selected.filter((_item,index) => allowed[index]);
+    };
     /** @type {ProjectLedger[]} */
-    const ledgers = [{ project, runs: cut(runs) }];
+    const ledgers = [{ project, runs: await cut(project,runs) }];
     if (!this.projects) return ledgers;
     for (const other of (await this.projects(project.userId)) ?? []) {
       if (!other?.id || String(other.id) === String(project.id)) continue;
       if (other.userId !== project.userId || other.archivedAt || isInternalProject(other.id)) continue;
-      ledgers.push({ project: other, runs: cut(await this.agentRuns.list(other)) });
+      ledgers.push({ project: other, runs: await cut(other,await this.agentRuns.list(other)) });
     }
     return ledgers;
   }
@@ -398,6 +404,7 @@ export class LearningTriggers {
    * @returns {Promise<{ queued: string[], skipped: string | null }>}
    */
   async afterRun(project, run, memoryResult = null) {
+    if (this.canReuseRun && !await this.canReuseRun(project,run)) return { queued: [], skipped: "clinical_context" };
     // The researcher's own switch. "Stop learning" has meant no memory is
     // written; a method distilled from their runs is learning too.
     if ((await memoryPausedFor(this.memory, project.userId, project.id).catch(() => ({ learning: false }))).learning) {
@@ -463,6 +470,7 @@ export class LearningTriggers {
     const runs = await this.agentRuns.list(project).catch(() => []);
     const run = runs.find((/** @type {any} */ item) => item?.id === runId);
     if (!run) return { queued: [], skipped: "run_unavailable" };
+    if (this.canReuseRun && !await this.canReuseRun(project,run)) return { queued: [], skipped: "clinical_context" };
     if (this.sessionState && run.sessionId) {
       const state = await this.sessionState(project.userId, project.id, run.sessionId).catch(() => null);
       if (state?.trialCapsuleId) return { queued: [], skipped: "trial" };

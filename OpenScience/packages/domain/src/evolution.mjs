@@ -91,7 +91,7 @@ export function validateEvolutionDataRequirements(requirement) {
   }
   const rules = requirement.researchRules ?? {}
   for (const key of ['minEvents', 'minFollowUp']) if (rules[key] != null && (!Number.isFinite(rules[key]) || rules[key] < 0)) issues.push(`${key}-invalid`)
-  if (rules.requiredSemanticsChecks != null && (!Array.isArray(rules.requiredSemanticsChecks) || !rules.requiredSemanticsChecks.length || rules.requiredSemanticsChecks.some(family => !DATA_CHECK_FAMILIES.includes(family)))) issues.push('semantics-check-families-invalid')
+  if (rules.requiredSemanticsChecks != null && (!Array.isArray(rules.requiredSemanticsChecks) || !rules.requiredSemanticsChecks.length || rules.requiredSemanticsChecks.some((/** @type {any} */ family) => !DATA_CHECK_FAMILIES.includes(family)))) issues.push('semantics-check-families-invalid')
   return [...new Set(issues)]
 }
 

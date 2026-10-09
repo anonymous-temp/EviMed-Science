@@ -427,6 +427,10 @@ const REQUESTS = {
   "POST /studies/:id/definitions/:definition/use": ["POST", "/api/vcr/studies/std_1/definitions/dfn_1/use", { version: 1 }],
   "POST /studies/:id/definitions/:definition/compare": ["POST", "/api/vcr/studies/std_1/definitions/dfn_1/compare", { versionA: 1, versionB: 2 }],
   "POST /models (with a study)": ["POST", "/api/vcr/models", { studyId: "std_1", name: "m" }],
+  "POST /studies/:id/data/sources/:source/cloud-permission": ["POST", "/api/vcr/studies/std_1/data/sources/src_1/cloud-permission", {}],
+  "GET /studies/:id/data/documents/:document": ["GET", "/api/vcr/studies/std_1/data/documents/sfl_1", undefined],
+  "POST /studies/:id/data/documents/:document/projection": ["POST", "/api/vcr/studies/std_1/data/documents/sfl_1/projection", {}],
+  "POST /studies/:id/data/documents/:document/quote": ["POST", "/api/vcr/studies/std_1/data/documents/sfl_1/quote", {}],
   "POST /studies/:id/data/sources": ["POST", "/api/vcr/studies/std_1/data/sources", { name: "合作方基线" }],
   "POST /studies/:id/data/sources/:source/files": ["POST", "/api/vcr/studies/std_1/data/sources/src_1/files?name=cohort.csv", undefined],
   "DELETE /studies/:id/data/files/:file": ["DELETE", "/api/vcr/studies/std_1/data/files/sfl_1", undefined],
@@ -463,6 +467,10 @@ function composedHooks() {
       const snapshot = { id: "snp_1", sourceId: "src_1", version: 1, sha256: "b".repeat(64), rowCount: 2, columnCount: 2, frozenAt: null, valueSource: "observed", fileHashes: [], sealedFields: [], sealedUntil: null, quality: {} };
       return {
         registerSource: async () => source,
+        setCloudPermission: async () => source,
+        documentText: async () => ({ id: "sfl_1", text: "synthetic" }),
+        createDocumentProjection: async () => ({ id: "prj_1" }),
+        resolveProjectionQuote: async () => ({ quote: "synthetic" }),
         storeUpload: async () => ({ created: true, file }),
         removeUpload: async () => ({ removed: true, fileId: "sfl_1" }),
         proposeFieldMap: async () => ({ source, hash: "a".repeat(64), entryIssues: [], mapIssues: [] }),

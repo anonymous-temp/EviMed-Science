@@ -78,13 +78,13 @@ export const VCR_FIELD_MAP_STATES = Object.freeze(["none", "proposed", "confirme
  */
 export const VCR_TABLES = Object.freeze([
   "studies", "members", "study_definitions", "protocol_versions", "criteria", "soa_items",
-  "precedents", "study_precedents", "evidence_items", "curve_extractions", "assumptions",
+  "precedents", "precedent_versions", "study_precedents", "evidence_items", "curve_extractions", "assumptions",
   "sources", "source_files", "grants", "snapshots", "field_maps", "analysis_tables",
   "populations", "patient_sets", "comparator_designs", "trial_scenarios", "design_grids",
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "executions", "results", "forecasts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "matching_candidates", "matching_producers",
   "referrals", "referral_events", "sites", "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
   "model_assessments", "model_plan_versions",
@@ -256,6 +256,19 @@ CREATE INDEX IF NOT EXISTS vcr_precedents_study_idx ON evimed_vcr.precedents (st
 -- registry changes under a stored value) and its hash.
 ALTER TABLE evimed_vcr.precedents ADD COLUMN IF NOT EXISTS record_text text NOT NULL DEFAULT '';
 ALTER TABLE evimed_vcr.precedents ADD COLUMN IF NOT EXISTS record_hash text;
+CREATE TABLE IF NOT EXISTS evimed_vcr.precedent_versions (
+  precedent_id text NOT NULL REFERENCES evimed_vcr.precedents(id) ON DELETE CASCADE,
+  record_hash text NOT NULL,
+  record_text text NOT NULL,
+  snapshot jsonb NOT NULL,
+  first_seen_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(precedent_id,record_hash)
+);
+INSERT INTO evimed_vcr.precedent_versions(precedent_id,record_hash,record_text,snapshot)
+  SELECT id,record_hash,record_text,to_jsonb(p)-'record_text' FROM evimed_vcr.precedents p
+  WHERE record_hash IS NOT NULL AND record_text <> '' ON CONFLICT DO NOTHING;
+
 
 -- Which studies use which precedent. The library is the account's, the use is the study's.
 CREATE TABLE IF NOT EXISTS evimed_vcr.study_precedents (
@@ -685,6 +698,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.study_packs (
   bound_by     text NOT NULL DEFAULT '',
   bound_at     timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE evimed_vcr.study_packs ADD COLUMN IF NOT EXISTS pack_body jsonb;
 
 -- A population definition of an account's library: its name, and the versions it
 -- has been through. The account's, never a study's.
@@ -894,6 +908,16 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.matching_assessments (
   UNIQUE (study_id, protocol_version_id, subject_key, as_of)
 );
 ALTER TABLE evimed_vcr.matching_assessments ADD COLUMN IF NOT EXISTS provenance jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE evimed_vcr.matching_assessments ADD COLUMN IF NOT EXISTS input_snapshot_id text NOT NULL DEFAULT 'legacy';
+DO $$ DECLARE old_unique record; BEGIN
+  FOR old_unique IN SELECT conname FROM pg_constraint
+    WHERE conrelid='evimed_vcr.matching_assessments'::regclass AND contype='u'
+      AND pg_get_constraintdef(oid)='UNIQUE (study_id, protocol_version_id, subject_key, as_of)'
+  LOOP EXECUTE format('ALTER TABLE evimed_vcr.matching_assessments DROP CONSTRAINT %I', old_unique.conname); END LOOP;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_assessment_frozen_identity
+  ON evimed_vcr.matching_assessments(study_id,protocol_version_id,subject_key,as_of,input_snapshot_id);
+
 CREATE INDEX IF NOT EXISTS vcr_matching_study_idx ON evimed_vcr.matching_assessments (study_id, summary, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.criterion_judgments (
@@ -953,6 +977,67 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.language_judgments (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS vcr_language_judgments_idx ON evimed_vcr.language_judgments (study_id, subject_key, criterion_key, created_at DESC);
+
+-- Legacy judgments remain readable by id; unknown protocol scope is never
+-- guessed from the current protocol. New evaluations select an exact version.
+ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS protocol_version_id text;
+ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS criterion_hash text;
+ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS provenance jsonb;
+ALTER TABLE evimed_vcr.matching_facts ADD COLUMN IF NOT EXISTS provenance jsonb;
+ALTER TABLE evimed_vcr.matching_facts ADD COLUMN IF NOT EXISTS clinical jsonb;
+CREATE INDEX IF NOT EXISTS vcr_language_protocol_idx ON evimed_vcr.language_judgments
+  (study_id, protocol_version_id, subject_key, criterion_key, created_at DESC);
+
+-- References and input digests only: no duplicate raw patient text. The job
+-- carries this content digest, never the manifest's subject keys or facts.
+CREATE TABLE IF NOT EXISTS evimed_vcr.matching_producers (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  target_id text NOT NULL,
+  producer_hash text NOT NULL,
+  provenance jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(study_id,target_id,producer_hash)
+);
+ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS cloud_permission jsonb;
+CREATE TABLE IF NOT EXISTS evimed_vcr.document_projections (
+  id text PRIMARY KEY,
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  source_id text NOT NULL REFERENCES evimed_vcr.sources(id) ON DELETE CASCADE,
+  document_id text NOT NULL REFERENCES evimed_vcr.source_files(id) ON DELETE CASCADE,
+  source_hash text NOT NULL,
+  projection_hash text NOT NULL,
+  permission_hash text NOT NULL,
+  location text NOT NULL,
+  manifest_hash text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vcr_document_projection_lookup ON evimed_vcr.document_projections(study_id,document_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS evimed_vcr.cloud_reads (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  session_id text NOT NULL,
+  run_id text NOT NULL,
+  projection_id text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(study_id,session_id,projection_id)
+);
+ALTER TABLE evimed_vcr.cloud_reads ADD COLUMN IF NOT EXISTS windows jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE TABLE IF NOT EXISTS evimed_vcr.matching_candidates (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  snapshot_id text NOT NULL REFERENCES evimed_vcr.snapshots(id) ON DELETE CASCADE,
+  subject_key text NOT NULL,
+  visible_at timestamptz NOT NULL,
+  PRIMARY KEY(study_id,snapshot_id,subject_key)
+);
+
+CREATE TABLE IF NOT EXISTS evimed_vcr.matching_inputs (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  id text NOT NULL,
+  manifest jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (study_id, id)
+);
+
+ALTER TABLE evimed_vcr.matching_inputs ADD COLUMN IF NOT EXISTS outcomes jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.sites (
   id             text PRIMARY KEY,

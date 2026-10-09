@@ -100,6 +100,11 @@ export class VcrEvidenceStore extends VcrStoreBase {
         ],
       );
       const row = result.rows[0] ?? null;
+      if (row?.record_hash && recordText) {
+        await handle.query(`INSERT INTO ${VCR_SCHEMA}.precedent_versions(precedent_id,record_hash,record_text,snapshot)
+          VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT(precedent_id,record_hash) DO UPDATE SET last_seen_at=now()`,
+        [row.id,row.record_hash,recordText,JSON.stringify(row)]);
+      }
       if (row && studyId) {
         await handle.query(
           `INSERT INTO ${VCR_SCHEMA}.study_precedents (study_id, precedent_id, user_id) VALUES ($1, $2, $3)
@@ -113,6 +118,16 @@ export class VcrEvidenceStore extends VcrStoreBase {
       return row;
     };
     return client ? run(client) : this.transaction(run);
+  }
+
+  /** Immutable registry evidence, scoped through the account and its study association.
+   * @param {string} userId @param {string} studyId @param {string} precedentId */
+  async registryVersions(userId, studyId, precedentId) {
+    return this.rows(`SELECT v.record_hash,v.first_seen_at,v.last_seen_at,v.snapshot->>'eligibility_text' AS eligibility_text,
+      v.snapshot->>'fetched_at' AS fetched_at FROM ${VCR_SCHEMA}.precedent_versions v
+      JOIN ${VCR_SCHEMA}.precedents p ON p.id=v.precedent_id
+      JOIN ${VCR_SCHEMA}.study_precedents sp ON sp.precedent_id=p.id AND sp.study_id=$2
+      WHERE p.user_id=$1 AND p.id=$3 ORDER BY v.first_seen_at DESC,v.record_hash LIMIT 100`, [userId,studyId,precedentId]);
   }
 
   /**
@@ -166,9 +181,13 @@ export class VcrEvidenceStore extends VcrStoreBase {
    * A precedent this study uses, with its preserved text: what a quotation
    * written by a run is checked against. A precedent the study does not use is
    * not found, whoever owns it.
-   * @param {{ userId: string, studyId: string, registry: string, registryId: string }} query
+   * @param {{ userId: string, studyId: string, registry: string, registryId: string, recordHash?:string|null }} query
    */
-  async precedentOfStudy({ userId, studyId, registry, registryId }) {
+  async precedentOfStudy({ userId, studyId, registry, registryId, recordHash = null }) {
+    if (recordHash) return this.one(`SELECT p.*,v.record_hash,v.record_text FROM ${VCR_SCHEMA}.precedents p
+      JOIN ${VCR_SCHEMA}.study_precedents sp ON sp.precedent_id=p.id AND sp.study_id=$2
+      JOIN ${VCR_SCHEMA}.precedent_versions v ON v.precedent_id=p.id AND v.record_hash=$5
+      WHERE p.user_id=$1 AND p.registry=$3 AND p.registry_id=$4`,[userId,studyId,registry,registryId,recordHash]);
     return this.one(
       `SELECT p.* FROM ${VCR_SCHEMA}.precedents p
          JOIN ${VCR_SCHEMA}.study_precedents sp ON sp.precedent_id = p.id AND sp.study_id = $2

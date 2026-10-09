@@ -1,3 +1,6 @@
+import { createVcrCloudEgress } from './vcrCloudEgress.mjs';
+import { VcrStore } from './vcrStore.mjs';
+import { vcrCloudDestinations } from './vcrCloudProjection.mjs';
 import { renderEvolutionToolContext } from './evolutionToolContext.mjs';
 import { routeExplicitEvolutionTool } from './evolutionToolRouting.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
@@ -1855,6 +1858,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // controller's disposable container, like a document export does.
     intakeController,
   });
+  // Processing a projection does not authorize copying it into account-wide
+  // methods, memory capsules or the shared evaluation corpus.
+  const vcrPrivacyStore = vcr?.store ?? (productDatabase ? new VcrStore({database:productDatabase}) : null);
+  const canReuseRun = async (project, run) => !vcrPrivacyStore || !await vcrPrivacyStore.hasClinicalContext(
+    project.userId, project.id, [{ sessionId: run.sessionId, runId: run.id }]);
 
   /**
    * The newest run of a GEO project's control-plane project that holds the
@@ -2108,6 +2116,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     onSignIn: (userId) => warmAfterSignIn(userId),
   });
   const memoryIntelligence = new MemoryIntelligence(config, researchMemory, {
+    canReuseRun,
     // A conversation that changes a memory the researcher confirmed is worth
     // telling them about, and the inbox is where that is told. It never holds
     // the write back: see contradictedValue in memoryIntelligence.mjs.
@@ -2478,6 +2487,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const service = new ReviewService({
       config, database: productDatabase, jobs: productJobs, usageLedger, runtimeManager, store, agentRegistry,
       attributeRun: (input) => attributeRun(input),
+      assertModelAccess: (caller, body) => assertVcrCloudAccess?.(caller, body) ?? Promise.resolve(),
       notifications: notificationService,
       imService: { sendRunCorrection: (userId, projectId, runId, text) => im?.service?.sendRunCorrection?.(userId, projectId, runId, text) },
       webReader: { read: (url, options) => webReader.read(url, options) },
@@ -2880,6 +2890,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // Best effort, and it audits its own failure: a throw in this callback is
       // caught by `finishInternal` and then caught again, so a step that does
       // not report for itself fails invisibly.
+      const reusableClinicalContext = await canReuseRun(project, run).catch(() => false);
       await trackLearningWrite((async () => {
         try {
           // A stop already read this one while its container was alive. That
@@ -2893,7 +2904,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
-          if (evolution) await evolution.finishRun(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
+          if (evolution && reusableClinicalContext) await evolution.finishRun(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
           // The web pages the run read (contract X5), off the same transcript:
           // each `web_read` result carries the gateway's receipt. A write of
           // its own, so a ledger at its ceiling costs this list and never the
@@ -2911,6 +2922,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               code: receipt.missing[0]?.reason ?? "incomplete",
             });
           }
+          if (!reusableClinicalContext) return;
           // What actually fed what, for the evaluation corpus.
           //
           // Every edge in all fifteen tool graphs is `via: "schema"` — a type
@@ -2973,7 +2985,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // The project says so as well as the runtime: `evaluationRun` is read
       // from memory the web process loses on every release, and a cell that
       // finishes after one would otherwise be read as the researcher's own run.
-      if (evaluationRun || isInternalProject(project.id)) return;
+      if (evaluationRun || isInternalProject(project.id) || !reusableClinicalContext) return;
       // Nor does the platform's own background work: a distillation, a
       // relations pass or a source being understood reads excerpts of the
       // researcher's runs, and extracting memory from it paid a model call to
@@ -3285,7 +3297,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }),
     });
     learningTriggers = new LearningTriggers({
-      jobs: productJobs, agentRuns, memory: researchMemory,
+      jobs: productJobs, agentRuns, memory: researchMemory, canReuseRun,
       // A conversation trying someone else's capsule teaches the loop nothing.
       sessionState: researchMemory.configured
         ? (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId) : null,
@@ -3751,6 +3763,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evaluationIsolation = createEvaluationIsolation({ dataDir: config.dataDir,
     resolveRunId: identity => identity.runId ?? attributeRun(identity) });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
+    clinicalContext: vcrPrivacyStore ? (identity, runs) => vcrPrivacyStore.hasClinicalContext(identity.userId, identity.projectId,
+      runs.map(run => ({ sessionId: run.sessionId, runId: run.id }))) : null,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
     // project's running runs, each conversation's own state, and the run
     // ledger line that records what it was handed.
@@ -3775,8 +3789,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
   const dataSemanticsGatewayHandler = createDataSemanticsGateway({ config, runtimeManager, store, service: dataSemantics });
   const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store, evaluationIsolation });
+  const assertVcrCloudAccess = vcrPrivacyStore ? createVcrCloudEgress({ store: vcrPrivacyStore, destinations: () => vcrCloudDestinations(config),
+    resolveSession: async caller => {
+      const project = await store.requireProject({ id: caller.userId }, caller.projectId);
+      const runs = await agentRuns.list(project);
+      const runId = caller.runId ?? agentRuns.runIdForSession(caller.sessionId, runs);
+      return runs.find(row => row.id === runId)?.sessionId ?? caller.sessionId ?? null;
+    },
+  }) : null;
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
+    assertModelAccess: assertVcrCloudAccess,
     usageLedger,
     attributeRun,
     runPurpose,
@@ -3902,7 +3925,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // a read answers aggregates and structure only, and a write refuses item by
   // item (build plan §11.2 layer 3).
   const vcrGatewayHandler = createVcrGatewayHandler(config, runtimeManager, {
-    vcr, report: (code) => process.stderr.write(`vcr gateway: ${code}\n`),
+    vcr, attributeRun, report: (code) => process.stderr.write(`vcr gateway: ${code}\n`),
+    readProducerRun: async (study, runId) => {
+      const project = await store.requireProject({ id: study.userId }, study.projectId);
+      const run = (await agentRuns.list(project)).find(row => row.id === runId);
+      return run ? { id: run.id, sessionId: run.sessionId ?? null, agentId: run.agentId ?? null, model: run.model ?? null,
+        platformSkills: run.platformSkillGeneration ?? null, personalSkills: run.personalSkillGeneration ?? null,
+        methods: run.methodsLoaded ?? [], handbooks: run.capabilityHandbooks ?? [] } : null;
+    },
   });
   const geoGatewayHandler = createGeoGatewayHandler(config, runtimeManager, {
     geo, report: (code) => process.stderr.write(`geo gateway: ${code}\n`),

@@ -207,6 +207,7 @@
         "mine": false,
         "readable": true,
         "canGrant": false,
+        "cloudPermission": null,
         "status": "frozen",
         "statusLabel": "已冻结",
         "valueSource": "observed",
@@ -218,6 +219,7 @@
         "window": "2020-01-01 至 不限",
         "retention": "保留至 2030-01-01；五年",
         "upload": {
+          "cloudDestinations": [],
           "formats": [
             "csv",
             "tsv",
@@ -656,6 +658,7 @@
         "mine": true,
         "readable": true,
         "canGrant": true,
+        "cloudPermission": null,
         "status": "profiled",
         "statusLabel": "已上传",
         "valueSource": "extracted",
@@ -666,6 +669,7 @@
         "window": null,
         "retention": null,
         "upload": {
+          "cloudDestinations": [],
           "formats": [
             "csv",
             "tsv",

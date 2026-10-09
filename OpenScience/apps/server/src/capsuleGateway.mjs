@@ -27,11 +27,12 @@ export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
  * 无痕 and 「本次不用」 were read here until 2026-09-20 and are gone with the bar
  * that was their only control.
  * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any, evaluationIsolation?: any, handbooks?: any,
+ *   clinicalContext?: ((identity:any,runs:any[])=>Promise<boolean>) | null,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
-export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null }) {
+export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null, clinicalContext = null }) {
   const windows = new Map();
   /** @param {any} req @param {any} res @param {(failure:any)=>void} [onFailure] */
   return async (req, res, onFailure) => {
@@ -87,6 +88,11 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       // A ledger that cannot be read leaves the recall as it was before this
       // existed rather than failing it.
       const running = sessions ? await sessions.running(currentUser, project).catch(() => []) : [];
+      if (action === "note" && await clinicalContext?.(identity, running)) {
+        sendJson(res, 200, { entry: null, reviewRequired: false, takesEffect: false, contextOnly: true,
+          notice: "本次对话读取了受试者资料，内容保留在该研究中，不写入通用研究记忆。" });
+        return;
+      }
       const states = sessions
         ? await Promise.all(running.map((run) => sessions.state(currentUser.id, identity.projectId, run.sessionId)
           .catch(() => ({ trialCapsuleId: null }))))

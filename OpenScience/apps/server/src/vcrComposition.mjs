@@ -1,3 +1,6 @@
+import { CLINICAL_FACT_CONTRACT, clinicalTerminologyContext } from '@evimed/domain';
+import { clinicalSemanticFields } from '@evimed/domain';
+import { clinicalDocumentWindow } from './vcrDocumentWindow.mjs';
 /**
  * 「虚拟临研」, composed: the seven packages joined into the one object the
  * control plane registers (build plan 2026-09-28 §11.2, build contract §2).
@@ -95,6 +98,7 @@ import {
   VCR_MATCHING_VOCABULARY_VERSION, assessSubject, eligibilityCounts, frozenAsOf, languageKeysOf, requiresLanguageJudgment,
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
+import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 
 /**
  * The data-plane seam the service reads through: the page's tab, the one-line
@@ -175,7 +179,7 @@ export function vcrDataPlaneSeam({ dataPlane, access }) {
  */
 const LOCAL_EXECUTOR_LOCK_HASH = createHash("sha256").update("evimed-control-plane:matching.evaluate:1.0.0").digest("hex");
 
-/** The most subjects one evaluation takes; a study larger than this is evaluated in the next run of the recheck loop. */
+/** The most subjects one evaluation takes; coverage names the next explicit offset. */
 export const VCR_MATCHING_MAX_SUBJECTS = 5_000;
 
 /** How the frozen context of a matching job rides in its `inputs` (contract §3.1 has no scenario key for it). */
@@ -236,23 +240,31 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
     if (!study) throw Object.assign(new Error("The study of this job is gone."), { code: "vcr_study_not_found" });
     const { asOf, protocolVersionId, vocabularyVersion } = matchingContextOf(job?.inputs);
 
-    const frozenIds = list(object(job?.scenario).criteria).map((criterion) => String(object(criterion).id ?? ""));
-    const criteria = (await matchStore.listCriteria({ studyId, protocolVersionId })).filter((criterion) => frozenIds.includes(criterion.id));
-    if (!criteria.length) throw Object.assign(new Error("None of the job's criteria is a criterion of this study."), { code: "vcr_criteria_missing" });
-
-    const visibleBy = asOf;
-    const [allFacts, languageBySubject] = await Promise.all([
-      matchStore.listFacts({ studyId, visibleBy }), matchStore.latestLanguageJudgments({ studyId, visibleBy }),
+    const snapshotId = list(job.inputs).map(input => String(input.id ?? '')).find(id => id.startsWith(MATCHING_SNAPSHOT_PREFIX))?.slice(MATCHING_SNAPSHOT_PREFIX.length);
+    if (!snapshotId) throw new HttpError(409, 'vcr_matching_snapshot_missing', 'This older job has no frozen matching inputs. Queue a new evaluation.');
+    const snapshot = verifyMatchingSnapshot(await matchStore.matchingSnapshot(studyId, snapshotId), studyId, snapshotId);
+    if (snapshot.protocolVersionId !== protocolVersionId || snapshot.asOf !== asOf) throw new HttpError(409, 'vcr_matching_input_changed', 'The job and its frozen inputs disagree.');
+    const frozenIds = list(object(job?.scenario).criteria).map((criterion) => String(object(criterion).id ?? ''));
+    const criteria = snapshot.criteria;
+    if (!criteria.length || criteria.length !== frozenIds.length || criteria.some((/** @type {any} */ c) => !frozenIds.includes(c.id))) {
+      throw new HttpError(409, 'vcr_criteria_missing', 'The scenario and its frozen criteria disagree.');
+    }
+    const [frozenFacts, frozenJudgments] = await Promise.all([
+      matchStore.matchingFactsByIds(studyId, snapshot.facts.map((/** @type {any} */ row) => row.id)),
+      matchStore.languageJudgmentsByIds(studyId, snapshot.languages.map((/** @type {any} */ row) => row.id)),
     ]);
+    const { facts: allFacts, languages: languageBySubject } = hydrateMatchingInputs(snapshot, frozenFacts, frozenJudgments);
     /** @type {Map<string, any[]>} */
     const factsBySubject = new Map();
     for (const fact of allFacts) factsBySubject.set(fact.subjectKey, [...(factsBySubject.get(fact.subjectKey) ?? []), fact]);
-    const subjects = [...new Set([...factsBySubject.keys(), ...languageBySubject.keys()])].sort().slice(0, VCR_MATCHING_MAX_SUBJECTS);
+    const subjects = snapshot.subjects.slice(snapshot.offset, snapshot.offset + snapshot.limit);
 
     /** @type {any[]} */
     const assessments = [];
     /** @type {string[]} */
     const errors = [];
+    /** @type {Record<string, any>} */
+    const outcomes = {};
     let voidedTotal = 0;
     let done = 0;
     for (const subjectKey of subjects) {
@@ -270,17 +282,22 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
           if (document) loaded[documentId] = { text: document.text };
         }
         const assessment = assessSubject({
-          studyId, protocolVersionId, subjectKey, asOf, direction: "trial_to_patient", criteria, facts, documents: loaded, modelJudgments, provenance: { vocabularyVersion },
+          studyId, protocolVersionId, subjectKey, asOf, direction: snapshot.direction, criteria, facts, documents: loaded, modelJudgments,
+          provenance: { vocabularyVersion, inputSnapshotId: snapshotId },
         });
         voidedTotal += assessment.voidedFacts.length;
+        outcomes[subjectKey] = { state: "evaluated", jobId: job.id };
         assessments.push({ ...assessment, counts: { ...assessment.counts, voidedFacts: assessment.voidedFacts.length } });
       } catch (error) {
-        errors.push(String(/** @type {any} */ (error)?.code ?? "vcr_evaluation_failed"));
+        const code = String(/** @type {any} */ (error)?.code ?? "vcr_evaluation_failed");
+        errors.push(code);
+        outcomes[subjectKey] = { state: "unavailable", code, jobId: job.id };
       }
       done += 1;
       if (done % 10 === 0) await onProgress({ done, total: subjects.length });
     }
     await onProgress({ done, total: subjects.length });
+    await matchStore.recordMatchingOutcomes?.(studyId, snapshotId, outcomes);
 
     const tally = assessments.reduce((acc, row) => { acc[row.summary] = (acc[row.summary] ?? 0) + 1; return acc; }, /** @type {Record<string, number>} */ ({}));
     // Deterministic tallies, not a score: how many subjects each summary holds,
@@ -301,8 +318,11 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
       diagnostics: {
         criteria: criteria.length, subjects: assessments.length, asOf, protocolVersionId, voidedFacts: voidedTotal,
         errors: errors.length, ...(errors.length ? { errorCodes: [...new Set(errors)] } : {}),
-        // What this run did not see: subjects past the cap wait for the next run.
-        subjectsNotEvaluated: Math.max(0, new Set([...factsBySubject.keys(), ...languageBySubject.keys()]).size - subjects.length),
+        requestedSubjects: snapshot.subjects.length, batchOffset: snapshot.offset, batchSubjects: subjects.length,
+        subjectsNotEvaluated: Math.max(0, snapshot.subjects.length - assessments.length),
+        batchEvaluated: assessments.length, batchUnavailable: errors.length,
+        outsideBatch: Math.max(0, snapshot.subjects.length - subjects.length), inputSnapshotId: snapshotId,
+        nextOffset: snapshot.offset + subjects.length < snapshot.subjects.length ? snapshot.offset + subjects.length : null,
       },
       tables: [],
       // Per-subject rows leave through the finish hook only: a result row
@@ -340,7 +360,31 @@ export function vcrDocumentsSeam({ dataPlane }) {
       if (!dataPlane) return null;
       const document = await dataPlane.documentText({ studyId: study.id, documentId, principal: study.userId, purpose: VCR_JOB_PURPOSE });
       if (!document || String(document.subjectKey ?? "") !== String(subjectKey)) return null;
-      return { id: document.id, text: String(document.text), visibleAt: document.visibleAt ?? null, subjectKey: String(document.subjectKey) };
+      return { id: document.id, text: String(document.text), visibleAt: document.visibleAt ?? null, subjectKey: String(document.subjectKey),
+        sourceHash: document.sourceHash ?? null, projectionHash: document.projectionHash ?? null };
+    },
+    /** The only document reader used by a cloud run. @param {any} study @param {any} input */
+    async runtimeRead(study, { subjectKey, documentId }) {
+      if (!dataPlane) return null;
+      const document = await dataPlane.projectionText({ studyId: study.id, documentId, principal: study.userId, purpose: VCR_JOB_PURPOSE, cloudContext: study.cloudContext }, true);
+      if (!document || document.subjectKey !== subjectKey) return null;
+      return document;
+    },
+    /** A quote or fact written under a revoked/legacy permission is not sent back out.
+     * @param {any} study @param {any[]} entries @param {string} subjectKey */
+    async runtimeEvidence(study, entries, subjectKey) {
+      const decisions = new Map();
+      const result = [];
+      for (const entry of entries) {
+        const source = entry.source ?? entry.locator ?? entry;
+        const id = String(source.documentId ?? '');
+        if (!id.startsWith('prj_')) continue;
+        if (!decisions.has(id)) decisions.set(id, await this.runtimeRead(study, { subjectKey, documentId: id }).catch(() => null));
+        const document = decisions.get(id);
+        const quote = source.quote ?? entry.quote;
+        if (document?.id === id && typeof quote === 'string' && document.text.slice(source.start, source.end) === quote) result.push(entry);
+      }
+      return result;
     },
     /**
      * `vcr_read what: "subject_document"`. With no filter, the subjects that have
@@ -354,16 +398,20 @@ export function vcrDocumentsSeam({ dataPlane }) {
       const subjectKey = filter?.subjectKey ? String(filter.subjectKey) : null;
       if (filter?.documentId) {
         if (!subjectKey) return { available: false, code: "vcr_read_filter_invalid", message: "读取一份文档要同时写 subjectKey 和 documentId。" };
-        const document = await this.read(study, { subjectKey, documentId: String(filter.documentId) }).catch(() => null);
+        let document;
+        try { document = await this.runtimeRead(study, { subjectKey, documentId: String(filter.documentId) }); }
+        catch (error) { return { available: false, code: String(/** @type {any} */ (error)?.code ?? 'vcr_projection_unavailable'),
+          message: '这份病历尚无适用的云端处理授权或已审阅的脱敏文本；其他工作可以继续。' }; }
         if (!document) return { available: false, code: "vcr_document_not_found", message: "这位受试者没有这份文档。" };
         const offset = Math.max(0, Number(filter?.offset ?? 0));
-        const text = document.text.slice(offset, offset + this.windowChars);
-        return { available: true, document: { id: document.id, subjectKey, chars: document.text.length, offset, visibleAt: document.visibleAt,
-          text, more: offset + text.length < document.text.length } };
+        const window = clinicalDocumentWindow(document.text, offset, this.windowChars);
+        if (study.cloudContext && dataPlane.recordDocumentWindow) await dataPlane.recordDocumentWindow(study.id, document.id, study.cloudContext, window);
+        return { available: true, document: { id: document.id, subjectKey, chars: document.text.length, visibleAt: document.visibleAt,
+          ...window, projectionHash: document.projectionHash } };
       }
       const documents = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId, subjectKey });
       if (subjectKey) {
-        return { available: true, documents: documents.map((entry) => ({ id: entry.id, name: entry.name, chars: entry.chars, visibleAt: entry.visibleAt })) };
+        return { available: true, documents: documents.map((entry) => ({ id: entry.id, name: "病历文档", chars: entry.chars, visibleAt: entry.visibleAt })) };
       }
       /** @type {Map<string, number>} */
       const bySubject = new Map();
@@ -398,12 +446,12 @@ function matchingInputs({ asOf, protocolVersionId, facts, judgments }) {
  * the object the service and the gateway read through is assembled here.
  *
  * @param {{ matchStore: VcrMatchStore, store: VcrStore, jobs?: VcrJobs | null,
- *   getNotifier?: (() => any) | null, report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string }} parts
+ *   getNotifier?: (() => any) | null, report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string, documents?:any, clinicalEnabled?:(study:any)=>boolean, clinicalContext?:(study:any,criteria:any[])=>Promise<any> }} parts
  */
-export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "" }) {
+export function vcrMatchingSeam({ matchStore, store, documents = null, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "", clinicalEnabled = () => false, clinicalContext = async () => null }) {
   /** @param {any} study */
-  const languageKeys = async (study) => {
-    const criteria = await matchStore.listCriteria({ studyId: study.id }).catch(() => []);
+  const languageKeys = async (study, /** @type {string|null} */ protocolVersionId = null) => {
+    const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId }).catch(() => []);
     return [...new Set(criteria.flatMap((criterion) => languageKeysOf(criterion.requirement, criterion.id)))];
   };
 
@@ -420,7 +468,7 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
         matchStore.listSites(study.id).catch(() => []),
         matchStore.referralProgress(study.id).catch(() => new Map()),
         matchStore.siteFunnel(study.id).catch(() => []),
-        matchStore.assessmentTallies(study.id).catch(() => ({})),
+        matchStore.assessmentTallies(study.id, protocol?.id ?? null).catch(() => ({})),
         matchStore.criterionFunnelRows(study.id, protocol?.id ?? null).catch(() => []),
       ]);
       return {
@@ -460,13 +508,25 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
      * @param {any} study @param {Record<string, any>} filter
      */
     async runtimeRead(study, filter) {
-      const protocol = await matchStore.latestProtocol(study.id).catch(() => null);
+      if (filter.snapshotId) {
+        const snapshot = await matchStore.matchingSnapshot(study.id, String(filter.snapshotId));
+        const progress = await matchStore.matchingProgress(study.id, String(filter.snapshotId));
+        return { inputSnapshotId: String(filter.snapshotId), protocolVersionId: snapshot.protocolVersionId,
+          asOf: snapshot.asOf, requested: progress.length,
+          subjects: progress.slice(Number(filter.offset ?? 0), Number(filter.offset ?? 0) + Number(filter.limit ?? 20)),
+          more: Number(filter.offset ?? 0) + Number(filter.limit ?? 20) < progress.length,
+          coverage: Object.fromEntries(['evaluated','pending','unavailable'].map(state => [state, progress.filter(row => row.state === state).length])) };
+      }
+      const protocol = filter.protocolVersionId ? (await matchStore.protocols(study.id, String(filter.protocolVersionId)))[0] ?? null
+        : await matchStore.latestProtocol(study.id).catch(() => null);
       if (!protocol) {
         return { protocol: null, criteria: [], subjects: [], note: "还没有入排条件：先在方案步骤里写入排条件。" };
       }
       const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id });
       const subjectKey = filter?.subjectKey ? String(filter.subjectKey) : null;
       const view = {
+        factContract: clinicalEnabled(study) ? CLINICAL_FACT_CONTRACT : null,
+        terminology: clinicalEnabled(study) ? await clinicalContext(study,criteria).catch(() => null) : null,
         protocol,
         criteria: criteria.map((criterion) => ({
           id: criterion.id, ordinal: criterion.ordinal, kind: criterion.kind, criterionType: criterion.criterionType,
@@ -477,12 +537,15 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
       };
       if (subjectKey) {
         const [assessment, facts, judgments] = await Promise.all([
-          matchStore.latestAssessment({ studyId: study.id, subjectKey }),
+          matchStore.latestAssessment({ studyId: study.id, subjectKey, protocolVersionId: protocol.id }),
           matchStore.listFacts({ studyId: study.id, subjectKey }),
-          matchStore.latestLanguageJudgments({ studyId: study.id }),
+          matchStore.latestLanguageJudgments({ studyId: study.id, protocolVersionId: protocol.id }),
         ]);
         const full = assessment ? await matchStore.getAssessment(assessment.id, study.id) : null;
         const answered = Object.keys(judgments.get(subjectKey) ?? {});
+        const cloudFacts = documents ? await documents.runtimeEvidence(study, facts, subjectKey) : [];
+        const cloudJudgments = full ? await Promise.all(full.judgments.map(async judgment => ({ ...judgment,
+          evidence: documents ? await documents.runtimeEvidence(study, list(judgment.evidence), subjectKey) : [] }))) : [];
         return {
           ...view, subjectKey,
           assessment: full ? {
@@ -492,7 +555,7 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
             criteriaCounts: Object.fromEntries(Object.entries(object(full.counts))
               .filter(([key]) => ["satisfied", "not_satisfied", "unknown", "pending_recheck", "notApplicable"].includes(key))),
             evidenceGaps: full.evidenceGaps,
-            judgments: full.judgments.map((judgment) => ({
+            judgments: cloudJudgments.map((judgment) => ({
               criterionId: judgment.criterionId, state: judgment.state, applicable: judgment.applicable, decidedBy: judgment.decidedBy,
               recheckAt: judgment.recheckAt,
               // The state a person set is a fact about the criterion; who set it, and what they wrote, are not the run's.
@@ -500,24 +563,26 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
               evidence: list(judgment.evidence).map((item) => ({ quote: object(item).quote ?? "", locator: object(item).locator ?? null })),
             })),
           } : null,
-          facts: facts.map((fact) => ({ id: fact.id, variable: fact.variable, value: fact.value, unit: fact.unit, polarity: fact.polarity,
-            occurredAt: fact.occurredAt, visibleAt: fact.visibleAt, surface: fact.surface, source: fact.source })),
+          semanticFields: clinicalSemanticFields(cloudFacts),
+          facts: cloudFacts.map((fact) => ({ id: fact.id, variable: fact.variable, value: fact.value, unit: fact.unit, polarity: fact.polarity,
+            occurredAt: fact.occurredAt, visibleAt: fact.visibleAt, surface: fact.surface, source: fact.source, clinical: fact.clinical ?? null })),
           // The language criteria this subject still has no answer for: what the run owes.
           requests: view.criteria.filter((criterion) => criterion.languageKeys.length)
             .flatMap((criterion) => criterion.languageKeys.filter((key) => !answered.includes(key)).map((key) => ({ criterionKey: key, criterionId: criterion.id }))),
         };
       }
       const [tallies, funnel, subjects, gaps] = await Promise.all([
-        matchStore.assessmentTallies(study.id),
+        matchStore.assessmentTallies(study.id, protocol?.id ?? null),
         matchStore.criterionFunnelRows(study.id, protocol.id),
-        matchStore.subjectSummaries(study.id),
-        matchStore.evidenceGapCounts(study.id),
+        matchStore.subjectSummaries(study.id, protocol?.id ?? null),
+        matchStore.evidenceGapCounts(study.id, protocol?.id ?? null),
       ]);
       const offset = Math.max(0, Number(filter?.offset ?? 0));
       const limit = Math.max(1, Number(filter?.limit ?? 20));
       const factSubjects = await matchStore.factSubjects(study.id);
+      const roster = await matchStore.candidateSubjects({ studyId: study.id });
       const known = new Map(subjects.map((row) => [row.subjectKey, row.summary]));
-      const keys = [...new Set([...known.keys(), ...factSubjects.map((entry) => entry.subjectKey)])].sort();
+      const keys = [...new Set([...roster, ...known.keys(), ...factSubjects.map((entry) => entry.subjectKey)])].sort();
       return {
         ...view,
         // Cells of siblings, so the boundary can hide the small ones together with the next-smallest.
@@ -542,28 +607,71 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
      * Freeze a `match_criteria` job's scenario and inputs from what the study
      * holds now: the newest protocol's criteria (by id, with the placeholder
      * state the domain's schema asks of the engine variant — the local executor
-     * never reads it), the instant to the minute, and a token of the facts.
-     * @param {any} study
+     * never reads it), the exact instant, and immutable references to the facts and language judgments.
+     * @param {any} study @param {{protocolVersionId?:string,subjectKeys?:string[],direction?:string,offset?:number,asOf?:string,snapshotId?:string}} [selection]
      */
-    async matchScenario(study) {
-      const protocol = await matchStore.latestProtocol(study.id);
+    async matchScenario(study, selection = {}) {
+      selection = matchingSelection(selection);
+      if (selection.snapshotId) {
+        const previous = await matchStore.matchingSnapshot(study.id, selection.snapshotId);
+        const offset = selection.offset ?? previous.offset;
+        if (offset < 0 || offset >= previous.subjects.length) throw new HttpError(400, 'vcr_matching_selection_invalid', 'Offset is outside the frozen candidate roster.');
+        const payload = { ...previous, offset };
+        const id = createHash('sha256').update(canonicalScenarioJson(payload)).digest('hex');
+        await matchStore.saveMatchingSnapshot({ id, payload });
+        return { ok: true, protocolVersionId: payload.protocolVersionId,
+          scenario: { criteria: payload.criteria.map(criterion => ({ id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: 'unknown' })) },
+          inputs: [{ kind: 'evidence', id: `matching:asof:${payload.asOf}` }, { kind: 'evidence', id: `matching:protocol:${payload.protocolVersionId}` },
+            { kind: 'evidence', id: `${MATCHING_SNAPSHOT_PREFIX}${id}` }] };
+      }
+      const latest = await matchStore.latestProtocol(study.id);
+      const protocol = selection.protocolVersionId ? { id: selection.protocolVersionId } : latest;
       const criteria = protocol ? await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }) : [];
       if (!protocol || !criteria.length) {
         return { ok: false, message: "还没有入排条件：先在方案步骤里写入排条件，再评估。" };
       }
       if (criteria.length > 500) return { ok: false, message: "入排条件超过 500 条，一次评估放不下。" };
-      const minute = new Date(Math.floor(now().getTime() / 60_000) * 60_000).toISOString();
-      const [facts, languages] = await Promise.all([
-        matchStore.listFacts({ studyId: study.id, visibleBy: minute }), matchStore.latestLanguageJudgments({ studyId: study.id, visibleBy: minute }),
+      const minute = selection.asOf ? frozenAsOf(selection.asOf) : now().toISOString();
+      const [facts, languages, roster] = await Promise.all([
+        matchStore.listFacts({ studyId: study.id, visibleBy: minute }), matchStore.latestLanguageJudgments({ studyId: study.id, visibleBy: minute, protocolVersionId: protocol.id }),
+        matchStore.candidateSubjects({ studyId: study.id, visibleBy: minute }),
       ]);
+      if (selection.subjectKeys?.some(key => !roster.includes(key))) throw new HttpError(404, 'vcr_subject_not_found', 'A requested subject is not in this study at this time.');
+      const subjects = selection.subjectKeys ?? roster;
+      const offset = selection.offset ?? 0;
+      if (!Number.isSafeInteger(offset) || offset < 0 || (subjects.length && offset >= subjects.length)) throw new HttpError(400, 'vcr_read_filter_invalid', 'The candidate offset is outside this roster.');
+      const snapshot = freezeMatchingInputs({ studyId: study.id, protocolVersionId: protocol.id, asOf: minute, criteria, facts, languages,
+        subjects, direction: selection.direction, offset, limit: VCR_MATCHING_MAX_SUBJECTS });
+      await matchStore.saveMatchingSnapshot(snapshot);
       const judgments = [...languages.entries()].map(([subject, entry]) => [subject, Object.entries(entry).map(([key, value]) => [key, value.state, list(value.evidence).length])]);
       return {
         ok: true, protocolVersionId: protocol.id,
         scenario: { criteria: criteria.map((criterion) => ({
           id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: "unknown",
         })) },
-        inputs: matchingInputs({ asOf: minute, protocolVersionId: protocol.id, facts, judgments }),
+        inputs: [...matchingInputs({ asOf: minute, protocolVersionId: protocol.id, facts, judgments }), { kind: 'evidence', id: `${MATCHING_SNAPSHOT_PREFIX}${snapshot.id}` }],
       };
+    },
+
+    /** @param {any} study @param {any} raw @param {string} [actor] */
+    async enqueuePanel(study, raw, actor = 'runtime') {
+      if (!jobs) throw new HttpError(503, 'vcr_gateway_unavailable', 'Matching jobs are unavailable.');
+      const selection = matchingSelection(raw);
+      const protocols = selection.protocolVersionIds ?? [selection.protocolVersionId ?? null];
+      const at = selection.asOf ?? now().toISOString();
+      const queued = []; const unavailable = [];
+      for (const protocolVersionId of protocols) {
+        try {
+          const { protocolVersionIds: _panel, ...single } = selection;
+          const built = await this.matchScenario(study, selection.snapshotId ? single : { ...single, asOf: at, protocolVersionId });
+          if (!built.ok) throw new HttpError(409, 'vcr_criteria_missing', built.message);
+          const { job } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: 'match_criteria',
+            scenario: built.scenario, inputs: built.inputs, detail: { origin: actor, protocolVersionId: built.protocolVersionId },
+            idempotencyKey: `vcr:${study.id}:matching:${built.protocolVersionId}` });
+          queued.push({ jobId: job.id, state: job.state, protocolVersionId: built.protocolVersionId });
+        } catch (error) { unavailable.push({ protocolVersionId, code: String(/** @type {any} */ (error)?.code ?? 'vcr_matching_unavailable') }); }
+      }
+      return { jobs: queued, unavailable, requested: protocols.length, asOf: at };
     },
 
     /**
@@ -593,7 +701,7 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
             assessment: {
               studyId: study.id, protocolVersionId: assessment.protocolVersionId ?? diagnostics.protocolVersionId ?? null,
               subjectKey: assessment.subjectKey, direction: assessment.direction, asOf: assessment.asOf, summary: assessment.summary,
-              counts: assessment.counts, priority: null, evidenceGaps: assessment.evidenceGaps, judgments: assessment.judgments,
+              counts: assessment.counts, priority: null, evidenceGaps: assessment.evidenceGaps, judgments: assessment.judgments, provenance: assessment.provenance,
             },
           }));
         } catch (error) {
@@ -918,7 +1026,9 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   /** @type {any} */
   let composed = null;
   const matching = vcrMatchingSeam({
-    matchStore, store, jobs, report, getNotifier: () => composed?.notifier ?? null, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""),
+    matchStore, store, documents, jobs, report, getNotifier: () => composed?.notifier ?? null, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""),
+    clinicalEnabled: study => list(config.vcrClinicalStudyIds).includes(study.id),
+    clinicalContext: async (study,criteria) => clinicalTerminologyContext((await knowledge.studyPack(study))?.pack,criteria),
   });
   // A matching job that has finished has its assessments persisted, its
   // candidates made referrals and its coordinators told — by the control plane,
@@ -1028,8 +1138,19 @@ export async function vcrMetricsSnapshot(vcr) {
   } catch {
     tables = null;
   }
+  let matching = null;
+  try {
+    matching = await vcr.store.one(`SELECT
+      (SELECT count(*)::int FROM evimed_vcr.matching_facts WHERE clinical IS NOT NULL) AS contextual_facts,
+      (SELECT count(*)::int FROM evimed_vcr.matching_facts WHERE clinical IS NULL) AS legacy_facts,
+      (SELECT count(*)::int FROM evimed_vcr.matching_producers) AS producer_receipts,
+      (SELECT count(*)::int FROM evimed_vcr.matching_assessments WHERE summary='insufficient_evidence') AS incomplete_assessments,
+      (SELECT count(*)::int FROM evimed_vcr.matching_inputs) AS frozen_batches,
+      (SELECT count(*)::int FROM evimed_vcr.document_projections) AS reviewed_projections`);
+  } catch { /* Missing metrics never stop research or masquerade as zero. */ }
   return {
     tables,
+    matching,
     service: vcr.service?.counters ?? {},
     jobs: vcr.jobs?.status?.() ?? null,
     orchestrator: vcr.orchestrator?.status?.() ?? null,
@@ -1076,6 +1197,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.intake?.counters) {
     add("intake_total", "What the intake conversions did since this process started: record documents converted or refused (needsText, unreadable, tooLong, tooLarge), conversions that timed out, failed or had no converter, and figures digitized or refused.", "counter",
       Object.entries(snapshot.intake.counters).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.matching) {
+    add('matching_records', 'Stored clinical matching records, including historical revisions; no patient or study labels.', 'gauge',
+      Object.entries(snapshot.matching).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   const loops = Object.entries(snapshot.worker?.loops ?? {}).filter(([, loop]) => loop?.wired);
   if (loops.length) {

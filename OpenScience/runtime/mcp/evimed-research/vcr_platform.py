@@ -141,7 +141,7 @@ def tool_definitions():
                 "(filter.query searches it); what: library lists the account's reusable population definitions. "
                 "what: matching answers criterion by criterion (how many subjects stand where, and the gaps) "
                 "and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's "
-                "judgments with their evidence quotes and the facts written for them, and the language criteria still "
+                "judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still "
                 "waiting for the run's answer."
             ),
             "inputSchema": {
@@ -158,9 +158,10 @@ def tool_definitions():
                             "sourceId": ID,
                             "subjectKey": ID,
                             "documentId": ID,
+                            "protocolVersionId": ID,
                             "query": {"type": "string", "minLength": 1, "maxLength": 200},
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
-                            "offset": {"type": "integer", "minimum": 0, "maximum": 10000},
+                            "offset": {"type": "integer", "minimum": 0, "maximum": 1048576},
                         },
                         "additionalProperties": False,
                     },
@@ -202,12 +203,10 @@ def tool_definitions():
         {
             "name": "vcr_simulate",
             "description": (
-                "Queue a deterministic computation on the 虚拟临研 engine and read where it got to. start returns a "
-                "jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed "
-                "batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the "
-                "frozen setting of one method and is refused by name (the field's path) when it carries a key the "
-                "engine does not read, lacks a required one, or asks for a design or endpoint the method does not "
-                "implement. Shapes (key? is optional; key[e] is read only when endpoint.type is e and refused for "
+                "Queue deterministic 虚拟临研 computation. start returns jobId; status returns progress and saved "
+                "results; cancel preserves completed batches. Numbers come from the engine, never the model. "
+                "Invalid scenario fields and unsupported designs/endpoints are refused by name (the field's path). "
+                "Shapes (key? is optional; key[e] is read only when endpoint.type is e and refused for "
                 "any other): design_analytic {design{kind,informationRates?,spending?,allocation?}, "
                 "endpoint{type}, truth{...}, analysis{alpha,power,sided}, accrual?[time_to_event]}; design_simulation "
                 "{design{kind,nTreat,nControl?,informationRates?}, endpoint{type}, truth{null?,...}, "
@@ -225,7 +224,8 @@ def tool_definitions():
                 "exists only for a time_to_event endpoint; alpha is the total, "
                 "sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, weight_comparator, ...) name "
                 "their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence and match_criteria are "
-                "built by the platform. The other comparator and robustness kinds and all shapes are in the "
+                "built by the platform. For matching, selection names one protocolVersionId or up to ten protocolVersionIds, "
+                "subjectKeys and direction; continue a frozen batch with snapshotId and offset. The other comparator and robustness kinds and all shapes are in the "
                 "vcr-analysis skill; maic_time_to_event_comparator takes reconstructionResultId, never rows."
             ),
             "inputSchema": {
@@ -239,6 +239,14 @@ def tool_definitions():
                     "replicates": {"type": "integer", "minimum": 1, "maximum": 10000000},
                     "cpuSecondsLimit": {"type": "integer", "minimum": 1, "maximum": 86400},
                     "subjectId": {"type": "string", "minLength": 1, "maxLength": 120},
+                    "selection": {"type": "object", "properties": {
+                        "protocolVersionId": ID,
+                        "protocolVersionIds": {"type": "array", "minItems": 1, "maxItems": 10, "items": ID},
+                        "subjectKeys": {"type": "array", "minItems": 1, "maxItems": 5000, "items": ID},
+                        "direction": {"type": "string", "enum": ["trial_to_patient", "patient_to_trial"]},
+                        "asOf": {"type": "string"}, "offset": {"type": "integer", "minimum": 0},
+                        "snapshotId": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+                    }, "additionalProperties": False},
                     "reconstructionResultId": ID,
                     "jobId": ID,
                 },
@@ -572,7 +580,7 @@ def simulate(arguments: dict) -> dict:
         if kind not in JOB_KINDS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
         payload["kind"] = kind
-        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId"):
+        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection"):
             if arguments.get(key) is not None:
                 payload[key] = arguments[key]
     else:

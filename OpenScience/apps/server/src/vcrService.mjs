@@ -37,7 +37,7 @@
 import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS } from './vcrMatching.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
-  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
+  clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
   VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
   vcrModelCardIssues, vcrModelInterfaceOf, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
 } from "@evimed/domain";
@@ -955,25 +955,29 @@ export class VcrService {
   async #match(study, query) {
     const matchStore = this.packages.matchStore;
     if (!matchStore) return null;
-    const protocol = await this.store.latestProtocolVersion(study.id).catch(() => null);
+    const protocols = typeof matchStore.protocols === 'function' ? await matchStore.protocols(study.id) : [];
+    const protocol = query.protocolVersionId ? protocols.find(row => row.id === query.protocolVersionId) ?? null
+      : protocols[0] ?? await this.store.latestProtocolVersion(study.id).catch(() => null);
+    if (query.protocolVersionId && !protocol) throw new HttpError(404, 'vcr_protocol_version_not_found', 'This protocol version is not in the study.');
+    const matchingArgs = [study.id, protocol?.id ?? null];
     const criteria = protocol ? await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }).catch(() => []) : [];
     const latest = `SELECT DISTINCT ON (subject_key) * FROM ${VCR_SCHEMA}.matching_assessments
-      WHERE study_id = $1 ORDER BY subject_key, as_of DESC, created_at DESC`;
+      WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id=$2) ORDER BY subject_key, as_of DESC, created_at DESC`;
     const [tallyRows, subjectRows, referrals, sites, siteFunnel, followups, gapRows, reviewRows] = await Promise.all([
-      matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l GROUP BY summary`, [study.id]).catch(() => []),
-      matchStore.rows(`SELECT * FROM (${latest}) l WHERE summary <> 'ineligible' ORDER BY subject_key LIMIT 200`, [study.id]).catch(() => []),
+      matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l GROUP BY summary`, matchingArgs).catch(() => []),
+      matchStore.rows(`SELECT * FROM (${latest}) l WHERE summary <> 'ineligible' ORDER BY subject_key LIMIT 200`, matchingArgs).catch(() => []),
       matchStore.listReferrals({ studyId: study.id, limit: 500 }).catch(() => []),
       matchStore.listSites(study.id).catch(() => []),
       matchStore.siteFunnel(study.id).catch(() => []),
       matchStore.listFollowupEpisodes({ studyId: study.id }).catch(() => []),
       matchStore.rows(`SELECT j.criterion_id, count(*)::int AS unknown FROM ${VCR_SCHEMA}.criterion_judgments j
-        WHERE j.assessment_id IN (SELECT id FROM (${latest}) l) AND j.applicable AND j.state = 'unknown' GROUP BY 1`, [study.id]).catch(() => []),
+        WHERE j.assessment_id IN (SELECT id FROM (${latest}) l) AND j.applicable AND j.state = 'unknown' GROUP BY 1`, matchingArgs).catch(() => []),
       // Excluded on a model's word alone: they wait in 「待复核排除」, so the
       // false-exclusion rate has a denominator (plan §7.1).
       matchStore.rows(`SELECT l.subject_key FROM (${latest}) l WHERE l.summary = 'ineligible'
         AND EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable AND j.state = 'not_satisfied')
         AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable
-          AND j.state = 'not_satisfied' AND j.decided_by <> 'model') ORDER BY l.subject_key LIMIT 200`, [study.id]).catch(() => []),
+          AND j.state = 'not_satisfied' AND j.decided_by <> 'model') ORDER BY l.subject_key LIMIT 200`, matchingArgs).catch(() => []),
     ]);
     const subjects = subjectRows.map((row) => ({
       id: String(row.id), subjectKey: String(row.subject_key), summary: String(row.summary), counts: row.counts ?? {},
@@ -1003,7 +1007,18 @@ export class VcrService {
     // ledger leaves its mark (plan §7.2), and the detail panel shows it.
     const focusReferral = focus ? referrals.find((referral) => referral.subjectKey === focus.subjectKey) ?? null : null;
     const referralEvents = focusReferral ? await matchStore.listReferralEvents(focusReferral.id).catch(() => []) : [];
+    const candidateRoster = typeof matchStore.candidateSubjects === 'function' ? await matchStore.candidateSubjects({ studyId: study.id }) : [];
+    const focusKey = query.candidate ?? focus?.subjectKey;
+    const comparisons = focusKey ? await Promise.all(protocols.map(async entry => ({ protocol: entry,
+      assessment: await matchStore.latestAssessment({ studyId: study.id, subjectKey: focusKey, protocolVersionId: entry.id }) }))) : [];
+    const timeline = focusKey ? await matchStore.listFacts({ studyId: study.id, subjectKey: focusKey }) : [];
+    const longitudinal = clinicalFactView(timeline, new Date().toISOString());
+    const clinicalTimeline = timeline.map(fact => ({ ...fact, superseded: longitudinal.superseded.includes(fact.id),
+      conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [] }));
+    const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
     return {
+      ...(candidateCoverage ? {candidateCoverage} : {}),
+      protocols, candidateRoster, comparisons, timeline: clinicalTimeline,
       protocol, criteria, subjects, referrals, sites, siteFunnel, followups, selected, referralEvents, openByAssessment,
       tallies: Object.fromEntries(tallyRows.map((row) => [String(row.summary), Number(row.total)])),
       gapsByCriterion: new Map(gapRows.map((row) => [String(row.criterion_id), { unknown: Number(row.unknown) }])),
@@ -1205,12 +1220,14 @@ export class VcrService {
       case "definition": return { definition: await this.store.latestDefinition(study.id),
         versions: (await this.store.definitionVersions(study.id)).map((version) => ({ version: version?.version, createdAt: version?.createdAt })) };
       case "criteria": {
-        const protocol = await this.store.latestProtocolVersion(study.id);
+        const protocol = filter.protocolVersionId && this.packages.matchStore
+          ? (await this.packages.matchStore.protocols(study.id, String(filter.protocolVersionId)))[0] ?? null
+          : await this.store.latestProtocolVersion(study.id);
         // The matching store's criteria carry their applicability beside the requirement.
         const criteria = protocol
           ? (this.packages.matchStore ? await this.packages.matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }) : await this.store.criteria(protocol.id))
           : [];
-        return { protocol, criteria };
+        return { protocol, criteria, protocols: this.packages.matchStore ? await this.packages.matchStore.protocols(study.id) : [] };
       }
       case "assumptions": {
         const assumptions = await this.store.assumptions(study.id);

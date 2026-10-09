@@ -55,6 +55,8 @@
 //   and never the run's: its code goes to `report`, the run hears
 //   `vcr_gateway_unavailable`.
 
+import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
+import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 import { createHash } from "node:crypto";
 
 import {
@@ -91,7 +93,7 @@ const answerBudgetMs = 10_000;
 const REGISTRY_MARGIN_MS = 3_000;
 /** The registry client's default deadline (its own default), when the deployment names none: `OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS`. */
 const REGISTRY_DEADLINE_MS = 20_000;
-const readFilterFields = Object.freeze(["kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "query"]);
+const readFilterFields = Object.freeze(["kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "query"]);
 const WRITE_MAX_ITEMS = 200;
 
 /**
@@ -190,7 +192,7 @@ function readRequest(body) {
   }
   /** @type {Record<string, any>} */
   const filter = {};
-  for (const key of ["kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId"]) {
+  for (const key of ["kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId"]) {
     if (raw[key] == null) continue;
     if (!ID.test(String(raw[key]))) throw gatewayError(400, "vcr_read_filter_invalid", `filter.${key} is not an id.`);
     filter[key] = String(raw[key]);
@@ -207,7 +209,7 @@ function readRequest(body) {
     filter.limit = raw.limit;
   }
   if (raw.offset != null) {
-    if (!Number.isSafeInteger(raw.offset) || raw.offset < 0 || raw.offset > 10_000) {
+    if (!Number.isSafeInteger(raw.offset) || raw.offset < 0 || raw.offset > (body.what === "subject_document" ? 1_048_576 : 10_000)) {
       throw gatewayError(400, "vcr_read_filter_invalid", "filter.offset must be a whole number from 0 to 10000.");
     }
     filter.offset = raw.offset;
@@ -238,7 +240,7 @@ const ACCRUAL_REQUEST_FIELDS = Object.freeze(["target", "eventTarget", "eventHaz
 
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
-  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId"]);
+  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection"]);
   const action = body.action ?? "start";
   if (!["start", "status", "cancel"].includes(action)) {
     throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status or cancel.");
@@ -262,7 +264,8 @@ function simulateRequest(body) {
         throw gatewayError(400, "vcr_simulate_payload_invalid", "reconstructionResultId 是本研究一次曲线重建结果的 id。");
       }
     }
-    return { action, kind: body.kind, scenario: object(body.scenario), inputs: list(body.inputs),
+    if (body.selection != null && body.kind !== 'match_criteria') throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
+    return { action, kind: body.kind, selection: body.selection == null ? null : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
       reconstructionResultId: body.reconstructionResultId == null ? null : body.reconstructionResultId,
       seed: Number.isInteger(body.seed) ? body.seed : null,
       replicates: Number.isInteger(body.replicates) ? body.replicates : null,
@@ -560,7 +563,7 @@ function distributionOf(item, field, value) {
  * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
- *   caller?: { runtimeRunId?: string | null } | null, knowledge?: any }} WriteDeps
+ *   caller?: { runtimeRunId?: string | null, provenance?:any } | null, knowledge?: any }} WriteDeps
  */
 
 /** The criterion fields a protocol write takes. */
@@ -1147,9 +1150,9 @@ const WRITERS = {
     return String(proposed?.source?.id ?? sourceId);
   },
 
-  async fact(item, { matchStore, documents, study }, extra) {
+  async fact(item, { matchStore, documents, study, caller }, extra) {
     if (!item.only(["subjectKey", "variable", "value", "unit", "polarity", "occurredAt", "recordedAt", "visibleAt", "surface", "dateSurface",
-      "documentId", "start", "end", "quote", "vocabularyVersion"])) return null;
+      "documentId", "start", "end", "quote", "vocabularyVersion", "clinical"])) return null;
     const subjectKey = item.token("subjectKey", TOKEN, "受试者的假名编号（vcr_read what:subject_document 给出）", { required: true });
     const vocabularyVersion = item.str('vocabularyVersion', { max: 80 }) ?? VCR_MATCHING_VOCABULARY_VERSION;
     if (vocabularyVersion !== VCR_MATCHING_VOCABULARY_VERSION) item.bad('vocabularyVersion', '这个编码词表版本未接入，不能按当前映射解释。');
@@ -1161,6 +1164,9 @@ const WRITERS = {
     const occurredAt = item.iso("occurredAt");
     const recordedAt = item.iso("recordedAt");
     const visibleAt = item.iso("visibleAt");
+    const clinical = item.row.clinical == null ? null : structuredClone(item.row.clinical);
+    for (const code of clinicalFactIssues(clinical)) item.bad('clinical', code);
+    if (clinical?.coding?.some(code => code.basis !== 'model_inferred')) item.bad('clinical.coding', '模型写入的术语解释只能标为 model_inferred。');
     const surface = item.str("surface", { max: 400, required: true });
     const dateSurface = item.str("dateSurface", { max: 80 });
     const documentId = item.token("documentId", ID, "vcr_read what:subject_document 给出的文档 id", { required: true });
@@ -1171,8 +1177,20 @@ const WRITERS = {
     if (!item.ok) return null;
     const verified = await verifySourceSpan({ item, documents, study, subjectKey: String(subjectKey), documentId: String(documentId),
       span: { start: start ?? null, end: end ?? null, quote: String(quote) },
-      fact: { surface, dateSurface, value: typeof value === "number" ? value : undefined } });
+      fact: { surface, dateSurface, value: typeof value === "number" ? value : undefined, clinical, unit } });
     if (!verified) return null;
+    if (clinical) {
+      const referenced = [...new Set([clinical.copiedFrom, clinical.correctionOf,
+        ...(clinical.relations ?? []).filter(r => r.state === 'supported').map(r => r.targetFactId)].filter(Boolean))];
+      const known = referenced.length ? await matchStore.matchingFactsByIds(study.id, referenced) : [];
+      if (known.length !== referenced.length || known.some(row => row.subjectKey !== subjectKey)) return void item.bad('clinical', '事实引用必须属于本研究的同一受试者。');
+      if (clinical.correctionOf && known.find(row => row.id === clinical.correctionOf)?.variable !== variable) return void item.bad('clinical.correctionOf', '更正必须针对同一临床变量。');
+      if ((clinical.relations ?? []).some(relation => !verified.span.quote.includes(relation.quote))) return void item.bad('clinical.relations', '关系证据必须在所引原文中。');
+      if (clinical.section && (clinical.section.start > verified.span.start || clinical.section.end < verified.span.end || clinical.section.end > verified.document.text.length)) return void item.bad('clinical.section', '章节范围必须包含这条事实证据。');
+      clinical.locator = { kind: 'text', offsetUnit: 'utf16', start: verified.span.start, end: verified.span.end,
+        ...(verified.document.sourceHash ? { sourceHash: verified.document.sourceHash } : {}),
+        ...(verified.document.projectionHash ? { projectionHash: verified.document.projectionHash } : {}) };
+    }
     // The platform's own clock for the document is the floor of the fact's: a
     // fact cannot have been visible before the record it was read from (a
     // replay as of an earlier date would otherwise read the future — AC-15).
@@ -1183,23 +1201,26 @@ const WRITERS = {
     }
     if (!matchStore?.saveFact) return void item.bad("subjectKey", "匹配未接入本部署。", "vcr_write_refused");
     const saved = await matchStore.saveFact({ studyId: study.id, userId: study.userId, fact: {
-      subjectKey, variable, value: value ?? null, unit: unit ?? null, polarity, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
+      subjectKey, variable, value: value ?? null, unit: unit ?? null, polarity: clinicalFactPolarity({ clinical, polarity }), clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
       visibleAt: visibleAt ?? verified.document.visibleAt ?? new Date().toISOString(), surface, dateSurface: dateSurface ?? null,
-      source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion }, extractedBy: "model",
+      source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion, projectionHash: verified.document.projectionHash ?? null, sourceHash: verified.document.sourceHash ?? null }, extractedBy: "model",
+      provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
+        inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 1 },
     } });
     extra.results.push({ index: item.index, id: saved.id, subjectKey });
     return saved.id;
   },
 
-  async language_judgment(item, { matchStore, matching, documents, study }, extra) {
-    if (!item.only(["subjectKey", "criterionKey", "state", "evidence"])) return null;
+  async language_judgment(item, { matchStore, matching, documents, study, caller }, extra) {
+    if (!item.only(["subjectKey", "criterionKey", "protocolVersionId", "state", "evidence"])) return null;
     const subjectKey = item.token("subjectKey", TOKEN, "受试者的假名编号", { required: true });
+    const protocolVersionId = item.token("protocolVersionId", ID, "本研究方案版本的 id");
     const criterionKey = item.token("criterionKey", TOKEN, "入排条件里 language 节点的 key（没写 key 时用条件的 id）", { required: true });
     const state = item.choice("state", ["satisfied", "not_satisfied", "unknown"], { required: true });
     const evidence = item.arr("evidence", { max: 10 }) ?? [];
     if (!item.ok) return null;
     if (!matching?.languageKeys) return void item.bad("criterionKey", "匹配未接入本部署。", "vcr_write_refused");
-    const known = await matching.languageKeys(study);
+    const known = await matching.languageKeys(study, protocolVersionId ?? null);
     if (!known.includes(String(criterionKey))) {
       return void item.bad("criterionKey", `最新方案版本里没有 key 为「${String(criterionKey).slice(0, 60)}」的 language 条件${known.length ? `（有：${known.slice(0, 8).join("、")}）` : ""}。`);
     }
@@ -1221,7 +1242,7 @@ const WRITERS = {
       if (!verified) return null;
       anchored.push({ documentId: span.documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, visibleAt: verified.document.visibleAt ?? null });
     }
-    const saved = await matchStore.saveLanguageJudgment({ studyId: study.id, userId: study.userId, subjectKey, criterionKey, state, evidence: anchored });
+    const saved = await matchStore.saveLanguageJudgment({ studyId: study.id, userId: study.userId, subjectKey, criterionKey, protocolVersionId, state, evidence: anchored, provenance: caller?.provenance ?? { schema: 1, status: "unknown", runId: caller?.runtimeRunId ?? null } });
     extra.results.push({ index: item.index, id: saved.id });
     return saved.id;
   },
@@ -1496,16 +1517,16 @@ async function loadPoolJob(store, study, jobId, parameter) {
  *
  * @param {{ item: Item, documents: any, study: any, subjectKey: string, documentId: string,
  *   span: { start: number | null, end: number | null, quote: string },
- *   fact: { surface?: string, dateSurface?: string, value?: number }, field?: string }} input
- * @returns {Promise<{ document: { id: string, text: string, visibleAt: string | null }, span: { start: number, end: number, quote: string } } | null>}
+ *   fact: { surface?: string, dateSurface?: string, value?: number, clinical?:any, unit?:string|null }, field?: string }} input
+ * @returns {Promise<{ document: { id: string, text: string, visibleAt: string | null, projectionHash?:string, sourceHash?:string }, span: { start: number, end: number, quote: string } } | null>}
  */
 async function verifySourceSpan({ item, documents, study, subjectKey, documentId, span, fact, field = "documentId" }) {
-  if (typeof documents?.read !== "function") {
+  if (typeof documents?.runtimeRead !== "function") {
     item.bad(field, "病历文档未接入本部署：事实无法在原文里核对，没有写入。", "vcr_write_refused");
     return null;
   }
-  const document = await documents.read(study, { subjectKey, documentId }).catch(() => null);
-  if (!document) {
+  const document = await documents.runtimeRead(study, { subjectKey, documentId }).catch(() => null);
+  if (!document || document.id !== documentId) {
     item.bad(field, `文档「${documentId.slice(0, 60)}」不是本研究里这位受试者的。`);
     return null;
   }
@@ -1530,10 +1551,11 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
   const { verifyFactEvidence } = await import("./vcrMatching.mjs");
   const verdict = verifyFactEvidence({
     id: "check", polarity: "affirmed", extractedBy: "model", surface: fact.surface ?? span.quote, value: fact.value, dateSurface: fact.dateSurface,
+    clinical: fact.clinical, unit: fact.unit,
     source: { documentId, start, end, quote: span.quote },
   }, { documents: new Map([[documentId, { text: document.text }]]) });
   if (!verdict.ok) {
-    item.bad(field, `原文里核对不上（${verdict.reason}）：start 到 end 之间的字要和 quote 逐字一致，quote 要包含 surface，数值要出现在这段里。`, "vcr_evidence_unverified");
+    item.bad(field, `原文里核对不上（${verdict.reason}）：start 到 end 之间的字要和 quote 逐字一致，quote 要包含 surface、数值及所声明的检验单位。`, "vcr_evidence_unverified");
     return null;
   }
   return { document, span: { start: /** @type {number} */ (start), end: /** @type {number} */ (end), quote: span.quote } };
@@ -1593,9 +1615,9 @@ function poolingSummary(result, about) {
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any } | null,
- *   report?: (code: string) => void, budgetMs?: number }} dependencies
+ *   report?: (code: string) => void, budgetMs?: number, attributeRun?: ((caller:any)=>Promise<string|null>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
  */
-export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs }) {
+export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, attributeRun = null }) {
   /** @type {Map<string, { until: number, count: number }>} */
   const windows = new Map();
   const registryDeadline = Number(config?.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : REGISTRY_DEADLINE_MS;
@@ -1633,6 +1655,14 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           "This conversation is not in a 虚拟临研 study; open the study's own conversation to read or write its data.");
       }
 
+      const scopedRunId = runtimeManager.boundedRuntimeScope?.({ userId: String(identity.userId), id: String(identity.projectId) })?.runId
+        ?? (attributeRun ? await attributeRun(identity) : null);
+      if (readProducerRun && ['read','write'].includes(operation) && ['subject_document','matching','fact','language_judgment'].includes(body.what)) {
+        const receipt = scopedRunId ? await readProducerRun(study, scopedRunId) : null;
+        if (!receipt?.sessionId) throw gatewayError(403, 'vcr_cloud_run_unattributed', 'Start a study conversation before reading patient evidence.');
+        study.cloudContext = { runId: scopedRunId, sessionId: receipt.sessionId };
+      }
+
       /** @type {() => Promise<any>} */
       let work;
       let budget = budgetMs;
@@ -1646,15 +1676,19 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         const request = writeRequest(body);
         // The token names the runtime, and a runtime reserved for one dispatch names that dispatch: with the
         // study's own run slot, that is which run is calling — nothing the run sends says so.
-        const runtimeRunId = runtimeManager.boundedRuntimeScope?.({ userId: String(identity.userId), id: String(identity.projectId) })?.runId ?? null;
+        const runtimeRunId = scopedRunId;
         work = async () => {
+          const clinicalWrite = ["fact", "language_judgment"].includes(request.what);
+          const runReceipt = clinicalWrite && runtimeRunId && readProducerRun ? await readProducerRun(study, runtimeRunId).catch(() => null) : null;
           const result = await vcrRuntimeWrite({
             store: vcr.store, service: vcr.service, orchestrator: vcr.orchestrator ?? null, study,
             what: request.what, items: request.items, data: request.data,
             evidence: vcr.evidence ?? null, evidenceStore: vcr.evidenceStore ?? null, matchStore: vcr.matchStore ?? null,
             matching: vcr.matching ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
             knowledge: vcr.knowledge ?? vcr.service?.packages?.knowledge ?? null,
-            caller: { runtimeRunId: runtimeRunId == null ? null : String(runtimeRunId) },
+            caller: { runtimeRunId: runtimeRunId == null ? null : String(runtimeRunId),
+              ...(["fact", "language_judgment"].includes(request.what) && typeof vcr.matchStore?.producerContext === "function"
+                ? { provenance: { ...await vcr.matchStore.producerContext(study, runtimeRunId == null ? null : String(runtimeRunId)).catch(() => ({ schema: 1, status: "ledger_unavailable", runId: runtimeRunId })), runReceipt } } : {}) },
           });
           vcr.service.counters.writes += 1;
           vcr.service.counters.writeIssues += result.issues.length;
@@ -1758,7 +1792,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
  *
  * @param {any} vcr @param {any} study
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
- *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null }} request
+ *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any }} request
  */
 async function startJob(vcr, study, request) {
   if (request.kind === "pool_evidence") {
@@ -1809,6 +1843,10 @@ async function startJob(vcr, study, request) {
     if (!vcr.matching?.matchScenario) throw gatewayError(503, "vcr_gateway_unavailable", "匹配未接入本部署：这一步暂不可用。");
     if (Object.keys(request.scenario).length || request.inputs.length) {
       throw gatewayError(400, "vcr_simulate_payload_invalid", "匹配评估不接受场景：平台按最新方案版本的入排条件和已写入的事实自己冻结它。");
+    }
+    if (request.selection) {
+      const batch = await vcr.matching.enqueuePanel(study, request.selection);
+      return { action: 'start', state: batch.jobs.length ? 'queued' : 'not_started', jobId: batch.jobs[0]?.jobId ?? null, ...batch };
     }
     const built = await vcr.matching.matchScenario(study);
     if (!built.ok) throw gatewayError(400, "vcr_simulate_payload_invalid", built.message);

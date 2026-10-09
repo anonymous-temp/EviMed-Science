@@ -1,0 +1,1979 @@
+{
+  "schemaVersion": 1,
+  "branch": "codex/openmed-adoption-20261009",
+  "tasks": [
+    {
+      "id": "A01",
+      "priority": "P0",
+      "title": "Pin a selective adoption boundary",
+      "dependencies": [],
+      "status": "implemented",
+      "evidence": [
+        "deps-version.json",
+        "packages/contracts/openmed/contract.test.mjs"
+      ],
+      "acceptance": "Every adopted item has an owner, an upstream path, an exact revision and a native integration point. No local model weights, Torch/MLX serving, OpenMed server, second agent kernel or second patient database enters the runtime image.",
+      "owner": "Architecture / backend",
+      "nativeIntegrationPoints": [
+        "OpenScience/deps-version.json",
+        "OpenScience/packages/contracts",
+        "OpenScience/packages/domain",
+        "OpenScience/packages/socket"
+      ],
+      "upstreamCapabilityIds": [
+        "C034",
+        "C036",
+        "C109",
+        "C110",
+        "C111",
+        "C112",
+        "C113",
+        "C114",
+        "C116",
+        "C150",
+        "C152"
+      ],
+      "implementationSummary": "Pinned the reviewed release and 152-surface adoption boundary; no OpenMed inference runtime is installed.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "A02",
+      "priority": "P0",
+      "title": "Establish corpus and vocabulary usage manifests",
+      "dependencies": [
+        "A01"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/contracts/openmed/data-rights.json",
+        "evals/vcr-matching/prepare_openmed_corpus.py"
+      ],
+      "acceptance": "Each corpus has an explicit admitted, conditional or excluded decision. An available loader or repository licence never authorizes a different corpus or cloud purpose. Restricted or unknown rights prevent only that data operation, while other research continues.",
+      "owner": "Evaluation / data steward",
+      "nativeIntegrationPoints": [
+        "OpenScience/evals",
+        "OpenScience/packages/domain/src/vcrKnowledgePack.mjs",
+        "OpenScience/apps/server/src/vcrKnowledge.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C026",
+        "C027",
+        "C028",
+        "C029",
+        "C030",
+        "C031",
+        "C032",
+        "C042",
+        "C043",
+        "C131",
+        "C132",
+        "C133",
+        "C134",
+        "C135",
+        "C136",
+        "C137",
+        "C138",
+        "C139"
+      ],
+      "implementationSummary": "Inventoried 26 hosted datasets, 27 SDK corpora and separate vocabulary/source rights; admitted only the frozen DrugProt pilot.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "A03",
+      "priority": "P0",
+      "title": "Make cloud processing permission explicit at the patient-text boundary",
+      "dependencies": [
+        "A01",
+        "A02"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrCloudEgress.mjs",
+        "apps/server/src/vcrCloudProjection.mjs",
+        "apps/server/test/vcrOpenmed.integration.test.mjs",
+        "apps/server/test/modelGateway.test.mjs"
+      ],
+      "acceptance": "A request trace proves which approved projection reached the provider. A revoked or inapplicable permission stops that document's external processing without stopping unrelated analyses. Provider logs, caching and training settings are recorded as verified or unknown, never inferred from the word API.",
+      "owner": "Backend / privacy",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrAccess.mjs",
+        "OpenScience/apps/server/src/vcrDataPlane.mjs",
+        "OpenScience/apps/server/src/vcrComposition.mjs",
+        "OpenScience/apps/server/src/modelGateway.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C062",
+        "C063",
+        "C064",
+        "C065",
+        "C066",
+        "C067",
+        "C068",
+        "C069",
+        "C070",
+        "C102",
+        "C103",
+        "C104",
+        "C108",
+        "C146",
+        "C147",
+        "C149"
+      ],
+      "implementationSummary": "Source-purpose/origin/expiry permission is checked before egress, including cached contexts and configured model reviewers; terms remain operator attestations.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "A04",
+      "priority": "P0",
+      "title": "Create an evidence-preserving cloud text projection",
+      "dependencies": [
+        "A03"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrCloudProjection.mjs",
+        "apps/server/src/vcrDataPlane.mjs",
+        "apps/server/test/vcrCloudProjection.test.mjs"
+      ],
+      "acceptance": "Chinese and mixed-language fixtures exercise names, IDs, addresses, repeated identifiers and chunk boundaries. Projected quotes resolve to the correct original span. Negation, doses, units and intervals remain usable. Any permitted date shift preserves intervals and is reconciled before time-window calculation; unsupported projections are explicit.",
+      "owner": "Backend / clinical NLP",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrComposition.mjs",
+        "OpenScience/apps/server/src/vcrDataPlane.mjs",
+        "OpenScience/apps/server/src/vcrGateway.mjs",
+        "OpenScience/apps/server/src/vcrMatching.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C022",
+        "C023",
+        "C024",
+        "C025",
+        "C062",
+        "C063",
+        "C064",
+        "C065",
+        "C066",
+        "C067",
+        "C068",
+        "C069",
+        "C070",
+        "C071",
+        "C073",
+        "C081",
+        "C082"
+      ],
+      "implementationSummary": "Reviewed spans become study-scoped surrogates with exact Unicode restoration; source hashes and protected mapping are retained. No automatic PII detection or date shifting is claimed.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "A05",
+      "priority": "P0",
+      "title": "Persist actual extraction and model provenance",
+      "dependencies": [
+        "A01"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/usageLedger.mjs",
+        "apps/server/src/usageMetering.mjs",
+        "apps/server/src/vcrMatchStore.mjs",
+        "apps/server/src/vcrGateway.mjs"
+      ],
+      "acceptance": "A displayed judgment can be traced to its real producing run and configuration. Historical rows explicitly say unknown instead of fabricating versions. A provider or prompt change can be selected and compared independently of a protocol change.",
+      "owner": "Backend / evaluation",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrMatchStore.mjs",
+        "OpenScience/apps/server/src/vcrGateway.mjs",
+        "OpenScience/apps/server/src/vcrComposition.mjs",
+        "OpenScience/apps/server/src/modelGateway.mjs",
+        "OpenScience/apps/server/src/usageLedger.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C117",
+        "C123"
+      ],
+      "implementationSummary": "Facts and language judgments retain run associations, observed provider/model identifiers and request fingerprints. Historical or unavailable provenance remains unknown.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "A06",
+      "priority": "P0",
+      "title": "Bind language judgments and job inputs to exact protocol versions",
+      "dependencies": [
+        "A05"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrMatchingSnapshot.mjs",
+        "apps/server/src/vcrMatchStore.mjs",
+        "apps/server/test/vcrOpenmed.integration.test.mjs"
+      ],
+      "acceptance": "A consent answer for one protocol cannot silently answer another protocol's changed criterion. Facts or judgments arriving after a job is queued cannot change that job's result. Historical results remain readable, including legacy inputs whose scope cannot be reconstructed.",
+      "owner": "Backend / matching",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrMatchStore.mjs",
+        "OpenScience/apps/server/src/vcrComposition.mjs",
+        "OpenScience/apps/server/src/vcrJobs.mjs",
+        "OpenScience/apps/server/src/vcrCorrectionCases.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C047"
+      ],
+      "implementationSummary": "Language judgments bind to protocol and criterion hashes; queued matching inputs are immutable and separately identified from clinical as-of time.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "A07",
+      "priority": "P0",
+      "title": "Account for every requested candidate, including empty extractions",
+      "dependencies": [
+        "A06"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrMatchingSnapshot.mjs",
+        "apps/server/src/vcrMatchStore.mjs",
+        "apps/server/src/vcrViewsTabs.mjs",
+        "apps/server/test/vcrOpenmed.integration.test.mjs"
+      ],
+      "acceptance": "Requested candidates equal evaluated plus pending plus explicitly unavailable candidates with reasons. Zero-fact cases and candidates past a batch limit do not vanish from recall, false-exclusion, funnel or cost denominators.",
+      "owner": "Backend / matching",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrComposition.mjs",
+        "OpenScience/apps/server/src/vcrService.mjs",
+        "OpenScience/apps/server/src/vcrJobs.mjs",
+        "OpenScience/apps/server/src/vcrMatching.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C047"
+      ],
+      "implementationSummary": "Explicit candidate rosters include empty charts; frozen batch outcomes partition the same denominator into evaluated, pending and unavailable.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "B01",
+      "priority": "P0",
+      "title": "Extend the existing harness with an API-only clinical runner",
+      "dependencies": [
+        "A01",
+        "A02",
+        "A05"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/run_native_clinical.mjs",
+        "evals/method-quality/native_dsh.mjs",
+        "evals/method-quality/score_native_clinical.py"
+      ],
+      "acceptance": "Runs resume by input/configuration digest, score archived predictions offline and report timeout/unknown cases. Gold is inaccessible to the prediction path. No local checkpoint or extra provider key is placed in the research runtime.",
+      "owner": "Evaluation engineering",
+      "nativeIntegrationPoints": [
+        "OpenScience/evals/method-quality/run_paired.py",
+        "OpenScience/evals/vcr-matching",
+        "OpenScience/apps/server/src/vcrMatching.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C131",
+        "C132",
+        "C133",
+        "C134",
+        "C135",
+        "C136",
+        "C137",
+        "C138",
+        "C139"
+      ],
+      "implementationSummary": "Native DSH reaches the existing cloud gateway; resumable prediction archives are keyed to input/configuration/source digests and scored offline. No gold loader or provider credential enters the child runtime.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "B02",
+      "priority": "P0",
+      "title": "Port task metrics, not the published scores",
+      "dependencies": [
+        "B01"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/clinical_metrics.py",
+        "evals/method-quality/test_clinical_metrics.py"
+      ],
+      "acceptance": "Reports name each denominator, dataset revision, slice size, unknown rate and uncertainty. There is no single blended clinical accuracy score; a cost gain cannot conceal increased false exclusions or privacy loss. Synthetic and real-text results are separate.",
+      "owner": "Evaluation / clinical methods",
+      "nativeIntegrationPoints": [
+        "OpenScience/evals",
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/packages/domain/src/clinicalEvidence.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C001",
+        "C002",
+        "C056",
+        "C057",
+        "C058",
+        "C059",
+        "C060",
+        "C131",
+        "C132",
+        "C133",
+        "C134",
+        "C135",
+        "C136",
+        "C137",
+        "C138",
+        "C139"
+      ],
+      "implementationSummary": "Independent strict/overlap NER, span-grounded relations, context classification, eligibility, retrieval and privacy metrics include missing cases, grouped uncertainty and separate cost/completion.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "B03",
+      "priority": "P0",
+      "title": "Build a Chinese VCR held-out reference set",
+      "dependencies": [
+        "A02",
+        "B05"
+      ],
+      "status": "external_validation_required",
+      "evidence": [
+        "evals/vcr-matching/corpora/chinese-synthetic/inputs.json",
+        "evals/vcr-matching/corpora/chinese-synthetic/reference.json",
+        "evals/vcr-matching/corpora/chinese-synthetic/splits.json"
+      ],
+      "acceptance": "A patient-level holdout is frozen before prompt tuning. Labels distinguish unknown, not applicable and not satisfied. Report inter-rater disagreement without treating it as a universal mathematical ceiling. Expert labeling is an evaluation activity, not a new mandatory approval step for every research run.",
+      "owner": "Clinical evaluation",
+      "nativeIntegrationPoints": [
+        "OpenScience/evals/vcr-matching/briefs.json",
+        "OpenScience/evals/vcr-matching/matching-eval-sample.json",
+        "OpenScience/evals/vcr-evidence"
+      ],
+      "upstreamCapabilityIds": [
+        "C005",
+        "C010",
+        "C011",
+        "C023",
+        "C025",
+        "C131",
+        "C132",
+        "C133",
+        "C134",
+        "C135",
+        "C136",
+        "C137",
+        "C138",
+        "C139",
+        "C141"
+      ],
+      "implementationSummary": "Authored twelve Chinese development regressions and explicit split/label provenance. None is falsely described as an untouched clinical holdout.",
+      "remaining": [
+        "Acquire an independently labeled, rights-cleared Chinese reference set and freeze patient-level holdout before tuning; measure actual reviewer disagreement."
+      ],
+      "validationStatus": "external_prerequisite"
+    },
+    {
+      "id": "B04",
+      "priority": "P1",
+      "title": "Admit a small, rights-checked public corpus batch",
+      "dependencies": [
+        "A02",
+        "B05"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "evals/vcr-matching/corpora/drugprot/selection.json",
+        "evals/vcr-matching/prepare_openmed_corpus.py",
+        "packages/contracts/openmed/data-rights.json"
+      ],
+      "acceptance": "Each admitted subset has a task, frozen selection, licence evidence, source-level split and limitations. No case-report collection becomes a representative VCR population, causal dataset or source of outcome-rate parameters. No full corpus download is required just to assess fit.",
+      "owner": "Evaluation / data engineering",
+      "nativeIntegrationPoints": [
+        "OpenScience/evals",
+        "OpenScience/evals/vcr-matching",
+        "OpenScience/evals/adr-analysis"
+      ],
+      "upstreamCapabilityIds": [
+        "C131",
+        "C132",
+        "C133",
+        "C134",
+        "C135",
+        "C136",
+        "C137",
+        "C138",
+        "C139"
+      ],
+      "implementationSummary": "Prepared a rights-checked ten-abstract DrugProt batch with source-level selection, original archive/input hashes and validated UTF-16 offsets. Real cloud predictions are measured without relabeling published scores.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "B05",
+      "priority": "P0",
+      "title": "Keep gold, development and related records apart",
+      "dependencies": [
+        "A02",
+        "B01"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/run_paired.py",
+        "evals/method-quality/test_clinical_metrics.py",
+        "apps/server/src/evaluationIsolation.mjs"
+      ],
+      "acceptance": "Deliberate gold leaks are detected before dispatch; variants of the same case stay in one split. Evaluation inputs never automatically populate global memory or disease packs. Aggregate reports remain re-creatable without exposing hidden labels to the agent.",
+      "owner": "Evaluation engineering",
+      "nativeIntegrationPoints": [
+        "OpenScience/evals/method-quality/run_paired.py",
+        "OpenScience/apps/server/src/vcrCorrectionCases.mjs",
+        "OpenScience/evals"
+      ],
+      "upstreamCapabilityIds": [
+        "C042",
+        "C043",
+        "C131",
+        "C132",
+        "C133",
+        "C134",
+        "C135",
+        "C136",
+        "C137",
+        "C138",
+        "C139"
+      ],
+      "implementationSummary": "Prediction and gold paths are separate; deliberate gold leaks are rejected before dispatch and source-group split checks prevent related records crossing boundaries. Synthetic development labels remain marked as seen.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "B06",
+      "priority": "P1",
+      "title": "Measure extraction through final matching end to end",
+      "dependencies": [
+        "B02",
+        "B03",
+        "B04",
+        "A07",
+        "C01",
+        "D01",
+        "D03"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/run_native_clinical.mjs",
+        "evals/method-quality/score_native_clinical.py"
+      ],
+      "acceptance": "Reports locate a failure at extraction, terminology, temporal interpretation, retrieval or deterministic evaluation. Candidate improvement is demonstrated on untouched cases with measured cost/latency; replay success is never presented as cloud-model accuracy.",
+      "owner": "Evaluation / VCR",
+      "nativeIntegrationPoints": [
+        "OpenScience/evals/vcr-matching",
+        "OpenScience/evals/method-quality/run_paired.py",
+        "OpenScience/scripts/vcr/live-acceptance.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C046",
+        "C056",
+        "C057",
+        "C058",
+        "C059",
+        "C060",
+        "C131",
+        "C132",
+        "C133",
+        "C134",
+        "C135",
+        "C136",
+        "C137",
+        "C138",
+        "C139"
+      ],
+      "implementationSummary": "Repeated real native/on/off extraction traverses the fact writer and deterministic matching executor. Raw outputs, fact refusals, downstream states, latency and cost are retained.",
+      "remaining": [
+        "Measure untouched clinical cases before claiming population-level improvement. The authored development sample is not that evidence."
+      ],
+      "validationStatus": "engineering_verified_scientific_acceptance_pending"
+    },
+    {
+      "id": "B07",
+      "priority": "P0",
+      "title": "Evaluate privacy together with clinical utility",
+      "dependencies": [
+        "A04",
+        "B02",
+        "B03"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/run_native_vcr.mjs",
+        "apps/server/test/vcrCloudProjection.test.mjs",
+        "apps/server/test/vcrOpenmed.integration.test.mjs",
+        "apps/server/test/vcrAuditNoLeak.test.mjs"
+      ],
+      "acceptance": "Canary identifiers do not appear in unauthorized requests, transcripts, traces or exports. Report observed residual leakage and utility loss by type; do not claim universal zero risk from finite tests. Repeated-request linkage and aggregate differencing get explicit tests.",
+      "owner": "Privacy / evaluation",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/test",
+        "OpenScience/evals",
+        "OpenScience/apps/server/src/modelGateway.mjs",
+        "OpenScience/apps/server/src/vcrGateway.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C022",
+        "C024",
+        "C062",
+        "C063",
+        "C064",
+        "C065",
+        "C066",
+        "C067",
+        "C068",
+        "C069",
+        "C070",
+        "C072",
+        "C076",
+        "C102",
+        "C103",
+        "C104",
+        "C108",
+        "C131",
+        "C132",
+        "C133",
+        "C134",
+        "C135",
+        "C136",
+        "C137",
+        "C138",
+        "C139"
+      ],
+      "implementationSummary": "Projection tests retain negation, amounts, dates and units. Real native MCP probes separately count explicitly marked synthetic canaries at the provider and reply boundaries; existing aggregate disclosure tests remain in force.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "B08",
+      "priority": "P1",
+      "title": "Publish an internal, reproducible scorecard",
+      "dependencies": [
+        "B02",
+        "B05"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/score_native_clinical.py",
+        "evals/method-quality/clinical_metrics.py",
+        "evals/vcr-matching/openmed-scorecard.json"
+      ],
+      "acceptance": "A reader can reproduce every row and distinguish held-out measurement from a smoke test. Comparisons use the same inputs and scorer. A public leaderboard submission, if later requested, follows that benchmark's terms and blind-test rules; no external scores are relabeled as ours.",
+      "owner": "Evaluation / product",
+      "nativeIntegrationPoints": [
+        "OpenScience/evals",
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/apps/server/src/vcrCorrectionCases.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C117",
+        "C131",
+        "C132",
+        "C133",
+        "C134",
+        "C135",
+        "C136",
+        "C137",
+        "C138",
+        "C139"
+      ],
+      "implementationSummary": "Archived versioned inputs, raw predictions, scoring commands and per-task scorecards; no public leaderboard submission or clinical qualification.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "B09",
+      "priority": "P1",
+      "title": "Use corrections for study-local regression learning",
+      "dependencies": [
+        "A05",
+        "B05",
+        "B08"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrMatchStore.mjs",
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/learningTriggers.mjs",
+        "apps/server/test/learningTriggers.test.mjs"
+      ],
+      "acceptance": "Corrections remain scoped to their study and historical inputs. Shared regression cases contain no patient facts or inherited restricted content. Improvement on development cases alone does not trigger promotion.",
+      "owner": "Evaluation / backend",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrCorrectionCases.mjs",
+        "OpenScience/apps/server/src/vcrMatchStore.mjs",
+        "OpenScience/evals/vcr-matching"
+      ],
+      "upstreamCapabilityIds": [
+        "C042",
+        "C043",
+        "C141"
+      ],
+      "implementationSummary": "Study-local correction provenance and frozen historical assessments remain distinct. Clinical source sessions cannot seed global memory, shared traces or cross-project learning peers.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "C01",
+      "priority": "P1",
+      "title": "Extend the native clinical fact contract",
+      "dependencies": [
+        "A04",
+        "A05",
+        "A06",
+        "B02"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/vcrMatching.mjs",
+        "apps/server/src/vcrGateway.mjs",
+        "packages/domain/test/clinicalFact.test.mjs"
+      ],
+      "acceptance": "The same versioned contract is used by cloud extraction, storage, matching and evaluation. A family history is representable independently of certainty. Unknown new fields do not silently acquire invented values, and existing assessments remain readable.",
+      "owner": "Domain / backend",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/vcrContracts.mjs",
+        "OpenScience/apps/server/src/vcrGateway.mjs",
+        "OpenScience/apps/server/src/vcrMatchStore.mjs",
+        "OpenScience/apps/server/src/vcrMatching.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C001",
+        "C002",
+        "C003",
+        "C005",
+        "C010",
+        "C011",
+        "C016",
+        "C021",
+        "C033",
+        "C037",
+        "C038",
+        "C039"
+      ],
+      "implementationSummary": "One optional versioned clinical fact contract serves extraction help, validation, storage, longitudinal views and deterministic matching; legacy facts remain readable.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "C02",
+      "priority": "P1",
+      "title": "Improve contextual assertions and time interpretation",
+      "dependencies": [
+        "C01",
+        "B03"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/vcrMatching.mjs",
+        "apps/server/test/vcrMatching.test.mjs"
+      ],
+      "acceptance": "Held-out Chinese cases resolve the intended context without converting family history or plans into patient events. Historical replay excludes future-visible evidence; missing dates remain unknown for time-window criteria.",
+      "owner": "Clinical prompts / evaluation",
+      "nativeIntegrationPoints": [
+        "OpenScience/capability-skills/vcr-matching/SKILL.md",
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/packages/domain/src/vcrRules.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C001",
+        "C002",
+        "C005",
+        "C010",
+        "C011",
+        "C023",
+        "C025"
+      ],
+      "implementationSummary": "Assertion and experiencer are independent; planned events, family history, recorded/occurred times and explicit interval absence have distinct semantics. Missing chronology and competing values remain unknown.",
+      "remaining": [
+        "Independent held-out Chinese contextual/time accuracy has not been established."
+      ],
+      "validationStatus": "engineering_verified_scientific_acceptance_pending"
+    },
+    {
+      "id": "C03",
+      "priority": "P1",
+      "title": "Preserve sections and detect copied clinical text",
+      "dependencies": [
+        "C01",
+        "C02"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrDocumentWindow.mjs",
+        "apps/server/src/vcrDataStore.mjs",
+        "apps/server/test/vcrDocumentWindow.test.mjs",
+        "apps/server/test/vcrMatching.test.mjs"
+      ],
+      "acceptance": "Every processed or unprocessed section has a coverage state. Chunk boundaries do not drop a negation or separate a value from its unit. Repeated old medication text does not become a new treatment event merely because it appears in a later note.",
+      "owner": "Clinical NLP / backend",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrComposition.mjs",
+        "OpenScience/apps/server/src/vcrDataPlane.mjs",
+        "OpenScience/capability-skills/vcr-matching/SKILL.md"
+      ],
+      "upstreamCapabilityIds": [
+        "C004",
+        "C007",
+        "C020",
+        "C078",
+        "C079",
+        "C080",
+        "C085"
+      ],
+      "implementationSummary": "Bounded overlapping text windows retain section/source ranges and served coverage; copied event metadata prevents washout resets. Reading a window is explicitly not called complete extraction.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "C04",
+      "priority": "P1",
+      "title": "Resolve abbreviations and coreference with evidence",
+      "dependencies": [
+        "C01",
+        "C03",
+        "C08"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/vcrGateway.mjs",
+        "evals/method-quality/clinical_metrics.py"
+      ],
+      "acceptance": "The same abbreviation can map differently in different contexts. No unsupported antecedent is invented. Resolved links point to source mentions and improve relation tasks on a held-out set rather than only making outputs longer.",
+      "owner": "Clinical prompts / terminology",
+      "nativeIntegrationPoints": [
+        "OpenScience/capability-skills/vcr-matching/SKILL.md",
+        "OpenScience/apps/server/src/vcrKnowledge.mjs",
+        "OpenScience/apps/server/src/vcrMatchStore.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C006"
+      ],
+      "implementationSummary": "Supported abbreviation/coreference links require a located quote and an existing same-subject target; unresolved links remain representable. The public relation pilot is reported independently.",
+      "remaining": [
+        "Held-out abbreviation/coreference improvement has not been established; the public pilot retains relation failures."
+      ],
+      "validationStatus": "engineering_verified_scientific_acceptance_pending"
+    },
+    {
+      "id": "C05",
+      "priority": "P1",
+      "title": "Extract relations and multi-attribute clinical events",
+      "dependencies": [
+        "C01",
+        "C02",
+        "C04",
+        "B04"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/vcrGateway.mjs",
+        "apps/server/src/vcrMatchStore.mjs"
+      ],
+      "acceptance": "A dose cannot attach to a neighboring drug and a biomarker result cannot attach to a different specimen. Each link is traceable; unsupported links remain unknown. Relation scores and resulting matching errors are reported separately.",
+      "owner": "Clinical NLP / domain",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/vcrContracts.mjs",
+        "OpenScience/apps/server/src/vcrMatchStore.mjs",
+        "OpenScience/capability-skills/vcr-matching/SKILL.md"
+      ],
+      "upstreamCapabilityIds": [
+        "C008",
+        "C009",
+        "C017",
+        "C018",
+        "C019"
+      ],
+      "implementationSummary": "Source-bound relation/event metadata represents dose, route, frequency, specimen, result, indication and adverse-event links; no cross-subject reference is accepted.",
+      "remaining": [
+        "Clinical relation attachment performance needs independent held-out measurement."
+      ],
+      "validationStatus": "engineering_verified_scientific_acceptance_pending"
+    },
+    {
+      "id": "C06",
+      "priority": "P1",
+      "title": "Build medication exposure and reconciliation views",
+      "dependencies": [
+        "C05",
+        "C08",
+        "C10"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/vcrMatching.mjs",
+        "apps/server/test/vcrMatching.test.mjs",
+        "apps/web/src/components/vcr/ClinicalMatchingDetails.tsx"
+      ],
+      "acceptance": "Washout is calculated only from an appropriate supported event. Prescription is not equated with administration, copied lists do not reset stop dates, and unresolved conflicts remain visible. No patient dosing advice is introduced by this extraction task.",
+      "owner": "Clinical NLP / matching",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/apps/server/src/vcrMatchStore.mjs",
+        "OpenScience/capability-skills/vcr-matching/SKILL.md"
+      ],
+      "upstreamCapabilityIds": [
+        "C012"
+      ],
+      "implementationSummary": "Medication states distinguish prescription, administration, stopping, planned treatment and historical lists; washout uses supported exposure events and bounded absence evidence.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "C07",
+      "priority": "P1",
+      "title": "Normalize laboratory values and units without losing originals",
+      "dependencies": [
+        "C01",
+        "C02",
+        "A02"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinical-units.json",
+        "packages/domain/src/clinicalUnits.mjs",
+        "packages/domain/test/clinicalFact.test.mjs",
+        "apps/server/test/vcrMatching.test.mjs"
+      ],
+      "acceptance": "Known conversion pairs round-trip within stated numerical tolerance; incompatible dimensions, unknown analytes and missing units produce unknown rather than guessed comparisons. Original values remain unchanged in quoted evidence, and table headers bind to the correct cells.",
+      "owner": "Domain / clinical data",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/packages/domain/src/sourceMaterials.mjs",
+        "OpenScience/packages/domain/src/dataSemantics.mjs",
+        "OpenScience/apps/server/src/sourceMaterials.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C012",
+        "C013",
+        "C014",
+        "C020"
+      ],
+      "implementationSummary": "A bounded versioned conversion table preserves original values and units; equivalent-unit observations agree while unknown analytes, units and conflicting latest ties remain uncertain.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "C08",
+      "priority": "P1",
+      "title": "Add versioned Chinese-first terminology grounding",
+      "dependencies": [
+        "A02",
+        "C01",
+        "B03"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/vcrKnowledge.mjs",
+        "apps/server/src/vcrKnowledgeStore.mjs",
+        "apps/server/test/vcrOpenmed.integration.test.mjs"
+      ],
+      "acceptance": "A mapping carries its provenance and ambiguity; changing an edition does not rewrite frozen studies. Chinese source coding is not silently reinterpreted as ICD-10-CM or another edition. UMLS/SNOMED and national terminology are used only within separately verified rights.",
+      "owner": "Terminology / backend",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/vcrKnowledgePack.mjs",
+        "OpenScience/apps/server/src/vcrKnowledge.mjs",
+        "OpenScience/packages/domain/src/dataSemantics.mjs",
+        "OpenScience/apps/server/src/vcrMatching.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C012",
+        "C026",
+        "C027",
+        "C028",
+        "C029",
+        "C030",
+        "C031",
+        "C032"
+      ],
+      "implementationSummary": "Coding metadata carries edition, source, basis and ambiguity. Exact criterion variables select existing licensed disease-pack definitions; stored pack bodies prevent catalogue updates rewriting studies.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "C09",
+      "priority": "P1",
+      "title": "Deepen the existing disease packs before expanding specialties",
+      "dependencies": [
+        "C05",
+        "C07",
+        "C08"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/vcrComposition.mjs",
+        "apps/server/src/vcrKnowledge.mjs"
+      ],
+      "acceptance": "At least one existing disease-pack workflow demonstrates improved criterion coverage on held-out cases. A stated descriptor stays distinct from an inferred diagnosis, and unsupported values remain unknown.",
+      "owner": "Clinical domain / prompts",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/vcr-packs",
+        "OpenScience/capability-skills/vcr-matching/SKILL.md",
+        "OpenScience/capability-skills/vcr-protocol/SKILL.md"
+      ],
+      "upstreamCapabilityIds": [
+        "C017",
+        "C018",
+        "C019",
+        "C107"
+      ],
+      "implementationSummary": "Existing disease packs supply targeted terminology and retain their selected bodies. Specialty descriptors remain source assertions, with unsupported fields left unknown.",
+      "remaining": [
+        "An existing disease pack is version-preserved and connected, but improved held-out criterion coverage is not established."
+      ],
+      "validationStatus": "engineering_verified_scientific_acceptance_pending"
+    },
+    {
+      "id": "C10",
+      "priority": "P1",
+      "title": "Add fact corrections and conflict-aware longitudinal views",
+      "dependencies": [
+        "C01",
+        "A06"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/vcrGateway.mjs",
+        "apps/web/src/components/vcr/ClinicalMatchingDetails.tsx",
+        "packages/domain/test/clinicalFact.test.mjs"
+      ],
+      "acceptance": "A correction does not erase its original source or historical assessment. Competing facts are not resolved solely by recency. An as-of query and a corrected-current query can legitimately differ and explain why.",
+      "owner": "Backend / domain",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrMatchStore.mjs",
+        "OpenScience/apps/server/src/vcrPersistence.mjs",
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/packages/domain/src/vcrLineage.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C007",
+        "C008",
+        "C009",
+        "C015",
+        "C033",
+        "C035",
+        "C037",
+        "C038",
+        "C039",
+        "C042",
+        "C043"
+      ],
+      "implementationSummary": "Source-grounded corrections supersede only a current view; competing corrections, same-event conflicts and historical as-of views are retained.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "C11",
+      "priority": "P1",
+      "title": "Unify evidence locators while preserving data boundaries",
+      "dependencies": [
+        "A04",
+        "C01"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "apps/server/src/vcrCloudProjection.mjs",
+        "apps/server/src/vcrDataPlane.mjs",
+        "apps/server/test/vcrCloudProjection.test.mjs"
+      ],
+      "acceptance": "Each supported locator resolves to the same source hash and exact value. Missing pages or image regions remain unknown. Privacy projection and quote verification agree on Unicode offset conventions, including non-BMP characters.",
+      "owner": "Source / backend",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/sourceMaterials.mjs",
+        "OpenScience/apps/server/src/sourceMaterials.mjs",
+        "OpenScience/apps/server/src/vcrGateway.mjs",
+        "OpenScience/apps/server/src/vcrEvidence.mjs",
+        "OpenScience/apps/server/src/vcrRecordExtract.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C020",
+        "C023",
+        "C025",
+        "C033",
+        "C035",
+        "C037",
+        "C038",
+        "C039",
+        "C077",
+        "C078",
+        "C079",
+        "C080",
+        "C085",
+        "C086"
+      ],
+      "implementationSummary": "A bounded locator contract carries source/projection hashes and known text/page/cell/FHIR/OMOP coordinates. The native quote resolver verifies UTF-16 spans; absent geometry is not invented.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "C12",
+      "priority": "P1",
+      "title": "Reprocess only affected clinical inputs and descendants",
+      "dependencies": [
+        "A05",
+        "A06",
+        "C10",
+        "C11"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrMatchingSnapshot.mjs",
+        "apps/server/src/vcrComposition.mjs",
+        "apps/server/src/vcrMatchStore.mjs",
+        "apps/server/src/vcrJobs.mjs"
+      ],
+      "acceptance": "Interrupted jobs resume without duplicating facts or charges unnecessarily. Changing one source does not reread every patient, and old snapshots remain replayable. A revoked projection is not served from cache.",
+      "owner": "Backend / orchestration",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrJobs.mjs",
+        "OpenScience/apps/server/src/vcrOrchestrator.mjs",
+        "OpenScience/apps/server/src/vcrWorker.mjs",
+        "OpenScience/packages/domain/src/vcrLineage.mjs",
+        "OpenScience/apps/server/src/sourceWorker.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C033",
+        "C037",
+        "C038",
+        "C039",
+        "C102",
+        "C103",
+        "C104",
+        "C108",
+        "C109",
+        "C110",
+        "C111",
+        "C112",
+        "C113",
+        "C114",
+        "C116",
+        "C123"
+      ],
+      "implementationSummary": "Existing leased jobs and content-addressed fact writes are reused; frozen batch continuation, changed-input identities and permission-aware projection reads avoid mixing mutable sources with old results.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "D01",
+      "priority": "P1",
+      "title": "Strengthen protocol-to-criterion translation",
+      "dependencies": [
+        "C01",
+        "C02",
+        "C08",
+        "A06",
+        "B03"
+      ],
+      "status": "native_reused",
+      "evidence": [
+        "packages/domain/src/vcrRules.mjs",
+        "apps/server/src/vcrMatching.mjs",
+        "capabilities/vcr-protocol/SKILL.md",
+        "capabilities/vcr-matching/SKILL.md"
+      ],
+      "acceptance": "Held-out protocol sentences retain their meaning when structured. Unsupported clauses are identified individually. No English keyword parser or new prose-regex rules replace the cloud model; strong Kleene semantics remain unchanged.",
+      "owner": "Clinical prompts / domain",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/vcrRules.mjs",
+        "OpenScience/apps/server/src/vcrGateway.mjs",
+        "OpenScience/capability-skills/vcr-matching/SKILL.md",
+        "OpenScience/capability-skills/vcr-protocol/SKILL.md"
+      ],
+      "upstreamCapabilityIds": [
+        "C045"
+      ],
+      "implementationSummary": "The native closed requirement grammar, source-backed criteria and language nodes remain authoritative. Extraction guidance adds scope/version discipline without an English medical keyword parser.",
+      "remaining": [
+        "Untouched protocol-translation cases and independent semantic references are still required."
+      ],
+      "validationStatus": "engineering_verified_scientific_acceptance_pending"
+    },
+    {
+      "id": "D02",
+      "priority": "P1",
+      "title": "Version and refresh trial-registry evidence",
+      "dependencies": [
+        "A01",
+        "A02"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrEvidenceStore.mjs",
+        "apps/server/src/vcrEvidence.mjs",
+        "apps/server/test/vcrOpenmed.integration.test.mjs"
+      ],
+      "acceptance": "A registry update creates a new version and can trigger targeted criterion review. Missing eligibility text remains a named gap. No candidate is described as currently recruitable solely because an old registry record says so.",
+      "owner": "Evidence connectors / backend",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/trialRegistryClient.mjs",
+        "OpenScience/apps/server/src/vcrEvidence.mjs",
+        "OpenScience/apps/server/src/vcrEvidenceStore.mjs",
+        "OpenScience/runtime/mcp/evimed-research/trial_snapshots.py"
+      ],
+      "upstreamCapabilityIds": [
+        "C044",
+        "C105",
+        "C106"
+      ],
+      "implementationSummary": "Registry refreshes append immutable source records; reads can recover the quoted historical hash. Fetch freshness is not treated as verified site recruitment.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "D03",
+      "priority": "P1",
+      "title": "Complete patient-to-multiple-trial execution",
+      "dependencies": [
+        "A06",
+        "A07",
+        "D01",
+        "D02"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrMatchingSnapshot.mjs",
+        "apps/server/src/vcrComposition.mjs",
+        "apps/server/src/vcrRoutes.mjs",
+        "apps/web/src/components/vcr/ClinicalMatchingDetails.tsx",
+        "apps/server/test/vcrOpenmed.integration.test.mjs"
+      ],
+      "acceptance": "A real hosted test evaluates one patient against multiple protocols, persists separate criterion sets and renders comparable missing evidence. Shared language keys do not cross-contaminate trials. No blended match probability is invented.",
+      "owner": "VCR backend / product",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrComposition.mjs",
+        "OpenScience/apps/server/src/vcrService.mjs",
+        "OpenScience/apps/server/src/vcrMatchStore.mjs",
+        "OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx"
+      ],
+      "upstreamCapabilityIds": [
+        "C046"
+      ],
+      "implementationSummary": "Queued patient-to-trial panels preserve protocol-specific frozen inputs, assessments and displayed comparisons. Real PostgreSQL verifies two distinct outcomes, retry idempotency and an unavailable foreign-study protocol; full deployed acceptance remains separate.",
+      "remaining": [
+        "A full deployed browser-to-kernel multi-trial acceptance is still required before production enabling; isolated native and HTTP/PG paths were tested."
+      ],
+      "validationStatus": "engineering_verified_scientific_acceptance_pending"
+    },
+    {
+      "id": "D04",
+      "priority": "P1",
+      "title": "Add candidate retrieval without turning ranking into eligibility",
+      "dependencies": [
+        "C08",
+        "D02",
+        "D03",
+        "B02"
+      ],
+      "status": "native_reused",
+      "evidence": [
+        "apps/server/src/trialRegistryClient.mjs",
+        "apps/server/src/vcrComposition.mjs",
+        "evals/method-quality/clinical_metrics.py",
+        "evals/method-quality/test_clinical_metrics.py"
+      ],
+      "acceptance": "Candidate recall is measured against the full eligible trial set separately from precision at k. Unknown fields do not become exclusion filters. A retrieval score is never shown as benefit, enrollment probability or clinical eligibility.",
+      "owner": "Search / evaluation",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/trialRegistryClient.mjs",
+        "OpenScience/apps/server/src/vcrComposition.mjs",
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/apps/server/src/vcrService.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C046"
+      ],
+      "implementationSummary": "Reuse existing registry discovery and explicit selected protocol panels; keep retrieval metrics separate from eligibility. No unmeasured cloud reranker, patient shared index or match probability is introduced.",
+      "remaining": [
+        "Measure candidate recall on a labeled trial universe before adding a cloud reranker or claiming discovery improvement."
+      ],
+      "validationStatus": "engineering_verified_scientific_acceptance_pending"
+    },
+    {
+      "id": "D05",
+      "priority": "P1",
+      "title": "Reuse native cohort definitions and membership evidence",
+      "dependencies": [
+        "C08",
+        "C10",
+        "C12",
+        "D01"
+      ],
+      "status": "native_reused",
+      "evidence": [
+        "packages/domain/src/vcrRules.mjs",
+        "apps/server/src/vcrKnowledge.mjs",
+        "apps/server/src/vcrMatching.mjs",
+        "apps/server/test/vcrMatching.test.mjs",
+        "apps/server/test/vcrImport.integration.test.mjs"
+      ],
+      "acceptance": "The same data, definition and date reproduce membership. Known true OR unknown remains true and false AND unknown remains false. No second OpenMed DSL or patient-master database is introduced.",
+      "owner": "Domain / cohort methods",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/vcrRules.mjs",
+        "OpenScience/apps/server/src/vcrKnowledge.mjs",
+        "OpenScience/apps/server/src/vcrDataPlane.mjs",
+        "OpenScience/apps/server/src/vcrMatching.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C034",
+        "C036",
+        "C040",
+        "C041",
+        "C042",
+        "C043"
+      ],
+      "implementationSummary": "Use existing cohort definitions, protected snapshots, three-valued grammar and deterministic engine lineage; enhanced facts feed that same evaluator.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "D06",
+      "priority": "P1",
+      "title": "Improve evidence-gap resolution and protocol feasibility views",
+      "dependencies": [
+        "A07",
+        "C12",
+        "D03",
+        "D05"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrComposition.mjs",
+        "apps/server/src/vcrService.mjs",
+        "apps/server/src/vcrMatchStore.mjs",
+        "apps/server/src/vcrRecruit.mjs"
+      ],
+      "acceptance": "A new laboratory report updates the relevant judgments and produces a traceable diff. A what-if threshold change is labeled a scenario and never alters the frozen protocol. Counts respect small-cell suppression and zero-fact candidates.",
+      "owner": "VCR product / methods",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/apps/server/src/vcrRecruit.mjs",
+        "OpenScience/apps/server/src/vcrContact.mjs",
+        "OpenScience/apps/server/src/vcrService.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C047"
+      ],
+      "implementationSummary": "New source facts and protocol versions produce separate frozen evaluations; existing criterion funnels, evidence gaps and rechecks are reused with explicit empty-chart denominators and per-protocol views.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "D07",
+      "priority": "P1",
+      "title": "Expose evidence, timeline and corrections in existing VCR views",
+      "dependencies": [
+        "A04",
+        "C10",
+        "C11",
+        "D03",
+        "D06"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/web/src/components/vcr/ClinicalMatchingDetails.tsx",
+        "apps/web/src/components/vcr/data/CloudDocuments.tsx",
+        "apps/web/src/components/vcr/ClinicalMatchingDetails.test.tsx"
+      ],
+      "acceptance": "A researcher can move from a criterion to the supporting or conflicting source, see why the result is unknown and compare a correction without losing context. Loading/empty/error/success and small-cell states work; no second OpenMed dashboard is shipped.",
+      "owner": "Frontend / VCR",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/web/src/components/vcr/VcrJudgmentDrawer.tsx",
+        "OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx",
+        "OpenScience/apps/web/src/components/vcr/tabs/PatientsTab.tsx",
+        "OpenScience/apps/web/src/lib/vcrClient.ts"
+      ],
+      "upstreamCapabilityIds": [
+        "C015",
+        "C035"
+      ],
+      "implementationSummary": "Existing matching/data pages now expose protocol panels, candidate coverage, located projected/original quotes, medication timelines, conflicts and corrections with existing role checks and UI tokens.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "D08",
+      "priority": "P1",
+      "title": "Add useful summary checks without withholding research",
+      "dependencies": [
+        "C01",
+        "C10",
+        "C11",
+        "B02",
+        "B03"
+      ],
+      "status": "native_reused",
+      "evidence": [
+        "packages/domain/src/clinicalEvidence.mjs",
+        "apps/server/test/clinicalEvidenceSingleImplementation.test.mjs",
+        "capabilities/vcr-package/SKILL.md"
+      ],
+      "acceptance": "Useful verified portions are delivered with claim-level findings. A missing model check or false positive never withholds the whole report. The one domain implementation remains authoritative; extraction, synthesis and derived estimates keep their existing distinctions.",
+      "owner": "Evidence / clinical prompts",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/clinicalEvidence.mjs",
+        "OpenScience/apps/server/src/vcrModelDocuments.mjs",
+        "OpenScience/capability-skills/vcr-package/SKILL.md",
+        "OpenScience/capability-skills/vcr-evidence/SKILL.md"
+      ],
+      "upstreamCapabilityIds": [
+        "C015",
+        "C054",
+        "C055",
+        "C056",
+        "C057",
+        "C058",
+        "C059",
+        "C060",
+        "C061"
+      ],
+      "implementationSummary": "The single domain evidence implementation and non-withholding delivery policy remain intact; selected skills explain uncertain source claims and separate signals from derived estimates.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "E01",
+      "priority": "P2",
+      "title": "Extend FHIR fidelity only for a concrete exchange use case",
+      "dependencies": [
+        "C01",
+        "C08",
+        "C11"
+      ],
+      "status": "conditional_not_activated",
+      "evidence": [
+        "runtime/mcp/evimed-research/vcr_import_convert.py",
+        "apps/server/test/vcrImport.test.mjs",
+        "apps/server/test/vcrImport.integration.test.mjs"
+      ],
+      "acceptance": "Each supported resource round-trips the declared fields with a loss report; unsupported profiles remain explicit. The work does not claim full FHIR/US Core support or replace the native protected data plane.",
+      "owner": "Data interoperability",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrImport.mjs",
+        "OpenScience/runtime/mcp/evimed-research/vcr_import_convert.py",
+        "OpenScience/apps/server/test"
+      ],
+      "upstreamCapabilityIds": [
+        "C089",
+        "C090",
+        "C091",
+        "C092",
+        "C093",
+        "C096",
+        "C097"
+      ],
+      "implementationSummary": "Retained and regression-tested native bounded FHIR R4 import and its source/coverage records. No target partner profile was supplied for a new exporter, SMART or Bulk route.",
+      "remaining": [
+        "A specific partner resource/profile contract and authorized round-trip fixtures are required for new export/SMART/Bulk work."
+      ],
+      "validationStatus": "external_prerequisite"
+    },
+    {
+      "id": "E02",
+      "priority": "P2",
+      "title": "Improve OMOP conformance and cohort reconciliation",
+      "dependencies": [
+        "C07",
+        "C08",
+        "D05"
+      ],
+      "status": "native_reused",
+      "evidence": [
+        "runtime/mcp/evimed-research/vcr_import_convert.py",
+        "apps/server/src/vcrImport.mjs",
+        "apps/server/test/vcrImport.integration.test.mjs"
+      ],
+      "acceptance": "Count and concept mismatches are explainable and localized; reports do not claim that a successful load validates all vocabularies or clinical meaning. There is no unsolicited full OHDSI stack deployment.",
+      "owner": "Data interoperability / methods",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrImport.mjs",
+        "OpenScience/runtime/mcp/evimed-research/vcr_import_convert.py",
+        "OpenScience/packages/domain/src/dataSemantics.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C094",
+        "C095"
+      ],
+      "implementationSummary": "Native OMOP conversion preserves source columns, unmapped concepts, declared editions and coverage warnings; preserved aggregate/cohort tests exercise import through frozen analysis tables. ADaM remains supported.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "E03",
+      "priority": "P2",
+      "title": "Reuse clinical structure across research capabilities",
+      "dependencies": [
+        "C01",
+        "C07",
+        "C08",
+        "C11"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/clinicalFact.mjs",
+        "packages/domain/src/dataSemantics.mjs",
+        "capabilities/vcr-analysis/SKILL.md",
+        "capabilities/vcr-matching/SKILL.md"
+      ],
+      "acceptance": "A researcher-confirmed meaning is not overwritten by a weaker model suggestion. A changed source version invalidates only dependent interpretations. Statistical numbers continue to come from deterministic tools, not the NLP model.",
+      "owner": "Data semantics / evidence",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/dataSemantics.mjs",
+        "OpenScience/apps/server/src/dataSemanticsService.mjs",
+        "OpenScience/runtime/mcp/evimed-research/data_semantics.py",
+        "OpenScience/runtime/mcp/evimed-research/data_semantics_checks.py"
+      ],
+      "upstreamCapabilityIds": [
+        "C071",
+        "C073",
+        "C078",
+        "C079",
+        "C080",
+        "C085",
+        "C124",
+        "C125",
+        "C126",
+        "C127",
+        "C128",
+        "C129",
+        "C130"
+      ],
+      "implementationSummary": "Clinical metadata exposes field units, coding editions and exact source hashes without patient values; skills reuse dataset_semantics and its stronger-basis precedence. Statistics stay in the native engine.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "E04",
+      "priority": "P2",
+      "title": "Strengthen structured disclosure regression checks",
+      "dependencies": [
+        "A04",
+        "B07"
+      ],
+      "status": "native_reused",
+      "evidence": [
+        "packages/domain/src/vcrSuppression.mjs",
+        "apps/server/src/vcrCloudProjection.mjs",
+        "apps/server/test/vcrAuditNoLeak.test.mjs",
+        "apps/server/test/vcrCloudProjection.test.mjs"
+      ],
+      "acceptance": "Linked tables retain referential integrity inside an authorized study and cannot be joined by reused pseudonyms across studies. Aggregate responses preserve existing suppression. Any future noisy release is labeled and reproducible under its declared privacy budget.",
+      "owner": "Privacy / evaluation",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/vcrSuppression.mjs",
+        "OpenScience/apps/server/src/vcrDataPlane.mjs",
+        "OpenScience/apps/server/src/vcrGateway.mjs",
+        "OpenScience/apps/server/test"
+      ],
+      "upstreamCapabilityIds": [
+        "C071",
+        "C072",
+        "C073",
+        "C074",
+        "C075",
+        "C076"
+      ],
+      "implementationSummary": "Retained deterministic small-cell and aggregate protections; new identifiers are study-scoped and original quote restoration is an authorized protected operation. No differential-privacy guarantee is invented.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "E05",
+      "priority": "P2",
+      "title": "Select useful skill and connector content for existing capabilities",
+      "dependencies": [
+        "A01",
+        "B08"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "capabilities/vcr-protocol/SKILL.md",
+        "capabilities/vcr-evidence/SKILL.md",
+        "capabilities/vcr-analysis/SKILL.md",
+        "capabilities/vcr-matching/SKILL.md",
+        "capabilities/vcr-package/SKILL.md",
+        "packages/domain/src/skill-packages.json"
+      ],
+      "acceptance": "Each adopted fragment has a purpose and evaluated benefit in an existing capability. No bulk installation of 74 skills, generic SQL access, second MCP gateway or new agent framework is required.",
+      "owner": "Capability maintainers",
+      "nativeIntegrationPoints": [
+        "OpenScience/capabilities",
+        "OpenScience/capability-skills",
+        "OpenScience/runtime/mcp/evimed-research",
+        "OpenScience/packages/socket"
+      ],
+      "upstreamCapabilityIds": [
+        "C098",
+        "C099",
+        "C100",
+        "C102",
+        "C103",
+        "C104",
+        "C105",
+        "C106",
+        "C107",
+        "C108",
+        "C124",
+        "C125",
+        "C126",
+        "C127",
+        "C128",
+        "C129",
+        "C130"
+      ],
+      "implementationSummary": "Selected guidance is integrated into the five current VCR capabilities and shared skill copies; no bulk skill install, generic database connector or replacement MCP server.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "E06",
+      "priority": "P2",
+      "title": "Extend existing deletion and audit coverage to new derived artifacts",
+      "dependencies": [
+        "A04",
+        "A05",
+        "C12",
+        "B09"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrDataPlane.mjs",
+        "apps/server/src/vcrStore.mjs",
+        "apps/server/src/vcrCloudEgress.mjs",
+        "apps/server/src/capsuleGateway.mjs",
+        "apps/server/src/memoryIntelligence.mjs",
+        "apps/server/src/learningTriggers.mjs",
+        "docs/WEB_OPERATIONS_RUNBOOK.md"
+      ],
+      "acceptance": "Deleting or revoking a study cannot leave its patient text in shared memory, caches or evaluation artifacts. Required retained records are documented within existing policy. Audit integrity is described precisely, without claiming HIPAA/GDPR/Part 11 certification from helper code.",
+      "owner": "Backend / operations",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrDataPlane.mjs",
+        "OpenScience/apps/server/src/vcrAccess.mjs",
+        "OpenScience/apps/server/src/vcrPersistence.mjs",
+        "OpenScience/apps/server/src/vcrDocumentExport.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C102",
+        "C103",
+        "C104",
+        "C108",
+        "C146",
+        "C147",
+        "C149"
+      ],
+      "implementationSummary": "Derived projection/fact deletion follows native lifecycle; cached permissions survive soft deletion and disabling VCR. Clinical sessions cannot populate general memory or shared learning; retained originals, transcripts, audit and backups are documented precisely.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "F01",
+      "priority": "P2 conditional",
+      "title": "Integrate licensed interaction evidence when a task needs it",
+      "dependencies": [
+        "A02",
+        "C06",
+        "C08",
+        "B02"
+      ],
+      "status": "conditional_not_activated",
+      "evidence": [
+        "packages/contracts/openmed/data-rights.json",
+        "runtime/mcp/evimed-research/drug_assessment.py",
+        "capabilities/vcr-analysis/SKILL.md"
+      ],
+      "acceptance": "Every interaction statement cites its licensed source and version. A missing database does not produce a no-interaction conclusion. The feature supports research review rather than silently issuing treatment changes.",
+      "owner": "Drug evidence / clinical domain",
+      "nativeIntegrationPoints": [
+        "OpenScience/runtime/mcp/evimed-research/drug_assessment.py",
+        "OpenScience/capability-skills/adr-analysis",
+        "OpenScience/packages/domain/src/clinical-safety-rules.json"
+      ],
+      "upstreamCapabilityIds": [
+        "C048",
+        "C049",
+        "C050",
+        "C051"
+      ],
+      "implementationSummary": "Existing drug-evidence workflows remain available. No interaction database was supplied or licensed; missing coverage is documented as unknown, not no interaction.",
+      "remaining": [
+        "A licensed versioned interaction source/provider and reference cases are required before building/activating that optional provider."
+      ],
+      "validationStatus": "external_prerequisite"
+    },
+    {
+      "id": "F02",
+      "priority": "P2 conditional",
+      "title": "Add bounded dose checks only with suitable reference rules",
+      "dependencies": [
+        "F01",
+        "C07"
+      ],
+      "status": "conditional_not_activated",
+      "evidence": [
+        "packages/domain/src/clinical-safety-rules.json",
+        "runtime/mcp/evimed-research/drug_assessment.py",
+        "capabilities/vcr-analysis/SKILL.md"
+      ],
+      "acceptance": "A missing weight, indication or renal measure yields insufficient information. Every derived number identifies its inputs and rule source; a table match is not represented as individualized prescribing approval.",
+      "owner": "Drug evidence / clinical methods",
+      "nativeIntegrationPoints": [
+        "OpenScience/packages/domain/src/clinical-safety-rules.json",
+        "OpenScience/runtime/mcp/evimed-research/drug_assessment.py",
+        "OpenScience/capability-skills/adr-analysis"
+      ],
+      "upstreamCapabilityIds": [
+        "C048",
+        "C049",
+        "C050",
+        "C051"
+      ],
+      "implementationSummary": "No patient dose decision route is enabled without suitable versioned indication/renal/weight rules; native drug evidence and safety framing remain in use.",
+      "remaining": [
+        "Suitable licensed rules and applicability cases are required before implementing a new dose-check route."
+      ],
+      "validationStatus": "external_prerequisite"
+    },
+    {
+      "id": "F03",
+      "priority": "P2 conditional",
+      "title": "Use report-level adverse-event signals appropriately",
+      "dependencies": [
+        "A02",
+        "C05",
+        "C08",
+        "B02"
+      ],
+      "status": "conditional_not_activated",
+      "evidence": [
+        "capabilities/adr-analysis/SKILL.md",
+        "runtime/mcp/evimed-research/drug_assessment.py",
+        "capabilities/vcr-analysis/SKILL.md"
+      ],
+      "acceptance": "A signal can be regenerated from the preserved counts. Duplicate reports and changed follow-ups are tested. Signal ratios are never reported as incidence, causal effect, patient risk or synthetic-trial outcome parameters.",
+      "owner": "ADR methods / data engineering",
+      "nativeIntegrationPoints": [
+        "OpenScience/capability-skills/adr-analysis",
+        "OpenScience/runtime/mcp/evimed-research/drug_assessment.py",
+        "OpenScience/evals/adr-analysis"
+      ],
+      "upstreamCapabilityIds": [
+        "C048",
+        "C049",
+        "C050",
+        "C051"
+      ],
+      "implementationSummary": "Reuse existing ADR capability when a report-level dataset is commissioned; no unsupported signal dataset or causal trial parameter was added.",
+      "remaining": [
+        "A commissioned authorized adverse-event report dataset is required to measure duplicate/follow-up reconciliation and signals."
+      ],
+      "validationStatus": "external_prerequisite"
+    },
+    {
+      "id": "F04",
+      "priority": "P3 conditional",
+      "title": "Use measure-style states for research readiness only when needed",
+      "dependencies": [
+        "D06",
+        "E03"
+      ],
+      "status": "conditional_not_activated",
+      "evidence": [
+        "apps/server/src/vcrMatching.mjs",
+        "apps/server/src/vcrRecruit.mjs",
+        "capabilities/vcr-matching/SKILL.md"
+      ],
+      "acceptance": "A missing test is a research evidence gap, not a diagnosis or a treatment recommendation. Measure definitions, time windows and denominators are versioned and understood by the intended user.",
+      "owner": "Research product / methods",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/apps/server/src/vcrService.mjs",
+        "OpenScience/packages/domain/src/vcrKnowledgePack.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C016",
+        "C052",
+        "C053"
+      ],
+      "implementationSummary": "Reuse native research evidence-gap states. No new care-management measure or quality-denominator definition was requested.",
+      "remaining": [
+        "A concrete research measure, time window and denominator are required before adding a new measure adapter."
+      ],
+      "validationStatus": "external_prerequisite"
+    },
+    {
+      "id": "F05",
+      "priority": "P2 conditional",
+      "title": "Support scanned clinical documents through an authorized cloud service",
+      "dependencies": [
+        "A03",
+        "A04",
+        "B07",
+        "C11",
+        "B04"
+      ],
+      "status": "conditional_not_activated",
+      "evidence": [
+        "apps/server/src/vcrRecordExtract.mjs",
+        "apps/server/src/vcrIntakeController.mjs",
+        "apps/server/test/vcrImport.test.mjs",
+        "packages/contracts/openmed/data-rights.json"
+      ],
+      "acceptance": "The feature does not install a local OCR/vision model or send protected originals to the ordinary parser by default. An unavailable approved route affects only those scans. OCR mistakes in decimal points, units and negation are measured end to end.",
+      "owner": "Source / privacy / evaluation",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrRecordExtract.mjs",
+        "OpenScience/apps/server/src/vcrIntakeController.mjs",
+        "OpenScience/apps/server/src/documentParserClient.mjs",
+        "OpenScience/apps/server/src/sourceMaterials.mjs"
+      ],
+      "upstreamCapabilityIds": [
+        "C081",
+        "C082",
+        "C083",
+        "C086"
+      ],
+      "implementationSummary": "No approved clinical scan/OCR provider and terms were supplied. Native protected text extraction remains available; scans retain named unavailable states and never fall through to the ordinary external parser.",
+      "remaining": [
+        "An explicitly approved clinical OCR service, processing terms and scan reference set are required before enabling cloud scan processing."
+      ],
+      "validationStatus": "external_prerequisite"
+    },
+    {
+      "id": "F06",
+      "priority": "P3 conditional",
+      "title": "Open new languages or hospital formats one use case at a time",
+      "dependencies": [
+        "A02",
+        "B08",
+        "E01",
+        "E02"
+      ],
+      "status": "conditional_not_activated",
+      "evidence": [
+        "apps/server/src/vcrImport.mjs",
+        "runtime/mcp/evimed-research/vcr_import_convert.py",
+        "packages/contracts/openmed/capability-decisions.csv"
+      ],
+      "acceptance": "Each activated extension has a supported-format/version statement and its own source-level acceptance cases. A language route or adapter name never expands product claims automatically; general email, billing, mobile inference and media platforms remain outside this adoption scope.",
+      "owner": "Product / interoperability",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrImport.mjs",
+        "OpenScience/apps/server/src/vcrIntakeLayout.mjs",
+        "OpenScience/runtime/mcp/evimed-research/vcr_import_convert.py",
+        "OpenScience/evals"
+      ],
+      "upstreamCapabilityIds": [
+        "C022",
+        "C024",
+        "C083",
+        "C087",
+        "C088",
+        "C091",
+        "C093",
+        "C096",
+        "C097"
+      ],
+      "implementationSummary": "No new partner format/language use case was supplied. Existing FHIR R4, OMOP and ADaM boundaries and limitations remain explicit.",
+      "remaining": [
+        "A named partner format/language and its acceptance fixtures are required for each extension."
+      ],
+      "validationStatus": "external_prerequisite"
+    },
+    {
+      "id": "G01",
+      "priority": "P1",
+      "title": "Wire selected contracts through the current five VCR capabilities",
+      "dependencies": [
+        "C09",
+        "C12",
+        "D03",
+        "D05",
+        "D06",
+        "D07",
+        "D08"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrComposition.mjs",
+        "runtime/mcp/evimed-research/vcr_platform.py",
+        "apps/server/test/capabilityPreflightCopiesAgree.test.mjs",
+        "packages/contracts/openmed/contract.test.mjs"
+      ],
+      "acceptance": "No duplicated delivery rule, second tool gateway or new generic agent route appears. Capability copies agree, old supported inputs still work, and a failed optional enrichment leaves the rest of the research usable.",
+      "owner": "Platform / capability maintainers",
+      "nativeIntegrationPoints": [
+        "OpenScience/capabilities",
+        "OpenScience/capability-skills",
+        "OpenScience/packages/domain",
+        "OpenScience/packages/socket",
+        "OpenScience/runtime/mcp/evimed-research/vcr_platform.py"
+      ],
+      "upstreamCapabilityIds": [
+        "C003",
+        "C021",
+        "C098",
+        "C099",
+        "C100",
+        "C109",
+        "C110",
+        "C111",
+        "C112",
+        "C113",
+        "C114",
+        "C116",
+        "C124",
+        "C125",
+        "C126",
+        "C127",
+        "C128",
+        "C129",
+        "C130"
+      ],
+      "implementationSummary": "Current VCR tools, job queue, domain rules and five capability packages carry the changes; no duplicate agent/gateway or report veto.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "G02",
+      "priority": "P1",
+      "title": "Validate the real integrated path and its targeted regressions",
+      "dependencies": [
+        "G01",
+        "B06",
+        "B07",
+        "B08"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/run_native_clinical.mjs",
+        "evals/method-quality/run_native_vcr.mjs",
+        "apps/server/test/vcrOpenmed.integration.test.mjs",
+        "evals/vcr-matching/openmed-scorecard.json"
+      ],
+      "acceptance": "The selected adoption batch has reproducible before/after measurements, no new violations of deterministic invariants and disclosed unresolved errors. Clinical utility, false exclusions, privacy, completion and cost are reported separately. Model improvements are not inferred from mocked tests.",
+      "owner": "Quality / evaluation",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/test",
+        "OpenScience/runtime/mcp/evimed-research/test",
+        "OpenScience/evals",
+        "OpenScience/scripts/vcr/live-acceptance.mjs",
+        "OpenScience/package.json"
+      ],
+      "upstreamCapabilityIds": [
+        "C150",
+        "C152"
+      ],
+      "implementationSummary": "Real PostgreSQL/R/native DSH/cloud-gateway runs supplement deterministic, UI and privacy tests. Synthetic and public failures remain in the scorecard; hosted production acceptance is not claimed.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    },
+    {
+      "id": "G03",
+      "priority": "P1",
+      "title": "Roll out a measured study-scoped batch",
+      "dependencies": [
+        "G02"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/config.mjs",
+        "apps/server/src/vcrComposition.mjs",
+        "deploy/web/.env.example",
+        "deploy/web/docker-compose.yml",
+        "docs/WEB_OPERATIONS_RUNBOOK.md"
+      ],
+      "acceptance": "The native baseline remains selectable for comparison, and a candidate provider failure does not cascade across studies. Production enabling follows the established release process; this planning document does not enable VCR or authorize new patient outreach.",
+      "owner": "Operations / VCR",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrWorker.mjs",
+        "OpenScience/apps/server/src/vcrJobs.mjs",
+        "OpenScience/apps/server/src/usageLedger.mjs",
+        "OpenScience/deploy/web/release-manifest.json"
+      ],
+      "upstreamCapabilityIds": [
+        "C109",
+        "C110",
+        "C111",
+        "C112",
+        "C113",
+        "C114",
+        "C116",
+        "C123",
+        "C150",
+        "C152"
+      ],
+      "implementationSummary": "Study-scoped enrichment defaults off and can be removed without deleting historical evidence. No production enablement or patient outreach was performed.",
+      "remaining": [
+        "Production release/enabling is a separate action; the enhanced extraction default remains off pending independent measurement."
+      ],
+      "validationStatus": "engineering_verified_scientific_acceptance_pending"
+    },
+    {
+      "id": "G04",
+      "priority": "P1",
+      "title": "Monitor drift and preserve rollback with historical evidence",
+      "dependencies": [
+        "G03",
+        "B09"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/usageMetering.mjs",
+        "apps/server/src/vcrMatchStore.mjs",
+        "apps/server/src/vcrComposition.mjs",
+        "docs/WEB_OPERATIONS_RUNBOOK.md"
+      ],
+      "acceptance": "A changed provider or mapping can be correlated with a measured regression. Rollback preserves original records and historical reports rather than deleting evidence. Operational metadata contains no raw patient text or secret values.",
+      "owner": "Operations / evaluation",
+      "nativeIntegrationPoints": [
+        "OpenScience/apps/server/src/vcrComposition.mjs",
+        "OpenScience/apps/server/src/vcrMatching.mjs",
+        "OpenScience/apps/server/src/modelGateway.mjs",
+        "OpenScience/deps-version.json",
+        "OpenScience/deploy/web/release-manifest.json"
+      ],
+      "upstreamCapabilityIds": [
+        "C150",
+        "C152"
+      ],
+      "implementationSummary": "Producer metadata, separate task scorecards and content-free operational gauges support drift investigation; rollback preserves snapshots and privacy boundaries.",
+      "remaining": [],
+      "validationStatus": "engineering_verified"
+    }
+  ],
+  "updatedAt": "2026-10-09",
+  "deliveryScope": "Selective cloud-API adoption on an isolated branch; no production rollout.",
+  "statusMeaning": {
+    "implemented": "Engineering change is present; consult remaining and validationStatus for unmet acceptance.",
+    "native_reused": "Existing implementation was retained and its applicable regressions exercised.",
+    "conditional_not_activated": "Explicit optional prerequisite is absent; no unsupported capability was enabled.",
+    "external_validation_required": "Evaluation scaffolding exists but independent reference data cannot be fabricated."
+  },
+  "productionEnabled": false,
+  "independentClinicalValidation": false,
+  "scientificPromotion": false,
+  "note": "All tasks have an explicit disposition, not all original scientific/partner acceptance criteria are met. No conditional task is relabeled verified."
+}

@@ -1,6 +1,6 @@
 // 「虚拟临研」's eligibility engine: the four states and the algebra over them,
 // the evidence check that voids a fabricated fact, the as-of replay, and the
-// evaluation report that states a ceiling and refuses a threshold.
+// evaluation report that describes reference agreement separately from clinical accuracy.
 //
 // The case numbers in the titles are the plan's: AC-14/15/36 are §12, and
 // C2-15…C2-20 are attachment C2's matching cases. They are in the titles on
@@ -141,6 +141,23 @@ test("C2-16 AC-14 unknown is not folded into not-satisfied anywhere in the summa
     { applicable: true, state: PENDING_RECHECK }, { applicable: false, state: UNKNOWN },
   ]);
   assert.deepEqual(counts, { satisfied: 1, not_satisfied: 0, unknown: 1, pending_recheck: 1, notApplicable: 1, total: 4 });
+});
+
+test('latest lab ties cannot choose a passing or failing value by row order', () => {
+  const criterion={id:'tie',kind:'inclusion',criterionType:'lab',requirement:{op:'compare',variable:'creatinine',comparator:'lte',value:1.5,unit:'mg/dL',aggregate:'latest'}};
+  const a={id:'a',variable:'creatinine',value:1,unit:'mg/dL',polarity:'affirmed',occurredAt:'2026-01-01'};
+  const b={...a,id:'b',value:2.4};
+  for(const facts of [[a,b],[b,a]]) assert.equal(evaluateCriterion(criterion,{facts,asOf:Date.parse(AS_OF)}).state,UNKNOWN);
+  assert.equal(evaluateCriterion(criterion,{facts:[a,{...b,value:88.4,unit:'µmol/L'}],asOf:Date.parse(AS_OF)}).state,SATISFIED);
+});
+
+test('current non-administration is not a lifetime denial of earlier exposure', () => {
+  const criterion={id:'wash',kind:'exclusion',criterionType:'prior_treatment',requirement:{op:'elapsed_since',variable:'docetaxel',days:28,comparator:'gte'}};
+  const context={schema:1,assertion:'negated',experiencer:'patient',temporality:'current',medication:{state:'planned',absenceScope:'current'}};
+  const current={id:'no-current-dose',variable:'docetaxel',polarity:'negated',clinical:context};
+  assert.equal(evaluateCriterion(criterion,{facts:[current],asOf:Date.parse(AS_OF)}).state,UNKNOWN);
+  const never={...current,clinical:{...context,temporality:'historical',medication:{state:'unknown',absenceScope:'never'}}};
+  assert.equal(evaluateCriterion(criterion,{facts:[never],asOf:Date.parse(AS_OF)}).state,SATISFIED);
 });
 
 test("AC-14 not-applicable is a field beside the state, not a fifth state and not an unknown", () => {
@@ -592,7 +609,7 @@ test("AC-36 subject-level metrics report recall, false exclusion, PPV and the nu
   assert.equal(metrics.unresolvedRate, 1 / 6);
 });
 
-test("AC-36 the report states the inter-rater ceiling and carries no threshold", () => {
+test("AC-36 the report describes inter-rater agreement without claiming an accuracy ceiling", () => {
   const agreement = interRaterAgreement([SATISFIED, SATISFIED, UNKNOWN, NOT_SATISFIED], [SATISFIED, UNKNOWN, UNKNOWN, NOT_SATISFIED]);
   assert.equal(agreement.pairs, 4);
   assert.equal(agreement.agreement, 3 / 4);
@@ -609,7 +626,7 @@ test("AC-36 the report states the inter-rater ceiling and carries no threshold",
   assert.equal(report.threshold, null, "there is no pass mark");
   assert.equal(Object.hasOwn(report, "passed"), false);
   assert.match(report.note, /不设统一准确率门槛/);
-  assert.match(report.ceiling.note, /上限/);
+  assert.match(report.ceiling.note, /不代表临床准确率上限/);
   assert.equal(report.reviewMinutes.savedPerChart, 5);
   // Nothing in the report quotes another product's number.
   assert.equal(/87\.3|88\.7|0\.93|63%|TrialGPT|PRISM/.test(JSON.stringify(report)), false);
@@ -619,7 +636,7 @@ test("C2-20 AC-36 the shipped evaluation set runs end to end and its numbers are
   const file = path.join(repoRoot, "evals", "vcr-matching", "matching-eval-sample.json");
   const dataset = JSON.parse(await readFile(file, "utf8"));
   assert.equal(dataset.synthetic, true, "the sample set says it is synthetic");
-  assert.match(dataset.note, /合成数据/);
+  assert.match(dataset.note, /synthetic/);
   assert.equal(dataset.cases.length, 7);
   assert.equal(dataset.criteria.length, 6);
 
@@ -808,4 +825,47 @@ test('C2-25 declared code vocabulary versions cannot silently select the current
   const assessed = assessSubject({ subjectKey: 'heldout', asOf: AS_OF, facts: [{ ...fact, visibleAt: AS_OF }], criteria: [{ id: 'sex', kind: 'inclusion', requirement: node }] });
   assert.equal(assessed.judgments[0].state, UNKNOWN);
   assert.ok(assessed.provenance.vocabularyVersion);
+});
+
+
+test('clinical context and medication states change eligibility without changing supported quotes', () => {
+  const source = chart('父亲有心梗史。患者可能心梗。拟于2026-10-02使用多西他赛。');
+  const metadata = { schema:1, assertion:'affirmed', experiencer:'family' };
+  const assess = facts => assessSubject({ asOf:'2026-10-09', criteria:[{...CRITERION_MI,requirement:{op:'absent',variable:'myocardial_infarction'}}], facts,documents:source.documents });
+  assert.equal(assess([source.fact('父亲有心梗史', {variable:'myocardial_infarction',clinical:metadata})]).summary,'insufficient_evidence');
+  assert.equal(assess([source.fact('患者可能心梗', {variable:'myocardial_infarction',clinical:{...metadata,experiencer:'patient',assertion:'possible'}})]).summary,'insufficient_evidence');
+  const washout={id:'washout',kind:'exclusion',requirement:{op:'elapsed_since',variable:'docetaxel',days:28}};
+  for (const state of ['prescribed','planned','historical_list','unknown']) {
+    const fact=source.fact('多西他赛',{variable:'docetaxel',occurredAt:'2026-08-01',clinical:{...metadata,experiencer:'patient',medication:{state}}});
+    assert.equal(evaluateCriterion(washout,{facts:[fact],asOf:Date.parse('2026-10-09')}).state,UNKNOWN,state);
+  }
+  const copied=source.fact('多西他赛',{variable:'docetaxel',occurredAt:'2026-08-01',clinical:{...metadata,experiencer:'patient',copiedFrom:'original',medication:{state:'administered'}}});
+  assert.equal(evaluateCriterion(washout,{facts:[copied],asOf:Date.parse('2026-10-09')}).state,UNKNOWN);
+});
+
+test('same-event conflicting lab results stay unknown; a visible sourced correction changes only the current view', () => {
+  const source=chart('肌酐 1.2 mg/dL。复核肌酐 2.4 mg/dL。');
+  const clinical={schema:1,assertion:'affirmed',experiencer:'patient',eventId:'sample_1'};
+  const first=source.fact('肌酐 1.2 mg/dL',{id:'first',subjectKey:'p1',variable:'creatinine',value:1.2,unit:'mg/dL',clinical});
+  const second=source.fact('复核肌酐 2.4 mg/dL',{id:'second',subjectKey:'p1',variable:'creatinine',value:2.4,unit:'mg/dL',clinical});
+  const criteria=[{id:'lab',kind:'inclusion',requirement:{op:'compare',variable:'creatinine',comparator:'lte',value:1.5,unit:'mg/dL'}}];
+  const assess=(facts,asOf='2026-10-09')=>assessSubject({criteria,facts,asOf,documents:source.documents});
+  assert.equal(assess([first,second]).summary,'insufficient_evidence');
+  const correction={...second,createdAt:'2026-10-02',clinical:{...clinical,correctionOf:'first',correctionReason:'Confirmed corrected report'}};
+  assert.equal(assess([first,correction],'2026-10-01').summary,'eligible');
+  assert.equal(assess([first,correction]).summary,'ineligible');
+});
+
+test('a model cannot attach a guessed unit to a quote that omits it, or bypass units with equality',()=>{
+  const source=chart('2026-09-01患者血肌酐1.0，单位未记载。');
+  const clinical={schema:1,assertion:'affirmed',experiencer:'patient',laboratory:{originalValue:1,originalUnit:'未给单位'}};
+  const guessed=source.fact('血肌酐1.0',{variable:'creatinine',value:1,unit:'mg/dL',clinical});
+  const verified=verifyFactEvidence(guessed,{documents:source.documents});
+  assert.deepEqual(verified,{ok:false,reason:'unit_not_in_span'});
+  const criterion={id:'lab',kind:'inclusion',requirement:{op:'compare',variable:'creatinine',comparator:'lte',value:1.5,unit:'mg/dL'}};
+  assert.equal(assessSubject({criteria:[criterion],facts:[guessed],documents:source.documents,asOf:AS_OF}).summary,'insufficient_evidence');
+  assert.equal(evaluateCriterion(criterion,{facts:[guessed],asOf:Date.parse(AS_OF)}).state,UNKNOWN);
+  const equal={...criterion,requirement:{...criterion.requirement,comparator:'eq',value:88.4,unit:'umol/L'}};
+  assert.equal(evaluateCriterion(equal,{facts:[{variable:'creatinine',value:1,unit:'mg/dL'}],asOf:Date.parse(AS_OF)}).state,SATISFIED);
+  assert.equal(evaluateCriterion(equal,{facts:[{variable:'creatinine',value:88.4}],asOf:Date.parse(AS_OF)}).state,UNKNOWN);
 });

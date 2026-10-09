@@ -1,0 +1,239 @@
+{
+  "schema": 1,
+  "dataClass": "synthetic",
+  "labeling": "author_seen_regression_not_clinician_validation",
+  "frozenAt": "2026-10-09T17:10:00Z",
+  "cases": [
+    {
+      "id": "family-negation",
+      "group": "synthetic-person-01",
+      "text": "父亲有心肌梗死史。患者本人明确否认心肌梗死史。",
+      "criteria": [
+        {
+          "kind": "exclusion",
+          "criterionType": "time_window",
+          "sourceText": "近六个月发生心梗者除外",
+          "requirement": {
+            "op": "absent",
+            "variable": "myocardial_infarction",
+            "window": {
+              "months": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "uncertain-event",
+      "group": "synthetic-person-02",
+      "text": "2026-09-01急诊：疑似心肌梗死，尚未确诊。",
+      "criteria": [
+        {
+          "kind": "exclusion",
+          "criterionType": "time_window",
+          "sourceText": "近六个月发生心梗者除外",
+          "requirement": {
+            "op": "absent",
+            "variable": "myocardial_infarction",
+            "window": {
+              "months": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "planned-treatment",
+      "group": "synthetic-person-03",
+      "text": "2026-09-01拟下周开始多西他赛，尚未给药；此前用药记录缺失。",
+      "criteria": [
+        {
+          "kind": "exclusion",
+          "criterionType": "prior_treatment",
+          "sourceText": "末次多西他赛实际给药至少28天",
+          "requirement": {
+            "op": "elapsed_since",
+            "variable": "docetaxel",
+            "days": 28,
+            "comparator": "gte"
+          }
+        }
+      ]
+    },
+    {
+      "id": "conflicting-lab",
+      "group": "synthetic-person-04",
+      "text": "2026-09-01同一次就诊同一标本两份报告：肌酐1.0 mg/dL；肌酐2.4 mg/dL。未注明哪份被更正。",
+      "criteria": [
+        {
+          "kind": "inclusion",
+          "criterionType": "lab",
+          "sourceText": "血肌酐不超过1.5 mg/dL",
+          "requirement": {
+            "op": "compare",
+            "variable": "creatinine",
+            "comparator": "lte",
+            "value": 1.5,
+            "unit": "mg/dL",
+            "aggregate": "latest"
+          }
+        }
+      ]
+    },
+    {
+      "id": "equivalent-units",
+      "group": "synthetic-person-05",
+      "text": "2026-09-01同一标本血肌酐88.4 µmol/L，另页记录1.0 mg/dL。",
+      "criteria": [
+        {
+          "kind": "inclusion",
+          "criterionType": "lab",
+          "sourceText": "血肌酐不超过1.5 mg/dL",
+          "requirement": {
+            "op": "compare",
+            "variable": "creatinine",
+            "comparator": "lte",
+            "value": 1.5,
+            "unit": "mg/dL",
+            "aggregate": "latest"
+          }
+        }
+      ]
+    },
+    {
+      "id": "administered-treatment",
+      "group": "synthetic-person-06",
+      "text": "2026-09-01实际完成多西他赛静脉给药，之后无再次给药。",
+      "criteria": [
+        {
+          "kind": "exclusion",
+          "criterionType": "prior_treatment",
+          "sourceText": "末次多西他赛实际给药至少28天",
+          "requirement": {
+            "op": "elapsed_since",
+            "variable": "docetaxel",
+            "days": 28,
+            "comparator": "gte"
+          }
+        }
+      ]
+    },
+    {
+      "id": "family-only",
+      "group": "synthetic-person-07",
+      "text": "父亲曾发生心肌梗死。病历未记载患者本人相关病史。",
+      "criteria": [
+        {
+          "kind": "exclusion",
+          "criterionType": "time_window",
+          "sourceText": "近六个月发生心梗者除外",
+          "requirement": {
+            "op": "absent",
+            "variable": "myocardial_infarction",
+            "window": {
+              "months": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "affirmed-event",
+      "group": "synthetic-person-08",
+      "text": "2026-09-01患者确诊急性心肌梗死。",
+      "criteria": [
+        {
+          "kind": "exclusion",
+          "criterionType": "time_window",
+          "sourceText": "近六个月发生心梗者除外",
+          "requirement": {
+            "op": "absent",
+            "variable": "myocardial_infarction",
+            "window": {
+              "months": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "missing-lab",
+      "group": "synthetic-person-09",
+      "text": "2026-09-01血肌酐已经采样，结果待回报。",
+      "criteria": [
+        {
+          "kind": "inclusion",
+          "criterionType": "lab",
+          "sourceText": "血肌酐不超过1.5 mg/dL",
+          "requirement": {
+            "op": "compare",
+            "variable": "creatinine",
+            "comparator": "lte",
+            "value": 1.5,
+            "unit": "mg/dL",
+            "aggregate": "latest"
+          }
+        }
+      ]
+    },
+    {
+      "id": "lab-high",
+      "group": "synthetic-person-10",
+      "text": "2026-09-01患者血肌酐为2.4 mg/dL。",
+      "criteria": [
+        {
+          "kind": "inclusion",
+          "criterionType": "lab",
+          "sourceText": "血肌酐不超过1.5 mg/dL",
+          "requirement": {
+            "op": "compare",
+            "variable": "creatinine",
+            "comparator": "lte",
+            "value": 1.5,
+            "unit": "mg/dL",
+            "aggregate": "latest"
+          }
+        }
+      ]
+    },
+    {
+      "id": "clinical-coreference",
+      "group": "synthetic-person-11",
+      "text": "2026-09-01患者父亲住院。他被诊断为急性心梗；患者本人否认心梗史。",
+      "criteria": [
+        {
+          "kind": "exclusion",
+          "criterionType": "time_window",
+          "sourceText": "近六个月发生心梗者除外",
+          "requirement": {
+            "op": "absent",
+            "variable": "myocardial_infarction",
+            "window": {
+              "months": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "unrecognized-unit",
+      "group": "synthetic-person-12",
+      "text": "2026-09-01患者血肌酐1.0，报告未给单位。",
+      "criteria": [
+        {
+          "kind": "inclusion",
+          "criterionType": "lab",
+          "sourceText": "血肌酐不超过1.5 mg/dL",
+          "requirement": {
+            "op": "compare",
+            "variable": "creatinine",
+            "comparator": "lte",
+            "value": 1.5,
+            "unit": "mg/dL",
+            "aggregate": "latest"
+          }
+        }
+      ]
+    }
+  ]
+}

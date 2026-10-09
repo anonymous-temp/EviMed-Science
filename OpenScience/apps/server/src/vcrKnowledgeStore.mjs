@@ -65,6 +65,7 @@ function bindingFromRow(row) {
   return {
     studyId: String(row.study_id), userId: String(row.user_id), origin: String(row.origin), packId: String(row.pack_id),
     packVersion: Number(row.pack_version), boundBy: String(row.bound_by ?? ""), boundAt: iso(row.bound_at),
+    ...(row.pack_body ? {packBody: row.pack_body} : {}),
   };
 }
 
@@ -143,16 +144,16 @@ export class VcrKnowledgeStore extends VcrStoreBase {
 
   /**
    * Point a study at a pack (replacing what it pointed at).
-   * @param {{ studyId: string, userId: string, origin: "shipped" | "stored", packId: string, packVersion: number, actor?: string }} input
+   * @param {{ studyId: string, userId: string, origin: "shipped" | "stored", packId: string, packVersion: number, actor?: string, packBody?:any }} input
    */
-  async bindStudy({ studyId, userId, origin, packId, packVersion, actor = "" }) {
+  async bindStudy({ studyId, userId, origin, packId, packVersion, actor = "", packBody = null }) {
     return this.transaction(async (client) => {
       const row = (await client.query(
-        `INSERT INTO ${VCR_SCHEMA}.study_packs (study_id, user_id, origin, pack_id, pack_version, bound_by)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO ${VCR_SCHEMA}.study_packs (study_id, user_id, origin, pack_id, pack_version, bound_by, pack_body)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
          ON CONFLICT (study_id) DO UPDATE SET origin = EXCLUDED.origin, pack_id = EXCLUDED.pack_id,
-           pack_version = EXCLUDED.pack_version, bound_by = EXCLUDED.bound_by, bound_at = now()
-         RETURNING *`, [studyId, userId, origin, packId, packVersion, actor || userId])).rows[0];
+           pack_version = EXCLUDED.pack_version, bound_by = EXCLUDED.bound_by, bound_at = now(), pack_body=EXCLUDED.pack_body
+         RETURNING *`, [studyId, userId, origin, packId, packVersion, actor || userId, JSON.stringify(packBody)])).rows[0];
       await this.audit({ client, studyId, userId, actor: actor || userId, action: "vcr.pack.bind", object: packId, detail: { origin, packVersion } });
       return bindingFromRow(row);
     });

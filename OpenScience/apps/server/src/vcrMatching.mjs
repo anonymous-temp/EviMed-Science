@@ -48,6 +48,7 @@
  * @module vcrMatching
  */
 
+import { clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from "@evimed/domain";
 import { createHash } from 'node:crypto';
 import {
   canonicalScenarioJson, VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
@@ -70,7 +71,7 @@ export function publicMatchingProvenance(provenance) {
  * cannot decide a question about a window (contract §2.2).
  */
 export const VCR_EVALUATOR_UNKNOWN_REASONS = Object.freeze([
-  "criterion_malformed", "coding_unmapped", "coding_version_unavailable", "unit_missing", "unit_mismatch", "undated", "evaluation_error",
+  "criterion_malformed", "coding_unmapped", "coding_version_unavailable", "unit_missing", "unit_mismatch", "undated", "evaluation_error", "conflicting_evidence",
 ]);
 /** Every reason a gap may carry. */
 const GAP_REASONS = Object.freeze([...VCR_MISSING_REASONS, ...VCR_EVALUATOR_UNKNOWN_REASONS]);
@@ -291,6 +292,10 @@ export function verifyFactEvidence(fact, context = {}) {
   if (typeof fact?.dateSurface === "string" && fact.dateSurface.trim() && !span.includes(fact.dateSurface)) {
     return { ok: false, reason: "date_not_in_span" };
   }
+  if (clinicalUnitInQuote(fact.unit,span) === false) return {ok:false,reason:'unit_not_in_span'};
+  const original = fact.clinical?.laboratory;
+  if (original?.originalValue != null && !numeralsIn(span).some(number => Math.abs(number-original.originalValue)<1e-9)) return {ok:false,reason:'value_not_in_span'};
+  if (original?.originalUnit && clinicalUnitInQuote(original.originalUnit,span) === false) return {ok:false,reason:'unit_not_in_span'};
   return { ok: true, reason: null };
 }
 
@@ -409,6 +414,10 @@ export function evaluateRequirement(node, context) {
 
 /** @param {any} node @param {any} context @returns {RequirementVerdict} */
 function evaluateNode(node, context) {
+  if (['present', 'absent', 'compare', 'elapsed_since'].includes(node.op)) {
+    const competing = factsFor(context, String(node.variable)).filter(fact => fact.conflicts?.length);
+    if (competing.length) return unknownBecause(String(node.variable), 'conflicting_evidence', competing.map(citation));
+  }
   switch (node.op) {
     case "all": case "any": {
       const parts = (Array.isArray(node.operands) ? node.operands : []).map((child) => evaluateNode(child, context));
@@ -434,7 +443,7 @@ function evaluateNode(node, context) {
 
 /** @param {any} context @param {string} variable */
 function factsFor(context, variable) {
-  return (context.facts ?? []).filter((fact) => String(fact?.variable ?? "") === String(variable ?? ""));
+  return (context.facts ?? []).filter((fact) => String(fact?.variable ?? "") === String(variable ?? "")).map(fact => ({ ...fact, polarity: clinicalFactPolarity(fact) }));
 }
 
 /**
@@ -505,34 +514,15 @@ export function codedValue(variable, value) {
   return null;
 }
 
-/** A unit as a comparable token: `µmol/L`, `umol/l` and `μmol/L` are one unit. @param {unknown} unit */
-const unitToken = (unit) => String(unit ?? "").normalize("NFKC").trim().toLowerCase().replaceAll("µ", "u").replaceAll("μ", "u");
-
-/**
- * The conversions the evaluator knows without being told: a laboratory value in
- * the other unit a chart commonly uses. Keyed by variable, then `from`, then
- * `to`; a factor multiplies. Anything not here converts through
- * `context.unitConverter` or not at all — an unconverted number is `unknown`,
- * never compared raw: creatinine 106 µmol/L is 1.2 mg/dL, and read against a
- * 1.5 mg/dL ceiling as 106 it would exclude a patient whose kidneys are fine.
- */
-const UNIT_FACTORS = Object.freeze(/** @type {Record<string, Record<string, Record<string, number>>>} */ ({
-  creatinine: { "umol/l": { "mg/dl": 1 / 88.4 }, "mg/dl": { "umol/l": 88.4 } },
-  bilirubin: { "umol/l": { "mg/dl": 1 / 17.1 }, "mg/dl": { "umol/l": 17.1 } },
-  glucose: { "mmol/l": { "mg/dl": 18.016 }, "mg/dl": { "mmol/l": 1 / 18.016 } },
-  hemoglobin: { "g/l": { "g/dl": 0.1 }, "g/dl": { "g/l": 10 } },
-}));
-
-/**
- * @param {number} value @param {string} from @param {string} to @param {string} variable
- * @param {((value: number, from: string, to: string, variable?: string) => number | null) | undefined} custom
- * @returns {number | null}
- */
+/** @param {unknown} unit */
+const unitToken = clinicalUnitToken;
+/** @param {number} value @param {string} from @param {string} to @param {string} variable
+ * @param {((value:number,from:string,to:string,variable?:string)=>number|null)|undefined} custom */
 function convertUnit(value, from, to, variable, custom) {
-  const own = UNIT_FACTORS[variable]?.[unitToken(from)]?.[unitToken(to)];
-  if (own !== undefined) return value * own;
+  const known = convertClinicalUnit(value, from, to, variable);
+  if (known) return known.value;
   const supplied = custom ? custom(value, from, to, variable) : null;
-  return supplied !== null && supplied !== undefined && Number.isFinite(supplied) ? supplied : null;
+  return supplied != null && Number.isFinite(supplied) ? supplied : null;
 }
 
 /** A fact's value as a number, when it is one (a plain numeric string is one). @param {unknown} value @returns {number | null} */
@@ -560,6 +550,16 @@ function evaluateCompare(node, context) {
   if (aggregate === "latest" && !ordered.length && candidates.length > 1) {
     // Several values and none of them dated: which is the latest cannot be said.
     return unknownBecause(variable, "undated", candidates.map(citation));
+  }
+  if (aggregate === 'latest' && ordered.length > 1) {
+    const tied = ordered.filter(fact => instant(fact.occurredAt) === instant(ordered[0].occurredAt));
+    const compared = tied.map(fact => compareFact(node,fact,context));
+    // A timestamp with no finer ordering cannot select whichever row happened
+    // to arrive first. Agreement can answer the threshold; disagreement cannot.
+    if (tied.length > 1) {
+      if (compared.some(item => item.state !== compared[0].state)) return unknownBecause(variable,'conflicting_evidence',tied.map(citation));
+      return verdict(compared[0].state,{evidence:tied.map(citation),missing:compared.flatMap(item=>item.missing)});
+    }
   }
   const chosen = aggregate === "latest" ? [ordered[0] ?? candidates[0]] : (ordered.length === candidates.length ? ordered : candidates);
 
@@ -592,15 +592,25 @@ function compareFact(node, fact, context) {
   const comparator = String(node.comparator ?? "eq");
   /** @param {string} reason */
   const cannot = (reason) => ({ state: UNKNOWN, missing: [{ variable, reason }] });
-  const raw = fact?.value;
+  const raw = fact.clinical?.laboratory?.originalValue ?? fact?.value;
   if (raw === null || raw === undefined || raw === "") return cannot("not_measured");
   if (fact?.source?.vocabularyVersion && fact.source.vocabularyVersion !== VCR_MATCHING_VOCABULARY_VERSION) return cannot('coding_version_unavailable');
+  const expectedUnit = String(node.unit ?? "");
+  const observedUnit = String(fact.clinical?.laboratory?.originalUnit ?? fact?.unit ?? "");
+  let comparable = numericValue(raw);
+  if (expectedUnit && comparable !== null) {
+    if (!observedUnit) return cannot('unit_missing');
+    if (unitToken(expectedUnit) !== unitToken(observedUnit)) {
+      comparable = convertUnit(comparable,observedUnit,expectedUnit,variable,context.unitConverter);
+      if (comparable === null) return cannot('unit_mismatch');
+    }
+  }
 
   if (comparator === "in" || comparator === "not_in" || comparator === "eq" || comparator === "ne") {
     const wanted = comparator === "in" || comparator === "not_in" ? (Array.isArray(node.value) ? node.value : [node.value]) : [node.value];
     // A number is compared as a number (2, 2.0 and "2" are one), a code as its
     // token through the variable's vocabulary.
-    const number = numericValue(raw);
+    const number = comparable;
     let hit;
     if (VOCABULARY_OF[variable]) {
       const version = fact?.source?.vocabularyVersion ?? context.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION;
@@ -619,18 +629,8 @@ function compareFact(node, fact, context) {
     return { state: positive === hit ? SATISFIED : NOT_SATISFIED, missing: [] };
   }
 
-  let value = numericValue(raw);
+  const value = comparable;
   if (value === null) return cannot("not_measured");
-  const want = String(node.unit ?? "");
-  const have = String(fact?.unit ?? "");
-  if (want) {
-    if (!have) return cannot("unit_missing");
-    if (unitToken(want) !== unitToken(have)) {
-      const converted = convertUnit(value, have, want, variable, context.unitConverter);
-      if (converted === null) return cannot("unit_mismatch");
-      value = converted;
-    }
-  }
   const bound = Number(node.value);
   const high = Number(node.highValue ?? node.value);
   const passes = comparator === "lt" ? value < bound
@@ -654,11 +654,20 @@ function compareFact(node, fact, context) {
  */
 function evaluateElapsed(node, context) {
   const variable = String(node.variable ?? "");
-  const everything = factsFor(context, variable);
+  const everything = factsFor(context, variable).filter(fact => !fact.clinical?.copiedFrom && (!fact.clinical?.medication
+    || fact.clinical.assertion === 'negated' || ['administered', 'stopped'].includes(fact.clinical.medication.state)));
   const affirmed = everything.filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed");
   // What happened after the assessment date is not yet a fact of it.
   const dated = affirmed.filter((fact) => instant(fact?.occurredAt) !== null && /** @type {number} */ (instant(fact.occurredAt)) <= context.asOf);
-  const denied = everything.filter((fact) => fact?.polarity === "negated");
+  const denied = everything.filter((fact) => {
+    if (fact?.polarity !== 'negated') return false;
+    if (!fact.clinical) return true; // Legacy assertions retain their declared interpretation.
+    if (fact.clinical.medication?.absenceScope === 'never') return true;
+    const interval = fact.clinical.occurredInterval;
+    return fact.clinical.medication?.absenceScope === 'interval' && interval
+      && instant(interval.start) != null && instant(interval.end) != null
+      && instant(interval.start) <= context.asOf - Number(node.days ?? 0) * DAY_MS && instant(interval.end) >= context.asOf;
+  });
   if (!dated.length) {
     // 「从未接受过」 is a complete answer to 「距上次治疗已满 N 天」.
     if (denied.length && node.deniedSatisfies !== false) return verdict(SATISFIED, { evidence: denied.map(citation) });
@@ -944,7 +953,7 @@ export function frozenAsOf(value) {
  * @param {{ studyId?: string, protocolVersionId?: string|null, subjectKey: string,
  *   direction?: string, criteria: readonly any[], facts: readonly any[],
  *   documents?: any, modelJudgments?: Record<string, any>, priority?: any,
- *   provenance?: { modelId?: string, promptVersion?: string, criteriaVersion?: string, vocabularyVersion?: string } | null,
+ *   provenance?: { modelId?: string, promptVersion?: string, criteriaVersion?: string, vocabularyVersion?: string, inputSnapshotId?:string } | null,
  *   asOf: number|string|Date, unitConverter?: (value: number, from: string, to: string) => number|null }} input
  */
 export function assessSubject(input) {
@@ -955,8 +964,9 @@ export function assessSubject(input) {
   // A fact that was thrown away here is the reason a criterion downstream reads
   // `unknown`; carrying the list on the assessment is what makes that traceable
   // instead of mysterious.
+  const longitudinal = clinicalFactView(facts, asOf);
   const context = {
-    facts, asOf, documents: input.documents,
+    facts: longitudinal.facts, asOf, documents: input.documents,
     modelJudgments: input.modelJudgments ?? {},
     unitConverter: input.unitConverter,
     vocabularyVersion: input.provenance?.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION,
@@ -972,6 +982,7 @@ export function assessSubject(input) {
     // the verdict: when any of the three changes the old assessment is
     // superseded rather than overwritten, and `matchingReportDiff` needs the
     // three to say what changed between two measurements.
+    clinicalHistory: { superseded: longitudinal.superseded, conflicts: longitudinal.conflicts },
     provenance: { ...(input.provenance ?? {}), vocabularyVersion: input.provenance?.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION,
       inputFactIds: (input.facts ?? []).map(fact => fact.id).filter(Boolean),
       inputLanguageIds: Object.values(input.modelJudgments ?? {}).map(judgment => judgment.id).filter(Boolean),

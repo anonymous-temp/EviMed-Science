@@ -1218,6 +1218,22 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
+  'registry_reported_not_site_confirmed',
+  'vcr_clinical_fact_invalid',
+  'vcr_cloud_permission_invalid',
+  'vcr_cloud_processing_not_authorized',
+  'vcr_cloud_run_unattributed',
+  'vcr_matching_input_changed',
+  'vcr_matching_selection_invalid',
+  'vcr_matching_snapshot_missing',
+  'vcr_matching_snapshot_unavailable',
+  'vcr_projection_invalid',
+  'vcr_projection_permission_changed',
+  'vcr_projection_quote_invalid',
+  'vcr_projection_span_invalid',
+  'vcr_projection_unavailable',
+  'vcr_subject_not_found',
+
   'vcr_backup_status_unavailable', 'vcr_backup_unhealthy',
   'review_proof_stale', 'document_review_conversion_incomplete', 'document_review_conversion_failed',
   'vcr_evaluation_input_restricted', 'vcr_evaluation_input_changed', 'vcr_evaluation_input_unavailable',
@@ -1492,6 +1508,22 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  registry_reported_not_site_confirmed: '登记记录反映抓取时的信息，尚未由研究中心确认当前招募情况。',
+  vcr_clinical_fact_invalid: '这条事实的临床字段不完整或格式有误，请按原文补齐或保留未知。',
+  vcr_cloud_permission_invalid: '云端处理授权信息不完整，请核对用途、服务范围和授权依据。',
+  vcr_cloud_processing_not_authorized: '这份病历没有适用的云端处理授权，其余研究工作仍可继续。',
+  vcr_cloud_run_unattributed: '请从本研究的对话读取病历，以便记录授权范围和使用出处。',
+  vcr_matching_input_changed: '本次匹配的冻结输入发生了变化，请保留旧结果并重新评估。',
+  vcr_matching_selection_invalid: '请核对所选方案、受试者和评估日期；一次最多比较十个方案。',
+  vcr_matching_snapshot_missing: '这项旧作业没有完整的冻结输入，请重新创建评估。',
+  vcr_matching_snapshot_unavailable: '本研究找不到这次匹配的冻结输入。',
+  vcr_projection_invalid: '脱敏文本的审阅信息不完整，请核对后保存。',
+  vcr_projection_permission_changed: '云端处理授权已变更，请重新准备脱敏文本并在新对话使用。',
+  vcr_projection_quote_invalid: '引文无法对应脱敏文本的完整片段，请重新选择原句。',
+  vcr_projection_span_invalid: '替换范围重叠、超出文本或拆开了字符，请重新选择。',
+  vcr_projection_unavailable: '这份病历尚未准备好经审阅的脱敏文本。',
+  vcr_subject_not_found: '所选受试者不在本研究已登记的名单中。',
+
   ...EVOLUTION_ERROR_MESSAGES,
   // Why a data-semantics check could not read a table. The check is reported as
   // not run; the other checks and the analysis go on.

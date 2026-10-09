@@ -147,7 +147,7 @@ export class StudyReviews {
           if (studyReviewDigest(row.frozen_input) !== row.package_digest) throw new HttpError(409, 'review_input_changed', 'The frozen review input changed.');
           const answer = await host.editors.run(() => {
             assertStudyReviewConfiguration(row.configuration, host.config);
-            return callReviewModel({ config: { ...host.config, reviewModel: row.configuration.model }, usageLedger: host.usageLedger, fetchImpl: host.fetchImpl }, {
+            return callReviewModel({ config: { ...host.config, reviewModel: row.configuration.model }, usageLedger: host.usageLedger, fetchImpl: host.fetchImpl, assertModelAccess: host.assertModelAccess }, {
             userId: job.userId, projectId: job.projectId, runId: row.run_id, signal: abort.signal,
             messages: [{ role: 'system', content: rolePrompt(row.subject.role) }, { role: 'user', content: JSON.stringify({ snapshot: row.frozen_input, checks: row.deterministic }) }],
             schema: reviewEditorSchema({ checklistIds: [], acceptanceCount: 0 }), schemaName: 'study_review',

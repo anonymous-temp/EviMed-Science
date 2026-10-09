@@ -94,7 +94,7 @@
         "Replay each referral as of the date the coordinator actually decided, using only facts whose visible time is at or before it.",
         "Report the four-by-four criterion confusion matrix, stratified by time, number, negation, logic and applicability, with 「未知被判成满足」 and 「满足被判成不满足」 as their own cells.",
         "Report the eligible recall, the false-exclusion rate, the positive predictive value and the number needed to screen together.",
-        "Report the two readers' agreement and κ, and state it as the ceiling.",
+        "Report the two readers' agreement and κ as properties of the reference set, without treating them as a universal clinical accuracy ceiling.",
         "Report the unknown rate and the share of criteria that code could not decide.",
         "Say in the report that no accuracy threshold is set."
       ],

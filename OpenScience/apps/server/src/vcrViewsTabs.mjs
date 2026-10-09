@@ -952,7 +952,7 @@ function judgementView(criterion, code, judgment, now) {
     state,
     applicable: judgment ? judgment.applicable !== false : true,
     evidence: evidence && text(evidence.quote) ? {
-      quote: String(evidence.quote),
+      quote: String(evidence.quote), locator: evidence.locator ?? null,
       source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
         : evidence.quoteKind === "verbatim" ? "病历原文" : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
       at: zhDate(evidence.at ?? evidence.occurredAt ?? object(evidence.locator).at, now),
@@ -1128,6 +1128,16 @@ export function presentMatchingTab(bundle, query = {}) {
   return {
     view,
     available: true,
+    protocols: list(match.protocols), protocolVersionId: match.protocol?.id ?? null,
+    candidateRoster: list(match.candidateRoster),
+    ...(match.candidateCoverage ? {candidateCoverage: match.candidateCoverage} : {}),
+    comparisons: list(match.comparisons).map(entry => ({ protocol: entry.protocol, summary: entry.assessment?.summary ?? null,
+      asOf: entry.assessment?.asOf ?? null, evidenceGaps: entry.assessment?.evidenceGaps ?? [] })),
+    timeline: (abilitiesOf(list(bundle.roles).map(String)).includes("read_patient_level") ? list(match.timeline) : []).map(fact => ({ id: fact.id, variable: fact.variable, value: fact.value, unit: fact.unit,
+      at: fact.occurredAt ?? null, assertion: fact.clinical?.assertion ?? fact.polarity, experiencer: fact.clinical?.experiencer ?? null,
+      medicationState: fact.clinical?.medication?.state ?? null, correctionOf: fact.clinical?.correctionOf ?? null,
+      superseded: fact.superseded === true, conflictFactIds: fact.conflicts ?? [], correctionReason: fact.clinical?.correctionReason ?? null,
+      quote: fact.source?.quote ?? null, locator: fact.source ? { documentId: fact.source.documentId, start: fact.source.start, end: fact.source.end } : null })),
     headline: total ? `${total.toLocaleString("en-US")} 人已评估，${(eligible ?? 0).toLocaleString("en-US")} 人全部满足，${insufficient.toLocaleString("en-US")} 人至少有 1 条未知或待复评。` : null,
     partner: total ? { name: null, candidates: total, tier: study.dataTier, snapshotAt: match.snapshotAt ? zhDate(match.snapshotAt, now) : null } : null,
     direction: ["trial_to_patient", "patient_to_trial"].includes(String(query.direction)) ? String(query.direction)
@@ -1449,6 +1459,7 @@ export function presentIntake(bundle) {
       mine: source.mine === true,
       readable: source.readable === true,
       canGrant: source.mine === true,
+      cloudPermission: source.cloudPermission ?? null,
       status: String(source.status ?? "registered"),
       statusLabel: INTAKE_STATUS_ZH[String(source.status)] ?? String(source.status ?? ""),
       valueSource: String(source.valueSource ?? "observed"),
@@ -1457,6 +1468,7 @@ export function presentIntake(bundle) {
       window: windowText(object(source.visibleWindow)),
       retention: [text(object(source.retention).until) ? `保留至 ${String(object(source.retention).until).slice(0, 10)}` : null, text(object(source.retention).note)].filter(Boolean).join("；") || null,
       upload: {
+        cloudDestinations: list(upload.cloudDestinations).map(String),
         formats: list(upload.formats).map(String), maxBytes: numeric(upload.maxBytes), maxText: byteText(numeric(upload.maxBytes)),
         // What a patient record may be: text, and PDF or Word where the deployment converts them.
         documents: {

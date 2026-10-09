@@ -217,6 +217,10 @@ function requests(target, ids) {
     "POST /studies/:id/definitions/:definition/compare": async () => ["POST", `${S}/definitions/dfn_none/compare`, { versionA: 1, versionB: 2 }],
     "POST /models (with a study)": async () => { counter += 1; return ["POST", "/api/vcr/models", { studyId: target.id, name: `model-${suffix}-${counter}` }]; },
     // Data intake: a lead and a data manager may; nobody else may, whatever else they hold.
+    "POST /studies/:id/data/sources/:source/cloud-permission": async () => ["POST", `${S}/data/sources/src_none/cloud-permission`, {}],
+    "GET /studies/:id/data/documents/:document": async () => ["GET", `${S}/data/documents/sfl_none`, undefined],
+    "POST /studies/:id/data/documents/:document/projection": async () => ["POST", `${S}/data/documents/sfl_none/projection`, {}],
+    "POST /studies/:id/data/documents/:document/quote": async () => ["POST", `${S}/data/documents/sfl_none/quote`, {}],
     "POST /studies/:id/data/sources": async () => { counter += 1; return ["POST", `${S}/data/sources`, { name: `数据源-${counter}`, ownerParty: "合作方" }]; },
     "POST /studies/:id/data/sources/:source/files": async () => ["POST", `${S}/data/sources/src_none/files?name=cohort.csv`, undefined],
     "DELETE /studies/:id/data/files/:file": async () => ["DELETE", `${S}/data/files/sfl_none`, undefined],

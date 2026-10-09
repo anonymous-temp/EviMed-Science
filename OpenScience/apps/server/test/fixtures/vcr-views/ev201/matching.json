@@ -1,6 +1,30 @@
 {
   "view": "matching",
   "available": true,
+  "protocols": [
+    {
+      "id": "prt_1",
+      "version": 1,
+      "title": "EV-201 方案 v1",
+      "sourceRef": null
+    }
+  ],
+  "protocolVersionId": "prt_1",
+  "candidateRoster": [],
+  "comparisons": [
+    {
+      "protocol": {
+        "id": "prt_1",
+        "version": 1,
+        "title": "EV-201 方案 v1",
+        "sourceRef": null
+      },
+      "summary": "eligible",
+      "asOf": "2026-09-28T00:00:00.000Z",
+      "evidenceGaps": []
+    }
+  ],
+  "timeline": [],
   "headline": "6 人已评估，2 人全部满足，2 人至少有 1 条未知或待复评。",
   "partner": {
     "name": null,
@@ -156,6 +180,10 @@
         "applicable": true,
         "evidence": {
           "quote": "age = 58 year",
+          "locator": {
+            "field": "age",
+            "snapshotId": "snp_partner"
+          },
           "source": "数据快照字段「age」",
           "at": "8 月 14 日"
         },
@@ -173,6 +201,10 @@
         "applicable": true,
         "evidence": {
           "quote": "ecog = 0",
+          "locator": {
+            "field": "ecog",
+            "snapshotId": "snp_partner"
+          },
           "source": "数据快照字段「ecog」",
           "at": "9 月 10 日"
         },
@@ -190,6 +222,10 @@
         "applicable": true,
         "evidence": {
           "quote": "first_line_platinum = true",
+          "locator": {
+            "field": "first_line_platinum",
+            "snapshotId": "snp_partner"
+          },
           "source": "数据快照字段「first_line_platinum」",
           "at": "1 月 5 日"
         },
@@ -207,6 +243,10 @@
         "applicable": true,
         "evidence": {
           "quote": "active_brain_metastasis = false",
+          "locator": {
+            "field": "active_brain_metastasis",
+            "snapshotId": "snp_partner"
+          },
           "source": "数据快照字段「active_brain_metastasis」",
           "at": "9 月 1 日"
         },
@@ -224,6 +264,10 @@
         "applicable": true,
         "evidence": {
           "quote": "last_immunotherapy = 2026-06-01T00:00:00.000Z",
+          "locator": {
+            "field": "last_immunotherapy",
+            "snapshotId": "snp_partner"
+          },
           "source": "数据快照字段「last_immunotherapy」",
           "at": "6 月 1 日"
         },
@@ -241,6 +285,10 @@
         "applicable": true,
         "evidence": {
           "quote": "pregnancy = false",
+          "locator": {
+            "field": "pregnancy",
+            "snapshotId": "snp_partner"
+          },
           "source": "数据快照字段「pregnancy」",
           "at": "9 月 1 日"
         },

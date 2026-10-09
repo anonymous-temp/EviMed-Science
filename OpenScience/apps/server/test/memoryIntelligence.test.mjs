@@ -407,6 +407,18 @@ test("a researcher who paused learning, for the account or for this project, get
   }
 });
 
+test('a study-scoped clinical conversation produces no memory summary, extraction or shared source',async()=>{
+  const store=new MemoryStoreDouble(); let calls=0; let canReuse=false;
+  const intelligence=new MemoryIntelligence(config,store,{canReuseRun:async()=>canReuse,
+    fetchImpl:async()=>{calls++;return Response.json({choices:[{message:{content:JSON.stringify({candidates:[]})}}]});}});
+  const result=await intelligence.recordRun(project(),run(),[message('patient','Synthetic patient information')]);
+  assert.equal(result.source,'clinical_context');assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(result.source));
+  assert.equal(calls,0);assert.equal(store.records.size,0);
+  canReuse=true;
+  await intelligence.recordRun(project(),run(),[message('research','Summarize the study design')]);
+  assert.equal(calls,1);assert.ok(store.records.size>0);
+});
+
 test("a conversation trying someone else's capsule leaves nothing behind, and the rest of the project still learns", async () => {
   // 无痕 was read here too until 2026-09-20; the trial is what is left of a
   // conversation that writes nothing. Not even the run summary, and no model

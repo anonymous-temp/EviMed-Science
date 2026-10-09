@@ -303,3 +303,7 @@ For these paths, zero-effect scenarios state `responseRate == nullRate` or zero 
 过程记述、改稿说明、自查记录写进 `revision-notes.md`，不要写进报告正文——报告正文里不写过程，正是因为过程有它自己的去处。
 
 然后 `evimed_submit_deliverable{deliverableId}`。它应用的规则只有一份实现，和服务端应用的是同一份。
+
+## Clinical extraction and adoption boundary
+
+Reuse the protected native cohort definitions, import coverage and deterministic engine outputs. Clinical extraction can contribute metadata through dataset_semantics, with model_inferred provenance and exact source hashes; it cannot overwrite confirmed meanings or export patient rows. Report FHIR/OMOP field losses, unmapped concepts and denominator differences. Missing licensed interaction/dose references yield a named evidence gap, not a no-risk conclusion. Adverse-event report ratios are signals, not incidence, causality or trial outcome rates.

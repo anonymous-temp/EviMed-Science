@@ -1,6 +1,11 @@
 {
   "view": "matching",
   "available": true,
+  "protocols": [],
+  "protocolVersionId": null,
+  "candidateRoster": [],
+  "comparisons": [],
+  "timeline": [],
   "headline": null,
   "partner": null,
   "direction": "trial_to_patient",

@@ -121,3 +121,7 @@ description: 把一项「虚拟临研」研究写成可检查、可复现的研�
 过程记述、改稿说明、自查记录写进 `revision-notes.md`，不要写进报告正文——报告正文里不写过程，正是因为过程有它自己的去处。
 
 然后 `evimed_submit_deliverable{deliverableId}`。它应用的规则只有一份实现，和服务端应用的是同一份。
+
+## Clinical extraction and adoption boundary
+
+Preserve selected protocol versions, input snapshot identities, actual producer receipts and unavailable-candidate counts. Keep privacy findings, extraction utility, false exclusions, completion, latency and cost separate; do not borrow OpenMed leaderboard scores. Use the existing claim-level evidence checks and deliver supported portions with findings. Authorization revocation stops affected external processing; protected historical evidence remains subject to the existing retention and study-deletion policy.

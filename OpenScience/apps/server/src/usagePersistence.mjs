@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS evimed_usage.model_requests (
   CHECK (cache_miss_tokens IS NULL OR cache_miss_tokens >= 0),
   CHECK (output_tokens IS NULL OR output_tokens >= 0)
 );
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS observed_model text;
 CREATE INDEX IF NOT EXISTS usage_model_requests_account_time_idx
   ON evimed_usage.model_requests(user_id,created_at DESC,id DESC);
 CREATE INDEX IF NOT EXISTS usage_model_requests_open_idx

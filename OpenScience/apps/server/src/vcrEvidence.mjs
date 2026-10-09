@@ -1322,7 +1322,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         const role = armRoles[String(item?.arm ?? "")] ?? item?.armRole;
         return verifyExtraction({
           extraction: {
-            ...item,
+            ...item, locator: { ...item.locator, recordHash: built.record?.hash ?? null },
             armRole: EVIDENCE_ARM_ROLES.includes(String(role)) ? role : (item?.armRole ?? "unknown"),
             // The endpoint key is the run's judgment about what was measured,
             // stored as a field so the pooling check can be an equality.
@@ -1349,6 +1349,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       return {
         status: "ok",
         precedent: saved.precedent,
+        versions: await store.registryVersions(userId, studyId, saved.precedent.id),
+        freshness: { checkedAt, recruitment: "registry_reported_not_site_confirmed" },
         record: built.record,
         counts: { extracted: saved.written, verified: saved.verified, refused: saved.refused },
         refusals: verified.filter((/** @type {any} */ entry) => !entry.verified)
@@ -1374,7 +1376,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
     async addEvidenceItem({ userId, studyId, item }) {
       const registryName = String(item.registry ?? "clinicaltrials.gov");
       const registryId = String(item.registryId ?? "");
-      const precedent = await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId });
+      const precedent = await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId, recordHash: item.locator?.recordHash ?? null });
       if (!precedent) {
         return { status: "refused", code: "vcr_precedent_not_in_study",
           message: `${registryId} 还不在本研究的先例里；先用 vcr_write what:"precedent" 取回这条登记记录。` };
@@ -1392,7 +1394,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           locator: { kind: "registry_field", ...(item.locator && typeof item.locator === "object" ? {
             path: typeof item.locator.path === "string" ? item.locator.path : undefined,
             inputs: Array.isArray(item.locator.inputs) ? item.locator.inputs.map(String) : undefined,
-          } : {}), authoredBy: "run" },
+          } : {}), recordHash: precedent.record_hash ?? null, authoredBy: "run" },
           endpointKey: String(item.endpointKey ?? ""),
           enrollmentKind: item.enrollmentKind ?? null,
           historicalBaseline: item.historicalBaseline === true,

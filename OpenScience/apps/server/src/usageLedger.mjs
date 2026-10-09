@@ -232,6 +232,7 @@ function record(row) {
     estimatedCost: row.estimated_cost == null ? null : Number(row.estimated_cost),
     priced: row.priced,
     providerRequestId: row.provider_request_id,
+    observedModel: row.observed_model ?? null,
     errorCode: row.error_code,
     usage: row.cache_hit_tokens == null ? null : {
       cacheHitTokens: Number(row.cache_hit_tokens),
@@ -378,7 +379,7 @@ export class UsageLedger {
     return attributed;
   }
 
-  /** @param {string} id @param {{usage:{cacheHitTokens:number,cacheMissTokens:number,completionTokens:number},actualCost:number,priced:boolean,providerRequestId?:string|null}} input */
+  /** @param {string} id @param {{usage:{cacheHitTokens:number,cacheMissTokens:number,completionTokens:number},actualCost:number,priced:boolean,providerRequestId?:string|null,observedModel?:string|null}} input */
   async settleModel(userId, id, input) {
     const usage = {
       cacheHitTokens: tokenCount(input.usage?.cacheHitTokens),
@@ -388,6 +389,7 @@ export class UsageLedger {
     const actualCost = money(input.actualCost, "actual cost");
     if (typeof input.priced !== "boolean") throw new HttpError(400, "usage_payload_invalid", "Invalid price status.");
     const providerRequestId = input.providerRequestId == null ? null : text(input.providerRequestId, "provider request id", 512);
+    const observedModel = input.observedModel == null ? null : text(input.observedModel, 'observed model', 160);
     await migrateUsageLedger(this.database);
     return this.database.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${productId(userId, "user")}`]);
@@ -395,15 +397,16 @@ export class UsageLedger {
       if (current.status === "settled") {
         const same = Number(current.actual_cost) === actualCost && current.priced === input.priced
           && Number(current.cache_hit_tokens) === usage.cacheHitTokens && Number(current.cache_miss_tokens) === usage.cacheMissTokens
-          && Number(current.output_tokens) === usage.completionTokens && current.provider_request_id === providerRequestId;
+          && Number(current.output_tokens) === usage.completionTokens && current.provider_request_id === providerRequestId
+          && (current.observed_model ?? null) === observedModel;
         if (same) return record(current);
         throw new HttpError(409, "usage_settlement_conflict", "The request already has another settlement.");
       }
       if (!['reserved', 'uncertain'].includes(current.status)) throw new HttpError(409, "usage_settlement_conflict", "The request is no longer settleable.");
       const result = await client.query(`UPDATE evimed_usage.model_requests SET status='settled',revision=revision+1,
-        actual_cost=$2,priced=$3,cache_hit_tokens=$4,cache_miss_tokens=$5,output_tokens=$6,provider_request_id=$7,
+        actual_cost=$2,priced=$3,cache_hit_tokens=$4,cache_miss_tokens=$5,output_tokens=$6,provider_request_id=$7,observed_model=$8,
         error_code=NULL,settled_at=clock_timestamp() WHERE id=$1 RETURNING *`,
-      [current.id, actualCost, input.priced, usage.cacheHitTokens, usage.cacheMissTokens, usage.completionTokens, providerRequestId]);
+      [current.id, actualCost, input.priced, usage.cacheHitTokens, usage.cacheMissTokens, usage.completionTokens, providerRequestId, observedModel]);
       return record(result.rows[0]);
     });
   }

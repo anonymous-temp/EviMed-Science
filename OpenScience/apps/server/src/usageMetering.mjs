@@ -204,7 +204,7 @@ export function createUsageTail(maxBytes = 16 * 1024, { stream = false, protocol
       const value = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
       tail += value;
       if (tail.length > maxBytes) tail = tail.slice(tail.length - maxBytes);
-      if (messages && stream && head.length < maxBytes) head += value.slice(0, maxBytes - head.length);
+      if (stream && head.length < maxBytes) head += value.slice(0, maxBytes - head.length);
       envelope?.observe(value);
       // Only the new bytes and the few before them can complete the sentinel,
       // so a long answer is not re-scanned once per chunk.
@@ -236,6 +236,16 @@ export function createUsageTail(maxBytes = 16 * 1024, { stream = false, protocol
       if (envelope) return envelope.providerRequestId();
       return messages ? parseMessagesReceipt(`${head}\n${tail}`).id : parseModelProviderRequestId(tail);
     },
+    observedModel() {
+      if (envelope) return envelope.observedModel();
+      for (const line of `${head}\n${tail}`.split(/\r?\n/)) {
+        if (!line.startsWith('data:')) continue;
+        const body = safeJson(line.slice(5).trim());
+        const model = messages ? body?.message?.model : body?.model;
+        if (typeof model === 'string' && /^[A-Za-z0-9._:/-]{1,160}$/.test(model)) return model;
+      }
+      return null;
+    },
     retainedBytes() {
       return Buffer.byteLength(tail, "utf8") + Buffer.byteLength(head, "utf8") + (envelope?.retainedBytes() ?? 0);
     },
@@ -254,6 +264,7 @@ function createTopLevelReceipt(maxValueBytes, readUsage = (/** @type {any} */ us
   let key = null;
   let usage = null;
   let providerRequestId = null;
+  let observedModel = null;
   let capture = null;
   let captureDepth = 0;
   let captureTooLarge = false;
@@ -268,7 +279,7 @@ function createTopLevelReceipt(maxValueBytes, readUsage = (/** @type {any} */ us
       if (stringRole === "key") {
         key = null;
         state = "colon";
-      } else if (stringRole === "id") state = "after-value";
+      } else if (["id", "model"].includes(stringRole)) state = "after-value";
       return;
     }
     const decoded = safeJson(`"${rawString}"`);
@@ -279,6 +290,9 @@ function createTopLevelReceipt(maxValueBytes, readUsage = (/** @type {any} */ us
     } else if (stringRole === "id") {
       if (decoded.length > 0 && decoded.length <= 512 && !/[\0\r\n]/.test(decoded)) providerRequestId = decoded;
       state = "after-value";
+    } else if (stringRole === 'model') {
+      if (/^[A-Za-z0-9._:/-]{1,160}$/.test(decoded)) observedModel = decoded;
+      state = 'after-value';
     } else if (depth === 1 && state === "value") {
       state = "after-value";
     }
@@ -322,7 +336,7 @@ function createTopLevelReceipt(maxValueBytes, readUsage = (/** @type {any} */ us
         rawString = "";
         stringTooLarge = false;
         stringRole = depth === 1 && state === "key" ? "key"
-          : depth === 1 && state === "value" && key === "id" ? "id" : "other";
+          : depth === 1 && state === "value" && ["id", "model"].includes(key) ? key : "other";
         continue;
       }
       if (character === "{" || character === "[") {
@@ -374,6 +388,7 @@ function createTopLevelReceipt(maxValueBytes, readUsage = (/** @type {any} */ us
     observe,
     usage: () => usage ? readUsage(usage) : null,
     providerRequestId: () => providerRequestId,
+    observedModel: () => observedModel,
     retainedBytes: () => Buffer.byteLength(rawString, "utf8") + Buffer.byteLength(capture ?? "", "utf8"),
   };
 }
