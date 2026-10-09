@@ -26,6 +26,9 @@
  * lost — they are the kernel's own 「运行」 view, one tab away, which this
  * deployment offers to every account.
  *
+ * Two tools are drawn as a card and not a line: the ones that make and change a scheduled task (`schedule_task`, `update_task`; the
+ * phrase's `card: 'task'`). The card is the task's name, when it runs and 「打开」, read from the tool's own answer (N-13).
+ *
  * The words are data, not code: `FRAME_VOCABULARY.toolViews`, built from
  * `@evimed/domain`'s `toolViewPhraseTable()` over its own tool list. Nothing
  * here names a tool; a tool added to the domain either arrives with words or
@@ -361,6 +364,47 @@ export function toolLineView(block, phrase, kit) {
 }
 
 /**
+ * The card of a scheduled task a conversation made or changed (`schedule_task`, `update_task`): its name, when it runs in words with the
+ * zone, a short word for what happened to it, and the way to open it — or, while the call is still arriving and when it did not
+ * succeed, the same one line every other tool has.
+ *
+ * Everything on the card is read from the tool's own answer, which states facts (id, title, schedule in words, zone, state): nothing
+ * is worked out here. An answer that names no task of a shape the shell would open — no id, no title — is a line, never a card
+ * with a button that leads nowhere. A failure is 「没有完成」 and nothing more: the sentence for a refusal is the model's to say, and
+ * it knows the code.
+ *
+ * @param {any} block @param {{ verb: string, subject?: readonly string[], subjectKind?: string }} phrase @param {any} kit
+ * @returns {{ kind: 'line', label: string, outcome: string | null } | { kind: 'card', taskId: string, title: string, when: string, tag: string | null }}
+ */
+export function taskCardView(block, phrase, kit) {
+  const call = kit.toolCallState(block);
+  const line = toolLineView(block, phrase, kit);
+  if (call.running || call.stopped) return { kind: 'line', label: line.label, outcome: line.outcome };
+  /** @type {any} */
+  let body = null;
+  try {
+    const parsed = call.text ? JSON.parse(call.text) : null;
+    body = parsed && typeof parsed === 'object' ? parsed : null;
+  } catch { body = null; }
+  if (call.isError || (body && body.status === 'error')) return { kind: 'line', label: line.label, outcome: '没有完成' };
+  const data = body && body.data && typeof body.data === 'object' ? body.data : null;
+  const taskId = data && typeof data.taskId === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(data.taskId) ? data.taskId : null;
+  const name = data ? toolSubjectText(data.title, 40) : '';
+  if (!taskId || !name) return { kind: 'line', label: line.label, outcome: line.outcome };
+  const schedule = typeof data.scheduleText === 'string' ? data.scheduleText.trim() : '';
+  const zone = typeof data.timeZoneName === 'string' ? data.timeZoneName.trim() : '';
+  const changed = Array.isArray(data.changed) ? data.changed : null;
+  /** @type {string | null} */
+  let tag = null;
+  if (data.state === 'paused') tag = '已暂停';
+  else if (data.state === 'completed') tag = '已完成';
+  else if (data.created === false) tag = '已有这项任务';
+  else if (data.created === true || (changed && changed.includes('resumed'))) tag = '已启用';
+  else if (changed && changed.length > 0) tag = '已更新';
+  return { kind: 'card', taskId, title: name, when: schedule && zone ? `${schedule}（${zone}）` : schedule, tag };
+}
+
+/**
  * 「查看」: the kernel's own view of a child, reached through the parent's
  * catalogue — the child's address is its parent, its id and the exact mode the
  * catalogue lists. Disabled until the catalogue lists the child; the catalogue
@@ -432,7 +476,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   /** @type {Map<string, string>} */
   const known = new Map();
 
-  const { card, line, title, tone, tag } = frameStyles();
+  const { card, line, title, tone, tag, quiet, button } = frameStyles();
 
   /** The run state for the conversation on screen, or null. */
   function useLive() {
@@ -522,6 +566,37 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     };
   }
 
+  /**
+   * A scheduled task's card, with 「打开」 asking the shell to open it: the destination is a name and the task an id, never an
+   * address (the bridge's closed vocabulary). Built per tool name, as `toolRowFor` is.
+   * @param {{ verb: string, subject?: readonly string[], subjectKind?: string }} phrase
+   */
+  function taskCardFor(phrase) {
+    /** @param {{ block: any }} props */
+    return function TaskCard({ block }) {
+      const model = modelOf(phrase.verb, () => taskCardView(block, phrase, kit));
+      if (!model) return h(PlainRow, { label: phrase.verb });
+      if (model.kind === 'line') {
+        return h('div', { style: { ...card, ...line }, 'data-evimed-toolview': 'tool' },
+          h('span', { style: { ...title, flex: '0 1 auto' } }, model.label),
+          model.outcome ? h('span', { style: tag }, model.outcome) : null);
+      }
+      const open = () => {
+        try { target.__EVIMED_SHELL__?.navigate?.('autopilot', undefined, { taskId: model.taskId }); } catch (error) {
+          target.console?.warn?.('[evimed-frame] the task did not open:', error);
+        }
+      };
+      return h('div', { style: { ...card, ...line }, 'data-evimed-toolview': 'task-card', 'data-task-id': model.taskId },
+        h('span', { style: { ...title, flex: '0 1 auto' } }, model.title),
+        model.when ? h('span', { style: { ...quiet, flex: '1 1 auto' } }, model.when) : null,
+        model.tag ? h('span', { style: tag }, model.tag) : null,
+        h('button', {
+          type: 'button', onClick: open, 'data-evimed-open-task': model.taskId,
+          'aria-label': `打开定时任务“${model.title}”`, style: { ...button, marginLeft: 'auto' },
+        }, '打开'));
+    };
+  }
+
   const views = [
     [tools.plan, PlanView],
     [tools.delegate, DelegateView],
@@ -545,7 +620,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     /** @type {{ slot: string, key: string, locale: string, priority?: number }} */
     const spec = { slot: 'tool.call.toolview', key: name, locale: 'conversation' };
     if (phrase.shipped) spec.priority = -1;
-    kit.guarded(`${name} view`, () => kit.occupy(spec, toolRowFor(phrase)));
+    kit.guarded(`${name} view`, () => kit.occupy(spec, phrase.card === 'task' ? taskCardFor(phrase) : toolRowFor(phrase)));
   }
 }
 
@@ -553,5 +628,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'toolviews',
   inject,
-  parts: Object.freeze([frameStyles, mainViewSession, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, gateRefusal, toolSubjectText, toolSubjectHost, toolResultCount, toolLineView, childLinkFor, apply]),
+  parts: Object.freeze([frameStyles, mainViewSession, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, gateRefusal, toolSubjectText, toolSubjectHost, toolResultCount, toolLineView, taskCardView, childLinkFor, apply]),
 });

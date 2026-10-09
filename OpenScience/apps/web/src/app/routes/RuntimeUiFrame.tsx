@@ -4,6 +4,7 @@ import { errorCodeMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "
 import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebAgentRuns, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebAgentRun, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
+import { TASKS_PATH, taskPath } from "@/lib/taskLocation";
 import { saveToKnowledgeBase } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
 import { provideFrameSessionSearch, reportPathOf, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
@@ -748,7 +749,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const routes: Record<string, string> = {
           "new-task": "/app/chat", knowledge: "/app/files",
           memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
-          geo: "/app/geo", "virtual-research": "/app/virtual-research",
+          geo: "/app/geo", "virtual-research": "/app/virtual-research", autopilot: TASKS_PATH,
         };
         const to = routes[String(message.destination)];
         if (!to) return;
@@ -759,6 +760,13 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           incoming.current = message.seq;
           const tab = isGeoTab(typeof message.tab === "string" ? message.tab : null) ? message.tab as string : null;
           void geoProjectPath(projectId, tab).then((path) => navigate(path));
+          return;
+        }
+        if (message.destination === "autopilot") {
+          // 「打开」 on the card of a task a conversation made: that task's page, in the project on screen. The id is the control
+          // plane's own shape, bounded here as the session ids are; anything else opens the list, where the task is, if it is anywhere.
+          incoming.current = message.seq;
+          navigate(taskPath(typeof message.taskId === "string" && SESSION_ID.test(message.taskId) ? message.taskId : null));
           return;
         }
         // A brief from a capability card in the kernel's hero. Bounded here as
