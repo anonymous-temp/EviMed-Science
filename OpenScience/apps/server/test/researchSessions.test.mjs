@@ -262,3 +262,55 @@ test("rejects oversized and corrupt state before unbounded parsing", async () =>
     assert.equal(listed.body.code, "research_sessions_corrupt");
   });
 });
+
+// Design reference N-14: a conversation opened from the knowledge base is limited to the documents it was opened with.
+// The scope is the conversation's own state: it is stored beside the session, survives the session being put again
+// (the shell re-asserts a binding on every open), and never touches the session's identity.
+test("a conversation's source scope is stored with its session, survives a second binding, and is lifted by an empty list", async () => {
+  const { ResearchSessionStore } = await import("../src/researchSessions.mjs");
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-research-scope-"));
+  try {
+    const project = { userId: "u1", id: "default", metaDir: dataDir, rootDir: dataDir };
+    const store = new ResearchSessionStore({ get: () => null, list: () => [] });
+    const a = `src_${"a".repeat(32)}`;
+    const b = `src_${"b".repeat(32)}`;
+    // A conversation with no session yet is given an open-domain one: it is scoped before it has asked anything.
+    const scoped = await store.setSourceScope(project, "ses_scope", [b, a, b]);
+    assert.deepEqual([scoped.mode, scoped.agentId, [...scoped.sourceScope]], ["open-domain", null, [a, b]], "sorted, without repeats");
+    assert.deepEqual([...(await store.get(project, "ses_scope")).sourceScope], [a, b], "read back from storage");
+    // The binding is asserted again when the conversation is opened; the scope stays.
+    await store.put(project, "ses_scope", { mode: "open-domain" });
+    assert.deepEqual([...(await store.get(project, "ses_scope")).sourceScope], [a, b]);
+    // Another session is not limited.
+    assert.equal((await store.put(project, "ses_other", { mode: "open-domain" })).sourceScope, null);
+    // An empty list is all of them again.
+    assert.equal((await store.setSourceScope(project, "ses_scope", [])).sourceScope, null);
+    assert.equal((await store.get(project, "ses_scope")).sourceScope, null);
+    // What is not a document id is refused, and so is a scope past what `kb_search` takes.
+    for (const bad of [["not-a-source"], [`src_${"A".repeat(32)}`], "src_x", [1], Array.from({ length: 51 }, (_, index) => `src_${String(index).padStart(32, "0")}`)]) {
+      await assert.rejects(() => store.setSourceScope(project, "ses_scope", bad), (error) => error.code === "invalid_research_session");
+    }
+    assert.equal((await store.get(project, "ses_scope")).sourceScope, null, "a refusal changes nothing");
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("the source-scope route refuses what it cannot check, and clears with an empty list", async () => {
+  await withApp(async ({ base }) => {
+    const put = (body, sessionId = "ses_route") => fetch(`${base}/api/research-sessions/${sessionId}/source-scope`, {
+      method: "PUT", headers: { "Content-Type": "application/json", "X-Open-Science-Project": "default" }, body: JSON.stringify(body),
+    });
+    assert.equal((await put({ sourceIds: [] })).status, 200);
+    const cleared = (await (await put({ sourceIds: null })).json()).data;
+    assert.deepEqual([cleared.sessionId, cleared.mode, cleared.sourceScope], ["ses_route", "open-domain", null]);
+    // Only one field, and ids of the shape the knowledge base's own are.
+    assert.equal((await put({ sourceIds: [], extra: 1 })).status, 400);
+    assert.equal((await put({ sourceIds: ["nope"] })).status, 400);
+    // A deployment with no source storage cannot say a document exists, so it does not scope to one.
+    assert.equal((await put({ sourceIds: [`src_${"c".repeat(32)}`] })).status, 503);
+    // The session is the researcher's own: the identity route still refuses a change.
+    assert.equal((await putBinding(base, "ses_route", { mode: "open-domain" })).status, 200);
+    assert.equal((await listBindings(base)).body.data.find((entry) => entry.sessionId === "ses_route").sourceScope, null);
+  });
+});

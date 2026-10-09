@@ -84,7 +84,7 @@ const queries = [
   ["projects", `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.projects WHERE user_id=$1 ORDER BY id`],
   ["researchSessions", `SELECT project_id AS "projectId",session_id AS "sessionId",mode,agent_id AS "agentId",
-    agent_version AS "agentVersion",runtime_agent AS "runtimeAgent",created_at AS "createdAt",updated_at AS "updatedAt"
+    agent_version AS "agentVersion",runtime_agent AS "runtimeAgent",source_scope AS "sourceScope",created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.research_sessions WHERE user_id=$1 ORDER BY project_id,session_id`],
   ["documents", `SELECT id,kind,project_id AS "projectId",payload,revision,created_at AS "createdAt",updated_at AS "updatedAt",deleted_at AS "deletedAt"
     FROM evimed_product.documents WHERE user_id=$1 AND kind=ANY($2::text[]) ORDER BY kind,id`],

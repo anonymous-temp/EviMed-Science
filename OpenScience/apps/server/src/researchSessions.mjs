@@ -12,6 +12,9 @@ const modes = new Set(["open-domain", "specialist"]);
 const inputFields = new Set(["mode", "agentId", "agentVersion"]);
 const maxResearchSessions = 1000;
 const maxStateBytes = 1024 * 1024;
+/** What a conversation's source scope may hold: knowledge-base documents by id, as many as `kb_search` takes. */
+export const MAX_SOURCE_SCOPE = 50;
+const sourceIdPattern = /^src_[a-f0-9]{32}$/;
 
 function invalid(message) {
   return new HttpError(400, "invalid_research_session", message);
@@ -26,6 +29,32 @@ function validateTimestamp(value, label) {
     throw new HttpError(500, "research_sessions_corrupt", `${label} is invalid.`);
   }
   return value;
+}
+
+/**
+ * A conversation's source scope as it is stored: the documents it is limited to, or null for all of them.
+ * @param {unknown} value
+ * @returns {readonly string[] | null}
+ */
+export function storedSourceScope(value) {
+  if (value == null) return null;
+  if (!Array.isArray(value) || value.length > MAX_SOURCE_SCOPE || value.some((id) => typeof id !== "string" || !sourceIdPattern.test(id))) {
+    throw new HttpError(500, "research_sessions_corrupt", "A research session's source scope is invalid.");
+  }
+  return value.length ? Object.freeze([...new Set(value)]) : null;
+}
+
+/**
+ * A source scope as a request states it: a list of document ids, or an empty one to go back to all of them.
+ * @param {unknown} value
+ * @returns {readonly string[] | null}
+ */
+export function requestedSourceScope(value) {
+  if (value == null) return null;
+  if (!Array.isArray(value) || value.length > MAX_SOURCE_SCOPE || value.some((id) => typeof id !== "string" || !sourceIdPattern.test(id))) {
+    throw invalid(`sourceIds must be at most ${MAX_SOURCE_SCOPE} document ids (src_…).`);
+  }
+  return value.length ? Object.freeze([...new Set(value)].sort()) : null;
 }
 
 function validateStoredRecord(value) {
@@ -53,6 +82,7 @@ function validateStoredRecord(value) {
     agentId: value.agentId,
     agentVersion: value.agentVersion,
     runtimeAgent: value.runtimeAgent,
+    sourceScope: storedSourceScope(value.sourceScope),
     createdAt: validateTimestamp(value.createdAt, "createdAt"),
     updatedAt: validateTimestamp(value.updatedAt, "updatedAt"),
   });
@@ -252,11 +282,41 @@ export class ResearchSessionStore {
       const record = Object.freeze({
         sessionId,
         ...selection,
+        sourceScope: existing?.sourceScope ?? null,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       });
       const sessions = state.sessions.filter((item) => item.sessionId !== sessionId);
       sessions.push(record);
+      sessions.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      const nextState = { version: 1, sessions };
+      assertSerializedStateSize(nextState);
+      await writeJsonFileAtomicNoFollow(project.metaDir, stateFile(project), nextState);
+      return record;
+    });
+  }
+
+  /**
+   * Limits one conversation to the knowledge-base documents named, or lifts the limit (null / an empty list). The
+   * conversation's research session is made first when it has none — a conversation opened from the knowledge base is
+   * scoped before it has asked anything — as an open-domain one, which is what an unbound conversation is.
+   * Only the scope changes: the session's identity (its mode and agent) is never touched here.
+   * @param {any} project @param {string} rawSessionId @param {unknown} sourceIds
+   * @returns {Promise<any>} the session as it now stands
+   */
+  async setSourceScope(project, rawSessionId, sourceIds) {
+    const sessionId = safeId(rawSessionId, "research session id");
+    const scope = requestedSourceScope(sourceIds);
+    if (!(await this.get(project, sessionId))) await this.putRecord(project, sessionId, { mode: "open-domain" });
+    if (typeof this.stateStore?.setResearchSessionSourceScope === "function") {
+      return this.stateStore.setResearchSessionSourceScope(project, sessionId, scope);
+    }
+    return withProjectStorageMutation(project, async () => {
+      const state = await readState(project);
+      const existing = state.sessions.find((record) => record.sessionId === sessionId);
+      if (!existing) throw new HttpError(404, "research_session_not_found", "Research session not found.");
+      const record = Object.freeze({ ...existing, sourceScope: scope, updatedAt: new Date().toISOString() });
+      const sessions = [...state.sessions.filter((item) => item.sessionId !== sessionId), record];
       sessions.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
       const nextState = { version: 1, sessions };
       assertSerializedStateSize(nextState);

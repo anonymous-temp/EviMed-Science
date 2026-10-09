@@ -128,10 +128,16 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         // scope (and so its composer) exist for the draft below.
         target.__EVIMED_RESULT_REVISION__?.clear();
         ctx.uiWorkspace.openSession(sessionId);
-        if (intent.draft !== undefined) {
+        if (intent.draft !== undefined || (Array.isArray(intent.references) && intent.references.length)) {
           const scope = ctx.sessions.scope(sessionId);
           if (!scope) throw new Error('Native session scope unavailable');
-          ctx.conversation.input.for(scope).setDraft(intent.draft);
+          const input = ctx.conversation.input.for(scope);
+          if (intent.draft !== undefined) input.setDraft(intent.draft);
+          for (const reference of Array.isArray(intent.references) ? intent.references : []) {
+            const state = input.state?.getSnapshot?.();
+            const end = typeof state?.draft === 'string' ? state.draft.length : 0;
+            if (!input.insertReference(kit.knowledgeChip(reference), { start: end, end, draftRev: Number(state?.draftRev) || 0 })) throw new Error('Native reference chip refused');
+          }
           if (intent.resultRevision) {
             if (!target.__EVIMED_RESULT_REVISION__) throw new Error('Result revision transport unavailable');
             target.__EVIMED_RESULT_REVISION__.stage({ sessionId, referenceId: intent.resultRevision.referenceId, draft: intent.draft });
@@ -443,10 +449,18 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (!intent || !['create', 'open'].includes(intent.kind)
       || typeof intent.sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)
       || (intent.draft !== undefined && (typeof intent.draft !== 'string' || intent.draft.length > 100_000))) return;
+    // Knowledge-base sources the conversation is opened with: ids and titles,
+    // rebuilt from a closed shape (this is another origin's payload).
+    if (intent.references !== undefined) {
+      if (!Array.isArray(intent.references) || intent.references.length > 50
+        || intent.references.some((/** @type {any} */ reference) => !reference || typeof reference.id !== 'string'
+          || !/^src_[A-Za-z0-9_-]{1,120}$/.test(reference.id) || typeof reference.title !== 'string')) return;
+      intent.references = intent.references.map((/** @type {any} */ reference) => ({ id: reference.id, title: reference.title.slice(0, 300) }));
+    }
     if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== 'string'
       || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId) || typeof intent.draft !== 'string' || !intent.draft)) return;
     incoming = data.seq;
-    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.resultRevision?.referenceId ?? null]);
+    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.resultRevision?.referenceId ?? null, (intent.references ?? []).map((/** @type {{ id: string }} */ reference) => reference.id)]);
     const existing = requests.get(data.requestId);
     if (existing) {
       if (existing.signature !== signature) return;

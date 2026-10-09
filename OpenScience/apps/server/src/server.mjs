@@ -117,7 +117,7 @@ import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resol
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
 import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
-import { ResearchSessionStore } from "./researchSessions.mjs";
+import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import {
   OPEN_DOMAIN_ANSWER_AGENT_ID,
@@ -6090,6 +6090,28 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (pathname === "/api/research-sessions" && req.method === "GET") {
         const ctx = await context(req, res);
         sendJson(res, 200, { data: await researchSessions.list(ctx.project) });
+        return;
+      }
+
+      // The knowledge-base documents one conversation is limited to (design reference N-14): `kb_search` searches
+      // only these, and the conversation's context lists only these. An empty list lifts the limit.
+      const sourceScopeRoute = /^\/api\/research-sessions\/([^/]+)\/source-scope$/.exec(pathname);
+      if (sourceScopeRoute && req.method === "PUT") {
+        const sessionId = decodeRouteComponent(sourceScopeRoute[1], "research session id");
+        const ctx = await context(req, res);
+        const body = await readJson(req, config.maxJsonBytes);
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => key !== "sourceIds")) {
+          throw new HttpError(400, "invalid_research_session", "A source scope has one field, sourceIds.");
+        }
+        const ids = requestedSourceScope(body.sourceIds);
+        if (ids && !sourceService) throw new HttpError(503, "product_state_unavailable", "Source storage is temporarily unavailable.");
+        // Each is a document of this account, in this project or shared with it: the ones `kb_search` can see.
+        for (const id of ids ?? []) {
+          const source = await sourceService.get(ctx.user.id, id).catch(() => null);
+          const readable = source && (source.projectId === ctx.project.id || (await sourceService.isShared(ctx.user.id, source)) === true);
+          if (!readable) throw new HttpError(404, "source_not_found", "This document is not in the knowledge base.");
+        }
+        sendJson(res, 200, { data: await researchSessions.setSourceScope(ctx.project, sessionId, ids) });
         return;
       }
 

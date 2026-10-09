@@ -588,9 +588,31 @@ export function createFrameKit(ctx, target, require, vocabulary) {
     withServices,
     useFrameState,
     shadowed,
+    knowledgeChip,
     parseToolText,
     toolCallState,
     partialArgField,
+  };
+}
+
+/**
+ * A knowledge-base source as the composer's reference chip: what the `@` menu
+ * inserts for a pick, and what the shell's intent inserts for a source it
+ * brings into a conversation. One shape, so both are serialized for the model
+ * by the same codec at send time (`knowledgeSerialization`) and show the
+ * researcher the same thing — the source's title, never its identifier or a
+ * path (design reference §18.4).
+ * @param {{ id: string, title: string }} reference
+ * @returns {{ source: string, ref: string, label: string, appearance: 'file', clipboardText: string }}
+ */
+export function knowledgeChip(reference) {
+  const title = String(reference.title || reference.id).slice(0, 200);
+  return {
+    source: '知识库',
+    ref: JSON.stringify({ id: reference.id, title }),
+    label: title,
+    appearance: /** @type {'file'} */ ('file'),
+    clipboardText: `@${title}`,
   };
 }
 
@@ -604,5 +626,6 @@ export const KIT_PARTS = Object.freeze([
   parseToolText,
   toolCallState,
   partialArgField,
+  knowledgeChip,
   createFrameKit,
 ]);

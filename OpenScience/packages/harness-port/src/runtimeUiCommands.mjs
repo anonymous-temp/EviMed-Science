@@ -731,13 +731,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       onPick({ candidate }) {
         const reference = knowledgeReference(candidate.value);
         if (!reference) return undefined;
-        return { insert: {
-          source: '知识库',
-          ref: JSON.stringify(reference),
-          label: reference.title,
-          appearance: 'file',
-          clipboardText: `@${reference.title}`,
-        } };
+        return { insert: kit.knowledgeChip(reference) };
       },
       codec: {
         /** @param {string} ref */
