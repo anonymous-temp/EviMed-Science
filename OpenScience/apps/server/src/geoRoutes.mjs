@@ -268,6 +268,7 @@ export function createGeoRoutes(dependencies) {
     }
     const tab = parts[2];
     if (parts.length === 3 && method === "GET") {
+      if (tab === "value") return reply(await service.value(user, id));
       if (tab === "evidence") return reply(await service.evidence(user, id));
       if (tab === "journey") return reply(await service.journey(user, id));
       if (tab === "questions") {

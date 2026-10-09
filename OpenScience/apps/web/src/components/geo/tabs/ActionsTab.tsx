@@ -1,3 +1,4 @@
+import { ValueSection } from "./ValueSection";
 import type { GeoProject } from "@/lib/geoClient";
 import { ContentTab } from "./ContentTab";
 import { DistributionTab } from "./DistributionTab";
@@ -16,6 +17,7 @@ import { TabSection } from "./geoTabKit";
 export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   return (
     <div data-geo-tab="actions" className="flex flex-col gap-10">
+      <ValueSection geoId={geoId} project={project} mode="actions" />
       <ContentTab geoId={geoId} project={project} />
       <TabSection title="投放">
         <DistributionTab geoId={geoId} project={project} />

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { deliverableDir, deliverableIdOfPath } from "@evimed/domain";
 import { geoRuntimeWrite, GEO_WRITE_LIMITS } from "./geoWrites.mjs";
 import { readFileNoFollow, resolveScopedPath } from "./security.mjs";
+import { importGeoValue } from "./geoValueImport.mjs";
 
 /**
  * The claim library a finished `geo-insight` run delivered, registered in its
@@ -142,6 +143,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
     const geoProject = await store.projectByControlProject(project.userId, project.id);
     if (!geoProject) return null;
     seen.add(run.id);
+    await importGeoValue({ store, project, geoProject, run, readFile, report });
     const deliverables = /** @type {any[]} */ (run.deliverables ?? run.progress?.deliverables ?? []);
     const ids = new Set(deliverables
       .filter((deliverable) => typeof deliverable?.id === "string" && (!deliverable.capability || deliverable.capability === "geo-insight"))

@@ -105,17 +105,17 @@ test("dispatch ids are the ledger's shape and one per attempt", () => {
 test("a run's brief says, in plain Chinese, the step, minimal or not, the product, and geo_read / geo_write", () => {
   const full = insightBrief(project, { scope: [{ step: "evidence", fidelity: "full" }, { step: "journey", fidelity: "full" },
     { step: "questions", fidelity: "full" }], target: "evidence", full: true });
-  for (const phrase of ["完整方案", "玛仕度肽", "mazdutide", "geo_read", "geo_write", "锁定 40–120 个测量问句", "旅程", "豆包、DeepSeek、Kimi"]) {
+  for (const phrase of ["完整方案", "玛仕度肽", "mazdutide", "geo_read", "geo_write", "锁定适量测量问句", "旅程", "豆包、DeepSeek、Kimi"]) {
     assert.ok(full.includes(phrase), `${phrase} missing from the full brief`);
   }
   assert.equal(full.includes("单步模式"), false);
   const minimal = insightBrief(project, { scope: [{ step: "evidence", fidelity: "minimal" }, { step: "questions", fidelity: "minimal" }],
     target: "sources", full: false });
-  for (const phrase of ["单步模式", "“信源”", "最小版", "共 30 个测量问句", "minimal:true", "geo_read", "geo_write"]) {
+  for (const phrase of ["单步模式", "“信源”", "最小版", "关键决策的测量问句", "minimal:true", "geo_read", "geo_write"]) {
     assert.ok(minimal.includes(phrase), `${phrase} missing from the minimal brief`);
   }
   assert.equal(minimal.includes("· 旅程"), false, "a single step does not do the journey");
-  assert.ok(strategyBrief(project, { minimal: true }).includes("30 个问句"));
+  assert.ok(strategyBrief(project, { minimal: true }).includes("实际测量的问句"));
   const batch = contentBrief(project, { number: 1, size: 3, reason: "first", groups: [{ name: "减重效果", pool: "P2", typicalQuestion: "玛仕度肽能减多少？" }],
     errors: [{ engine: "deepseek", statement: "每天注射一次" }] });
   for (const phrase of ["第 1 批", "最多 3 篇", "语义群“减重效果”", "通用名与品类类", "DeepSeek 讲错“每天注射一次”", "safety: open", "geo_write articles",

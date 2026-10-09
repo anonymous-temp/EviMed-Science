@@ -26,6 +26,12 @@
 
 export const DOMAIN_VERSION = '0.1.0'
 
+export {
+  GEO_VALUE_DOMAINS, GEO_RESEARCH_CAPABILITIES, GEO_VALUE_COLLECTIONS, GEO_VALUE_COVERAGE_STATUSES,
+  geoValueObject, geoValueCanonical, mergeGeoValue, geoValueList, geoValueText, geoValueActive,
+  geoValueContext, geoValueImpacts, summarizeGeoValueCoverage,
+} from './src/geoValue.mjs'
+
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityReason} AvailabilityReason */
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityState} AvailabilityState */

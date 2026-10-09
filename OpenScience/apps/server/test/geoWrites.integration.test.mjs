@@ -101,7 +101,7 @@ test("a claim is versioned by what it says; its bookkeeping changes in place", o
   const first = await write(project, "claims", { items: [{ claimKey: "dose", statement: "每周一次", quote: "每周一次皮下注射。", sourceRef: "说明书 2024" }] });
   assert.deepEqual(first.claims.map((/** @type {any} */ entry) => [entry.version, entry.change]), [[1, "created"]]);
   const bookkeeping = await write(project, "claims", { items: [{ claimKey: "dose", statement: "每周一次 ", quote: "每周一次皮下注射。",
-    sourceRef: "说明书 2024", evidenceLevel: "A", verifiedAt: "2026-09-25", status: "active" }] });
+    sourceRef: "说明书 2024", sourceLabel: "Label", verifiedAt: "2026-09-25", status: "active" }] });
   assert.deepEqual(bookkeeping.claims.map((/** @type {any} */ entry) => [entry.id, entry.version, entry.change]), [[first.ids[0], 1, "updated"]],
     "whitespace is not a new statement");
   const changed = await write(project, "claims", { items: [{ claimKey: "dose", statement: "每周一次，第 4 周起加量", quote: "每周一次皮下注射。", sourceRef: "说明书 2024" }] });
@@ -198,37 +198,37 @@ test("a question map is a new unlocked version; invalid groups and questions are
   assert.equal((await store.questionSets(project.id))[0].lockedAt, null);
 });
 
-test("locking checks the whole set: all four pools, the measured count, and in the full program the control groups", options, async () => {
+test("locking retains small and incomplete sets with coverage notices, and protects resource bounds", options, async () => {
   const project = await freshProject();
   const lock = async (/** @type {Record<string, any>} */ data = {}) => write(project, "lock_questions", { data });
   assert.deepEqual((await lock()).issues.map((/** @type {any} */ issue) => issue.code), ["not_found"], "nothing to lock yet");
 
   await write(project, "questions", { data: { groups: fullSet({ pools: ["P1", "P2", "P3"] }) } });
   let refused = await lock();
-  assert.equal(refused.ok, false);
-  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["pools_missing"]);
+  assert.equal(refused.ok, true);
+  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
 
   await write(project, "questions", { data: { groups: fullSet({ control: 1 }) } });
   refused = await lock();
-  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["control_groups"]);
+  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
 
   await write(project, "questions", { data: { groups: fullSet({ perGroup: 2 }) } });
   refused = await lock();
-  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["measured_count"], "24 measured is short of 40");
+  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"], "24 measured is usable with a scope notice");
 
   // A set of 36 with no control groups: the run saying "minimal" does not make it one.
   await write(project, "questions", { data: { groups: fullSet({ control: 0, perGroup: 3 }) } });
   refused = await lock({ minimal: true });
-  assert.equal(refused.ok, false, "a caller's `minimal` is not the program's");
-  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code).sort(), ["control_groups", "measured_count", "notice"]);
+  assert.equal(refused.ok, true, "limited measurements remain useful regardless of the program shape");
+  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code).sort(), ["notice", "notice", "notice"]);
   // A single step asked for downstream (信源), the questions only its upstream: a minimal set —
   // 30 or more measured, four pools, control groups only a notice.
   await store.setStep(project.id, "sources", { status: "queued", requested: true });
   const minimal = await write(/** @type {any} */ (await store.getProject(USER, project.id)), "lock_questions", { data: {} });
   assert.equal(minimal.ok, true, JSON.stringify(minimal.issues));
   assert.equal(minimal.measuredCount, 36);
-  assert.deepEqual(minimal.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
-  assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "minimal");
+  assert.equal(minimal.alreadyLocked, true);
+  assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "done", "an already locked set keeps its completion state");
 
   // The full program asked for: the questions step itself is requested.
   await store.setStep(project.id, "questions", { requested: true });
@@ -257,10 +257,10 @@ test("the lock rule is a pure function of the set", () => {
     Array.from({ length: total }, (_unused, index) => ({ pool: ["P1", "P2", "P3", "P4"][index % 4], isControl: index < control,
       questions: Array.from({ length: perGroup }, () => ({ isMeasured: true, pool: null })) }));
   assert.deepEqual(geoLockCheck(groups(3, 12, 4), false).refusals, []);
-  assert.equal(geoLockCheck(groups(6, 12, 4), false).refusals[0].code, "control_groups", "six control groups are too many");
-  assert.equal(geoLockCheck(groups(3, 24, 4), false).refusals[0].code, "control_groups", "3 of 24 is under a fifth, even with the tolerance");
+  assert.equal(geoLockCheck(groups(6, 12, 4), false).notices[0].code, "notice", "control imbalance limits interpretation");
+  assert.equal(geoLockCheck(groups(3, 24, 4), false).notices[0].code, "notice", "few controls remain measurable");
   assert.deepEqual(geoLockCheck(groups(3, 20, 4), false).refusals, [], "3 of 20 is inside the tolerance");
-  assert.equal(geoLockCheck(groups(3, 12, 11), false).refusals[0].code, "measured_count", "132 measured is over 120");
+  assert.equal(geoLockCheck(groups(3, 12, 11), false).notices[0].code, "notice", "132 questions remain usable within the queue resource ceiling");
   assert.deepEqual(geoLockCheck(groups(0, 10, 3), true).refusals, [], "a minimal set of 30 locks without control groups");
 });
 

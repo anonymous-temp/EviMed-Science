@@ -27,6 +27,7 @@ import { SourcesTab } from "./SourcesTab";
 import { VisibilityTab } from "./VisibilityTab";
 
 const client = vi.hoisted(() => ({
+  getGeoValue: vi.fn(async () => ({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } })),
   getGeoEvidence: vi.fn(),
   getGeoJourney: vi.fn(),
   getGeoQuestions: vi.fn(),
@@ -82,6 +83,7 @@ const props = (project: GeoProject = geoProject()) => ({ geoId: "geo_1", project
 
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
+  client.getGeoValue.mockResolvedValue({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } });
   store.select.mockClear();
   download.downloadArtifact.mockClear();
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });

@@ -8,13 +8,21 @@ metadata:
 # 循证 GEO — layered content
 
 You run step 6, **内容**: articles an answering engine can quote correctly, all
-written from the project's one claim library so the same fact reads the same in
-every layer, and correction materials for every 讲错我方 the platform found.
+written from the project's shared drug-value analysis, research and claim library
+so the same finding keeps its meaning and limitations in every selected format.
+Corrections address substantiated errors when they are relevant to the batch.
 The platform places what you write (step 7) and measures whether it gets cited
 (step 8); you do neither.
 
 Work and write in Simplified Chinese. Product names, approval numbers, doses,
 label wording and source titles stay exactly as their sources write them.
+
+## Drug value informs this work
+
+Load `geo-drug-value` before planning this task. Read `geo_read value` and
+`geo_read research`; use the shared analysis to choose questions, research,
+strategy, content and interpretation. Preserve partial findings. Its guidance
+replaces fixed clinical-field, stage, length and sample quotas in older methods.
 
 ## The method pack
 
@@ -49,13 +57,14 @@ The layers (the platform's ids in brackets):
 
 | Layer | For | Must carry |
 |---|---|---|
-| 深度分析 (`deep`) | physicians | a GRADE evidence profile of at most 7 outcomes — absolute effects, time frame, certainty — copied, never self-graded |
-| 证据卡片 (`card`) | everyone; engines extract it | the seven panels: one-line answer, what it is, what the label says, when it does not apply, go to a doctor now if…, misconceptions actually measured, sources with the date checked; a benefit–risk fact box when trial data exist |
+| 深度分析 (`deep`) | physicians | a comparison with relevant outcomes, timeframe and limitations; a GRADE profile only when available |
+| 证据卡片 (`card`) | everyone; engines extract it | choose useful panels from: one-line answer, what it is, what the label says, when it does not apply, go to a doctor now if…, misconceptions actually measured, sources with the date checked; a benefit–risk fact box when trial data exist |
 | 科普稿件 (`popular`) | patients, families | one typical question per article, conclusion first, readable at middle-school level, certainty words 会 / 很可能 / 可能 / 目前尚不清楚 |
-| 问答 (`qa`) | search and community users | the first sentence answers; 300–600 characters; a certainty qualifier, absolute numbers, source and date |
+| 问答 (`qa`) | search and community users | the first sentence answers; length suited to the question; certainty and sources, absolute numbers only when supported |
 | 纠错材料 (`correction`) | the outlet or editor that carries the error | what was said, what the label says, the source, the requested fix |
 
-A lower layer carries no claim the upper layer does not; public layers stay
+Choose formats for the audience; an article does not require another layer to
+exist first. Keep shared findings consistent across formats. Public layers stay
 inside the label and carry no purchase link; a prescription medicine's product
 content goes to professional channels only.
 
@@ -67,9 +76,9 @@ population, and name the estimand (treatment-policy or efficacy) whenever a
 trial reports both. A correction never says 「不是 X」 on abstract-level evidence.
 
 GEO structure (the method pack's mechanics): the title is the question; the
-conclusion sits in the first 80–150 characters; paragraphs stand alone; every
-article carries statistics, a verbatim quotation and a clickable source; one
-spelling of the product everywhere; author and medical reviewer visible.
+conclusion sits in the first 80–150 characters; paragraphs stand alone; use statistics and direct quotations only when they help answer the question;
+source-backed qualitative explanations are useful too; one
+spelling of the product everywhere; actual authors and medical reviewers visible when provided; never invent identities.
 
 ## Humanize last, and keep the evidence still
 

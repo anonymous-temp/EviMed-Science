@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-strategy",
-  "version": "sha256:a238a706f56a0a81892378b7ec554cd8d8a7a226418a3013cce526b58dee0978",
+  "version": "sha256:ad1bdc8f3969625b2ead300ee786d5e85a8856065d2e781ca31d5705e3da28ca",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 25,
@@ -491,7 +491,7 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links or monitoring. Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
+      "description": "Read this 循证 GEO project's claims, questions, journey, strategy, sources, articles and measurements. value includes drug-value findings, opportunities, research outputs and answer coverage; research lists specialist tasks. filter.version reads an earlier value basis. Missing or unjudged is unknown, never zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -512,12 +512,22 @@
               "articles",
               "orders",
               "owned_links",
-              "monitoring"
+              "monitoring",
+              "value",
+              "research"
             ]
           },
           "filter": {
             "type": "object",
             "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "audience": {
+                "type": "string",
+                "maxLength": 120
+              },
               "round": {
                 "type": "string",
                 "minLength": 1,
@@ -661,7 +671,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} or retires one {id, status: retired}. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 循证 GEO project's data; valid items survive individual refusals. value merges optional drug-value context; send known fields, reuse ids to amend. research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -679,7 +689,9 @@
               "articles",
               "placement_plan",
               "owned_links",
-              "step"
+              "step",
+              "value",
+              "research"
             ]
           },
           "items": {

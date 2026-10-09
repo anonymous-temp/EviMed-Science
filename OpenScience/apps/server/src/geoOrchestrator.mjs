@@ -1,4 +1,4 @@
-import { GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, stepWaitingFor } from "@evimed/domain";
+import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoValueActive, geoValueList, geoValueText, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
@@ -20,7 +20,7 @@ import { HttpError, randomId } from "./security.mjs";
  *   `requested` (「让 AI 做」 sets it; a full program has all eight). What a
  *   requested step needs upstream is wanted too, as a *minimal* version when
  *   it was not itself requested (plan §5.5: 「只做信源分析与预期」 = identity +
- *   label claims + 30 questions → one round → the strategy run). A
+ *   available clinical context + useful questions → one round → the strategy run). A
  *   conversation that locks a question set with nothing requested starts the
  *   program itself: a full set is the full program, a minimal set is a
  *   diagnosis.
@@ -38,9 +38,10 @@ import { HttpError, randomId } from "./security.mjs";
  *   derived from its key and attempt, so the run ledger returns the existing
  *   run for a dispatch that was accepted but not recorded.
  * - **A run's end is read from the data, not only its status.** An insight
- *   run is done for evidence when claims exist, for the journey when a journey
- *   version exists, for the questions when the set is locked; the strategy
- *   run when strategy and targets exist; a content batch when it registered
+ *   run is done for evidence when claims exist (minimal when it has useful
+ *   value findings alone), for the journey when a journey version exists,
+ *   for the questions when the set is locked; the strategy run when strategy
+ *   and targets exist (minimal when only one exists); a content batch when it registered
  *   articles. A failed run that wrote them still counts (principle 19); a
  *   finished run that wrote nothing fails its steps, and a failed run is
  *   retried once before its step waits for a person to ask again.
@@ -377,7 +378,7 @@ export function insightBrief(project, { scope, target, full }) {
   for (const { step, fidelity } of scope) {
     if (step === "evidence") {
       lines.push(fidelity === "full"
-        ? "· 证据：核实产品身份和说明书，竞品，完整主张库（通常 30–50 条，每条带说明书或文献原文引用）。"
+        ? "· 证据：核实产品身份和说明书，竞品，有依据的价值结论与主张库（保留人群、比较对象、获益和风险，不凑条数）。"
         : "· 证据（最小版）：核实产品身份，只从说明书取主张——适应证、用法用量、禁忌、特殊人群、主要不良反应、相互作用。");
       // The identity the measurement counts by (G5): without the aliases,
       // the misspellings and whether one holder markets the generic, a
@@ -385,13 +386,14 @@ export function insightBrief(project, { scope, target, full }) {
       lines.push("  产品身份写全：aliases（回答里会用的其他叫法）、misspellings（常见错写）、approvalNo（批准文号）、rx（处方药 rx / 非处方药 otc）、identityStatus，"
         + "以及 singleSource（这个通用名是否只有这一家持证：是则回答里说通用名也算提到本品，否则只按商品名计）。每个竞品同样写 singleSource。");
     } else if (step === "journey") {
-      lines.push("· 旅程：人群分型与规模（subtypes）、3–5 个典型人物（personas）、12 个阶段的患者旅程、就医节点与就医红旗；完整的阶段 × 列矩阵另存一个文件，并在 journey 的 files 里登记。");
+      lines.push("· 旅程：有依据的人群分型（subtypes）、相关受众（personas）、按实际决策组织的旅程、就医节点与就医红旗；完整的阶段 × 列矩阵另存一个文件，并在 journey 的 files 里登记。");
     } else if (step === "questions") {
       lines.push(fidelity === "full"
-        ? "· 问题：采集真实问法（每条写上帖子的 collectedAt 和链接），四池问题地图，3–5 个对照组，锁定 40–120 个测量问句（lock_questions）。"
-        : "· 问题（最小版）：四池都有、共 30 个测量问句，没采到真实问法的写成 typical；用 lock_questions 并设 minimal:true 锁定。");
+        ? "· 问题：采集真实问法（每条写上帖子的 collectedAt 和链接），按药品价值与真实需求组织问题地图，保留可比较的对照问句，锁定适量测量问句（lock_questions）。"
+        : "· 问题（最小版）：先覆盖关键决策的测量问句，没采到真实问法的写成 typical；用 lock_questions 并设 minimal:true 锁定。");
     }
   }
+  lines.push("先读 geo_read value 与 research，从药品综合评价的获益、风险、适用性、经济负担、可及性与临床创新出发组织本次工作；已完成研究先复用，缺什么补什么，不要求六个维度都有数据。用 geo_write value 增量记录发现、机会和下一步。");
   lines.push(DATA_LINE);
   lines.push("写回顺序：geo_write product、claims、journey、questions，锁定问句后用 step 标记做完的步骤。锁定之后平台会自己测基线。");
   return lines.join("\n");
@@ -405,7 +407,7 @@ export function strategyBrief(project, { minimal, freshness = null }) {
   return [
     `“循证 GEO”自动运行 · 第 5 步（信源）`,
     productLine(project), scopeLine(project),
-    `诊断已经测完${minimal ? "（最小版：30 个问句测一轮，数字只代表这 30 个问句，报告里写明）" : "（基线）"}。先用 geo_read 读 diagnosis、metrics、snapshots、sources、errors。`,
+    `诊断已经测完${minimal ? "（最小版：数字只代表实际测量的问句，报告里写明样本与缺口）" : "（基线）"}。先用 geo_read 读 diagnosis、metrics、snapshots、sources、errors。`,
     ...(freshness ? [freshness] : []),
     "这次要做：信源表、七类缺口、每个引擎本周期能做到什么、主战场与布局、三档目标（每档写目标、稿件数和预算）。",
     // G3: every coverage candidate is checked, and a site no one checked is
@@ -435,6 +437,7 @@ export function contentBrief(project, { number, groups, errors, reason, size }) 
   if (!groups.length && !errors.length) lines.push("· 由你按主张库和问题地图挑最需要的主题。");
   lines.push("语义群的 groupId 用 geo_read questions 查，讲错我方的依据和它的 id 用 geo_read errors 查。每篇写好后用 geo_write articles 登记（deliverableId 即本交付物的 id、path、layer、groupId、claimIds、safety、contentSha256）；"
     + "纠错材料在 errorIds 里写上它纠正的讲错 id，这条讲错就会转为处置中。闸门结论由平台从交付记录读取，不必填 gate。有临床安全问题就如实标 safety: open，不要自己放行。");
+  lines.push("先读 geo_read value 与 research，从药品综合评价的获益、风险、适用性、经济负担、可及性与临床创新出发组织本次工作；已完成研究先复用，缺什么补什么，不要求六个维度都有数据。用 geo_write value 增量记录发现、机会和下一步。");
   lines.push(DATA_LINE);
   return lines.join("\n");
 }
@@ -759,33 +762,43 @@ export class GeoOrchestrator {
     const written = detail.purpose === "content" ? Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.articles
       WHERE geo_project_id = $1 AND created_at >= (SELECT updated_at FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = $2)`,
     [project.id, mark.key])).rows[0]?.n ?? 0) : 0;
-    const moved = await this.#update(project.id, mark.key, { state: status === "succeeded" ? "done" : "failed", detail: { runStatus: status } },
+    const moved = await this.#update(project.id, mark.key, { state: status === "succeeded" ? "done" : "failed", detail: { runStatus: status, ...(detail.purpose === "research" ? { result: { runId: mark.run_id ?? null, available: "Read value.researchResults and the run deliverables; partial outputs remain usable." } } : {}) } },
       ["claimed", "running", "pending"]);
     if (!moved) return;
     this.counters.runsFinished += 1;
     let current = (await this.#project(project.id)) ?? project;
     if (detail.purpose === "insight") {
-      const [claims, journey, sets] = await Promise.all([
+      const [claims, journey, sets, value] = await Promise.all([
         this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.claims WHERE geo_project_id = $1`, [project.id]),
         this.store.latestJourney(project.id),
         this.store.questionSets(project.id),
+        this.store.latestValue(project.id),
       ]);
+      const hasClaims = Number(claims.rows[0]?.n ?? 0) > 0;
+      const hasValue = Boolean(geoValueText(value.data.summary))
+        || geoValueList(value.data.findings).some((finding) => geoValueActive(finding) && geoValueText(finding));
       for (const { step, fidelity } of /** @type {Array<{ step: string, fidelity: string }>} */ (detail.scope ?? [])) {
         if (FINISHED.has(current.steps[step]?.status)) continue;
-        const reached = step === "evidence" ? Number(claims.rows[0]?.n ?? 0) > 0
+        const reached = step === "evidence" ? hasClaims || hasValue
           : step === "journey" ? Boolean(journey)
             : step === "questions" ? sets.some((/** @type {any} */ set) => set.lockedAt) : false;
         current = await this.#step(current, step, reached
-          ? { status: fidelity === "full" ? "done" : "minimal", runId: mark.run_id ?? null }
+          ? { status: fidelity === "full" && (step !== "evidence" || hasClaims) ? "done" : "minimal", runId: mark.run_id ?? null }
           : { status: "failed", runId: mark.run_id ?? null });
+      }
+      if (!hasClaims && hasValue && detail.scope?.length
+        && detail.scope.every((/** @type {{step: string}} */ entry) => FINISHED.has(current.steps[entry.step]?.status))) {
+        // Useful partial work is complete for now; an explicit runStep can extend the allowance.
+        await this.#update(project.id, mark.key, { detail: { allowed: Number(mark.attempts ?? 0) } });
       }
     } else if (detail.purpose === "strategy") {
       const [strategy, targets] = await Promise.all([this.store.latestStrategy(project.id), this.store.latestTargets(project.id)]);
-      if (strategy && targets) {
-        current = await this.#step(current, "sources", { status: current.steps.diagnosis?.status === "minimal" ? "minimal" : "done", runId: mark.run_id ?? null });
-        const suggested = targets.rows.filter((row) => row.tier === current.tier && row.budgetCny != null)
+      if (strategy || targets) {
+        current = await this.#step(current, "sources", { status: !strategy || !targets || current.steps.diagnosis?.status === "minimal" ? "minimal" : "done", runId: mark.run_id ?? null });
+        if (!strategy || !targets) await this.#update(project.id, mark.key, { detail: { allowed: Number(mark.attempts ?? 0) } });
+        const suggested = (targets?.rows ?? []).filter((row) => row.tier === current.tier && row.budgetCny != null)
           .reduce((/** @type {number | null} */ max, row) => Math.max(max ?? 0, Number(row.budgetCny)), null);
-        await this.#notice(current, `notice:targets:${targets.version}`, () => this.notifier?.targetsReady(current, { version: targets.version, suggestedBudgetCny: suggested }));
+        if (targets) await this.#notice(current, `notice:targets:${targets.version}`, () => this.notifier?.targetsReady(current, { version: targets?.version ?? null, suggestedBudgetCny: suggested }));
       } else if (!FINISHED.has(current.steps.sources?.status)) {
         current = await this.#step(current, "sources", { status: "failed", runId: mark.run_id ?? null });
       }
@@ -1028,6 +1041,7 @@ export class GeoOrchestrator {
     if (active) return;
     const candidates = [
       () => this.#pendingExport(project),
+      () => this.#researchRun(project),
       () => this.#insightRun(project, plan),
       () => this.#strategyRun(project, plan),
       () => this.#weeklyExport(project, plan),
@@ -1045,7 +1059,7 @@ export class GeoOrchestrator {
   }
 
   /**
-   * @typedef {{ key: string, purpose: "insight" | "strategy" | "content" | "export", capabilityId: string, reason: string,
+   * @typedef {{ key: string, purpose: "insight" | "strategy" | "content" | "export" | "research", capabilityId: string, reason: string,
    *   brief: string, steps: string[], detail?: Record<string, any> }} RunSpec
    */
 
@@ -1054,6 +1068,26 @@ export class GeoOrchestrator {
     if (!mark) return true;
     if (["claimed", "running"].includes(mark.state)) return false;
     return Number(mark.attempts ?? 0) < Number(mark.detail?.allowed ?? GEO_RUN_RULES.attempts);
+  }
+
+  /** A focused research question uses the existing specialist and budgeted run queue. @param {any} project @returns {Promise<RunSpec | null>} */
+  async #researchRun(project) {
+    const marks = (await this.store.query(`SELECT * FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND kind = 'run'
+      AND starts_with(key, 'run:research:') AND state = 'pending' ORDER BY created_at LIMIT 100`, [project.id])).rows;
+    const mark = marks.find((entry) => this.#allowed(entry) && GEO_RESEARCH_CAPABILITIES.includes(entry.detail?.capabilityId));
+    if (!mark) return null;
+    const value = await this.store.latestValue(project.id);
+    return { key: mark.key, purpose: "research", capabilityId: mark.detail.capabilityId, reason: "geo:research", steps: [],
+      detail: { ...mark.detail, basisVersion: value.version }, brief: [
+        `Research the following question for this GEO project: ${mark.detail.question}`,
+        `Context: ${JSON.stringify({ product: project.product, ...mark.detail })}`,
+        `Existing analysis (version ${value.version}): ${JSON.stringify(value.data).slice(0, 20000)}`,
+        "Reuse the available analysis and project files. If GEO tools are available, read value and research for additional context before doing new research.",
+        "Use the selected specialist's methods only where the question and available inputs warrant them. Preserve partial, negative and conflicting findings; describe unavailable calculations and continue with usable work.",
+        "Translate the result into decision-relevant benefits, risks, costs, treatment burden or access, with known population/comparator/region/time and source references. Do not infer incidence or causation from reporting signals.",
+        "Use geo_write(value) to append or amend findings and researchResults, linking supplied findingIds/groupIds/opportunityId where known. Alternatively place an optional geo-value.json beside the report; the platform imports it. Missing metadata never requires another research run.",
+        "Do not queue another research task to complete this one. Finish the available work and name any remaining uncertainty.",
+      ].join("\n") };
   }
 
   /** @param {any} project @returns {Promise<RunSpec | null>} */

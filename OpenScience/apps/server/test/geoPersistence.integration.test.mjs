@@ -67,11 +67,11 @@ test("the migration creates every table of the build spec and a second run chang
   const result = await migrateGeo(first);
   assert.deepEqual(result.tables, GEO_TABLES);
   const created = await inventory(first);
-  assert.equal(created.tables.length, 26, created.tables.join());
+  assert.equal(created.tables.length, 27, created.tables.join());
   assert.deepEqual([...created.tables].sort(), [...GEO_TABLES].sort());
   // The columns other packages code against, spot-checked per side.
   const has = (/** @type {string} */ table, /** @type {string} */ column) => created.columns.some((row) => row.table_name === table && row.column_name === column);
-  for (const [table, column] of [["projects", "steps"], ["projects", "budget"], ["claims", "elements"], ["question_sets", "locked_at"],
+  for (const [table, column] of [["value_profiles", "version"], ["articles", "value_context"], ["projects", "steps"], ["projects", "budget"], ["claims", "elements"], ["question_sets", "locked_at"],
     ["questions", "is_measured"], ["rounds", "surface"], ["probe_jobs", "lease_until"], ["snapshots", "screenshot_sha256"], ["facts", "failure_mode"],
     ["errors", "cited_source"], ["metrics", "ci_high"], ["strategy", "layout"], ["targets", "budget_cny"], ["sources", "market"],
     ["articles", "protected_sha256"], ["media", "price_history"], ["media_outcomes", "cited"], ["orders", "vendor_order_nid"],

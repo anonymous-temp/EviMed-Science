@@ -1,3 +1,4 @@
+import { ValueSection } from "./ValueSection";
 import { useState } from "react";
 import {
   getGeoDiagnosis,
@@ -130,6 +131,7 @@ function Accuracy({
 
   return (
     <div data-geo-tab="accuracy" className="flex flex-col gap-6">
+      <ValueSection geoId={geoId} project={project} mode="safety" />
       <StatBand label="准确与安全" footnote={denominator} columns={tiles.length >= 5 ? 5 : 4}>
         {tiles.map((tile) => (
           <StatTile

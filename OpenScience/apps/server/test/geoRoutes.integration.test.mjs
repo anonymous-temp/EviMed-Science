@@ -250,7 +250,7 @@ test("the project page, its tabs and its actions answer in the spec's shapes fro
   const stale = map.groups[1].questions[0].id;
   refused(await call("POST", `/api/geo/projects/${id}/questions/${stale}/unmeasure`, { body: {} }), 409, "geo_question_not_current");
   assert.equal((await call("GET", `/api/geo/projects/${id}/questions`)).payload.data.version, 2, "nothing was written");
-  // A locked set that would fall below the lock rule is not written: 47 → 40 is fine, 39 is not.
+  // Removing an irrelevant question keeps a smaller measured set usable.
   for (let remaining = 47; remaining > 40; remaining -= 1) {
     const latest = (await call("GET", `/api/geo/projects/${id}/questions`)).payload.data;
     const next = latest.groups.flatMap((/** @type {any} */ group) => group.questions).find((/** @type {any} */ question) => question.isMeasured);
@@ -260,12 +260,11 @@ test("the project page, its tabs and its actions answer in the spec's shapes fro
   assert.equal(forty.sets[0].measuredCount, 40);
   const last = forty.groups.flatMap((/** @type {any} */ group) => group.questions).find((/** @type {any} */ question) => question.isMeasured);
   const below = await call("POST", `/api/geo/projects/${id}/questions/${last.id}/unmeasure`, { body: {} });
-  refused(below, 409, "geo_question_set_invalid");
-  assert.match(String(below.payload.error), /40 to 120/);
-  assert.equal((await call("GET", `/api/geo/projects/${id}/questions`)).payload.data.version, forty.version, "the refused copy was not written");
+  assert.equal(below.status, 200);
+  assert.equal((await call("GET", `/api/geo/projects/${id}/questions`)).payload.data.version, forty.version + 1, "the smaller set retains its own version");
 
   const journey = (await call("GET", `/api/geo/projects/${id}/journey`)).payload.data;
-  assert.deepEqual(journey, { version: null, subtypes: [], personas: [], stages: [], careNodes: [], files: [] }, "nothing written yet reads as empty");
+  assert.deepEqual(journey, { version: null, decisions: [], valueContext: {}, subtypes: [], personas: [], stages: [], careNodes: [], files: [] }, "nothing written yet reads as empty");
 
   const sources = (await call("GET", `/api/geo/projects/${id}/sources`)).payload.data;
   assert.equal(sources.sources[0].domain, "39.net");

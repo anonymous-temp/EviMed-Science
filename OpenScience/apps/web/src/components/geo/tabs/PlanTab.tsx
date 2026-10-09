@@ -1,3 +1,4 @@
+import { ValueSection } from "./ValueSection";
 import type { GeoProject } from "@/lib/geoClient";
 import { Panel, PanelRow } from "@/components/ui/Panel";
 import { EvidenceTab } from "./EvidenceTab";
@@ -22,6 +23,7 @@ export function PlanTab({ geoId, project }: { geoId: string; project: GeoProject
   const engines = (project.engines ?? []).map(engineName).join("、");
   return (
     <div data-geo-tab="plan" className="flex flex-col gap-10">
+      <ValueSection geoId={geoId} project={project} mode="profile" />
       <Panel title="测量方案">
         <PanelRow label="测量的 AI 引擎" control={engines || "—"} />
         <PanelRow label="覆盖周期" control={coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)} />

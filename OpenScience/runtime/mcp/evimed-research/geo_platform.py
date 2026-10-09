@@ -45,11 +45,11 @@ import public_sources
 # and holds these copies equal to the domain's.
 READ_WHATS = (
     "project", "claims", "questions", "journey", "diagnosis", "metrics", "snapshots", "errors", "sources",
-    "strategy", "targets", "articles", "orders", "owned_links", "monitoring",
+    "strategy", "targets", "articles", "orders", "owned_links", "monitoring", "value", "research",
 )
 WRITE_WHATS = (
     "product", "claims", "questions", "lock_questions", "journey", "strategy", "sources", "targets",
-    "articles", "placement_plan", "owned_links", "step",
+    "articles", "placement_plan", "owned_links", "step", "value", "research",
 )
 ENGINES = ("doubao", "qianwen", "deepseek", "yuanbao", "kimi", "baidu")
 POOLS = ("P1", "P2", "P3", "P4")
@@ -81,9 +81,9 @@ def tool_definitions():
         {
             "name": "geo_read",
             "description": (
-                "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, "
-                "answer snapshots, errors, sources, strategy, targets, articles, orders, owned links or monitoring. "
-                "Every number is a cell with numerator, denominator and status; absent or insufficient is not zero."
+                "Read this 循证 GEO project's claims, questions, journey, strategy, sources, articles and measurements. "
+                "value includes drug-value findings, opportunities, research outputs and answer coverage; research lists specialist tasks. "
+                "filter.version reads an earlier value basis. Missing or unjudged is unknown, never zero."
             ),
             "inputSchema": {
                 "type": "object",
@@ -92,6 +92,8 @@ def tool_definitions():
                     "filter": {
                         "type": "object",
                         "properties": {
+                            "version": {"type": "integer", "minimum": 1},
+                            "audience": {"type": "string", "maxLength": 120},
                             "round": ID,
                             "engine": {"type": "string", "enum": list(ENGINES)},
                             "pool": {"type": "string", "enum": list(POOLS)},
@@ -110,11 +112,10 @@ def tool_definitions():
         {
             "name": "geo_write",
             "description": (
-                "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, "
-                "strategy and sources, three-tier targets, articles, placement preferences, or a step's status. "
-                "owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} "
-                "or retires one {id, status: retired}. "
-                "Items are checked one by one; refused items come back in issues and the rest are written."
+                "Write this 循证 GEO project's data; valid items survive individual refusals. "
+                "value merges optional drug-value context; send known fields, reuse ids to amend. "
+                "research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. "
+                "owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}."
             ),
             "inputSchema": {
                 "type": "object",

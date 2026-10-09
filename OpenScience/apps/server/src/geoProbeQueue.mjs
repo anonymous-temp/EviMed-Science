@@ -459,10 +459,12 @@ export async function enqueueRound(deps, { geoProjectId, kind, questionIds = nul
   if (jobs.length > GEO_ROUND_MAX_ASKS) throw new HttpError(400, "geo_round_too_large", `A round plans at most ${GEO_ROUND_MAX_ASKS} asks.`);
 
   const roundId = randomId("gr_");
+  const context = typeof store.projectContext === "function" ? await store.projectContext(geoProjectId) : null;
+  const evaluationBasis = context ? { product: context.project.product, competitors: context.project.competitors, value: context.value, claims: context.claims, careFlags: context.careFlags } : null;
   await store.createRound({
     id: roundId, userId: project.userId, geoProjectId, kind,
     setVersion: questionIds?.length ? (questions[0]?.setVersion ?? setVersion) : setVersion,
-    engines: requested, surface: { ...DEFAULT_SURFACE }, planned: jobs.length, ref: ref ?? null, now,
+    engines: requested, surface: { ...DEFAULT_SURFACE }, planned: jobs.length, ref: { ...ref, ...(evaluationBasis ? { evaluationBasis } : {}) }, now,
   }, jobs);
   return { roundId, planned: jobs.length, engines: jobEngines, absentEngines: requested.filter((engine) => !jobEngines.includes(engine)),
     setVersion: questionIds?.length ? (questions[0]?.setVersion ?? setVersion) : setVersion };

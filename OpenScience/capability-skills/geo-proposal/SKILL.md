@@ -22,6 +22,13 @@ in. Two modes, named in the brief:
 Write in Simplified Chinese; product names, approval numbers and outlet names
 stay exactly as their owners write them.
 
+## Drug value informs this work
+
+Load `geo-drug-value` before planning this task. Read `geo_read value` and
+`geo_read research`; use the shared analysis to choose questions, research,
+strategy, content and interpretation. Preserve partial findings. Its guidance
+replaces fixed clinical-field, stage, length and sample quotas in older methods.
+
 ## The method pack
 
 Load with the `skill` tool and follow; `$GEO_LIB` is the `shared/` directory of

@@ -1,3 +1,4 @@
+import { ValueSection } from "./ValueSection";
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -55,6 +56,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
   if (groups.length === 0) return <StepPending geoId={geoId} project={project} step="questions" />;
   return (
     <QuestionMap
+      project={project}
       geoId={geoId}
       data={data}
       groups={groups}
@@ -69,6 +71,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
 }
 
 function QuestionMap({
+  project,
   geoId,
   data,
   groups,
@@ -76,6 +79,7 @@ function QuestionMap({
   onChanged,
 }: {
   geoId: string;
+  project: GeoProject;
   data: GeoQuestions;
   groups: GeoQuestionGroup[];
   onVersion: (version: number | null) => void;
@@ -108,6 +112,7 @@ function QuestionMap({
 
   return (
     <div data-geo-tab="questions">
+      <ValueSection geoId={geoId} project={project} mode="decisions" />
       <FilterRow summary={`${counts.groups} 个语义群 · ${counts.measured} 问 · ${counts.real.toLocaleString("zh-CN")} 条真实问法`}>
         <FilterChips
           label="问句池"

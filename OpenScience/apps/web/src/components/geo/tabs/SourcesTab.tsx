@@ -1,3 +1,4 @@
+import { ValueSection } from "./ValueSection";
 import { useState } from "react";
 import { Check, Minus, X } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -46,6 +47,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   return (
     <div data-geo-tab="sources">
+      <ValueSection geoId={geoId} project={project} mode="sources" />
       {sources.length > 0 && <SourceTable sources={sources} engines={project.engines} />}
       {/* An engine whose citations had no link is not missing from the table
           by accident: it is said, not dropped (G8). */}

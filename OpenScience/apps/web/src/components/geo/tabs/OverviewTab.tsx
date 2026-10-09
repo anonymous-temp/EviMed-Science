@@ -1,3 +1,4 @@
+import { ValueSection } from "./ValueSection";
 import { useMemo } from "react";
 import { Radar } from "lucide-react";
 import { getGeoDiagnosis, getGeoMonitoring, type GeoDiagnosis, type GeoMonitoring, type GeoProject } from "@/lib/geoClient";
@@ -70,6 +71,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
 
   return (
     <div data-geo-tab="overview" className="flex flex-col gap-4">
+      <ValueSection geoId={geoId} project={project} mode="summary" />
       <p className="flex items-start gap-2 text-section font-semibold text-text">
         <Radar size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-accent" />
         <span className="min-w-0">{headlineSentence(project, diag)}</span>

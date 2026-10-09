@@ -126,6 +126,15 @@
     },
     {
       "schemaVersion": 1,
+      "id": "capability-skill/geo-drug-value",
+      "name": "geo-drug-value",
+      "origin": "capability-skill",
+      "source": {"kind":"release"},
+      "digest": "sha256:4f6e7e24a93a09b9878098dbb122cc7161cab298a279c5864fca7ccd0cadcc49",
+      "digestAlgorithm": "release-directory-v1"
+    },
+    {
+      "schemaVersion": 1,
       "id": "capability-skill/manuscript-humanize",
       "name": "manuscript-humanize",
       "origin": "capability-skill",
@@ -535,11 +544,11 @@
       "id": "capability/geo-content",
       "name": "geo-content",
       "origin": "capability",
-      "version": "2.0.3",
+      "version": "2.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:007c7effcff106fed04c897aec4df9e10674f0771f4f3ae26e992941c9b50bb7",
+      "digest": "sha256:acf86b379b29d043ec8d118218b37a8fdda5c8d29302f50c64b7dea0737e9e5d",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"95f4c2056e1e7545a022b40f742d0d7303059385d14291dbd7c2c5a12e8fbc9b"}],
+      "references": [{"path":"capability.yaml","sha256":"3eae3ac8c2ede6fb54063179473b47060572d04d4bbb5ddf426799586b6ba771"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -560,9 +569,10 @@
         {
           "name": "geo-content-pack",
           "kind": "deliverable",
-          "summaryZh": "从结论库写出四层稿件和纠错材料，逐篇审核后去 AI 味。",
+          "summary": "Step 6 of an evidence-based GEO project — audience-specific content grounded in drug value, clinical evidence and real decisions. Choose useful formats, retain benefit-risk conditions and uncertainty, reuse specialist research, and register medically reviewed articles and corrections in the project.",
+          "summaryZh": "从药品价值和真实决策出发，按受众写稿，逐篇医学审核并优化表达。",
           "accepts": ["brandEntity","groups","layers","drafts","corrections","minimal","questionSet","competitors","platforms","deepMode","outputLanguage"],
-          "produces": ["geo-content.md","articles.json","geo-probe-log.jsonl","revision-notes.md"],
+          "produces": ["geo-content.md","articles.json","geo-probe-log.jsonl","geo-value.json","revision-notes.md"],
           "limits": ["有未处理安全问题的稿件会标出来，不自动投放，需要人看一眼。"]
         }
       ]
@@ -572,11 +582,11 @@
       "id": "capability/geo-insight",
       "name": "geo-insight",
       "origin": "capability",
-      "version": "1.0.6",
+      "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:5f615579e342895a322350a5fbed4acaae8467bd123010e1b9af05019291a7ec",
+      "digest": "sha256:411e9633b822c97d3d82d160a4d2e4b8829cebd7449039ebd5e32641393d81c4",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"e1b3fe41a5242a7c17e5304246f0c83e30ea8e933d218aa84ea758c6beb69768"}],
+      "references": [{"path":"capability.yaml","sha256":"3e7d3de304853deac2367ff2d1edf6d9fcc047629e69fad4c82c86048fcadef6"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -599,10 +609,10 @@
         {
           "name": "geo-insight-pack",
           "kind": "deliverable",
-          "summary": "Steps 1–3 of an evidence-based GEO project for one medicine — verified identity and label, a claim library of verbatim-quoted statements, patient subtypes, journey and care nodes, and a four-pool question map with control groups, registered in the project and locked for measurement.",
-          "summaryZh": "核对产品与说明书，建结论库，画患者旅程并锁定测量问句。",
+          "summary": "Steps 1–3 of an evidence-based GEO project — establish drug value and its limits from available research, identify audience decisions and opportunities, preserve source-linked findings, and build a useful question map for measurement. Partial evidence and unresolved product identity remain explicit.",
+          "summaryZh": "分析药品价值，发现不同受众的决策与机会，形成旅程和测量问句。",
           "accepts": ["brandEntity","coverageDays","engines","step","minimal","clientQuestions","competitors"],
-          "produces": ["geo-insight.md","claims.json","question-map.json","journey.md","revision-notes.md"],
+          "produces": ["geo-insight.md","claims.json","question-map.json","journey.md","geo-value.json","revision-notes.md"],
           "limits": ["真实问法依赖社媒采集通道；采不到时只用典型问句，并如实标注。"]
         }
       ]
@@ -612,11 +622,11 @@
       "id": "capability/geo-proposal",
       "name": "geo-proposal",
       "origin": "capability",
-      "version": "1.0.2",
+      "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:f6ae94471028d60538b8b28f4d59f4c2b6abf3402271cb675c4f1bfa12cd6ed0",
+      "digest": "sha256:a74a3aafa952014118198750f28ada619323b2419c042141e9321d7e44654dde",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"5c46a137c175752a5491a4776d3bbb075ef677aa02ad51f33b1d9a8332bc29aa"}],
+      "references": [{"path":"capability.yaml","sha256":"a80de4fda7aca3817644f08451d9bee2a8da6f95f80f7f04b852710966be53e6"}],
       "dependencies": [
         {"kind":"platform-tool","name":"geo_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"geo_write","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -628,7 +638,7 @@
           "kind": "deliverable",
           "summaryZh": "用项目冻结的数据导出提案资料包或每周周报。",
           "accepts": ["brandEntity","mode","week","tier"],
-          "produces": ["geo-proposal.md","proposal-package.json","revision-notes.md"],
+          "produces": ["geo-proposal.md","proposal-package.json","geo-value.json","revision-notes.md"],
           "limits": ["只呈现项目里已有的数据；没做过的步骤写“未做”。"]
         }
       ]
@@ -638,11 +648,11 @@
       "id": "capability/geo-strategy",
       "name": "geo-strategy",
       "origin": "capability",
-      "version": "1.0.4",
+      "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:14a8777ce30eec066f403589a767405a4e04999902e9274587569d33a9ca5d17",
+      "digest": "sha256:f8e849ce43115efbf63580063e2378028f49bc404f53552806418642a36294ba",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"2e146f04f07469b368d3184be0f6ce8547d168112dad5704b16af51c5f87a9fa"}],
+      "references": [{"path":"capability.yaml","sha256":"1dd461843341dc52bca4a8eace22fe8fd3964dc1854dd736312cd80d36aa2508"}],
       "dependencies": [
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"geo_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -658,9 +668,10 @@
         {
           "name": "geo-strategy-pack",
           "kind": "deliverable",
-          "summaryZh": "读懂各引擎引用谁、缺什么，定主战场和三档目标。",
+          "summary": "Step 5 of an evidence-based GEO project — prioritize opportunities from drug value, audience decisions and measured answers; distinguish clinical authority from retrieval, choose sources and channels, and set supportable goals and budgets while keeping uncertain forecasts unknown.",
+          "summaryZh": "结合药品价值和实测结果，确定优先机会、信源、渠道与可支持的目标。",
           "accepts": ["brandEntity","tier","minimal","engines"],
-          "produces": ["geo-strategy.md","strategy.json","revision-notes.md"],
+          "produces": ["geo-strategy.md","strategy.json","geo-value.json","revision-notes.md"],
           "limits": ["只解读平台实测的数；样本不足的格子不出百分数。"]
         }
       ]
