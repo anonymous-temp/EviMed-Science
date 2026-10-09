@@ -28,7 +28,7 @@ import {
   type GeoStepKey,
   type GeoWeekItem,
 } from "@/lib/geoClient";
-import { allowanceWaitingSentence } from "@evimed/domain";
+import { allowanceWaitingSentence, geoCoverageDifference, geoCoverageStatement } from "@evimed/domain";
 import { stepAllowanceWait, type AllowanceWaiting } from "@/lib/allowanceWait";
 import type { RailState, RailStep } from "@/components/ui/ProgressRail";
 import type { DeltaPolarity } from "@/components/ui/Delta";
@@ -77,22 +77,33 @@ export function tileValue(cell: GeoCell | null | undefined, unit: GeoUnit): { va
     : { value: word, placeholder: true };
 }
 
-/** One reading of a series: a point's value and the sample under it. */
+/** One reading of a series: a point's value, the sample under it, and what its round measured. */
 export interface ReadingPoint {
   date?: string;
   value: number | null;
   n?: number | null;
+  /** The coverage key of the round (`geoCoverageKey`); absent from a server that does not send it, null where it could not be named. */
+  coverage?: string | null;
 }
+
+/** What moved between two readings that were not measured over the same thing (`geoCoverageDifference`). */
+export type CoverageChange = ReturnType<typeof geoCoverageDifference>;
 
 /** How a series moved between its last two stated readings. */
 export interface ReadingChange {
-  /** The change on the metric's own scale, to a tenth; null before there are two readings. */
+  /** The change on the metric's own scale, to a tenth; null before there are two readings, and where they are not comparable. */
   delta: number | null;
   /** Whether it is “持平”: it rounds to nothing, or lies inside the metric's measured band. */
   flat: boolean;
   /** The date of the reading the change is measured from, and of the latest one. */
   from: string | null;
   to: string | null;
+  /**
+   * Present when the last two readings were measured over different things (the engines that answered, the questions, the probe
+   * surface): they are not compared, `delta` is null, and this says what moved. Absent when they were compared, or when there was
+   * nothing to compare.
+   */
+  coverage?: CoverageChange;
 }
 
 /**
@@ -100,6 +111,10 @@ export interface ReadingChange {
  * not one), the two compared are the last two of the **same series**, and a change that rounds to nothing, or lies inside the
  * metric's measured fluctuation band, is flat. The band belongs to a rate: it was measured on the mention rate and is passed
  * for that and for nothing else — the index has none, so a two-point change of it is a change.
+ *
+ * The two are compared only when they were measured over the same thing (R14 N-4): equal coverage keys. Otherwise there is no
+ * change to read — `delta` is null, no arrow or colour can be drawn from it — and `coverage` says what moved, for the one sentence
+ * every page prints (`changeWord`). Engines joining or leaving the sample moves a rate as much as the product does.
  * @param noise the metric's own band, or null where none was measured
  */
 export function readingChange(points: ReadonlyArray<ReadingPoint> | null | undefined, { noise = null }: { noise?: number | null } = {}): ReadingChange {
@@ -107,9 +122,65 @@ export function readingChange(points: ReadonlyArray<ReadingPoint> | null | undef
   const last = stated[stated.length - 1] ?? null;
   const before = stated[stated.length - 2] ?? null;
   if (!last || !before) return { delta: null, flat: false, from: null, to: last?.date ?? null };
+  const coverage = geoCoverageDifference(before.coverage, last.coverage);
+  if (!coverage.comparable) return { delta: null, flat: false, from: before.date ?? null, to: last.date ?? null, coverage };
   const delta = Math.round(((last.value as number) - (before.value as number)) * 10) / 10;
   const flat = Math.round(delta) === 0 || (typeof noise === "number" && Number.isFinite(noise) && Math.abs(delta) <= Math.abs(noise));
   return { delta, flat, from: before.date ?? null, to: last.date ?? null };
+}
+
+/**
+ * The readings a series can honestly be drawn as one line from: the latest stated reading and the ones before it that were
+ * measured over the same thing, back to the last change of coverage. A line that ran on through a change of the engine set would
+ * say the two sides are one measurement.
+ */
+export function comparableRun<T extends ReadingPoint>(points: ReadonlyArray<T> | null | undefined): T[] {
+  const all = Array.isArray(points) ? points.filter(Boolean) : [];
+  const last = [...all].reverse().find((point) => statedValue(point) !== null);
+  if (!last) return all;
+  let start = all.indexOf(last);
+  for (let index = start - 1; index >= 0; index -= 1) {
+    if (statedValue(all[index]) === null) continue;
+    if (!geoCoverageDifference(all[index].coverage, last.coverage).comparable) break;
+    start = index;
+  }
+  return all.slice(start);
+}
+
+/**
+ * Where a chart marks that the readings changed what they were measured over: the latest such point, with what moved in a few
+ * words — beside the sentence that says the two sides are not compared.
+ */
+export function coverageMarker(points: ReadonlyArray<ReadingPoint> | null | undefined): { index: number; label: string } | null {
+  const all = Array.isArray(points) ? points : [];
+  const states = all.map((point, index) => ({ point, index })).filter(({ point }) => point && statedValue(point) !== null);
+  for (let at = states.length - 1; at > 0; at -= 1) {
+    const difference = geoCoverageDifference(states[at - 1].point.coverage, states[at].point.coverage);
+    if (difference.comparable) continue;
+    const statement = geoCoverageStatement(difference) ?? "";
+    return { index: states[at].index, label: statement.replace(/，不与上一轮比较$/u, "") };
+  }
+  return null;
+}
+
+/**
+ * A chart's markers with the coverage change among them. Two markers on one reading would write their labels over each other, so
+ * where the change falls on a reading that already has one, the words join it.
+ */
+export function withCoverageMarker(
+  markers: ReadonlyArray<{ index: number; label: string }>,
+  points: ReadonlyArray<ReadingPoint> | null | undefined,
+): Array<{ index: number; label: string }> {
+  const change = coverageMarker(points);
+  if (!change) return [...markers];
+  const same = markers.find((marker) => marker.index === change.index);
+  if (!same) return [...markers, change];
+  return markers.map((marker) => (marker === same ? { ...marker, label: `${marker.label} · ${change.label}` } : marker));
+}
+
+/** The sentence that says two readings were not compared, or null where they were (or there was nothing to compare). */
+export function coverageNotice(change: ReadingChange | null | undefined): string | null {
+  return change?.coverage ? geoCoverageStatement(change.coverage) : null;
 }
 
 /** What a `Delta` is handed: a flat change as 0, so the arrow and the words never disagree. */
@@ -117,8 +188,12 @@ export function shownDelta(change: ReadingChange): number | null {
   return change.delta === null ? null : change.flat ? 0 : change.delta;
 }
 
-/** “与上次持平” / “比上次低 2” (a rate's “个百分点”), and null before there are two readings. */
+/**
+ * “与上次持平” / “比上次低 2” (a rate's “个百分点”), and null before there are two readings. Where the two were measured over
+ * different things it is the plain statement of that — 「引擎范围有变化，不与上一轮比较」 — in the place a change would stand.
+ */
 export function changeWord(change: ReadingChange, unit: GeoUnit): string | null {
+  if (change.coverage) return coverageNotice(change);
   if (change.delta === null) return null;
   if (change.flat) return "与上次持平";
   const size = Math.abs(change.delta) >= 1 ? Math.round(Math.abs(change.delta)) : Math.round(Math.abs(change.delta) * 10) / 10;
@@ -175,8 +250,9 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
     const metric = project.overview.metrics.find((item) => item.key === key) ?? null;
     const unit = GEO_METRIC_UNITS[key];
     const cell = metric?.cell ?? null;
-    // A point under the sample floor is not a reading: it is neither drawn nor compared.
-    const trend = metric?.trend.map(statedValue) ?? [];
+    // A point under the sample floor is not a reading: it is neither drawn nor compared. Nor is a reading measured over something
+    // else than the latest: the line starts where the coverage last changed, so it never runs across the change.
+    const trend = comparableRun(metric?.trend).map(statedValue);
     // The band was measured on the mention rate and belongs to it alone.
     const change = readingChange(metric?.trend, { noise: key === "mention" ? noise : null });
     tiles.push({
@@ -234,6 +310,20 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
     rival: null,
   });
   return tiles;
+}
+
+/**
+ * The one sentence a band of tiles says when its changes were not compared: read from the same readings, by the same rule, as the
+ * arrows beside the numbers — the first of the four metrics that has one (they are one round's, so they agree). Null when every
+ * change was compared or there was none to compare.
+ */
+export function overviewCoverageNotice(project: GeoProject): string | null {
+  for (const key of TILE_ORDER) {
+    const metric = project.overview.metrics.find((item) => item.key === key);
+    const notice = coverageNotice(readingChange(metric?.trend));
+    if (notice) return notice;
+  }
+  return null;
 }
 
 /* --------------------------------------------------------------- headline */

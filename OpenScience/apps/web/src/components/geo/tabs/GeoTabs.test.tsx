@@ -15,6 +15,8 @@ import {
   monitoringFilled,
   questionsFilled,
   sourceDetailOf,
+  sourceHistoryOf,
+  sourcePagesOf,
   sourcesFilled,
 } from "../__fixtures__/geoTabs";
 import { AccuracyTab } from "./AccuracyTab";
@@ -504,6 +506,104 @@ describe("信源", () => {
     expect(client.runGeoStep).not.toHaveBeenCalled();
   });
 
+  it("lists the pages of the site that were cited, an outside link each with its title and how many answers cited it; the most cited eight, then all", async () => {
+    const baike = sourcesFilled.sources[1];
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue({ ...sourceDetailOf(baike), pages: sourcePagesOf("baike.baidu.com", 11), pagesTotal: 11 });
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
+    const dialog = await screen.findByRole("dialog", { name: "百度百科" });
+    const section = await within(dialog).findByRole("region", { name: "被引用的页面" });
+    expect(section.querySelector("[data-geo-source-count='pages']")).toHaveTextContent("11");
+    // Eight to begin with, in the order the server gave: the most cited first.
+    const links = () => [...section.querySelectorAll<HTMLAnchorElement>("a[data-geo-source-page]")];
+    expect(links()).toHaveLength(8);
+    expect(links()[0]).toHaveAttribute("href", "https://www.baike.baidu.com/p/1");
+    expect(links()[0]).toHaveAttribute("target", "_blank");
+    expect(links()[0]).toHaveAttribute("rel", expect.stringContaining("noreferrer"));
+    expect(links()[0]).toHaveTextContent("第 1 个页面");
+    // A page with no title is its address; one with a title keeps its address under it.
+    expect(links()[2]).toHaveTextContent("baike.baidu.com/p/3");
+    expect(links()[2]).not.toHaveTextContent("第 3 个页面");
+    expect(section.querySelector("[data-geo-source-page='https://www.baike.baidu.com/p/1']")?.closest("li")).toHaveTextContent("baike.baidu.com/p/1");
+    // How many answers cited a page, and how many of those misstated us: the two columns the drawer's lists use.
+    const first = section.querySelector("[data-geo-source-page='https://www.baike.baidu.com/p/1']")?.closest("li") as HTMLElement;
+    expect(first.querySelector("[data-list-cell='cited'] [data-list-value]")).toHaveTextContent("11");
+    expect(first.querySelector("[data-list-cell='wrong'] [data-list-value]")).toHaveTextContent("2");
+    expect(first.querySelector("[data-list-cell='wrong']")).toHaveClass("text-danger");
+    expect(section.querySelectorAll("[data-list-cell='wrong'].text-danger")).toHaveLength(1);
+    await userEvent.click(within(section).getByRole("button", { name: "显示全部 11 个" }));
+    expect(links()).toHaveLength(11);
+    await userEvent.click(within(section).getByRole("button", { name: "收起" }));
+    expect(links()).toHaveLength(8);
+  });
+
+  it("draws no page list for a site with no cited page, and says when the list is only the most cited of more", async () => {
+    const dxy = sourcesFilled.sources[0];
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue({ ...sourceDetailOf(dxy), pages: [], pagesTotal: 0 });
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("dxy.com")).getByRole("button", { name: /丁香医生/ }));
+    const dialog = await screen.findByRole("dialog", { name: "丁香医生" });
+    await within(dialog).findByRole("region", { name: "引用它的回答" });
+    expect(within(dialog).queryByRole("region", { name: "被引用的页面" })).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    client.getGeoSource.mockResolvedValue({ ...sourceDetailOf(dxy), pages: sourcePagesOf("dxy.com", 3), pagesTotal: 250 });
+    await userEvent.click(within(rowOf("dxy.com")).getByRole("button", { name: /丁香医生/ }));
+    expect(await screen.findByText("只列出被引用最多的 3 个，共 250 个页面。")).toBeInTheDocument();
+  });
+
+  it("shows the site's counts across the last rounds, and compares only the rounds measured over the same thing: a rule where the engine set changed, no change stated across it", async () => {
+    const baike = sourcesFilled.sources[1];
+    const two = "v1|P1,P2|deepseek,kimi|web";
+    const three = "v1|P1,P2|deepseek,doubao,kimi|web";
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue({ ...sourceDetailOf(baike), history: sourceHistoryOf([["07", 12, 1, two], ["14", 14, 2, two], ["21", 30, 5, three], ["28", 33, 1, three]]) });
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
+    const dialog = await screen.findByRole("dialog", { name: "百度百科" });
+    const section = await within(dialog).findByRole("region", { name: "近几轮" });
+    const table = within(section).getByRole("table");
+    const cells = (kind: string) => [...table.querySelectorAll(`[data-geo-history='${kind}']`)].map((cell) => cell.textContent);
+    expect(cells("cited")).toEqual(["12", "14", "30", "33"]);
+    expect(cells("wrong")).toEqual(["1", "2", "5", "1"]);
+    expect([...table.querySelectorAll("thead th[data-geo-history-round]")].map((head) => head.firstChild?.textContent)).toEqual(["9月7日", "9月14日", "9月21日", "9月28日"]);
+    // The rule stands before the round whose coverage differs, and the screen reader hears why; no other column has one.
+    const heads = [...table.querySelectorAll("thead th[data-geo-history-round]")];
+    expect(heads.map((head) => head.className.includes("border-l"))).toEqual([false, false, true, false]);
+    expect(heads[2]).toHaveTextContent("测量范围有变化，不与前一轮比较");
+    expect(section.querySelector("[data-geo-history-break]")).toHaveTextContent("竖线两侧的轮次测量范围不同，不互相比较。");
+    // The latest round against the one before it — the same coverage — is compared, by the one reading.
+    expect(section.querySelector("[data-geo-history-note]")).toHaveTextContent("较上一轮（9月21日）：被引用多 3 个，讲错的回答少 4 个");
+  });
+
+  it("states that the latest round is not compared when the engine set changed in it, and never writes a change across it", async () => {
+    const baike = sourcesFilled.sources[1];
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue({ ...sourceDetailOf(baike), history: sourceHistoryOf([["14", 14, 2, "v1|P1|deepseek,kimi|web"], ["21", 30, 5, "v1|P1|deepseek,doubao,kimi|web"]]) });
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
+    const section = await within(await screen.findByRole("dialog", { name: "百度百科" })).findByRole("region", { name: "近几轮" });
+    expect(section.querySelector("[data-geo-history-note]")).toHaveTextContent("引擎范围有变化，不与上一轮比较");
+    expect(section.textContent).not.toMatch(/较上一轮|多 \d+ 个|少 \d+ 个/);
+  });
+
+  it("draws no trend from a single round, or for a site no round cited", async () => {
+    const dxy = sourcesFilled.sources[0];
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue({ ...sourceDetailOf(dxy), history: sourceHistoryOf([["21", 48, 0, "v1|P1|deepseek|web"]]) });
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("dxy.com")).getByRole("button", { name: /丁香医生/ }));
+    const dialog = await screen.findByRole("dialog", { name: "丁香医生" });
+    await within(dialog).findByRole("region", { name: "引用它的回答" });
+    expect(within(dialog).queryByRole("region", { name: "近几轮" })).not.toBeInTheDocument();
+  });
+
   it("sorts by a column header: the most cited first, then the most misstating, again to reverse; the paging starts over", async () => {
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     renderTab(<SourcesTab {...props()} />);
@@ -618,6 +718,29 @@ const fallingMonitoring = {
   next: { date: "2026-10-19", kind: "weekly" },
 };
 
+/** The same fall, but the engines that answered changed between the two rounds: 豆包 joined the sample (R14 N-4). */
+const TWO_ENGINES = "v1|P1,P2,P3,P4|deepseek,kimi|web";
+const THREE_ENGINES = "v1|P1,P2,P3,P4|deepseek,doubao,kimi|web";
+function enginesChangedProject() {
+  const base = fallingProject();
+  const withKeys = (trend: Array<{ date: string; value: number | null; n?: number | null }>) => trend.map((point, index) => ({ ...point, coverage: index === trend.length - 1 ? THREE_ENGINES : TWO_ENGINES }));
+  return geoProject({}, {
+    overview: {
+      ...base.overview,
+      metrics: base.overview.metrics.map((metric) => ({
+        ...metric,
+        // The accuracy rate has two readings here, so its tile has a change to state — or not to state.
+        trend: withKeys(metric.key === "accuracy" ? [{ date: "2026-09-25", value: 95, n: 310 }, { date: "2026-10-12", value: 92, n: 310 }] : metric.trend),
+      })),
+    },
+  });
+}
+const enginesChangedMonitoring = {
+  ...fallingMonitoring,
+  series: fallingMonitoring.series.map((line) => ({ ...line, points: line.points.map((point, index) => ({ ...point, coverage: index === line.points.length - 1 ? THREE_ENGINES : TWO_ENGINES })) })),
+};
+const NOT_COMPARED = "引擎范围有变化，不与上一轮比较";
+
 describe("总览", () => {
   it("says one change in one word wherever it says it: the sentence, the tile, the chart's heading, and 可见度 (G02)", async () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
@@ -637,6 +760,47 @@ describe("总览", () => {
     const same = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(same).toHaveTextContent("综合可见度指数 44，比上次低 2");
     expect(same.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
+  });
+
+  it("an engine-set change shows no ▲ or ▼ anywhere on 总览: not on a tile, not in the sentence, the chart or the band — one plain statement instead", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(enginesChangedMonitoring);
+    renderTab(<OverviewTab {...props(enginesChangedProject())} />);
+    // The sentence at the top, and the chart's heading, say it in the place a change would stand.
+    expect(await screen.findByText(new RegExp(`综合可见度 44，${NOT_COMPARED}，目标 50`))).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: `综合可见度指数 44，${NOT_COMPARED}` })).toBeInTheDocument();
+    // No tile has a change: no ▲ or ▼, no 持平 either (it is not a comparison that came out level).
+    expect(document.querySelectorAll("[data-delta]")).toHaveLength(0);
+    expect(document.body.textContent).not.toMatch(/[▲▼]/);
+    expect(document.body.textContent).not.toMatch(/比上次(高|低)|与上次持平/);
+    // The band says it once, with its denominator, in the same words.
+    const band = screen.getByRole("region", { name: "本轮指标" });
+    expect(band.textContent?.split(NOT_COMPARED).length).toBe(2);
+    // A tile's line starts where the coverage changed: the one reading measured over what the latest was, not a line across the change.
+    expect(screen.getByRole("group", { name: "品牌提及率" }).querySelector("[data-geo-readings]")?.getAttribute("data-geo-readings")).toBe("1");
+  });
+
+  it("an engine-set change on 可见度 titles the chart with the statement, and no arrow is drawn", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(enginesChangedMonitoring);
+    renderTab(<VisibilityTab {...props(enginesChangedProject())} />);
+    const title = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
+    expect(title).toHaveTextContent(`综合可见度指数 44，${NOT_COMPARED}`);
+    expect(title.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
+    await userEvent.click(screen.getByRole("button", { name: "品牌提及率" }));
+    expect(await screen.findByRole("heading", { name: `品牌提及率 23%，${NOT_COMPARED}` })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[▲▼]/);
+  });
+
+  it("the same two readings with the same engines are still compared: the arrow is there", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    const base = fallingProject();
+    const same = geoProject({}, { overview: { ...base.overview, metrics: base.overview.metrics.map((metric) => ({ ...metric, trend: metric.trend.map((point) => ({ ...point, coverage: TWO_ENGINES })) })) } });
+    renderTab(<OverviewTab {...props(same)} />);
+    expect(await screen.findByText(/综合可见度 44，比上次低 2，目标 50/)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "综合可见度指数" }).querySelector("[data-delta='down']")).not.toBeNull();
+    expect(document.body.textContent).not.toContain(NOT_COMPARED);
   });
 
   it("applies the mention rate's band to the mention rate on 可见度 as well, and to nothing else", async () => {
@@ -715,6 +879,17 @@ describe("准确与安全", () => {
     // Red is the badge and the ✗ — not the sentence.
     expect(screen.getByText(/它需要每天注射一次/)).not.toHaveClass("text-danger");
     expect(screen.getByRole("link", { name: "看回答" })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_deepseek");
+  });
+
+  it("an engine-set change leaves the accuracy tile with no arrow and the band with one plain statement", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    renderTab(<AccuracyTab {...props(enginesChangedProject())} />);
+    const accuracy = await screen.findByRole("group", { name: "事实准确率" });
+    expect(accuracy.querySelector("[data-delta]")).toBeNull();
+    const band = screen.getByRole("region", { name: "准确与安全" });
+    expect(band.textContent?.split(NOT_COMPARED).length).toBe(2);
+    expect(document.body.textContent).not.toMatch(/[▲▼]/);
   });
 
   it("opens the conversation with the correction brief, and never asks about a single number", async () => {

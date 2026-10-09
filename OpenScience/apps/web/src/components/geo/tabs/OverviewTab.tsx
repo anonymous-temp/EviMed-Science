@@ -23,12 +23,14 @@ import {
   chartDates,
   headlineSentence,
   nextSteps,
+  overviewCoverageNotice,
   overviewTiles,
   readingChange,
   rivalRanking,
   statedValue,
   trendConclusion,
   weekTarget,
+  withCoverageMarker,
   GEO_ALERT_KINDS,
   type NextStep,
 } from "../geoOverviewModel";
@@ -90,7 +92,9 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
 
       <StatBand
         label="本轮指标"
-        footnote={denominator}
+        // The denominator, and — when the engines, the questions or the surface changed since the last round — the plain statement that
+        // the tiles' changes are not compared (R14 N-4); the same sentence the headline and the chart say.
+        footnote={[denominator, overviewCoverageNotice(project)].filter(Boolean).join(" · ") || null}
         columns={cells >= 6 ? 6 : cells === 5 ? 5 : 4}
         className={cells > 6 ? "xl:[&>div]:grid-cols-7" : undefined}
       >
@@ -246,7 +250,7 @@ function TrendCard({
     target: metric?.target ?? null,
     targetLabel: metric?.target == null ? null : `目标 ${formatGeoValue(metric.target, "index")}`,
     band: null,
-    markers: actionMarkers(dates, watch),
+    markers: withCoverageMarker(actionMarkers(dates, watch), points),
     nextLabel: watch?.next?.date ? `${monthDay(watch.next.date)} ${roundKindWord(watch.next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [watch, metric?.target, project.name]);

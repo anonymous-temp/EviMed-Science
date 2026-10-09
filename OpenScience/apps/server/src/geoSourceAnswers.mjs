@@ -119,3 +119,76 @@ export function sentenceSource(answer, sentence, domain) {
   const cited = citedFor(String(answer.answerText ?? ""), sentence, list(answer.citations));
   return cited != null && citedDomain(cited) === String(domain).toLowerCase().replace(/^www\./u, "");
 }
+
+/**
+ * The counts of the answers that cite a site — the row's three numbers for those answers, by the one tally.
+ * @param {readonly RoundAnswer[]} citing answers that already cite `domain` (and are one engine's, when the reader narrowed to one)
+ * @param {string} domain
+ * @returns {{ cited: number, wrongOurs: number, mentionsOurs: number }}
+ */
+export function countsOf(citing, domain) {
+  const counted = tallySources(citing).get(String(domain).toLowerCase().replace(/^www\./u, "")) ?? null;
+  return {
+    cited: Object.values(counted?.byEngine ?? {}).reduce((sum, count) => sum + count.cited, 0),
+    wrongOurs: counted?.wrongOurs ?? 0,
+    mentionsOurs: counted?.mentionsOurs ?? 0,
+  };
+}
+
+/** The most pages of one site a detail lists; the count of all of them is told beside. */
+export const SOURCE_PAGES_LIMIT = 200;
+
+/**
+ * The page a link is: the address without its fragment, its trailing slash, its scheme and a leading `www.` — and with its query,
+ * because on a portal the query IS the page (`/s?id=173…`). Two links with the same key are one page.
+ * @param {unknown} url @returns {string}
+ */
+export function pageKey(url) {
+  const text = String(url ?? "").trim().split("#", 1)[0];
+  const bare = text.replace(/^[a-z][a-z0-9+.-]*:\/\//iu, "");
+  const slash = bare.search(/[/?]/u);
+  const host = (slash === -1 ? bare : bare.slice(0, slash)).toLowerCase().replace(/^www\./u, "");
+  return `${host}${slash === -1 ? "" : bare.slice(slash)}`.replace(/\/+(?=\?|$)/u, "");
+}
+
+/**
+ * The specific pages of a site that answers cited: the page's address (as first cited, without its fragment), its title when any
+ * citation of it had one (the most often written), how many answers cited it — once each however many of its links an answer
+ * carries — and how many of those answers misstated us (a co-occurrence, like the row's).
+ * @param {ReadonlyArray<RoundAnswer>} citing answers that already cite `domain` @param {string} domain
+ * @param {{ limit?: number }} [options]
+ * @returns {{ pages: Array<{ url: string, title: string | null, cited: number, wrongOurs: number }>, total: number }}
+ */
+export function pagesCited(citing, domain, { limit = SOURCE_PAGES_LIMIT } = {}) {
+  const wanted = String(domain).toLowerCase().replace(/^www\./u, "");
+  /** @type {Map<string, { url: string, titles: Map<string, number>, cited: number, wrongOurs: number }>} */
+  const byPage = new Map();
+  for (const answer of citing) {
+    /** @type {Set<string>} */
+    const seen = new Set();
+    for (const citation of answer.citations) {
+      const url = String(citation?.url ?? "").trim().split("#", 1)[0];
+      if (!url || citedDomain(citation) !== wanted) continue;
+      const key = pageKey(url);
+      if (!key) continue;
+      const page = byPage.get(key) ?? { url, titles: new Map(), cited: 0, wrongOurs: 0 };
+      const title = String(citation?.title ?? "").replace(/\s+/gu, " ").trim();
+      if (title) page.titles.set(title, (page.titles.get(title) ?? 0) + 1);
+      if (!seen.has(key)) {
+        seen.add(key);
+        page.cited += 1;
+        if (answer.wrongOurs) page.wrongOurs += 1;
+      }
+      byPage.set(key, page);
+    }
+  }
+  const pages = [...byPage.values()]
+    .map((page) => ({
+      url: page.url,
+      title: [...page.titles].sort((left, right) => right[1] - left[1])[0]?.[0] ?? null,
+      cited: page.cited,
+      wrongOurs: page.wrongOurs,
+    }))
+    .sort((left, right) => right.cited - left.cited || right.wrongOurs - left.wrongOurs || left.url.localeCompare(right.url));
+  return { pages: pages.slice(0, limit), total: pages.length };
+}

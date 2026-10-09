@@ -158,8 +158,11 @@ export interface GeoOverviewMetric {
   cell: GeoCell;
   /** The chosen tier's target on the metric's own scale, or null before there is one. */
   target: number | null;
-  /** One point per full measurement; `n` is how many answers it rests on (a point under the sample floor is not a reading). */
-  trend: Array<{ date: string; value: number | null; n?: number | null }>;
+  /**
+   * One point per full measurement; `n` is how many answers it rests on (a point under the sample floor is not a reading), and
+   * `coverage` the key of what its round measured (`geoCoverageKey`): two points are compared only when their keys are equal.
+   */
+  trend: Array<{ date: string; value: number | null; n?: number | null; coverage?: string | null }>;
 }
 /** Which tab a “本周” line jumps to, and what inside it. */
 export interface GeoWeekItem {
@@ -444,6 +447,27 @@ export interface GeoSourceAnswer {
   wrong: Array<{ text: string; fromThisSite: boolean }>;
 }
 
+/** One page of a source cited in the latest round, and how many answers cited it (`GET …/sources/:sourceId`, R14 N-11). */
+export interface GeoSourcePage {
+  url: string;
+  title: string | null;
+  /** Answers that cited this page, once each. */
+  cited: number;
+  /** Of those, the ones that misstated us (a co-occurrence, like the row's count). */
+  wrongOurs: number;
+}
+
+/** The source's counts for one round, with the key of what the round measured (`coverage`). */
+export interface GeoSourceHistoryPoint {
+  roundId: string;
+  kind: string;
+  sampleDate: string | null;
+  coverage: string | null;
+  cited: number;
+  wrongOurs: number;
+  mentionsOurs: number;
+}
+
 /** What a source row stands for: the answers its three numbers count. */
 export interface GeoSourceDetail {
   source: Pick<GeoSourceRow, "id" | "domain" | "name" | "kind" | "layer" | "conditions" | "impostor" | "market">;
@@ -452,6 +476,11 @@ export interface GeoSourceDetail {
   engine: GeoEngine | null;
   counts: { cited: number; wrongOurs: number; mentionsOurs: number };
   answers: GeoSourceAnswer[];
+  /** The pages of the site the latest round's answers cited, most cited first; `pagesTotal` is how many there were (the list is capped). Absent from an older server. */
+  pages?: GeoSourcePage[];
+  pagesTotal?: number;
+  /** The counts for the last few rounds, oldest first, the latest last (its counts are `counts`). Absent from an older server. */
+  history?: GeoSourceHistoryPoint[];
 }
 export interface GeoTier {
   tier: GeoTierId;
@@ -548,12 +577,14 @@ export interface GeoSeriesPoint {
   n: number | null;
   /** Numerator. */
   k: number | null;
+  /** What the point's round measured (engines that answered, question set and pools, probe surface); null: no answer to name it from. Absent from an older server. */
+  coverage?: string | null;
 }
 export interface GeoMonitoring {
   series: Array<{ key: string; points: GeoSeriesPoint[] }>;
   arms: {
-    pilot: Array<{ date: string; value: number | null }>;
-    control: Array<{ date: string; value: number | null }>;
+    pilot: Array<{ date: string; value: number | null; coverage?: string | null }>;
+    control: Array<{ date: string; value: number | null; coverage?: string | null }>;
     netEffect: GeoCell & { noiseBand: number | null };
   };
   byEngine: Array<{ engine: GeoEngine; points: GeoSeriesPoint[] }>;
@@ -641,7 +672,11 @@ function readProject(raw: GeoProject): GeoProject {
         cell: readGeoCell(metric.cell),
         target: finite(metric.target),
         trend: Array.isArray(metric.trend)
-          ? metric.trend.filter((point) => point && typeof point.date === "string").map((point) => ({ date: point.date, value: finite(point.value), n: finite(point.n) }))
+          ? metric.trend.filter((point) => point && typeof point.date === "string").map((point) => ({
+            date: point.date, value: finite(point.value), n: finite(point.n),
+            // Absent stays absent (an older server: compared as before); a server that sends null is saying it does not know.
+            ...("coverage" in point ? { coverage: typeof point.coverage === "string" ? point.coverage : null } : {}),
+          }))
           : [],
       })),
       week: Array.isArray(overview.week) ? overview.week.filter((item) => item && typeof item.text === "string" && item.text) : [],

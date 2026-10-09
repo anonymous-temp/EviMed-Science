@@ -195,7 +195,8 @@ test("a point of a trend says how many answers it rests on", options, async () =
   await database.query(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, metric_id, numerator, denominator, value, status, data_type)
     VALUES ($1, $2, $3, $4, 'project', 'M-19', NULL, 310, 44, 'ok', 'measured')`, [`mt-${project.id}`, ALICE, project.id, `rt-${project.id}`]);
   const page = await service.projectView(USER, project.id);
-  assert.deepEqual(page.overview.metrics[0].trend, [{ date: "2026-09-24", value: 44, n: 310 }]);
+  // This round has no answer on file to name a coverage from: the key is null, which is compared with nothing.
+  assert.deepEqual(page.overview.metrics[0].trend, [{ date: "2026-09-24", value: 44, n: 310, coverage: null }]);
 });
 
 test("a 本周 line about an error opens the answer that holds the sentence it quotes", options, async () => {
