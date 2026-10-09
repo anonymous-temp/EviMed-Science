@@ -5,6 +5,7 @@ import {
   fetchFrontierNotificationSwitch,
   setFrontierNotificationSwitch,
   fetchFrontierDaily,
+  fetchFrontierWeekly,
   fetchFrontierEvent,
   fetchFrontierForYou,
   fetchFrontierHot,
@@ -260,6 +261,18 @@ describe("the routes of the second wave", () => {
     expect(frontierAbsence(await fetchFrontierEvent("e1").catch((error: unknown) => error))).toBe("not-offered");
     fetchMock.mockResolvedValueOnce(reply(404, { error: "off", code: "frontier_not_enabled" }));
     expect(frontierAbsence(await fetchFrontierEvent("e1").catch((error: unknown) => error))).toBe("off");
+  });
+
+  it("reads a day or a week the server published no issue for as an empty day, and any other 404 as what it is", async () => {
+    fetchMock.mockResolvedValueOnce(reply(404, { error: "No issue for that date.", code: "frontier_daily_not_found" }));
+    await expect(fetchFrontierDaily("2026-10-05")).resolves.toBeNull();
+    fetchMock.mockResolvedValueOnce(reply(404, { error: "No issue for that date.", code: "frontier_weekly_not_found" }));
+    await expect(fetchFrontierWeekly("2026-09-28")).resolves.toBeNull();
+    // A daily's code is not a weekly's absence, and a failure stays a failure.
+    fetchMock.mockResolvedValueOnce(reply(404, { error: "No issue for that date.", code: "frontier_weekly_not_found" }));
+    await expect(fetchFrontierDaily("2026-10-05")).rejects.toBeInstanceOf(WebApiError);
+    fetchMock.mockResolvedValueOnce(reply(500, { error: "boom", code: "internal_error" }));
+    await expect(fetchFrontierDaily("2026-10-05")).rejects.toBeInstanceOf(WebApiError);
   });
 
   it("reads the hot list in rank order, each row with its shown heat, change, badge and trend", async () => {

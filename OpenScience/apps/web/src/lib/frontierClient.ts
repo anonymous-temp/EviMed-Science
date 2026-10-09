@@ -1094,9 +1094,21 @@ export function listFrontierDailies(limit = 30): Promise<FrontierDailyArchive | 
   });
 }
 
+/**
+ * A day the server published no issue for (404 `frontier_daily_not_found`, `frontier_weekly_not_found`): the view's empty state says so
+ * and offers the past issues. It is an empty day, not a failure to retry — until 2026-10-09 it was read as one, and the empty state
+ * that names the day was unreachable on the live site.
+ */
+function issueAbsent(error: unknown, code: "frontier_daily_not_found" | "frontier_weekly_not_found"): boolean {
+  return error instanceof WebApiError && error.status === 404 && error.code === code;
+}
+
 export function fetchFrontierDaily(day: string): Promise<FrontierDaily | null> {
   return optional(async () => {
-    const daily = parseDaily(record(await productRequest<unknown>(`/frontier/dailies/${id(day)}`))?.daily);
+    let raw: unknown;
+    try { raw = await productRequest<unknown>(`/frontier/dailies/${id(day)}`); }
+    catch (error) { if (issueAbsent(error, "frontier_daily_not_found")) return null; throw error; }
+    const daily = parseDaily(record(raw)?.daily);
     if (!daily) throw new WebApiError("The frontier daily was malformed.", { status: 502 });
     return daily;
   });
@@ -1117,7 +1129,10 @@ export function listFrontierWeeklies(limit = 30): Promise<FrontierWeeklySummary[
 
 export function fetchFrontierWeekly(week: string): Promise<FrontierWeekly | null> {
   return optional(async () => {
-    const raw = record(record(await productRequest<unknown>(`/frontier/weeklies/${id(week)}`))?.weekly);
+    let body: unknown;
+    try { body = await productRequest<unknown>(`/frontier/weeklies/${id(week)}`); }
+    catch (error) { if (issueAbsent(error, "frontier_weekly_not_found")) return null; throw error; }
+    const raw = record(record(body)?.weekly);
     const issue = parseDaily(raw);
     if (!issue || !text(raw?.weekStart) || !text(raw?.weekEnd)) throw new WebApiError("The frontier weekly was malformed.", { status: 502 });
     return { ...issue, weekStart: String(raw?.weekStart), weekEnd: String(raw?.weekEnd) };
