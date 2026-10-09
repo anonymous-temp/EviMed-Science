@@ -359,3 +359,47 @@ test('the frozen input tells the run which units to audit, and the contract does
   assert.deepEqual(validateSourceUnderstanding(output, { ...input, auditSample: ['src_fix:g4:u1'] }), [])
   assert.deepEqual(sourceUnderstandingOmissionNotice(output, { ...input, auditSample: ['src_fix:g4:u1'] }).plan, ['src_fix:g4:u8', 'src_fix:g4:u9'])
 })
+
+// N-17 (design reference §13.1): what a source contains and what limits it, for every document type.
+test('contents and limitations are optional lists, each bounded, for every schema', async () => {
+  const { SOURCE_UNDERSTANDING_CONTENTS_ITEM_MAX_CHARS, SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS, SOURCE_UNDERSTANDING_LIMITATIONS_MAX_ITEMS,
+    SOURCE_UNDERSTANDING_LIMITATION_ITEM_MAX_CHARS } = await import('../src/sourceUnderstanding.mjs')
+  assert.equal(SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS, 5)
+  for (const docType of ['research-protocol', 'published-paper', 'note-memo', 'policy-document']) {
+    const input = normalizeSourceText({ sourceId: 's', generation: 1, docType, depth: 'structured', text: 'An anchored statement.' })
+    const slots = Object.fromEntries(sourceUnderstandingSchema(docType).slots.map(key => [key, { state: 'unknown', reason: 'Not stated in the source.' }]))
+    const base = { schemaVersion: 1, sourceId: 's', generation: 1, docType, depth: 'structured', summary: 'Source summary', slots, claims: [], methods: [],
+      omissionAudit: { status: 'not_run', reason: 'Not run.', omissionRate: null } }
+    // Absent: an understanding that predates the fields, or one that left them out, is valid.
+    assert.deepEqual(validateSourceUnderstanding(base, input), [])
+    // Empty is an answer: nothing to list, nothing the document states.
+    assert.deepEqual(validateSourceUnderstanding({ ...base, contents: [], limitations: [] }, input), [])
+    assert.deepEqual(validateSourceUnderstanding({ ...base, contents: Array.from({ length: 5 }, (_, i) => `第 ${i + 1} 部分`), limitations: ['单中心回顾性设计'] }, input), [])
+    for (const [field, max, chars] of [['contents', SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS, SOURCE_UNDERSTANDING_CONTENTS_ITEM_MAX_CHARS],
+      ['limitations', SOURCE_UNDERSTANDING_LIMITATIONS_MAX_ITEMS, SOURCE_UNDERSTANDING_LIMITATION_ITEM_MAX_CHARS]]) {
+      assert.ok(validateSourceUnderstanding({ ...base, [field]: Array.from({ length: max + 1 }, () => '一项') }, input).some(issue => issue.startsWith(field)), `${field}: too many`)
+      assert.ok(validateSourceUnderstanding({ ...base, [field]: ['中'.repeat(chars + 1)] }, input).some(issue => issue.includes(field)), `${field}: too long`)
+      assert.ok(validateSourceUnderstanding({ ...base, [field]: [''] }, input).some(issue => issue.includes(field)), `${field}: empty item`)
+      assert.ok(validateSourceUnderstanding({ ...base, [field]: [42] }, input).some(issue => issue.includes(field)), `${field}: not text`)
+      assert.ok(validateSourceUnderstanding({ ...base, [field]: '一项' }, input).some(issue => issue.includes(field)), `${field}: not a list`)
+      assert.ok(validateSourceUnderstanding({ ...base, [field]: null }, input).some(issue => issue.includes(field)), `${field}: null is not a list`)
+    }
+  }
+})
+
+test('the projection keeps the two lists where the output carried them, bounded, and leaves them out where it did not', () => {
+  const input = normalizeSourceText({ sourceId: 's', generation: 1, docType: 'note-memo', depth: 'structured', text: 'A note.' })
+  const output = { schemaVersion: 1, sourceId: 's', generation: 1, docType: 'note-memo', depth: 'structured', summary: 'Note', slots: {}, claims: [], methods: [],
+    omissionAudit: { status: 'not_run', reason: 'Not run.', omissionRate: null } }
+  const absent = projectSourceUnderstandingOutput(output, input)
+  assert.equal('contents' in absent, false, 'an understanding without the field projects without it: not read is not none')
+  assert.equal('limitations' in absent, false)
+  const empty = projectSourceUnderstandingOutput({ ...output, contents: [], limitations: [] }, input)
+  assert.deepEqual([empty.contents, empty.limitations], [[], []])
+  const kept = projectSourceUnderstandingOutput({ ...output, contents: ['  表 3 推荐等级  ', '图 1', 7, '', null, 'a', 'b', 'c', 'd'], limitations: ['x'.repeat(900)] }, input)
+  assert.deepEqual(kept.contents, ['表 3 推荐等级', '图 1', 'a', 'b', 'c'], 'trimmed, text only, at most five')
+  assert.equal(kept.limitations[0].length, 400)
+  // Read paths project a stored record again with no input: the lists survive that, and a malformed stored value degrades to what is usable.
+  assert.deepEqual(projectSourceUnderstandingOutput(kept).contents, kept.contents)
+  assert.deepEqual(projectSourceUnderstandingOutput({ ...output, contents: 'not a list', limitations: [{ nope: 1 }] }).limitations, [])
+})

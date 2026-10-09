@@ -454,7 +454,7 @@
       "id": "source-understanding",
       "visibility": "internal",
       "evalHarness": "evals/source-understanding",
-      "briefCount": 7,
+      "briefCount": 8,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/source-understanding/results/2026-09-24-acceptance-aspirin-warfarin-note/run.json",
@@ -467,7 +467,7 @@
         "PROGRESS.md@2026-09-07 04:04",
         "PROGRESS.md@2026-09-07 03:35"
       ],
-      "note": "Internal: dispatched only by the source pipeline, never by a user request; a person's material reaches it, so it is not exempt from the brief rule (seven briefs, all offline fixtures; two of them, a hospital rule and a drug label, are documents that are not papers, added with source-understanding 1.2.0). Accepted on production 2026-09-24: the source pipeline ran run_f3acd23a1a77 (1.1.0, 2 minutes, ¥0.15) over 《验收-阿司匹林与华法林.md》, a two-sentence test note the acceptance account uploaded; it succeeded and verified on its first submission, its package equals its receipt, and the pipeline published a summary and three quote-anchored facts from it; they were retired 41 s later, and the note is no longer in the store. Its transcript was not kept, so whether it read the gate cannot be checked. 10 of 13 production runs since 2026-09-21 succeeded (the three failures were the first day's runtime_prompt_lost and two stale-output verdicts). The larger paper-schema run (run_5665375ea44c, 09-24, an 83 KB document) also succeeded; its input is an internal product-test document, so its package stays outside this public repository. The real-input briefs in real-briefs.json have still not been dispatched."
+      "note": "Internal: dispatched only by the source pipeline, never by a user request; a person's material reaches it, so it is not exempt from the brief rule (eight briefs, all offline fixtures; two of them, a hospital rule and a drug label, are documents that are not papers, added with source-understanding 1.2.0; the eighth, an extraction table that states no limitations, was added with 1.3.0, which gave every understanding 包含什么 and 局限 and has not been run live). Accepted on production 2026-09-24: the source pipeline ran run_f3acd23a1a77 (1.1.0, 2 minutes, ¥0.15) over 《验收-阿司匹林与华法林.md》, a two-sentence test note the acceptance account uploaded; it succeeded and verified on its first submission, its package equals its receipt, and the pipeline published a summary and three quote-anchored facts from it; they were retired 41 s later, and the note is no longer in the store. Its transcript was not kept, so whether it read the gate cannot be checked. 10 of 13 production runs since 2026-09-21 succeeded (the three failures were the first day's runtime_prompt_lost and two stale-output verdicts). The larger paper-schema run (run_5665375ea44c, 09-24, an 83 KB document) also succeeded; its input is an internal product-test document, so its package stays outside this public repository. The real-input briefs in real-briefs.json have still not been dispatched."
     },
     {
       "id": "statistical-analysis",

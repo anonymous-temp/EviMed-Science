@@ -31,7 +31,8 @@
         "The design, population, exposure, outcomes and limitations remain source-bound.",
         "DOI and effectEstimates remain unknown with reasons.",
         "No method draft is produced at structured depth.",
-        "The system records the configured actual model and CNY receipt."
+        "The system records the configured actual model and CNY receipt.",
+        "contents names what the report holds (its sections and the result it reports as absent), in at most five items that are not the summary's own sentences; limitations carries the one limitation the report states, as its own item."
       ],
       "generated": {
         "authoredAt": "2026-09-07",
@@ -121,10 +122,29 @@
         "The label is read with the general slots; no research-design slot is filled or shown as unknown.",
         "The first sentence of the summary names the drug and what the label covers.",
         "Adult and child doses, the daily ceiling and the contraindication are separate claims with exact anchors and units.",
-        "Nothing in the output reads as a clinical recommendation beyond the label's own words."
+        "Nothing in the output reads as a clinical recommendation beyond the label's own words.",
+        "limitations stays empty or carries only what the label itself restricts; contents lists the label's sections (indications, dosage, contraindications, precautions) without restating the summary."
       ],
       "generated": {
         "authoredAt": "2026-10-07",
+        "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "contents-and-limitations",
+      "docType": "dataset",
+      "depth": "structured",
+      "fixtureOnly": true,
+      "sourceText": "疳证纳入研究提取表（节选）\n表 1 纳入研究基线：研究 ID、年份、样本量、年龄、干预、对照。\n表 2 结局：总有效率、不良反应例数。\n图 1 文献筛选流程。\n附录 A 检索式。\n（本文件未说明数据的局限。）\n",
+      "brief": "Understand this extraction table. It states no limitations of its own: list what it contains, and leave the limitations empty rather than inventing any.",
+      "expectations": [
+        "contents lists at most five things the document holds (the baseline table, the outcome table, the screening figure, the search appendix), each naming a different thing and none a cut-out of the summary.",
+        "limitations is an empty list, because the document states none and its design is not described: no critique, no 'sample size unknown', no restatement of an unknown slot.",
+        "Every claim keeps an exact anchor; contents and limitations carry none and are not counted as anchored findings.",
+        "A reader opening the document sees 包含什么 and no 局限."
+      ],
+      "generated": {
+        "authoredAt": "2026-10-08",
         "authoredAtSource": "first-commit"
       }
     }

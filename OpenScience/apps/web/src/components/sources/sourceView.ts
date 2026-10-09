@@ -110,3 +110,15 @@ export function readerMeta(source: SourceRecord): string {
 
 /** The type's full name, for a place with room (a menu), from the vocabulary. */
 export const typeName = (docType: string) => sourceDocTypeLabel(docType);
+
+/**
+ * A line of text cut at the words of a search, so the match can be shown: the parts in order, each flagged where it is one
+ * of the words (any case; a word is looked for as typed). Nothing in the text is changed, and a search with no words, or a
+ * line with none of them, is one plain part.
+ */
+export function highlightParts(text: string, query: string): Array<{ text: string; match: boolean }> {
+  const words = [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))].sort((left, right) => right.length - left.length).slice(0, 6);
+  if (!text || words.length === 0) return [{ text, match: false }];
+  const pattern = new RegExp(`(${words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  return text.split(pattern).filter((part) => part !== "").map((part) => ({ text: part, match: words.includes(part.toLowerCase()) }));
+}

@@ -517,6 +517,26 @@ BEGIN
   END IF;
 END $feedback_vocabulary$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-04-feedback-result-corrected-v1') ON CONFLICT DO NOTHING;
+-- Which conversations used a document (N-16): a search hit or a direct read of its parsed text, read off a finished run's
+-- transcript (sourceUses.mjs). One row per document, run and kind; recording a run again changes nothing. Owned by the
+-- account and, through the run's project, by that project; a document's deletion removes its rows (SourceService.remove).
+CREATE TABLE IF NOT EXISTS evimed_product.source_uses (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  project_id text NOT NULL,
+  source_id text NOT NULL CHECK (char_length(source_id) BETWEEN 1 AND 160),
+  run_id text NOT NULL CHECK (char_length(run_id) BETWEEN 1 AND 200),
+  session_id text NOT NULL CHECK (char_length(session_id) BETWEEN 1 AND 200),
+  kind text NOT NULL CONSTRAINT source_uses_kind_check CHECK (kind IN ('search','read')),
+  uses integer NOT NULL CHECK (uses > 0),
+  first_used_at timestamptz(3) NOT NULL,
+  last_used_at timestamptz(3) NOT NULL,
+  PRIMARY KEY (user_id, source_id, run_id, kind),
+  CONSTRAINT source_uses_span_check CHECK (last_used_at >= first_used_at),
+  FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS source_uses_source_idx ON evimed_product.source_uses(user_id, source_id, last_used_at DESC);
+CREATE INDEX IF NOT EXISTS source_uses_project_fk_idx ON evimed_product.source_uses(user_id, project_id);
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-09-source-uses-v1') ON CONFLICT DO NOTHING;
 ALTER TABLE evimed_product.memory_index_state ADD COLUMN IF NOT EXISTS verified_at timestamptz(3) NOT NULL DEFAULT clock_timestamp();
 -- The engine's own record ids were a MemOS-era receipt; the index is addressed
 -- by path now, and a readback reads those paths. CREATE TABLE IF NOT EXISTS

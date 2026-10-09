@@ -42,6 +42,7 @@ async function fixture(t, depth = "structured") {
     const evidence = [{ sourceId: input.sourceId, generation: input.generation, unitId: unit.id, start: 0, end: 19, quote: "Record the outcome." }];
     return { status: "succeeded", usage: { currency: "CNY", actualCost: 0.12, modelId: "actual-model", providerId: "deepseek", inputTokens: 10, outputTokens: 20 },
       output: { schemaVersion: 1, sourceId: input.sourceId, generation: input.generation, docType: input.docType, depth: input.depth, summary: "Record outcomes and retain notes.",
+        contents: ["记录结果的要求", "保留原始笔记的要求"], limitations: [],
         slots: Object.fromEntries(sourceUnderstandingSchema(input.docType).slots.map((key, i) => [key, i === 0
           ? { state: "known", value: "Record the outcome.", evidence } : { state: "unknown", reason: "Not stated." }])),
         claims: [{ id: "claim1", statement: "The source asks to record the outcome.", evidence }],
@@ -75,6 +76,9 @@ test("real PostgreSQL recovery freezes complete input, reuses one dispatch, publ
   f.state.complete = true; await f.due(); await f.worker().tick();
   const detail = await f.sources.getUnderstanding(f.userId, f.source.id);
   assert.equal(detail.current.claims.length, 1); assert.equal(detail.current.methods[0].status, "draft");
+  // N-17: what the source contains and what limits it are stored with the understanding and read back with it; an empty list is an answer.
+  assert.deepEqual(detail.current.contents, ["记录结果的要求", "保留原始笔记的要求"]);
+  assert.deepEqual(detail.current.limitations, []);
   assert.equal(detail.current.usage.modelId, "actual-model"); assert.equal(detail.current.omissionAudit.omissionRate, null);
   assert.equal(detail.current.units[0].text, "Record the outcome.\nKeep the original notes.");
   assert.equal(f.calls.dispatch, 1);

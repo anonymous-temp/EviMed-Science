@@ -486,6 +486,73 @@ describe("知识库", () => {
     });
   });
 
+  // N-16: the box also searches the documents' own text, and the matches are shown under their documents.
+  describe("matches inside a document's text", () => {
+    const withPassages = (items: SourceRecord[], passages: Record<string, unknown[]>) => ({ ...listing(items), passages });
+
+    it("are shown under the row of their document: the page, one line around the match with what was typed marked, and a link that opens the document at that page", async () => {
+      mocks.listSources.mockImplementation(async (_scope, options) => options?.q
+        ? withPassages([guideline], { src_guideline: [{ page: 2, snippet: "…达比加群酯为另一选择，剂量 150 mg…", start: 120, end: 150 }, { page: null, snippet: "正文里没有页码的一处达比加群", start: 900, end: 940 }] })
+        : listing([guideline, sheet]));
+      renderPage();
+      await screen.findByText(guideline.display.title);
+      expect(screen.queryByRole("list", { name: "正文里的匹配" })).not.toBeInTheDocument();
+      await userEvent.type(screen.getByRole("searchbox", { name: "搜索资料和内容" }), "达比加群");
+      const matches = await screen.findByRole("list", { name: "正文里的匹配" });
+      const row = matches.closest("li[class*='relative']") as HTMLElement;
+      expect(within(row).getByRole("link", { name: guideline.display.title })).toBeInTheDocument();
+      const [first, second] = within(matches).getAllByRole("link");
+      expect(first).toHaveTextContent("第 2 页…达比加群酯为另一选择，剂量 150 mg…");
+      expect(second).toHaveTextContent("正文里没有页码的一处达比加群");
+      expect(second).toHaveTextContent(/^正文/);
+      // What was typed is marked where it is, and nothing else changes.
+      expect([...first.querySelectorAll("span.bg-highlight")].map((mark) => mark.textContent)).toEqual(["达比加群"]);
+      expect(first.textContent).toBe("第 2 页…达比加群酯为另一选择，剂量 150 mg…");
+      // Opened at the page, from the list it was found in.
+      expect(first).toHaveAttribute("href", "/app/files/src_guideline?q=%E8%BE%BE%E6%AF%94%E5%8A%A0%E7%BE%A4&tab=original&page=2");
+      expect(second).toHaveAttribute("href", "/app/files/src_guideline?q=%E8%BE%BE%E6%AF%94%E5%8A%A0%E7%BE%A4");
+      await userEvent.click(first);
+      expect(addressOf()).toBe("/app/files/src_guideline?q=%E8%BE%BE%E6%AF%94%E5%8A%A0%E7%BE%A4&tab=original&page=2");
+    });
+
+    it("are for the rows that have them, and a row the box matched by its name has none", async () => {
+      mocks.listSources.mockResolvedValue(withPassages([guideline, sheet], { src_sheet: [{ page: null, snippet: "…75 项研究…", start: 1, end: 5 }] }));
+      renderPage("/app/files?q=75");
+      await screen.findByText(sheet.display.title);
+      expect(within(rowOf(guideline.display.title)).queryByRole("list", { name: "正文里的匹配" })).not.toBeInTheDocument();
+      expect(within(rowOf(sheet.display.title)).getByRole("list", { name: "正文里的匹配" })).toBeInTheDocument();
+      // The two are in separate rows: the first row's link is still the document.
+      expect(within(rowOf(guideline.display.title)).getAllByRole("link")).toHaveLength(1);
+    });
+
+    it("follow the list as it is paged, and go with the search that found them", async () => {
+      const second = makeSource("src_second", { title: "第二页的资料" });
+      mocks.listSources.mockImplementation(async (_scope, options) => options?.cursor
+        ? withPassages([guideline, second], { src_second: [{ page: 7, snippet: "第二页的匹配", start: 1, end: 5 }] })
+        : { ...withPassages([guideline], { src_guideline: [{ page: 1, snippet: "第一页的匹配", start: 1, end: 5 }] }), nextCursor: "cursor-2" });
+      renderPage("/app/files?q=%E5%8C%B9%E9%85%8D");
+      // What was typed is marked inside the line, so the line is read as text, not as one element's.
+      const said = () => document.body.textContent ?? "";
+      await waitFor(() => expect(said()).toContain("第一页的匹配"));
+      await userEvent.click(screen.getByRole("button", { name: "加载更多" }));
+      await waitFor(() => expect(said()).toContain("第二页的匹配"));
+      expect(said()).toContain("第一页的匹配");
+      // A new search starts again from what it found.
+      mocks.listSources.mockResolvedValue(listing([guideline]));
+      await userEvent.clear(screen.getByRole("searchbox", { name: "搜索资料和内容" }));
+      await waitFor(() => expect(said()).not.toContain("第一页的匹配"));
+      expect(said()).not.toContain("第二页的匹配");
+    });
+
+    it("keep the list's own search when the server has no text to offer: no list, no empty heading", async () => {
+      mocks.listSources.mockResolvedValue(listing([guideline]));
+      renderPage("/app/files?q=%E5%85%B1%E8%AF%86");
+      await screen.findByText(guideline.display.title);
+      expect(screen.queryByRole("list", { name: "正文里的匹配" })).not.toBeInTheDocument();
+      expect(screen.getByRole("searchbox", { name: "搜索资料和内容" })).toHaveValue("共识");
+    });
+  });
+
   // E-8 and E-19 (design reference §13.1): the list is an address, and a document is a page of its own.
   describe("the list's address", () => {
     it("reads the scope, the type and the search from the address it is opened at", async () => {

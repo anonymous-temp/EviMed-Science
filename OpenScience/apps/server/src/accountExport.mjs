@@ -145,6 +145,7 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_product.jobs": "queue bookkeeping for work whose result is the exported documents; a queued or failed job is the platform's state, not the researcher's",
   "evimed_product.plugin_prompt_admissions": "one row recording that a project was offered a plugin prompt; it holds nothing the customer wrote",
   "evimed_product.plugin_application_state": "the runtime's view of a plugin document that is itself exported, and stale the moment it leaves this deployment",
+  "evimed_product.source_uses": "a pointer from a document to the conversations that consulted it (a search hit or a read of its parsed text), derived from run transcripts the archive does not carry and rebuilt by use; the documents and the conversations themselves are what the archive holds",
   "evimed_product.memory_index_state": "publication bookkeeping for the ranking index over capsules that are themselves exported; derived from them and from nothing else",
   "evimed_memory.records": "carried by the archive as memory/memory.json, written from the store's own exportUserMemory so that the evidence and revision history travel in the shape the product reads them in",
   "evimed_memory.settings": "carried by the archive as memory/memory.json, beside the records: the researcher's own pause switches, read through the same store",

@@ -88,13 +88,17 @@ const KIND_SQL = `(CASE d.payload->>'docType' ${SOURCE_DOC_TYPES.map((type) => `
  * researcher or the page gave, the title the parser read, the authors, what the document says (its summary), the name
  * of its file and the address of a link. A plain substring match with no pattern characters in it, so a `%` or an
  * `_` the researcher types is what they typed.
- * @param {string} param
+ * @param {string} param @param {string | null} [bodyParam]
  */
-function searchSql(param) {
-  return [
+function searchSql(param, bodyParam = null) {
+  const terms = [
     "regexp_replace(coalesce(d.payload->'paths'->>0,''),'^.*/','')", "d.payload->>'title'", "d.payload->'metadata'->>'title'",
     "(d.payload->'metadata'->'authors')::text", "d.payload->'outputs'->>'summary'", "d.payload->'link'->>'url'",
-  ].map((expression) => `strpos(lower(coalesce(${expression},'')),lower(${param}::text))>0`).join(" OR ");
+  ].map((expression) => `strpos(lower(coalesce(${expression},'')),lower(${param}::text))>0`);
+  // And the text of the document itself, where the knowledge-base index found the search in it (`bodyParam`: the SHA-256 of
+  // each document the index matched). Content-addressed, so every row holding those bytes is a match.
+  if (bodyParam) terms.push(`d.payload->'fingerprint'->>'sha256'=ANY(${bodyParam}::text[])`);
+  return terms.join(" OR ");
 }
 
 function projectRun(run) { return run ? { id: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId } : null; }
@@ -1260,9 +1264,10 @@ export class SourceService {
    * What comes back carries `counts` — how many documents fall under each chip, for the whole scope and the search, not
    * for the page and not for the chosen chip — so the chips are an inventory that does not move as one is chosen.
    * Without a database (`status` or `familyId` asked, or none is configured) it is the plain list and has no counts.
-   * @param {string} userId @param {{projectId?:string|null,shared?:boolean,status?:string|null,state?:string|null,kind?:string|null,q?:string|null,familyId?:string|null,limit?:number,cursor?:string|null}} options
+   * `bodyShas` are the documents the knowledge-base index matched the search in, beside what the document is called and says.
+   * @param {string} userId @param {{projectId?:string|null,shared?:boolean,status?:string|null,state?:string|null,kind?:string|null,q?:string|null,bodyShas?:string[],familyId?:string|null,limit?:number,cursor?:string|null}} options
    */
-  async list(userId, { projectId = null, shared = false, status = null, state = null, kind = null, q = null, familyId = null, limit = 50, cursor = null }) {
+  async list(userId, { projectId = null, shared = false, status = null, state = null, kind = null, q = null, bodyShas = [], familyId = null, limit = 50, cursor = null }) {
     const wantsState = state != null && state !== "";
     const wantsStatus = (status != null && status !== "") || (familyId != null && familyId !== "");
     if (wantsState) {
@@ -1276,7 +1281,8 @@ export class SourceService {
     if (shared && wantsStatus) throw new HttpError(400, "source_payload_invalid", "The shared documents are not filtered by status.");
     if (!wantsStatus) {
       if (!shared) text(projectId, "project id", 160);
-      return this.listPage(userId, { projectId, shared, state: wantsState ? String(state) : null, kind: wantsKind ? String(kind) : null, q: needle, limit, cursor });
+      const bodies = [...new Set((Array.isArray(bodyShas) ? bodyShas : []).filter((sha) => typeof sha === "string" && /^[a-f0-9]{64}$/.test(sha)))].slice(0, 500);
+      return this.listPage(userId, { projectId, shared, state: wantsState ? String(state) : null, kind: wantsKind ? String(kind) : null, q: needle, bodyShas: needle ? bodies : [], limit, cursor });
     }
     const selectedStatus = status == null || status === "" ? null : text(status, "source status", 40);
     const selectedFamily = familyId == null || familyId === "" ? null : text(familyId, "family id", 80);
@@ -1289,9 +1295,9 @@ export class SourceService {
   /**
    * The database half of `list`: the scope (a project's sources, or one source per document the account library holds),
    * the filters as predicates over the record, the page with its cursor and the chip counts.
-   * @param {string} userId @param {{projectId:string|null,shared:boolean,state:string|null,kind:string|null,q:string,limit:number,cursor:string|null}} options
+   * @param {string} userId @param {{projectId:string|null,shared:boolean,state:string|null,kind:string|null,q:string,bodyShas?:string[],limit:number,cursor:string|null}} options
    */
-  async listPage(userId, { projectId, shared, state, kind, q, limit, cursor }) {
+  async listPage(userId, { projectId, shared, state, kind, q, bodyShas = [], limit, cursor }) {
     const database = this.documents.database;
     if (!database) throw new HttpError(503, "source_state_unavailable", "Listing sources requires durable shared storage.");
     const bounded = productInteger(limit, 1, 100);
@@ -1324,7 +1330,7 @@ export class SourceService {
         : "evimed_product.documents d";
       const where = [shared ? "TRUE" : `d.user_id=${user} AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=${bind(projectId)}`];
       if (state) where.push(SOURCE_STATE_SQL[state]);
-      if (q) where.push(`(${searchSql(bind(q))})`);
+      if (q) where.push(`(${searchSql(bind(q), bodyShas.length ? bind(bodyShas) : null)})`);
       if (withKind && kind) where.push(`${KIND_SQL}=${bind(kind)}`);
       return { values, bind, from, where };
     };
@@ -1803,6 +1809,8 @@ export class SourceService {
       await recordRevision(client, updated.rows[0]);
       await client.query(`UPDATE evimed_product.jobs SET status='canceled',finished_at=clock_timestamp(),updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
         WHERE user_id=$1 AND kind='ingest' AND payload->>'sourceId'=$2 AND payload->>'action' IS DISTINCT FROM 'source-delete' AND status IN ('queued','running')`, [userId, sourceId]);
+      // Which conversations used the document is the account's record about a document that is going: it goes with it.
+      await client.query("DELETE FROM evimed_product.source_uses WHERE user_id=$1 AND source_id=$2", [userId, sourceId]);
       // Keep audit content, but hide units and retire all explicitly linked
       // understanding.
       await client.query(`WITH changed AS (

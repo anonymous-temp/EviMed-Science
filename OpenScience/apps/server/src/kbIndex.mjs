@@ -1,6 +1,6 @@
 import path from "node:path";
 import { workspaceLayout } from "@evimed/domain";
-import { chunkDocument, embeddingText, estimateTokens, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "./kbChunker.mjs";
+import { chunkDocument, embeddingText, estimateTokens, passageQuery, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "./kbChunker.mjs";
 import { migrateKnowledgeBaseIndex } from "./kbPersistence.mjs";
 import { searchTokens } from "./memoryRecallPolicy.mjs";
 import { HttpError } from "./security.mjs";
@@ -69,6 +69,14 @@ const DERIVABLE_SQL = `EXISTS (SELECT 1 FROM evimed_product.documents d WHERE d.
 const HELD_SQL = `EXISTS (SELECT 1 FROM unnest($2::text[], $3::text[], $4::text[], $5::text[]) AS h(user_id, sha256, parser_revision, text_sha256)
   WHERE h.user_id=k.user_id AND h.sha256=k.sha256 AND h.parser_revision=k.parser_revision AND h.text_sha256=k.text_sha256)`;
 
+/** How much of a chunk the line of a page's search result quotes around the match, before and after it. */
+const PASSAGE_BEFORE = 40;
+const PASSAGE_AFTER = 80;
+/** How many chunks one page search reads back, how many passages a document shows, and how many documents answer. */
+const PASSAGE_CHUNKS = 200;
+const PASSAGE_PER_DOCUMENT = 3;
+const PASSAGE_DOCUMENTS = 40;
+
 /** One index document's identity, the same whichever side names it.
  * @param {{ sha256: string, parser_revision?: string, parserRevision?: string, text_sha256?: string, textSha256?: string }} row */
 function keyOf(row) {
@@ -91,6 +99,21 @@ function snippetWindow(content, start, terms) {
   if (from > 0 && content.charCodeAt(from) >= 0xDC00 && content.charCodeAt(from) <= 0xDFFF) from += 1;
   if (to < content.length && content.charCodeAt(to - 1) >= 0xD800 && content.charCodeAt(to - 1) <= 0xDBFF) to -= 1;
   return { start: start + from, end: start + to, snippet: content.slice(from, to) };
+}
+
+/**
+ * One line of a chunk around where the search matched: a few words before, the match, a few after, whitespace folded, an
+ * ellipsis where it was cut. Offsets stay absolute (UTF-16, into the captured text), and the cut never lands inside a
+ * surrogate pair.
+ * @param {string} content @param {number} start the chunk's offset @param {number} at where the match is in the chunk @param {number} length
+ */
+function passageLine(content, start, at, length) {
+  let from = Math.max(0, at - PASSAGE_BEFORE);
+  let to = Math.min(content.length, at + length + PASSAGE_AFTER);
+  if (from > 0 && content.charCodeAt(from) >= 0xDC00 && content.charCodeAt(from) <= 0xDFFF) from += 1;
+  if (to < content.length && content.charCodeAt(to - 1) >= 0xD800 && content.charCodeAt(to - 1) <= 0xDBFF) to -= 1;
+  const text = content.slice(from, to).replace(/\s+/g, " ").trim();
+  return { start: start + from, end: start + to, snippet: `${from > 0 ? "…" : ""}${text}${to < content.length ? "…" : ""}` };
 }
 
 export class KnowledgeBaseIndex {
@@ -386,6 +409,79 @@ export class KnowledgeBaseIndex {
       else if (!scope[at].searchable && entry.searchable) scope[at] = entry;
     }
     return scope;
+  }
+
+  /**
+   * Where a search of the knowledge-base page's box matches inside the text of the documents it lists (N-16, §13.1 「页面搜索也搜正文」).
+   *
+   * The same chunks `kb_search` reads, asked a plainer question: which of this scope's documents contain every word typed,
+   * and where. No model is called (the box is searched as it is typed in), so nothing here is the embedding or the reranker;
+   * a match is a chunk whose terms hold every word and whose text really contains it, and the line quoted is the text
+   * around the first one, with its page. The scope is the page's: a project's documents, or the account's library; each
+   * chunk is read through the account's own rows (`user_id`) and through the keys of the documents of that scope, so no
+   * other account's text and no document outside the list is ever reached.
+   *
+   * What it returns is by document content (`sha256`): the list says which rows hold those bytes, and a document the index
+   * has not indexed yet is simply not there — the list's own search still finds it by its name and summary.
+   *
+   * @param {{ userId: string, projectId: string | null, shared: boolean, q: string }} request
+   * @returns {Promise<{ shas: string[], bySha: Record<string, { page: number | null, snippet: string, start: number, end: number }[]> } | null>}
+   */
+  async passages({ userId, projectId, shared, q }) {
+    const query = passageQuery(q);
+    if (!query || !userId) return null;
+    await this.ready();
+    /** @type {{ sha256: string, parserRevision: string, textSha256: string }[]} */
+    let documents = [];
+    if (shared) {
+      documents = (this.library ? await this.library.searchScope(userId) : [])
+        .filter((/** @type {any} */ entry) => entry.searchable && entry.sha256 && entry.parserRevision && entry.textSha256);
+    } else if (projectId) {
+      const rows = (await this.database.query(`SELECT payload FROM evimed_product.documents
+        WHERE user_id=$1 AND project_id=$2 AND kind='source' AND deleted_at IS NULL`, [userId, projectId])).rows;
+      documents = rows.map((/** @type {{ payload: any }} */ row) => ({ sha256: row.payload.fingerprint?.sha256, parserRevision: sourceParserRevision(row.payload.analysis),
+        textSha256: row.payload.analysis?.textSha256, readable: sourceReadable(row.payload) }))
+        .filter((/** @type {any} */ entry) => entry.readable && entry.sha256 && entry.parserRevision && entry.textSha256);
+    }
+    if (!documents.length) return null;
+    const indexed = new Set((await this.database.query(`SELECT sha256, parser_revision, text_sha256 FROM evimed_kb.documents
+      WHERE user_id=$1 AND sha256=ANY($2::text[])`, [userId, documents.map((entry) => entry.sha256)])).rows.map(keyOf));
+    /** @type {Map<string, { sha256: string, parserRevision: string, textSha256: string }>} */
+    const ready = new Map();
+    for (const entry of documents) if (indexed.has(keyOf(entry)) && !ready.has(keyOf(entry))) ready.set(keyOf(entry), entry);
+    if (!ready.size) return null;
+    const scope = [...ready.values()];
+    const rows = (await this.database.query(`WITH scope AS (SELECT * FROM unnest($2::text[], $3::text[], $4::text[]) AS s(sha256, parser_revision, text_sha256))
+      SELECT c.sha256, c.ordinal, c.start_offset, c.page, c.content FROM evimed_kb.chunks c JOIN scope USING (sha256, parser_revision, text_sha256)
+      WHERE c.user_id=$1 AND c.lexemes @@ $5::tsquery AND strpos(lower(c.content), $6::text) > 0
+      ORDER BY ts_rank(c.lexemes, $5::tsquery, 1) DESC, c.sha256, c.ordinal LIMIT $7`,
+    [userId, scope.map((entry) => entry.sha256), scope.map((entry) => entry.parserRevision), scope.map((entry) => entry.textSha256),
+      query.tsquery, query.needles[0], PASSAGE_CHUNKS])).rows;
+    /** @type {Map<string, { ordinal: number, page: number | null, snippet: string, start: number, end: number }[]>} */
+    const found = new Map();
+    for (const row of rows) {
+      const lower = String(row.content).toLowerCase();
+      // Every word typed is in the text itself, not only among its terms (a prefix, a pair, a word near another).
+      if (!query.needles.every((needle) => lower.includes(needle))) continue;
+      const first = query.needles[0];
+      const at = lower.length === row.content.length ? lower.indexOf(first) : 0;
+      const line = passageLine(row.content, row.start_offset, Math.max(0, at), first.length);
+      const list = found.get(row.sha256) ?? [];
+      if (list.length >= PASSAGE_PER_DOCUMENT * 3) continue;
+      list.push({ ordinal: row.ordinal, page: Number.isSafeInteger(row.page) ? row.page : null, ...line });
+      found.set(row.sha256, list);
+    }
+    /** @type {Record<string, any[]>} */
+    const bySha = {};
+    const shas = [];
+    for (const [sha, list] of found) {
+      if (shas.length >= PASSAGE_DOCUMENTS) break;
+      // A document's best chunks, shown in the order a reader meets them.
+      bySha[sha] = list.slice(0, PASSAGE_PER_DOCUMENT).sort((left, right) => left.ordinal - right.ordinal)
+        .map(({ page, snippet, start, end }) => ({ page, snippet, start, end }));
+      shas.push(sha);
+    }
+    return shas.length ? { shas, bySha } : null;
   }
 
   /**

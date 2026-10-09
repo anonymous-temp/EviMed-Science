@@ -223,6 +223,7 @@ import { createResearchAllowanceRoutes, researchAllowanceRoutePattern } from "./
 import { createResearchCommerce } from "./researchCommerce.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
+import { SourceUses, nameConversations, recordSourceUsesOfRun } from "./sourceUses.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceMaterials } from "./sourceMaterials.mjs";
@@ -1601,7 +1602,25 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
     readTimeoutMs: config.webReadTimeoutMs,
   }) : null;
-  const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, knowledge: knowledgeEntries, maxJsonBytes: config.maxJsonBytes });
+  // Which conversations used a document (N-16): recorded when a run finishes, read here with each conversation's title
+  // from the ledger of the project it happened in. `agentRuns` and `kbIndex` are built further down; both are read only
+  // when a request arrives.
+  const sourceUses = productDatabase && sourceService ? new SourceUses({ database: productDatabase }) : null;
+  const sourceUsesReader = sourceUses ? {
+    /** @param {any} user @param {string} sourceId */
+    list: async (user, sourceId) => {
+      const rows = await sourceUses.list(user.id, sourceId);
+      /** @type {Map<string, any[]>} */
+      const ledgers = new Map();
+      for (const projectId of new Set(rows.map((row) => row.projectId))) {
+        // A project that can no longer be opened, or a ledger that cannot be read, costs the title and not the entry.
+        try { ledgers.set(projectId, await agentRuns.list(await store.requireProject(user, projectId))); } catch { ledgers.set(projectId, []); }
+      }
+      return nameConversations(rows, ledgers);
+    },
+  } : null;
+  const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, knowledge: knowledgeEntries, uses: sourceUsesReader,
+    passages: { find: (request) => kbIndex ? kbIndex.passages(request) : Promise.resolve(null) }, maxJsonBytes: config.maxJsonBytes });
   // One admission for every way a file reaches `knowledge-base/`: the upload
   // route and the upload command both refuse a format the knowledge base
   // cannot read before a byte is written, and both register what they wrote.
@@ -3437,6 +3456,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               code: typeof error?.code === "string" ? error.code : "pages_read_unrecorded",
             }));
           }
+          // Which documents of the knowledge base the run used (N-16): a passage `kb_search` returned, or the parsed text read
+          // directly — off the same transcript. A write of its own, and not for a background run (a document being read,
+          // an evaluation cell): those are the platform working, not a conversation that used the document.
+          await recordSourceUsesOfRun({ sourceUses, project, run, sessions, skip: Boolean(evaluationRun) || internalFor(project.userId, project.id),
+            onError: (error) => securityAudit(config, "run.source_uses.record", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: typeof error?.code === "string" ? error.code : "source_uses_unrecorded",
+            }) });
           if (receipt.completeness !== "complete") {
             await securityAudit(config, "run.transcript.persist", "partial", {
               userId: project.userId, projectId: project.id, runId: run.id,
@@ -7594,6 +7621,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     resultImpacts,
     knowledgeChange,
     kbIndex,
+    sourceUses,
     libraryService,
     sourceUnderstandingRuntime,
     autopilotService,

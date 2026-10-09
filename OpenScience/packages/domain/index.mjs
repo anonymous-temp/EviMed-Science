@@ -824,7 +824,7 @@ export {
 /** @typedef {import('./src/experienceBullets.mjs').ExperienceBullet} ExperienceBullet */
 
 export { citedIdentifiers, retractionNotices } from './src/retractionCheck.mjs'
-// sourceUnderstanding — 15 exports
+// sourceUnderstanding — 19 exports
 // Written one per line so `no two modules export the same name, and the root
 // re-exports every one of them` covers this module: the omission audit's names
 // were defined here, tested here, and left out of this list, which made them
@@ -834,8 +834,12 @@ export {
   SOURCE_UNDERSTANDING_AUDIT_NOTE_MAX_CHARS,
   SOURCE_UNDERSTANDING_AUDIT_SAMPLE_FRACTION,
   SOURCE_UNDERSTANDING_AUDIT_STATUSES,
+  SOURCE_UNDERSTANDING_CONTENTS_ITEM_MAX_CHARS,
+  SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS,
   SOURCE_UNDERSTANDING_FILE,
   SOURCE_UNDERSTANDING_INPUT_FILE,
+  SOURCE_UNDERSTANDING_LIMITATIONS_MAX_ITEMS,
+  SOURCE_UNDERSTANDING_LIMITATION_ITEM_MAX_CHARS,
   SOURCE_UNDERSTANDING_MAX_CHARS,
   SOURCE_UNDERSTANDING_SCHEMAS,
   SOURCE_UNDERSTANDING_VERSION,

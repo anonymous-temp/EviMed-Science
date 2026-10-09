@@ -252,6 +252,34 @@ export function tsqueryLiteral(query) {
   return terms.length ? terms.map(quoteLexeme).join(" | ") : "";
 }
 
+/**
+ * What a researcher typed into the knowledge-base page's box, as a match inside document text: a `tsquery` every word of
+ * which must be in the chunk (an AND, where a question's is an OR — a search box finds what contains what was typed, and a
+ * question is read for what it is about), and the words themselves, which the caller checks are really in the text.
+ *
+ * A Chinese run becomes the pairs a chunk was indexed under (a run of two is itself), a Latin word a prefix
+ * (`dapag` finds `dapagliflozin`, as the box is searched while it is typed in). A single Chinese character has no pair to
+ * look up and a single Latin letter no word: a box holding only those is not a body search, and the list's own search
+ * (the names and the summaries) answers it. Null when there is nothing to look up.
+ *
+ * @param {string} query
+ * @returns {{ tsquery: string, needles: string[] } | null}
+ */
+export function passageQuery(query) {
+  const words = String(query ?? "").toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6);
+  /** @type {Set<string>} */
+  const lexemes = new Set();
+  for (const word of words) {
+    for (const run of word.match(/[\u3400-\u9fff]+/g) ?? []) {
+      if (run.length === 2) lexemes.add(quoteLexeme(run));
+      else for (let at = 0; at + 2 <= run.length; at += 1) lexemes.add(quoteLexeme(run.slice(at, at + 2)));
+    }
+    for (const token of word.match(/[a-z0-9][a-z0-9._-]{1,}/g) ?? []) lexemes.add(`${quoteLexeme(token)}:*`);
+  }
+  if (lexemes.size === 0 || lexemes.size > 24) return null;
+  return { tsquery: [...lexemes].join(" & "), needles: words };
+}
+
 /** The Latin words of a question worth a trigram lookup: drug names and their
  *  misspellings are where the CJK pairs cannot help. @param {string} query */
 export function trigramTerms(query) {

@@ -86,3 +86,29 @@ test("the literals PostgreSQL reads are quoted, positioned and bounded", () => {
   assert.equal(tsqueryLiteral("?"), "");
   assert.deepEqual(trigramTerms("Rivaroxiban 与 NOAC 的 eGFR"), ["rivaroxiban", "noac", "egfr"]);
 });
+
+// N-16: what the knowledge-base page's box becomes as a match inside document text.
+import { passageQuery } from "../src/kbChunker.mjs";
+
+test("the page's box is an AND of what was typed: Chinese in the pairs the text was indexed under, a Latin word as a prefix", () => {
+  assert.deepEqual(passageQuery("共识"), { tsquery: "'共识'", needles: ["共识"] });
+  assert.deepEqual(passageQuery("达比加群"), { tsquery: "'达比' & '比加' & '加群'", needles: ["达比加群"] });
+  assert.deepEqual(passageQuery("Empagli"), { tsquery: "'empagli':*", needles: ["empagli"] });
+  assert.deepEqual(passageQuery("利伐沙班 15 mg"), { tsquery: "'利伐' & '伐沙' & '沙班' & '15':* & 'mg':*", needles: ["利伐沙班", "15", "mg"] });
+  assert.deepEqual(passageQuery("利伐沙班 3 mg"), { tsquery: "'利伐' & '伐沙' & '沙班' & 'mg':*", needles: ["利伐沙班", "3", "mg"] },
+    "a word too short to be a term stays in the words the text must contain");
+  assert.deepEqual(passageQuery("SGLT2抑制剂"), { tsquery: "'抑制' & '制剂' & 'sglt2':*", needles: ["sglt2抑制剂"] });
+  assert.equal(passageQuery("heart-failure").tsquery, "'heart-failure':*");
+});
+
+test("a box with nothing to look up, or too much, is not a search of the text", () => {
+  for (const nothing of ["", "   ", "药", "a", "—", "3", null, undefined]) assert.equal(passageQuery(nothing), null, JSON.stringify(nothing));
+  assert.equal(passageQuery("一二三四五六七八九十甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥"), null, "more terms than a match can carry");
+  assert.equal(passageQuery("aa bb cc dd ee ff gg hh").needles.length, 6, "six words at most");
+});
+
+test("a quote in what was typed cannot leave its lexeme", () => {
+  // The tokenizer admits no quote or backslash, so what reaches the query is the safe part of each word.
+  assert.equal(passageQuery("o'brien \\x").tsquery, "'brien':*");
+  assert.equal(passageQuery("a'b'c '; DROP").tsquery, "'drop':*");
+});

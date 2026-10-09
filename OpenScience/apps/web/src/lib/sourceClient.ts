@@ -35,6 +35,14 @@ export interface SourceUnderstanding {
    *  A label on a stored understanding, never a reason it is missing; the page does not print it. */
   verification?: "unverified";
   summary: string;
+  /**
+   * 「包含什么」: up to five things the document holds, written from the document and not cut from the summary (N-17).
+   * Absent on an understanding written before the field existed — not read, which is not the same as none; an empty list is
+   * an answer.
+   */
+  contents?: string[];
+  /** 「局限」: what limits the document, as it states it or as its stated design implies; empty when it states none. Absent as `contents` is. */
+  limitations?: string[];
   slots: Record<string, { state: "known"; value: string; evidence: SourceAnchor[] } | { state: "unknown"; reason: string }>;
   claims: Array<{ id: string; statement: string; evidence: SourceAnchor[] }>;
   methods: Array<{
@@ -201,6 +209,10 @@ export function sourceFailureMessage(error?: { code: string; message?: string } 
 export function getSource(id: string) {
   return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}`);
 }
+/** The conversations that used a document, newest first: the account's own, and nobody else's. */
+export function getSourceUses(id: string) {
+  return productRequest<{ items: SourceUse[] }>(`/sources/${encodeURIComponent(id)}/uses`);
+}
 /** The structured materials of the current capture: the ledger and every table and figure with the page it was placed on (`materials: null` when none was extracted). */
 export function getSourceMaterials(id: string) {
   return productRequest<SourceMaterialsResult>(`/sources/${encodeURIComponent(id)}/materials`);
@@ -221,8 +233,35 @@ export function listSourceUnderstandingHistory(id: string, cursor?: string | nul
  * pipeline is doing behind that.
  */
 export type SourceRecord = ProductRecord<SourcePayload> & { projectId: string; readable?: boolean; display: SourceDisplay };
-/** A page of the list: the documents, the cursor for the next page and, for the page's own list, the chip counts. */
-export type SourcePage = ProductPage<SourceRecord> & { counts?: SourceCounts };
+/**
+ * Where the list's search matched inside a document's own text (N-16): the page it is on (null where the document has no
+ * pages), one line of text around the match, and its offsets in the document's parsed text.
+ */
+export interface SourcePassage {
+  page: number | null;
+  snippet: string;
+  start: number;
+  end: number;
+}
+/**
+ * A page of the list: the documents, the cursor for the next page and, for the page's own list, the chip counts. When the
+ * search matched inside documents' text, `passages` holds the matches of the rows of this page, by document id.
+ */
+export type SourcePage = ProductPage<SourceRecord> & { counts?: SourceCounts; passages?: Record<string, SourcePassage[]> };
+/**
+ * A conversation that used a document (N-16): a passage of it came back from a search, or a run read its text. `title` is the
+ * conversation's name in its project's ledger — null where the ledger no longer holds it.
+ */
+export interface SourceUse {
+  sessionId: string;
+  projectId: string;
+  runId: string;
+  title: string | null;
+  kinds: Array<"search" | "read">;
+  uses: number;
+  firstUsedAt: string;
+  lastUsedAt: string;
+}
 /** Whose documents a list is of: one project's, or the account's shared documents (every project reads them). */
 export type SourceScope = { kind: "project"; projectId: string } | { kind: "shared" };
 /** What the page filters by, in the words a row says (`SOURCE_STATES`). */

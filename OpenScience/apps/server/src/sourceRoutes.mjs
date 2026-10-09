@@ -16,8 +16,12 @@ async function bodyOf(req, limit, allowed) {
  * `knowledge` is what puts a web page or a note into a project's knowledge base (`knowledgeBaseEntries.mjs`): the
  * composition builds it where it holds the project's write path and the public-web reader, and without it those
  * routes answer that source intake is unavailable.
- * @param {{store:any,service:any,openList?:any,knowledge?:any,maxJsonBytes:number}} dependencies */
-export function createSourceRoutes({ store, service, openList = null, knowledge = null, maxJsonBytes }) {
+ * `uses` reads which conversations used a document (`GET /api/sources/:id/uses`, N-16) and `passages` finds where a search
+ * of the page's box matches inside the documents' own text (N-16); each is absent where its store is, and the route then
+ * answers as though there were none — a list without passages is the list it always was.
+ * @param {{store:any,service:any,openList?:any,knowledge?:any,uses?:{list:(user:any,sourceId:string)=>Promise<any[]>}|null,
+ *   passages?:{find:(request:{userId:string,projectId:string|null,shared:boolean,q:string})=>Promise<any>}|null,maxJsonBytes:number}} dependencies */
+export function createSourceRoutes({ store, service, openList = null, knowledge = null, uses = null, passages = null, maxJsonBytes }) {
   // The composition builds one OpenList connector for the browser's namespace and
   // shares this SourceService instance with the ingestion worker. Handing the
   // connector to the service here is what lets the leased folder sync page the
@@ -138,9 +142,16 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
         if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
         await store.requireProject(user, projectId);
       }
-      return reply(await service.list(user.id, {
+      // What the box matches inside the documents' own text, before the list is read: the list then includes a document the
+      // box matched only there, counts and pages as it does for every other, and says where each match is. Any failure of
+      // the index is no failure of the list.
+      const query = url.searchParams.get("q");
+      const body = passages && query?.trim()
+        ? await passages.find({ userId: user.id, projectId: shared ? null : projectId, shared, q: query }).catch(() => null) : null;
+      const page = await service.list(user.id, {
         projectId: shared ? null : projectId,
         shared,
+        ...(body?.shas?.length ? { bodyShas: body.shas } : {}),
         status: url.searchParams.get("status"),
         // What the page says about a document (`SOURCE_STATES`), when asked by that.
         ...(url.searchParams.has("state") ? { state: url.searchParams.get("state") } : {}),
@@ -150,7 +161,15 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
         familyId: url.searchParams.get("familyId"),
         limit: Number(url.searchParams.get("limit") ?? 50),
         cursor: url.searchParams.get("cursor"),
-      }));
+      });
+      if (!body?.bySha) return reply(page);
+      /** @type {Record<string, any[]>} */
+      const found = {};
+      for (const item of page.items ?? []) {
+        const matches = body.bySha[item?.payload?.fingerprint?.sha256];
+        if (matches?.length) found[item.id] = matches;
+      }
+      return reply({ ...page, passages: found });
     }
     if (parts.length < 1 || parts.length > 3) throw new HttpError(404, "not_found", "Source route not found.");
     const [sourceId, action] = parts;
@@ -182,6 +201,9 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
       const owned = await store.requireProject(user, source.projectId);
       return reply(entryReply(await requireKnowledge().refetchLink({ user, project: owned, source })));
     }
+    // The conversations that used this document, newest first. The document was asked for through the account that holds it
+    // (`service.get` above), and the store lists only that account's rows.
+    if (action === "uses" && parts.length === 2 && method === "GET") return reply({ items: uses ? await uses.list(user, sourceId) : [] });
     if (parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
     // One document, as the reader page opens it: the row's own `shared` (whether the account library holds the bytes) is a
     // column of the list query, so a single read asks for it here.
