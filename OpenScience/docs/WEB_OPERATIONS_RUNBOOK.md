@@ -474,6 +474,18 @@ to give up on a cleanup the walk itself reports as unfinished
 must be the public origin — logout is checked against it — so if this host
 cannot reach its own public address, add that name to the host's `/etc/hosts`.
 
+Since release 13 the notices also carry what is new there: a line `<page>: not
+observable: <why>` is a check that could not reach its target (a throwaway account
+has no task, no document, no GEO data, and the walk's conversation runs no tool),
+which is different from a pass; an axe-core line per desktop page names the rules
+not yet named on an earlier page, and one line counts the walk (the whole list is
+`report.json`'s `axe` and each page's `axe`). The walk carries axe-core's build
+itself — the container it runs in has none, and only `ui-walk.mjs` is mounted into
+it — so there is nothing to install; `OPEN_SCIENCE_WALK_AXE=<path to axe.min.js>`
+in `ui-walk.env` names another build (the file must be readable in the container),
+and `OPEN_SCIENCE_WALK_AXE=off` skips the scan. To change the build the walk
+carries: `node scripts/ops/embed-axe-core.mjs [axe.min.js]` (`--check` compares).
+
 ## Alert Response
 
 | Alert | First checks | Immediate action |

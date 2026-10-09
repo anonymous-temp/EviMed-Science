@@ -11,24 +11,29 @@
 // the browser (2026-09-26 fusion audit, F-G2, F-G14 and F-G20).
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { brotliCompressSync } from "node:zlib";
 import {
-  afterClickFindings, afterClickProbe, BACK_OFFICE, BUDGET_BY_PAGE, budgetKey, cleanupFindings, cleanupNotices, clickNamed, clickRowTitled, EXPECTED_REFUSALS, focusProbe,
-  frontierTargets, GEO_TABS, geoAnswerSnapshot, HEADING_ORDER_PAGES, keylessTitles, leftEdgeNotices, matrixFindings, matrixProbe, matrixRoute,
-  measure, measureStructure, MISSING_RECORDS, pageFindings, pageProbe, PAGE_PROBES, pdfPreviewFindings, pdfProbe, pdfSourceTitle,
-  pickVcrStudies, probeFindings, PROVISIONAL_PAGES, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown, rowProbe,
-  SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, structureFindings, tabOrderFindings, TYPE_PAIR_NOTICE, unexpectedRefusals,
-  VCR_TABS_WALK,
+  AFTER_CLICK_KIND, afterClickFindings, afterClickProbe, BACK_OFFICE, BUDGET_BY_PAGE, budgetKey, cleanupFindings, cleanupNotices, clickNamed, clickRowTitled,
+  EXPECTED_REFUSALS, focusProbe, frontierTargets, GEO_TABS, geoAnswerSnapshot, HEADING_ORDER_PAGES, keylessTitles, knowledgeProbe, knowledgeReturnFindings,
+  leftEdgeNotices, matrixFindings, matrixProbe, matrixRoute, measure, measureStructure, MISSING_RECORDS, NOTICE_ROW_CLICK_PAGES, ORIGINAL_MIN_WIDTH,
+  pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings, PROVISIONAL_PAGES,
+  readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, ROW_LINK_BY_PAGE, ROW_REVEAL_BY_PAGE, rowClickFindings, rowClickShown,
+  rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
+  addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
+  axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
+  handoffFindings, handoffProbe, HANDOFF_FIELDS, NOTICE_SECTION_PAGES, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["geo-answer", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix"];
+const DISCOVERED_PAGES = ["geo-answer", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
@@ -76,12 +81,17 @@ test("every page the router serves at a fixed address is walked, or says why it 
   // written by hand and nothing compared it with the router.
   const router = await readFile(path.join(repoRoot, "apps/web/src/app/router.tsx"), "utf8");
   const app = router.slice(router.indexOf('path: "/app"'), router.indexOf('{ path: "*", element: <NotFound /> }'));
-  const pages = [...app.matchAll(/\{ path: "([^"]+)", element: <(\w+)/g)]
-    .filter(([, address, element]) => element !== "Navigate" && !address.includes(":") && !address.includes("*"))
-    .map(([, address]) => `/app/${address}`);
-  assert.ok(pages.length >= 12 && pages.includes("/app/frontier") && pages.includes("/app/account"), `read ${pages.length} fixed pages from the router; the scan did not walk`);
+  // One route with an optional last parameter serves the fixed page in front of it too: `autopilot/:taskId?` is /app/autopilot (the list)
+  // and /app/autopilot/<id> (one task), and R13 made the task page one route with the list. An address with any other parameter, or a
+  // splat, is not a fixed page: its pages are found from the deployment's lists (`discoverRoutes`).
+  const pages = [...new Set([...app.matchAll(/\{ path: "([^"]+)", element: <(\w+)/g)]
+    .filter(([, , element]) => element !== "Navigate")
+    .map(([, address]) => address.replace(/\/:\w+\?$/, ""))
+    .filter((address) => !address.includes(":") && !address.includes("*"))
+    .map((address) => `/app/${address}`))];
+  assert.ok(pages.length >= 12 && ["/app/frontier", "/app/account", "/app/autopilot"].every((page) => pages.includes(page)), `read ${pages.length} fixed pages from the router; the scan did not walk`);
   const notWalked = {
-    // The conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it.
+    "/app/chat": "the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it",
     "/app/handoff": "opens only with a hand-off in the address; without one it returns to the conversation",
     "/app/runs": "a redirect to the newest run's conversation, decided at run time",
   };
@@ -278,9 +288,9 @@ test("a visually hidden control is not a kind of control on the page", () => {
  * descendant chain, a tag, `.class`, `[attr]`, `[attr='value']`, `*`, and the
  * one `:scope > li [data-row-title]`.
  */
-function node(tag, { attrs = {}, text = "", w = 600, h = 24, left = 0, style = {}, scrollW = w, scrollH = h, tabIndex = -1, open = false } = {}, children = []) {
+function node(tag, { attrs = {}, text = "", w = 600, h = 24, left = 0, top = 0, style = {}, scrollW = w, scrollH = h, tabIndex = -1, open = false, value = null } = {}, children = []) {
   const el = {
-    tag, text, attrs, children, parent: null, tagName: tag.toUpperCase(), clicks: 0, rect: { width: w, height: h, left },
+    tag, text, attrs, children, parent: null, tagName: tag.toUpperCase(), clicks: 0, value, rect: { width: w, height: h, left, top },
     clientWidth: w, clientHeight: h, scrollWidth: scrollW, scrollHeight: scrollH, tabIndex, open,
     get previousElementSibling() { return el.parent ? el.parent.children[el.parent.children.indexOf(el) - 1] ?? null : null; },
     style: {
@@ -294,7 +304,7 @@ function node(tag, { attrs = {}, text = "", w = 600, h = 24, left = 0, style = {
     get parentElement() { return el.parent; },
     classList: { contains: (name) => (attrs.class ?? "").split(/\s+/).includes(name) },
     getAttribute: (name) => attrs[name] ?? null,
-    getBoundingClientRect: () => ({ ...el.rect, top: 0, right: el.rect.left + el.rect.width }),
+    getBoundingClientRect: () => ({ ...el.rect, right: el.rect.left + el.rect.width, bottom: el.rect.top + el.rect.height }),
     computedStyleMap: () => ({ get: () => ({ toString: () => "auto" }) }),
     click() { el.clicks += 1; },
     contains: (other) => { for (let at = other; at; at = at.parent) if (at === el) return true; return false; },
@@ -437,6 +447,30 @@ test("rowProbe finds the first row of each list whose title is a control, clicks
   });
   assert.equal(descendants(open).find((el) => el.text === "第一行").clicks, 1);
   assert.equal(descendants(open).find((el) => el.text === "第二行").clicks, 0);
+  // A list that holds another list finds the inner list's first row as its own: one row, one target. 问题与回答's groups hold their questions.
+  const nested = page(header(), node("ul", {}, [node("li", { attrs: { "data-geo-group": "g1" } }, [
+    node("button", { attrs: { "aria-expanded": "true" }, text: "第一组" }),
+    node("ul", { attrs: { "aria-label": "测量问句" } }, [node("li", {}, [node("a", { attrs: { "data-row-title": "", href: "/answers/1" }, text: "一个问句" })])]),
+  ])]));
+  inPage(nested, () => assert.deepEqual(rowProbe(["targets"]), ["一个问句"]));
+  // The groups of 问题与回答 are closed until their toggle is pressed; the probe presses the ones it is told to, at most `limit`, and says how many.
+  const groups = page(header(), node("ul", {}, [1, 2, 3].map((n) => node("li", { attrs: { "data-geo-group": `g${n}` } }, [node("button", { attrs: { "aria-expanded": n === 3 ? "true" : "false" }, text: `组${n}` })]))));
+  const toggle = ROW_REVEAL_BY_PAGE["geo-questions"];
+  // The fake DOM's selector engine knows tags, attributes and descendants, which is all this selector is.
+  assert.equal(inPage(groups, () => rowProbe(["reveal", 0, { selector: "[data-geo-group] button[aria-expanded='false']", limit: 1 }])), 1);
+  assert.equal(inPage(groups, () => rowProbe(["reveal", 0, { selector: "[data-geo-group] button[aria-expanded='false']", limit: 12 }])), 2);
+  assert.equal(inPage(groups, () => rowProbe(["reveal", 0, { selector: "", limit: 12 }])), 0);
+  assert.equal(inPage(groups, () => rowProbe(["reveal", 0, null])), 0);
+  assert.equal(toggle, "[data-geo-group] button[aria-expanded='false']");
+  // The card page: a link the page names is the first row when no list has one, and the second target when one has.
+  const cards = page(header(), node("div", { attrs: { "data-geo-error-list": "" } }, [node("article", {}, [node("a", { attrs: { href: "/app/geo/g/answers/s1" }, text: "看回答" })])]));
+  inPage(cards, () => {
+    assert.deepEqual(rowProbe(["targets"]), []);
+    assert.deepEqual(rowProbe(["targets", 0, ROW_LINK_BY_PAGE["geo-accuracy"]]), ["讲错清单"]);
+    assert.deepEqual(rowProbe(["external", 0, ROW_LINK_BY_PAGE["geo-accuracy"]]), false);
+    assert.equal(rowProbe(["click", 0, ROW_LINK_BY_PAGE["geo-accuracy"]]), true);
+  });
+  assert.equal(descendants(cards).find((el) => el.text === "看回答").clicks, 1);
   // A row that opens in place says so in aria-expanded.
   const expanding = page(header(), node("ul", {}, [node("li", {}, [node("button", { attrs: { "data-row-title": "", "aria-expanded": "true" }, text: "已展开" })])]));
   assert.equal(inPage(expanding, () => rowProbe(["state"])).expanded, 1);
@@ -456,6 +490,20 @@ test("a row click shows something when it opens a drawer, goes to a page, opens 
   assert.equal(rowClickShown({ ...closed, dialog: true }, { ...closed, dialog: true }, 0), false);
   assert.deepEqual(rowClickFindings("files", [{ label: "资料", shown: true }, { label: "笔记", shown: false }]),
     ["files@desktop: clicking the first row of the list “笔记” showed nothing — no drawer, no page, no opened row"]);
+});
+
+test("a page's first-row clicks come to failures on the pages clicked before R13 and to notices on the ones new in it; a page with nothing to click says so", () => {
+  const rows = [{ label: "资料", shown: true }, { label: "笔记", shown: false }];
+  const nothing = (name, label) => `${name}@desktop: clicking the first row of the list “${label}” showed nothing — no drawer, no page, no opened row`;
+  assert.deepEqual(rowClickVerdict("files", rows), { failures: [nothing("files", "笔记")], notices: [] });
+  assert.deepEqual(rowClickVerdict("inbox", rows), { failures: [], notices: [nothing("inbox", "笔记")] });
+  assert.deepEqual(rowClickVerdict("geo-questions", [{ label: "测量问句", shown: true }]), { failures: [], notices: [] });
+  const empty = (name) => `${name}@desktop: not observable: no list on the page has a first row that opens (an empty list, a page without rows, or an account with none), so no click was made`;
+  assert.deepEqual(rowClickVerdict("memory-growth", []), { failures: [], notices: [empty("memory-growth")] });
+  assert.deepEqual(rowClickVerdict("geo-accuracy", []), { failures: [], notices: [empty("geo-accuracy")] });
+  // A click that shows nothing is the same notice whichever way a page is spelled.
+  assert.deepEqual(rowClickVerdict("geo-sources", rows).failures, [nothing("geo-sources", "笔记")]);
+  for (const name of NOTICE_ROW_CLICK_PAGES) assert.ok(ROW_CLICK_PAGES.has(name), `${name} is clicked`);
 });
 
 test("the page's blocks are the title, what stands over it and the body that follows the header — not the first block that is not the header", () => {
@@ -534,11 +582,29 @@ function probe(kind, arg, search) {
     case "notFound": return { said: !wrong };
     case "missingRecord": return wrong ? { dialog: true, said: false, back: false, failedWord: true } : { dialog: true, said: true, back: true, failedWord: false };
     case "readingFolds": return { folds: [{ label: "编写与核查", open: wrong }, { label: "评议与讨论（0）", open: false }], models: wrong ? ["deepseek"] : [] };
+    // FAKE_DAILY=error|off|nameless|zoneless: the empty day read as a failure, a feed the account is not offered, an empty day that names no day, a time with no zone.
+    case "dailyEmpty": {
+      const mode = process.env.FAKE_DAILY || "";
+      if (mode === "error") return { alert: "这条动态已不再提供。", retry: true, title: null, description: null, past: false };
+      if (mode === "off") return { alert: null, retry: false, title: null, description: null, past: false };
+      if (mode === "nameless") return { alert: null, retry: false, title: "今日日报尚未发布", description: "当天没有符合条件的内容时不出刊。", past: false };
+      if (mode === "zoneless") return { alert: null, retry: false, title: "1月1日 周三没有日报", description: "日报每天 07:30发布；当天没有符合条件的内容时不出刊。", past: true };
+      return { alert: null, retry: false, title: "1月1日 周三没有日报", description: "日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。", past: true };
+    }
     default: return null;
   }
 }
 let skillProbes = 0;
 let cleanupProbes = 0;
+let knowledgeStates = 0;
+// The composer as the kernel's frame draws it. FAKE_COMPOSER=low|hero|wrap|chips|onechip|stats: a control too near the bottom, the blank conversation,
+// a toolbar that wraps on a phone, two chips (one in the dock), one chip in the toolbar, the statistics and the ring visible.
+function composerRead(operator, narrow) {
+  const mode = process.env.FAKE_COMPOSER || "";
+  const chips = mode === "chips" ? { total: 2, bar: 2, hero: 0, inTools: 1, inDock: 1 } : mode === "onechip" ? { total: 1, bar: 1, hero: 0, inTools: 1, inDock: 0 } : { total: 0, bar: 0, hero: 0, inTools: 0, inDock: 0 };
+  return { composer: true, hero: mode === "hero", operator, window: { width: narrow ? 390 : 1512, height: narrow ? 844 : 945 }, gapCard: 40, gapLowest: mode === "low" ? 4 : 24,
+    rowLines: mode === "wrap" && narrow ? 2 : 1, rowHeight: mode === "wrap" && narrow ? 82 : 42, scrollsSideways: false, chips, stats: { present: 1, visible: mode === "stats" ? 1 : 0 }, ring: mode === "stats" ? 1 : 0 };
+}
 function context() {
   const routes = [];
   const fire = async (url) => {
@@ -554,6 +620,11 @@ function context() {
     const failed = [];
     const pageRoutes = [];
     let phone = false;
+    // The page one sidebar link left, for Back; and how often each list page's address was read (the walk reads it in a fixed order).
+    let previousUrl = null;
+    const addressCalls = {};
+    // Whether axe-core is in the document: a new document does not have it.
+    let axeInjected = false;
     // FAKE_CHAT=network-changed: the chat page drops its requests with
     // ERR_NETWORK_CHANGED and shows 打开超时 until 重试 is pressed;
     // FAKE_CHAT=broken: 重试 does not help either.
@@ -570,6 +641,7 @@ function context() {
       keyboard: { press: async (key) => log({ key, at: target().pathname }) },
       on(event, handler) { if (event === "requestfailed") failed.push(handler); }, off() {},
       async setViewportSize(size) { phone = size.width < 600; }, async close() {}, async screenshot() {}, async waitForTimeout() {},
+      async goBack() { log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
       async route(pattern, handler) { pageRoutes.push([pattern, handler]); log({ route: String(pattern) }); },
       async unroute() { pageRoutes.length = 0; log({ unroute: true }); },
       async waitForFunction() {
@@ -577,28 +649,61 @@ function context() {
         if (process.env.FAKE_NO_MATRIX && url.endsWith("clinical-evidence-matrix.json")) throw Error("no matrix");
         routeSettled = true;
       },
-      frames: () => [{ url: () => "https://evimed.example.org/__evimed/f/x", evaluate: async () => ({ composer: !chatFailing(), stats: [] }) }],
+      frames: () => [{
+        url: () => "https://evimed.example.org/__evimed/f/x",
+        evaluate: async (fn, arg) => {
+          if (typeof fn === "function" && fn.name === "composerProbe") return composerRead(Boolean(arg && arg[0] && arg[0].operator), phone);
+          return { composer: !chatFailing(), stats: [] };
+        },
+      }],
       getByRole: (role, { name }) => locator(role, name),
       async goto(target, options) {
-        url = target; routeSettled = false; dialogOpen = false; log({ goto: target });
+        url = target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
         const start = new URL("/api/commands/start_runtime", target).href;
         // A page's own route answers before the context's: the walk's cleanup cover answers the start itself.
-        const own = pageRoutes.find(([pattern]) => pattern.test(start));
+        const own = pageRoutes.find(([pattern]) => typeof pattern.test === "function" && pattern.test(start));
         if (own) { log({ start, verdict: "fulfilled" }); await own[1]({ fulfill: async () => {} }); }
         else await fire(start);
         if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
       },
       async evaluate(fn, arg) {
+        // axe-core's source is put into the page as a string; the scan is a function. FAKE_AXE=clean|fail: nothing to report, a scan that throws.
+        if (typeof fn === "string") {
+          if (fn.includes("axe v")) { axeInjected = true; log({ axe: "injected", at: target().pathname }); }
+          return undefined;
+        }
+        if (typeof fn === "function" && fn.name === "axeLoaded") return axeInjected;
+        if (typeof fn === "function" && fn.name === "axeRun") {
+          const mode = process.env.FAKE_AXE || "";
+          if (mode === "fail") throw new Error("axe blew up");
+          if (mode === "clean") return { version: "4.12.1", violations: [], incomplete: 0 };
+          const shell = { id: "region", impact: "moderate", nodes: 1, target: "aside", help: "Page content should be contained by landmarks" };
+          const own = target().pathname === "/app/files" ? [{ id: "color-contrast", impact: "serious", nodes: 4, target: ".text-text-3", help: "Elements must meet minimum color contrast" }] : [];
+          return { version: "4.12.1", violations: [shell, ...own], incomplete: 2 };
+        }
         if (url.endsWith("/app/chat") && typeof fn === "function" && String(fn).includes("document.body.innerText")) return chatFailing() ? "打开超时，请重试\n重试" : "";
         // FAKE_ROWS=dead: a row that does nothing when clicked; FAKE_ROWS=two: two lists on every page, so the walk loads the page again between clicks.
         if (typeof fn === "function" && fn.name === "rowProbe") {
           const [action] = arg;
-          if (action === "targets") return process.env.FAKE_ROWS === "two" ? ["第一张清单", "第二张清单"] : ["资料清单"];
+          if (action === "reveal") { log({ reveal: new URL(url).pathname, option: arg[2] }); return 2; }
+          if (action === "targets") {
+            if (arg[2]) log({ link: new URL(url).pathname, option: arg[2] });
+            // FAKE_ROWS=none: a page with no row to click, as an account with no data draws.
+            return process.env.FAKE_ROWS === "none" ? [] : process.env.FAKE_ROWS === "two" ? ["第一张清单", "第二张清单"] : ["资料清单"];
+          }
           if (action === "state") return { dialog: dialogOpen, path: new URL(url).pathname, expanded: 0 };
           // FAKE_ROWS=external: the row's title is a link to an outside address; the browser reports no popup, and the row is not silent.
           if (action === "external") return process.env.FAKE_ROWS === "external";
           dialogOpen = process.env.FAKE_ROWS !== "dead" && process.env.FAKE_ROWS !== "external";
           log({ rowClick: new URL(url).pathname, index: arg[1] });
+          // FAKE_ROW_WRITE=1: the row marks itself read on the way (the inbox): a write the walk's guard must refuse, next to a read it must let through.
+          if (process.env.FAKE_ROW_WRITE) {
+            for (const [, handler] of pageRoutes) {
+              handler({ request: () => ({ method: () => "GET", url: () => "https://evimed.example.org/api/inbox" }), abort: async () => log({ aborted: "GET" }), fallback: async () => log({ fellBack: "GET" }) });
+              handler({ request: () => ({ method: () => "POST", url: () => "https://evimed.example.org/api/inbox/n1/read" }), abort: async () => log({ aborted: "POST" }), fallback: async () => log({ fellBack: "POST" }) });
+              handler({ request: () => ({ method: () => "POST", url: () => "https://evimed.example.org/api/commands/start_runtime" }), abort: async () => log({ aborted: "start_runtime" }), fallback: async () => log({ fellBack: "start_runtime" }) });
+            }
+          }
           return true;
         }
         if (typeof fn === "function" && fn.name === "measure") {
@@ -618,19 +723,57 @@ function context() {
         if (typeof fn === "function" && fn.name === "focusProbe") return { text: process.env.FAKE_STRUCTURE === "tabs" ? "对话" : "跳到主要内容", inSidebar: process.env.FAKE_STRUCTURE === "tabs" };
         if (typeof fn === "function" && fn.name === "pageProbe") return probe(arg[0], arg[1], target().search);
         if (typeof fn === "function" && fn.name === "afterClickProbe") {
-          if (arg[0] === "sourceDetail") return { details: process.env.FAKE_AFTER === "bad" ? 0 : 1 };
-          return process.env.FAKE_AFTER === "bad" ? { header: "每天 07:00", zoneIds: ["Asia/Shanghai"], workingFilesOpen: ["a.py"] } : { header: "每天 07:00 · 中国标准时间 · 单次上限 ¥8", zoneIds: [], workingFilesOpen: [] };
+          if (arg[0] === "sourceDrawer") return { dialog: process.env.FAKE_AFTER !== "bad", drawers: process.env.FAKE_AFTER === "bad" ? 0 : 1 };
+          // The task page, as the shell draws it with the runtime not started: the frame's container is placed over the pane and holds no iframe.
+          // FAKE_AFTER=bad: a time zone shown by its identifier, a box for typing of the page's own, a frame that is not over the pane.
+          const pane = { left: 300, top: 120, width: 900, height: 700 };
+          const bad = process.env.FAKE_AFTER === "bad";
+          return { path: "/app/autopilot/task_1", layout: "split", list: true, main: true, bar: true, marked: 1, pane: "conversation", paneBox: pane, surface: "task",
+            holderBox: bad ? { ...pane, top: 300 } : pane, frameBox: null, editors: bad ? 1 : 0, inputsInMain: 0, dialogs: 0, zoneIds: bad ? ["Asia/Shanghai"] : [] };
         }
         if (typeof fn === "function" && fn.name === "clickNamed") {
           const [role, name] = arg;
           log({ clickNamed: name });
-          if (name === "保存" && process.env.FAKE_SKILL_WRITE) for (const [, handler] of pageRoutes) handler({ request: () => ({ method: () => "POST", url: () => "https://evimed.example.org/api/personal-skills" }), abort: async () => log({ aborted: "POST" }), continue: async () => {} });
+          if (name === "保存" && process.env.FAKE_SKILL_WRITE) for (const [, handler] of pageRoutes) handler({ request: () => ({ method: () => "POST", url: () => "https://evimed.example.org/api/personal-skills" }), abort: async () => log({ aborted: "POST" }), continue: async () => {}, fallback: async () => {} });
           if (name === "回到插件列表") url = new URL("/app/extensions/plugins", url).href;
           if (name === "回到技能列表") url = new URL(process.env.FAKE_BACK === "stay" ? "/app/extensions/skills/impeccable-audit-missing" : "/app/extensions/skills", url).href;
           return true;
         }
         if (typeof fn === "function" && fn.name === "clickRowTitled") return true;
-        if (typeof fn === "function" && fn.name === "pdfProbe") return { width: process.env.FAKE_PDF === "narrow" ? 576 : 896, src: "blob:x#view=FitH&navpanes=0" };
+        if (typeof fn === "function" && fn.name === "addressAct") {
+          log({ act: arg });
+          if (arg[0] === "link") { previousUrl = url; url = new URL(arg[1], url).href; }
+          return true;
+        }
+        // The inbox is read after the choice, after Back and after the address is loaded again; the memory page the same three times, then with a
+        // row open and after Back. FAKE_ADDRESS=lost: the address does not come back; FAKE_ADDRESS=open: Back leaves the row open.
+        if (typeof fn === "function" && fn.name === "addressProbe") {
+          const kind = arg[0];
+          const n = (addressCalls[kind] = (addressCalls[kind] ?? 0) + 1);
+          const lost = process.env.FAKE_ADDRESS === "lost" && n > 1 && n < 4;
+          if (kind === "inbox") return { path: "/app/inbox", search: lost ? "" : "?filter=unread", dialog: false, found: true, pressed: lost ? "全部" : "未读 3" };
+          const search = "?tab=project&q=" + encodeURIComponent("探针");
+          if (n === 4) return { path: "/app/memory", search: search + "&open=r1", dialog: true, found: true, selected: "项目 5", query: "探针" };
+          if (n === 5) return { path: "/app/memory", search: process.env.FAKE_ADDRESS === "open" ? search + "&open=r1" : search, dialog: process.env.FAKE_ADDRESS === "open", found: true, selected: "项目 5", query: "探针" };
+          return { path: "/app/memory", search: lost ? "" : search, dialog: false, found: true, selected: lost ? "关于你" : "项目 5", query: lost ? "" : "探针" };
+        }
+        // FAKE_HANDOFF=bad: a draft with no link to a source and a field that would send; FAKE_HANDOFF=nobutton: an event page without 深入研究.
+        if (typeof fn === "function" && fn.name === "handoffProbe") {
+          if (arg[0] === "event") return { path: new URL(url).pathname, title: "某事件", button: process.env.FAKE_HANDOFF !== "nobutton" };
+          const bad = process.env.FAKE_HANDOFF === "bad";
+          return { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"].concat(bad ? ["send"] : []), kind: "create",
+            draft: bad ? "请深入研究" : "请围绕这个事件做一次深入研究。\n\n事件：某事件\n一手来源：\n- 官方：标题（https://example.org/a）", requestId: "req_1" } };
+        }
+        if (typeof fn === "function" && fn.name === "pdfProbe") return { width: process.env.FAKE_PDF === "narrow" ? 559 : 896, src: "blob:x#view=FitH&navpanes=0" };
+        // FAKE_KB=lost: the way back does not find the list as it was left.
+        if (typeof fn === "function" && fn.name === "readerProbe") {
+          return { path: "/app/files/src_1?q=" + encodeURIComponent("一份指南"), layout: "columns", title: "一份指南", back: { text: "知识库", href: "/app/files?q=" + encodeURIComponent("一份指南") }, dialogs: 0, columns: ["original", "points"], tabs: [], missing: false };
+        }
+        if (typeof fn === "function" && fn.name === "knowledgeProbe") {
+          if (arg[0] === "first") return { title: "一份指南", href: "/app/files/src_1" };
+          const lost = process.env.FAKE_KB === "lost";
+          return { path: lost && knowledgeStates++ >= 1 ? "/app/files" : "/app/files?q=" + encodeURIComponent("一份指南"), query: "一份指南", rows: 1, listed: true };
+        }
         if (typeof fn === "function" && fn.name === "skillDrawerProbe") {
           skillProbes += 1;
           const refused = skillProbes % 2 === 0;
@@ -673,9 +816,9 @@ function context() {
         if (url.endsWith("/api/frontier/zones/z_official/evidence")) return json(200, { data: { items: [{ id: "card_1" }] } });
         if (url.endsWith("/api/frontier/evidence/card_1/links")) return json(200, { data: { author: { id: "au_1", name: "平台" } } });
         if (url.endsWith("/api/agent-runs")) return json(200, { data: [{ id: "run_1", deliverables: [{ id: "pkg", capability: "clinical-evidence-synthesis", status: "delivered" }] }] });
-        if (url.includes("/api/sources?")) return json(200, { data: { items: [{ display: { format: "pdf", title: "一份指南" }, payload: { status: "complete" } }] } });
+        if (url.includes("/api/sources?")) return json(200, { data: { items: [{ id: "src_1", display: { format: "pdf", title: "一份指南" }, payload: { status: "complete" } }] } });
         if (url.endsWith("/api/connectors")) return json(200, { data: [{ title: "Semantic Scholar", keyless: true, source: "none" }, { title: "PubMed", keyless: false, source: "none" }] });
-        if (url.endsWith("/api/me")) return loggedIn ? json(200, { data: { csrfToken: "t" } }) : json(401, {});
+        if (url.endsWith("/api/me")) return loggedIn ? json(200, { data: { csrfToken: "t", operator: process.env.FAKE_OPERATOR === "1" } }) : json(401, {});
         return json(404, {});
       },
     },
@@ -684,9 +827,13 @@ function context() {
 module.exports = { chromium: { launch: async () => ({ newContext: async () => context(), close: async () => {} }) } };
 `;
 
-async function walk(env = {}) {
+/** What the walk takes for axe-core's build: a banner and `axe.run`. The fake page never runs it. */
+const FAKE_AXE_SOURCE = "/*! axe v4.12.1\n * a stand-in for the test\n */\nwindow.axe = { version: \"4.12.1\" };\nwindow.axe.run = function () {};\n";
+
+async function walk(env = {}, { axe = false } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "ui-walk-"));
   await mkdir(path.join(dir, "playwright-core"));
+  if (axe) await writeFile(path.join(dir, "axe.min.js"), FAKE_AXE_SOURCE);
   await writeFile(path.join(dir, "playwright-core", "index.js"), FAKE_PLAYWRIGHT);
   await writeFile(path.join(dir, "password"), "not-a-real-password\n");
   const result = await new Promise((resolve) => {
@@ -700,6 +847,7 @@ async function walk(env = {}) {
         OPEN_SCIENCE_WALK_OUT: path.join(dir, "out"),
         OPEN_SCIENCE_WALK_CHAT: "",
         OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS: "0",
+        OPEN_SCIENCE_WALK_AXE: axe ? path.join(dir, "axe.min.js") : "",
         FAKE_PLAYWRIGHT_LOG: path.join(dir, "log.jsonl"),
         ...env,
       },
@@ -803,13 +951,20 @@ test("the walk clicks the first row of each list on the pages R10 rebuilt, at th
   assert.equal(report.pages["capabilities@desktop"].rowClicks, undefined);
 });
 
-test("a row that shows nothing when clicked fails the page it is on", async () => {
+test("a row that shows nothing when clicked fails the page it is on — except the pages whose click is new in R13, where it is a notice", async () => {
   const { code, report } = await walk({ FAKE_ROWS: "dead" });
   assert.equal(code, 1);
-  for (const name of ROW_CLICK_PAGES) {
-    assert.ok(report.failures.includes(`${name}@desktop: clicking the first row of the list “资料清单” showed nothing — no drawer, no page, no opened row`), name);
+  const sentence = (name) => `${name}@desktop: clicking the first row of the list “资料清单” showed nothing — no drawer, no page, no opened row`;
+  const failing = [...ROW_CLICK_PAGES].filter((name) => !NOTICE_ROW_CLICK_PAGES.has(name));
+  for (const name of failing) assert.ok(report.failures.includes(sentence(name)), name);
+  for (const name of NOTICE_ROW_CLICK_PAGES) {
+    assert.ok(!report.failures.includes(sentence(name)), `${name} fails on a click that shows nothing; the click is new, so it is a notice`);
+    assert.ok(report.notices.includes(sentence(name)), `${name} says so as a notice`);
   }
-  assert.equal(report.failures.length, ROW_CLICK_PAGES.size);
+  assert.equal(report.failures.length, failing.length);
+  // The pages R10 and R11 clicked keep failing; the R13 additions are exactly the ones the reference named.
+  assert.deepEqual([...NOTICE_ROW_CLICK_PAGES].sort(), ["account", "frontier-zones", "geo", "geo-accuracy", "geo-questions", "inbox"]);
+  for (const name of ["geo-sources", "autopilot", "files"]) assert.ok(failing.includes(name), name);
 });
 
 test("a row that is a link to an outside address is not a row that shows nothing, even when the browser reports no new tab", async () => {
@@ -822,8 +977,70 @@ test("with two lists on a page the walk loads the page again before the second c
   const { code, stdout, stderr, log } = await walk({ FAKE_ROWS: "two" });
   assert.equal(code, 0, stdout + stderr);
   const events = log.filter((entry) => (entry.goto && entry.goto.endsWith("/app/files")) || entry.rowClick === "/app/files");
-  // The page, the first click, the page again, the second click — then the knowledge base's PDF step opens the page once more, and the phone's view is the last.
-  assert.deepEqual(events.map((entry) => (entry.rowClick ? `click ${entry.index}` : "goto")), ["goto", "click 0", "goto", "click 1", "goto", "goto"]);
+  // The page, the first click, the page again, the second click — then the knowledge base's PDF step and its way-back step each open the page
+  // once more, and the phone's view is the last.
+  assert.deepEqual(events.map((entry) => (entry.rowClick ? `click ${entry.index}` : "goto")), ["goto", "click 0", "goto", "click 1", "goto", "goto", "goto"]);
+});
+
+test("R13 first-row clicks: the closed groups of 问题与回答 are opened first, the cards of 准确与安全 are clicked on their link, the task page and the drawer are read", async () => {
+  const { code, stdout, stderr, log, report } = await walk();
+  assert.equal(code, 0, stdout + stderr);
+  assert.deepEqual(ROW_REVEAL_BY_PAGE, { "geo-questions": "[data-geo-group] button[aria-expanded='false']" });
+  assert.deepEqual(ROW_LINK_BY_PAGE, { "geo-accuracy": { label: "讲错清单", selector: "[data-geo-error-list] a[href*='/answers/']" } });
+  // The groups are opened on 问题与回答 and nowhere else, with the walk's limit; the click comes after.
+  assert.deepEqual(log.filter((entry) => entry.reveal).map((entry) => [entry.reveal, entry.option]),
+    [["/app/geo/geo_1/questions", { selector: ROW_REVEAL_BY_PAGE["geo-questions"], limit: 12 }]]);
+  const revealAt = log.findIndex((entry) => entry.reveal);
+  assert.equal(log.findIndex((entry, index) => index > revealAt && entry.rowClick === "/app/geo/geo_1/questions"), revealAt + 1);
+  // The accuracy page's link is passed to the probe; no other page is given one.
+  assert.deepEqual(log.filter((entry) => entry.link).map((entry) => [entry.link, entry.option]), [["/app/geo/geo_1/accuracy", ROW_LINK_BY_PAGE["geo-accuracy"]]]);
+  // Every R13 page was clicked, and what the first click opened was read where the page has a reading (the source's drawer, the task's page).
+  for (const name of NOTICE_ROW_CLICK_PAGES) assert.deepEqual(report.pages[`${name}@desktop`].rowClicks, [{ label: "资料清单", shown: true }], name);
+  assert.deepEqual(report.pages["geo-sources@desktop"].rowClicks[0].after, { dialog: true, drawers: 1 });
+  assert.equal(report.pages["autopilot@desktop"].rowClicks[0].after.pane, "conversation");
+  // The walk starts no runtime, so the task's frame container is compared and the notice says there was no iframe to compare.
+  assert.ok(report.notices.includes("autopilot@desktop: not observable: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared"), report.notices.join("\n"));
+  // The knowledge base: a PDF opened on its own page, then the way back to a long list with the search it was found by.
+  assert.ok(report.steps["files-return"].browserBack && report.steps["files-return"].back);
+  assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索资料和内容"), [["搜索资料和内容", "一份指南"]]);
+  assert.deepEqual(report.steps["files-return"].reader.back, { text: "知识库", href: "/app/files?q=" + encodeURIComponent("一份指南") });
+});
+
+test("a page with no row to click says so as a notice and fails nothing; a row that writes on its way is refused in the browser, and said", async () => {
+  const none = await walk({ FAKE_ROWS: "none" });
+  assert.equal(none.code, 0, none.stdout + none.stderr);
+  for (const name of ROW_CLICK_PAGES) {
+    assert.ok(none.report.notices.includes(`${name}@desktop: not observable: no list on the page has a first row that opens (an empty list, a page without rows, or an account with none), so no click was made`), name);
+    assert.deepEqual(none.report.pages[`${name}@desktop`].rowClicks, [], name);
+  }
+  // With no row on the knowledge base there is nothing to open and come back from, and the step is not run.
+  assert.equal(none.report.steps?.["files-return"], undefined);
+
+  const writes = await walk({ FAKE_ROW_WRITE: "1" });
+  assert.equal(writes.code, 0, writes.stdout + writes.stderr);
+  // The inbox's row marks itself read on the way: the POST is refused, the GET and the runtime start (the context's) are handed on.
+  assert.ok(writes.report.notices.includes("inbox@desktop: clicking the first row tried 1 write(s), refused in the browser: POST /api/inbox/n1/read"), writes.report.notices.join("\n"));
+  assert.ok(writes.log.some((entry) => entry.aborted === "POST") && writes.log.some((entry) => entry.fellBack === "GET") && writes.log.some((entry) => entry.fellBack === "start_runtime"));
+  assert.ok(!writes.log.some((entry) => entry.aborted === "start_runtime" || entry.aborted === "GET"));
+  // The pages clicked before R13 are not guarded: their clicks are what they always were.
+  assert.ok(!writes.report.notices.some((notice) => /^(files|memory|frontier|geo-sources|autopilot)@desktop: clicking the first row tried/.test(notice)));
+  // The guard is removed after every page it was put on.
+  const routes = writes.log.filter((entry) => entry.route === "**/api/**").length;
+  assert.equal(routes, [...NOTICE_ROW_CLICK_PAGES].length + 1, "one guard per R13 page, and the new-skill drawer's own");
+  assert.equal(writes.log.filter((entry) => entry.unroute).length, routes);
+});
+
+test("the way back to the knowledge base's list is read, and a list that does not come back as it was left is a notice", async () => {
+  const lost = await walk({ FAKE_KB: "lost" });
+  assert.equal(lost.code, 0, lost.stdout + lost.stderr);
+  const q = "/app/files?q=" + encodeURIComponent("一份指南");
+  assert.deepEqual(lost.report.notices.filter((notice) => /^files@desktop: after /.test(notice)), [
+    `files@desktop: after 「知识库」 on the document's page the address is /app/files and the list was ${q}`,
+    `files@desktop: after the browser's Back the address is /app/files and the list was ${q}`,
+  ]);
+  // A list that comes back as it was left says nothing.
+  const kept = await walk();
+  assert.deepEqual(kept.report.notices.filter((notice) => /^files@desktop: (after|the document|the search|the reader|the way back)/.test(notice)), []);
 });
 
 test("a retired module name, a second primary action or a stacked page fails the walk, naming the page", async () => {
@@ -856,6 +1073,19 @@ test("a variant page is held to its page's budget, and a page no walk has measur
   assert.deepEqual(pageFindings("frontier-zone", "desktop", clean({ leakHits: ["undefined"], retiredNameHits: ["循证传播"] }), []).failures.length, 2); // retired-word-ok
   assert.deepEqual(pageFindings("frontier-zone", "phone", clean({ overflowX: true }), []).failures, ["frontier-zone@phone: the page overflows horizontally at 390 px"]);
   for (const name of PROVISIONAL_PAGES) assert.ok(walkedNames().has(name), `${name} is on the provisional list and no route walks it`);
+
+  // R13's two rebuilt pages, measured on the first walk of them: the scheduled tasks' list column, whose empty sentence sits 8 px left of
+  // the title (248 and 240 on a walk with no task), and 信源 with its 11 kinds of control against the data page's 10. Notices there; the
+  // same numbers fail the pages that were measured before (a GEO tab's 11th kind of control; any other page's second left edge).
+  const empty = pageFindings("autopilot", "desktop", clean({ pageLefts: [248, 240] }), []);
+  assert.deepEqual(empty.failures, []);
+  assert.deepEqual(empty.notices, ["autopilot@desktop: the page's blocks start on 2 left edges (248, 240) — provisional: this page has not been measured by a walk yet"]);
+  assert.deepEqual(pageFindings("autopilot", "phone", clean({ overflowX: true }), []).failures, ["autopilot@phone: the page overflows horizontally at 390 px"]);
+  const sources = pageFindings("geo-sources", "desktop", clean({ controlKinds: 11 }), []);
+  assert.deepEqual([sources.failures, sources.notices], [[], ["geo-sources@desktop: 11 kinds of control (budget 10) — provisional: this page has not been measured by a walk yet"]]);
+  assert.deepEqual(pageFindings("geo-overview", "desktop", clean({ controlKinds: 11 }), []).failures, ["geo-overview@desktop: 11 kinds of control (budget 10)"]);
+  assert.deepEqual(pageFindings("inbox", "desktop", clean({ pageLefts: [248, 240] }), []).failures, ["inbox@desktop: the page's blocks start on 2 left edges (248, 240)"]);
+  assert.deepEqual(pageFindings("geo-sources", "desktop", clean({ leakHits: ["undefined"] }), []).failures.length, 1);
 });
 
 /** Every name the walk reports a page under, static or found. */
@@ -864,7 +1094,9 @@ function walkedNames() {
 }
 
 test("the refusals a page is walked to meet are not failures, and any other refusal still is", () => {
-  assert.deepEqual(Object.keys(EXPECTED_REFUSALS).sort(), ["extensions-skill-missing", "memory-shared-missing"]);
+  assert.deepEqual(Object.keys(EXPECTED_REFUSALS).sort(), ["extensions-skill-missing", "frontier-daily-empty", "memory-shared-missing"]);
+  // A day nobody published answers 404, and the page is walked to say so in words.
+  assert.deepEqual(unexpectedRefusals("frontier-daily-empty", ["404 /api/frontier/dailies/2020-01-01", "500 /api/frontier/dailies"]), ["500 /api/frontier/dailies"]);
   assert.deepEqual(unexpectedRefusals("extensions-skill-missing", ["404 /api/skills/impeccable-audit-missing", "500 /api/skills"]), ["500 /api/skills"]);
   assert.deepEqual(unexpectedRefusals("memory-shared-missing", ["404 /api/capsules/shares/x", "410 /api/capsules/shares/x", "403 /api/capsules"]), ["403 /api/capsules"]);
   // A page with no expected refusal keeps all of them, and a refusal that is not the API's was never a refusal of the page.
@@ -903,6 +1135,13 @@ test("the studies and ids the walk opens are read from the lists, and a missing 
   const sources = { items: [{ display: { format: "docx", title: "报告" }, payload: { status: "complete" } }, { display: { format: "pdf", title: " 一份指南 " }, payload: { status: "parsing" } }, { display: { format: "pdf", title: " 另一份指南 " }, payload: { status: "complete" } }] };
   assert.equal(pdfSourceTitle(sources), "另一份指南");
   assert.equal(pdfSourceTitle({ items: [] }), null);
+
+  // A document's own page: the first document read to the end, whatever it is; none, no page.
+  const documents = { items: [{ id: "src_a", display: { format: "docx" }, payload: { status: "parsing" } }, { id: "src b/1", display: { format: "docx" }, payload: { status: "complete" } }, { id: "src_c", payload: { status: "complete" } }] };
+  assert.equal(sourceReaderRoute(documents), "/app/files/src%20b%2F1");
+  assert.equal(sourceReaderRoute({ items: [{ payload: { status: "complete" } }, { id: "", payload: { status: "complete" } }] }), null);
+  assert.equal(sourceReaderRoute({ items: [] }), null);
+  assert.equal(sourceReaderRoute(undefined), null);
 
   assert.deepEqual(keylessTitles([{ title: "Semantic Scholar", keyless: true, source: "none" }, { title: "PubMed", keyless: false, source: "none" }, { title: "NCBI", keyless: true, source: "user" }]), ["Semantic Scholar"]);
   assert.deepEqual(keylessTitles(null), []);
@@ -1142,23 +1381,101 @@ test("a page probe is judged on what it exists to guard, and a probe that read n
   }
 });
 
-test("what a first row opened to is read while it is open: a source's detail in place, a task's drawer", () => {
-  const detail = inPage(page(header(), node("span", { attrs: { "data-geo-source-detail": "" }, text: "备案" })), () => afterClickProbe(["sourceDetail"]));
-  assert.deepEqual(detail, { details: 1 });
-  assert.deepEqual(inPage(page(header()), () => afterClickProbe(["sourceDetail"])), { details: 0 });
-  const drawer = (headerText, extra = []) => node("div", { attrs: { role: "dialog" } }, [node("header", {}, [node("p", { text: headerText })]), ...extra]);
-  const open = (dialog) => inPage(node("body", {}, [node("main", {}, [dialog])]), () => afterClickProbe(["taskDrawer"]));
-  assert.deepEqual(open(drawer("每天 07:00 · 中国标准时间 · 单次上限 ¥8")), { header: "每天 07:00 · 中国标准时间 · 单次上限 ¥8", zoneIds: [], workingFilesOpen: [] });
-  const bad = open(drawer("每天 07:00 · Asia/Shanghai · 单次上限 ¥8", [node("a", { text: "analysis.py" }), node("details", {}, [node("summary", { text: "其他文件 1 个" }), node("a", { text: "kept.py" })])]));
-  assert.deepEqual([bad.zoneIds, bad.workingFilesOpen], [["Asia/Shanghai"], ["analysis.py"]]);
-  assert.deepEqual(open(node("div", { attrs: { role: "dialog" } }, [node("form")])), { header: null });
+test("what a first row opened to is read while it is open: a source's drawer, a task's own page", () => {
+  assert.deepEqual(AFTER_CLICK_KIND, { "geo-sources": "sourceDrawer", autopilot: "taskPage" });
+  // R13 (E-15): a source opens a drawer holding data-geo-source-drawer, and no longer its conditions in the row.
+  const drawer = node("div", { attrs: { role: "dialog" } }, [node("div", { attrs: { "data-geo-source-drawer": "example.org" } }, [node("p", { text: "正在读取引用它的回答" })])]);
+  assert.deepEqual(inPage(page(header(), drawer), () => afterClickProbe(["sourceDrawer"])), { dialog: true, drawers: 1 });
+  assert.deepEqual(inPage(page(header()), () => afterClickProbe(["sourceDrawer"])), { dialog: false, drawers: 0 });
+  // A dialog of another kind is not the source's drawer; the old in-row detail on the page is not one either.
+  assert.deepEqual(inPage(page(header(), node("div", { attrs: { role: "dialog" } }, [node("p", { text: "别的" })]), node("span", { attrs: { "data-geo-source-detail": "" } })), () => afterClickProbe(["sourceDrawer"])), { dialog: true, drawers: 0 });
+  assert.deepEqual(afterClickFindings("geo-sources", "sourceDrawer", { dialog: true, drawers: 1 }), { failures: [], notices: [] });
+  assert.deepEqual(afterClickFindings("geo-sources", "sourceDrawer", { dialog: false, drawers: 0 }).failures,
+    ["geo-sources@desktop: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)"]);
+  assert.deepEqual(afterClickFindings("geo-sources", "sourceDrawer", null), { failures: [], notices: [] });
+  assert.deepEqual(afterClickFindings("geo-sources", "unknown", { drawers: 0 }), { failures: [], notices: [] });
+});
 
-  assert.deepEqual(afterClickFindings("geo-sources", "sourceDetail", { details: 1 }), { failures: [], notices: [] });
-  assert.deepEqual(afterClickFindings("geo-sources", "sourceDetail", { details: 0 }).failures, ["geo-sources@desktop: clicking the first source opened no detail in place"]);
-  assert.deepEqual(afterClickFindings("autopilot", "taskDrawer", { header: "每天 07:00 · 单次上限 ¥8", zoneIds: [], workingFilesOpen: [] }), { failures: [], notices: [] });
-  assert.equal(afterClickFindings("autopilot", "taskDrawer", { header: "每天 07:00", zoneIds: ["Asia/Shanghai"], workingFilesOpen: ["a.py"] }).failures.length, 3);
-  assert.equal(afterClickFindings("autopilot", "taskDrawer", { header: null }).notices.length, 1);
-  assert.deepEqual(afterClickFindings("autopilot", "taskDrawer", null), { failures: [], notices: [] });
+/** The task page as the shell draws it: the list beside the task, the task bar, and a pane the kernel's frame is placed over. */
+function taskPage({ pane = "conversation", frame = true, holder = true, extra = [], barText = "每周一、周五 07:30 · 中国标准时间 · 下次 10月12日 07:30", dialog = false, layout = "split", marked = true, surface = "task" } = {}) {
+  const paneBox = { w: 900, h: 700, left: 300 };
+  return node("body", {}, [
+    node("div", { attrs: { "data-session-surface": surface } }, holder ? [node("div", { attrs: { "data-task-frame": "" }, ...paneBox }, frame ? [node("iframe", { attrs: { title: "对话" }, ...paneBox })] : [])] : []),
+    node("main", {}, [node("div", { attrs: { "data-autopilot-layout": layout } }, [
+      node("section", { attrs: { "data-task-list": "" } }, [
+        node("input", { attrs: { type: "search", "aria-label": "搜索任务" } }),
+        node("ul", {}, [node("li", {}, [node("a", { attrs: { "data-row-title": "", "data-task-id": "task_1", ...(marked ? { "aria-current": "page" } : {}) }, text: "每周文献" })])]),
+      ]),
+      node("section", { attrs: { "data-task-main": "" } }, [
+        node("header", { attrs: { "data-task-bar": "" } }, [node("h2", { text: "每周文献" }), node("p", { text: barText })]),
+        ...(pane ? [node("div", { attrs: { role: "region", "data-task-pane": pane }, ...paneBox })] : []),
+        ...extra,
+      ]),
+      ...(dialog ? [node("div", { attrs: { role: "dialog" } })] : []),
+    ])]),
+  ]);
+}
+
+test("the task page is read for its hooks, its pane, the frame over it and what the page does not draw; every verdict is a notice, bar the time-zone identifier", () => {
+  const read = (root, path = "/app/autopilot/task_1") => inPage(root, () => afterClickProbe(["taskPage"]), { path });
+  const good = read(taskPage());
+  assert.deepEqual(good, {
+    path: "/app/autopilot/task_1", layout: "split", list: true, main: true, bar: true, marked: 1, pane: "conversation", surface: "task",
+    paneBox: { left: 300, top: 0, width: 900, height: 700 }, holderBox: { left: 300, top: 0, width: 900, height: 700 }, frameBox: { left: 300, top: 0, width: 900, height: 700 },
+    editors: 0, inputsInMain: 0, dialogs: 0, zoneIds: [],
+  });
+  // With the runtime up the iframe is compared; the same rectangle passes in silence.
+  assert.deepEqual(taskPageFindings("autopilot", good), { failures: [], notices: [] });
+
+  // The walk starts no runtime: the container is over the pane and holds no iframe, and the notice says what was and was not compared.
+  const bare = read(taskPage({ frame: false }));
+  assert.equal(bare.frameBox, null);
+  assert.deepEqual(taskPageFindings("autopilot", bare), { failures: [], notices: ["autopilot@desktop: not observable: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared"] });
+
+  // A frame that is not over the pane, a text box of the page's own, a dialog, an unmarked row, a missing surface: each its own notice.
+  const off = { ...good, frameBox: { ...good.frameBox, top: 40 } };
+  assert.deepEqual(taskPageFindings("autopilot", off).notices, ["autopilot@desktop: the kernel frame is 900×700 at 300,40 and the pane 900×700 at 300,0 (the same rectangle)"]);
+  assert.deepEqual(taskPageFindings("autopilot", { ...good, holderBox: { ...good.holderBox, width: 880 }, frameBox: null }).notices,
+    ["autopilot@desktop: the kernel frame's container is 880×700 at 300,0 and the pane 900×700 at 300,0 (the same rectangle)"]);
+  assert.equal(sameBox(good.paneBox, { ...good.paneBox, left: good.paneBox.left + 2 }), true);
+  assert.equal(sameBox(good.paneBox, { ...good.paneBox, left: good.paneBox.left + 3 }), false);
+  assert.equal(sameBox(null, good.paneBox), false);
+  const typed = read(taskPage({ extra: [node("textarea", { attrs: { "aria-label": "补充" } })], dialog: true, marked: false, surface: "hidden" }));
+  assert.deepEqual([typed.editors, typed.dialogs, typed.marked], [1, 1, 0]);
+  assert.deepEqual(taskPageFindings("autopilot", typed).notices, [
+    "autopilot@desktop: 0 row(s) of the list are marked as the open task (aria-current=page; one)",
+    "autopilot@desktop: the task page draws 1 text box(es) of its own; the conversation's input is the kernel's, inside the frame",
+    "autopilot@desktop: 1 dialog(s) open on the task page right after the task opened (the conversation is not in a dialog)",
+    "autopilot@desktop: the conversation surface reads hidden while the task's conversation is on (task)",
+  ]);
+  // The list's own search is not a text box of the page's main area, and the sidebar's search is the shell's.
+  assert.equal(read(taskPage({ extra: [node("input", { attrs: { type: "checkbox" } })] })).inputsInMain, 0);
+  assert.equal(read(taskPage({ extra: [node("input", { attrs: { type: "search" } })] })).inputsInMain, 1);
+
+  // A pane that is not the conversation has no frame placed over it: said, not judged. A page with no pane yet is not observable either.
+  assert.deepEqual(taskPageFindings("autopilot", read(taskPage({ pane: "never-run", holder: false }))).notices,
+    ["autopilot@desktop: not observable: the first task's pane reads never-run, so no conversation frame is placed over it"]);
+  assert.deepEqual(taskPageFindings("autopilot", read(taskPage({ pane: null, holder: false }))).notices,
+    ["autopilot@desktop: not observable: the task's pane (data-task-pane) had not rendered, so the conversation's place was not read"]);
+  assert.deepEqual(taskPageFindings("autopilot", read(taskPage({ holder: false }))).notices,
+    ["autopilot@desktop: not observable: the pane reads conversation and no frame container (data-task-frame) is placed over it"]);
+  // The single column (the list is the page, or the task is): no list beside the task to mark, no list required.
+  assert.deepEqual(taskPageFindings("autopilot", read(taskPage({ layout: "single", marked: false, frame: false, holder: false, pane: "waiting" }))).notices,
+    ["autopilot@desktop: not observable: the first task's pane reads waiting, so no conversation frame is placed over it"]);
+  // A click that did not go to a task's page reads nothing of it.
+  assert.deepEqual(taskPageFindings("autopilot", { ...good, path: "/app/autopilot" }).notices,
+    ["autopilot@desktop: not observable: the first row did not go to a task's own page (the address is /app/autopilot), so the task page was not read"]);
+  assert.deepEqual(taskPageFindings("autopilot", null), { failures: [], notices: [] });
+  assert.deepEqual(afterClickFindings("autopilot", "taskPage", good), { failures: [], notices: [] });
+  assert.deepEqual(afterClickFindings("autopilot", "taskPage", null), { failures: [], notices: [] });
+
+  // The one failure is carried over from the drawer: a time zone is named, never shown by its identifier.
+  const named = read(taskPage({ barText: "每天 07:00 · Asia/Shanghai · 下次 10月12日 07:00" }));
+  assert.deepEqual(named.zoneIds, ["Asia/Shanghai"]);
+  assert.deepEqual(taskPageFindings("autopilot", named).failures, ["autopilot@desktop: the task bar names a time zone by its identifier: Asia/Shanghai"]);
+  // The pane's wait is the pane being on the page.
+  assert.equal(inPage(taskPage(), () => taskPaneReady()), true);
+  assert.equal(inPage(taskPage({ pane: null }), () => taskPaneReady()), false);
 });
 
 test("the title column of a page is held against the one most pages share", () => {
@@ -1168,15 +1485,92 @@ test("the title column of a page is held against the one most pages share", () =
   assert.deepEqual(leftEdgeNotices({ "files@desktop": { pageLefts: [] } }), []);
 });
 
-test("a PDF's original opens wide and fit to the width, and a drawer that is too narrow or a viewer without the fragment fails", () => {
+test("a PDF's original is wide on the document's page and fit to the width; a column that is too narrow or a viewer without the fragment fails", () => {
+  assert.equal(ORIGINAL_MIN_WIDTH, 560);
   assert.deepEqual(pdfPreviewFindings({ width: 896, src: "blob:x#view=FitH&navpanes=0" }), []);
-  assert.deepEqual(pdfPreviewFindings({ width: 576, src: "blob:x#view=FitH&navpanes=0" }), ["files@desktop: the original of a PDF opens in a 576 px drawer (wider than 576)"]);
+  assert.deepEqual(pdfPreviewFindings({ width: 560, src: "blob:x#view=FitH&navpanes=0" }), []);
+  assert.deepEqual(pdfPreviewFindings({ width: 559, src: "blob:x#view=FitH&navpanes=0" }), ["files@desktop: the original of a PDF is 559 px wide on its page (at least 560)"]);
   assert.deepEqual(pdfPreviewFindings({ width: 896, src: "blob:x" }), ["files@desktop: the PDF is not opened fit to width without the thumbnail column"]);
+  // A page asked for first: the fragment still ends with the two open-parameters.
+  assert.deepEqual(pdfPreviewFindings({ width: 896, src: "blob:x#page=7&view=FitH&navpanes=0" }), []);
   assert.deepEqual(pdfPreviewFindings({ width: 896, src: null }), []);
   assert.deepEqual(pdfPreviewFindings(null), []);
-  const dialog = node("div", { attrs: { role: "dialog" }, w: 896 }, [node("iframe", { attrs: { title: "PDF 预览", src: "blob:x#view=FitH&navpanes=0" } })]);
-  assert.deepEqual(inPage(node("body", {}, [dialog]), () => pdfProbe()), { width: 896, src: "blob:x#view=FitH&navpanes=0" });
+  const column = (...children) => node("body", {}, [node("main", {}, [node("section", { attrs: { "data-reader-column": "original" }, w: 896 }, children)])]);
+  const viewer = node("iframe", { attrs: { title: "PDF 预览", src: "blob:x#view=FitH&navpanes=0" } });
+  assert.deepEqual(inPage(column(viewer), () => pdfProbe()), { width: 896, src: "blob:x#view=FitH&navpanes=0" });
+  // The column is there and the viewer is not (the file is still being fetched, or the original is not a PDF).
+  assert.deepEqual(inPage(column(node("iframe", { attrs: { title: "HTML 预览" } })), () => pdfProbe()), { width: 896, src: null });
   assert.equal(inPage(page(header()), () => pdfProbe()), null);
+  // The drawer it replaced is not the original's column.
+  assert.equal(inPage(node("body", {}, [node("div", { attrs: { role: "dialog" }, w: 896 }, [viewer])]), () => pdfProbe()), null);
+  assert.equal(inPage(column(viewer), () => pdfFrameReady()), true);
+  assert.equal(inPage(column(node("p", { text: "原文" })), () => pdfFrameReady()), false);
+});
+
+/** A document's page as R13 draws it. */
+function readerPage({ layout = "columns", title = "一份指南", back = "知识库", href = "/app/files?q=%E4%B8%80", dialog = false, missing = false, tabs = false } = {}) {
+  return node("body", {}, [node("main", {}, [node("div", {}, [
+    node("div", {}, [node("nav", { attrs: { "aria-label": "返回" } }, [node("a", { attrs: { href }, text: back })])]),
+    node("header", {}, [node("h1", { text: title })]),
+    node("div", layout ? { attrs: { "data-reader-layout": layout } } : {}, [
+      ...(layout === "columns" ? [node("section", { attrs: { "data-reader-column": "original" } }), node("section", { attrs: { "data-reader-column": "points" } })] : []),
+      ...(layout === "tabs" ? [node("div", { attrs: { role: "tablist", "aria-label": "资料视图" } }, tabs ? [node("button", { attrs: { role: "tab" }, text: "内容" }), node("button", { attrs: { role: "tab" }, text: "原文" })] : []),
+        node("div", { attrs: { "data-reader-column": "original" } })] : []),
+      ...(missing ? [node("p", { text: "这份资料不存在或已删除。" })] : []),
+    ]),
+  ]), ...(dialog ? [node("div", { attrs: { role: "dialog" } })] : [])])]);
+}
+
+test("a document's page is read for its layout, its heading, the way back and what is open; the way back to a long list is judged from what was read at each stage", () => {
+  const read = (root, path = "/app/files/src_1") => inPage(root, () => readerProbe(), { path });
+  const columns = read(readerPage());
+  assert.deepEqual(columns, {
+    path: "/app/files/src_1", layout: "columns", title: "一份指南", back: { text: "知识库", href: "/app/files?q=%E4%B8%80" }, dialogs: 0,
+    columns: ["original", "points"], tabs: [], missing: false,
+  });
+  const expected = { title: "一份指南", list: "/app/files?q=%E4%B8%80" };
+  assert.deepEqual(readerFindings(columns, expected), { failures: [], notices: [] });
+  assert.deepEqual(read(readerPage({ layout: "tabs", tabs: true })).tabs, ["内容", "原文"]);
+  assert.deepEqual(readerFindings(read(readerPage({ layout: "tabs", tabs: true })), expected).notices, []);
+  assert.deepEqual(readerFindings(read(readerPage({ layout: "tabs" })), expected).notices, ["files@desktop: the reader is in tabs and its tab strip reads nothing (内容/原文)"]);
+  assert.deepEqual(inPage(readerPage({ missing: true }), () => readerProbe()).missing, true);
+  assert.deepEqual(readerFindings(read(readerPage({ layout: null, missing: true })), expected).notices, ["files@desktop: the reader of the first row says the document does not exist"]);
+  assert.deepEqual(readerFindings(read(readerPage({ layout: null })), expected).notices, ["files@desktop: not observable: the document's page drew no layout (data-reader-layout) within the wait"]);
+  assert.deepEqual(readerFindings({ ...columns, path: "/app/files" }, expected).notices,
+    ["files@desktop: not observable: opening the first row did not go to a document's own page (/app/files), so the reader was not read"]);
+  assert.deepEqual(readerFindings(null, expected).notices.length, 1);
+  assert.deepEqual(readerFindings({ ...columns, title: "另一份" }, expected).notices, ["files@desktop: the reader's heading is “另一份” and the row it was opened from is “一份指南”"]);
+  assert.deepEqual(readerFindings({ ...columns, back: { text: "返回", href: "/app/files" } }, expected).notices, ["files@desktop: the way back on the document's page reads “返回” (知识库)"]);
+  assert.deepEqual(readerFindings({ ...columns, back: { text: "知识库", href: "/app/files" } }, expected).notices, ["files@desktop: the way back goes to /app/files and the list was /app/files?q=%E4%B8%80"]);
+  assert.deepEqual(readerFindings({ ...columns, dialogs: 1 }, expected).notices, ["files@desktop: a dialog is open on the document's page (a document is a page, not a drawer)"]);
+  assert.deepEqual(readerFindings({ ...columns, columns: ["original"] }, expected).notices, ["files@desktop: the reader is in two columns and shows original (original/points)"]);
+  assert.equal(inPage(readerPage(), () => readerReady()), true);
+  assert.equal(inPage(page(header()), () => readerReady()), false);
+
+  // The knowledge base's list, as the walk reads it before and after a document was opened.
+  const list = (rows, query = "一份指南") => node("body", {}, [node("main", {}, [
+    node("input", { attrs: { "aria-label": "搜索资料和内容" }, value: query }),
+    node("ul", { attrs: { "aria-label": "资料" } }, rows.map((title) => node("li", {}, [node("a", { attrs: { "data-row-title": "", href: "/app/files/src_1" }, text: title })]))),
+  ])]);
+  assert.deepEqual(inPage(list(["一份指南", "另一份"]), () => knowledgeProbe(["first"])), { title: "一份指南", href: "/app/files/src_1" });
+  assert.equal(inPage(list([]), () => knowledgeProbe(["first"])), null);
+  assert.deepEqual(inPage(list(["一份指南", "另一份"]), () => knowledgeProbe(["state", "另一份"]), { path: "/app/files" }), { path: "/app/files", query: "一份指南", rows: 2, listed: true });
+  const state = (overrides = {}) => ({ path: "/app/files?q=%E4%B8%80", query: "一份指南", rows: 1, listed: true, ...overrides });
+  const read3 = (overrides = {}) => ({ filtered: state(), reader: { ...columns, path: "/app/files/src_1?q=%E4%B8%80" }, back: state(), browserBack: state(), ...overrides });
+  assert.deepEqual(knowledgeReturnFindings("一份指南", read3()), { failures: [], notices: [] });
+  assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ filtered: state({ rows: 0, listed: false }) })).notices,
+    ["files@desktop: not observable: searching for the first document's own title left 0 row(s) and not that document, so it was not opened"]);
+  assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ filtered: state({ path: "/app/files" }) })).notices[0], "files@desktop: the search is not in the address after typing (/app/files)");
+  assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ reader: null })).notices, ["files@desktop: not observable: the document's row was not on the filtered list to open"]);
+  assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ reader: { ...columns, path: "/app/files/src_1" } })).notices,
+    ["files@desktop: the document's address does not carry the list's search (/app/files/src_1)"]);
+  assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ back: state({ path: "/app/files", query: "", listed: false }) })).notices, [
+    "files@desktop: after 「知识库」 on the document's page the address is /app/files and the list was /app/files?q=%E4%B8%80",
+    "files@desktop: after 「知识库」 on the document's page the search box holds “” and held “一份指南”",
+    "files@desktop: after 「知识库」 on the document's page the document is not in the list",
+  ]);
+  assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ browserBack: null })).notices, ["files@desktop: not observable: the browser's Back was not taken"]);
+  assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ reader: { ...columns, layout: null } })).notices.length, 1);
 });
 
 test("the new-skill drawer names its captions and its switch, names an empty field in place, and sends nothing", () => {
@@ -1241,8 +1635,14 @@ test("the evidence matrix is read by its rows: the 核对 text in view, a search
   assert.deepEqual(failures({ state: { ...state, markInView: false } }), ["evidence-matrix@phone: the 核对 text of the first claim is outside the screen"]);
   assert.deepEqual(failures({ state: { ...state, markInView: null, headers: [] } }), []);
   assert.deepEqual(failures({ state: { ...state, headers: ["结论", "内容", "核对"] } }), ["evidence-matrix@phone: the second column is “内容” (核对)"]);
-  assert.deepEqual(failures({ state: { ...state, marks: ["未核对", "核对中"] } }), ["evidence-matrix@phone: some claims read 未核对 while others read 核对中"]);
-  assert.deepEqual(failures({ state: { ...state, marks: ["未核对"] } }), []);
+  // R13 (E-5): the column is ✓, ⚠ or blank and says 核对中 only while the checks come in. The words it used to write for a claim nobody had
+  // checked are retired; one still on a page is a notice, alone or beside 核对中, and no longer the failure that the mixture was.
+  assert.deepEqual(failures({ state: { ...state, marks: ["未核对", "核对中"] } }), []);
+  assert.deepEqual(matrixFindings("phone", { ...good, state: { ...state, marks: ["未核对", "核对中"] } }).notices,
+    ["evidence-matrix@phone: the 核对 column still reads 未核对 for a claim (R13: ✓, ⚠ or blank)"]);
+  assert.deepEqual(matrixFindings("phone", { ...good, state: { ...state, marks: ["暂无核对结果", "未核对", "✓", "⚠", ""] } }).notices,
+    ["evidence-matrix@phone: the 核对 column still reads 暂无核对结果, 未核对 for a claim (R13: ✓, ⚠ or blank)"]);
+  assert.deepEqual(matrixFindings("phone", { ...good, state: { ...state, marks: ["✓", "⚠", "", "核对中"] } }), { failures: [], notices: [] });
   assert.deepEqual(failures({ filtered: { rows: 3, status: "显示 3 / 3 条" } }), ["evidence-matrix@phone: searching for CLM-001 leaves 3 row(s) and “显示 3 / 3 条”"]);
   assert.deepEqual(failures({ dialog: { open: false, name: null } }), ["evidence-matrix@phone: clicking the first claim does not open a dialog named CLM-001 (“none”)"]);
   assert.deepEqual(failures({ closed: { open: true, focusInRow: false } }), ["evidence-matrix@phone: Escape leaves the claim's dialog open"]);
@@ -1265,7 +1665,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
     "/app/frontier/events/ev_1", "/app/frontier?view=following", "/app/virtual-research?tab=models", "/app/virtual-research?tab=precedents",
     "/app/virtual-research?tab=definitions", "/app/account?tab=notifications", "/app/account?tab=ops", "/app/account/simulated/membership",
     "/app/account/simulated/refunds", "/app/memory/shared/impeccable-audit-missing", "/app/extensions/plugins/impeccable-audit-missing",
-    "/app/extensions/skills/impeccable-audit-missing", "/app/runs/run_1/files/deliverables/pkg/clinical-evidence-matrix.json",
+    "/app/extensions/skills/impeccable-audit-missing", "/app/runs/run_1/files/deliverables/pkg/clinical-evidence-matrix.json", "/app/files/src_1",
   ]) assert.ok(visited.has(address), `walked ${address}`);
   assert.deepEqual(report.discovered.routes.filter((name) => name.endsWith("@2")).length, 7);
   assert.deepEqual([report.discovered.evidenceMatrix, report.discovered.pdf, report.discovered.keylessConnectors], [true, true, 1]);
@@ -1280,10 +1680,11 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
   assert.equal(log.filter((entry) => ["回到插件列表", "回到技能列表"].includes(entry.clickNamed)).length, 2);
   assert.deepEqual(report.failures, []);
   // The step that presses 保存 wrote nothing: the guard is installed for it and removed after.
-  const routeAt = log.findIndex((entry) => entry.route === String("**/api/**"));
-  assert.ok(routeAt >= 0 && log.findIndex((entry, index) => index > routeAt && entry.unroute) > routeAt);
+  const pressedAt = log.findIndex((entry) => entry.clickNamed === "保存");
+  const routeAt = log.findLastIndex((entry, index) => index < pressedAt && entry.route === String("**/api/**"));
+  assert.ok(pressedAt >= 0 && routeAt >= 0 && log.findIndex((entry, index) => index > pressedAt && entry.unroute) > pressedAt);
   assert.equal(log.filter((entry) => entry.aborted).length, 0);
-  assert.deepEqual(Object.keys(report.steps).sort(), ["evidence-matrix@desktop", "evidence-matrix@phone", "extensions-skills-create", "files-pdf"]);
+  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-skills-create", "files-pdf", "files-return", "frontier-event-handoff"]);
 });
 
 test("a page that regresses on what R11 fixed fails the walk and names the page and the defect", async () => {
@@ -1315,9 +1716,9 @@ test("a page that regresses on what R11 fixed fails the walk and names the page 
   assert.ok((await failures({ FAKE_PROBE: "capabilityCards" })).failures.includes("capabilities@desktop: the tool cards still say 可运行"));
   assert.ok((await failures({ FAKE_BACK: "stay" })).failures.includes("extensions-skill-missing@desktop: 回到技能列表 goes to /app/extensions/skills/impeccable-audit-missing (/app/extensions/skills)"));
   const after = await failures({ FAKE_AFTER: "bad" });
-  assert.ok(after.failures.includes("geo-sources@desktop: clicking the first source opened no detail in place"));
-  assert.ok(after.failures.includes("autopilot@desktop: working files are listed outside 其他文件: a.py"));
-  assert.ok((await failures({ FAKE_PDF: "narrow" })).failures.includes("files@desktop: the original of a PDF opens in a 576 px drawer (wider than 576)"));
+  assert.ok(after.failures.includes("geo-sources@desktop: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)"));
+  assert.ok(after.failures.includes("autopilot@desktop: the task bar names a time zone by its identifier: Asia/Shanghai"));
+  assert.ok((await failures({ FAKE_PDF: "narrow" })).failures.includes("files@desktop: the original of a PDF is 559 px wide on its page (at least 560)"));
   assert.ok((await failures({ FAKE_SKILL: "bare" })).failures.includes("extensions-skills@desktop: the new-skill drawer has 0 caption(s) under its fields (two)"));
   assert.ok((await failures({ FAKE_MATRIX: "search" })).failures.includes("evidence-matrix@desktop: searching for CLM-001 leaves 3 row(s) and “显示 3 / 3 条”"));
   assert.ok((await failures({ FAKE_MATRIX: "focus" })).failures.includes("evidence-matrix@phone: Escape does not return focus to the claim's row"));
@@ -1344,18 +1745,511 @@ test("a page whose id the lists do not name is not walked, and the notice says w
   const empty = await walk({ FAKE_EMPTY_LISTS: "1" });
   assert.equal(empty.code, 0, empty.stdout + empty.stderr);
   const visited = empty.log.filter((entry) => entry.goto).map((entry) => new URL(entry.goto).pathname);
-  assert.ok(visited.every((address) => !/\/(std_|answers|zones\/z_|authors|events\/ev_|runs\/run_)/.test(address)), visited.join("\n"));
+  assert.ok(visited.every((address) => !/\/(std_|answers|zones\/z_|authors|events\/ev_|runs\/run_|files\/src_)/.test(address)), visited.join("\n"));
   for (const wanted of [
     "geo-answer: not walked — the first project lists no wrong sentence with an answer",
     "frontier-zone: not walked — the evidence zones are not offered to this account or the list is empty",
     "frontier-evidence: not walked — no official zone holds a card", "frontier-author: not walked — the first card names no author page", "frontier-event: not walked — the hot list is empty or not offered",
     "evidence-matrix: not walked — no run of this account delivered a clinical-evidence package", "files: the original of a PDF: not walked — the knowledge base holds no finished PDF",
+    "files-reader: not walked — the knowledge base holds no finished document",
   ]) assert.ok(empty.report.notices.includes(wanted), `${wanted}\n${empty.report.notices.join("\n")}`);
   assert.ok(empty.report.notices.some((notice) => notice.startsWith("account-connectors@desktop: no data source without a key is unset")));
   assert.equal(empty.report.steps?.["files-pdf"], undefined);
   const { code, report } = await walk({ FAKE_NO_MATRIX: "1" });
   assert.equal(code, 0);
   assert.ok(report.notices.some((notice) => /^evidence-matrix@desktop: the step could not run/.test(notice)), report.notices.join("\n"));
+});
+
+/**
+ * The composer as the kernel's frame draws it: a root holding the card (the editable and the toolbar's row, with its tools and its send key) and the dock
+ * under the card. The kernel's classes end in a stable suffix (`InputBar_card`), which is how the shell's own stylesheet and the probe find them.
+ */
+function composerDom({ chipsInBar = 0, chipsInDock = 0, hero = false, dock = true, researcher = true, wrap = false, gap = 24 } = {}) {
+  const chip = (placement) => node("span", { attrs: { "data-evimed-tool-chip": "vcr-protocol", "data-evimed-chip-placement": placement }, w: 120, h: 24, top: 945 - gap - 28 });
+  const lowest = 945 - gap;
+  const send = node("button", { attrs: { "aria-label": "发送" }, w: 32, h: 32, top: lowest - 32 });
+  const tools = node("div", { attrs: { class: "InputBar_tools" }, top: lowest - 32 }, [
+    node("button", { attrs: { "aria-label": "添加" }, w: 32, h: 32, top: lowest - 32 }),
+    ...Array.from({ length: chipsInBar }, () => chip("bar")),
+  ]);
+  const row = node("div", { attrs: { class: "InputBar_row" }, top: lowest - 32 }, [tools, node("div", { attrs: { class: "InputBar_trailing" }, top: wrap ? lowest : lowest - 32 }, [send])]);
+  const card = node("div", { attrs: { class: "InputBar_card" }, top: lowest - 100, h: 100 }, [node("div", { attrs: { contenteditable: "true" }, top: lowest - 100, h: 60 }), row]);
+  const hidden = researcher ? { display: "none" } : {};
+  const dockEl = node("div", { attrs: { class: "InputBar_dock" }, top: lowest, h: 24 }, [
+    node("span", { attrs: { "data-composer-stats": "" }, text: "用量 12K", style: hidden, top: lowest - 24 }),
+    node("span", {}, [node("button", { attrs: { "aria-haspopup": "dialog", "aria-label": "上下文已用 20%" }, style: hidden, top: lowest - 60 })]),
+    ...Array.from({ length: chipsInDock }, () => chip("bar")),
+  ]);
+  return node("body", {}, [node("div", { attrs: { class: hero ? "InputBar_root InputBar_hero" : "InputBar_root" } }, [card, ...(dock ? [dockEl] : [])])]);
+}
+
+test("the composer is read inside the kernel's frame: the room under it, the chips by where they are drawn, the toolbar's lines, the statistics and the ring", () => {
+  assert.equal(COMPOSER_BOTTOM_PX, 16);
+  const read = (options, dom = {}) => inPage(composerDom(dom), () => composerProbe([options]));
+  const normal = read({ operator: false });
+  assert.deepEqual(normal, {
+    composer: true, hero: false, operator: false, window: { width: 1512, height: 945 }, gapCard: 24, gapLowest: 24, rowLines: 1, rowHeight: 24, scrollsSideways: false,
+    chips: { total: 0, bar: 0, hero: 0, inTools: 0, inDock: 0 }, stats: { present: 1, visible: 0 }, ring: 0,
+  });
+  // The lowest control is the one nearest the bottom, wherever it is; the card's own edge is read beside it.
+  assert.equal(read({}, { gap: 4 }).gapLowest, 4);
+  assert.equal(read({}, { gap: 40 }).gapCard, 40);
+  // A chip is counted where it is drawn: in the toolbar, or in the dock under the card.
+  assert.deepEqual(read({}, { chipsInBar: 1 }).chips, { total: 1, bar: 1, hero: 0, inTools: 1, inDock: 0 });
+  assert.deepEqual(read({}, { chipsInBar: 1, chipsInDock: 1 }).chips, { total: 2, bar: 2, hero: 0, inTools: 1, inDock: 1 });
+  // The statistics and the ring are in the document for a researcher and hidden; an operator's are drawn.
+  const operator = read({ operator: true }, { researcher: false });
+  assert.deepEqual([operator.operator, operator.stats, operator.ring], [true, { present: 1, visible: 1 }, 1]);
+  // The blank conversation has no dock under its card; a toolbar whose children start on two lines took two.
+  assert.equal(read({}, { dock: false }).hero, true);
+  assert.equal(read({}, { hero: true }).hero, true);
+  assert.equal(read({}, { wrap: true }).rowLines, 2);
+  // The tools and the send key are centred in the row and a few pixels apart (the kernel's measured: 888 and 885): still one line.
+  const centred = composerDom();
+  const trailing = descendants(centred).find((el) => el.attrs.class === "InputBar_trailing");
+  trailing.rect.top -= 3;
+  assert.equal(inPage(centred, () => composerProbe([{}])).rowLines, 1);
+  // A class list that merely ends in another class is not the kernel's card: the editable of a page without one has no composer.
+  const stray = node("body", {}, [node("div", { attrs: { class: "InputBar_card other" } }, [node("div", { attrs: { contenteditable: "true" } })])]);
+  assert.equal(inPage(stray, () => composerProbe([{}])).composer, false);
+  assert.equal(inPage(page(header()), () => composerProbe([])).composer, false);
+
+  // Judged: every verdict a notice, each "not observable" with its reason.
+  const none = "chat@desktop: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)";
+  assert.deepEqual(composerFindings("desktop", normal), { failures: [], notices: [none] });
+  assert.deepEqual(composerFindings("desktop", read({}, { gap: 15 })).notices, ["chat@desktop: the lowest control of the composer is 15 px above the bottom of the window (at least 16)", none]);
+  assert.deepEqual(composerFindings("desktop", read({}, { gap: 16 })).notices, [none]);
+  assert.deepEqual(composerFindings("desktop", read({}, { chipsInBar: 1 })), { failures: [], notices: [] });
+  assert.deepEqual(composerFindings("desktop", read({}, { chipsInBar: 2 })).notices, ["chat@desktop: 2 tool chip(s) are drawn in the toolbar (exactly one)"]);
+  assert.deepEqual(composerFindings("desktop", read({}, { chipsInBar: 1, chipsInDock: 1 })).notices, [
+    "chat@desktop: 2 tool chip(s) are drawn in the toolbar (exactly one)",
+    "chat@desktop: 2 chip(s) say they are in the toolbar and 1 are inside it",
+    "chat@desktop: 1 tool chip(s) are drawn in the dock under the card (none)",
+  ]);
+  assert.deepEqual(composerFindings("desktop", read({ operator: true }, { researcher: false, chipsInBar: 1 })).notices,
+    ["chat@desktop: not observable: the account is an operator's, whose session statistics and context ring are drawn by design, so their absence was not judged"]);
+  assert.deepEqual(composerFindings("desktop", read({ operator: false }, { researcher: false, chipsInBar: 1 })).notices,
+    ["chat@desktop: 1 session statistics line(s) are visible to a researcher", "chat@desktop: the context ring is visible to a researcher"]);
+  assert.deepEqual(composerFindings("desktop", read({}, { hero: true, chipsInBar: 1 })).notices,
+    ["chat@desktop: not observable: the conversation is the blank one, whose composer is centred with no dock under it, so the room under it was not judged"]);
+  assert.deepEqual(composerFindings("desktop", { ...normal, gapLowest: null, chips: { ...normal.chips, total: 1, bar: 1, inTools: 1 } }).notices,
+    ["chat@desktop: not observable: the composer holds no control, so the room under it was not judged"]);
+  assert.deepEqual(composerFindings("desktop", { composer: false }).notices, ["chat@desktop: not observable: no composer was found in the conversation's frame, so its room, chips and statistics were not read"]);
+  assert.deepEqual(composerFindings("phone", null).notices.length, 1);
+  // At 390 px the toolbar is one line and nothing scrolls sideways; the desktop does not look at either.
+  const phone = { ...read({}, { chipsInBar: 1 }), window: { width: 390, height: 844 } };
+  assert.deepEqual(composerFindings("phone", phone), { failures: [], notices: [] });
+  assert.deepEqual(composerFindings("phone", { ...phone, rowLines: 2, scrollsSideways: true }).notices,
+    ["chat@phone: the toolbar takes 2 lines at 390 px (one)", "chat@phone: the conversation scrolls sideways at 390 px"]);
+  assert.deepEqual(composerFindings("desktop", { ...phone, rowLines: 2, scrollsSideways: true }).notices, []);
+});
+
+test("with the chat asked for, the walk reads the composer at both widths, restores the window, and fails nothing", async () => {
+  const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
+  assert.equal(code, 0, stdout + stderr);
+  const none = (width) => `chat@${width}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)`;
+  assert.ok(report.notices.includes(none("desktop")) && report.notices.includes(none("phone")), report.notices.join("\n"));
+  assert.deepEqual(Object.keys(report.steps["chat-composer"]), ["desktop", "phone"]);
+  assert.deepEqual([report.steps["chat-composer"].desktop.window, report.steps["chat-composer"].phone.window], [{ width: 1512, height: 945 }, { width: 390, height: 844 }]);
+  assert.deepEqual(report.failures, []);
+  // Without the chat page the walk does not look.
+  assert.equal((await walk()).report.steps?.["chat-composer"], undefined);
+  // A control too near the bottom, a toolbar that wraps, two chips, the statistics and the ring: notices, never failures.
+  const low = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "low" });
+  assert.equal(low.code, 0, low.stdout + low.stderr);
+  assert.ok(low.report.notices.includes("chat@desktop: the lowest control of the composer is 4 px above the bottom of the window (at least 16)"));
+  const wrap = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "wrap" });
+  assert.equal(wrap.code, 0);
+  assert.ok(wrap.report.notices.includes("chat@phone: the toolbar takes 2 lines at 390 px (one)"));
+  assert.ok(!wrap.report.notices.some((notice) => notice.startsWith("chat@desktop: the toolbar")));
+  const chips = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "chips" });
+  assert.equal(chips.code, 0);
+  assert.ok(chips.report.notices.includes("chat@desktop: 1 tool chip(s) are drawn in the dock under the card (none)"));
+  const stats = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "stats" });
+  assert.equal(stats.code, 0);
+  assert.ok(stats.report.notices.includes("chat@desktop: the context ring is visible to a researcher"));
+  // An operator's statistics are by design: said, not judged.
+  const operator = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "stats", FAKE_OPERATOR: "1" });
+  assert.equal(operator.code, 0);
+  assert.ok(operator.report.notices.includes("chat@desktop: not observable: the account is an operator's, whose session statistics and context ring are drawn by design, so their absence was not judged"));
+  assert.ok(!operator.report.notices.some((notice) => /visible to a researcher|context ring is visible/.test(notice)));
+  // The blank conversation is not judged for its bottom room.
+  const hero = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "hero" });
+  assert.ok(hero.report.notices.some((notice) => notice.includes("the conversation is the blank one")));
+  void log;
+});
+
+test("the pages the reference named have a section budget, and stacking more is a notice there until a walk has measured them; every other budget still fails", () => {
+  for (const name of ["inbox", "geo", "frontier-zones", "autopilot", "account"]) {
+    assert.ok(Number.isInteger(SECTION_SHAPES_BY_PAGE[name]) && NOTICE_SECTION_PAGES.has(name), `${name} has a notice-first section budget`);
+  }
+  const stacked = ["ul>li", "table>thead+tbody", "svg>g", "section>h2+ul"];
+  const inbox = pageFindings("inbox", "desktop", clean({ sectionShapes: stacked.slice(0, 3) }), []);
+  assert.deepEqual(inbox.failures, []);
+  assert.deepEqual(inbox.notices, ["inbox@desktop: the page stacks 3 kinds of section (budget 2): ul>li, table>thead+tbody, svg>g — new in R13: reported, not failed, until a walk has measured this page"]);
+  assert.deepEqual(pageFindings("inbox", "desktop", clean({ sectionShapes: stacked.slice(0, 2) }), []), { failures: [], notices: [] });
+  // The budget of the page R10 rebuilt is a failure still; so is everything else a page spends past a number.
+  assert.equal(pageFindings("memory", "desktop", clean({ sectionShapes: stacked.slice(0, 3) }), []).failures.length, 1);
+  assert.equal(pageFindings("inbox", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
+  assert.deepEqual(pageFindings("account", "desktop", clean({ sectionShapes: stacked }), []).failures, []);
+  assert.equal(pageFindings("account", "desktop", clean({ sectionShapes: stacked }), []).notices.length, 1);
+  assert.deepEqual(pageFindings("inbox", "phone", clean({ sectionShapes: stacked }), []), { failures: [], notices: [] });
+  // The budgeted pages of R10 are not among them.
+  for (const name of ["files", "memory", "frontier", "capabilities", "virtual-research"]) assert.ok(!NOTICE_SECTION_PAGES.has(name), name);
+});
+
+test("the daily of a day nobody published is read for the day it names, the clock and zone it gives, and for not reading as a failure", () => {
+  const view = (...blocks) => node("body", {}, [node("main", {}, [node("div", { attrs: { role: "tabpanel" } }, blocks)])]);
+  const empty = (title, description, extra = []) => view(node("div", {}, [node("p", { text: title }), ...(description ? [node("div", { text: description })] : []), ...extra]));
+  const read = (root) => inPage(root, () => pageProbe(["dailyEmpty"]));
+  assert.deepEqual(read(empty("1月1日 周三没有日报", "日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。", [node("button", { text: "往期" })])), {
+    alert: null, retry: false, title: "1月1日 周三没有日报", description: "日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。", past: true,
+  });
+  const failed = read(view(node("div", { attrs: { role: "alert" } }, [node("span", { text: "这条动态已不再提供。" }), node("button", { text: "重试" })])));
+  assert.deepEqual([failed.alert, failed.retry, failed.title], ["这条动态已不再提供。", true, null]);
+  assert.equal(read(view(node("p", { text: "一条普通的段落" }))).title, null);
+  const one = (r) => probeFindings("frontier-daily-empty", "desktop", "dailyEmpty", r);
+  assert.deepEqual(one(read(empty("1月1日 周三没有日报", "日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。"))), { failures: [], notices: [] });
+  assert.deepEqual(one(failed).notices, ["frontier-daily-empty@desktop: a day nobody published reads as a failure: “这条动态已不再提供。” with 重试 (an empty day and a failed one are different, A11)"]);
+  assert.deepEqual(one(read(view(node("p", { text: "一条普通的段落" })))).notices, ["frontier-daily-empty@desktop: not observable: the daily view drew neither an empty day nor an error (the feed may not be offered to this account)"]);
+  assert.deepEqual(one(read(empty("今日日报尚未发布", "当天没有符合条件的内容时不出刊。"))).notices, ["frontier-daily-empty@desktop: the empty day does not name the day it is about: “今日日报尚未发布”"]);
+  assert.deepEqual(one(read(empty("1月1日 周三没有日报", "日报每天 07:30发布；当天没有符合条件的内容时不出刊。"))).notices, ["frontier-daily-empty@desktop: the empty day names a publication time (07:30) and not whose clock it is"]);
+  // The time may stand in the title (「今日日报 07:30（北京时间）发布」), and then it carries its zone.
+  assert.deepEqual(one(read(empty("今日日报 07:30（北京时间）发布", "当天没有符合条件的内容时不出刊。"))).notices, ["frontier-daily-empty@desktop: the empty day does not name the day it is about: “今日日报 07:30（北京时间）发布”"]);
+  assert.deepEqual(one(null), { failures: [], notices: [] });
+  assert.deepEqual(PAGE_PROBES["frontier-daily-empty"], [["dailyEmpty", ["desktop", "phone"]]]);
+  assert.ok(PROVISIONAL_PAGES.has("frontier-daily-empty") && BUDGET_BY_PAGE["frontier-daily-empty"]);
+  assert.ok(ROUTES.some(([name, route]) => name === "frontier-daily-empty" && route === "/app/frontier?view=daily&day=2020-01-01"));
+});
+
+/** The inbox's filter chips and the memory page's tabs and search box, as the pages draw them. */
+const listPage = ({ pressed = "未读 3", selected = "项目 5", query = "探针", search = true, dialog = false } = {}) => node("body", {}, [
+  node("aside", {}, [node("a", { attrs: { href: "/app/capabilities" }, text: "科研工具" }), node("a", { attrs: { href: "/app/inbox" }, text: "收件箱" })]),
+  node("main", {}, [
+    node("div", { attrs: { role: "group", "aria-label": "消息筛选" } }, [node("button", { attrs: { "aria-pressed": String(pressed === "全部") }, text: "全部" }), node("button", { attrs: { "aria-pressed": String(pressed.startsWith("未读")) }, text: pressed.startsWith("未读") ? pressed : "未读" })]),
+    node("div", { attrs: { role: "tablist" } }, ["关于你", "项目 5", "做法 2", "成长"].map((name) => node("button", { attrs: { role: "tab", "aria-selected": String(name === selected) }, text: name }))),
+    ...(search ? [node("input", { attrs: { "aria-label": "搜索记忆" }, value: query })] : []),
+    ...(dialog ? [node("div", { attrs: { role: "dialog" } })] : []),
+  ]),
+]);
+
+test("where a list page keeps its place is read from the address and from what its controls show: chips, tabs, the search box, the open row", () => {
+  const at = (path, search, fn, root = listPage()) => inPage(root, () => { globalThis.location.search = search; return fn(); }, { path });
+  assert.deepEqual(at("/app/inbox", "?filter=unread", () => addressProbe(["inbox"])), { path: "/app/inbox", search: "?filter=unread", dialog: false, found: true, pressed: "未读 3" });
+  assert.deepEqual(at("/app/memory", "?tab=project&q=%E6%8E%A2", () => addressProbe(["memory"]), listPage({ dialog: true })),
+    { path: "/app/memory", search: "?tab=project&q=%E6%8E%A2", dialog: true, found: true, selected: "项目 5", query: "探针" });
+  assert.equal(inPage(page(header()), () => addressProbe(["inbox"])).found, false);
+  assert.equal(inPage(listPage({ search: false }), () => addressProbe(["memory"])).query, null);
+  assert.equal(inPage(page(header()), () => addressProbe(["other"])), null);
+  // The controls are pressed by what they are called (a chip and a tab carry their count), or by where a sidebar link goes; nothing else.
+  const body = listPage();
+  inPage(body, () => {
+    assert.equal(addressAct(["chip", "消息筛选", "未读"]), true);
+    assert.equal(addressAct(["chip", "消息筛选", "不存在"]), false);
+    assert.equal(addressAct(["chip", "别的组", "未读"]), false);
+    assert.equal(addressAct(["tab", "项目"]), true);
+    assert.equal(addressAct(["tab", "不存在"]), false);
+    assert.equal(addressAct(["link", "/app/capabilities"]), true);
+    assert.equal(addressAct(["link", "/app/nowhere"]), false);
+    assert.equal(addressAct(["other"]), false);
+  });
+  assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["科研工具", "未读 3", "项目 5"]);
+  assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory"]);
+  assert.equal(addressStateHolds({ pressed: "未读" }, { pressed: "未读 3" }), true);
+  assert.equal(addressStateHolds({ query: "探针" }, { query: "探针 " }), false);
+  assert.equal(addressStateHolds({ pressed: "未读" }, null), false);
+
+  // Judged.
+  const inbox = ADDRESS_CASES[0];
+  const memory = ADDRESS_CASES[1];
+  const shown = { path: "/app/inbox", search: "?filter=unread", dialog: false, found: true, pressed: "未读 3" };
+  const good = { pressed: [true], first: shown, away: "/app/capabilities", back: shown, reload: shown };
+  assert.deepEqual(addressStateFindings(inbox, good), { failures: [], notices: [] });
+  assert.deepEqual(addressStateFindings(inbox, { ...good, first: { ...shown, search: "" } }).notices, [
+    "inbox@desktop: the choice is not in the address after it was made: filter=unread is not in “”",
+    "inbox@desktop: after Back from another page the address is “?filter=unread” and was “”",
+    "inbox@desktop: after loading the address again the address is “?filter=unread” and was “”",
+  ]);
+  assert.deepEqual(addressStateFindings(inbox, { ...good, back: { ...shown, search: "", pressed: "全部" }, reload: { ...shown, pressed: "全部" } }).notices, [
+    "inbox@desktop: after Back from another page the address is “” and was “?filter=unread”",
+    "inbox@desktop: after Back from another page the page shows {\"pressed\":\"全部\"} ({\"pressed\":\"未读\"})",
+    "inbox@desktop: after loading the address again the page shows {\"pressed\":\"全部\"} ({\"pressed\":\"未读\"})",
+  ]);
+  assert.deepEqual(addressStateFindings(inbox, { ...good, first: { ...shown, pressed: "全部" } }).notices, ["inbox@desktop: the page does not show the choice it was given ({\"pressed\":\"未读\"})"]);
+  assert.deepEqual(addressStateFindings(inbox, { ...good, back: null, reload: null }).notices, ["inbox@desktop: not observable: Back from another page was not taken", "inbox@desktop: not observable: loading the address again was not taken"]);
+  assert.deepEqual(addressStateFindings(inbox, { ...good, away: "/app/inbox" }).notices, ["inbox@desktop: not observable: the sidebar link did not leave the page (/app/inbox), so Back came from nowhere"]);
+  assert.deepEqual(addressStateFindings(inbox, { pressed: [false], first: shown, away: null, back: null, reload: null }).notices,
+    ["inbox@desktop: not observable: a control of the case was not on the page (missing), so the choice was not made"]);
+  assert.deepEqual(addressStateFindings(inbox, { pressed: [], first: { ...shown, found: false }, away: null, back: null, reload: null }).notices,
+    ["inbox@desktop: not observable: the page's list controls were not found, so what it keeps in its address was not read"]);
+  const kept = { path: "/app/memory", search: "?tab=project&q=%E6%8E%A2%E9%92%88", dialog: false, found: true, selected: "项目 5", query: "探针" };
+  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: kept, away: "/app/capabilities", back: kept, reload: kept }), { failures: [], notices: [] });
+  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: { ...kept, query: null }, away: null, back: null, reload: null }).notices,
+    ["memory@desktop: not observable: a control of the case was not on the page (found, search box missing), so the choice was not made"]);
+  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: { ...kept, search: "?tab=project" }, away: "/app/capabilities", back: { ...kept, search: "?tab=project" }, reload: { ...kept, search: "?tab=project" } }).notices,
+    ["memory@desktop: the choice is not in the address after it was made: q=探针 is not in “?tab=project”"]);
+
+  // A row that opens in a drawer: in the address while open, and Back closes it.
+  const opened = { ...kept, search: `${kept.search}&open=r1`, dialog: true };
+  assert.deepEqual(addressOpenFindings("memory", { rows: 3, opened, closed: kept }), { failures: [], notices: [] });
+  assert.deepEqual(addressOpenFindings("memory", { rows: 0, opened: null, closed: null }).notices, ["memory@desktop: not observable: no row of the list opens, so an open row's place in the address was not read"]);
+  assert.deepEqual(addressOpenFindings("memory", { rows: 1, opened: kept, closed: kept }).notices, ["memory@desktop: not observable: the first row did not open a drawer, so its place in the address was not read"]);
+  assert.deepEqual(addressOpenFindings("memory", { rows: 1, opened: { ...opened, search: kept.search }, closed: opened }).notices, [
+    "memory@desktop: the open row is not in the address (“?tab=project&q=%E6%8E%A2%E9%92%88”)", "memory@desktop: Back leaves the drawer open",
+    "memory@desktop: Back leaves the row in the address (“?tab=project&q=%E6%8E%A2%E9%92%88&open=r1”)"]);
+  assert.deepEqual(addressOpenFindings("memory", { rows: 1, opened, closed: null }).notices, ["memory@desktop: not observable: Back was not taken"]);
+});
+
+test("the event page's 深入研究 is read at the hand-off: the title, a link to a source, a create intent that cannot send, and Back to the event", () => {
+  const eventPage = (button = true) => node("body", {}, [node("main", {}, [node("header", {}, [node("h1", { text: "某事件" })]), ...(button ? [node("button", { text: "深入研究" })] : [])])]);
+  assert.deepEqual(inPage(eventPage(), () => handoffProbe(["event"]), { path: "/app/frontier/events/ev_1" }), { path: "/app/frontier/events/ev_1", title: "某事件", button: true });
+  assert.equal(inPage(eventPage(false), () => handoffProbe(["event"])).button, false);
+  const withState = (usr) => inPage(eventPage(), () => { globalThis.window.history = { state: usr === undefined ? null : { usr, key: "k", idx: 2 } }; return handoffProbe(["intent"]); }, { path: "/app/chat" });
+  const draft = "请围绕这个事件做一次深入研究。\n\n事件：某事件\n一手来源：\n- 官方：标题（https://example.org/a）";
+  const intent = { kind: "create", projectId: "p", requestId: "req_1", sessionId: "s", draft };
+  assert.deepEqual(withState({ runtimeUiIntent: intent }), { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } });
+  assert.deepEqual(withState({}), { path: "/app/chat", intent: null });
+  assert.deepEqual(withState(undefined), { path: "/app/chat", intent: null });
+  assert.deepEqual(HANDOFF_FIELDS, ["draft", "kind", "projectId", "requestId", "resultRevision", "sessionId"]);
+
+  const before = { path: "/app/frontier/events/ev_1", title: "某事件", button: true };
+  const after = { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } };
+  assert.deepEqual(handoffFindings(before, after, before.path), { failures: [], notices: [] });
+  assert.deepEqual(handoffFindings({ ...before, button: false }, null, null).notices, ["frontier-event@desktop: not observable: the event page has no 深入研究 button, so the hand-off to the conversation was not read"]);
+  assert.deepEqual(handoffFindings(null, null, null).notices.length, 1);
+  assert.deepEqual(handoffFindings(before, { path: "/app/frontier/events/ev_1", intent: null }, null).notices, ["frontier-event@desktop: not observable: 深入研究 did not go to the conversation (/app/frontier/events/ev_1), so its draft was not read"]);
+  assert.deepEqual(handoffFindings(before, { path: "/app/chat", intent: null }, null).notices, ["frontier-event@desktop: the hand-off to the conversation carries no intent in the address's state"]);
+  assert.deepEqual(handoffFindings(before, { ...after, intent: { ...after.intent, kind: "open", draft: null, requestId: null, keys: [...after.intent.keys, "send"] } }, before.path).notices, [
+    "frontier-event@desktop: the hand-off is a “open” intent (create: a new conversation)", "frontier-event@desktop: the hand-off carries no draft",
+    "frontier-event@desktop: the hand-off has no request id, so a reload cannot tell it from a new one", "frontier-event@desktop: the hand-off carries fields a draft does not need: send"]);
+  assert.deepEqual(handoffFindings(before, { ...after, intent: { ...after.intent, draft: "请深入研究" } }, before.path).notices, [
+    "frontier-event@desktop: the draft does not hold the event's title “某事件”", "frontier-event@desktop: the draft holds no link to a source"]);
+  assert.deepEqual(handoffFindings(before, after, "/app/chat").notices, ["frontier-event@desktop: Back from the conversation leaves the address at /app/chat and the event page was /app/frontier/events/ev_1"]);
+});
+
+test("the walk tries the address of the inbox and the memory page, the event's hand-off and a day nobody published; what it cannot try it says", async () => {
+  const { code, stdout, stderr, log, report } = await walk();
+  assert.equal(code, 0, stdout + stderr);
+  assert.deepEqual(report.failures, []);
+  // The daily of a day with no issue is a page of the walk at both widths, and its 404 is the refusal it is walked to meet.
+  const visited = log.filter((entry) => entry.goto).map((entry) => entry.goto);
+  assert.ok(visited.includes("https://evimed.example.org/app/frontier?view=daily&day=2020-01-01"));
+  assert.ok(report.pages["frontier-daily-empty@desktop"] && report.pages["frontier-daily-empty@phone"]);
+  assert.equal(report.notices.filter((notice) => /^(inbox|memory|frontier-event)@desktop: /.test(notice) && /address|hand-off|draft|Back/.test(notice)).length, 0, report.notices.join("\n"));
+  // Both cases were made, then Back, then the address again; the memory row was opened and Back closed it.
+  assert.deepEqual(log.filter((entry) => entry.act).map((entry) => entry.act),
+    [["chip", "消息筛选", "未读"], ["link", "/app/capabilities"], ["tab", "项目"], ["link", "/app/capabilities"]]);
+  assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索记忆"), [["搜索记忆", "探针"]]);
+  assert.deepEqual(Object.keys(report.steps["address-state"]), ["inbox", "memory", "memory-open"]);
+  assert.equal(report.steps["frontier-event-handoff"].after.path, "/app/chat");
+
+  // The address that does not come back, a row that stays open after Back.
+  const lost = await walk({ FAKE_ADDRESS: "lost" });
+  assert.equal(lost.code, 0, lost.stdout + lost.stderr);
+  assert.ok(lost.report.notices.includes("inbox@desktop: after Back from another page the address is “” and was “?filter=unread”"), lost.report.notices.join("\n"));
+  assert.ok(lost.report.notices.some((notice) => notice.startsWith("memory@desktop: after loading the address again the address is “”")));
+  const open = await walk({ FAKE_ADDRESS: "open" });
+  assert.ok(open.report.notices.includes("memory@desktop: Back leaves the drawer open"));
+  // The hand-off with no link, and an event page without the button; no event at all.
+  const bad = await walk({ FAKE_HANDOFF: "bad" });
+  assert.equal(bad.code, 0);
+  assert.ok(bad.report.notices.includes("frontier-event@desktop: the draft holds no link to a source"));
+  assert.ok((await walk({ FAKE_HANDOFF: "nobutton" })).report.notices.some((notice) => notice.includes("the event page has no 深入研究 button")));
+  const empty = await walk({ FAKE_EMPTY_LISTS: "1" });
+  assert.equal(empty.code, 0, empty.stdout + empty.stderr);
+  assert.ok(empty.report.notices.includes("frontier-event@desktop: not observable: the hot list names no event, so the hand-off of 深入研究 to the conversation (A01) was not read"));
+  assert.equal(empty.report.steps?.["frontier-event-handoff"], undefined);
+
+  // The daily of a day nobody published: read as a failure, as an account without the feed, with no day, with a time and no zone — notices all.
+  for (const [mode, wanted] of [
+    ["error", "frontier-daily-empty@desktop: a day nobody published reads as a failure: “这条动态已不再提供。” with 重试 (an empty day and a failed one are different, A11)"],
+    ["off", "frontier-daily-empty@desktop: not observable: the daily view drew neither an empty day nor an error (the feed may not be offered to this account)"],
+    ["nameless", "frontier-daily-empty@phone: the empty day does not name the day it is about: “今日日报尚未发布”"],
+    ["zoneless", "frontier-daily-empty@desktop: the empty day names a publication time (07:30) and not whose clock it is"],
+  ]) {
+    const daily = await walk({ FAKE_DAILY: mode });
+    assert.equal(daily.code, 0, daily.stdout + daily.stderr);
+    assert.ok(daily.report.notices.includes(wanted), `${mode}\n${daily.report.notices.join("\n")}`);
+  }
+});
+
+test("axe-core is looked for where the walk was told, in the copy it carries and beside a checkout; a source that is not axe's is not used; absence is an answer", async () => {
+  const banner = (version) => `/*! axe v${version}\n * Copyright (c) Deque */\n!function(){window.axe={};axe.run=function(){}}();`;
+  assert.equal(axeVersionOf(banner("4.12.1")), "4.12.1");
+  assert.equal(axeVersionOf(`  \n${banner("4.9.0")}`), "4.9.0");
+  assert.equal(axeVersionOf("/*! axe v4.12.1 */ nothing runs"), null);
+  assert.equal(axeVersionOf("console.log('axe.run')"), null);
+  assert.equal(axeVersionOf(""), null);
+  const files = { "/mounted/axe.min.js": banner("4.13.0"), "/found/axe.min.js": banner("4.12.1"), "/other/lib.js": "console.log(1)" };
+  const read = async (file) => { if (!(file in files)) throw Object.assign(new Error("missing"), { code: "ENOENT" }); return files[file]; };
+  const embedded = (version) => {
+    const source = banner(version);
+    return { version, sha256: createHash("sha256").update(source).digest("hex"), brotliBase64: brotliCompressSync(source).toString("base64") };
+  };
+  const none = () => null;
+  // The file the walk is told about comes first, then the copy it carries, then what a checkout resolves.
+  assert.deepEqual(await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "/mounted/axe.min.js" }, read, resolve: () => "/found/axe.min.js", embedded: embedded("4.12.1") }),
+    { source: banner("4.13.0"), version: "4.13.0", from: "/mounted/axe.min.js", why: null });
+  const carried = await loadAxeSource({ env: {}, read, resolve: () => "/found/axe.min.js", embedded: embedded("4.12.1") });
+  assert.deepEqual([carried.version, carried.from, carried.why], ["4.12.1", "embedded in the walk (axe-core 4.12.1)", null]);
+  const resolved = await loadAxeSource({ env: {}, read, resolve: () => "/found/axe.min.js", embedded: null });
+  assert.deepEqual([resolved.version, resolved.from], ["4.12.1", "/found/axe.min.js"]);
+  // Off is off; a path that cannot be read or is not axe's is said, and the next place is tried.
+  assert.deepEqual(await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "off" }, read, resolve: () => "/found/axe.min.js", embedded: embedded("4.12.1") }),
+    { source: null, version: null, from: null, why: "the scan is switched off (OPEN_SCIENCE_WALK_AXE=off)" });
+  const missing = await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "/nowhere.js" }, read, resolve: none, embedded: null });
+  assert.deepEqual([missing.source, missing.why], [null, "/nowhere.js could not be read (ENOENT)"]);
+  const wrong = await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "/other/lib.js" }, read, resolve: none, embedded: null });
+  assert.deepEqual([wrong.source, wrong.why], [null, "/other/lib.js is not axe-core's build"]);
+  assert.equal((await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "/other/lib.js" }, read, resolve: () => "/found/axe.min.js", embedded: null })).from, "/found/axe.min.js");
+  assert.deepEqual(await loadAxeSource({ env: {}, read, resolve: none, embedded: null }), { source: null, version: null, from: null, why: "no copy was given, embedded or installed beside the walk" });
+  // A copy that does not match its checksum is not used, and says so.
+  const tampered = { ...embedded("4.12.1"), sha256: "0".repeat(64) };
+  const refused = await loadAxeSource({ env: {}, read, resolve: none, embedded: tampered });
+  assert.deepEqual([refused.source, refused.why], [null, "the copy embedded in the walk does not match its checksum"]);
+  assert.deepEqual(AXE_TAGS, ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]);
+});
+
+test("axe-core runs in the page over a document and is cut down to rule, impact, nodes and the first node's selector; a scan that fails or runs out is null", async () => {
+  // In the page: `axeLoaded` says whether it is there; `axeRun` gives the rules it was told to run on the document, with no frames.
+  assert.equal(inPage(page(header()), () => axeLoaded()), false);
+  const calls = [];
+  const fakeAxe = { version: "4.12.1", run: async (context, options) => {
+    calls.push([context === globalThis.document, options]);
+    return { violations: [
+      { id: "color-contrast", impact: "serious", help: "Elements must meet minimum color contrast ratio thresholds", nodes: [{ target: [".a", ".b"] }, { target: [".c"] }] },
+      { id: "region", impact: null, help: "x".repeat(300), nodes: [{ target: [["#frame", "main p"]] }] },
+      { id: "bare", impact: "minor", nodes: [{}] },
+    ], incomplete: [{}, {}], passes: [] };
+  } };
+  const withAxe = (fn) => inPage(page(header()), () => { globalThis.window.axe = fakeAxe; return fn(); });
+  assert.equal(withAxe(() => axeLoaded()), true);
+  const result = await withAxe(() => axeRun([{ tags: AXE_TAGS }]));
+  assert.deepEqual(calls, [[true, { iframes: false, resultTypes: ["violations"], runOnly: { type: "tag", values: AXE_TAGS } }]]);
+  assert.deepEqual(result, { version: "4.12.1", incomplete: 2, violations: [
+    { id: "color-contrast", impact: "serious", nodes: 2, target: ".a .b", help: "Elements must meet minimum color contrast ratio thresholds" },
+    { id: "region", impact: null, nodes: 1, target: "#frame,main p", help: "x".repeat(100) },
+    { id: "bare", impact: "minor", nodes: 1, target: "", help: "" },
+  ] });
+  // A page without axe-core has nothing to run; a scope is a selector axe is given instead of the document.
+  assert.equal(await inPage(page(header()), () => axeRun([{ tags: AXE_TAGS }])), null);
+  await withAxe(() => axeRun([{ tags: ["wcag2a"], scope: "main" }]));
+  assert.equal(calls[1][0], false);
+  assert.deepEqual(calls[1][1].runOnly.values, ["wcag2a"]);
+
+  // From the walk: the source goes into the page only where axe is not, and a scan that fails or runs out is null, not an exception.
+  const pageOf = ({ loaded = false, run = async () => ({ version: "4.12.1", violations: [], incomplete: 0 }) } = {}) => {
+    const evaluated = [];
+    return { evaluated, evaluate: async (fn, arg) => {
+      evaluated.push(typeof fn === "string" ? "source" : fn.name);
+      if (typeof fn === "string") return undefined;
+      return fn.name === "axeLoaded" ? loaded : run(arg);
+    } };
+  };
+  const fresh = pageOf();
+  assert.deepEqual(await scanWithAxe(fresh, "AXE SOURCE"), { version: "4.12.1", violations: [], incomplete: 0 });
+  assert.deepEqual(fresh.evaluated, ["axeLoaded", "source", "axeRun"]);
+  const there = pageOf({ loaded: true });
+  await scanWithAxe(there, "AXE SOURCE");
+  assert.deepEqual(there.evaluated, ["axeLoaded", "axeRun"]);
+  assert.equal(await scanWithAxe(pageOf({ run: async () => { throw new Error("axe blew up"); } }), "AXE SOURCE"), null);
+  assert.equal(await scanWithAxe(pageOf({ run: () => new Promise(() => {}) }), "AXE SOURCE", { timeoutMs: 20 }), null);
+});
+
+test("the copy of axe-core the walk carries is the pinned build, keeps its notice, and is the package's byte for byte where the package is installed", async () => {
+  // The default is the copy in the file: the container the walk runs in has no other.
+  const loaded = await loadAxeSource({ env: {}, resolve: () => null });
+  assert.deepEqual([loaded.version, loaded.from, loaded.why], ["4.12.1", "embedded in the walk (axe-core 4.12.1)", null]);
+  assert.equal(createHash("sha256").update(/** @type {string} */ (loaded.source)).digest("hex"), "66a8aaa95a8b044a7fd74a5435873bf04ff65a1ca75567c921b7509742085a14");
+  assert.equal(axeVersionOf(/** @type {string} */ (loaded.source)), "4.12.1");
+  // The licence asks its notice in every file that holds a substantial part of the source; the file keeps it as text beside the copy.
+  const text = await readFile(path.join(repoRoot, "scripts/ops/ui-walk.mjs"), "utf8");
+  assert.match(text, /\/\*! axe v4\.12\.1\n \* Copyright \(c\) 2015 - 2026 Deque Systems, Inc\./);
+  assert.match(text, /This entire copyright notice must appear in every copy of this file you\n \* distribute or in any file that contains substantial portions of this source\n \* code\./);
+  // What is between the markers is what the generator writes for that build, so it can be regenerated and checked.
+  const { BEGIN, END, embeddedBlock } = await import("../../../scripts/ops/embed-axe-core.mjs");
+  assert.equal(embeddedBlock(/** @type {string} */ (loaded.source)), text.slice(text.indexOf(BEGIN), text.indexOf(END) + END.length));
+  assert.equal(text.split(BEGIN).length, 2);
+  // Where the package is installed (a checkout; the pnpm store holds eslint-plugin-jsx-a11y's), it is that file.
+  const installed = path.join(repoRoot, "node_modules/.pnpm/axe-core@4.12.1/node_modules/axe-core/axe.min.js");
+  const package_ = await readFile(installed, "utf8").catch(() => null);
+  if (package_ !== null) {
+    assert.equal(loaded.source, package_);
+    const check = await new Promise((resolve) => execFile(process.execPath, [path.join(repoRoot, "scripts/ops/embed-axe-core.mjs"), "--check", installed], (error, stdout) => resolve({ code: error ? error.code : 0, stdout })));
+    assert.deepEqual([check.code, check.stdout.startsWith("the copy in ui-walk.mjs is ")], [0, true]);
+  }
+  // Another build, or a file that is not axe-core's, is not "the copy in the walk".
+  assert.throws(() => embeddedBlock("console.log(1)"), /not axe-core's browser build/);
+  assert.notEqual(embeddedBlock(`${loaded.source}\n`), text.slice(text.indexOf(BEGIN), text.indexOf(END) + END.length));
+});
+
+test("what axe found is told once per page: new rules by impact with their first node, what repeats from an earlier page counted, and one line for the walk", () => {
+  const violation = (id, impact, nodes, target) => ({ id, impact, nodes, target, help: "" });
+  const shell = violation("region", "moderate", 1, "aside");
+  const scan = (view, violations) => ({ view, result: { version: "4.12.1", violations, incomplete: 0 } });
+  assert.deepEqual(axeNotices([]), []);
+  assert.deepEqual(axeNotices([scan("capabilities@desktop", [])]), ["axe-core 4.12.1: 1 page view(s) scanned, 0 with violations, 0 node(s) in all; never a failure, the whole list is in the report"]);
+  const notices = axeNotices([
+    scan("capabilities@desktop", [shell]),
+    scan("files@desktop", [shell, violation("color-contrast", "serious", 4, ".text-text-3"), violation("label", "critical", 1, "input.q")]),
+    scan("memory@desktop", [shell]),
+    { view: "inbox@desktop", result: null },
+  ]);
+  assert.deepEqual(notices, [
+    "capabilities@desktop: axe-core: 1 rule(s) violated: region (moderate, 1 node, aside)",
+    "files@desktop: axe-core: 2 rule(s) violated: label (critical, 1 node, input.q); color-contrast (serious, 4 nodes, .text-text-3); 1 more as on an earlier page",
+    "inbox@desktop: axe-core could not scan this page",
+    "axe-core 4.12.1: 3 page view(s) scanned, 3 with violations, 8 node(s) in all (region on 3, color-contrast on 1, label on 1); never a failure, the whole list is in the report",
+  ]);
+  // A page names at most AXE_RULES_PER_NOTICE rules and counts the rest.
+  const many = Array.from({ length: AXE_RULES_PER_NOTICE + 2 }, (_, index) => violation(`rule-${index}`, "minor", 1, `.n${index}`));
+  const named = axeNotices([scan("geo@desktop", many)])[0];
+  assert.equal(named.split("; ").length, AXE_RULES_PER_NOTICE + 1, named);
+  assert.match(named, /; and 2 more$/);
+  // The same rule at another node is another finding.
+  assert.match(axeNotices([scan("a@desktop", [shell]), scan("b@desktop", [violation("region", "moderate", 1, "main")])])[1], /^b@desktop: axe-core: 1 rule\(s\) violated: region \(moderate, 1 node, main\)$/);
+});
+
+test("the walk scans each desktop page with axe-core, never fails on what it finds, and says once when it has none", async () => {
+  // The walk carries its own copy, so the container it runs in needs none: the default is a scan with that.
+  const carried = await walk();
+  assert.equal(carried.code, 0, carried.stdout + carried.stderr);
+  assert.deepEqual([carried.report.axe.from, carried.report.axe.version, carried.report.axe.why], ["embedded in the walk (axe-core 4.12.1)", "4.12.1", null]);
+  assert.ok(carried.report.axe.scanned > 30 && carried.log.filter((entry) => entry.axe).length === carried.report.axe.scanned);
+  assert.ok(!carried.report.notices.some((notice) => notice.startsWith("axe-core not available")));
+  // A path that is not axe-core's is said (to the report) and the carried copy is used.
+  const stray = await walk({ OPEN_SCIENCE_WALK_AXE: "/nowhere/axe.min.js" });
+  assert.equal(stray.report.axe.from, "embedded in the walk (axe-core 4.12.1)");
+  // With one: the source goes into every desktop page view once and into no phone page view; the report holds each page's list.
+  const scanned = await walk({}, { axe: true });
+  assert.equal(scanned.code, 0, scanned.stdout + scanned.stderr);
+  assert.deepEqual(scanned.report.failures, []);
+  assert.ok(!scanned.report.notices.some((notice) => notice.startsWith("axe-core not available")));
+  const desktopViews = Object.keys(scanned.report.pages).filter((view) => view.endsWith("@desktop") && scanned.report.pages[view].axe !== undefined);
+  assert.ok(desktopViews.length > 30, `${desktopViews.length} desktop page views were scanned`);
+  assert.equal(scanned.log.filter((entry) => entry.axe).length, desktopViews.length);
+  assert.ok(Object.keys(scanned.report.pages).filter((view) => view.endsWith("@phone")).every((view) => scanned.report.pages[view].axe === undefined));
+  assert.deepEqual(scanned.report.pages["files@desktop"].axe.violations.map((violation) => violation.id), ["region", "color-contrast"]);
+  assert.deepEqual([scanned.report.axe.scanned, scanned.report.axe.version], [desktopViews.length, "4.12.1"]);
+  assert.equal(scanned.report.axe.from.endsWith("/axe.min.js"), true, "the file the walk was given comes before the copy it carries");
+  // The shell's rule is named on the first page only; the page's own rule on its page; the line for the walk counts all.
+  const lines = scanned.report.notices.filter((notice) => notice.includes("axe-core"));
+  assert.equal(lines.filter((notice) => notice.includes("region (moderate")).length, 1);
+  assert.ok(lines.some((notice) => notice.startsWith("files@desktop: axe-core: 1 rule(s) violated: color-contrast (serious, 4 nodes, .text-text-3); 1 more as on an earlier page")), lines.join("\n"));
+  assert.ok(lines.at(-1).startsWith(`axe-core 4.12.1: ${desktopViews.length} page view(s) scanned, ${desktopViews.length} with violations`), lines.at(-1));
+  // A scan that throws is a notice for the page, a page with nothing is quiet, and switching it off scans nothing.
+  const failed = await walk({ FAKE_AXE: "fail" }, { axe: true });
+  assert.equal(failed.code, 0, failed.stdout + failed.stderr);
+  assert.ok(failed.report.notices.includes("files@desktop: axe-core could not scan this page"));
+  assert.equal(failed.report.axe.scanned, 0);
+  const clean = await walk({ FAKE_AXE: "clean" }, { axe: true });
+  assert.equal(clean.code, 0);
+  assert.ok(!clean.report.notices.some((notice) => /axe-core: \d+ rule/.test(notice)));
+  const off = await walk({ OPEN_SCIENCE_WALK_AXE: "off" });
+  assert.deepEqual(off.report.notices.filter((notice) => notice.startsWith("axe-core not available")), ["axe-core not available in this image: the scan is switched off (OPEN_SCIENCE_WALK_AXE=off)"]);
+  assert.equal(off.log.filter((entry) => entry.axe).length, 0);
+  assert.deepEqual([off.report.axe.scanned, off.report.axe.from], [0, null]);
+  assert.equal(off.report.pages["files@desktop"].axe, undefined);
 });
 
 test("with the chat asked for, the walk answers a start with the cleanup refusal itself, reads the cover and the alert after the wait, and starts nothing", async () => {
