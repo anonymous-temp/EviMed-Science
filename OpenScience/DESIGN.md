@@ -365,8 +365,17 @@ pages after every release.
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`SECTION_SHAPES_BY_PAGE`); groups of one shape — a group per use, a group per day — are
    one kind.
-2. **Detail opens in the right-hand drawer** (`Drawer`); the list stays where it is. A row does not
-   take the reader to another page to read what it holds.
+2. **A row opens by the nature of what it is** (adopted 2026-10-08 with release 13, from the owner's
+   screenshots of the scheduled-task and knowledge-base pages):
+   - a **record** — a memory entry, an inbox message, a frontier item, an evidence-matrix row, a GEO
+     source or a wrong answer — opens in the right-hand drawer (`Drawer`) and the list stays where it
+     is; a record's row does not take the reader to another page to read what it holds;
+   - a **conversation-type object** — a scheduled task — opens its conversation in the main area,
+     with the list as a column inside the page (`/app/autopilot/:taskId`);
+   - a **document** — a knowledge-base source, a report, an event — opens on a page of its own that
+     has an address (`/app/files/:sourceId`), and going back restores the list as it was.
+   A drawer never holds a conversation and never holds a second input box (the kernel's composer is
+   the only one).
 3. **The header is the title, the scope and at most one primary button** — and a search box. Two
    solid accent buttons in a header fail the walk.
 4. **Only what can be acted on, and the result itself.** System state, version numbers, model
@@ -375,8 +384,11 @@ pages after every release.
 5. **At most one row of view switches and one row of filters.** A second tab strip, a row of
    chips under another row of chips, or a navigation row above the views is one row too many.
 6. **What looks clickable shows a result where the reader is looking.** A drawer, a new page, a
-   tab or a row opened in place — never a change somewhere below the fold. The walk clicks the
-   first row of each list on the rebuilt pages and fails a click that shows nothing.
+   tab or a row opened in place — never a change somewhere below the fold. What opens answers the
+   number or state the row shows: a red count opens the items it counts. A row that can be pressed
+   says so (`ListRow`: hover `surface-2`, selected `accent-soft`, a quiet › ⌄ ↗ mark at its end).
+   The walk clicks the first row of each list on the rebuilt pages and fails a click that shows
+   nothing; what a row's content holds is for unit tests, not the walk.
 
 Both module names are a rule of the same kind. The two modules are 「循证 GEO」 and 「虚拟临床研究」
 (identifiers `geo` and `vcr`); 「循证传播」 and 「虚拟临研」 are retired words — `retiredWords.test.ts`
@@ -445,10 +457,13 @@ content area only — no sidebar, no project rail, no shortcut sheet; the host d
 New UI uses the `components/ui/` primitives — Button, Input/Textarea, Card, SegmentedControl,
 Disclosure, Drawer, ConfirmDialog, Toaster, ShortcutHelp — and `components/cards/` —
 EmptyState, LoadError, Skeletons — rather than a hand-rolled box. Signature components:
-`PageShell` / `PageHeader`, `RunStatusDot`, `InboxBell`, `QualityNotices` (SAFETY in the danger
-tone with a shield and never folded, 必须修改 in amber, 提示 folded and quiet; no validator
-sentence is ever primary text), `Disclosure` (the one collapse), `ConfirmDialog`
+`PageShell` / `PageHeader`, `RunStatusDot`, `InboxBell`, `Disclosure` (the one collapse), `ConfirmDialog`
 (`tone="danger"` for what cannot be undone, `primary` for a checkpoint; initial focus on 取消).
+
+The delivery gate's findings are not a component of the report. A SAFETY conclusion stands before the
+text in the danger tone and is never folded; every other finding is a mark on its sentence (the ✓ / ⚠
+of 「依据」, and the header's “⚠ N 条待核对”), and the rest stay in the run record for operators.
+`lib/qualityNotices.ts` groups them for those two places; no validator sentence is ever primary text.
 
 ---
 
