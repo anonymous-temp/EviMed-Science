@@ -56,6 +56,21 @@
  * browser, and the chat's cleanup cover is the walk's own answer to `start_runtime` (asked for with the chat page; it waits up to
  * 135 s for the shell to give up, which `OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips).
  *
+ * R13 (design reference v1.2, §21.3 V-6, V-7, V-11) brought the walk in step with the pages it changed, and everything it added is a
+ * NOTICE unless it replaces a failure of the same thing. The old forms are gone: a 信源 row opens a drawer, not its conditions in place; a
+ * scheduled task is a page (`/app/autopilot/:taskId`, read after the first row is clicked: the layout's hooks, which pane is on, the
+ * kernel frame's rectangle against the pane's, no text box or dialog of the page's own), not a drawer with a spend cap in ¥; a document is
+ * a page whose original column is not narrower than 560 px, not a drawer; the 核对 column of the evidence matrix is ✓, ⚠ or blank. The first
+ * row of 问题与回答 (its groups opened first), 准确与安全 (its 看回答 link), the inbox, settings, 循证 GEO's home and the evidence zones'
+ * home is clicked too, behind a guard that refuses every request that is not a read, and a page with nothing to click says "not
+ * observable" and why instead of passing in silence. With the chat page the composer is read inside the kernel's frame at both widths
+ * (room under it, one chip in the toolbar, no statistics or context ring for a researcher, a one-line toolbar at 390 px). V-7's cases
+ * that a page's measure cannot decide are steps of their own: where the reader is lives in the address (the inbox's filter, the memory
+ * page's tab, search and open row, the knowledge base's search and its way back from a document: A08), the event page's hand-off to the
+ * conversation (A01), a day nobody published (A11). A06 (a slow answer for the old project after a switch) is held by the app's own test.
+ * V-6: every desktop page is scanned with axe-core, which the walk carries (`embed-axe-core.mjs`) because its container has none; the
+ * whole list is in the report and a line per page in the notices. `OPEN_SCIENCE_WALK_AXE=<path>` names another build, `off` skips it.
+ *
  * It also records, without failing on them, small click targets, decorative
  * SVGs without aria-hidden, console errors and other HTTP errors — the things
  * that need a person to judge — and, as a NOTICE, a page that sets its text in
@@ -305,6 +320,14 @@ export const PROVISIONAL_PAGES = new Set([
   "virtual-research-models", "virtual-research-precedents", "virtual-research-definitions",
   "account-notifications", "account-ops", "memory-shared-missing", "extensions-plugin-missing", "extensions-skill-missing",
   "evidence-matrix", "files-reader", "frontier-daily-empty",
+  // R13 (E-18): 定时任务 became a split page — a list column beside a task whose pane is the kernel's conversation — and no walk has measured
+  // it. The first walk of it, on an account with no task, found its two blocks on left edges 8 px apart (the list's empty sentence sits in a
+  // column padded 8 px, under a title padded 16): the number is a notice until the page's own is settled, and the report holds it.
+  "autopilot",
+  // R13 (E-15): a 信源 row is two lines and three sortable numbers with a header, and a red count that is a button of its own; the page then
+  // draws 11 kinds of control against the data page's 10 (the first walk of it, on the web app's own fixture of four sources). The page's
+  // number is a notice until a walk on a real project has reported it.
+  "geo-sources",
 ]);
 
 /**

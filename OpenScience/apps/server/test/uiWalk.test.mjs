@@ -1073,6 +1073,19 @@ test("a variant page is held to its page's budget, and a page no walk has measur
   assert.deepEqual(pageFindings("frontier-zone", "desktop", clean({ leakHits: ["undefined"], retiredNameHits: ["循证传播"] }), []).failures.length, 2); // retired-word-ok
   assert.deepEqual(pageFindings("frontier-zone", "phone", clean({ overflowX: true }), []).failures, ["frontier-zone@phone: the page overflows horizontally at 390 px"]);
   for (const name of PROVISIONAL_PAGES) assert.ok(walkedNames().has(name), `${name} is on the provisional list and no route walks it`);
+
+  // R13's two rebuilt pages, measured on the first walk of them: the scheduled tasks' list column, whose empty sentence sits 8 px left of
+  // the title (248 and 240 on a walk with no task), and 信源 with its 11 kinds of control against the data page's 10. Notices there; the
+  // same numbers fail the pages that were measured before (a GEO tab's 11th kind of control; any other page's second left edge).
+  const empty = pageFindings("autopilot", "desktop", clean({ pageLefts: [248, 240] }), []);
+  assert.deepEqual(empty.failures, []);
+  assert.deepEqual(empty.notices, ["autopilot@desktop: the page's blocks start on 2 left edges (248, 240) — provisional: this page has not been measured by a walk yet"]);
+  assert.deepEqual(pageFindings("autopilot", "phone", clean({ overflowX: true }), []).failures, ["autopilot@phone: the page overflows horizontally at 390 px"]);
+  const sources = pageFindings("geo-sources", "desktop", clean({ controlKinds: 11 }), []);
+  assert.deepEqual([sources.failures, sources.notices], [[], ["geo-sources@desktop: 11 kinds of control (budget 10) — provisional: this page has not been measured by a walk yet"]]);
+  assert.deepEqual(pageFindings("geo-overview", "desktop", clean({ controlKinds: 11 }), []).failures, ["geo-overview@desktop: 11 kinds of control (budget 10)"]);
+  assert.deepEqual(pageFindings("inbox", "desktop", clean({ pageLefts: [248, 240] }), []).failures, ["inbox@desktop: the page's blocks start on 2 left edges (248, 240)"]);
+  assert.deepEqual(pageFindings("geo-sources", "desktop", clean({ leakHits: ["undefined"] }), []).failures.length, 1);
 });
 
 /** Every name the walk reports a page under, static or found. */
