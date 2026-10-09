@@ -154,6 +154,20 @@ test("a remote runtime is offered exactly the gateways a local one is, at the pu
   }
   assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/vcr/%2e%2e/%2e%2e/api/me"), null);
   assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/vcrx/v1/read"), null, "a prefix of the name is not the gateway");
+  // The scheduled-task tools (N-13): one base, two operations, offered only where the feature is on and the product ledger exists.
+  assert.equal(urls?.tasks, "", "scheduled tasks are off here, so their tools are not offered there");
+  const withTasks = publicRuntimeGatewayUrls({
+    runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway",
+    taskToolsEnabled: true, stateStore: "postgres", modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1",
+  });
+  assert.equal(withTasks?.tasks, "https://evimed.example/runtime-gateway/tasks/v1");
+  assert.equal(publicRuntimeGatewayUrls({ runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway", taskToolsEnabled: true, stateStore: "file",
+    modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1" })?.tasks, "", "no product ledger to keep a task in");
+  assert.ok(RUNTIME_GATEWAY_NAMES.includes("tasks"));
+  for (const operation of ["schedule", "update"]) {
+    assert.deepEqual(resolveRuntimeGatewayPath(`/runtime-gateway/tasks/v1/${operation}`), { kind: "internal", url: `/internal/tasks/v1/${operation}` }, operation);
+  }
+  assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/tasks/%2e%2e/%2e%2e/api/me"), null);
 });
 
 test("a request for the 虚拟临床研究 gateway from an active runtime reaches it, and an unknown runtime does not", async (t) => {

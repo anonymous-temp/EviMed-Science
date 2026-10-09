@@ -12,7 +12,7 @@ import test from 'node:test';
 
 import { MCP_TOOL_NAMES } from '@evimed/domain';
 import {
-  apply, BODY, delegateView, gateRefusal, liveRunFor, planView, refusalOf, toolLineView, toolResultCount, toolSubjectHost,
+  apply, BODY, delegateView, gateRefusal, liveRunFor, planView, refusalOf, taskCardView, toolLineView, toolResultCount, toolSubjectHost,
 } from '../src/runtimeUiToolviews.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -284,4 +284,94 @@ test('outside a frame nothing is registered', () => {
   const target = fakeTarget({ framed: false });
   apply(ctx, {}, target, undefined, kitFor(ctx, target));
   assert.equal(ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.component !== 'shipped').length, 0);
+});
+
+// ---- the card of a scheduled task a conversation made or changed (N-13) -------------------------------------------------------------
+
+const SCHEDULE_NAME = 'mcp__evimed__schedule_task';
+const UPDATE_NAME = 'mcp__evimed__update_task';
+const TASK = {
+  taskId: 'agenda-0123abcd-0000-4000-8000-000000000001', title: 'SGLT2 抑制剂新研究', created: true,
+  schedule: { kind: 'weekly', time: '09:00', weekdays: [5], timeZone: 'Asia/Shanghai' }, scheduleText: '每周五 09:00',
+  timeZone: 'Asia/Shanghai', timeZoneName: '中国标准时间', nextRunAt: '2026-10-09T01:00:00.000Z', nextRunText: '10月9日 09:00', state: 'scheduled',
+};
+const taskAnswer = (/** @type {Record<string, unknown>} */ data) => JSON.stringify({ status: 'success', summary: 'Scheduled.', data, warnings: [], next_actions: ['Tell the researcher.'] });
+const SCHEDULE_PHRASE = { verb: '安排定时任务', subject: ['title', 'instruction'] };
+
+/** Every element in a React tree, depth first. @param {any} node @returns {any[]} */
+function elementsOf(node) {
+  if (!node || typeof node !== 'object') return [];
+  /** @type {any[]} */
+  const children = [].concat(node.props?.children ?? []);
+  return [node, ...children.flatMap((child) => elementsOf(child))];
+}
+
+test('the two task tools are drawn as a card, and nothing else is', () => {
+  const f = frame();
+  assert.ok(f.view(SCHEDULE_NAME) && f.view(UPDATE_NAME));
+  const settledCard = renderStatic(f.view(SCHEDULE_NAME), {
+    block: settled(SCHEDULE_NAME, { instruction: '每周五帮我看看 SGLT2 抑制剂的新研究', schedule: { kind: 'weekly', weekdays: [5], time: '09:00' } }, taskAnswer(TASK)),
+  });
+  assert.match(settledCard, /data-evimed-toolview="task-card"/);
+  assert.match(settledCard, /SGLT2 抑制剂新研究/);
+  assert.match(settledCard, /每周五 09:00（中国标准时间）/);
+  assert.match(settledCard, /已启用/);
+  assert.match(settledCard, /<button[^>]*data-evimed-open-task="agenda-0123abcd-0000-4000-8000-000000000001"[^>]*>打开<\/button>/);
+  assert.match(settledCard, /aria-label="打开定时任务“SGLT2 抑制剂新研究”"/);
+  // Not the wire name, the server's English, or an id the reader never needs to see.
+  assert.doesNotMatch(settledCard.replace(/data-[a-z-]+="[^"]*"/g, ''), /mcp__|schedule_task|Scheduled|agenda-|Tell the researcher/);
+  // Another tool of the same table is still a line.
+  assert.match(renderStatic(f.view('mcp__evimed__kb_search'), { block: settled('mcp__evimed__kb_search', { query: 'x' }, JSON.stringify({ status: 'success', data: { hits: [] } })) }), /data-evimed-toolview="tool"/);
+  assert.deepEqual(f.target.warnings, []);
+});
+
+test('the card says what happened to the task in a word, and the updated card is the task as it now stands', () => {
+  const kitted = kit();
+  /** @param {Record<string, unknown>} data @param {string} [name] */
+  const cardOf = (data, name = UPDATE_NAME) => taskCardView(settled(name, { taskId: TASK.taskId }, taskAnswer({ ...TASK, ...data })), { verb: '修改定时任务', subject: ['title', 'instruction'] }, kitted);
+  assert.deepEqual(cardOf({ created: undefined, changed: ['schedule'], scheduleText: '每周一 08:00' }), { kind: 'card', taskId: TASK.taskId, title: 'SGLT2 抑制剂新研究', when: '每周一 08:00（中国标准时间）', tag: '已更新' });
+  assert.equal(/** @type {any} */ (cardOf({ created: undefined, changed: ['paused'], state: 'paused', nextRunAt: null, nextRunText: null })).tag, '已暂停');
+  assert.equal(/** @type {any} */ (cardOf({ created: undefined, changed: ['resumed'] })).tag, '已启用');
+  assert.equal(/** @type {any} */ (cardOf({ created: undefined, changed: [] })).tag, null, 'a change that changed nothing is not announced');
+  assert.equal(/** @type {any} */ (cardOf({ created: false })).tag, '已有这项任务');
+  assert.equal(/** @type {any} */ (cardOf({ state: 'completed', nextRunAt: null })).tag, '已完成');
+  // A zone the server could not name leaves the schedule's words alone.
+  assert.equal(/** @type {any} */ (cardOf({ timeZoneName: '' })).when, '每周五 09:00');
+});
+
+test('while the call arrives, and when it did not succeed, the card is the one line every tool has — never a button that leads nowhere', () => {
+  const kitted = kit();
+  const args = { instruction: '每周五帮我看看 SGLT2 抑制剂的新研究', schedule: { kind: 'weekly', weekdays: [5], time: '09:00' } };
+  assert.deepEqual(taskCardView(running(SCHEDULE_NAME, '{"instruction":"每周五帮我看看 SGLT2 抑制剂的新研究","sche'), SCHEDULE_PHRASE, kitted),
+    { kind: 'line', label: '安排定时任务 · 每周五帮我看看 SGLT2 抑制剂的新研究', outcome: '进行中' });
+  assert.equal(taskCardView(settled(SCHEDULE_NAME, args, '', { isError: true }), SCHEDULE_PHRASE, kitted).kind, 'line');
+  const refused = taskCardView(settled(SCHEDULE_NAME, args, JSON.stringify({ status: 'error', summary: 'The schedule has an invalid calendar.', error: { code: 'task_schedule_invalid' } })), SCHEDULE_PHRASE, kitted);
+  assert.deepEqual(refused, { kind: 'line', label: '安排定时任务 · 每周五帮我看看 SGLT2 抑制剂的新研究', outcome: '没有完成' });
+  const stopped = { ...settled(SCHEDULE_NAME, args, ''), error: { code: 'interrupted' } };
+  assert.equal(/** @type {any} */ (taskCardView(stopped, SCHEDULE_PHRASE, kitted)).outcome, '已停止');
+  // An answer that names no task the shell would open: an id that is a path, no title, not an answer at all.
+  for (const text of [taskAnswer({ ...TASK, taskId: '../../account' }), taskAnswer({ ...TASK, taskId: 'agenda 1' }), taskAnswer({ ...TASK, title: '' }), taskAnswer({}), 'not json at all', JSON.stringify([1])]) {
+    assert.equal(taskCardView(settled(SCHEDULE_NAME, args, text), SCHEDULE_PHRASE, kitted).kind, 'line', text);
+  }
+  const f = frame();
+  assert.doesNotMatch(renderStatic(f.view(SCHEDULE_NAME), { block: settled(SCHEDULE_NAME, args, JSON.stringify({ status: 'error', summary: 'x' })) }), /<button/);
+  assertReaderWords(renderStatic(f.view(SCHEDULE_NAME), { block: settled(SCHEDULE_NAME, { ...args, instruction: '每周五帮我看看心衰的新研究' }, JSON.stringify({ status: 'error', summary: 'The schedule has an invalid calendar.' })) }));
+});
+
+test('「打开」 asks the shell to open that task, by its id, through the bridge and nowhere else', () => {
+  const f = frame();
+  /** @type {any[][]} */
+  const asked = [];
+  /** @type {any} */ (f.target).__EVIMED_SHELL__ = { navigate: (/** @type {any[]} */ ...args) => { asked.push(args); } };
+  const element = f.view(SCHEDULE_NAME)({ block: settled(SCHEDULE_NAME, { instruction: 'x', schedule: { kind: 'daily', time: '07:00' } }, taskAnswer(TASK)) });
+  const button = elementsOf(element).find((entry) => entry.type === 'button');
+  assert.ok(button, 'the card has its button');
+  button.props.onClick();
+  assert.deepEqual(asked, [['autopilot', undefined, { taskId: TASK.taskId }]]);
+  // A shell that is not there (a frame outside the product) is not an error the reader sees.
+  /** @type {any} */ (f.target).__EVIMED_SHELL__ = undefined;
+  assert.doesNotThrow(() => button.props.onClick());
+  /** @type {any} */ (f.target).__EVIMED_SHELL__ = { navigate: () => { throw new Error('refused'); } };
+  assert.doesNotThrow(() => button.props.onClick());
+  assert.ok(f.target.warnings.some((/** @type {any[]} */ entry) => String(entry[0]).includes('the task did not open')));
 });

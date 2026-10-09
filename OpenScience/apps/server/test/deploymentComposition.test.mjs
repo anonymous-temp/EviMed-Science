@@ -42,10 +42,14 @@ const matrix = [
   ["vcr on, operators only", { vcrEnabled: true, vcrAudience: "operators", vcrEngineConfigured: true }],
   ["results on with an engine url and postgres", { resultsEnabled: true, stateStore: "postgres", resultEngineUrl: "http://result-replay:8031" }],
   ["results on, postgres, vcr engine instead of a result engine", { resultsEnabled: true, stateStore: "postgres", resultEngineUrl: "", vcrEnabled: true, vcrAudience: "all", vcrEngineConfigured: true }],
+  ["scheduled tasks on, with the product ledger", { taskToolsEnabled: true, stateStore: "postgres" }],
+  ["scheduled tasks on but no product ledger", { taskToolsEnabled: true, stateStore: "file" }],
+  ["scheduled tasks off", { taskToolsEnabled: false, stateStore: "postgres" }],
+  ["scheduled tasks on, with the ledger, but no public-source gateway", { taskToolsEnabled: true, stateStore: "postgres", publicSourceGatewayInternalUrl: "" }],
   ["results on but no postgres", { resultsEnabled: true, stateStore: "file", resultEngineUrl: "http://result-replay:8031" }],
   ["everything on", { webReadEnabled: true, frontierEnabled: true, frontierAudience: "all", geoEnabled: true, geoAudience: "all", geoSocialUrl: "http://s:1",
     vcrEnabled: true, vcrAudience: "all", vcrEngineConfigured: true, resultsEnabled: true, stateStore: "postgres", resultEngineUrl: "http://r:1",
-    evimedAdapterUrls: { patentSearch: "https://p.internal/s" } }],
+    taskToolsEnabled: true, evimedAdapterUrls: { patentSearch: "https://p.internal/s" } }],
 ];
 
 test("the composition names exactly the tools the real launch withholds, over a matrix of deployments", async () => {

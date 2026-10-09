@@ -1623,6 +1623,10 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     // ledger exists, so a run's `dataset_semantics` tool answers `semantics_disabled` without a request elsewhere.
     const semanticsGatewayUrl = gateways ? String(gateways.semantics ?? "") : dataSemanticsGatewayProviderUrl(config);
     if (semanticsGatewayUrl) environment.EVIMED_SEMANTICS_GATEWAY_URL = semanticsGatewayUrl;
+    // The two tools that schedule and change a task from a conversation ride the same token, and are given an address on
+    // the same terms: the feature on and the product ledger there to keep a task in. Without it they are not offered below.
+    const tasksGatewayUrl = gateways ? String(gateways.tasks ?? "") : taskToolsGatewayProviderUrl(config);
+    if (tasksGatewayUrl) environment.EVIMED_TASKS_GATEWAY_URL = tasksGatewayUrl;
     // So does 「前沿动态」 search, and it is absent for the same reason — and
     // also for an account the module is not open to yet (the operators-only
     // dry run): that runtime's tool answers `frontier_disabled` without asking
@@ -1782,6 +1786,12 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // release audit count it as not offered.
   if (!environment.EVIMED_FRONTIER_GATEWAY_URL) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "frontier_search"])].join(",");
+  }
+  // Scheduling a task from a conversation likewise: offered only where its gateway address was given above. Listed anyway it
+  // would cost every root request its two schemas for tools that could only answer `task_tools_disabled`.
+  // `OPTIONAL_TOOLS` in the MCP server lets the release audit count them.
+  if (!environment.EVIMED_TASKS_GATEWAY_URL) {
+    environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...TASK_RUNTIME_TOOLS])].join(",");
   }
   // 「循证 GEO」's tools likewise: offered only where their gateway address
   // was given above, and the social search only where the deployment has a
@@ -1964,6 +1974,21 @@ export function dataSemanticsGatewayProviderUrl(config) {
   url.pathname = "/internal/semantics/v1";
   return url.toString().replace(/\/$/, "");
 }
+
+/**
+ * The scheduled-task tools' gateway, as the runtime may know it: empty when the feature is off or there is no product ledger
+ * to keep a task in.
+ * @param {any} config @returns {string}
+ */
+export function taskToolsGatewayProviderUrl(config) {
+  if (!config.taskToolsEnabled || config.stateStore !== "postgres") return "";
+  const url = new URL(modelGatewayProviderUrl(config));
+  url.pathname = "/internal/tasks/v1";
+  return url.toString().replace(/\/$/, "");
+}
+
+/** The two tools the gateway above serves, by the base names the MCP server publishes them under. */
+export const TASK_RUNTIME_TOOLS = Object.freeze(["schedule_task", "update_task"]);
 
 /** @param {any} config */
 export function capsuleGatewayProviderUrl(config) {

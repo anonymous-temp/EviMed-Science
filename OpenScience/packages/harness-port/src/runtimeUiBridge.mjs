@@ -467,7 +467,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
    * redirect it could choose. The shell maps each name to a route and ignores
    * anything else.
    */
-  const SHELL_DESTINATIONS = ['new-task', 'runs', 'knowledge', 'memory', 'capabilities', 'account', 'geo', 'virtual-research'];
+  const SHELL_DESTINATIONS = ['new-task', 'knowledge', 'memory', 'capabilities', 'account', 'geo', 'virtual-research', 'autopilot'];
   /** The tabs of a 循证 GEO project a `geo` destination may name; the project is the shell's to know. */
   const GEO_TABS = ['overview', 'evidence', 'journey', 'questions', 'diagnosis', 'sources', 'content', 'distribution', 'monitoring'];
 
@@ -486,14 +486,17 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      *   meaningful for `new-task`; the shell sends it back in as the
      *   navigation intent's draft. Bounded here as well as there, because this
      *   side runs third-party-composed code.
-     * @param {{ tab?: string }} [options] for `geo`: which tab of the
-     *   project to open (a report linking to 诊断); one of `GEO_TABS`.
+     * @param {{ tab?: string, taskId?: string }} [options] for `geo`: which tab of the
+     *   project to open (a report linking to 诊断); one of `GEO_TABS`. For `autopilot`: which scheduled task to
+     *   open (the card a conversation draws for a task it made), an id of the shape the control plane issues; the
+     *   shell opens it in the project it is showing, and a task of another project is simply not found there.
      */
     navigate(destination, draft = undefined, options = {}) {
       if (typeof destination !== 'string' || !SHELL_DESTINATIONS.includes(destination)) return;
       if (draft !== undefined && (typeof draft !== 'string' || !draft || draft.length > 100_000)) return;
       const tab = destination === 'geo' && typeof options?.tab === 'string' && GEO_TABS.includes(options.tab) ? options.tab : undefined;
-      post('shell-navigate', { destination, ...(draft === undefined ? {} : { draft }), ...(tab ? { tab } : {}) });
+      const taskId = destination === 'autopilot' && typeof options?.taskId === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(options.taskId) ? options.taskId : undefined;
+      post('shell-navigate', { destination, ...(draft === undefined ? {} : { draft }), ...(tab ? { tab } : {}), ...(taskId ? { taskId } : {}) });
     },
   };
 

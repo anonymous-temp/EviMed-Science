@@ -113,3 +113,42 @@ export function agendaNextOccurrence(input, last, after) {
   }
   return null
 }
+
+/** The weekday words, Monday first: the index is the ISO weekday minus one. */
+export const AGENDA_WEEKDAY_WORDS = Object.freeze(['周一', '周二', '周三', '周四', '周五', '周六', '周日'])
+/**
+ * A schedule in the reader's words: 「每天 07:00」, 「每周一、周五 07:30」, 「10月12日 · 仅一次 07:30」 (with the year when it is not the
+ * year the zone is in). The clock is the schedule's own; the zone is said beside it by whoever prints the line
+ * (`agendaZoneName`), since a time without one is ambiguous. A weekly schedule that names all seven days is every day.
+ * One place, so the conversation's task card, the tool's answer and the page say the same thing.
+ * @param {any} input @param {string|Date} [now] when 「this year」 is read
+ * @returns {string}
+ */
+export function describeAgendaSchedule(input, now = new Date()) {
+  const schedule = validateAgendaSchedule(input)
+  if (schedule.kind === 'once') {
+    const [year, month, day] = /** @type {string} */ (schedule.date).split('-').map(Number)
+    const thisYear = Number(agendaLocalDate(schedule.timeZone, now).slice(0, 4))
+    return `${year === thisYear ? '' : `${year}年`}${month}月${day}日 · 仅一次 ${schedule.time}`
+  }
+  const days = schedule.weekdays ?? []
+  if (schedule.kind === 'weekly' && days.length < 7) return `每${days.map(day => AGENDA_WEEKDAY_WORDS[day - 1]).join('、')} ${schedule.time}`
+  return `每天 ${schedule.time}`
+}
+/**
+ * The zone as a reader names it (「中国标准时间」), or '' for an identifier the runtime does not know.
+ * @param {string} timeZone @returns {string}
+ */
+export function agendaZoneName(timeZone) {
+  try {
+    return new Intl.DateTimeFormat('zh-CN', { timeZone, timeZoneName: 'long' }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value ?? ''
+  } catch { return '' }
+}
+/**
+ * A moment as a person in `timeZone` reads it: 「10月9日 07:00」. '' for a value that is not a moment.
+ * @param {string|null|undefined} value @param {string} timeZone @returns {string}
+ */
+export function agendaInstantText(value, timeZone) {
+  if (!value || !Number.isFinite(Date.parse(value))) return ''
+  return new Intl.DateTimeFormat('zh-CN', { timeZone, month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value))
+}

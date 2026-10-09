@@ -366,6 +366,39 @@ test("循证 GEO's tools reach a runtime only where the module is on and open to
   }
 });
 
+// Scheduling a task from a conversation needs the product ledger and its own switch. A runtime of a deployment without either is
+// given no route, and the two tools are not offered at all rather than listed to answer `task_tools_disabled`.
+test("the scheduled-task tools reach a runtime only where the feature is on and the product ledger is there", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-task-tools-mcp-"));
+  try {
+    const { project, plan } = await fixture(tmp);
+    const environment = (overrides) => dshProfileInput(dshConfig({
+      publicSourceGatewayInternalUrl: "https://gateway.internal/internal/sources/v1/fetch",
+      taskToolsEnabled: true, stateStore: "postgres", ...overrides,
+    }), project, plan, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
+    const disabled = (/** @type {any} */ env) => String(env.EVIMED_DISABLED_TOOLS).split(",").filter((name) => /_task$/.test(name)).sort();
+    const on = environment({});
+    assert.equal(on.EVIMED_TASKS_GATEWAY_URL, "http://127.0.0.1:8787/internal/tasks/v1");
+    assert.deepEqual(disabled(on), []);
+    for (const [overrides, reason] of [
+      [{ taskToolsEnabled: false }, "off"],
+      [{ stateStore: "file" }, "no product ledger to keep a task in"],
+      [{ publicSourceGatewayInternalUrl: "" }, "the tools authenticate with the source gateway's token; without it they have none"],
+    ]) {
+      const env = environment(overrides);
+      assert.equal(env.EVIMED_TASKS_GATEWAY_URL, undefined, reason);
+      assert.deepEqual(disabled(env), ["schedule_task", "update_task"], reason);
+    }
+    const remote = { ...plan, gateways: { model: "https://evimed.example/runtime-gateway/model/v1", publicSource: "https://evimed.example/runtime-gateway/sources/v1/fetch",
+      tasks: "https://evimed.example/runtime-gateway/tasks/v1", adapters: {} } };
+    const remoteEnv = dshProfileInput(dshConfig({ taskToolsEnabled: true, stateStore: "postgres" }), project, remote, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
+    assert.equal(remoteEnv.EVIMED_TASKS_GATEWAY_URL, "https://evimed.example/runtime-gateway/tasks/v1", "a remote session is given the public prefix");
+    assert.deepEqual(disabled(remoteEnv), []);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 // How long a `vcr_simulate` call waits for the job it queued is the deployment's
 // (config.mjs `vcrStatusWaitSeconds`); the runtime's tool reads it as
 // EVIMED_VCR_STATUS_WAIT_SECONDS, and only a runtime that has the module is given it.
@@ -421,8 +454,9 @@ test("the generated patch mounts the research MCP and hands it a token, never a 
       // The frontier, GEO and 虚拟临床研究 modules are off here, so their tools are
       // not offered; nor is patent search, which has no adapter here. 虚拟临床研究
       // withholds all six, gateway address and engine alike: a tool that can
-      // only answer 「未接入」 is not offered.
-      EVIMED_DISABLED_TOOLS: "research_calculate,frontier_search,geo_read,geo_write,social_posts_search,vcr_read,vcr_write,vcr_simulate,trial_registry_record,curve_digitize,evidence_pool,patent_search",
+      // only answer 「未接入」 is not offered. Scheduling a task from a conversation
+      // needs the product ledger and its gateway, which this deployment has not got.
+      EVIMED_DISABLED_TOOLS: "research_calculate,frontier_search,schedule_task,update_task,geo_read,geo_write,social_posts_search,vcr_read,vcr_write,vcr_simulate,trial_registry_record,curve_digitize,evidence_pool,patent_search",
       // The NCBI Gene Expression Omnibus workflow's six resource limits, the defaults here: the tools enforce them in the runtime.
       EVIMED_GENE_EXPRESSION_MAX_ANNOTATION_BYTES: "134217728",
       EVIMED_GENE_EXPRESSION_MAX_MATRIX_BYTES: "67108864",

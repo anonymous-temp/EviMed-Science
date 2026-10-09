@@ -1912,6 +1912,42 @@ describe("循证 GEO in the conversation", () => {
   });
 });
 
+describe("a scheduled task's card in the conversation", () => {
+  // `schedule_task` and `update_task` draw a card whose 「打开」 asks the shell for the `autopilot` destination, carrying the task's id.
+  async function openConversationWithCard() {
+    const view = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+    return { view, frame };
+  }
+
+  it("opens that task's page, and the list when the frame names no task or one that is not an id", async () => {
+    const { view, frame } = await openConversationWithCard();
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "autopilot", taskId: "agenda-0123abcd-0000-4000-8000-000000000001" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/autopilot\/agenda-0123abcd-0000-4000-8000-000000000001$/));
+    await userEvent.click(screen.getByText("Back"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a"));
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 5, destination: "autopilot", taskId: "../../account" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/autopilot$/));
+    await userEvent.click(screen.getByText("Back"));
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 6, destination: "autopilot" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/autopilot$/));
+    view.unmount();
+  });
+
+  it("leaves the destination `runs` alone: the ledger page it named is gone, and nothing sends it", async () => {
+    const { view, frame } = await openConversationWithCard();
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "runs" });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a");
+    view.unmount();
+  });
+});
+
 describe("虚拟临床研究 in the conversation", () => {
   const requested = (...steps: string[]) => Object.fromEntries(
     ["definition", "evidence", "population", "patients", "comparator", "trial", "matching"].map(step => [step, { status: "none", requested: steps.includes(step) }]));

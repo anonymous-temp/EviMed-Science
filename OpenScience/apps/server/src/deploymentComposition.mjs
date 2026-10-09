@@ -33,7 +33,7 @@ import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
 import { frontierAudienceAllows } from "./frontierService.mjs";
 import { geoGatewayProviderUrl } from "./geoGateway.mjs";
 import { geoAudienceAllows } from "./geoService.mjs";
-import { GEO_RUNTIME_TOOLS, VCR_ENGINE_TOOLS, VCR_RUNTIME_TOOLS, publicSourceGatewayProviderUrl } from "./runtimeManager.mjs";
+import { GEO_RUNTIME_TOOLS, TASK_RUNTIME_TOOLS, VCR_ENGINE_TOOLS, VCR_RUNTIME_TOOLS, publicSourceGatewayProviderUrl, taskToolsGatewayProviderUrl } from "./runtimeManager.mjs";
 import { vcrGatewayProviderUrl } from "./vcrGateway.mjs";
 import { vcrAudienceAllows } from "./vcrService.mjs";
 
@@ -139,6 +139,11 @@ export function declinedTools(config, user) {
     if (state === "not-open") return "module-not-open";
     return gateway && gatewayUrl !== "" ? "" : "gateway-unconfigured";
   };
+
+  // Scheduling a task from a conversation: given an address where the feature is on and the product ledger exists.
+  if (!(gateway && providerUrl(() => taskToolsGatewayProviderUrl(config)) !== "")) {
+    for (const tool of TASK_RUNTIME_TOOLS) decline(tool, "gateway-unconfigured");
+  }
 
   const frontierUrl = providerUrl(() => frontierGatewayProviderUrl(config));
   if (!addressed("frontier", frontierUrl)) decline("frontier_search", whyNot("frontier", frontierUrl), "runtime", "frontier");
