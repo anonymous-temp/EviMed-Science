@@ -415,9 +415,11 @@ export class ReviewService {
     const packageText = [...files.entries()].map(([name, text]) => `${name}\n${text}`).join('\n\n');
     const { claims, sources } = await claimsWithSources(project.workspaceDir, files.get(MATRIX_FILE));
     const jobs = tier.tier === 'L3' ? (await existingJobs(project.workspaceDir, [...new Set(packageText.match(JOB_ID) ?? [])].slice(0, JOB_CANDIDATE_LIMIT))).slice(0, 4) : [];
-    const frozen = { files: [...files], claims, sources, jobs, jobFiles: await readJobOutputs(project.workspaceDir, jobs), input };
-    if (Buffer.byteLength(JSON.stringify(frozen)) > 20 * 1024 * 1024) throw Object.assign(new Error('The review snapshot is too large.'), { code: 'review_input_invalid' });
-    const digest = studyReviewDigest(frozen);
+    const frozenJson = JSON.stringify({ files: [...files], claims, sources, jobs, jobFiles: await readJobOutputs(project.workspaceDir, jobs), input });
+    if (Buffer.byteLength(frozenJson) > 20 * 1024 * 1024) throw Object.assign(new Error('The review snapshot is too large.'), { code: 'review_input_invalid' });
+    // Hash the persisted shape: JSON drops optional undefined gateway fields,
+    // which otherwise made an unchanged snapshot fail after its JSONB round trip.
+    const digest = studyReviewDigest(JSON.parse(frozenJson));
     const configuration = studyReviewConfiguration(this.config);
     const id = `rv_${studyReviewDigest({ identity, socketRunId, sessionId, digest, configuration })}`;
     await this.studyReviews.ready();
@@ -427,7 +429,7 @@ export class ReviewService {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'running',$12,$13::jsonb,$14::jsonb,$15::jsonb)
         ON CONFLICT(id) DO NOTHING`,
       [id, identity.userId, identity.projectId, runId, socketRunId, sessionId, input.deliverableId, input.contractKind, tier.tier, tier.safety,
-        Math.max(1, Math.floor(Number(input.attempt) || 1)), digest, JSON.stringify({ kind: 'deliverable' }), JSON.stringify(frozen), JSON.stringify(configuration)]);
+        Math.max(1, Math.floor(Number(input.attempt) || 1)), digest, JSON.stringify({ kind: 'deliverable' }), frozenJson, JSON.stringify(configuration)]);
       await this.jobs.enqueue(identity.userId, 'study-review', { reviewId: id }, { projectId: identity.projectId, idempotencyKey: id, maxAttempts: 3, transactionClient: client });
     });
     this.counts.reviewsStarted += 1;

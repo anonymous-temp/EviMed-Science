@@ -1369,8 +1369,8 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
     'run.model !== `deepseek/${certifiedModel}`',
     'agent.requiredInputs?.includes("drug")',
     'specialistOutputs(run.artifacts)',
-    'item.kind === "preference"',
-    'memoryRecord.evidenceCount < 1',
+    'run.automated !== true',
+    'assertAutomatedMemoryIsolation(run,',
   ]) assert.equal(script.includes(proof), true, `Hosted E2E is missing proof: ${proof}`);
   assert.equal(script.includes("mock-agent-artifact.md"), false);
 });

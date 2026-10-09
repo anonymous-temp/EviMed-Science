@@ -88,7 +88,7 @@ export class StudyReviews {
     const frozen = JSON.stringify(input.frozenInput);
     if (!frozen || Buffer.byteLength(frozen) > 1024 * 1024) throw new HttpError(413, 'review_input_invalid', 'The review snapshot exceeds its bound.');
     const configuration = snapshotReviewConfiguration(host.config);
-    const inputDigest = studyReviewDigest(input.frozenInput);
+    const inputDigest = studyReviewDigest(JSON.parse(frozen));
     const subject = { ref: input.subjectRef, role: input.role, nodes };
     const id = `rv_${studyReviewDigest({ ...identity, subject, inputDigest, configuration, deterministic: input.deterministic ?? {} })}`;
     await migrateProductStore(host.database); await migrateReview(host.database);

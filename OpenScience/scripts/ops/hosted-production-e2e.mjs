@@ -116,63 +116,14 @@ async function waitForRun(base, runId, headers) {
   throw failure("hosted_e2e_run_timeout", "The production agent run did not reach a terminal state.");
 }
 
-/**
- * The mechanical half: did the memory pipeline run at all?
- *
- * `recordRun` writes a run-summary record before it extracts anything, so this
- * record existing proves the pipeline executed, built sources from the
- * transcript, and that the research-memory store accepted a write. That is a property
- * of this deployment and stays blocking — without it, "the extractor produced
- * nothing" and "the extractor never ran" arrive as the same silence, which is
- * the shape this whole gate exists to refuse.
- */
-async function waitForRunSummary(base, headers, projectId, runId) {
-  const deadline = Date.now() + Number(process.env.OPEN_SCIENCE_E2E_MEMORY_TIMEOUT_MS ?? 180_000);
-  const key = `run.${runId}`.toLowerCase();
-  const url = `${base}/api/memory/records?scope=project&kind=run_summary&scopeId=${encodeURIComponent(projectId)}&pageSize=100`;
-  while (Date.now() < deadline) {
-    const listed = await jsonFetch(url, { headers });
-    const record = (listed.body?.data ?? []).find((item) => String(item.key ?? "").toLowerCase() === key);
-    if (record) return record;
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
+/** Automated acceptance is excluded from researcher memory; its marker must not become a personal preference. */
+export function assertAutomatedMemoryIsolation(run, projectRecords, profileRecords, initialIds, marker) {
+  if (run.automated !== true) throw failure("hosted_e2e_automation_untracked", "The acceptance run lost its automated provenance.");
+  if (projectRecords.length || profileRecords.some(record => !initialIds.has(record.id) && JSON.stringify(record).includes(marker))) {
+    throw failure("hosted_e2e_automated_memory_leak", "An automated acceptance run wrote researcher memory.");
   }
-  throw failure(
-    "hosted_e2e_memory_pipeline_missing",
-    `No run-summary memory record for ${runId}: the memory pipeline did not run, or the research-memory store refused its write.`,
-  );
 }
 
-async function waitForMemoryRecord(base, headers, initialIds, marker) {
-  // Longer than the extraction's own budget, which is the point.
-  //
-  // This waited 90s for a pipeline the server gives 120s
-  // (`memoryExtractionTimeoutMs`), so an extraction that was merely slow lost a
-  // race it had not been told it was in, and the gate reported it as "the
-  // conversation produced no structured memory" — a content verdict about a
-  // timing accident. Same shape as the batch harness waiting 30 minutes for
-  // runs that take forty.
-  const deadline = Date.now() + Number(process.env.OPEN_SCIENCE_E2E_MEMORY_TIMEOUT_MS ?? 180_000);
-  while (Date.now() < deadline) {
-    const profile = await jsonFetch(`${base}/api/memory/profile`, { headers });
-    const record = profile.body?.data?.records?.find((item) =>
-      !initialIds.has(item.id)
-      && item.scope === "user"
-      && item.kind === "preference"
-      && JSON.stringify(item).includes(marker)
-    );
-    if (record) return record;
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
-  }
-  // Not a verdict any more: whether the extractor found a durable preference in
-  // this particular conversation is the model's behaviour, and the caller
-  // records it instead of failing on it.
-  return null;
-}
-
-/**
- * @param {Record<string, any>} ready
- * @returns {string} the certified model this deployment actually serves
- */
 function assertReady(ready) {
   const checks = ready?.data?.checks;
   if (!ready?.data?.ok || !checks) throw failure("hosted_e2e_not_ready", "The hosted deployment is not ready.");
@@ -400,68 +351,12 @@ async function main() {
       throw failure("hosted_e2e_signals_invalid", "The production signal table does not expose a disproportionality metric.");
     }
 
-    // Mechanical first, and blocking: the pipeline ran and the research-memory store
-    // took its write.
-    await waitForRunSummary(base, scoped, projectId, run.id);
-
-    const memoryRecord = await waitForMemoryRecord(base, scoped, initialRecordIds, preferenceMarker);
-    if (!memoryRecord) {
-      // Content, and recorded rather than judged. Measured 2026-09-01 on one
-      // acceptance stack, same brief and same code: one run proposed six
-      // candidates and adopted six, the next proposed none and rejected none —
-      // the extractor simply returned nothing. Twenty-three messages holding no
-      // durable fact is a legitimate outcome, and it is indistinguishable from
-      // model reticence, so it joins the same distribution as the signals table
-      // before anyone decides where the requirement belongs.
-      const finished = await jsonFetch(`${base}/api/agent-runs`, { headers: scoped });
-      // Notices are structured (C2) since 2026-09-18; the sentence is `text`.
-      const counts = (finished.body?.data ?? []).find((item) => item.id === run.id)?.qualityNotices
-        ?.find((line) => line?.code === "memory_extraction_empty" || String(line?.text ?? line).includes("记忆抽取未产出记录"));
-      notice(
-        "memory_extraction_produced_no_preference",
-        counts ? String(counts?.text ?? counts) : "the run recorded no extraction counts",
-      );
-    } else {
-      // Six conditions under one message meant a run told you the memory was
-      // wrong without telling you which part, and the record is deleted with
-      // the project moments later — so the answer was gone before anyone could
-      // look.
-      const memoryFaults = [
-        memoryRecord.scope !== "user" ? `scope=${memoryRecord.scope}` : null,
-        memoryRecord.kind !== "preference" ? `kind=${memoryRecord.kind}` : null,
-        memoryRecord.origin !== "explicit" ? `origin=${memoryRecord.origin}` : null,
-        memoryRecord.status !== "active" ? `status=${memoryRecord.status}` : null,
-        memoryRecord.evidenceCount < 1 ? `evidenceCount=${memoryRecord.evidenceCount}` : null,
-        memoryRecord.evidence?.some((item) => item.quote?.includes(preferenceMarker))
-          ? null
-          : `no evidence quote carries the marker (quotes=${(memoryRecord.evidence ?? []).length})`,
-      ].filter(Boolean);
-      if (memoryFaults.length) {
-        // Still blocking, and deliberately so: since the client now applies the
-        // research-memory store's own bounds before sending, no model output should be
-        // able to produce an invalid record. If this fires it is our defect —
-        // which is exactly what it caught last time.
-        throw failure(
-          "hosted_e2e_memory_evidence_invalid",
-          `The structured preference memory is not explicit, evidenced and active: ${memoryFaults.join("; ")}.`,
-        );
-      }
-      // Written is half of it; a memory nobody can find again is not one. The
-      // search the memory page uses, over the same records recall reads.
-      const found = await jsonFetch(`${base}/api/memory/search?q=${encodeURIComponent(preferenceMarker)}`, { headers: scoped });
-      if (!(found.body?.data?.items ?? []).some((item) => item?.id === memoryRecord.id)) {
-        throw failure("hosted_e2e_memory_not_found", "The extracted preference memory was written but its own marker does not find it.");
-      }
-    }
-
-    // The kernel identity is printed, not just asserted: "which kernel did the
-    // release gate actually certify" is the question this run is the only
-    // record of.
-    const runtimeCheck = ready.body.data.checks.runtime;
-    process.stdout.write(
-      `hosted production E2E ok: release=${ready.body.data.checks.release.releaseId}`
-      + ` kernel=${runtimeCheck.kernel}@${runtimeCheck.kernelVersion ?? "unknown"} project=${projectId}\n`,
-    );
+    // Automation deliberately writes neither a run summary nor a preference (memoryIntelligence.recordRun).
+    // Native user-conversation extraction is accepted separately; marking this scripted run as human would bypass that rule.
+    const projectMemory = await jsonFetch(`${base}/api/memory/records?scope=project&scopeId=${encodeURIComponent(projectId)}&pageSize=100`, { headers: scoped });
+    const profile = await jsonFetch(`${base}/api/memory/profile`, { headers: scoped });
+    assertAutomatedMemoryIsolation(run, projectMemory.body?.data ?? [], profile.body?.data?.records ?? [], initialRecordIds, preferenceMarker);
+    notice("automated_memory_excluded", "The scripted acceptance created no researcher memory; native conversation extraction is checked separately.");
   } finally {
     if (runtimeStarted && scoped) {
       await command(base, "stop_runtime", {}, scoped).catch(() => {});

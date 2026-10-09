@@ -326,3 +326,15 @@ test('real multistage job persistence proves both the engine stage and recorded 
   results[0].diagnostics.stageResults.analytic.measures[0].value = 999;
   assert.ok(trace().deterministic.findings.some(row => row.kind === 'number_untraced'), 'Named-stage numerical diagnostics are also bound.');
 });
+
+test('a study snapshot hashes the JSON shape persisted across its worker boundary', options, async () => {
+  const review = service();
+  const request = input('clinical', '-optional-field');
+  request.frozenInput.optional = undefined;
+  const record = await review.requestStudyReview(identity, request);
+  await review.processStudyReviews('optional-field-worker');
+  const row = (await database.query('SELECT status,error_code,frozen_input FROM evimed_review.reviews WHERE id=$1', [record.reviewId])).rows[0];
+  assert.equal(row.status, 'done', JSON.stringify(row));
+  assert.equal(row.error_code, null);
+  assert.equal(Object.hasOwn(row.frozen_input, 'optional'), false);
+});

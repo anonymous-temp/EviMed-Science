@@ -616,6 +616,29 @@ test('queued deliverable resumes after API restart against frozen package bytes'
   } finally { await fs.writeFile(file, original); }
 });
 
+test('optional gateway fields survive the JSONB review snapshot without a false input-change failure', options, async () => {
+  const { review, prompts } = service({ modelAnswers: [QUIET] });
+  const requested = await review.startDeliverableReview({ userId, projectId }, {
+    runId: 'gateway-optional-fields', deliverableId: 'd1', contractKind: 'clinical-evidence-report',
+    turn: undefined, editor: undefined,
+  });
+  const done = await settled(review, requested.reviewId);
+  assert.equal(done.status, 'done', JSON.stringify(done));
+  assert.equal(prompts.length, 1);
+});
+
+test('a changed persisted review snapshot still fails before calling the reviewer', options, async () => {
+  const { review, prompts } = service({ modelAnswers: [QUIET] });
+  const requested = await review.startDeliverableReview({ userId, projectId }, {
+    runId: 'tampered-frozen-input', deliverableId: 'd1', contractKind: 'clinical-evidence-report', turn: undefined,
+  });
+  await database.query("UPDATE evimed_review.reviews SET frozen_input=jsonb_set(frozen_input,'{files,0,1}','\"Changed after freezing\"'::jsonb) WHERE id=$1", [requested.reviewId]);
+  const done = await settled(review, requested.reviewId);
+  assert.equal(done.status, 'failed');
+  assert.equal(done.code, 'review_input_changed');
+  assert.equal(prompts.length, 0);
+});
+
 test('restarted L2/L3 deliverable refuses provider drift without changing the frozen package or source files', options, async () => {
   const original = service({ modelAnswers: [QUIET] });
   const requested = await original.review.startDeliverableReview({ userId, projectId }, { runId: 'deliverable-provider-drift', deliverableId: 'd1', contractKind: 'clinical-evidence-report' });
