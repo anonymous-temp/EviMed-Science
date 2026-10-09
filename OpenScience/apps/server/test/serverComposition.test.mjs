@@ -1278,7 +1278,11 @@ test("a bounded execution opens with the researcher's own instruction; the brief
   assert.equal(stored.runLimitCny, 6);
   assert.equal(stored.status, "running");
   assert.equal(stored.runId, "run-episode");
-  assert.equal(stored.sessionId, "session-episode");
+  const agenda = fixture.pool.documents.get("agenda:agenda-verify").payload;
+  assert.match(agenda.sessionId, /^session_/, "the task owns the conversation across executions");
+  assert.equal(stored.sessionId, agenda.sessionId);
+  assert.equal(prompts[0].session, agenda.sessionId);
+  assert.equal(dispatches[0].sessionId, agenda.sessionId);
 });
 
 test("a follow-up execution opens with the note the researcher wrote, and an execution made before the split still opens as it did", async (t) => {

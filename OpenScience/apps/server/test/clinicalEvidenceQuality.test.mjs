@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import { parse as parseYaml } from "yaml";
 import {
   citationIntegrityIssues,
   clinicalEvidencePackageErrorCode,
@@ -2711,12 +2712,12 @@ test("every file the capability manifest requires is named by the run-side gate 
     new URL("../../../capabilities/clinical-evidence-synthesis/capability.yaml", import.meta.url),
     "utf8",
   );
-  const produces = manifest.slice(manifest.indexOf("- contractKind: clinical-evidence-report"));
-  const required = [...produces.matchAll(/- path:\s*(\S+)\s*\n\s*required:\s*true/g)].map((match) => match[1]);
+  const outputs = parseYaml(manifest).produces.find((entry) => entry.contractKind === "clinical-evidence-report").outputs;
+  const required = outputs.filter((output) => output.required === true).map((output) => output.path);
   // Two since 2026-09-17: the report and the matrix. The floor is what proves
   // the manifest was parsed at all, and an empty list would pass every loop.
   assert.ok(required.length >= 2, `expected the manifest's required outputs, found ${required.length}`);
-  const declaredOptional = [...produces.matchAll(/- path:\s*(\S+)\s*\n\s*required:\s*false/g)].map((match) => match[1]);
+  const declaredOptional = outputs.filter((output) => output.required === false).map((output) => output.path);
   assert.ok(declaredOptional.includes("agenda-delta.json"), "the manifest no longer lists the optional output this case leaves out below");
 
   const input = deepResearchPackage();

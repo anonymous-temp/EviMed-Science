@@ -57,7 +57,7 @@ test("the session routes and the panel they served are gone, and the composition
   // dispatch no longer adds it a second time.
   // 2026-10-07: the same answer also says which capability the conversation is bound to (`boundConversationNote`), first.
   assert.match(server, /notes: async \(userId, projectId, sessionId\) => \{[\s\S]{0,1400}?sessionDispatchNotes\(\{ researchMemory, capsules: capsuleService \}, userId, projectId, sessionId\)/, "the capsule gateway answers with it");
-  assert.match(server, /boundConversationNote\(await researchSessions\.get\(project, sessionId\), await agentRegistry\)/, "and with the conversation's binding");
+  assert.match(server, /const session = await researchSessions\.get\(project, sessionId\);\s*return \[dispatched \? null : boundConversationNote\(session, await agentRegistry\)/, "and with the conversation's current saved binding");
   assert.doesNotMatch(server, /const sessionNotes = await sessionDispatchNotes\(/, "and nothing else adds it");
 });
 
