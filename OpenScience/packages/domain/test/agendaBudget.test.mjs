@@ -80,7 +80,7 @@ test("the registry says the per-episode minimum in a Chinese sentence, and the c
   assert.ok(ALL_ERROR_CODES.includes("autopilot_episode_budget_too_small"));
   assert.ok(ALL_ERROR_CODES.includes("verification_canceled_by_stop"));
   const floor = knownErrorCodeMessage("autopilot_episode_budget_too_small") ?? "";
-  assert.match(floor, new RegExp(`¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2).replace(".", "\\.")}`), "the sentence states the minimum it enforces");
+  assert.match(floor, new RegExp(`${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2).replace(".", "\\.")} 灵豆`), "the sentence states the minimum it enforces, in 灵豆");
   const stopped = knownErrorCodeMessage("verification_canceled_by_stop") ?? "";
   assert.match(stopped, /停止/);
   assert.match(stopped, /原结论未被推翻/, "a cancelled re-check is not a finding about the claim");
