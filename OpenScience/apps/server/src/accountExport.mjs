@@ -8,6 +8,7 @@ import { migrateUsageLedger } from "./usagePersistence.mjs";
 import { projectSourceDerivedRecord, projectSourceManifestRecord } from "./sourceService.mjs";
 import { EXTENSION_CUSTOMER_KINDS, exportExtensionAccountRow, exportPersonalSkillResources } from "./extensionAccountExport.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
+import { migrateFrontierEventReading } from "./frontierEventReading.mjs";
 import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
 
 const MAX_ROWS = 50000;
@@ -382,6 +383,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
   await migrateNotifications(database);
   await migrateUsageLedger(database);
   await migrateEvidenceZones(database);
+  await migrateFrontierEventReading(database);
   await migrateCapsuleShare(database);
   return database.transaction(async client => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
@@ -452,6 +454,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       projects: tables.projects, researchSessions: tables.researchSessions, documents: tables.documents, revisions: tables.revisions,
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
       priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, omissions,
+      frontierEventReads: tables.frontierEventReads,
       evidenceCardRevisions:tables.evidenceCardRevisions,evidenceAutomation:tables.evidenceAutomation,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
       evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,evidenceTopicRequestVotes:tables.evidenceTopicRequestVotes,
       shareLinks:tables.shareLinks,shareLinkUses:tables.shareLinkUses,shareDeliveriesSent:tables.shareDeliveriesSent,shareDeliveriesReceived:tables.shareDeliveriesReceived,

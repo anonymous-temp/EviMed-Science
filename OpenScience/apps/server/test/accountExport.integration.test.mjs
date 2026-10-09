@@ -38,7 +38,7 @@ function tarEntries(compressed) {
 async function fixture(t) {
   const dataDir = await mkdtemp("/tmp/evimed-account-export-");
   const app = createWebApiApp({ dataDir, stateStore: "postgres", databaseUrl, runtimeMode: "mock", authMode: "local", devAuth: false,
-    bootstrapUser: "", bootstrapPassword: "" });
+    bootstrapUser: "", bootstrapPassword: "", frontierEnabled: false });
   const users = [];
   t.after(async () => {
     await app.store.database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [users]);
@@ -106,6 +106,23 @@ test("account export includes the owner's PostgreSQL customer state and revision
   const serialized = [...entries.values()].map(value => value.toString()).join("\n");
   for (const forbidden of [f.other, "other original fact", "excluded-operator-provider-secret", "excluded-provider-request-id", "excluded-job-credential", "excluded-lease", "excluded-worker", f.cookie, f.csrf,
     "password_hash", "passwordHash", "csrf_token", "request_fingerprint", "lease_token", "worker_id"]) assert.equal(serialized.includes(forbidden), false, forbidden);
+});
+
+test("a disabled feed still exports only the owner's event reading baseline", options, async t => {
+  const f = await fixture(t);
+  const first = await fetch(`${f.base}/api/account/export`, { headers: { cookie: f.cookie } });
+  assert.equal(first.status, 200, "export prepares its reader table without enabling the feed");
+  const empty = JSON.parse(tarEntries(Buffer.from(await first.arrayBuffer())).get("account/customer-state.json").toString());
+  assert.deepEqual(empty.frontierEventReads, []);
+  for (const [userId, eventId] of [[f.owner, "owner-event"], [f.other, "other-event"]]) {
+    await f.app.store.database.query(`INSERT INTO evimed_frontier.event_reads(user_id,event_id,report_marks)
+      VALUES ($1,$2,$3::jsonb)`, [userId, eventId, JSON.stringify({ report: "a".repeat(64) })]);
+  }
+  const response = await fetch(`${f.base}/api/account/export`, { headers: { cookie: f.cookie } });
+  assert.equal(response.status, 200);
+  const state = JSON.parse(tarEntries(Buffer.from(await response.arrayBuffer())).get("account/customer-state.json").toString());
+  assert.deepEqual(state.frontierEventReads.map(row => row.event_id), ["owner-event"]);
+  assert.deepEqual(state.frontierEventReads[0].report_marks, { report: "a".repeat(64) });
 });
 
 // What an account shared and was shared with (flywheel F17) is the account's own record, and the export once left the whole `evimed_share` schema out.
