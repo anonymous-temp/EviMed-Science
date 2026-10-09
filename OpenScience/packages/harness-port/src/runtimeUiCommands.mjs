@@ -649,11 +649,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     // The toolbar seat: after the kernel's `+` and the paperclip.
     const BarChip = () => {
       React.useLayoutEffect(() => { toolbarSeats(1); return () => { toolbarSeats(-1); }; }, []);
-      return h(ToolChip, { placement: 'bar' });
+      return h(SourceScopeChip);
     };
     kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.input.left', id: 'evimed-tool', order: 10 }, BarChip));
 
     const SourceScopeChip = () => {
+      const selectedTool = useTool();
       const [selection, setSelection] = React.useState(null);
       const [failed, setFailed] = React.useState(false);
       React.useEffect(() => {
@@ -669,11 +670,17 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         read();
         return () => { result(); switched(); };
       }, []);
-      if (!selection?.sourceIds?.length && !selection?.originReference) return null;
-      return h(React.Fragment, null,
-        selection.originReference ? h('button', { type: 'button', style: { ...chipStyle, ...textButton, maxWidth: barChipBudget }, title: selection.originReference.title,
+      if (!selectedTool && !selection?.sourceIds?.length && !selection?.originReference) return null;
+      // One budget for all EviMed controls, so the kernel can still measure
+      // when its model picker must collapse, with no wrapped or scrolling row.
+      return h('span', { 'data-evimed-composer-context': true,
+        style: { display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0, maxWidth: barChipBudget, flex: '0 1 auto' } },
+        h(ToolChip, { placement: 'bar' }),
+        selection?.originReference ? h('button', { type: 'button', 'data-evimed-origin-reference': true,
+          style: { ...chipStyle, ...textButton, flex: '0 1 auto', minWidth: 0, fontSize: '12px', maxWidth: barChipBudget },
+          'aria-label': `来自：${selection.originReference.title}`,
           onClick: () => kit.hub.send('open-event', { eventId: selection.originReference.id }) }, h('span', { style: starterText }, '来自：', selection.originReference.title)) : null,
-        selection.sourceIds?.length ? h('span' , { style: chipStyle, 'data-evimed-source-scope': selection.sourceIds.length },
+        selection?.sourceIds?.length ? h('span' , { style: { ...chipStyle, flex: 'none', whiteSpace: 'nowrap' }, 'data-evimed-source-scope': selection.sourceIds.length },
         h('span', null, `${selection.sourceIds.length} 份资料`),
         h('button', { type: 'button', style: textButton, 'aria-label': failed ? '移除资料范围失败，重试' : '移除资料范围',
           onClick: async () => {
@@ -684,7 +691,6 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
           },
         }, failed ? '重试' : '×')) : null);
     };
-    kit.guarded('source scope', () => kit.occupy({ slot: 'conversation.input.left', id: 'evimed-source-scope', order: 11 }, SourceScopeChip));
 
     /**
      * The tool's example questions, as pills the reader can start from. Drawn

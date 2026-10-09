@@ -16,6 +16,7 @@ export function SourcePdf({ path, projectId, initialPage, quote }: { path: strin
   const [marked, setMarked] = useState<boolean | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(560);
+  const displayedPage = Math.min(Math.max(1, page), pdf?.numPages ?? Infinity);
   useEffect(() => {
     setPage(initialPage);
   }, [initialPage]);
@@ -49,7 +50,7 @@ export function SourcePdf({ path, projectId, initialPage, quote }: { path: strin
     setMarked(null);
     setError(false);
     void (async () => {
-      const current = await pdf.getPage(Math.min(Math.max(1, page), pdf.numPages));
+      const current = await pdf.getPage(displayedPage);
       if (!alive) return;
       const natural = current.getViewport({ scale: 1 });
       const scale = width / natural.width;
@@ -60,7 +61,7 @@ export function SourcePdf({ path, projectId, initialPage, quote }: { path: strin
       canvas.height = Math.ceil(viewport.height * ratio);
       canvas.style.width = `${viewport.width}px`;
       canvas.style.height = `${viewport.height}px`;
-      canvas.setAttribute("aria-label", `第 ${page} 页`);
+      canvas.setAttribute("aria-label", `第 ${displayedPage} 页`);
       const layer = document.createElement("div");
       layer.className = "evimed-pdf-text";
       layer.style.setProperty("--total-scale-factor", String(scale));
@@ -73,12 +74,12 @@ export function SourcePdf({ path, projectId, initialPage, quote }: { path: strin
       if (alive) setMarked(markPdfQuotation(textLayer.textDivs, textLayer.textContentItemsStr, quote));
     })().catch(() => { if (alive) setError(true); });
     return () => { alive = false; rendering?.cancel(); textLayer?.cancel(); element.replaceChildren(); };
-  }, [pdf, page, width, quote]);
+  }, [pdf, displayedPage, width, quote]);
   return <div className="min-h-0 overflow-y-auto bg-surface-2">
     <div className="sticky top-0 z-sticky flex items-center justify-center gap-3 border-b border-border bg-surface p-2">
-      <Button variant="text" size="sm" disabled={!pdf || page <= 1} onClick={() => setPage(value => value - 1)}>上一页</Button>
-      <span className="text-caption text-text-2">{pdf ? `${Math.min(page, pdf.numPages)} / ${pdf.numPages}` : "正在打开 PDF"}</span>
-      <Button variant="text" size="sm" disabled={!pdf || page >= pdf.numPages} onClick={() => setPage(value => value + 1)}>下一页</Button>
+      <Button variant="text" size="sm" disabled={!pdf || displayedPage <= 1} onClick={() => setPage(displayedPage - 1)}>上一页</Button>
+      <span className="text-caption text-text-2">{pdf ? `${displayedPage} / ${pdf.numPages}` : "正在打开 PDF"}</span>
+      <Button variant="text" size="sm" disabled={!pdf || displayedPage >= pdf.numPages} onClick={() => setPage(displayedPage + 1)}>下一页</Button>
     </div>
     {error && <p role="alert" className="p-3 text-caption text-text-2">PDF 暂时无法显示，可下载原件核对上方引文。</p>}
     {!error && marked === false && <p className="p-3 text-caption text-text-2">这一页未能标出引文，请对照上方原文摘录。</p>}

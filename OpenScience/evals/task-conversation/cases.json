@@ -24,7 +24,7 @@
     },
     {
       "id": "continuous-execution",
-      "setup": "Create a paused fixture task, run it twice manually, and wait for each execution to finish. Between executions send the intervening turn in the task conversation.",
+      "setup": "Create a paused fixture task, run it three times manually, and wait for each execution to finish. Between executions send the intervening turn in the task conversation.",
       "turns": ["以后只看稳定版本，排除预发布版本，并在下一次回复开头说明范围。"],
       "expect": { "sameSessionForAllExecutions": true, "interveningTurnPreserved": true, "perExecutionBudgetEnforced": true, "verificationUsesSeparateSession": true }
     }

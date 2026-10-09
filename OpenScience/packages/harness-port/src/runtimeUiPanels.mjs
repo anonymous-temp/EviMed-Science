@@ -258,7 +258,9 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     const live = useLive();
     if (!live?.stalled || live.state !== 'running') return null;
     const stoppable = live.availableActions?.some((/** @type {any} */ action) => action.kind === 'stop' && action.targetId === live.runId);
-    return h('div', { role: 'status', style: { ...meta, display: 'flex', alignItems: 'center', gap: '8px' } },
+    return h('div', { role: 'status', 'data-evimed-stall-notice': true,
+      style: { ...meta, display: 'flex', alignItems: 'center', gap: '8px', width: 'calc(100% - 32px)',
+        maxWidth: 'var(--dsh-chat-user-width,var(--dsh-chat-content-width,920px))', margin: '0 auto 8px' } },
       h('span', null, '这项研究暂时没有新进展，仍在继续。'),
       stoppable ? h('button', { type: 'button', style: { ...textButton, ...meta }, onClick: () => kit.hub.send('stop-run', { runId: live.runId }) }, '停止') : null);
   }
