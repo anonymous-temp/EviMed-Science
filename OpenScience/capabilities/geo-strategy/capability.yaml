@@ -35,10 +35,13 @@ produces:
 - contractKind: geo-strategy-pack
   outputs:
   - path: geo-strategy.md
+    role: report
     required: true
   - path: strategy.json
+    role: data
     required: true
   - path: revision-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

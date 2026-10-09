@@ -20,35 +20,43 @@
       "outputs": [
         {
           "path": "gene-expression-report.md",
-          "required": false
+          "required": false,
+          "role": "report"
         },
         {
           "path": "gene-expression-results.json",
-          "required": false
+          "required": false,
+          "role": "data"
         },
         {
           "path": "gene-expression-top-table.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "gene-expression-de-table.tsv",
-          "required": false
+          "required": false,
+          "role": "data"
         },
         {
           "path": "gene-expression-analysed-matrix.tsv.gz",
-          "required": false
+          "required": false,
+          "role": "matrix"
         },
         {
           "path": "gene-expression-request.json",
-          "required": false
+          "required": false,
+          "role": "work"
         },
         {
           "path": "gene_expression.py",
-          "required": false
+          "required": false,
+          "role": "work"
         },
         {
           "path": "gene-expression-receipt.json",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

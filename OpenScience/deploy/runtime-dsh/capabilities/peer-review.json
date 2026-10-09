@@ -20,11 +20,13 @@
       "outputs": [
         {
           "path": "peer-review-report.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "peer-review-run.json",
-          "required": true
+          "required": true,
+          "role": "work"
         }
       ],
       "checks": [

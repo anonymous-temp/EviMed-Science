@@ -30,10 +30,13 @@ produces:
 - contractKind: geo-proposal-pack
   outputs:
   - path: geo-proposal.md
+    role: report
     required: true
   - path: proposal-package.json
+    role: data
     required: true
   - path: revision-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

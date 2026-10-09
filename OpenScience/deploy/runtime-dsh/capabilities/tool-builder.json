@@ -16,7 +16,8 @@
       "outputs": [
         {
           "path": "tool-candidate.json",
-          "required": true
+          "required": true,
+          "role": "work"
         }
       ],
       "checks": [

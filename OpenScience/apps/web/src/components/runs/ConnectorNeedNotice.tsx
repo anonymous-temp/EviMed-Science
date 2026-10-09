@@ -125,7 +125,7 @@ export function ConnectorNeedNotice({ run }: { run: WebAgentRun | null }) {
             </div>
           );
         })}
-        {ready.length > 0 && (
+        {ready.length > 0 && run.availableActions?.some(action => action.kind === "continue" && action.scope === "session") && (
           <div>
             <Button size="sm" loading={sending} onClick={() => void continueRun()}>继续</Button>
           </div>

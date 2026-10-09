@@ -58,10 +58,13 @@ produces:
 - contractKind: vcr-study-package
   outputs:
   - path: study-definition.md
+    role: report
     required: false
   - path: criteria.json
+    role: data
     required: false
   - path: results.json
+    role: data
     required: false
   checks:
   - skillsLoaded

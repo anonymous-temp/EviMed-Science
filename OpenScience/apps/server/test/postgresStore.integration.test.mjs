@@ -124,6 +124,9 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     // Design reference N-14: a conversation's source scope is a column of its session row, shared across instances,
     // kept when the session is bound again, and lifted by null.
     const scopedTo = `src_${"d".repeat(32)}`;
+    const origin = { kind: 'frontier-event', id: 'a'.repeat(16), title: 'An event' };
+    await first.app.store.setResearchSessionOriginReference(paperFromFirst, 'ses_shared', origin);
+    assert.deepEqual((await second.app.store.getResearchSession(paperFromSecond, 'ses_shared')).originReference, origin);
     const scoped = await first.app.store.setResearchSessionSourceScope(paperFromFirst, "ses_shared", [scopedTo]);
     assert.deepEqual([...scoped.sourceScope], [scopedTo]);
     assert.deepEqual([...(await second.app.store.getResearchSession(paperFromSecond, "ses_shared")).sourceScope], [scopedTo]);
@@ -132,6 +135,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
       sessionId: "ses_shared", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null, createdAt: reboundAt, updatedAt: reboundAt,
     }, { maximum: 2 });
     assert.deepEqual([...rebound.sourceScope], [scopedTo], "binding the conversation again leaves its scope alone");
+    assert.deepEqual(rebound.originReference, origin);
     assert.equal((await first.app.store.setResearchSessionSourceScope(paperFromFirst, "ses_shared", null)).sourceScope, null);
     await assert.rejects(() => first.app.store.setResearchSessionSourceScope(paperFromFirst, "ses_unknown", null), (error) => error.code === "research_session_not_found");
     const createdAt = new Date().toISOString();

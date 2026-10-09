@@ -1,5 +1,7 @@
 import { Link } from "react-router";
+import { Square, SquareCheck } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { ListRow } from "@/components/ui/ListRow";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Tag } from "@/components/ui/Tag";
@@ -44,7 +46,7 @@ export function sourceMenuItems(source: SourceRecord, {
  * document: each is the page it is on and one line around the match, with what was typed marked, and is a link that opens
  * the document at that page (`passageTo`).
  */
-export function SourceRow({ source, busy, duplicate, showShared, projectName, to, onOpen, passages = [], query = "", passageTo, onRetry, onShare, onDuplicates, onDelete }: {
+export function SourceRow({ source, busy, duplicate, showShared, projectName, to, onOpen, passages = [], query = "", passageTo, selected, onSelect, onRetry, onShare, onDuplicates, onDelete }: {
   source: SourceRecord;
   busy: boolean;
   duplicate: boolean;
@@ -55,6 +57,8 @@ export function SourceRow({ source, busy, duplicate, showShared, projectName, to
   /** The document's page. */
   to: string;
   onOpen?: () => void;
+  selected?: boolean;
+  onSelect?: () => void;
   /** Where the search matched inside the document's text, when it did. */
   passages?: readonly SourcePassage[];
   /** What was typed, for marking the match in each line. */
@@ -71,7 +75,10 @@ export function SourceRow({ source, busy, duplicate, showShared, projectName, to
   const menu = sourceMenuItems(source, { duplicate, busy, onRetry, onShare, onDuplicates, onDelete });
   return (
     <ListRow
-      leading={<span className="grid h-8 w-8 place-items-center rounded bg-surface-2 text-text-3"><Icon size={16} aria-hidden="true" /></span>}
+      leading={onSelect ? <IconButton icon={selected ? SquareCheck : Square} size="sm" label={`选择“${display.title}”`}
+        role="checkbox" aria-checked={selected === true} disabled={!isUsable(source)} onClick={onSelect} className="z-sticky" />
+        : <span className="grid h-8 w-8 place-items-center rounded bg-surface-2 text-text-3"><Icon size={16} aria-hidden="true" /></span>}
+      selected={selected}
       title={<Tooltip content={display.title} kind="label" whenTruncated><span className="block truncate">{display.title}</span></Tooltip>}
       to={to}
       onOpen={onOpen}
@@ -84,7 +91,7 @@ export function SourceRow({ source, busy, duplicate, showShared, projectName, to
         {passages.length > 0 && (
           <ul aria-label="正文里的匹配" className="mt-1 space-y-0.5">
             {passages.map((passage) => (
-              <li key={`${passage.start}:${passage.end}`} className="relative z-10 flex min-w-0 gap-2">
+              <li key={`${passage.start}:${passage.end}`} className="relative z-sticky flex min-w-0 gap-2">
                 {passageTo ? (
                   <Link to={passageTo(passage)} onClick={onOpen} className="flex min-w-0 gap-2 rounded text-text-2 hover:text-text">
                     <PassageLine passage={passage} query={query} />

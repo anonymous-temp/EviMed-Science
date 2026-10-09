@@ -54,6 +54,7 @@
 import { frameStyles } from './runtimeUiStyles.mjs';
 import { liveRunFor } from './runtimeUiToolviews.mjs';
 import { turnCarriesRun } from './runtimeUiPanels.mjs';
+import { sourceCitationProse, sourceCitationReferences } from '@evimed/domain';
 
 /** Services this body needs outright: the slot registry. */
 export const inject = ['slots'];
@@ -173,6 +174,30 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   const { text, meta, card, line, title, tag, tone, textButton, link } = frameStyles();
   const badges = (kit.vocabulary && kit.vocabulary.studyBadges) || {};
   const statusText = sourceStatusText();
+
+  /** Each answer resolves its own references, including old turns and small libraries read without search.
+   * @param {{body: string}} props */
+  const KnowledgeSources = ({ body }) => {
+    const [result, setResult] = React.useState(/** @type {any} */ (null));
+    const references = sourceCitationReferences(body);
+    const key = JSON.stringify(references);
+    React.useEffect(() => {
+      if (key === '[]') return undefined;
+      let alive = true;
+      void kit.hub.request('source-citations', { references: JSON.parse(key) })
+        .then((/** @type {any} */ value) => { if (alive) setResult(value); })
+        .catch(() => { if (alive) setResult({ ok: false }); });
+      return () => { alive = false; };
+    }, [key]);
+    if (!references.length) return null;
+    if (!result) return h('p', { style: meta }, '引文核对中');
+    if (!result.ok) return h('p', { style: meta }, '引文暂时无法核对');
+    return h('ul', { 'aria-label': '引用的资料', style: { ...meta, padding: 0, listStyle: 'none' } },
+      ...result.items.map((/** @type {any} */ item, /** @type {number} */ index) => h('li', { key: `${item.sourceId}:${index}` },
+        h('button', { type: 'button', style: { ...textButton, ...meta }, onClick: () => kit.hub.send('open-source', item) },
+          `${item.status === 'verified' ? '✓' : '⚠'} ${item.title}${item.page ? ` · 第 ${item.page} 页` : ''}`),
+        item.status !== 'verified' ? h('span', { style: meta }, ' · 引文未核对上') : null)));
+  };
 
   /** @param {{ badge: { kind: string, label: string } }} props */
   const StudyBadge = ({ badge }) => {
@@ -308,14 +333,23 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         return Array.isArray(order) && order.length ? order[order.length - 1] : null;
       })
       : undefined;
-    const own = Shadowed ? h(Shadowed, props) : null;
     const node = props?.node;
+    // Preserve the original transcript for quotation resolution, but pass only
+    // prose to the native markdown renderer (which prints HTML comments).
+    const visibleProps = Array.isArray(node?.data?.blocks) ? { ...props, node: { ...node, data: { ...node.data,
+      blocks: node.data.blocks.map((/** @type {any} */ block) => block.kind === 'text'
+        ? { ...block, text: sourceCitationProse(block.text) } : block),
+    } } } : props;
+    const own = Shadowed ? h(Shadowed, visibleProps) : null;
     const seq = node?.data?.finalNode?.seq;
     const closing = Number.isInteger(seq) && tail?.closing?.finalNode?.seq === seq && (newest === undefined || newest === node.data.turn);
     // One answer node is drawn twice when the turn's process is folded — its
     // reasoning inside the fold, then the response; the sources follow the response.
-    if (!closing || props?.groupPart === 'reasoning') return own;
-    return h(React.Fragment, null, own, h(TurnSources, { turn: { start: node?.location?.turn?.start?.time, end: tail?.time } }));
+    if (props?.groupPart === 'reasoning') return own;
+    const body = (Array.isArray(node?.data?.blocks) ? node.data.blocks : []).filter((/** @type {any} */ block) => block.kind === 'text')
+      .map((/** @type {any} */ block) => block.text).join('\n');
+    return h(React.Fragment, null, own, node?.data?.finalNode ? h(KnowledgeSources, { body }) : null,
+      closing ? h(TurnSources, { turn: { start: node?.location?.turn?.start?.time, end: tail?.time } }) : null);
   }
 
   kit.guarded('source cards', () => kit.occupyOver({ slot, key: 'assistant-step', priority: -3, locale: 'chat' }, AnswerWithSources));
@@ -325,5 +359,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'sources',
   inject,
-  parts: Object.freeze([frameStyles, liveRunFor, turnCarriesRun, sourceStatusText, sourceCardsModel, apply]),
+  parts: Object.freeze([frameStyles, liveRunFor, turnCarriesRun, sourceCitationProse, sourceCitationReferences, sourceStatusText, sourceCardsModel, apply]),
 });

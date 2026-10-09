@@ -64,7 +64,7 @@ export function TaskPane({ agenda, execution, lock, ledgerRun, projectId }: {
   projectId: string;
 }) {
   const pane = useRef<HTMLDivElement>(null);
-  const sessionId = conversationOf(execution, lock);
+  const sessionId = lock ? null : conversationOf(execution, lock) ?? agenda.payload.sessionId ?? null;
   useLayoutEffect(() => {
     const element = pane.current;
     if (!element || !sessionId) return undefined;

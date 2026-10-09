@@ -278,8 +278,11 @@ test("a conversation's source scope is stored with its session, survives a secon
     const scoped = await store.setSourceScope(project, "ses_scope", [b, a, b]);
     assert.deepEqual([scoped.mode, scoped.agentId, [...scoped.sourceScope]], ["open-domain", null, [a, b]], "sorted, without repeats");
     assert.deepEqual([...(await store.get(project, "ses_scope")).sourceScope], [a, b], "read back from storage");
+    const origin = { kind: 'frontier-event', id: 'a'.repeat(16), title: 'An event' };
+    await store.setOriginReference(project, 'ses_scope', origin);
     // The binding is asserted again when the conversation is opened; the scope stays.
     await store.put(project, "ses_scope", { mode: "open-domain" });
+    assert.deepEqual((await store.get(project, 'ses_scope')).originReference, origin);
     assert.deepEqual([...(await store.get(project, "ses_scope")).sourceScope], [a, b]);
     // Another session is not limited.
     assert.equal((await store.put(project, "ses_other", { mode: "open-domain" })).sourceScope, null);

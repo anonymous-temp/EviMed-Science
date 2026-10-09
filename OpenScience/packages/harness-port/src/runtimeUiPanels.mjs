@@ -47,6 +47,7 @@
  * @module @evimed/harness-port/runtime-ui-panels
  */
 
+import { artifactPresentation, compareArtifacts } from '@evimed/domain';
 import { frameStyles } from './runtimeUiStyles.mjs';
 import { liveRunFor } from './runtimeUiToolviews.mjs';
 
@@ -64,33 +65,7 @@ export const KERNEL_FILES_TAB = 'files';
  * @returns {{ name: string, type: string, icon: 'doc' | 'sheet' | 'data' | 'image' | 'file', rank: number }}
  */
 export function fileTypeOf(path) {
-  const name = String(path ?? '').split('/').pop() ?? '';
-  const lower = name.toLowerCase();
-  const extension = lower.includes('.') ? lower.slice(lower.lastIndexOf('.') + 1) : '';
-  /** @type {Record<string, [string, 'doc' | 'sheet' | 'data' | 'image' | 'file']>} */
-  const types = {
-    md: ['Markdown', 'doc'], markdown: ['Markdown', 'doc'], txt: ['文本', 'doc'],
-    docx: ['Word', 'doc'], doc: ['Word', 'doc'], pdf: ['PDF', 'doc'], pptx: ['PPT', 'doc'], ppt: ['PPT', 'doc'],
-    html: ['网页', 'doc'], htm: ['网页', 'doc'],
-    xlsx: ['Excel', 'sheet'], xls: ['Excel', 'sheet'], csv: ['CSV', 'sheet'], tsv: ['TSV', 'sheet'],
-    json: ['JSON', 'data'], jsonl: ['JSON', 'data'], xml: ['XML', 'data'], ris: ['RIS', 'data'], bib: ['BibTeX', 'data'],
-    png: ['图片', 'image'], jpg: ['图片', 'image'], jpeg: ['图片', 'image'], gif: ['图片', 'image'], svg: ['图片', 'image'], webp: ['图片', 'image'],
-    zip: ['压缩包', 'file'],
-  };
-  const [type, icon] = types[extension] ?? ['文件', 'file'];
-  // A deliverable's completed reporting checklist (CONSORT 2025, TRIPOD+AI…)
-  // matches `report` and is not the report: it lists where the report says
-  // each item. The name is @evimed/domain's REPORTING_CHECKLIST_FILE, written
-  // out because this function is shipped into the frame on its own.
-  const report = icon === 'doc' && /report/.test(lower) && lower !== 'reporting-checklist.md';
-  // A delivery summary says what the answer above it already says, once per
-  // run and once per deliverable; it waits behind 「显示全部」 (production,
-  // 2026-09-24: three 「交付摘要」 took three of four cards from a manuscript
-  // run whose two sections and two checklists were the delivery).
-  const rank = report ? 0
-    : /matrix.*\.json$/.test(lower) ? 1
-      : lower === 'delivery-summary.md' ? 5
-        : icon === 'doc' ? 2 : icon === 'sheet' ? 3 : icon === 'image' ? 4 : 5;
+  const { name, type, icon, rank } = artifactPresentation(path);
   return { name, type, icon, rank };
 }
 
@@ -167,8 +142,8 @@ export function fileCardsModel(live) {
     if (typeof path !== 'string' || !path || seen.has(path) || path.startsWith('/') || path.includes('\\')
       || path.split('/').some((part) => part === '' || part === '.' || part === '..')) continue;
     seen.add(path);
-    const type = fileTypeOf(path);
-    if (/^revision-notes?\.md$/i.test(type.name)) continue;
+    const type = artifactPresentation(path, live.artifactRoles?.[path]);
+    if (!type.readable) continue;
     files.push({ path, ...type, label: documentNameOf(path) ?? type.name, where: /** @type {string | null} */ (null) });
   }
   /** @type {Map<string, number>} */
@@ -178,7 +153,7 @@ export function fileCardsModel(live) {
     const folders = file.path.split('/');
     if ((named.get(file.label) ?? 0) > 1 && folders.length > 1) file.where = folders[folders.length - 2];
   }
-  files.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name) || a.path.localeCompare(b.path));
+  files.sort(compareArtifacts);
   return files.length ? { runId: String(live.runId), files } : null;
 }
 
@@ -278,6 +253,16 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     const session = kit.useFrameState((/** @type {any} */ state) => state.session);
     return liveRunFor(runState, session);
   }
+
+  function StallNotice() {
+    const live = useLive();
+    if (!live?.stalled || live.state !== 'running') return null;
+    const stoppable = live.availableActions?.some((/** @type {any} */ action) => action.kind === 'stop' && action.targetId === live.runId);
+    return h('div', { role: 'status', style: { ...meta, display: 'flex', alignItems: 'center', gap: '8px' } },
+      h('span', null, '这项研究暂时没有新进展，仍在继续。'),
+      stoppable ? h('button', { type: 'button', style: { ...textButton, ...meta }, onClick: () => kit.hub.send('stop-run', { runId: live.runId }) }, '停止') : null);
+  }
+  kit.guarded('stall notice', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-stall', order: 10 }, StallNotice));
 
   /** The newest turn of the conversation on screen, from the chat's own timeline. */
   function latestTurn(/** @type {any} */ snapshot) {
@@ -422,5 +407,5 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
 export const BODY = Object.freeze({
   name: 'panels',
   inject,
-  parts: Object.freeze([frameStyles, liveRunFor, fileTypeOf, documentNameOf, fileCardsModel, hasReport, turnCarriesRun, formatBytes, fileAddress, openDeliveredFile, apply]),
+  parts: Object.freeze([frameStyles, liveRunFor, artifactPresentation, compareArtifacts, fileTypeOf, documentNameOf, fileCardsModel, hasReport, turnCarriesRun, formatBytes, fileAddress, openDeliveredFile, apply]),
 });

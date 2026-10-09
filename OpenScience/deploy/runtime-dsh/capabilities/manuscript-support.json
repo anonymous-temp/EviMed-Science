@@ -31,31 +31,38 @@
       "outputs": [
         {
           "path": "manuscript-section.md",
-          "required": true
+          "required": true,
+          "role": "draft"
         },
         {
           "path": "section-claims.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "citation-ledger.csv",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "reporting-checklist.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "revision-notes.md",
-          "required": false
+          "required": false,
+          "role": "work"
         },
         {
           "path": "delivery-summary.md",
-          "required": true
+          "required": true,
+          "role": "document"
         },
         {
           "path": "agenda-delta.json",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

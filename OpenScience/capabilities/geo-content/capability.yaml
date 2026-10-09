@@ -50,14 +50,18 @@ produces:
   # manifest cannot declare, so articles.json names them and the gate brings
   # them in (contractCompanionPaths in @evimed/domain).
   - path: geo-content.md
+    role: report
     required: true
   - path: articles.json
+    role: data
     required: true
   # A probe ledger exists only when the run asked an engine one question the
   # user raised; measurement proper is the platform's.
   - path: geo-probe-log.jsonl
+    role: work
     required: false
   - path: revision-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

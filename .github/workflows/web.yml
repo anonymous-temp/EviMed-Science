@@ -1434,6 +1434,7 @@ jobs:
             backup: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
             runtime: process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE,
             resultReplay: process.env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE,
+            evidenceAdapter: process.env.EVIMED_DRUG_EVIDENCE_ADAPTER_IMAGE,
           } : { vcr: process.env.EVIMED_VCR_ENGINE_IMAGE };
           const full = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'evimed-release/manifest.json'), 'utf8'));
           assert.equal(full.sourceRevision, process.env.OPEN_SCIENCE_SOURCE_REVISION);

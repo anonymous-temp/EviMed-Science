@@ -76,6 +76,19 @@ const agendaInput = {
   maxEpisodeCny: 16, scheduleHour: 1, timeZone: "Asia/Shanghai",
 };
 
+test("a task owns one conversation across executions, races, edits and a service restart", async () => {
+  const { service, documents, jobs, usage } = fixture();
+  const agenda = await service.create("user-one", agendaInput);
+  const conversations = await Promise.all(Array.from({ length: 3 }, () => service.conversation("user-one", agenda.id)));
+  assert.equal(new Set(conversations).size, 1);
+  assert.match(conversations[0], /^session_/);
+  const updated = await service.get("user-one", agenda.id);
+  assert.equal(updated.payload.sessionId, conversations[0]);
+  const restarted = new AutopilotService({ documents, jobs, usage });
+  assert.equal(await restarted.conversation("user-one", agenda.id), conversations[0]);
+  await assert.rejects(restarted.conversation("another-user", agenda.id), { code: "autopilot_agenda_not_found" });
+});
+
 test("opening an owned digest records reading without treating list or get as activity", async () => {
   let at = new Date("2026-09-06T01:00:00Z");
   const { service } = fixture({ now: () => at });
@@ -474,6 +487,7 @@ test("a completed episode admits only contract-valid claims tied to accepted run
   assert.equal(digest.payload.leads[0].tier, "gated");
   const episode = await service.getEpisode("user-one", scheduled.episode.id);
   assert.equal(episode.payload.rejectedClaims.length, 2);
+  assert.equal(episode.payload.resultKind, "result");
   assert.equal(episode.payload.costCny, 1.25);
 });
 
@@ -488,6 +502,7 @@ test("a briefing carries its episode's day in the agenda's time zone, not the UT
   const digest = await service.completeRun("user-one", {
     projectId: "project-one", runId: "run-one", status: "succeeded", deltaSchemaVersion: 1, artifacts: [], costCny: 0.5, claims: [] });
   assert.equal(digest.payload.date, "2026-09-07");
+  assert.equal((await service.getEpisode("user-one", manual.episode.id)).payload.resultKind, "no-new-evidence");
 });
 
 test("an episode with no day of its own is dated by the agenda's day when its briefing is made, not the UTC day it finished on", async () => {

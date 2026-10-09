@@ -154,7 +154,7 @@ test('the blank conversation is the headline and the composer; a chosen tool is 
   assert.equal(renderStatic(chip.component), '');
 });
 
-test('the @ menu offers the parsed sources the shell names, and a pick reads to the model as where the text is', async () => {
+test('the @ menu saves the selected scope before sending readable source titles', async () => {
   const f = frame();
   assert.equal(f.sources.length, 1);
   const source = f.sources[0];
@@ -164,6 +164,11 @@ test('the @ menu offers the parsed sources the shell names, and a pick reads to 
   /** @type {any[]} */
   const asked = [];
   f.kit.hub.attach((/** @type {string} */ type, /** @type {any} */ fields) => {
+    if (type === 'source-scope') {
+      asked.push([type, fields.sessionId, fields.sourceIds]);
+      setTimeout(() => f.kit.hub.deliver('source-scope-result', { ...fields, ok: true }), 0);
+      return;
+    }
     asked.push([type, fields.query]);
     setTimeout(() => f.kit.hub.deliver('kb-result', { requestId: fields.requestId, ok: true, items: [
       { id: 'src_ab12', title: 'ROCKET-AF.pdf', detail: '利伐沙班与华法林的比较' },
@@ -177,11 +182,36 @@ test('the @ menu offers the parsed sources the shell names, and a pick reads to 
   assert.deepEqual(outcome.insert.source, '知识库');
   assert.equal(outcome.insert.label, 'ROCKET-AF.pdf');
   assert.equal(await source.codec.serialize(outcome.insert.ref, new globalThis.AbortController().signal),
-    '【知识库文献 src_ab12：「ROCKET-AF.pdf」，解析后的正文在工作区 .evimed-knowledge/.evimed-derived/src_ab12/ 下】');
+    '“ROCKET-AF.pdf”');
+  assert.deepEqual(asked[1], ['source-scope', 'session-a', ['src_ab12']]);
   assert.equal(source.codec.clipboardText(outcome.insert.ref), '@ROCKET-AF.pdf');
   // With the shell unreachable the group is empty, not an error.
   const lonely = frame();
   assert.deepEqual(await lonely.sources[0].candidates({ sessionId: 'session-a' }, { query: 'x', signal: new globalThis.AbortController().signal }), []);
+});
+
+test('sending several reference chips saves one scope and refuses to send if it cannot be saved', async () => {
+  const f = frame();
+  /** @type {any[]} */
+  const saved = [];
+  let ok = true;
+  f.kit.hub.attach((/** @type {string} */ type, /** @type {any} */ fields) => {
+    if (type !== 'source-scope') return;
+    saved.push(fields.sourceIds);
+    setTimeout(() => f.kit.hub.deliver('source-scope-result', { ...fields, ok }), 0);
+  });
+  const serialize = f.sources[0].codec.serialize;
+  const signal = new globalThis.AbortController().signal;
+  const a = JSON.stringify({ id: `src_${'a'.repeat(32)}`, title: 'A.pdf' });
+  const b = JSON.stringify({ id: `src_${'b'.repeat(32)}`, title: 'B.pdf' });
+  assert.deepEqual(await Promise.all([serialize(a, signal), serialize(b, signal), serialize(a, signal)]), ['“A.pdf”', '“B.pdf”', '“A.pdf”']);
+  assert.deepEqual(saved, [[`src_${'a'.repeat(32)}`, `src_${'b'.repeat(32)}`]]);
+  ok = false;
+  await assert.rejects(serialize(a, new globalThis.AbortController().signal), /无法保存资料范围/);
+  const canceled = new globalThis.AbortController();
+  canceled.abort();
+  await assert.rejects(serialize(a, canceled.signal), /资料引用无法使用/);
+  assert.equal(saved.length, 2, 'a canceled send cannot alter the persisted scope');
 });
 
 test('references are read back strictly', () => {

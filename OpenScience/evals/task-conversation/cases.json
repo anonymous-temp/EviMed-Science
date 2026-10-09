@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "about": "Run through real DSH and DeepSeek in a disposable account. Inspect persisted tasks and tool calls, not only the model's promise. Remove the fixture task and account after acceptance.",
+  "cases": [
+    {
+      "id": "schedule-and-reschedule",
+      "turns": [
+        "请按中国标准时间，每周一上午 8 点追踪 PDF 文本提取的新进展，任务标题叫阅读器进展。",
+        "改成每周五上午 9 点，只看 Mozilla PDF.js 官方发布记录。",
+        "暂停这项任务。"
+      ],
+      "expect": {
+        "tools": ["schedule_task", "update_task", "update_task"],
+        "tasksCreated": 1,
+        "finalSchedule": { "kind": "weekly", "timeZone": "Asia/Shanghai", "time": "09:00", "weekdays": [5] },
+        "finalState": "paused",
+        "cardOpens": "/app/autopilot/<persisted task id>"
+      }
+    },
+    {
+      "id": "discussion-does-not-schedule",
+      "turns": ["解释一下定时研究与我随时发问有什么区别，暂时不创建任务。"],
+      "expect": { "tasksCreated": 0, "forbiddenTools": ["schedule_task", "update_task"] }
+    },
+    {
+      "id": "continuous-execution",
+      "setup": "Create a paused fixture task, run it twice manually, and wait for each execution to finish. Between executions send the intervening turn in the task conversation.",
+      "turns": ["以后只看稳定版本，排除预发布版本，并在下一次回复开头说明范围。"],
+      "expect": { "sameSessionForAllExecutions": true, "interveningTurnPreserved": true, "perExecutionBudgetEnforced": true, "verificationUsesSeparateSession": true }
+    }
+  ]
+}

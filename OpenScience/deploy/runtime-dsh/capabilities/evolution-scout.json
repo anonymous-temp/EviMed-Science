@@ -22,7 +22,8 @@
       "outputs": [
         {
           "path": "research-card.json",
-          "required": true
+          "required": true,
+          "role": "work"
         }
       ],
       "checks": [

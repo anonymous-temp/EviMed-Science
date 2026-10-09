@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light"><head><meta charset="utf-8"><title>图 3 定时任务：列表加任务的对话</title>
+<meta name="shot" content="2040x1010">
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="fig.css">
+<style>
+  .frame.a { right: auto; width: 1560px; }
+  .tl { width: 300px; flex: none; border-right: 1px solid var(--border-hairline); padding: 20px 12px; display: flex; flex-direction: column; gap: 2px; background: var(--bg); }
+  .tl .hd { display: flex; align-items: center; gap: 8px; padding: 0 8px 12px; }
+  .tl .hd h1 { font-size: 20px; line-height: 28px; font-weight: 600; }
+  .tl .grp { font-size: 12px; line-height: 20px; color: var(--text-3); padding: 12px 8px 4px; }
+  .tr { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: 8px; }
+  .tr.sel { background: var(--surface-2); }
+  .tr .n { font-weight: 500; }
+  .tr .s { font-size: 12px; line-height: 18px; color: var(--text-3); }
+  .tr .more { margin-left: auto; color: var(--text-3); letter-spacing: 1px; }
+  .tr .rd { width: 6px; height: 6px; border-radius: 3px; background: var(--dot-running); display: inline-block; margin-right: 6px; vertical-align: 2px; }
+  .mainc { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .strip { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--border-hairline); background: var(--bg); }
+  .strip .t { font-size: 18px; line-height: 26px; font-weight: 600; }
+  .strip .m { color: var(--text-3); font-size: 13px; }
+  .strip .runs { color: var(--text-2); font-size: 13px; padding: 0 10px; height: 32px; display: inline-flex; align-items: center; border-radius: 8px; }
+  .kernel { flex: 1; position: relative; margin: 8px; border: 2px dashed var(--border-control); border-radius: 10px;
+    background: repeating-linear-gradient(135deg, var(--surface-1) 0 10px, var(--surface-2) 10px 11px); display: flex; flex-direction: column; padding: 22px 0 0; }
+  .kbadge { position: absolute; left: 12px; top: -12px; background: var(--surface); border: 1px dashed var(--border-control); border-radius: 6px; padding: 0 8px; font-size: 12px; line-height: 22px; color: var(--text-2); }
+  .col { width: 620px; margin: 0 0 0 28px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .k { background: var(--surface); border: 1px dashed var(--border-control); border-radius: 10px; }
+  .e { background: var(--accent-soft); border: 1.5px solid var(--accent); border-radius: 10px; }
+  .user { align-self: flex-end; max-width: 480px; padding: 10px 14px; }
+  .when { align-self: center; font-size: 12px; color: var(--text-3); }
+  .fold { padding: 6px 12px; color: var(--text-2); font-size: 13px; width: max-content; }
+  .ans { padding: 10px 14px; }
+  .ans p { margin: 2px 0; }
+  .fcs { display: flex; gap: 8px; margin-top: 8px; }
+  .fc { padding: 6px 10px; background: var(--surface); border: 1px solid var(--border-hairline); border-radius: 8px; font-size: 13px; }
+  .card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+  .card .ic { width: 32px; height: 32px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border-hairline); flex: none; }
+  .card .n { font-weight: 600; }
+  .card .s { font-size: 12px; color: var(--text-3); }
+  .card .o { margin-left: auto; height: 30px; padding: 0 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border-control); display: inline-flex; align-items: center; font-size: 13px; }
+  .composer { margin-top: auto; padding: 12px 14px 10px; border-radius: 24px; box-shadow: var(--shadow-e2); background: var(--surface); border: 1px dashed var(--border-control); }
+  .composer .ph { color: var(--text-3); height: 36px; }
+  .crow { display: flex; align-items: center; gap: 10px; color: var(--text-3); font-size: 13px; }
+  .send { margin-left: auto; width: 32px; height: 32px; border-radius: 16px; background: var(--accent); }
+  .gap16 { height: 16px; flex: none; }
+  .frame.b { left: auto; right: 24px; width: 408px; flex-direction: column; padding: 16px; gap: 10px; }
+  .frame.b .lab { font-size: 13px; color: var(--text-2); }
+</style>
+</head>
+<body>
+<div class="frame a">
+  <aside class="side">
+    <div class="brand"><span class="mark"></span>EviMed<span class="sp"></span><span class="ico"></span><span class="ico"></span></div>
+    <nav class="nav">
+      <a><span class="ico"></span>新对话</a>
+      <a><span class="ico"></span>前沿动态</a>
+      <a><span class="ico"></span>科研工具</a>
+      <a><span class="ico"></span>知识库</a>
+      <a><span class="ico"></span>记忆胶囊</a>
+      <a class="on"><span class="ico"></span>定时任务</a>
+      <a><span class="ico"></span>插件与技能</a>
+    </nav>
+    <div class="sec">项目</div>
+    <div class="conv" style="padding-left:8px;color:var(--text);font-weight:500">我的研究</div>
+    <div class="conv">SGLT2 抑制剂与心衰再住院</div>
+    <div class="foot"><span class="avatar"></span>研究者<span class="sp"></span><span class="ico"></span></div>
+  </aside>
+  <div class="tl">
+    <div class="hd"><h1>定时任务</h1><span class="sp"></span><span class="ico"></span><span class="btn secondary" style="height:32px;width:32px;padding:0;justify-content:center">＋</span></div>
+    <div class="grp">即将执行</div>
+    <div class="tr sel"><div><div class="n"><span class="rd"></span>每周文献简报</div><div class="s">进行中 · 每周一 08:00</div></div><span class="more">⋯</span></div>
+    <div class="tr"><div><div class="n">心衰指南更新追踪</div><div class="s">下次 周五 09:00 · 每周</div></div><span class="more">⋯</span></div>
+    <div class="tr"><div><div class="n">GLP-1 注册试验进展</div><div class="s">下次 10月15日 07:00 · 每月</div></div><span class="more">⋯</span></div>
+    <div class="grp">已暂停</div>
+    <div class="tr"><div><div class="n">SGLT2 安全信号监测</div><div class="s">需要你补充：要监测的药品名单</div></div><span class="more">⋯</span></div>
+  </div>
+  <div class="mainc">
+    <div class="strip">
+      <span class="t">每周文献简报</span><span class="m">每周一 08:00 · 中国标准时间 · 下次 10月12日 08:00</span><span class="sp"></span><span class="runs" style="color:var(--accent)">最新结果</span>
+      <span class="runs">第 3 次 · 今天 ▾</span><span class="btn secondary">停止本次</span><span class="ico"></span>
+    </div>
+    <div class="kernel">
+      <span class="kbadge">内核界面：这项任务的对话（随任务保存）</span>
+      <div class="col">
+        <div class="user k">每天检索心力衰竭领域新发表的临床研究，说明研究设计、主要结局与局限，附可核对的来源；只汇报有意义的新变化。</div>
+        <div class="when">10月7日 07:00 · 第 2 次</div>
+        <div class="ans k"><p>本周没有新的心衰随机对照试验；1 项注册研究更新了入组人数……</p></div>
+        <div class="user k">以后只看随机对照试验，改成每周一早上 8 点。</div>
+        <div class="ans k"><p>已改为每周一 08:00，只汇报随机对照试验。</p>
+          <div class="e card" style="margin-top:8px"><span class="ic"></span><div><div class="n">每周文献简报</div><div class="s">每周一 08:00 · 已更新</div></div><span class="o">打开</span></div>
+        </div>
+        <div class="when">今天 15:20 · 第 3 次 · 立即运行 · 进行中</div>
+        <div class="fold k">▸ 正在检索 · 12 次工具调用</div>
+        <div class="composer"><div class="ph">继续提问，或在执行中插话…</div><div class="crow"><span>＋</span><span>📎</span><span class="sp"></span><span>deepseek-flash</span><span class="send"></span></div></div>
+        <div class="gap16"></div>
+      </div>
+    </div>
+  </div>
+  <div class="call" style="left:262px;top:410px;max-width:270px"><span class="num">1</span><span class="box">列表在页内一栏，不盖遮罩；行上只有名称与下次时间，⋯ 常显（立即运行 · 暂停 · 编辑 · 删除）</span></div>
+  <div class="call" style="left:1196px;top:104px;max-width:330px"><span class="num">2</span><span class="box">任务条由外壳画：周期、时区、下次、最新结果与执行切换；主按钮“立即运行”，执行中变“停止本次”；不写预算</span></div>
+  <div class="call" style="left:1196px;top:236px;max-width:330px"><span class="num">3</span><span class="box">主区就是这项任务的对话：每次执行是其中一轮，结果、追问与插话都在这里，执行中实时可见</span></div>
+  <div class="call" style="left:1196px;top:380px;max-width:330px"><span class="num">4</span><span class="box">用话改任务：模型调用任务工具，回复里出现任务卡</span></div>
+  <div class="call" style="left:1196px;top:838px;max-width:330px"><span class="num">5</span><span class="box">输入框是内核的同一个；它下面至少留 16 px</span></div>
+</div>
+
+<div class="frame b">
+  <div class="lab">在任何对话里创建（目标）</div>
+  <div class="kernel" style="margin:0;padding:22px 12px 12px;flex:none">
+    <span class="kbadge">内核界面：普通对话</span>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="user k" style="max-width:320px">每周五帮我筛选心衰领域的新指南和随机对照试验，按新增内容、来源和是否值得核查整理。</div>
+      <div class="ans k"><p>已设置，每周五 09:00 运行，第一次在明天（10月9日）。</p>
+        <div class="e card" style="margin-top:8px"><span class="ic"></span><div><div class="n">心衰指南与试验周报</div><div class="s">每周五 09:00</div></div><span class="o">打开</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="call" style="position:static;max-width:none"><span class="num">6</span><span class="box">一句话加频率就够，预算与停止规则用默认值（已裁定 2026-09-20）；“打开”进入左图这项任务的页面</span></div>
+  <div class="call" style="position:static;max-width:none"><span class="num">7</span><span class="box">页内“新建”仍可用：一个短对话框，只填要持续做的事和频率</span></div>
+</div>
+<div class="caption"><b>图 3　定时任务的目标形态：页内任务列表 + 这项任务的对话。</b>按设计令牌 2.1.2 绘制的示意图，不是线上截图；参照所有者 10-08 给出的 ChatGPT 定时任务截图。斜纹虚线框是内核渲染，蓝框是插槽里的 EviMed 组件。①②⑤ 不需要新契约（第 1 批 E-18；执行中可以插话要 E-20）；③ 的“一项任务一段对话”、④⑥ 需要新契约（第 3 批 N-12、N-13）。</div>
+</body></html>

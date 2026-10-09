@@ -3,6 +3,7 @@ import { usagePurposeOfRun } from "@evimed/domain";
 import { handbookContextFor, prepareCapabilityHandbooks } from "./capabilityHandbooks.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
+import { sourceConversationContext } from "./sourceConversationContext.mjs";
 import { OPEN_DOMAIN_ANSWER_AGENT_ID } from "./specialistRouting.mjs";
 
 /** The actual runtime mount, not a second estimate of what the image might carry. */
@@ -37,14 +38,16 @@ export function createOwnedHandbookSelector({ learning, registry, config, runtim
   };
 }
 
-/** @param {{learning:any,registry:any,config:any,runtimeManager:any,agentRuns:any,paused:Function,audit:Function}} dependencies */
+/** @param {{learning:any,registry:any,config:any,runtimeManager:any,agentRuns:any,paused:Function,audit:Function,sourceService?:any,researchSessions?:any}} dependencies */
 export function createOwnedResearchContext(dependencies) {
   const select = createOwnedHandbookSelector(dependencies);
   const { config, agentRuns } = dependencies;
   return async (project, session, options, run) => {
     const { selection: handbooks } = await select(project, session, options, run);
     const capabilityId = run.effectiveAgentId ?? options.routedSpecialist?.agentId ?? session.agentId ?? OPEN_DOMAIN_ANSWER_AGENT_ID;
-    const prepared = await prepareResearchContext(project, { ...session, agentId: session.agentId ?? capabilityId }, config, { ...options, handbooks });
+    const saved = dependencies.researchSessions ? await dependencies.researchSessions.get(project, session.sessionId) : session;
+    const sourceContext = await sourceConversationContext(dependencies.sourceService, project, saved);
+    const prepared = await prepareResearchContext(project, { ...session, agentId: session.agentId ?? capabilityId }, config, { ...options, handbooks, sourceContext });
     if (prepared.handbooks.length) {
       await agentRuns.recordLearning(project, run.id, { capabilityHandbooks: prepared.handbooks });
     }

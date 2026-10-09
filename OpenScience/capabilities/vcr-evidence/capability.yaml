@@ -57,14 +57,19 @@ produces:
 - contractKind: vcr-study-package
   outputs:
   - path: evidence-parameters.md
+    role: document
     required: true
   - path: results.json
+    role: data
     required: true
   - path: precedents.md
+    role: document
     required: false
   - path: applicability.md
+    role: document
     required: false
   - path: revision-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

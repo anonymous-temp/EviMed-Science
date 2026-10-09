@@ -629,8 +629,8 @@ test("a run dispatched for one product of vcr-analysis is held to that product's
   // comparability.md, a file of another product.
   const patients = registry.get("vcr-analysis", { products: ["vcr-cohort-snapshot"] });
   assert.deepEqual(requiredPaths(patients), ["analysis-report.md", "results.json"]);
-  assert.deepEqual(registry.get("vcr-analysis", { products: ["vcr-comparator-analysis"] }).outputs, [{ path: "comparability.md", required: true }]);
-  assert.deepEqual(registry.get("vcr-analysis", { products: ["vcr-simulation-report"] }).outputs, [{ path: "simulation.json", required: true }]);
+  assert.deepEqual(registry.get("vcr-analysis", { products: ["vcr-comparator-analysis"] }).outputs, [{ path: "comparability.md", required: true, role: "document" }]);
+  assert.deepEqual(registry.get("vcr-analysis", { products: ["vcr-simulation-report"] }).outputs, [{ path: "simulation.json", required: true, role: "data" }]);
   assert.deepEqual(requiredPaths(registry.get("vcr-analysis", { products: ["vcr-comparator-analysis", "vcr-simulation-report"] })), ["comparability.md", "simulation.json"],
     "two products owe both products' files and not the third's");
   for (const kinds of [["vcr-cohort-snapshot"], ["vcr-comparator-analysis", "vcr-simulation-report"]]) {

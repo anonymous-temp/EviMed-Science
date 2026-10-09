@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light"><head><meta charset="utf-8"><title>图 2 对话工作区的分工</title>
+<meta name="shot" content="2040x1000">
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="fig.css">
+<style>
+  .frame.a { right: auto; width: 1600px; bottom: 64px; }
+  .kernel { flex: 1; position: relative; display: flex; border: 2px dashed var(--border-control); margin: 8px; border-radius: 10px;
+    background: repeating-linear-gradient(135deg, var(--surface-1) 0 10px, var(--surface-2) 10px 11px); }
+  .kbadge { position: absolute; left: 12px; top: -12px; background: var(--surface); border: 1px dashed var(--border-control); border-radius: 6px; padding: 0 8px; font-size: 12px; line-height: 22px; color: var(--text-2); z-index: 3; }
+  .chat { flex: 1; display: flex; flex-direction: column; padding: 24px 40px 16px; gap: 14px; position: relative; }
+  .k { background: var(--surface); border: 1px dashed var(--border-control); border-radius: 10px; }
+  .e { background: var(--accent-soft); border: 1.5px solid var(--accent); border-radius: 10px; }
+  .tagk { font-size: 11px; line-height: 16px; color: var(--text-3); }
+  .tage { font-size: 11px; line-height: 16px; color: var(--accent-strong); }
+  .shead { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+  .user { align-self: flex-end; max-width: 560px; padding: 10px 14px; }
+  .fold { padding: 8px 12px; color: var(--text-2); font-size: 13px; width: max-content; }
+  .ans { padding: 12px 14px; color: var(--text); }
+  .ans p { margin: 4px 0; max-width: 760px; }
+  .cards { display: flex; gap: 10px; padding: 10px; flex-wrap: wrap; }
+  .fc { width: 210px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border-hairline); border-radius: 10px; }
+  .fc b { display: block; font-weight: 600; }
+  .fc span { font-size: 12px; color: var(--text-3); }
+  .src { padding: 10px 12px; display: flex; gap: 10px; align-items: center; }
+  .warnrow { padding: 8px 12px; color: var(--warn-strong); width: max-content; }
+  .composer { margin-top: auto; padding: 12px 14px 10px; border-radius: 24px; box-shadow: var(--shadow-e2); }
+  .composer .ph { color: var(--text-3); height: 44px; }
+  .crow { display: flex; align-items: center; gap: 10px; }
+  .chipE { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 13px; }
+  .send { margin-left: auto; width: 32px; height: 32px; border-radius: 16px; background: var(--accent); }
+  .right { width: 340px; flex: none; border-left: 1px dashed var(--border-control); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .rtabs { display: flex; gap: 16px; font-size: 13px; color: var(--text-2); }
+  .rtabs b { color: var(--text); font-weight: 500; box-shadow: inset 0 -2px 0 var(--text); padding-bottom: 6px; }
+  .tree div { font-size: 13px; line-height: 26px; color: var(--text-2); }
+  .legend { position: absolute; top: 24px; right: 24px; width: 368px; display: flex; flex-direction: column; gap: 14px; font-size: 13px; line-height: 20px; color: var(--text-2); }
+  .sw { display: flex; gap: 10px; align-items: flex-start; }
+  .sw i { flex: none; width: 44px; height: 28px; display: inline-block; }
+  .sw b { color: var(--text); font-weight: 600; }
+  .cover { padding: 14px 16px; background: var(--surface); border: 1px solid var(--border-hairline); border-radius: 12px; box-shadow: var(--shadow-e2); }
+  .cover .t { color: var(--text); font-weight: 600; }
+  .note { border-top: 1px solid var(--border-hairline); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="frame a">
+  <aside class="side">
+    <div class="brand"><span class="mark"></span>EviMed<span class="sp"></span><span class="ico"></span><span class="ico"></span></div>
+    <nav class="nav">
+      <a class="on"><span class="ico"></span>新对话</a>
+      <a><span class="ico"></span>前沿动态</a>
+      <a><span class="ico"></span>科研工具</a>
+      <a><span class="ico"></span>知识库</a>
+      <a><span class="ico"></span>记忆胶囊</a>
+      <a><span class="ico"></span>定时任务</a>
+      <a><span class="ico"></span>插件与技能</a>
+    </nav>
+    <div class="sec">项目</div>
+    <div class="conv" style="padding-left:8px;color:var(--text);font-weight:500">我的研究</div>
+    <div class="conv" style="background:var(--surface-2)"><span class="dot"></span>SGLT2 抑制剂与心衰再住院</div>
+    <div class="conv">口服 GLP-1 的肾脏结局</div>
+    <div class="foot"><span class="avatar"></span>研究者<span class="sp"></span><span class="ico"></span></div>
+  </aside>
+  <div class="kernel">
+    <span class="kbadge">内核界面：DSH 0.1.7-rc.2，另一个源的 iframe</span>
+    <div class="chat">
+      <div class="shead k"><b>SGLT2 抑制剂与心衰再住院</b><span class="sp"></span><span class="tagk">会话标题（内核）</span></div>
+      <div class="user k">比较 SGLT2 抑制剂在射血分数保留的心衰中降低再住院的证据，给我一份报告。<div class="tagk">用户消息（内核）</div></div>
+      <div class="fold k">▸ 23 次工具调用 · 3 个子任务　<span class="tagk">过程折叠行，展开即内核原生视图</span></div>
+      <div class="ans k"><div class="tagk">回答正文（内核 Markdown，没有逐句挂载点）</div>
+        <p>两项大型随机对照试验显示，SGLT2 抑制剂使射血分数保留的心衰患者心衰再住院风险下降约两成……</p>
+      </div>
+      <div class="e"><div class="tage" style="padding:8px 12px 0">EviMed 组件 · 插槽 conversation.chat.node（文件卡、来源卡、复核行）</div>
+        <div class="cards">
+          <div class="fc"><b>报告.md</b><span>报告 · 打开</span></div>
+          <div class="fc"><b>证据矩阵.json</b><span>证据矩阵 · 打开</span></div>
+          <div class="fc"><b>显示全部 5 个文件</b><span>可读文件在前</span></div>
+        </div>
+        <div class="src">来源 · 证据等级 B · 随机对照试验<span class="sp"></span><span style="color:var(--accent)">在报告中查看 ›</span></div>
+        <div class="warnrow">⚠ 2 处引用待核对</div>
+      </div>
+      <div class="composer k">
+        <div class="ph">继续提问…　<span class="tagk">输入框、发送、排队与插话（内核）</span></div>
+        <div class="crow">
+          <span class="chipE e">+ 上传</span><span class="tage">插槽 conversation.input.left</span>
+          <span class="chipE e">证据综合 ×</span><span class="tage">插槽 conversation.composer.dock</span>
+          <span class="send"></span>
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="rtabs"><b>文件</b><span>运行</span></div>
+      <div class="tagk">右栏：文件树与文档预览、“运行”轨迹视图（内核）</div>
+      <div class="tree k" style="padding:8px 12px">
+        <div>▾ 输出</div><div>　报告.md</div><div>　证据矩阵.json</div><div>　图 1 森林图.png</div><div>▸ 资料</div>
+      </div>
+      <div class="k" style="flex:1;padding:12px"><div class="tagk">文档预览（内核原生，没有依据标记）</div>
+        <div class="bar" style="width:90%;margin-top:10px"></div><div class="bar" style="width:80%;margin-top:8px"></div><div class="bar" style="width:86%;margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="sw"><i class="k" style="background:repeating-linear-gradient(135deg, var(--surface-1) 0 6px, var(--surface-2) 6px 7px);border:2px dashed var(--border-control)"></i><span><b>内核渲染。</b>外壳只能用语言包、主题令牌、面板启停与隐藏规则影响它；文案按键覆盖，几何没有令牌。</span></div>
+  <div class="sw"><i class="e"></i><span><b>插槽里的 EviMed 组件。</b>组件内由我们全权决定；插槽名随内核版本变化，以 <code>runtimeUiSlots.mjs</code> 为准。</span></div>
+  <div class="sw"><i style="background:var(--surface);border:1px solid var(--border-hairline);border-radius:8px"></i><span><b>外壳渲染。</b>侧栏、启动与重连的覆盖层、告警，由我们全权决定。</span></div>
+  <div class="cover"><div class="t">正在清理上一次任务的运行环境，完成后自动继续</div><div style="font-size:12px;color:var(--text-3)">外壳覆盖层：启动被拒时盖在对话框架上，按原因给出动作</div></div>
+  <div class="note">带依据（✓ / ⚠）的阅读在外壳的报告阅读器里，从来源卡的“在报告中查看”、收件箱或定时任务进入；从文件卡打开默认是内核预览。</div>
+  <div class="note">改动对话行为时，在真实的 DSH + DeepSeek 会话里验证；对话内的键盘与读屏只能真机探测。</div>
+</div>
+<div class="caption"><b>图 2　对话工作区：谁渲染什么。</b>按设计令牌 2.1.2 绘制的示意图，不是线上截图；对应 §4.6 的分工表；医学内容仅作说明。</div>
+</body></html>

@@ -4,6 +4,7 @@ export interface AgendaSchedule { kind: "once" | "daily" | "weekly"; timeZone: s
 /** What the researcher wrote to the question; `paused` marks a message that asked to hold the research and was answered by pausing it (no episode ran). */
 export interface AgendaMessage { requestId: string; note: string; episodeId?: string | null; runEpisodeId: string | null; outcome?: "paused"; at: string }
 export interface AgendaPayload {
+  sessionId?: string | null;
   prompt?: string; schedule?: AgendaSchedule; nextRunAt?: string | null;
   scheduleState?: "paused" | "scheduled" | "completed" | "archived"; archivedAt?: string | null;
   messages?: AgendaMessage[]; title: string; topics: string[]; taskTypes: string[]; dailyBudgetCny: number; weeklyBudgetCny: number;
@@ -28,7 +29,7 @@ export interface ResearchState {
   unresolved: Array<{ kind: "unchecked" | "check_unavailable" | "not_rechecked" | "weakened" | "question" | "not_run"; text?: string; date?: string; reason?: string }>;
   materials: Array<{ sourceId: string; name: string; addedAt: string; state: "reading" | "ready" | "attention" | "unavailable" }>;
 }
-export interface AutopilotArtifactRef { projectId: string; runId: string; sessionId: string; path: string }
+export interface AutopilotArtifactRef { projectId: string; runId: string; sessionId: string; path: string; role?: string }
 export interface DigestClaim { id: string; statement: string;
   /** How far the claim has been checked: only an independent rerun reaches `reproduced`. */
   tier?: string; type?: string;
@@ -42,6 +43,7 @@ export interface DigestPayload { date: string; costCny: number; headlines: Diges
   decisions: Array<{ action: string; claimId: string; note: string; memory?: { status: string; reason?: string; code?: string } }> }
 /** One scheduled run of an agenda: the conversation it ran in and the briefing it fed. */
 export interface EpisodePayload {
+  resultKind?: import("@evimed/domain").AgendaResultKind;
   trigger?: "scheduled" | "manual" | "follow-up"; scheduledAt?: string; occurrenceKey?: string | null;
   instruction?: string; followUpNote?: string; replyToEpisodeId?: string | null; requestId?: string;
  agendaId: string; taskType: string; date: string; budgetCny: number;

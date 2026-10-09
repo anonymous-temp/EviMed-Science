@@ -1,3 +1,4 @@
+import { conversationReference } from '@evimed/domain';
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
@@ -996,6 +997,7 @@ function databaseResearchSession(row) {
     agentVersion: row.agent_version,
     runtimeAgent: row.runtime_agent,
     // The documents this conversation is limited to (a jsonb array of ids), or null for all of them.
+    originReference: conversationReference(row.origin_reference),
     sourceScope: Array.isArray(row.source_scope) && row.source_scope.length ? Object.freeze([...row.source_scope]) : null,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -1634,7 +1636,7 @@ export class PostgresStore extends InMemoryStore {
 
   async listResearchSessions(project) {
     const result = await this.database.query(
-      `SELECT session_id, mode, agent_id, agent_version, runtime_agent, source_scope, created_at, updated_at
+      `SELECT session_id, mode, agent_id, agent_version, runtime_agent, source_scope, origin_reference, created_at, updated_at
          FROM ${CONTROL_PLANE_SCHEMA}.research_sessions
         WHERE user_id = $1 AND project_id = $2 ORDER BY updated_at DESC`,
       [project.userId, project.id],
@@ -1644,7 +1646,7 @@ export class PostgresStore extends InMemoryStore {
 
   async getResearchSession(project, sessionId) {
     const result = await this.database.query(
-      `SELECT session_id, mode, agent_id, agent_version, runtime_agent, source_scope, created_at, updated_at
+      `SELECT session_id, mode, agent_id, agent_version, runtime_agent, source_scope, origin_reference, created_at, updated_at
          FROM ${CONTROL_PLANE_SCHEMA}.research_sessions
         WHERE user_id = $1 AND project_id = $2 AND session_id = $3`,
       [project.userId, project.id, sessionId],
@@ -1691,7 +1693,7 @@ export class PostgresStore extends InMemoryStore {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (user_id, project_id, session_id)
          DO UPDATE SET updated_at = EXCLUDED.updated_at
-         RETURNING session_id, mode, agent_id, agent_version, runtime_agent, source_scope, created_at, updated_at`,
+         RETURNING session_id, mode, agent_id, agent_version, runtime_agent, source_scope, origin_reference, created_at, updated_at`,
         [
           project.userId,
           project.id,
@@ -1709,12 +1711,21 @@ export class PostgresStore extends InMemoryStore {
   }
 
   /** Only the scope of a research session changes (`ResearchSessionStore.setSourceScope`); the row must exist. */
+  async setResearchSessionOriginReference(project, sessionId, reference) {
+    const result = await this.database.query(`UPDATE ${CONTROL_PLANE_SCHEMA}.research_sessions SET origin_reference = $4::jsonb, updated_at = now()
+      WHERE user_id = $1 AND project_id = $2 AND session_id = $3
+      RETURNING session_id, mode, agent_id, agent_version, runtime_agent, source_scope, origin_reference, created_at, updated_at`,
+    [project.userId, project.id, sessionId, JSON.stringify(reference)]);
+    if (!result.rowCount) throw new HttpError(404, "research_session_not_found", "Research session not found.");
+    return databaseResearchSession(result.rows[0]);
+  }
+
   async setResearchSessionSourceScope(project, sessionId, scope) {
     const result = await this.database.query(
       `UPDATE ${CONTROL_PLANE_SCHEMA}.research_sessions
           SET source_scope = $4::jsonb, updated_at = now()
         WHERE user_id = $1 AND project_id = $2 AND session_id = $3
-        RETURNING session_id, mode, agent_id, agent_version, runtime_agent, source_scope, created_at, updated_at`,
+        RETURNING session_id, mode, agent_id, agent_version, runtime_agent, source_scope, origin_reference, created_at, updated_at`,
       [project.userId, project.id, sessionId, scope ? JSON.stringify(scope) : null],
     );
     if (!result.rowCount) throw new HttpError(404, "research_session_not_found", "Research session not found.");

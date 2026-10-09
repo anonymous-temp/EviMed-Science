@@ -46,14 +46,19 @@ produces:
 - contractKind: geo-insight-pack
   outputs:
   - path: geo-insight.md
+    role: report
     required: true
   - path: claims.json
+    role: data
     required: true
   - path: question-map.json
+    role: data
     required: true
   - path: journey.md
+    role: document
     required: false
   - path: revision-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

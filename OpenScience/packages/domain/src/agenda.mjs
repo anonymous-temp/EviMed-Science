@@ -24,6 +24,18 @@
  * @module @evimed/domain/agenda
  */
 
+/** @typedef {'result' | 'no-new-evidence' | 'failed'} AgendaResultKind */
+
+/** No new evidence is an explicit, valid empty delta, never a missing or unreadable result.
+ * @param {{status: string, deltaSchemaVersion?: number | null, deltaErrorCode?: string | null, claims?: unknown[]}} input
+ * @returns {AgendaResultKind}
+ */
+export function agendaResultKind(input) {
+  if (input.status !== 'succeeded') return 'failed'
+  return input.deltaSchemaVersion === 1 && !input.deltaErrorCode && Array.isArray(input.claims) && input.claims.length === 0
+    ? 'no-new-evidence' : 'result'
+}
+
 /** What an agenda holds. */
 export const AGENDA_ITEM_TYPES = Object.freeze([
   'question',

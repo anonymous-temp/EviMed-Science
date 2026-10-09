@@ -20,6 +20,7 @@ produces:
 - contractKind: evolution-research-card
   outputs:
   - path: research-card.json
+    role: work
     required: true
   checks:
   - requiredOutputsExist

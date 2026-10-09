@@ -1,3 +1,4 @@
+import { WebVitals } from './webVitals.mjs';
 import { GeoJudge } from './geoJudge.mjs';
 import { createModuleEvolutionPolicies } from './moduleEvolutionPolicies.mjs';
 import { createPublishedResultExtractor } from './publishedResultExtraction.mjs';
@@ -119,6 +120,8 @@ import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEd
 import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
+import { preservedConversationHistory } from "./conversationHistory.mjs";
+import { sourceConversationContext } from "./sourceConversationContext.mjs";
 import {
   OPEN_DOMAIN_ANSWER_AGENT_ID,
   classifierFailureReason,
@@ -3146,6 +3149,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     onRunStateChanged: (project, run) => {
       runEvents.publish(run.id, "run/state", {
         state: run.status,
+        artifactRoles: run.artifactRoles ?? {}, stepActions: run.stepActions ?? {}, availableActions: run.availableActions ?? [], stalled: run.stalled === true,
         // The nine-state projection (§7.1.1): `state` stays the ledger's own
         // four values so nothing that already reads it has to change; `phase`
         // is the added, richer read for whatever wants it — today's frontend
@@ -3766,7 +3770,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
   }) : null;
   const ownedContextDependencies = {
-    learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns,
+    learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns, sourceService, researchSessions,
     paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
     audit: (event, status, detail) => securityAudit(config, event, status, detail),
   };
@@ -4255,12 +4259,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           throw Object.assign(new HttpError(409, "runtime_busy", "The project has a run in progress; the scheduled execution waits for it."),
             { retryAfterMs: AUTOPILOT_INTERACTIVE_RETRY_MS });
         }
-        const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, {
+        const sessionId = programmeOwned ? randomId("session_") : await autopilotService.conversation(user.id, agenda.id);
+        if (!interactive) await runtimeManager.reserveBoundedRuntimeSession(project, {
           runId: episode.episodeId,
           dailyLimit,
           weeklyLimit,
           runLimit,
         });
+        const session = { id: sessionId };
         noteEpisodePlacement(interactive ? "interactive" : "bounded");
         const cleanupTarget = interactive ? null : runtimeManager.boundedRuntimeCleanupTarget(project);
         const releaseOwnRuntime = async () => cleanupTarget?.runId === episode.episodeId
@@ -4268,12 +4274,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // Where the run lives and what it may spend, written with the binding to the episode. Every write of that binding carries it.
         const bindingOf = (/** @type {string} */ runId) => ({ runId, sessionId: session.id, interactive, runLimitCny: runLimit });
         try {
-          await researchSessions.put(project, session.id, {
-            mode: "specialist", agentId: selected.id, agentVersion: selected.version,
-          });
+          await researchSessions.put(project, session.id, programmeOwned
+            ? { mode: "specialist", agentId: selected.id, agentVersion: selected.version }
+            : { mode: "open-domain" });
           const run = await agentRuns.dispatch(project, {
             sessionId: session.id,
             dispatchId,
+            agendaId: agenda.id,
             // The researcher's words are the question the run is listed and titled by; the whole brief is what the delivery gate
             // and the run's injected context read (`brief`).
             question: visibleText,
@@ -4431,8 +4438,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       state: (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId),
       // What a conversation's own state adds at its first step: the capability it is bound to (a conversation typed in the
       // kernel's frame passes through no dispatch, so this is where it learns the binding — `boundConversationNote`), and the
-      // pack a 「试用一次」 conversation is trying. The binding is best effort like the rest: a record that cannot be read adds
-      // nothing, and the conversation goes on as an open one.
+      // pack a 「试用一次」 conversation is trying. An unreadable scope must never
+      // turn a selected library into permission to read the whole knowledge base.
       notes: async (userId, projectId, sessionId) => {
         const bound = await (async () => {
           const owner = await store.userById(userId);
@@ -4440,8 +4447,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const project = await store.requireProject(owner, projectId);
           // A turn the control plane dispatched already carries the instruction in its own context; said twice it is only longer.
           const dispatched = (await agentRuns.activeRuns(project)).some((/** @type {any} */ run) => run.sessionId === sessionId && run.dispatchId);
-          return dispatched ? null : boundConversationNote(await researchSessions.get(project, sessionId), await agentRegistry);
-        })().catch(() => null);
+          const session = await researchSessions.get(project, sessionId);
+          return [dispatched ? null : boundConversationNote(session, await agentRegistry),
+            await sourceConversationContext(sourceService, project, session)].filter(Boolean).join("\n") || null;
+        })().catch(() => "The conversation's knowledge-base scope is temporarily unavailable. Do not read knowledge-base files or search the knowledge base on this turn; explain that the selected materials are temporarily unavailable if the question needs them.");
         return [...(bound ? [bound] : []), ...await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, userId, projectId, sessionId)];
       },
       recordRecall: (project, runId, items) => agentRuns.recordLearning(project, runId, {
@@ -4584,7 +4593,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   sourceChanges?.useLookup(sourceUpdates);
   const resultSourceUpdatesRoutes = createResultSourceUpdatesRoutes({ store, results: resultProvenance,
     lookup: sourceUpdates, impacts: resultImpacts, maxJsonBytes: config.maxJsonBytes });
-  const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex, evaluationIsolation });
+  const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex, evaluationIsolation,
+    sourceScope: async (identity, sessionId) => {
+      const user = await store.userById(identity.userId);
+      const project = await store.requireProject(user, identity.projectId);
+      return (await researchSessions.get(project, sessionId))?.sourceScope ?? null;
+    },
+  });
   // `frontier_search`: the page's own list, read for the runtime's account;
   // with the module off it answers `frontier_disabled` (frontierGateway.mjs).
   const frontierGatewayHandler = createFrontierGatewayHandler(config, runtimeManager, {
@@ -5128,6 +5143,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const authRateLimiter = new FixedWindowRateLimiter();
   const commandRateLimiter = new FixedWindowRateLimiter();
   const operationalMetrics = new OperationalMetrics();
+  const webVitals = new WebVitals();
   let activeCommands = 0;
   let startupRuntimeCleanup = null;
   let backgroundReady = false;
@@ -5663,6 +5679,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           openList: openListConnector,
           productDatabase,
           operationalMetrics,
+          webVitals,
           activeCommands,
           runMetrics,
           imMetrics: im.service ? () => im.service.metrics() : null,
@@ -6093,12 +6110,36 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return;
       }
 
+      const historyRoute = /^\/api\/research-sessions\/([^/]+)\/history$/.exec(pathname);
+      if (historyRoute && req.method === "GET") {
+        const ctx = await context(req, res);
+        const sessionId = decodeRouteComponent(historyRoute[1], "research session id");
+        sendJson(res, 200, { data: await preservedConversationHistory(ctx.project, sessionId, await agentRuns.list(ctx.project)) });
+        return;
+      }
+
       // The knowledge-base documents one conversation is limited to (design reference N-14): `kb_search` searches
       // only these, and the conversation's context lists only these. An empty list lifts the limit.
+      const originReferenceRoute = /^\/api\/research-sessions\/([^/]+)\/origin-reference$/.exec(pathname);
+      if (originReferenceRoute && req.method === "PUT") {
+        const ctx = await context(req, res);
+        const body = await readJson(req, 4096);
+        if (body?.kind !== "frontier-event" || !/^[a-z0-9]{12,32}$/.test(body?.id ?? "") || !frontier?.service || !frontier.service.allows(ctx.user)) throw new HttpError(400, "invalid_request", "Invalid conversation reference.");
+        const found = await frontier.service.event(ctx.user, body.id);
+        if (!found.event) throw new HttpError(404, "frontier_event_not_found", "No such event.");
+        sendJson(res, 200, { data: await researchSessions.setOriginReference(ctx.project, decodeRouteComponent(originReferenceRoute[1], "session id"),
+          { kind: "frontier-event", id: found.event.id, title: found.event.title }) });
+        return;
+      }
       const sourceScopeRoute = /^\/api\/research-sessions\/([^/]+)\/source-scope$/.exec(pathname);
-      if (sourceScopeRoute && req.method === "PUT") {
+      if (sourceScopeRoute && (req.method === "PUT" || req.method === "GET")) {
         const sessionId = decodeRouteComponent(sourceScopeRoute[1], "research session id");
         const ctx = await context(req, res);
+        if (req.method === "GET") {
+          const session = await researchSessions.get(ctx.project, sessionId);
+          sendJson(res, 200, { data: { sourceScope: session?.sourceScope ?? null, originReference: session?.originReference ?? null } });
+          return;
+        }
         const body = await readJson(req, config.maxJsonBytes);
         if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => key !== "sourceIds")) {
           throw new HttpError(400, "invalid_research_session", "A source scope has one field, sourceIds.");
@@ -6997,6 +7038,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return;
       }
 
+      if (pathname === "/api/web-vitals" && req.method === "POST") {
+        await context(req, res);
+        webVitals.record(await readJson(req, 2048));
+        res.writeHead(204); res.end(); return;
+      }
+      if (pathname === "/api/ops/web-vitals" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        sendJson(res, 200, { data: webVitals.snapshot() }); return;
+      }
       if (pathname === "/api/metrics" && req.method === "GET") {
         const ctx = await context(req, res);
         sendJson(res, 200, { data: await metricsSnapshot(ctx, taskManager) });
@@ -7167,6 +7217,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // stream that never speaks again.
         channel.publish("run/state", {
           state: run.status,
+          artifactRoles: run.artifactRoles ?? {}, stepActions: run.stepActions ?? {}, availableActions: run.availableActions ?? [], stalled: run.stalled === true,
           phase: run.phase ?? null,
           errorCode: run.errorCode ?? null,
           verification: run.verification ?? null,
@@ -8606,7 +8657,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
+async function operatorMetricsText({ webVitals = null, judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8616,6 +8667,7 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   const httpStats = operationalMetrics.snapshot();
   const lines = [];
 
+  if (webVitals) lines.push(...webVitals.metrics());
   addMetric(lines, "open_science_up", "EviMed Web API process liveness.", "gauge", { value: 1 });
   addMetric(lines, "open_science_ready", "EviMed Web API readiness status.", "gauge", {
     value: readiness.ok ? 1 : 0,

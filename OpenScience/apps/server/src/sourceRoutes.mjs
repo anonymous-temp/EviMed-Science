@@ -1,6 +1,7 @@
 import { projectSourceManifestRecord } from "./sourceService.mjs";
 import { openListSourceInput } from "./openListSourceConnector.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
+import { locateSourceQuote, sourceQuoteExcerpt } from "./sourceQuotations.mjs";
 
 /** @param {any} req @param {number} limit @param {string[]} allowed */
 async function bodyOf(req, limit, allowed) {
@@ -175,6 +176,13 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
     const [sourceId, action] = parts;
     const source = await service.get(user.id, sourceId, { includeDeleted: method === "DELETE" });
     await store.requireProject(user, source.projectId);
+    if (action === "locate" && method === "POST" && parts.length === 2) {
+      const input = await bodyOf(req, maxJsonBytes, ["quote"]);
+      return reply(await locateSourceQuote(service, user.id, source, input.quote));
+    }
+    if (action === "excerpt" && method === "GET" && parts.length === 2) {
+      return reply(await sourceQuoteExcerpt(service, user.id, source, url.searchParams));
+    }
     if (action === "family" && method === "GET" && parts.length === 2) {
       return reply(await service.family(user.id, sourceId, { limit: Number(url.searchParams.get("limit") ?? 50) }));
     }

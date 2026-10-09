@@ -56,8 +56,10 @@ produces:
 - contractKind: vcr-cohort-snapshot
   outputs:
   - path: analysis-report.md
+    role: report
     required: true
   - path: results.json
+    role: data
     required: true
   checks:
   - requiredOutputsExist
@@ -72,6 +74,7 @@ produces:
   # results file belong to the cohort entry above and cannot be repeated here —
   # the flattened output list refuses a duplicate path (2026-09-28 merge).
   - path: comparability.md
+    role: document
     required: true
   checks:
   - requiredOutputsExist
@@ -79,6 +82,7 @@ produces:
 - contractKind: vcr-simulation-report
   outputs:
   - path: simulation.json
+    role: data
     required: true
   checks:
   - requiredOutputsExist

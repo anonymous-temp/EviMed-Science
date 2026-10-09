@@ -18,10 +18,13 @@ produces:
 - contractKind: source-understanding
   outputs:
   - path: source-understanding.json
+    role: data
     required: true
   - path: source-understanding-input.json
+    role: work
     required: true
   - path: revision-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

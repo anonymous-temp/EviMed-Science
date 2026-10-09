@@ -55,16 +55,22 @@ produces:
   # The structured table first: it is the only artifact whose numbers can be
   # recomputed, and the other two are renderings of it.
   - path: appraisal-table.json
+    role: matrix
     required: true
   - path: appraisal-table.md
+    role: matrix
     required: true
   - path: appraisal-table.csv
+    role: matrix
     required: true
   - path: citation-ledger.csv
+    role: data
     required: true
   - path: delivery-summary.md
+    role: document
     required: true
   - path: revision-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

@@ -26,10 +26,13 @@ produces:
 - contractKind: mendelian-randomization-report
   outputs:
   - path: mendelian-randomization-report.md
+    role: report
     required: true
   - path: mendelian-randomization-run.json
+    role: work
     required: true
   - path: mendelian-randomization-inputs.json
+    role: work
     required: false
   checks:
   - requiredOutputsExist

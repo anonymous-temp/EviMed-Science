@@ -25,6 +25,17 @@
  */
 
 export const DOMAIN_VERSION = '0.1.0'
+export { availableRunActions, availableRunStepActions, runIsStalled } from './src/runActions.mjs'
+export { ARTIFACT_ROLES, artifactPresentation, compareArtifacts } from './src/artifactPresentation.mjs'
+export { frontierEventEvidenceCounts } from './src/frontierEventEvidence.mjs'
+export { webVitalRoute, validWebVital } from './src/webVitals.mjs'
+export { conversationReference } from './src/conversationReference.mjs'
+/** @typedef {import('./src/artifactPresentation.mjs').ArtifactRole} ArtifactRole */
+/** @typedef {import('./src/runActions.mjs').RunAction} RunAction */
+export { sourceCitationProse, sourceCitationReferences, locateSourceQuotation } from './src/sourceCitations.mjs'
+
+export { agendaResultKind } from './src/agenda.mjs'
+/** @typedef {import('./src/agenda.mjs').AgendaResultKind} AgendaResultKind */
 
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityReason} AvailabilityReason */

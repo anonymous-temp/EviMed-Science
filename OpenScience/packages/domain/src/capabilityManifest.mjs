@@ -1,3 +1,4 @@
+import { ARTIFACT_ROLES } from './artifactPresentation.mjs';
 /**
  * `capability.yaml` — the only definition of a capability.
  *
@@ -202,7 +203,7 @@ export function validateCapabilityManifest(value) {
     }
     seenKinds.add(contractKind)
     const outputs = Array.isArray(item.outputs) ? item.outputs : []
-    /** @type {{ path: string, required: boolean }[]} */
+    /** @type {{ path: string, required: boolean, role?: string }[]} */
     const normalizedOutputs = []
     for (const output of outputs) {
       const record = /** @type {Record<string, unknown>} */ (output ?? {})
@@ -211,7 +212,10 @@ export function validateCapabilityManifest(value) {
         issues.push({ code: 'capability_invalid', message: `output path "${path}" must be a relative path inside the deliverable directory.`, field: 'produces' })
         continue
       }
-      normalizedOutputs.push({ path, required: record.required !== false })
+      if (record.role !== undefined && !ARTIFACT_ROLES.includes(String(record.role))) {
+        issues.push({ code: 'capability_invalid', message: `unknown artifact role "${record.role}".`, field: 'produces' })
+      }
+      normalizedOutputs.push({ path, required: record.required !== false, ...(typeof record.role === 'string' ? { role: record.role } : {}) })
     }
     if (!normalizedOutputs.length) {
       issues.push({ code: 'capability_invalid', message: `contract kind "${contractKind}" declares no outputs.`, field: 'produces' })

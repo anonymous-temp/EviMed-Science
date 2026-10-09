@@ -87,6 +87,12 @@ class KbSearchTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertIn("read the 1 listed files directly", result["summary"])
 
+    def test_session_identity_comes_from_private_execution_context(self):
+        _Gateway.answer = (200, {"data": {"mode": "small-library", "files": [], "hits": []}})
+        kb_search.search({"query": "q"}, execution_context={"sessionId": "session-owned"})
+        self.assertEqual(_Gateway.seen[0]["body"]["sessionId"], "session-owned")
+        self.assertNotIn("sessionId", kb_search.tool_definitions()[0]["inputSchema"]["properties"])
+
     def test_a_keyword_only_miss_is_a_warning_that_says_silence_is_not_evidence(self):
         _Gateway.answer = (200, {"data": {"mode": "keyword", "query": "q", "library": {}, "hits": []}})
         result = kb_search.search({"query": "q"})

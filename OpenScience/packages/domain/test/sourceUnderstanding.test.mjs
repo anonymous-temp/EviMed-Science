@@ -375,8 +375,9 @@ test('contents and limitations are optional lists, each bounded, for every schem
     // Empty is an answer: nothing to list, nothing the document states.
     assert.deepEqual(validateSourceUnderstanding({ ...base, contents: [], limitations: [] }, input), [])
     assert.deepEqual(validateSourceUnderstanding({ ...base, contents: Array.from({ length: 5 }, (_, i) => `第 ${i + 1} 部分`), limitations: ['单中心回顾性设计'] }, input), [])
-    for (const [field, max, chars] of [['contents', SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS, SOURCE_UNDERSTANDING_CONTENTS_ITEM_MAX_CHARS],
-      ['limitations', SOURCE_UNDERSTANDING_LIMITATIONS_MAX_ITEMS, SOURCE_UNDERSTANDING_LIMITATION_ITEM_MAX_CHARS]]) {
+    const limits = /** @type {Array<[string, number, number]>} */ ([['contents', SOURCE_UNDERSTANDING_CONTENTS_MAX_ITEMS, SOURCE_UNDERSTANDING_CONTENTS_ITEM_MAX_CHARS],
+      ['limitations', SOURCE_UNDERSTANDING_LIMITATIONS_MAX_ITEMS, SOURCE_UNDERSTANDING_LIMITATION_ITEM_MAX_CHARS]])
+    for (const [field, max, chars] of limits) {
       assert.ok(validateSourceUnderstanding({ ...base, [field]: Array.from({ length: max + 1 }, () => '一项') }, input).some(issue => issue.startsWith(field)), `${field}: too many`)
       assert.ok(validateSourceUnderstanding({ ...base, [field]: ['中'.repeat(chars + 1)] }, input).some(issue => issue.includes(field)), `${field}: too long`)
       assert.ok(validateSourceUnderstanding({ ...base, [field]: [''] }, input).some(issue => issue.includes(field)), `${field}: empty item`)
@@ -398,7 +399,7 @@ test('the projection keeps the two lists where the output carried them, bounded,
   assert.deepEqual([empty.contents, empty.limitations], [[], []])
   const kept = projectSourceUnderstandingOutput({ ...output, contents: ['  表 3 推荐等级  ', '图 1', 7, '', null, 'a', 'b', 'c', 'd'], limitations: ['x'.repeat(900)] }, input)
   assert.deepEqual(kept.contents, ['表 3 推荐等级', '图 1', 'a', 'b', 'c'], 'trimmed, text only, at most five')
-  assert.equal(kept.limitations[0].length, 400)
+  assert.equal(kept.limitations?.[0].length, 400)
   // Read paths project a stored record again with no input: the lists survive that, and a malformed stored value degrades to what is usable.
   assert.deepEqual(projectSourceUnderstandingOutput(kept).contents, kept.contents)
   assert.deepEqual(projectSourceUnderstandingOutput({ ...output, contents: 'not a list', limitations: [{ nope: 1 }] }).limitations, [])

@@ -35,47 +35,58 @@
       "outputs": [
         {
           "path": "data-profile.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "data-profile.json",
-          "required": false
+          "required": false,
+          "role": "data"
         },
         {
           "path": "data-profile.py",
-          "required": false
+          "required": false,
+          "role": "work"
         },
         {
           "path": "data-quality.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "evidence-map.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "feasibility-matrix.md",
-          "required": false
+          "required": false,
+          "role": "matrix"
         },
         {
           "path": "external-linkage.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "research-portfolio.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "study-protocol.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "scoping-run.json",
-          "required": false
+          "required": false,
+          "role": "work"
         },
         {
           "path": "agenda-delta.json",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

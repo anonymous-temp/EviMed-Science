@@ -28,6 +28,7 @@ const ARCHIVE_SHOWN = 14;
 
 /** The daily's archive and the issue on screen, read together. */
 export interface DailyState {
+  publication?: import("@/lib/frontierClient").FrontierPublication | null;
   /** null: the daily does not exist on this server yet. */
   index: FrontierDailySummary[] | null;
   issue: FrontierDaily | null;
@@ -50,6 +51,7 @@ export function useFrontierDaily(day: string | null, enabled: boolean): DailySta
   const [schedule, setSchedule] = useState<FrontierDailySchedule | null>(null);
   const [issue, setIssue] = useState<FrontierDaily | null>(null);
   const [loading, setLoading] = useState(enabled);
+  const [publication, setPublication] = useState<DailyState["publication"]>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -58,17 +60,17 @@ export function useFrontierDaily(day: string | null, enabled: boolean): DailySta
     setLoading(true);
     setError(null);
     (async () => {
-      const archive = await listFrontierDailies(30);
-      const wanted = day ?? archive?.dailies[0]?.day ?? null;
+      const archive = await listFrontierDailies(30, day);
+      const wanted = day ?? archive?.publication?.day ?? archive?.dailies[0]?.day ?? null;
       const found = wanted && archive !== null ? await fetchFrontierDaily(wanted) : null;
       return { archive, found };
     })().then(
-      ({ archive, found }) => { if (active) { setIndex(archive?.dailies ?? null); setSchedule(archive?.schedule ?? null); setIssue(found); } },
+      ({ archive, found }) => { if (active) { setIndex(archive?.dailies ?? null); setSchedule(archive?.schedule ?? null); setIssue(found); setPublication(archive?.publication); } },
       (caught: unknown) => { if (active) setError(frontierErrorMessage(caught)); },
     ).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [day, enabled, attempt]);
-  return { index, issue, loading, error, retry: () => setAttempt((value) => value + 1), day, schedule };
+  return { index, issue, loading, error, retry: () => setAttempt((value) => value + 1), day, schedule, publication };
 }
 
 /**
@@ -130,15 +132,16 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
     </Menu>
   );
   if (!state.issue) {
-    // The server does not tell a reader that a day was left unpublished, so this says when issues come and what leaves a day without one,
-    // and never that something failed or that nothing qualified. Past issues stay one tap away whenever there are any.
+    // Only a durable publication outcome distinguishes an empty day from a failed issue.
+    // Past issues stay one tap away whenever there are any.
     const when = state.schedule ? scheduleLabel(state.schedule) : null;
-    const asked = !weekly && state.day ? state.day : null;
+    const asked = !weekly ? state.day ?? state.publication?.day ?? null : null;
+    const outcome = !weekly ? state.publication?.state : null;
     return (
       <EmptyState
         icon={CalendarDays}
-        title={weekly ? "暂无周报" : asked ? `${shortDate(asked)}没有日报` : when ? `今日日报 ${when}发布` : "今日日报尚未发布"}
-        description={weekly ? undefined : asked && when ? `日报每天 ${when}发布；当天没有符合条件的内容时不出刊。` : "当天没有符合条件的内容时不出刊。"}
+        title={outcome === "failed" ? "日报生成失败" : outcome === "empty" ? `${state.day ? shortDate(state.day) : "今日"}没有符合条件的内容` : outcome === "pending" ? (when ? `日报尚未发布，每天 ${when}发布` : "日报尚未发布") : weekly ? "暂无周报" : asked ? `${shortDate(asked)}没有日报` : when ? `今日日报 ${when}发布` : "今日日报尚未发布"}
+        description={outcome === "failed" ? "暂未生成这一期日报，可以先阅读往期。" : outcome === "empty" ? `${asked ? shortDate(asked) : "这一天"}未出刊，可以阅读往期。` : weekly ? undefined : asked && when ? `日报每天 ${when}发布；当天没有符合条件的内容时不出刊。` : "当天没有符合条件的内容时不出刊。"}
         action={pastIssues(asked) || undefined}
       />
     );

@@ -27,10 +27,13 @@ produces:
 - contractKind: bibliometric-analysis-report
   outputs:
   - path: bibliometric-analysis-report.md
+    role: report
     required: true
   - path: bibliometric-analysis-run.json
+    role: work
     required: true
   - path: agenda-delta.json
+    role: work
     required: false
   checks:
   - requiredOutputsExist

@@ -3,6 +3,21 @@ import type { SourceMaterialsLedger, SourceMaterialsResult } from "@/lib/sourceM
 import { invokeCommand, type WebMe } from "./apiClient";
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
 
+export interface SourceQuoteLocation {
+  sourceId: string; title: string; generation: number; quote: string; textSha256: string | null;
+  status: string; start: number | null; end: number | null; page: number | null;
+}
+export interface SourceQuoteExcerpt {
+  status: string; text: string | null; quote: string | null; start: number | null; end: number | null; page: number | null;
+}
+export function locateSourceQuote(sourceId: string, quote: string) {
+  return productRequest<SourceQuoteLocation>(`/sources/${encodeURIComponent(sourceId)}/locate`, "POST", { quote });
+}
+export function getSourceQuoteExcerpt(sourceId: string, span: { start: number; end: number; sha: string }) {
+  const query = new URLSearchParams({ start: String(span.start), end: String(span.end), sha: span.sha });
+  return productRequest<SourceQuoteExcerpt>(`/sources/${encodeURIComponent(sourceId)}/excerpt?${query}`);
+}
+
 export type SourceStatus = "queued" | "parsing" | "complete" | "needs_attention" | "failed" | "missing" | "canceled";
 export type SourceDepth = "skip" | "index_only" | "structured" | "deep";
 export interface SourceAnchor {

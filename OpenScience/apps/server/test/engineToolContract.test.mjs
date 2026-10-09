@@ -118,7 +118,7 @@ test("the session models, efforts and engine tools the MCP server admits are the
     release();
     return decorated;
   });
-  assert.equal(wrapped.length, 7, "the wrapper decorates the six specialists and the calculator");
+  assert.equal(wrapped.length, 8, "the wrapper decorates the six specialists, calculator and scoped knowledge search");
   assert.deepEqual(missingFrom(wrapped, admitted.tools), [], "the wrapper attaches a context to a tool whose body refuses one");
   assert.deepEqual(missingFrom(admitted.tools, wrapped), [], "the MCP server expects a context on a tool the wrapper never gives one");
 });

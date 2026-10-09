@@ -39,7 +39,7 @@ export async function completeOwnedAutopilotRun({ service, runtimeManager, usage
   const usage = usageLedger ? await usageLedger.summaryRun(project.userId, episode.id).catch(() => null) : null;
   await service.completeRun(project.userId, {
     ...delta, projectId: project.id, runId: run.id, episodeId: episode.id, sessionId: run.sessionId,
-    status: run.status, artifacts: run.artifacts ?? [], unverifiedArtifacts: run.unverifiedArtifacts ?? [],
+    status: run.status, artifactRoles: run.artifactRoles ?? {}, artifacts: run.artifacts ?? [], unverifiedArtifacts: run.unverifiedArtifacts ?? [],
     artifactRefs: safeAutopilotArtifactRefs(project.id, run), costCny: usage?.actualCost ?? 0,
   }).catch(error => audit("autopilot.run.complete", error));
 

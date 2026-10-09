@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light"><head><meta charset="utf-8"><title>图 5 知识库：阅读页与多选</title>
+<meta name="shot" content="2040x1000">
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="fig.css">
+<style>
+  .frame.a { right: auto; width: 1520px; }
+  .rd { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .rh { padding: 18px 24px 12px; border-bottom: 1px solid var(--border-hairline); }
+  .back { font-size: 13px; color: var(--text-2); }
+  .rh .l { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+  .rh h1 { font-size: 22px; line-height: 30px; font-weight: 600; }
+  .rh .m { font-size: 13px; color: var(--text-3); }
+  .split { flex: 1; display: flex; min-height: 0; }
+  .orig { flex: 1; background: var(--surface-1); padding: 20px 28px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid var(--border-hairline); }
+  .pg { background: var(--surface); border: 1px solid var(--border-hairline); border-radius: 4px; padding: 28px 36px; flex: 1; display: flex; flex-direction: column; gap: 9px; }
+  .pg .ln { height: 9px; border-radius: 4px; background: var(--surface-2); }
+  .pg .hl { background: #f6e7a6; height: 9px; border-radius: 2px; }
+  .pbar { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-2); }
+  .aside { width: 380px; flex: none; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .aside h3 { font-size: 13px; line-height: 20px; color: var(--text-3); font-weight: 500; }
+  .aside p, .aside li { font-size: 14px; line-height: 22px; color: var(--text); }
+  .aside ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  .kp { display: flex; gap: 8px; padding: 4px 6px; border-radius: 6px; }
+  .kp.on { background: var(--accent-soft); }
+  .kp .p { flex: none; font-size: 12px; color: var(--text-3); width: 44px; }
+  .gapline { font-size: 13px; color: var(--text-3); }
+  .fold { font-size: 13px; color: var(--text-2); }
+  .frame.b { left: auto; right: 24px; width: 456px; flex-direction: column; padding: 16px; gap: 10px; }
+  .lab { font-size: 13px; color: var(--text-2); }
+  .lrow { display: flex; gap: 10px; align-items: flex-start; padding: 10px 8px; border-radius: 8px; }
+  .lrow + .lrow { border-top: 1px solid var(--border-faint); }
+  .cb { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--border-control); flex: none; margin-top: 3px; }
+  .cb.on { background: var(--accent); border-color: var(--accent); }
+  .lrow .t { font-weight: 600; font-size: 14px; }
+  .lrow .s { font-size: 12px; color: var(--text-3); }
+  .bulk { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-e2); border: 1px solid var(--border-hairline); }
+  .kernel { position: relative; border: 2px dashed var(--border-control); border-radius: 10px; padding: 18px 12px 12px;
+    background: repeating-linear-gradient(135deg, var(--surface-1) 0 10px, var(--surface-2) 10px 11px); display: flex; flex-direction: column; gap: 8px; }
+  .kbadge { position: absolute; left: 12px; top: -12px; background: var(--surface); border: 1px dashed var(--border-control); border-radius: 6px; padding: 0 8px; font-size: 12px; line-height: 22px; color: var(--text-2); }
+  .k { background: var(--surface); border: 1px dashed var(--border-control); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+  .e { background: var(--accent-soft); border: 1.5px solid var(--accent); border-radius: 10px; }
+  .hit { padding: 6px 10px; font-size: 13px; display: flex; gap: 8px; }
+  .composer { padding: 10px 12px 8px; border-radius: 20px; background: var(--surface); border: 1px dashed var(--border-control); }
+  .crow { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); margin-top: 18px; }
+  .chipE { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 999px; font-size: 12px; color: var(--accent-strong); }
+  .send { margin-left: auto; width: 26px; height: 26px; border-radius: 13px; background: var(--accent); }
+</style>
+</head>
+<body>
+<div class="frame a">
+  <aside class="side">
+    <div class="brand"><span class="mark"></span>EviMed<span class="sp"></span><span class="ico"></span><span class="ico"></span></div>
+    <nav class="nav">
+      <a><span class="ico"></span>新对话</a>
+      <a><span class="ico"></span>前沿动态</a>
+      <a><span class="ico"></span>科研工具</a>
+      <a class="on"><span class="ico"></span>知识库</a>
+      <a><span class="ico"></span>记忆胶囊</a>
+      <a><span class="ico"></span>定时任务</a>
+      <a><span class="ico"></span>插件与技能</a>
+    </nav>
+    <div class="sec">项目</div>
+    <div class="conv" style="padding-left:8px;color:var(--text);font-weight:500">我的研究</div>
+    <div class="foot"><span class="avatar"></span>研究者<span class="sp"></span><span class="ico"></span></div>
+  </aside>
+  <div class="rd">
+    <div class="rh">
+      <div class="back">‹ 知识库 · 我的研究</div>
+      <div class="l"><h1>2025 心衰指南更新要点</h1><span class="m">文献与指南 · 3.1 MB · 38 页 · 上传 · 10月5日</span><span class="sp"></span>
+        <span class="btn primary">在对话中使用</span><span class="btn secondary">下载</span><span class="ico"></span></div>
+    </div>
+    <div class="split">
+      <div class="orig">
+        <div class="pbar"><span>原文</span><span class="sp"></span><span>‹ 第 12 / 38 页 ›</span><span>适应宽度</span></div>
+        <div class="pg">
+          <div class="ln" style="width:70%;height:12px"></div>
+          <div class="ln" style="width:96%"></div><div class="ln" style="width:92%"></div><div class="ln" style="width:94%"></div>
+          <div class="hl" style="width:88%"></div><div class="hl" style="width:64%"></div>
+          <div class="ln" style="width:90%"></div><div class="ln" style="width:95%"></div><div class="ln" style="width:72%"></div>
+          <div class="ln" style="width:40%;height:80px;margin-top:8px;background:var(--surface-1);border:1px solid var(--border-faint)"></div>
+          <div class="ln" style="width:93%"></div><div class="ln" style="width:89%"></div><div class="ln" style="width:58%"></div>
+        </div>
+      </div>
+      <div class="aside">
+        <h3>讲了什么</h3>
+        <p>本次更新把 SGLT2 抑制剂列为射血分数降低心衰的一线治疗，并扩展到射血分数轻度降低与保留的人群。</p>
+        <h3>包含什么（N-17）</h3>
+        <ul><li>· 四类基础药物的推荐等级与起始顺序</li><li>· 射血分数保留心衰的新推荐</li><li>· 合并糖尿病、慢性肾病时的用药调整</li></ul>
+        <h3>要点</h3>
+        <ul>
+          <li class="kp"><span class="p">第 4 页</span><span>四类药物均为 I 类推荐，不要求先后顺序</span></li>
+          <li class="kp on"><span class="p">第 12 页</span><span>SGLT2 抑制剂用于射血分数保留心衰，推荐等级 IIa</span></li>
+          <li class="kp"><span class="p">第 21 页</span><span>eGFR ≥ 20 时可以起始</span></li>
+        </ul>
+        <div class="gapline">第 31—34 页的两张表格没有读到。</div>
+        <h3>表格与图</h3>
+        <ul><li class="kp"><span class="p">第 9 页</span><span>表 3 推荐等级汇总</span></li></ul>
+        <h3>用过它的对话（N-16）</h3>
+        <ul><li class="kp"><span class="p">10月6日</span><span>SGLT2 抑制剂与心衰再住院</span></li></ul>
+        <div class="fold">▸ 完整摘要 · 以前的版本（2）</div>
+      </div>
+    </div>
+  </div>
+  <div class="call" style="left:330px;top:560px;max-width:330px"><span class="num">1</span><span class="box">资料是文档，用有地址的阅读页，不用抽屉；返回时列表恢复范围、筛选与位置</span></div>
+  <div class="call" style="left:650px;top:372px;max-width:300px"><span class="num">2</span><span class="box">原文与要点并排；点一条带页码的要点，原文翻到那一页并标出原句（高亮需要 N-15）</span></div>
+  <div class="call" style="left:830px;top:600px;max-width:280px"><span class="num">3</span><span class="box">要点栏按“一句话 → 包含什么 → 要点 → 缺口 → 表格与图 → 用过它的对话”；长摘要折叠</span></div>
+</div>
+
+<div class="frame b">
+  <div class="lab">列表多选，带着资料进对话（目标）</div>
+  <div class="lrow"><span class="cb on"></span><div><div class="t">2025 心衰指南更新要点</div><div class="s">文献与指南 · 38 页 · 上传</div></div></div>
+  <div class="lrow"><span class="cb on"></span><div><div class="t">DAPA-HF 试验主要结果（NEJM 2019）</div><div class="s">文献与指南 · 12 页 · 上传</div></div></div>
+  <div class="lrow"><span class="cb"></span><div><div class="t">再住院队列_2023-2025.xlsx</div><div class="s">数据表 · 1.2 MB · 上传</div></div></div>
+  <div class="bulk"><span>已选 2 份</span><span class="sp"></span><span class="btn secondary" style="height:30px">取消</span><span class="btn primary" style="height:30px">在对话中使用 2 份</span></div>
+  <div class="kernel" style="margin-top:14px">
+    <span class="kbadge">内核界面：新对话</span>
+    <div class="k" style="align-self:flex-end;max-width:330px">这两份资料对射血分数保留的患者结论一致吗？</div>
+    <div class="k">不完全一致。指南给出 IIa 推荐，依据……</div>
+    <div class="e hit"><span>指南更新要点 · 第 12 页</span><span class="sp"></span><span style="color:var(--accent)">打开原文 ›</span></div>
+    <div class="composer"><span style="color:var(--text-3);font-size:13px">继续提问…</span>
+      <div class="crow"><span>＋</span><span>📎</span><span class="chipE e">2 份资料 ×</span><span class="sp"></span><span>deepseek-flash</span><span class="send"></span></div></div>
+  </div>
+  <div class="call" style="position:static;max-width:none"><span class="num">4</span><span class="box">选中的资料成为这段对话的资料范围，输入框里一枚“2 份资料 ×”；检索只在这些资料里进行（N-14）</span></div>
+  <div class="call" style="position:static;max-width:none"><span class="num">5</span><span class="box">回答里的检索结果可点，打开左图的阅读页并定位到那一段（N-15）</span></div>
+</div>
+<div class="caption"><b>图 5　知识库的目标形态：列表不变，点开是阅读页；可以多选资料带进对话，引用回到原文。</b>按设计令牌 2.1.2 绘制的示意图，不是线上截图；参照 Gemini Notebook（原 NotebookLM）的来源选择与引用回跳、FastGPT 的引用阅读器。①②③ 的页面与已有数据属第 1 批（E-19，标了 N-16、N-17 的两项除外；原句高亮要 N-15），④⑤ 需要新契约（N-14、N-15）。</div>
+</body></html>

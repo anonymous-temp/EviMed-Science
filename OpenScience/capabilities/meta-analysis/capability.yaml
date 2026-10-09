@@ -24,10 +24,13 @@ produces:
 - contractKind: meta-analysis-report
   outputs:
   - path: meta-analysis-report.md
+    role: report
     required: true
   - path: meta-analysis-run.json
+    role: work
     required: true
   - path: agenda-delta.json
+    role: work
     required: false
   checks:
   - requiredOutputsExist

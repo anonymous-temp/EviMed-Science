@@ -49,7 +49,7 @@ export function claimCheck(claim) {
 export function safeAutopilotArtifactRefs(projectId, run) {
   if (!validId(projectId) || !validId(run?.id) || !validId(run?.sessionId)) return [];
   return [...new Set([...(Array.isArray(run.artifacts) ? run.artifacts : []), ...(Array.isArray(run.unverifiedArtifacts) ? run.unverifiedArtifacts : [])])]
-    .filter(safePath).slice(0, 24).map(path => ({ projectId, runId: run.id, sessionId: run.sessionId, path }));
+    .filter(safePath).slice(0, 24).map(path => ({ projectId, runId: run.id, sessionId: run.sessionId, path, ...(run.artifactRoles?.[path] ? { role: run.artifactRoles[path] } : {}) }));
 }
 
 /** @param {any} snapshot */

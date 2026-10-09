@@ -30,27 +30,33 @@
       "outputs": [
         {
           "path": "appraisal-table.json",
-          "required": true
+          "required": true,
+          "role": "matrix"
         },
         {
           "path": "appraisal-table.md",
-          "required": true
+          "required": true,
+          "role": "matrix"
         },
         {
           "path": "appraisal-table.csv",
-          "required": true
+          "required": true,
+          "role": "matrix"
         },
         {
           "path": "citation-ledger.csv",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "delivery-summary.md",
-          "required": true
+          "required": true,
+          "role": "document"
         },
         {
           "path": "revision-notes.md",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

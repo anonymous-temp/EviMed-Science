@@ -53,6 +53,7 @@ export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
 export function accountExportDocumentKinds() { return [...customerKinds]; }
 
 const queries = [
+  ["frontierEventReads", "SELECT * FROM evimed_frontier.event_reads WHERE user_id=$1 ORDER BY event_id"],
   ["evidenceZones", "SELECT * FROM evimed_frontier.evidence_zones WHERE user_id=$1 ORDER BY id"],
   ["evidenceCards", "SELECT * FROM evimed_frontier.evidence_cards WHERE user_id=$1 ORDER BY id"],
   ["evidenceCardRevisions", "SELECT r.* FROM evimed_frontier.evidence_card_revisions r JOIN evimed_frontier.evidence_cards c ON c.id=r.card_id WHERE c.user_id=$1 ORDER BY r.card_id,r.revision"],
@@ -84,7 +85,7 @@ const queries = [
   ["projects", `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.projects WHERE user_id=$1 ORDER BY id`],
   ["researchSessions", `SELECT project_id AS "projectId",session_id AS "sessionId",mode,agent_id AS "agentId",
-    agent_version AS "agentVersion",runtime_agent AS "runtimeAgent",source_scope AS "sourceScope",created_at AS "createdAt",updated_at AS "updatedAt"
+    agent_version AS "agentVersion",runtime_agent AS "runtimeAgent",source_scope AS "sourceScope",origin_reference AS "originReference",created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.research_sessions WHERE user_id=$1 ORDER BY project_id,session_id`],
   ["documents", `SELECT id,kind,project_id AS "projectId",payload,revision,created_at AS "createdAt",updated_at AS "updatedAt",deleted_at AS "deletedAt"
     FROM evimed_product.documents WHERE user_id=$1 AND kind=ANY($2::text[]) ORDER BY kind,id`],

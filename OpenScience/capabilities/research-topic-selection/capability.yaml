@@ -33,16 +33,22 @@ produces:
 - contractKind: research-topic-report
   outputs:
   - path: research-topic-report.md
+    role: report
     required: true
   - path: evidence-map.md
+    role: document
     required: true
   - path: research-topic-run.json
+    role: work
     required: true
   - path: research-portfolio.json
+    role: data
     required: true
   - path: evidence-records.json
+    role: data
     required: true
   - path: agenda-delta.json
+    role: work
     required: false
   checks:
   - requiredOutputsExist

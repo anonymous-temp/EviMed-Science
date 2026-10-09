@@ -18,15 +18,18 @@
       "outputs": [
         {
           "path": "meta-analysis-report.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "meta-analysis-run.json",
-          "required": true
+          "required": true,
+          "role": "work"
         },
         {
           "path": "agenda-delta.json",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

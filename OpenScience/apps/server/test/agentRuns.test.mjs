@@ -8579,3 +8579,27 @@ test("only a dispatch a person is waiting on asks the runtime to wait for a free
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('a stall notice survives workspace-only movement and clears live after authenticated kernel activity', async t => {
+  const { runNotice } = await import('../src/runNotices.mjs');
+  const { project, store, writeProjection, polls } = await delegatingRunFixture(t, { manual: true, stallPolls: 0 });
+  let time = Date.parse('2026-10-09T01:00:00Z');
+  store.now = () => new Date(time);
+  const states = [];
+  store.onRunStateChanged = (_project, run) => states.push(run);
+  const started = await store.start(project, { sessionId: 'ses_deleg' });
+  await polls.parked();
+  time += 1000;
+  await store.appendQualityNotices(project, started.id, [runNotice('run_stall_observed', 'No new progress.')]);
+  assert.equal((await store.list(project))[0].stalled, true);
+  time += 1000;
+  await writeProjection({ evidence: { total: 4, byStatus: { ready: 4 } }, budget: {} });
+  await polls.step();
+  assert.equal((await store.list(project))[0].stalled, true, 'a model-controlled file cannot clear the stall');
+  time += 1000;
+  store.noteKernelActivity(project, started.id, { sessionId: 'ses_deleg', seq: 42 });
+  await polls.step();
+  assert.equal((await store.list(project))[0].stalled, false);
+  assert.equal(states.at(-1).stalled, false, 'the already connected browser receives the resumed state');
+  store.monitors.get(started.id)?.cancel();
+});

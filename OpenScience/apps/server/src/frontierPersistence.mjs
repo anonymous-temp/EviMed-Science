@@ -435,6 +435,14 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.user_state (
 CREATE INDEX IF NOT EXISTS frontier_user_state_starred_idx
   ON evimed_frontier.user_state (user_id, starred_at DESC) WHERE starred_at IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS evimed_frontier.event_reads (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  event_id text NOT NULL,
+  report_marks jsonb NOT NULL DEFAULT '{}'::jsonb,
+  read_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, event_id)
+);
+
 CREATE TABLE IF NOT EXISTS evimed_frontier.user_follows (
   id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id    text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,

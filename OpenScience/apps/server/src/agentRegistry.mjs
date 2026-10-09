@@ -175,7 +175,7 @@ function validateOutputs(value, { requireDeliverable = true } = {}) {
   const paths = new Set();
   return value.map((rawOutput, index) => {
     const output = expectPlainObject(rawOutput, `output at index ${index}`);
-    const unknownFields = Object.keys(output).filter((field) => !["path", "required"].includes(field));
+    const unknownFields = Object.keys(output).filter((field) => !["path", "required", "role"].includes(field));
     if (unknownFields.length > 0) throw registryError(`output at index ${index} contains unknown field(s): ${unknownFields.join(", ")}.`);
     if (!Object.hasOwn(output, "path") || !Object.hasOwn(output, "required")) {
       throw registryError(`output at index ${index} requires path and required fields.`);
@@ -184,7 +184,7 @@ function validateOutputs(value, { requireDeliverable = true } = {}) {
     if (paths.has(outputPath)) throw registryError(`outputs must not contain duplicate output path "${outputPath}".`);
     paths.add(outputPath);
     if (typeof output.required !== "boolean") throw registryError(`output at index ${index} required must be boolean.`);
-    return Object.freeze({ path: outputPath, required: output.required });
+    return Object.freeze({ path: outputPath, required: output.required, ...(output.role ? { role: output.role } : {}) });
   });
 }
 
@@ -334,7 +334,7 @@ function parseSkillName(text, label) {
 function productsOf(source) {
   return Object.freeze(/** @type {Array<Record<string, any>>} */ (source.produces).map((product) => Object.freeze({
     contractKind: product.contractKind,
-    outputs: Object.freeze(/** @type {Array<Record<string, any>>} */ (product.outputs).map((output) => Object.freeze({ path: String(output.path), required: output.required === true }))),
+    outputs: Object.freeze(/** @type {Array<Record<string, any>>} */ (product.outputs).map((output) => Object.freeze({ path: String(output.path), required: output.required === true, ...(output.role ? { role: output.role } : {}) }))),
     completionChecks: Object.freeze([.../** @type {string[]} */ (product.checks)]),
   })));
 }

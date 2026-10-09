@@ -30,19 +30,23 @@
       "outputs": [
         {
           "path": "off-label-report.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "evidence-table.csv",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "assessment-result.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "evidence-snapshot.json",
-          "required": true
+          "required": true,
+          "role": "data"
         }
       ],
       "checks": [

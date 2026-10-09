@@ -42,26 +42,37 @@ produces:
 - contractKind: dataset-scoping-package
   outputs:
   - path: data-profile.md
+    role: document
     required: false
   - path: data-profile.json
+    role: data
     required: false
   - path: data-profile.py
+    role: work
     required: false
   - path: data-quality.md
+    role: document
     required: false
   - path: evidence-map.md
+    role: document
     required: false
   - path: feasibility-matrix.md
+    role: matrix
     required: false
   - path: external-linkage.md
+    role: document
     required: false
   - path: research-portfolio.md
+    role: document
     required: false
   - path: study-protocol.md
+    role: document
     required: false
   - path: scoping-run.json
+    role: work
     required: false
   - path: agenda-delta.json
+    role: work
     required: false
   checks:
   - citationsResolvable

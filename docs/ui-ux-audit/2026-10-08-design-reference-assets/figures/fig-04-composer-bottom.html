@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light"><head><meta charset="utf-8"><title>图 4 对话输入区：现状与目标</title>
+<meta name="shot" content="2040x780">
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="fig.css">
+<style>
+  .frame.a { right: auto; width: 984px; flex-direction: column; }
+  .frame.b { left: auto; right: 24px; width: 984px; flex-direction: column; }
+  .lab { padding: 14px 20px 0; font-size: 14px; font-weight: 600; }
+  .lab span { font-weight: 400; color: var(--text-3); font-size: 13px; margin-left: 8px; }
+  .kernel { flex: 1; position: relative; margin: 12px 16px 0; border: 2px dashed var(--border-control); border-bottom: 0; border-radius: 10px 10px 0 0;
+    background: repeating-linear-gradient(135deg, var(--surface-1) 0 10px, var(--surface-2) 10px 11px); display: flex; flex-direction: column; }
+  .col { width: 720px; margin: 0 auto; flex: 1; display: flex; flex-direction: column; padding-top: 18px; }
+  .ans { color: var(--text); background: var(--surface); border: 1px dashed var(--border-control); border-radius: 10px; padding: 10px 14px; }
+  .acts { display: flex; gap: 14px; align-items: center; color: var(--text-3); font-size: 13px; padding: 8px 4px; }
+  .composer { margin-top: auto; padding: 12px 14px 10px; border-radius: 24px; box-shadow: var(--shadow-e2); background: var(--surface); border: 1px dashed var(--border-control); }
+  .composer .ph { color: var(--text-3); height: 40px; }
+  .crow { display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 13px; }
+  .send { width: 32px; height: 32px; border-radius: 16px; background: var(--accent); flex: none; }
+  .plus { width: 32px; height: 32px; border-radius: 16px; background: var(--surface-2); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .e { background: var(--accent-soft); border: 1.5px solid var(--accent); }
+  .chipE { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 13px; color: var(--accent-strong); white-space: nowrap; }
+  .sel { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border-control); background: var(--surface); color: var(--text-2); white-space: nowrap; }
+  .dock { display: flex; align-items: center; gap: 12px; padding-top: 4px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  .ring { width: 18px; height: 18px; border-radius: 9px; border: 3px solid var(--surface-2); border-top-color: var(--text-3); flex: none; }
+  .edge { height: 4px; background: transparent; }
+  .edge16 { height: 16px; }
+  .pop { position: absolute; width: 360px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border-hairline); border-radius: 12px; box-shadow: var(--shadow-e2); font-size: 13px; z-index: 4; }
+  .pop .h { color: var(--text-3); font-size: 12px; margin-top: 6px; }
+  .pop .o { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .pop .o span { padding: 2px 8px; border-radius: 6px; background: var(--surface-2); }
+  .pop .o span.on { background: var(--accent-soft); color: var(--accent-strong); }
+  .pop .x { border-top: 1px solid var(--border-hairline); margin-top: 10px; padding-top: 8px; color: var(--text-2); }
+  .windowedge { height: 0; border-top: 2px solid var(--text); margin: 0 16px; }
+</style>
+</head>
+<body>
+<div class="frame a">
+  <div class="lab">现状（R11.2 / R12）<span>运维账号看到的样子；研究者看不到前两项统计</span></div>
+  <div class="kernel">
+    <div class="col">
+      <div class="ans">……生成记录也不等于入组人数或有效样本量。</div>
+      <div class="acts"><span class="ico"></span><span class="ico"></span><span>用量 6.1M tok</span><span>10月7日 19:07</span></div>
+      <div class="composer"><div class="ph">继续提问…</div>
+        <div class="crow"><span class="plus">＋</span><span>📎</span><span class="sp"></span><span>deepseek-flash High ⌄</span><span class="send"></span></div></div>
+      <div class="dock"><span>1 轮 86 步 · 251 tok/s</span><span>6.1M tok · 缓存命中 95%</span>
+        <span class="chipE e">虚拟临床研究 ×</span><span class="sel">起点：队列 ⌄</span><span class="sel" style="width:150px">预期用途：探索<span class="sp"></span>⌄</span><span class="ring"></span><span>20%</span></div>
+      <div class="edge"></div>
+    </div>
+  </div>
+  <div class="windowedge"></div>
+  <div class="call" style="left:150px;top:400px;max-width:300px"><span class="num">1</span><span class="box">模块芯片与两个下拉放在内核的 <code>conversation.composer.dock</code>，排在统计之后，在输入框下面</span></div>
+  <div class="call" style="left:500px;top:370px;max-width:260px"><span class="num">2</span><span class="box">原生下拉按最长选项撑宽（“预期用途：研究设计支持”）</span></div>
+  <div class="call" style="left:500px;top:460px;max-width:260px"><span class="num">3</span><span class="box">内核输入区底部只有 4 px；外壳也没加；GEO 的引擎弹层向下开，会被切掉</span></div>
+</div>
+
+<div class="frame b">
+  <div class="lab">目标<span>研究者与运维相同；运维另在输入框下保留内核统计</span></div>
+  <div class="kernel">
+    <div class="col">
+      <div class="ans">……生成记录也不等于入组人数或有效样本量。</div>
+      <div class="acts"><span class="ico"></span><span class="ico"></span><span>10月7日 19:07</span></div>
+      <div class="composer" style="position:relative"><div class="ph">继续提问…</div>
+        <div class="crow"><span class="plus">＋</span><span>📎</span><span class="chipE e">虚拟临床研究 · 队列 ▾</span><span class="sp"></span><span>deepseek-flash High ⌄</span><span class="send"></span></div>
+        <div class="pop" style="left:70px;bottom:52px"><div style="font-weight:600">虚拟临床研究</div>
+          <div class="h">起点</div><div class="o"><span>自动</span><span class="on">队列</span><span>患者</span><span>对照</span><span>试验</span></div>
+          <div class="h">预期用途</div><div class="o"><span class="on">探索</span><span>研究设计支持</span><span>指定研究分析</span><span>申报准备</span></div>
+          <div class="x">退出虚拟临床研究</div></div>
+      </div>
+      <div class="edge16"></div>
+    </div>
+  </div>
+  <div class="windowedge"></div>
+  <div class="call" style="left:600px;top:300px;max-width:300px"><span class="num">4</span><span class="box">芯片进输入框的工具栏（插槽 <code>conversation.input.left</code>，回形针右边），与主流产品放工具的位置一致</span></div>
+  <div class="call" style="left:600px;top:410px;max-width:300px"><span class="num">5</span><span class="box">参数收进芯片的菜单，向上弹出；芯片只在参数不是默认值时带一个短后缀</span></div>
+  <div class="call" style="left:600px;top:500px;max-width:300px"><span class="num">6</span><span class="box">输入框下到窗口底至少 16 px；手机再加底部安全区</span></div>
+  <div class="call" style="left:600px;top:200px;max-width:300px"><span class="num">7</span><span class="box">上下文占用环与会话统计一样，只给运维</span></div>
+</div>
+<div class="caption"><b>图 4　对话输入区：现状与目标。</b>按设计令牌 2.1.2 绘制的示意图，不是线上截图；左图对应所有者 10-08 的截图。斜纹虚线框是内核渲染，蓝框是 EviMed 组件，黑线是窗口底边。循证 GEO 的“覆盖周期 / AI 引擎”走同一结构（第 1 批 E-17）。</div>
+</body></html>

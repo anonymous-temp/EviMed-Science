@@ -120,6 +120,7 @@ const selectSpy = vi.fn(async (_projectId: string, land?: () => void) => { land?
 
 describe("知识库", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     Object.values(mocks).forEach((mock) => mock.mockReset());
     selectSpy.mockClear();
     context.projectId = "default";
@@ -152,6 +153,24 @@ describe("知识库", () => {
 
   // 2026-10-07 plan §2.3, mockup k01: the title, the scope, a search and one primary action; one row of chips; one list.
   describe("the page", () => {
+    it("takes several selected sources to an unsent conversation and excludes a removed selection", async () => {
+      renderPage();
+      const user = userEvent.setup();
+      const first = await screen.findByRole("checkbox", { name: `选择“${guideline.display.title}”` });
+      const second = screen.getByRole("checkbox", { name: `选择“${sheet.display.title}”` });
+      await user.click(first);
+      await user.click(second);
+      expect(screen.getByText("已选 2 份资料")).toBeInTheDocument();
+      await user.click(first);
+      await user.click(screen.getByRole("button", { name: "在对话中使用" }));
+      const location = screen.getByTestId("location");
+      await waitFor(() => expect(location).toHaveTextContent("/app/chat"));
+      const intent = JSON.parse(location.dataset.state!).runtimeUiIntent;
+      expect(intent.references).toEqual([{ id: sheet.id, title: sheet.display.title }]);
+      expect(intent.draft).not.toMatch(/src_|knowledge-base|\.evimed-/);
+      expect(intent.send).not.toBe(true);
+    });
+
     it("is its title, the scope it lists, a search and one 「添加」 — and nothing under the title", async () => {
       renderPage();
       const heading = await screen.findByRole("heading", { level: 1, name: "知识库" });

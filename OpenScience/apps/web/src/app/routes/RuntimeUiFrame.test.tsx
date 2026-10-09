@@ -1280,7 +1280,7 @@ describe("the run behind the task, in the frame", () => {
   describe("a data source the run went without", () => {
     const connector = (source: "none" | "user") => ({ id: "umls", title: "UMLS", kind: "api-key", unlocks: "", obtainUrl: "https://example.test/umls",
       capabilities: [], keyless: false, validityDays: null, source, own: null, needsAttention: source === "none" });
-    const finished = { ...run, status: "succeeded", finishedAt: "2026-09-18T01:05:00.000Z", mode: "open-domain", effectiveAgentId: "open-domain-answer", connectorNeeds: ["umls"] };
+    const finished = { ...run, status: "succeeded", finishedAt: "2026-09-18T01:05:00.000Z", mode: "open-domain", effectiveAgentId: "open-domain-answer", connectorNeeds: ["umls"], availableActions: [{ kind: "continue", scope: "session", targetId: "session-a" }] };
 
     it("shows a strip above the frame, opens the credential form in place, and asks for the skipped part in the same conversation", async () => {
       mocks.listRuns.mockResolvedValue([finished]);

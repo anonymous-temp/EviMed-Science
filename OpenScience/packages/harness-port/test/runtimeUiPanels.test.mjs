@@ -173,12 +173,19 @@ function answerProps({ seq = 40, turn = 2, turns = [1, 2], closingSeq = 40, size
   };
 }
 
-test("nothing of the product's is registered above the composer, in the view ring or as a column tab", () => {
+test("only the conditional stall notice occupies the composer dock; files remain after the answer", () => {
   const f = column();
   assert.deepEqual(f.definitions, [], 'no tab type: a second guide entry would turn the column into the kernel 「开始」 compass');
-  for (const name of ['sidebar.right.pane.tab', 'conversation.view', 'conversation.input.dock']) {
+  for (const name of ['sidebar.right.pane.tab', 'conversation.view']) {
     assert.deepEqual(f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === name), [], `${name} is not ours`);
   }
+  const dock = f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'conversation.input.dock');
+  assert.equal(dock.length, 1);
+  assert.equal(renderStatic(dock[0].component, {}), '', 'no status strip without an observed stall');
+  f.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running', stalled: true, availableActions: [{ kind: 'stop', scope: 'run', targetId: 'run-1' }] });
+  const stalled = renderStatic(dock[0].component, {});
+  assert.match(stalled, /暂时没有新进展/);
+  assert.match(stalled, /停止/);
   const ours = f.answerRow();
   assert.equal(ours.options.priority, -2, 'below the reply check (-1), below the kernel (0)');
   assert.equal(ours.options.locale, 'chat', "the kernel's answer is drawn with the chat namespace's translator");
@@ -244,7 +251,7 @@ test('a helper script is not a card while there are readable files', () => {
   const html = renderStatic(f.answerRow().component, answerProps().props);
   assert.equal((html.match(/data-evimed-file="/g) ?? []).length, 2);
   assert.doesNotMatch(html, /data-evimed-file="d\/build_/);
-  assert.match(html, /显示全部 5 个文件/);
+  assert.doesNotMatch(html, /显示全部/);
 });
 
 test('an answer can carry both the reply check and the files, each drawing what it shadows first', () => {

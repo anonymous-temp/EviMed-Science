@@ -44,18 +44,25 @@ produces:
   # it: a proposal is a response to a call, and a call nobody wrote down is one
   # the run can quietly drift away from.
   - path: call-requirements.json
+    role: data
     required: true
   - path: specific-aims.md
+    role: document
     required: true
   - path: proposal-outline.md
+    role: document
     required: true
   - path: milestones.csv
+    role: data
     required: true
   - path: grant-audit.md
+    role: document
     required: true
   - path: citation-ledger.csv
+    role: data
     required: true
   - path: delivery-summary.md
+    role: document
     required: true
   # The reporting checklist of the one study the proposal designs, when the
   # plan declared its type and that type has a guideline (@evimed/domain
@@ -64,10 +71,13 @@ produces:
   # Optional: most proposals declare no single study, and a new file enters at
   # `required: false` (required-outputs-baseline.json).
   - path: reporting-checklist.md
+    role: document
     required: false
   - path: revision-notes.md
+    role: work
     required: false
   - path: agenda-delta.json
+    role: work
     required: false
   checks:
   - requiredOutputsExist

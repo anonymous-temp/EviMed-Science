@@ -11,6 +11,7 @@ import { ThemeProvider } from "./app/providers/ThemeProvider";
 import { router } from "./app/router";
 import { installStaleChunkReload } from "./lib/staleChunk";
 import "./index.css";
+import { startWebVitals } from "./lib/webVitals";
 
 // Before the first page chunk is asked for: a tab older than the release it
 // talks to reloads once instead of failing the page (UI plan §2.1).
@@ -23,3 +24,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </ThemeProvider>
   </React.StrictMode>,
 );
+
+startWebVitals();

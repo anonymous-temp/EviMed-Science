@@ -15,14 +15,19 @@ produces:
 - contractKind: statistical-analysis-package
   outputs:
   - path: statistical-report.md
+    role: report
     required: false
   - path: analysis-results.json
+    role: data
     required: false
   - path: analysis-run.json
+    role: work
     required: false
   - path: analysis.py
+    role: work
     required: false
   - path: analysis.R
+    role: work
     required: false
   checks:
   - skillsLoaded

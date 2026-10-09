@@ -30,11 +30,13 @@
       "outputs": [
         {
           "path": "analysis-report.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "results.json",
-          "required": true
+          "required": true,
+          "role": "data"
         }
       ],
       "checks": [
@@ -47,7 +49,8 @@
       "outputs": [
         {
           "path": "comparability.md",
-          "required": true
+          "required": true,
+          "role": "document"
         }
       ],
       "checks": [
@@ -60,7 +63,8 @@
       "outputs": [
         {
           "path": "simulation.json",
-          "required": true
+          "required": true,
+          "role": "data"
         }
       ],
       "checks": [

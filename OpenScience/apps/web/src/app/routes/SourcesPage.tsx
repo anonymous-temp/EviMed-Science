@@ -5,6 +5,7 @@ import { SOURCE_KINDS } from "@evimed/domain";
 import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
 import { projectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { addToLibrary, decideDuplicateGroup, listDuplicateCandidates, listSources, openListOffered, refetchSource, removeFromLibrary,
   removeSource, retrySource, type DuplicateGroup, type SourceCounts, type SourceKind, type SourcePassage, type SourceRecord, type SourceScope } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
@@ -29,7 +30,7 @@ import { DriveImportDrawerBody } from "@/components/sources/DriveImport";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
 import { KnowledgeScopeMenu } from "@/components/sources/KnowledgeScopeMenu";
 import { SourceRow } from "@/components/sources/SourceRow";
-import { isReading } from "@/components/sources/sourceView";
+import { isReading, isUsable } from "@/components/sources/sourceView";
 
 /** The folder an upload lands in, under the project's base folder. */
 const KNOWLEDGE_ROOT = "knowledge-base";
@@ -96,6 +97,7 @@ export function SourcesPage() {
 
 function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const navigate = useNavigate();
+  const selectProject = useProjectStore((state) => state.select);
   const location = useLocation();
   const navigationType = useNavigationType();
   const projects = useProjectStore((state) => state.projects);
@@ -131,6 +133,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const search = listState.q;
   const narrow = useNarrow();
   const [items, setItems] = useState<SourceRecord[] | null>(null);
+  const [selected, setSelected] = useState<Map<string, SourceRecord>>(() => new Map());
   const [counts, setCounts] = useState<SourceCounts | null>(null);
   // Where the search matched inside documents' text, by document: what the server answers with a page of the list while
   // something is searched for, shown under each row.
@@ -164,6 +167,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
 
   const shared = scope.kind === "shared";
   const scopeProjectId = scope.kind === "project" ? scope.projectId : null;
+  useEffect(() => setSelected(new Map()), [shared, scopeProjectId]);
   // Where a new document goes: the project the page lists, or — in the shared scope, which belongs to no project —
   // the project the tab is in.
   const addProjectId = scopeProjectId ?? currentProjectId;
@@ -360,6 +364,27 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     const scroller = pageRoot.current?.querySelector<HTMLElement>(".overflow-y-auto");
     rememberListPosition(listState, { scroll: scroller?.scrollTop ?? 0, count: items?.length ?? PAGE_SIZE });
   };
+  const toggleSelected = (source: SourceRecord) => {
+    if (!isUsable(source)) return;
+    setSelected(previous => {
+      const next = new Map(previous);
+      if (next.has(source.id)) next.delete(source.id);
+      else if (next.size < 50) next.set(source.id, source);
+      else toast.error("一次最多选择 50 份资料");
+      return next;
+    });
+  };
+  const openSelected = async () => {
+    const references = [...selected.values()].map(source => ({ id: source.id, title: source.display.title }));
+    if (!references.length) return;
+    keepPlace();
+    try {
+      await selectProject(scopeProjectId ?? currentProjectId, () => {
+        const intent = { ...newRuntimeUiIntent("请根据所选资料回答我的问题，引用时标出处。\n\n我的问题："), references };
+        navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: intent } });
+      });
+    } catch (failure) { toast.error(webErrorMessage(failure)); }
+  };
 
   const kindOptions: FilterOption<SourceKind | "all">[] = useMemo(() => {
     if (!counts) return [];
@@ -426,6 +451,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
               <SourceRow key={source.id} source={source} showShared={!shared} {...rowActions(source)}
                 projectName={shared ? projectNames.get(source.projectId) ?? null : null}
                 to={readerLink(source)} onOpen={keepPlace}
+                selected={selected.has(source.id)} onSelect={() => toggleSelected(source)}
                 passages={passages[source.id]} query={search}
                 passageTo={(passage) => readerPath(source.id, listState, passage.page ? { tab: "original", page: passage.page } : { tab: null, page: null })} />
             ))}
@@ -435,6 +461,13 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
               </li>
             )}
           </List>
+        )}
+        {selected.size > 0 && (
+          <div className="sticky bottom-0 mt-4 flex flex-wrap items-center gap-3 border-t border-border bg-surface pt-3 pb-4" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }} role="region" aria-label="所选资料">
+            <span className="text-caption text-text-2">已选 {selected.size} 份资料</span>
+            <Button onClick={() => void openSelected()}>在对话中使用</Button>
+            <Button variant="text" onClick={() => setSelected(new Map())}>取消选择</Button>
+          </div>
         )}
       </PageShell>
       {connecting && driveOffered && (

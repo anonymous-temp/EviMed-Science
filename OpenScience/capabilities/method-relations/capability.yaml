@@ -21,8 +21,10 @@ produces:
 - contractKind: method-relations
   outputs:
   - path: method-relations.json
+    role: data
     required: true
   - path: revision-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

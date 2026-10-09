@@ -579,6 +579,22 @@ export class FrontierDaily {
 
   // ───────────────────────── reading ─────────────────────────
 
+  /** The requested day's durable publication outcome; absence alone never means an empty day.
+   * @param {string | null} [requestedDay]
+   */
+  async publicationStatus(requestedDay = null) {
+    const day = requestedDay ?? this.#due().day;
+    if (!DAY_PATTERN.test(day)) throw new TypeError('Invalid daily date.');
+    await this.ready();
+    if (await this.read(day)) return { day, state: 'published' };
+    const owner = await this.owner();
+    const row = owner ? (await this.database.query(`SELECT status, result, error FROM evimed_product.jobs
+      WHERE user_id = $1 AND idempotency_key = $2`, [owner.userId, `${JOB_KIND}:${day}`])).rows?.[0] : null;
+    const state = row?.status === 'succeeded' && row?.result?.empty === true ? 'empty'
+      : row?.status === 'failed' || row?.error ? 'failed' : 'pending';
+    return { day, state };
+  }
+
   /** The archive, newest first. @param {number} [limit] */
   async list(limit = 30) {
     await this.ready();

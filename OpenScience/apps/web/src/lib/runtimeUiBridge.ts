@@ -43,6 +43,10 @@ export interface FrameDeliverable {
 
 /** The run state the frame receives (C9 `run-state`, plus the run's files and its session). */
 export interface FrameRunState {
+  stepActions?: Record<string, import("@evimed/domain").RunAction[]>;
+  artifactRoles?: Record<string, import("@evimed/domain").ArtifactRole>;
+  availableActions?: import("@evimed/domain").RunAction[];
+  stalled?: boolean;
   runId: string | null;
   sessionId?: string;
   state?: string;
@@ -120,6 +124,7 @@ export function runStateFromRecord(run: WebAgentRun): FrameRunState {
     : { deliverables: record.deliverables ?? deliverablesFromPlan(run), startedAt: run.startedAt ?? null, updatedAt: run.finishedAt ?? run.startedAt ?? null };
   return {
     runId: run.id,
+    stepActions: run.stepActions ?? {}, availableActions: run.availableActions ?? [], stalled: run.stalled === true,
     sessionId: run.sessionId,
     state: run.status,
     phase: run.phase ?? null,
@@ -128,6 +133,7 @@ export function runStateFromRecord(run: WebAgentRun): FrameRunState {
     progress,
     claimSummary: record.claimSummary ?? null,
     artifacts: [...(run.artifacts ?? [])],
+    artifactRoles: run.artifactRoles ?? {},
     unverifiedArtifacts: [...(run.unverifiedArtifacts ?? [])],
     updatedAt: run.finishedAt ?? run.lastProgressAt ?? run.startedAt,
   };
@@ -145,6 +151,10 @@ export function foldRunEvent(state: FrameRunState, event: RunStreamEvent): Frame
     return {
       ...state,
       state: typeof event.state === "string" ? event.state : state.state,
+      artifactRoles: event.artifactRoles && typeof event.artifactRoles === "object" ? event.artifactRoles as FrameRunState["artifactRoles"] : state.artifactRoles,
+      stepActions: event.stepActions && typeof event.stepActions === "object" ? event.stepActions as FrameRunState["stepActions"] : state.stepActions,
+      availableActions: Array.isArray(event.availableActions) ? event.availableActions as import("@evimed/domain").RunAction[] : state.availableActions,
+      stalled: event.stalled === true,
       phase: typeof event.phase === "string" ? event.phase : state.phase ?? null,
       verification: typeof event.verification === "string" ? event.verification : state.verification ?? null,
       updatedAt: at,
@@ -426,4 +436,3 @@ export function useRuntimeSessionSearch(): { available: boolean; search: FrameSe
   );
   return { available: current !== null, search: current ?? unavailableSearch };
 }
-

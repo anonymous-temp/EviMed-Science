@@ -24,23 +24,28 @@
       "outputs": [
         {
           "path": "study-package.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "results.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "assumption-register.md",
-          "required": true
+          "required": true,
+          "role": "document"
         },
         {
           "path": "execution-record.md",
-          "required": true
+          "required": true,
+          "role": "document"
         },
         {
           "path": "cde-communication-pack.md",
-          "required": false
+          "required": false,
+          "role": "document"
         }
       ],
       "checks": [

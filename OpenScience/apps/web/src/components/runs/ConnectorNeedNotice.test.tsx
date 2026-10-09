@@ -37,7 +37,7 @@ function run(overrides: Partial<WebAgentRun> = {}): WebAgentRun {
     agentVersion: null, runtimeAgent: null, effectiveAgentId: "open-domain-answer", model: "deepseek-flash", status: "succeeded",
     createdAt: "2026-10-04T01:00:00.000Z", startedAt: "2026-10-04T01:00:00.000Z", finishedAt: "2026-10-04T01:05:00.000Z",
     durationMs: 300_000, errorCode: null, artifacts: [], unverifiedArtifacts: [], question: "把这些术语映射到 UMLS",
-    connectorNeeds: ["umls"], ...overrides,
+    connectorNeeds: ["umls"], availableActions: [{ kind: "continue", scope: "session", targetId: "web-session-1" }], ...overrides,
   };
 }
 
@@ -54,6 +54,12 @@ beforeEach(() => {
 });
 
 describe("when the strip speaks", () => {
+  it("does not offer continuation when the server has not advertised it", async () => {
+    mocks.fetchWebConnectors.mockResolvedValue([connector("umls", "UMLS", "user")]);
+    mount(run({ availableActions: [] }));
+    await screen.findByRole("status");
+    expect(screen.queryByRole("button", { name: "继续" })).not.toBeInTheDocument();
+  });
   it("names the source a finished run went without, with 去配置 and no 继续 yet", async () => {
     mount(run());
     expect(await screen.findByText("UMLS 还没有配置，相关部分已跳过。")).toBeInTheDocument();

@@ -37,15 +37,18 @@
       "outputs": [
         {
           "path": "clinical-evidence-report.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "clinical-evidence-matrix.json",
-          "required": true
+          "required": true,
+          "role": "matrix"
         },
         {
           "path": "agenda-delta.json",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

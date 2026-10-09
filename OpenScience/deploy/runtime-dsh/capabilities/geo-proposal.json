@@ -19,15 +19,18 @@
       "outputs": [
         {
           "path": "geo-proposal.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "proposal-package.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "revision-notes.md",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

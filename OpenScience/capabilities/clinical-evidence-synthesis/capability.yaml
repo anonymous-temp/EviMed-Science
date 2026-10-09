@@ -53,10 +53,13 @@ produces:
   # is the platform's own record.
   outputs:
   - path: clinical-evidence-report.md
+    role: report
     required: true
   - path: clinical-evidence-matrix.json
+    role: matrix
     required: true
   - path: agenda-delta.json
+    role: work
     required: false
   checks:
   - requiredOutputsExist

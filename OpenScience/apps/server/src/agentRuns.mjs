@@ -4,6 +4,7 @@ import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { availableRunActions, availableRunStepActions, runIsStalled } from "@evimed/domain";
 import {
   HttpError,
   assertNoSymlinkPath,
@@ -33,7 +34,7 @@ import {
   runNotice,
   runSideDegradedNotice,
 } from "./runNotices.mjs";
-import { describeRunArtifacts } from "./runArtifacts.mjs";
+import { describeRunArtifacts, describeRunArtifactRoles } from "./runArtifacts.mjs";
 import { normalizeRunEstimate, routeReasonText } from "./runRoute.mjs";
 import {
   assembleRunProgress,
@@ -136,6 +137,7 @@ const startFields = new Set(["sessionId"]);
 const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
+  "agendaId",
   "automated",
   // A person is waiting on this dispatch (an interactive route, a messaging channel): waking the
   // runtime waits for a free slot instead of refusing. Read by `dispatch` itself, not recorded.
@@ -332,6 +334,7 @@ function normalizeDispatchInput(input) {
   return {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
+    agendaId: input.agendaId == null ? null : safeId(input.agendaId, "research agenda id"),
     // Started by a harness rather than a person; read by the inbox, which
     // records such a run's completion without notifying anyone (C1).
     automated: input.automated === true,
@@ -486,6 +489,7 @@ function foldEvents(events) {
         id,
         dispatchId,
         dispatchStatus,
+        ...(event.agendaId ? { agendaId: safeStoredId(event.agendaId, "agendaId") } : {}),
         ...(Object.hasOwn(event, "baselineCursor") ? { baselineCursor: event.baselineCursor } : {}),
         ...(event.nativeTurn ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
         ...(event.kernelRequestIds ? { kernelRequestIds: event.kernelRequestIds.map(storedKernelRequestId) } : {}),
@@ -594,6 +598,7 @@ function foldEvents(events) {
           ? { observedKernelActivity: event.kernelActivity }
           : {}),
         lastProgressAt: storedTimestamp(event.at, "at"),
+        ...(event.trustedProgressAt ? { lastTrustedProgressAt: storedTimestamp(event.trustedProgressAt, "trustedProgressAt") } : {}),
       }));
       continue;
     }
@@ -747,6 +752,7 @@ function foldEvents(events) {
           ? "unchecked"
           : current.verification,
         qualityNotices: [...current.qualityNotices, ...added].slice(0, maxQualityNotices),
+        ...(added.some(notice => notice.code === "run_stall_observed") ? { lastStallAt: event.at } : {}),
       }));
       continue;
     }
@@ -4205,7 +4211,8 @@ export class AgentRunStore {
         return Array.isArray(outputs) ? outputs.map((/** @type {any} */ output) => String(output?.path ?? "")).filter(Boolean) : null;
       });
     } catch { /* isolated: a record that cannot be described is still a record */ }
-    return described ? { ...run, ...described } : run;
+    return { ...run, ...(described ?? {}), artifactRoles: describeRunArtifactRoles(run, id => registry?.get?.(id)?.outputs), stepActions: availableRunStepActions(run.deliverables ?? []), availableActions: availableRunActions(/** @type {any} */ (run),
+      Boolean(registry?.get?.(run.effectiveAgentId ?? run.agentId))), stalled: runIsStalled(run) };
   }
 
   notifyState(project, folded) {
@@ -4426,6 +4433,8 @@ export class AgentRunStore {
         return {
           ...run,
           phase: history.phase,
+          stepActions: availableRunStepActions(run.deliverables ?? []), availableActions: availableRunActions(run, Boolean(this.loadedAgentRegistry?.get?.(run.effectiveAgentId ?? run.agentId))),
+          stalled: runIsStalled(run),
           phaseIllegalTransitions: history.illegalTransitions,
           ...(history.notices.length ? { phaseNotices: history.notices } : {}),
         };
@@ -4531,6 +4540,7 @@ export class AgentRunStore {
   async reserveRun(project, session, {
     baselineCursor,
     dispatchId = null,
+    agendaId = null,
     automated = false,
     estimatedMinutes = null,
     forkedFrom = null,
@@ -4621,6 +4631,7 @@ export class AgentRunStore {
         id,
         dispatchId,
         dispatchStatus: dispatchId ? "dispatching" : "accepted",
+        ...(agendaId ? { agendaId } : {}),
         ...(nativeTurn ? { nativeTurn } : {}),
         kernelRequestIds: kernelRequestIds ?? (dispatchId ? [randomId("req_")] : []),
         sessionId: session.sessionId,
@@ -4692,6 +4703,7 @@ export class AgentRunStore {
       sessionId,
       dispatchId,
       automated,
+      agendaId,
       estimatedMinutes,
       question,
       briefText,
@@ -4719,7 +4731,7 @@ export class AgentRunStore {
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
     await this.setRuntimePlatformSkillScope(project, selected.effectiveAgentId ?? null);
-    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
+    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
@@ -5596,7 +5608,7 @@ export class AgentRunStore {
         void pending.finally(() => this.backgroundLabels.delete(pending));
       }
       try {
-        await this.onRunFinished(project, result);
+        await this.onRunFinished(project, this.withArtifactKinds(result));
       } catch (error) {
         try {
           await this.onRunFinishedError(error, project, result);
@@ -6913,6 +6925,7 @@ export class AgentRunStore {
         at: this.now().toISOString(),
         messages,
         toolCalls,
+        trustedProgressAt: !stillByHistory || !stillByKernel ? this.now().toISOString() : current.lastTrustedProgressAt ?? null,
         ...(activity === null ? {} : { runSideActivity: activity }),
         ...(kernelActivity === null ? {} : { kernelActivity }),
         // The aggregate, stored so a reader who opens the run later (or a
@@ -6925,6 +6938,10 @@ export class AgentRunStore {
       // `serializeNext` holds that rule now, so the terminal path drops them too.
       const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      if (runIsStalled(current) && (!stillByHistory || !stillByKernel)) {
+        const resumed = foldEvents(parseEvents(text)).get(run.id);
+        if (resumed) this.notifyState(project, resumed);
+      }
     });
     // The projection is still recorded and published, but it is a workspace
     // document the model can influence. Only root history or an authenticated

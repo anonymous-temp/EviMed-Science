@@ -17,15 +17,18 @@
       "outputs": [
         {
           "path": "SKILL.md",
-          "required": true
+          "required": true,
+          "role": "work"
         },
         {
           "path": "method-candidate.json",
-          "required": true
+          "required": true,
+          "role": "work"
         },
         {
           "path": "distillation-notes.md",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

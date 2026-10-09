@@ -1,3 +1,4 @@
+import { markFrontierEventRead } from "@/lib/frontierClient";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { CalendarClock, ChevronLeft, SearchX } from "lucide-react";
@@ -90,6 +91,7 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
       (event) => {
         if (!active) return;
         setState({ kind: "ready", event });
+        if (event.readingMark) void markFrontierEventRead(event.id, event.readingMark).catch(() => {});
         if (event.id !== eventId) navigate(`/app/frontier/events/${encodeURIComponent(event.id)}`, { replace: true, state: location.state });
       },
       (error: unknown) => {
@@ -162,7 +164,7 @@ function EventBody({ event }: { event: FrontierEvent }) {
   const location = useLocation();
   const timeline = useMemo(() => [...event.items]
     .sort((a, b) => Date.parse(b.timelineAt) - Date.parse(a.timelineAt)), [event.items]);
-  const research = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(eventResearchDraft(event)) } });
+  const research = () => navigate("/app/chat", { state: { runtimeUiIntent: { ...newRuntimeUiIntent(eventResearchDraft(event)), originReference: { kind: "frontier-event", id: event.id, title: event.title } } } });
   // From ten reports on, a kind of source narrows the list: the kinds the rows already name, in the order they first appear.
   const [sourceType, setSourceType] = useState<string | null>(null);
   const sourceTypes = useMemo(() => [...new Set(timeline.flatMap((item) => (item.sourceTypeLabel ? [item.sourceTypeLabel] : [])))], [timeline]);
@@ -179,13 +181,21 @@ function EventBody({ event }: { event: FrontierEvent }) {
       actions={<Button onClick={research}>深入研究</Button>}
       facts={(
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-3">
-          {event.sourceCount72h > 0 && <span>{event.sourceCount72h} 家机构报道</span>}
+          {event.counts ? <span>{event.counts.reports} 篇报道 · {event.counts.institutions} 家机构 · {event.counts.studies} 项已识别研究{event.counts.unlinkedReports > 0 ? `（${event.counts.unlinkedReports} 篇尚未关联研究）` : ""}</span>
+            : event.sourceCount72h > 0 && <span>{event.sourceCount72h} 家机构报道</span>}
           {event.sourceCount72h > 0 && updated && <span aria-hidden="true">·</span>}
           {updated && <span>{updatedText(updated)}</span>}
           {specialty && <Tag className="ml-1">{specialty.label}</Tag>}
         </div>
       )}
     >
+      {Boolean(event.changes?.length) && <section aria-label="自上次阅读以来" className="space-y-2">
+        <h2 className="text-ui font-semibold text-text">自上次阅读以来</h2>
+        {event.changes?.map(change => <div key={change.id} className="text-ui">
+          <p className="text-text"><span className="text-accent">{change.kind === "added" ? "新增报道" : "内容更新"} · </span>{change.title}</p>
+          {change.summary && <p className="mt-1 text-text-2">{change.summary}</p>}
+        </div>)}
+      </section>}
       {/* One column: 720 holds a timeline or a side column, not both. The heat and where the reports come from are a strip above
         * the summary, where a reader weighing the event looks first. */}
       <div className="mt-6 flex flex-col gap-8">

@@ -31,7 +31,7 @@
  * @module runArtifacts
  */
 
-import { deliverableIdOfPath, normalizeWorkspacePath, workspaceLayout } from "@evimed/domain";
+import { artifactPresentation, deliverableIdOfPath, normalizeWorkspacePath, workspaceLayout } from "@evimed/domain";
 
 /** @typedef {'deliverable' | 'revision-notes' | 'work' | 'superseded'} ArtifactKind */
 
@@ -118,4 +118,19 @@ export function describeRunArtifacts(run, declaredOutputsOf) {
     else artifactCounts[kind] += 1;
   }
   return { artifactKinds, artifactCounts };
+}
+
+/** Reading roles declared by the runtime's capability contracts, applied to the actual run files.
+ * @param {any} run @param {(id: string) => any[] | undefined} outputsOf
+ */
+export function describeRunArtifactRoles(run, outputsOf) {
+  const roles = {};
+  for (const path of [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])]) {
+    const id = deliverableIdOfPath(path);
+    const capability = run.deliverables?.find(item => item.id === id)?.capability ?? run.effectiveAgentId ?? run.agentId;
+    const relative = id ? path.slice(`${workspaceLayout.deliverablesDir}/${id}/`.length) : path;
+    const declared = outputsOf(capability)?.find(output => output.path === relative)?.role;
+    roles[path] = artifactPresentation(path, declared).role;
+  }
+  return roles;
 }

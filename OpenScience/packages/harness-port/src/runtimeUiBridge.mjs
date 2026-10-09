@@ -134,9 +134,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
           const input = ctx.conversation.input.for(scope);
           if (intent.draft !== undefined) input.setDraft(intent.draft);
           for (const reference of Array.isArray(intent.references) ? intent.references : []) {
-            const state = input.state?.getSnapshot?.();
-            const end = typeof state?.draft === 'string' ? state.draft.length : 0;
-            if (!input.insertReference(kit.knowledgeChip(reference), { start: end, end, draftRev: Number(state?.draftRev) || 0 })) throw new Error('Native reference chip refused');
+            // Lexical publishes draft revisions asynchronously. Each insertion must observe the preceding edit.
+            await new Promise(resolve => (target.setTimeout ?? globalThis.setTimeout)(resolve, 0));
+            // Clipboard text expands a chip to its title; insertion coordinates count it as one placeholder.
+            // The native capture is the only correct coordinate/revision pair after the first chip.
+            const span = input.actions?.captureInsertion?.();
+            if (!span || !input.insertReference(kit.knowledgeChip(reference), span)) throw new Error('Native reference chip refused');
           }
           if (intent.resultRevision) {
             if (!target.__EVIMED_RESULT_REVISION__) throw new Error('Result revision transport unavailable');
@@ -262,6 +265,19 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
    * drop the message.
    */
   const INBOUND = {
+    /** @param {any} data */
+    'source-citations-result'(data) {
+      if (typeof data.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId)) return null;
+      return { requestId: data.requestId, ok: data.ok === true,
+        items: (Array.isArray(data.items) ? data.items : []).filter((/** @type {any} */ item) => /^src_[a-f0-9]{32}$/.test(item?.sourceId)).slice(0, 20) };
+    },
+    /** @param {any} data */
+    'source-scope-result'(data) {
+      if (typeof data.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId)) return null;
+      return { requestId: data.requestId, ok: data.ok === true, sessionId: validId(data.sessionId) ? data.sessionId : null,
+        originReference: data.originReference?.kind === 'frontier-event' && /^[a-z0-9]{12,32}$/.test(data.originReference.id) && typeof data.originReference.title === 'string' ? { kind: 'frontier-event', id: data.originReference.id, title: data.originReference.title.slice(0, 300) } : null,
+        sourceIds: (Array.isArray(data.sourceIds) ? data.sourceIds : []).filter((/** @type {unknown} */ id) => typeof id === 'string' && /^src_[a-f0-9]{32}$/.test(id)).slice(0, 50) };
+    },
     /** @param {any} data */
     theme(data) {
       const preference = ['light', 'dark', 'system'].includes(data.preference) ? data.preference : null;
@@ -531,6 +547,39 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     return { runId: /** @type {string} */ (fields.runId), path: /** @type {string} */ (fields.path) };
   };
   const OUTBOUND = {
+    /** @param {any} fields */
+    'stop-run'(fields) {
+      return validId(fields.runId) ? { runId: fields.runId } : null;
+    },
+    /** @param {any} fields */
+    'source-citations'(fields) {
+      if (typeof fields.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(fields.requestId)
+        || !Array.isArray(fields.references) || fields.references.length > 20
+        || fields.references.some((/** @type {any} */ ref) => !/^src_[a-f0-9]{32}$/.test(ref?.sourceId)
+          || typeof ref.quote !== 'string' || ref.quote.length > 2000)) return null;
+      return { requestId: fields.requestId, references: fields.references };
+    },
+    /** @param {any} fields */
+    'open-event'(fields) {
+      return /^[a-z0-9]{12,32}$/.test(fields?.eventId ?? '') ? { eventId: fields.eventId } : null;
+    },
+    /** @param {any} fields */
+    'open-source'(fields) {
+      if (!/^src_[a-f0-9]{32}$/.test(fields.sourceId)) return null;
+      return { sourceId: fields.sourceId,
+        page: Number.isInteger(fields.page) && fields.page > 0 ? fields.page : null,
+        start: Number.isSafeInteger(fields.start) && fields.start >= 0 ? fields.start : null,
+        end: Number.isSafeInteger(fields.end) && fields.end > fields.start && fields.end - fields.start <= 2000 ? fields.end : null,
+        sha: typeof fields.textSha256 === 'string' && /^[a-f0-9]{64}$/.test(fields.textSha256) ? fields.textSha256 : null };
+    },
+    /** @param {any} fields */
+    'source-scope'(fields) {
+      if (!validId(fields.sessionId) || typeof fields.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(fields.requestId)
+        || (fields.sourceIds !== undefined && (!Array.isArray(fields.sourceIds) || fields.sourceIds.length > 50
+        || fields.sourceIds.some((/** @type {unknown} */ id) => typeof id !== 'string' || !/^src_[a-f0-9]{32}$/.test(id))))) return null;
+      return { requestId: fields.requestId, sessionId: fields.sessionId,
+        ...(fields.sourceIds === undefined ? {} : { sourceIds: [...new Set(fields.sourceIds)] }) };
+    },
     /** @param {any} fields */
     'open-artifact'(fields) {
       const file = deliveredFile(fields);

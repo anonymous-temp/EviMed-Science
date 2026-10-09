@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { ALLOWED_EFFECT_MEASURES, AUTOPILOT_TASK_TYPES, digestPlacement, directionVerdict, REFUTATION_VERDICTS,
   agendaDueOccurrence, agendaNextOccurrence, agendaLocalDate, normalizeAgendaSchedule, validateAgendaSchedule, validAgendaDate,
   AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY, STOPPING_RULES, VERIFICATION_CANCELED_BY_STOP, knownErrorCodeMessage,
-  splitEpisodeBudget, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim } from "@evimed/domain";
+  splitEpisodeBudget, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim, agendaResultKind } from "@evimed/domain";
 import { AUTOPILOT_MATERIALS_MAX, loadAutopilotProgress, projectResearchState, renderAutopilotProgress, safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
 import { RESEARCHER_PAUSE_KIND, buildPlannerContext, eligibleTaskTypes, plannerFrontierItems, rotationTaskType } from "./autopilotNextAction.mjs";
 import { foldOutcome, reducedPriority } from "./autopilotOutcome.mjs";
@@ -582,6 +582,23 @@ export class AutopilotService {
     return this.documents.put(userId, "agenda", this.id("agenda-"), payload, { expectedRevision: 0, projectId });
   }
 
+  /** Allocate one conversation for all future executions; earlier execution conversations remain readable.
+   * Optimistic revisions make racing workers and retries agree before any prompt is sent. */
+  async conversation(userId, agendaId) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const agenda = await this.get(userId, agendaId);
+      if (agenda.payload.sessionId) return text(agenda.payload.sessionId, "session id", 160);
+      const sessionId = this.id("session_");
+      try {
+        await this.documents.put(userId, "agenda", agenda.id, {
+          ...agenda.payload, sessionId, updatedAt: this.now().toISOString(),
+        }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+        return sessionId;
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    throw new HttpError(409, "autopilot_request_conflict", "The task changed while opening its conversation.");
+  }
+
   /**
    * Put the agenda's entity keys (what its title, topics and prompt are about:
    * `entityVocabulary.mjs`) on the payload. Where the vocabulary cannot tag —
@@ -1104,7 +1121,7 @@ export class AutopilotService {
   }
 
   /** Fold an ordinary AgentRun terminal result back into the proactive ledger.
-   * @param {string} userId @param {{projectId:string,runId:string,episodeId?:string|null,sessionId?:string|null,status:string,deltaSchemaVersion?:number|null,deltaErrorCode?:string|null,claims?:any[],artifacts?:string[],unverifiedArtifacts?:string[],artifactRefs?:any[],costCny?:number}} input */
+   * @param {string} userId @param {{projectId:string,runId:string,episodeId?:string|null,sessionId?:string|null,status:string,deltaSchemaVersion?:number|null,deltaErrorCode?:string|null,claims?:any[],artifacts?:string[],unverifiedArtifacts?:string[],artifactRefs?:any[],artifactRoles?:Record<string,string>,costCny?:number}} input */
   async completeRun(userId, input) {
     let episode = await this.episodeForRun(userId, input.projectId, input.runId);
     if (!episode && input.episodeId) {
@@ -1163,6 +1180,7 @@ export class AutopilotService {
       completion = {
         runId: input.runId,
         outcomeStatus,
+        resultKind: agendaResultKind(input),
         digestId: `digest-${hash(`${episode.id}:${input.runId}`).slice(0, 32)}`,
         // The episode's own day, which is the agenda's local one. This was the
         // UTC day, so the briefing of a 07:00 Asia/Shanghai episode was dated
@@ -1173,7 +1191,7 @@ export class AutopilotService {
           : agendaLocalDate(normalizeAgendaSchedule((await this.get(userId, episode.payload.agendaId)).payload).timeZone, this.now()),
         claims: acceptedClaims,
         artifactRefs: safeAutopilotArtifactRefs(input.projectId, { id: input.runId, sessionId: input.sessionId ?? episode.payload.sessionId,
-          artifacts: input.artifacts, unverifiedArtifacts: input.unverifiedArtifacts }),
+          artifactRoles: input.artifactRoles, artifacts: input.artifacts, unverifiedArtifacts: input.unverifiedArtifacts }),
         rejectedClaims,
         deltaErrorCode: input.deltaErrorCode ?? (succeeded && input.deltaSchemaVersion !== 1 ? "agenda_delta_schema_invalid" : null),
         costCny: Number(input.costCny) || 0,
@@ -1232,6 +1250,7 @@ export class AutopilotService {
           ...latest.payload,
           status: stopped ? "canceled" : completion.outcomeStatus === "succeeded" ? "merged" : completion.outcomeStatus,
           claims: completion.claims, artifactRefs: completion.artifactRefs ?? [], rejectedClaims: completion.rejectedClaims,
+          resultKind: completion.resultKind ?? (completion.outcomeStatus === "succeeded" ? "result" : "failed"),
           deltaErrorCode: completion.deltaErrorCode, costCny: completion.costCny,
           digestId: digest.id, completion: null, updatedAt: this.now().toISOString(),
         }, { expectedRevision: latest.revision, projectId: latest.projectId });

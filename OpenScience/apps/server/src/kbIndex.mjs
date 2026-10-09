@@ -395,7 +395,7 @@ export class KnowledgeBaseIndex {
     });
     /** @type {any[]} */
     const library = this.library ? (await this.library.searchScope(userId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
-    const wanted = sourceIds?.length ? new Set(sourceIds) : null;
+    const wanted = sourceIds === null ? null : new Set(sourceIds);
     /** @param {{ sourceId: string }} entry */
     const named = (entry) => !wanted || wanted.has(entry.sourceId);
     // One document, one entry: a document the project holds is read from the

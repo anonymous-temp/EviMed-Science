@@ -37,12 +37,16 @@ produces:
 - contractKind: drug-evaluation-report
   outputs:
   - path: comprehensive-evaluation-report.md
+    role: report
     required: true
   - path: evidence-table.csv
+    role: data
     required: true
   - path: evaluation-summary.json
+    role: data
     required: true
   - path: evidence-snapshot.json
+    role: data
     required: true
   checks:
   - requiredOutputsExist

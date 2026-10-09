@@ -30,15 +30,18 @@
       "outputs": [
         {
           "path": "study-definition.md",
-          "required": false
+          "required": false,
+          "role": "report"
         },
         {
           "path": "criteria.json",
-          "required": false
+          "required": false,
+          "role": "data"
         },
         {
           "path": "results.json",
-          "required": false
+          "required": false,
+          "role": "data"
         }
       ],
       "checks": [

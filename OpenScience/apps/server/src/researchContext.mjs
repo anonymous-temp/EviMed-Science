@@ -234,7 +234,7 @@ export async function prepareResearchContext(
   config,
   // `query` still arrives from every caller and chooses nothing any more: the
   // knowledge base is named here, and searched only when the model asks.
-  { query: _query = "", memories = [], specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null } = {},
+  { query: _query = "", memories = [], specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null, sourceContext = null } = {},
 ) {
   const knowledge = await syncKnowledgeBase(project, config);
   // A pointer, not a retrieval. Until 2026-09-20 every dispatch indexed the
@@ -337,7 +337,7 @@ export async function prepareResearchContext(
     system: [
       "你是 EviMed 科研助手。使用用户所用语言回答。回答先给结论与可执行建议，再给关键证据；证据强弱写进它所支撑的那句话。",
       "根据问题本身自主判断回答深度，以及是否需要检索、分析、调用工具或生成文件。简单事实、机制或定义类问题直接简明回答；只有用户明确要求报告、系统评价或深度研究时，才产出长篇结构化报告。",
-      knowledgeInstruction,
+      sourceContext ?? knowledgeInstruction,
       "只能在当前工作区内读取 .evimed-knowledge/；若该目录或相关文件不存在，就按知识库为空处理，不得为寻找知识库扫描父目录、用户主目录或其他外部目录。",
       memoryInstruction,
       "开放域问题保持自主科研能力。",

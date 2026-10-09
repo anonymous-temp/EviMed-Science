@@ -98,10 +98,8 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   // registration's `label` is read through the kernel's own label resolver and
   // may be a thunk, so it re-reads on a language change.
   'conversation.view': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
-  // Above the composer card: `main.conversation`'s children table. Nothing of
-  // ours sits there since 2026-09-23 (the delivery card became the files after
-  // the answer; the queue/steer hint the send button's tooltip). An occupant
-  // must hold itself to the composer's width, as the kernel's queue dock does.
+  // Above the composer card: `main.conversation`'s children table. Only the
+  // conditional stalled-run notice sits here; it follows the composer's width.
   'conversation.input.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // Below the composer card, one centred row: `ui-chat` holds the session
   // statistics there (`stats`, order 0), and the kernel draws its context ring

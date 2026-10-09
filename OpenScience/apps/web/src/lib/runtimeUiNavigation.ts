@@ -1,3 +1,4 @@
+import { conversationReference } from "@evimed/domain";
 import { getWebProjectId } from "./apiClient";
 
 /** One explicit request to the native session surface; a draft never submits. */
@@ -7,6 +8,8 @@ export interface RuntimeUiIntent {
   requestId: string;
   sessionId: string;
   draft?: string;
+  originReference?: NonNullable<ReturnType<typeof conversationReference>>;
+  references?: Array<{ id: string; title: string }>;
   resultRevision?: { referenceId: string };
 }
 
@@ -37,5 +40,9 @@ export function runtimeUiIntentFromState(state: unknown, projectId: string): Run
     || (intent.draft !== undefined && (typeof intent.draft !== "string" || intent.draft.length > 100_000))) return null;
   if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== "string"
     || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId) || !intent.draft)) return null;
+  if (intent.originReference && !conversationReference(intent.originReference)) return null;
+  if (intent.references && (!Array.isArray(intent.references) || intent.references.length > 50
+    || intent.references.some(ref => !ref || typeof ref.id !== "string" || !/^src_[a-f0-9]{32}$/.test(ref.id)
+      || typeof ref.title !== "string" || ref.title.length > 300))) return null;
   return intent;
 }

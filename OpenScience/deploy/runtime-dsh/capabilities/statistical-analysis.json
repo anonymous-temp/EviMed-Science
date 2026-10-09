@@ -18,23 +18,28 @@
       "outputs": [
         {
           "path": "statistical-report.md",
-          "required": false
+          "required": false,
+          "role": "report"
         },
         {
           "path": "analysis-results.json",
-          "required": false
+          "required": false,
+          "role": "data"
         },
         {
           "path": "analysis-run.json",
-          "required": false
+          "required": false,
+          "role": "work"
         },
         {
           "path": "analysis.py",
-          "required": false
+          "required": false,
+          "role": "work"
         },
         {
           "path": "analysis.R",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

@@ -1,3 +1,5 @@
+import { frontierEventEvidenceCounts } from '@evimed/domain';
+import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION } from "./frontierEditor.mjs";
 import { issueFrontierExposure } from "./frontierEvolution.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
@@ -1275,9 +1277,12 @@ export class FrontierService {
     if ("redirect" in read) return { redirect: read.redirect };
     const items = await this.hydrate(user, { rowIds: read.members.map((member) => member.rowId) });
     const event = read.event;
+    const baseline = (await this.database.query('SELECT report_marks FROM evimed_frontier.event_reads WHERE user_id = $1 AND event_id = $2', [user.id, publicId])).rows?.[0]?.report_marks ?? null;
+    const reading = frontierEventChanges(read.members, baseline);
     return {
       event: {
         id: event.public_id,
+        counts: frontierEventEvidenceCounts(read.members), readingMark: reading.mark, changes: reading.changes,
         title: event.title_zh,
         digest: event.digest_zh ?? null,
         latest: event.latest_zh ? { text: event.latest_zh, at: iso(event.last_at) } : null,
@@ -1307,6 +1312,20 @@ export class FrontierService {
     };
   }
 
+  /** Persist only the exact visible versions acknowledged by the reader; newer reports remain unseen.
+   * @param {{id: string}} user @param {string} eventId @param {any} mark
+   */
+  async markEventRead(user, eventId, mark) {
+    if (!mark || typeof mark !== 'object' || Array.isArray(mark) || Object.keys(mark).length > 256) throw failure(400, 'frontier_payload_invalid', 'Invalid reading mark.');
+    const read = await this.events?.read(eventId);
+    if (!read || 'redirect' in read) throw failure(404, 'frontier_event_not_found', 'No such event.');
+    const current = frontierEventChanges(read.members, null).mark;
+    const accepted = Object.fromEntries(Object.entries(mark).filter(([id, hash]) => current[id] && current[id] === hash));
+    await this.database.query(`INSERT INTO evimed_frontier.event_reads (user_id, event_id, report_marks) VALUES ($1, $2, $3::jsonb)
+      ON CONFLICT (user_id, event_id) DO UPDATE SET report_marks = EXCLUDED.report_marks, read_at = clock_timestamp()`, [user.id, eventId, JSON.stringify(accepted)]);
+    return { read: true };
+  }
+
   /** The daily archive, newest first. @param {URLSearchParams} params */
   async dailies(params) {
     if (!this.daily) throw failure(404, "not_found", "Frontier route not found.");
@@ -1314,7 +1333,11 @@ export class FrontierService {
     const limit = value == null || value === "" ? 30 : Number(value);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 60) throw failure(400, "frontier_query_invalid", "The limit parameter is invalid.");
     // The schedule rides with the archive so the page can say when the next issue comes, in whose clock, without a copy of the setting.
-    return { dailies: await this.daily.list(limit), schedule: { time: this.daily.dailyTime, timeZone: this.daily.timeZone } };
+    const day = params.get("day");
+    if (day && (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(`${day}T00:00:00Z`))
+      || new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) !== day)) throw failure(400, "frontier_query_invalid", "Invalid daily date.");
+    return { dailies: await this.daily.list(limit), schedule: { time: this.daily.dailyTime, timeZone: this.daily.timeZone },
+      publication: this.daily.publicationStatus ? await this.daily.publicationStatus(day) : null };
   }
 
   /**

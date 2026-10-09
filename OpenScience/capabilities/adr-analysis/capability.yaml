@@ -32,10 +32,13 @@ produces:
 - contractKind: adr-analysis-report
   outputs:
   - path: safety-report.md
+    role: report
     required: true
   - path: signals.csv
+    role: data
     required: true
   - path: agenda-delta.json
+    role: work
     required: false
   checks:
   - requiredOutputsExist

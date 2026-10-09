@@ -33,43 +33,53 @@
       "outputs": [
         {
           "path": "call-requirements.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "specific-aims.md",
-          "required": true
+          "required": true,
+          "role": "document"
         },
         {
           "path": "proposal-outline.md",
-          "required": true
+          "required": true,
+          "role": "document"
         },
         {
           "path": "milestones.csv",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "grant-audit.md",
-          "required": true
+          "required": true,
+          "role": "document"
         },
         {
           "path": "citation-ledger.csv",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "delivery-summary.md",
-          "required": true
+          "required": true,
+          "role": "document"
         },
         {
           "path": "reporting-checklist.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "revision-notes.md",
-          "required": false
+          "required": false,
+          "role": "work"
         },
         {
           "path": "agenda-delta.json",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

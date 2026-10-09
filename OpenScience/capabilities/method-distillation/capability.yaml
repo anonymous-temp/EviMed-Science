@@ -20,10 +20,13 @@ produces:
 - contractKind: method-candidate
   outputs:
   - path: SKILL.md
+    role: work
     required: true
   - path: method-candidate.json
+    role: work
     required: true
   - path: distillation-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

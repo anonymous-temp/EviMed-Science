@@ -490,11 +490,13 @@ export type WebResearchSessionSelection =
   | { mode: "specialist"; agentId: string; agentVersion: string };
 
 export interface WebResearchSession {
+  originReference?: NonNullable<ReturnType<typeof import("@evimed/domain").conversationReference>> | null;
   sessionId: string;
   mode: "open-domain" | "specialist";
   agentId: string | null;
   agentVersion: string | null;
   runtimeAgent: string | null;
+  sourceScope?: string[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -741,6 +743,10 @@ export interface WebRunProgress {
 }
 
 export interface WebAgentRun {
+  stepActions?: Record<string, import("@evimed/domain").RunAction[]>;
+  artifactRoles?: Record<string, import("@evimed/domain").ArtifactRole>;
+  availableActions?: import("@evimed/domain").RunAction[];
+  stalled?: boolean;
   id: string;
   dispatchId: string | null;
   /**
@@ -1652,6 +1658,33 @@ export async function putWebResearchSession(
   return parseApiResponse<WebResearchSession>(res);
 }
 
+/** Persist the native composer's document selection before it submits its message. */
+export async function putWebSessionSourceScope(sessionId: string, sourceIds: string[], projectId: string): Promise<WebResearchSession> {
+  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/source-scope`), {
+    method: "PUT", headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId },
+    body: JSON.stringify({ sourceIds }),
+  });
+  return parseApiResponse<WebResearchSession>(res);
+}
+
+export async function getWebSessionSourceScope(sessionId: string, projectId: string): Promise<{ sourceScope: string[] | null; originReference?: NonNullable<ReturnType<typeof import("@evimed/domain").conversationReference>> | null }> {
+  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/source-scope`), {
+    headers: { "X-Open-Science-Project": projectId },
+  });
+  return parseApiResponse<{ sourceScope: string[] | null; originReference?: NonNullable<ReturnType<typeof import("@evimed/domain").conversationReference>> | null }>(res);
+}
+
+export interface PreservedConversationHistory {
+  sessionId: string; capturedAt: string | null; partial: boolean;
+  messages: Array<{ seq: number; role: "user" | "assistant"; text: string }>;
+}
+export async function getWebConversationHistory(sessionId: string, projectId: string): Promise<PreservedConversationHistory> {
+  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/history`), {
+    headers: { "X-Open-Science-Project": projectId },
+  });
+  return parseApiResponse<PreservedConversationHistory>(res);
+}
+
 /**
  * A project's run ledger: the tab's own project, or `projectId`'s. The sidebar
  * lists other projects' tasks beside the current one's, and the header is how
@@ -2423,4 +2456,17 @@ export async function fetchWebReadiness(): Promise<WebReadiness> {
     throw new Error(message);
   }
   return body as WebReadiness;
+}
+
+/** Anonymous route-family performance samples; no paths, content or stable user identifiers. */
+export async function recordWebVital(sample: { route: string; device: string; name: string; id: string; value: number }): Promise<void> {
+  if (!hasWebApi) return;
+  await fetchWithWebAuth(apiUrl('/web-vitals'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sample), keepalive: true });
+}
+
+export async function putConversationReference(sessionId: string, projectId: string, reference: { kind: string; id: string; title: string }): Promise<void> {
+  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/origin-reference`), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Open-Science-Project': projectId }, body: JSON.stringify(reference),
+  });
+  await parseApiResponse(res);
 }

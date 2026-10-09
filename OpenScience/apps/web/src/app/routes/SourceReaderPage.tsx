@@ -24,6 +24,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
 import { SourceKeyPoints } from "@/components/sources/SourceKeyPoints";
 import { SourceOriginal } from "@/components/sources/SourceOriginal";
+import { SourceQuotation } from "@/components/sources/SourceQuotation";
 import { sourceMenuItems } from "@/components/sources/SourceRow";
 import { conversationDraft, isEditableNote, isReading, isUsable, originalPathOf, readerMeta } from "@/components/sources/sourceView";
 import { COLUMN_GAP, fitsTwoColumns, MIN_PANE_HEIGHT, POINTS_WIDTH, useReaderBox } from "@/components/sources/useReaderBox";
@@ -162,7 +163,9 @@ function SourceReader({ sourceId }: { sourceId: string }) {
     if (!source) return;
     const target = listState.scope === SHARED_SCOPE ? currentProjectId : source.projectId;
     void select(target, () => {
-      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: newRuntimeUiIntent(conversationDraft(source)) } });
+      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: {
+        ...newRuntimeUiIntent(conversationDraft(source)), references: [{ id: source.id, title: source.display.title }],
+      } } });
     }).catch((failure) => toast.error(webErrorMessage(failure)));
   };
 
@@ -195,7 +198,11 @@ function SourceReader({ sourceId }: { sourceId: string }) {
     duplicate: group !== null, busy, onRetry: readAgain, onShare: toggleShared, onDuplicates: () => setDuplicatesOpen(true), onDelete: () => setDeleting(true),
   }) : [];
 
-  const original = source && <SourceOriginal source={source} page={view.page ?? undefined} onNoteSaved={noteSaved} />;
+  const start = Number(params.get("start")), end = Number(params.get("end")), sha = params.get("sha") ?? "";
+  const span = params.has("start") && Number.isSafeInteger(start) && start >= 0 && Number.isSafeInteger(end)
+    && end > start && end - start <= 2000 && /^[a-f0-9]{64}$/.test(sha) ? { start, end, sha } : undefined;
+  const original = source && (span ? <SourceQuotation source={source} page={view.page ?? undefined} span={span} onNoteSaved={noteSaved} />
+    : <SourceOriginal source={source} page={view.page ?? undefined} onNoteSaved={noteSaved} />);
   const points = source && <SourceKeyPoints source={source} busy={busy} versionPath={versionPath} onShowPage={showPage} onRetry={readAgain} />;
   return (
     <div ref={rootRef} className="h-full">

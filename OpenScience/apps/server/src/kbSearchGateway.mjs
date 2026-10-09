@@ -11,7 +11,7 @@
 // what a run did before this tool existed.
 
 const gatewayPath = "/internal/kb/v1/search";
-const allowedFields = new Set(["query", "limit", "sourceIds"]);
+const allowedFields = new Set(["query", "limit", "sourceIds", "sessionId"]);
 const maxQueryLength = 512;
 const maxLimit = 20;
 const defaultLimit = 8;
@@ -76,7 +76,10 @@ function validatedRequest(body) {
     }
     sourceIds = [...new Set(body.sourceIds)];
   }
-  return { query, limit, sourceIds };
+  if (body.sessionId != null && (typeof body.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId))) {
+    throw gatewayError(400, "kb_search_request_invalid", "The conversation identity is invalid.");
+  }
+  return { query, limit, sourceIds, sessionId: typeof body.sessionId === "string" ? body.sessionId : null };
 }
 
 /**
@@ -98,9 +101,9 @@ export function kbSearchGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ index: any, evaluationIsolation?: any }} dependencies the knowledge-base index, or null when switched off
+ * @param {{ index: any, evaluationIsolation?: any, sourceScope?: (identity: any, sessionId: string) => Promise<readonly string[] | null> }} dependencies
  */
-export function createKbSearchGatewayHandler(config, runtimeManager, { index, evaluationIsolation = null }) {
+export function createKbSearchGatewayHandler(config, runtimeManager, { index, evaluationIsolation = null, sourceScope }) {
   const windows = new Map();
   return async function kbSearchGatewayHandler(req, res, onFailure) {
     try {
@@ -123,7 +126,14 @@ export function createKbSearchGatewayHandler(config, runtimeManager, { index, ev
       const window = windows.get(key) ?? { until: now + 60_000, count: 0 };
       windows.set(key, window);
       if (++window.count > windowLimit) throw gatewayError(429, "kb_search_rate_limited", "Too many knowledge-base searches in a minute.");
-      const request = validatedRequest(await readJsonBody(req, 16 * 1024));
+      const { sessionId, ...request } = validatedRequest(await readJsonBody(req, 16 * 1024));
+      // Intersect before the index chooses its small-library shortcut too. An empty intersection is empty,
+      // never an invitation to read all documents. Failure to read a saved scope must not broaden it.
+      if (sessionId && sourceScope) {
+        const selected = await sourceScope(identity, sessionId);
+        if (selected) request.sourceIds = request.sourceIds
+          ? request.sourceIds.filter(id => selected.includes(id)) : [...selected];
+      }
       const timeoutMs = Math.max(1_000, Number(config.kbSearchTimeoutMs) || 20_000);
       let timer;
       const result = await Promise.race([

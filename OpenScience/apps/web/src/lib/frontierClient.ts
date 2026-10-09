@@ -356,6 +356,9 @@ export type FrontierEventRole = "primary" | "report" | "background";
 
 /** `GET /api/frontier/events/:id` (a merged id answers 308, which `fetch` follows). */
 export interface FrontierEvent {
+  counts?: { reports: number; institutions: number; studies: number; unlinkedReports: number };
+  readingMark?: Record<string, string>;
+  changes?: { id: string; kind: "added" | "updated"; title: string; summary: string | null }[];
   id: string;
   title: string;
   /** 「先了解这件事」; null until the event has earned one (plan §4.4). */
@@ -402,7 +405,9 @@ export interface FrontierDailySchedule {
 }
 
 /** `GET /api/frontier/dailies`: the archive, newest first, and the schedule the server publishes by (null from a server that names none). */
+export interface FrontierPublication { day: string; state: "published" | "empty" | "failed" | "pending" }
 export interface FrontierDailyArchive {
+  publication?: FrontierPublication | null;
   dailies: FrontierDailySummary[];
   schedule: FrontierDailySchedule | null;
 }
@@ -781,7 +786,16 @@ function parseEvent(value: unknown): FrontierEvent | null {
   const lane = text(raw.lane) ?? "mixed";
   const primary = orNull(raw.primary, ["paper", "official", "guideline", "label"] as const);
   const institutions = record(raw.institutions72h);
+  const counts = record(raw.counts);
+  const mark = record(raw.readingMark);
   return {
+    counts: counts ? { reports: count(counts.reports), institutions: count(counts.institutions), studies: count(counts.studies), unlinkedReports: count(counts.unlinkedReports) } : undefined,
+    readingMark: mark ? Object.fromEntries(Object.entries(mark).filter(([id, hash]) => /^[a-z0-9]{12,32}$/.test(id) && typeof hash === "string" && /^[a-f0-9]{64}$/.test(hash))) as Record<string, string> : undefined,
+    changes: (Array.isArray(raw.changes) ? raw.changes : []).slice(0, 256).flatMap(entry => {
+      const change = record(entry);
+      return change && typeof change.id === "string" && typeof change.title === "string" && ["added", "updated"].includes(String(change.kind))
+        ? [{ id: change.id, kind: change.kind as "added" | "updated", title: change.title, summary: text(change.summary) }] : [];
+    }),
     id,
     title,
     digest: text(raw.digest),
@@ -1080,9 +1094,9 @@ export async function fetchFrontierEvent(eventId: string): Promise<FrontierEvent
   return event;
 }
 
-export function listFrontierDailies(limit = 30): Promise<FrontierDailyArchive | null> {
+export function listFrontierDailies(limit = 30, day?: string | null): Promise<FrontierDailyArchive | null> {
   return optional(async () => {
-    const raw = record(await productRequest<unknown>(`/frontier/dailies?limit=${Math.min(60, Math.max(1, Math.floor(limit)))}`)) ?? {};
+    const raw = record(await productRequest<unknown>(`/frontier/dailies?limit=${Math.min(60, Math.max(1, Math.floor(limit)))}${day ? `&day=${encodeURIComponent(day)}` : ""}`)) ?? {};
     const dailies = (Array.isArray(raw.dailies) ? raw.dailies : Array.isArray(raw.items) ? raw.items : []).flatMap((entry) => {
       const row = record(entry);
       const day = text(row?.day);
@@ -1090,7 +1104,9 @@ export function listFrontierDailies(limit = 30): Promise<FrontierDailyArchive | 
     });
     const named = record(raw.schedule);
     const time = text(named?.time), timeZone = text(named?.timeZone);
-    return { dailies, schedule: time && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) && timeZone && timeZone.length <= 64 ? { time, timeZone } : null };
+    const publication = record(raw.publication);
+    return { dailies, publication: publication && typeof publication.day === "string" && ["published", "empty", "failed", "pending"].includes(String(publication.state))
+      ? { day: publication.day, state: publication.state as FrontierPublication["state"] } : null, schedule: time && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) && timeZone && timeZone.length <= 64 ? { time, timeZone } : null };
   });
 }
 
@@ -1212,4 +1228,8 @@ export async function setFrontierNotificationSwitch(key: FrontierNotificationSwi
 
 export async function reportFrontierExposure(token: string, items: {id: string; position: number}[]): Promise<void> {
   await productRequest("/frontier/exposures", "POST", { token, items });
+}
+
+export function markFrontierEventRead(eventId: string, mark: Record<string, string>): Promise<unknown> {
+  return productRequest(`/frontier/events/${id(eventId)}/read`, "POST", { mark });
 }

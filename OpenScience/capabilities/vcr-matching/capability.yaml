@@ -44,14 +44,19 @@ produces:
 - contractKind: vcr-matching-assessment
   outputs:
   - path: matching-assessment.md
+    role: report
     required: true
   - path: matching.json
+    role: data
     required: true
   - path: criterion-funnel.md
+    role: document
     required: false
   - path: recruitment-drafts.md
+    role: draft
     required: false
   - path: revision-notes.md
+    role: work
     required: false
   checks:
   - requiredOutputsExist

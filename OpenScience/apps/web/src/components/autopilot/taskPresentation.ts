@@ -76,6 +76,7 @@ export const RUN_IN_FLIGHT = ["queued", "running", "verifying"];
  * waiting for the allowance or for a runtime says what it waits for, and the rest is the status.
  */
 export function runState(payload: EpisodePayload | undefined): string {
+  if (payload?.status === "merged" && payload.resultKind === "no-new-evidence") return "没有新证据";
   const deferrals = Object.values(payload?.resourceDeferrals ?? {}).filter(Boolean);
   const waiting = deferrals.find(value => value?.status === "waiting");
   const exhausted = deferrals.find(value => value?.status === "exhausted");

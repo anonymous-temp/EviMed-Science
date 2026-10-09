@@ -17,11 +17,13 @@
       "outputs": [
         {
           "path": "method-relations.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "revision-notes.md",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

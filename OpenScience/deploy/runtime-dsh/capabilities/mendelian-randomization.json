@@ -21,15 +21,18 @@
       "outputs": [
         {
           "path": "mendelian-randomization-report.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "mendelian-randomization-run.json",
-          "required": true
+          "required": true,
+          "role": "work"
         },
         {
           "path": "mendelian-randomization-inputs.json",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

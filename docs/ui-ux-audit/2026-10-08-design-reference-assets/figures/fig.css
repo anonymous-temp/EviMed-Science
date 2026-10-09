@@ -1,0 +1,69 @@
+/* Shared styles for the v1.1 schematic figures. Values come from tokens.css (design-tokens 2.1.2, copied from r11/ui-audit 3e52ca1f2).
+   These are design renders, not production screenshots. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; }
+body {
+  font-family: var(--font-sans), "Noto Sans CJK SC", sans-serif;
+  font-size: 14px; line-height: 22px; color: var(--text); background: #e9edf1;
+  -webkit-font-smoothing: antialiased;
+}
+.frame { position: absolute; left: 24px; top: 24px; right: 24px; bottom: 64px; background: var(--bg); border: 1px solid var(--border-hairline); border-radius: 12px; overflow: hidden; display: flex; }
+.caption { position: absolute; left: 24px; right: 24px; bottom: 18px; font-size: 13px; line-height: 20px; color: var(--text-2); }
+.caption b { color: var(--text); font-weight: 600; }
+
+/* Shell sidebar */
+.side { width: 232px; flex: none; background: var(--surface-1); border-right: 1px solid var(--border-hairline); padding: 14px 12px; display: flex; flex-direction: column; gap: 2px; position: relative; }
+.brand { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px; font-weight: 600; font-family: var(--font-serif), serif; font-size: 16px; }
+.brand .mark { width: 20px; height: 20px; border-radius: 6px; background: var(--accent); }
+.brand .sp { flex: 1; }
+.ico { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--text-graphic); flex: none; }
+.nav { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; border-radius: 8px; color: var(--text-2); }
+.nav a.on { background: var(--accent-soft); color: var(--text); font-weight: 500; }
+.sec { margin-top: 16px; padding: 0 8px; font-size: 12px; line-height: 20px; color: var(--text-3); }
+.conv { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px 0 24px; border-radius: 8px; color: var(--text-2); font-size: 13px; }
+.conv .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--dot-running); }
+.foot { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px; color: var(--text-2); }
+.avatar { width: 24px; height: 24px; border-radius: 12px; background: var(--surface-2); }
+
+/* Page content */
+.main { flex: 1; position: relative; overflow: hidden; }
+.shell { margin: 0 auto; padding: 24px; }
+.phead { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+.phead h1 { font-size: 24px; line-height: 32px; font-weight: 600; }
+.scope { color: var(--text-3); display: inline-flex; align-items: center; gap: 4px; }
+.sp { flex: 1; }
+.search { width: 256px; height: 36px; border: 1px solid var(--border-control); border-radius: 8px; padding: 0 12px; display: flex; align-items: center; gap: 8px; color: var(--text-3); background: var(--surface); }
+.btn { height: 36px; padding: 0 16px; border-radius: 8px; display: inline-flex; align-items: center; font-weight: 500; }
+.btn.primary { background: var(--accent); color: var(--accent-fg); }
+.btn.secondary { background: var(--surface-2); color: var(--text); }
+.chips { display: flex; align-items: center; gap: 4px; margin-top: 16px; }
+.chip { height: 28px; padding: 0 12px; border-radius: 999px; font-size: 13px; display: inline-flex; align-items: center; color: var(--text-2); }
+.chip.on { background: var(--surface-2); color: var(--text); font-weight: 500; }
+.list { margin-top: 12px; }
+.row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 8px; border-radius: 8px; }
+.row + .row { border-top: 1px solid var(--border-faint); }
+.row.sel { background: var(--surface-2); }
+.row .t { font-weight: 600; }
+.row .m { font-size: 12px; line-height: 20px; color: var(--text-3); }
+.row .d { margin-left: auto; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); font-size: 12px; margin-left: 8px; font-weight: 400; }
+
+/* Drawer */
+.scrim { position: absolute; inset: 0; background: var(--scrim); }
+.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 576px; background: var(--surface); border-left: 1px solid var(--border-hairline); box-shadow: var(--shadow-e3); padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+.drawer h2 { font-size: 20px; line-height: 28px; font-weight: 600; }
+.tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--border-hairline); }
+.tabs span { height: 40px; display: inline-flex; align-items: center; color: var(--text-2); }
+.tabs span.on { color: var(--text); font-weight: 500; box-shadow: inset 0 -2px 0 var(--text); }
+.para { color: var(--text-2); max-width: 560px; }
+.bar { height: 10px; border-radius: 5px; background: var(--surface-2); }
+.dfoot { margin-top: auto; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Callouts: annotation purple #6b3fd4 is outside the product palette on purpose, so a reader never mistakes a note for UI. */
+.call { position: absolute; display: flex; align-items: flex-start; gap: 8px; max-width: 300px; font-size: 13px; line-height: 20px; color: var(--text); z-index: 5; }
+.num { flex: none; width: 22px; height: 22px; border-radius: 11px; background: #6b3fd4; color: #fff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.call .box { background: var(--surface); border: 1px solid var(--border-light); border-radius: 8px; padding: 6px 10px; box-shadow: var(--shadow-e2); }
+.dim { position: absolute; font-size: 12px; line-height: 16px; color: #6b3fd4; font-variant-numeric: tabular-nums; z-index: 5; }
+.dimline { position: absolute; border-top: 1px dashed #6b3fd4; z-index: 5; }
+.dimvline { position: absolute; border-left: 1px dashed #6b3fd4; z-index: 5; }

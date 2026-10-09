@@ -1381,7 +1381,8 @@ export class FrontierEvents {
     }
     if (!event || event.merged_into != null) return null;
     if (event.public_id !== publicId) return { redirect: event.public_id };
-    const members = (await this.database.query(`SELECT ei.item_id, ei.role, i.specialties FROM evimed_frontier.event_items ei
+    const members = (await this.database.query(`SELECT ei.item_id, ei.role, i.specialties, i.public_id, i.doi, i.pmid, i.registry_ids,
+        i.title_zh, i.title_raw, i.summary_zh, s.owner_entity FROM evimed_frontier.event_items ei
       JOIN evimed_frontier.items i ON i.id = ei.item_id JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE ei.event_id = $1 AND i.state = 'published' AND s.enabled
       ORDER BY (ei.role = 'primary') DESC, i.timeline_at DESC, i.id DESC`, [event.id])).rows ?? [];
@@ -1401,7 +1402,10 @@ export class FrontierEvents {
     const facts = this.#asMembers((await this.#members(this.database, [String(event.id)])).get(String(event.id)) ?? []);
     return {
       event,
-      members: members.map((row) => ({ rowId: String(row.item_id), role: row.role })),
+      members: members.map((row) => ({ rowId: String(row.item_id), role: row.role, id: row.public_id, owner: row.owner_entity,
+        title: row.title_zh || row.title_raw, summary: row.summary_zh ?? null,
+        studyIds: [...(row.doi ? [`doi:${String(row.doi).toLowerCase()}`] : []), ...(row.pmid ? [`pmid:${row.pmid}`] : []),
+          ...(Array.isArray(row.registry_ids) ? row.registry_ids.map(id => `registry:${String(id).toUpperCase()}`) : [])] })),
       related: related.map((row) => ({ id: row.public_id, title: row.title_zh, relation: row.relation, at: iso(row.last_at ?? row.linked_at) })),
       specialties: [...tally].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])).slice(0, 3).map(([key]) => key),
       heat: facts.length ? frontierHeatDisplay(frontierEventHeat({ members: facts, now })) : null,

@@ -12,9 +12,9 @@ const runtimeManager = {
   },
 };
 
-async function withGateway(t, { config = {}, index = null } = {}) {
+async function withGateway(t, { config = {}, index = null, sourceScope = undefined } = {}) {
   const failures = [];
-  const handler = createKbSearchGatewayHandler({ kbSearchEnabled: true, kbSearchTimeoutMs: 1_000, ...config }, runtimeManager, { index });
+  const handler = createKbSearchGatewayHandler({ kbSearchEnabled: true, kbSearchTimeoutMs: 1_000, ...config }, runtimeManager, { index, sourceScope });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -106,4 +106,26 @@ test("the runtime learns the route only when the switch is on and the address is
   assert.equal(kbSearchGatewayProviderUrl({ kbSearchEnabled: false, kbSearchGatewayInternalUrl: url }), "");
   assert.equal(kbSearchGatewayProviderUrl({ kbSearchEnabled: true, kbSearchGatewayInternalUrl: "http://user:fake@host/x" }), "");
   assert.equal(kbSearchGatewayProviderUrl({ kbSearchEnabled: true, kbSearchGatewayInternalUrl: "not a url" }), "");
+});
+
+test("saved conversation scope intersects requested sources before either search mode, including an empty intersection", async (t) => {
+  const other = `src_${"c".repeat(32)}`;
+  const calls = [];
+  const { call } = await withGateway(t, {
+    index: { async search(request) { calls.push(request); return { mode: "small-library", files: [] }; } },
+    sourceScope: async (identity, sessionId) => {
+      assert.deepEqual(identity, { userId: "user-1", projectId: "project-1" });
+      assert.equal(sessionId, "selected-session");
+      return [SOURCE];
+    },
+  });
+  assert.equal((await call({ query: "q", sessionId: "selected-session" })).status, 200);
+  assert.deepEqual(calls[0].sourceIds, [SOURCE]);
+  await call({ query: "q", sessionId: "selected-session", sourceIds: [other] });
+  assert.deepEqual(calls[1].sourceIds, [], "no overlap never broadens the library");
+  const unavailable = await withGateway(t, {
+    index: { search() { assert.fail("must not search without the scope"); } },
+    sourceScope: async () => { throw new Error("database down"); },
+  });
+  assert.equal((await unavailable.call({ query: "q", sessionId: "selected-session" })).body.code, "kb_search_unavailable");
 });

@@ -15,6 +15,7 @@ produces:
 - contractKind: evolution-tool-candidate
   outputs:
   - path: tool-candidate.json
+    role: work
     required: true
   checks:
   - requiredOutputsExist

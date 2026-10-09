@@ -205,19 +205,15 @@ export function knowledgeReference(ref) {
 }
 
 /**
- * What the model reads for a knowledge reference: the source's id, its title,
- * and where its parsed text is in the workspace — the control plane
- * materializes a parsed source under `knowledge-base/.evimed-derived/<id>/`
- * and syncs the knowledge base read-only into the workspace before each
- * dispatch (`researchContext.mjs`), so the reference is something the run can
- * open, not a name it has to search for.
- * @param {unknown} ref @param {string} knowledgeDir
+ * The sent message keeps the source title. Identifiers and read paths reach the
+ * model through the saved session scope and its control-plane context note.
+ * @param {unknown} ref @param {string} _knowledgeDir
  * @returns {string}
  */
-export function knowledgeSerialization(ref, knowledgeDir) {
+export function knowledgeSerialization(ref, _knowledgeDir) {
   const reference = knowledgeReference(ref);
   if (!reference) throw new Error('知识库引用无法识别');
-  return `【知识库文献 ${reference.id}：「${reference.title}」，解析后的正文在工作区 ${knowledgeDir}/.evimed-derived/${reference.id}/ 下】`;
+  return `“${reference.title}”`;
 }
 
 /**
@@ -657,6 +653,39 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     };
     kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.input.left', id: 'evimed-tool', order: 10 }, BarChip));
 
+    const SourceScopeChip = () => {
+      const [selection, setSelection] = React.useState(null);
+      const [failed, setFailed] = React.useState(false);
+      React.useEffect(() => {
+        const read = () => {
+          setSelection(null);
+          const sessionId = currentSession();
+          if (sessionId) void kit.hub.request('source-scope', { sessionId }).catch(() => {});
+        };
+        const result = kit.hub.on('source-scope-result', (/** @type {any} */ data) => {
+          if (data.ok && data.sessionId === currentSession()) { setSelection(data); setFailed(false); }
+        });
+        const switched = kit.hub.on('session', read);
+        read();
+        return () => { result(); switched(); };
+      }, []);
+      if (!selection?.sourceIds?.length && !selection?.originReference) return null;
+      return h(React.Fragment, null,
+        selection.originReference ? h('button', { type: 'button', style: { ...chipStyle, ...textButton, maxWidth: barChipBudget }, title: selection.originReference.title,
+          onClick: () => kit.hub.send('open-event', { eventId: selection.originReference.id }) }, h('span', { style: starterText }, '来自：', selection.originReference.title)) : null,
+        selection.sourceIds?.length ? h('span' , { style: chipStyle, 'data-evimed-source-scope': selection.sourceIds.length },
+        h('span', null, `${selection.sourceIds.length} 份资料`),
+        h('button', { type: 'button', style: textButton, 'aria-label': failed ? '移除资料范围失败，重试' : '移除资料范围',
+          onClick: async () => {
+            try {
+              const result = await kit.hub.request('source-scope', { sessionId: selection.sessionId, sourceIds: [] });
+              if (!result.ok) setFailed(true);
+            } catch { setFailed(true); }
+          },
+        }, failed ? '重试' : '×')) : null);
+    };
+    kit.guarded('source scope', () => kit.occupy({ slot: 'conversation.input.left', id: 'evimed-source-scope', order: 11 }, SourceScopeChip));
+
     /**
      * The tool's example questions, as pills the reader can start from. Drawn
      * on the hero only (below): the hero is the blank conversation by the
@@ -716,6 +745,9 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   }
 
   // `@` knowledge-base references.
+  // Native serialization calls every reference with the same attempt signal. Collect those references before
+  // saving the scope once, then let the native send proceed. Removed chips never join this attempt.
+  const selections = new WeakMap();
   kit.withServices(['inputTriggers'], (/** @type {any} */ scope) => {
     scope.effect(() => scope.inputTriggers.registerSource({
       trigger: '@',
@@ -736,8 +768,27 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       codec: {
         /** @param {string} ref */
         clipboardText: (ref) => `@${knowledgeReference(ref)?.title ?? ''}`,
-        /** @param {string} ref */
-        serialize: (ref) => Promise.resolve(knowledgeSerialization(ref, knowledgeDir)),
+        /** @param {string} ref @param {AbortSignal} signal */
+        serialize: async (ref, signal) => {
+          const reference = knowledgeReference(ref);
+          if (!reference || signal?.aborted) throw new Error('资料引用无法使用，请重新选择');
+          const sessionId = mainViewSession(ctx.sessions.list.getSnapshot());
+          if (!sessionId) throw new Error('对话暂时无法打开');
+          let selection = selections.get(signal);
+          if (!selection) {
+            selection = { ids: new Set(), promise: null };
+            const current = selection;
+            current.promise = Promise.resolve().then(async () => {
+              if (signal.aborted) throw new Error('发送已取消');
+              const result = await kit.hub.request('source-scope', { sessionId, sourceIds: [...current.ids] });
+              if (!result?.ok) throw new Error('无法保存资料范围，请重试');
+            });
+            selections.set(signal, selection);
+          }
+          selection.ids.add(reference.id);
+          await selection.promise;
+          return knowledgeSerialization(ref, knowledgeDir);
+        },
       },
     }), 'evimed-commands: @ knowledge base');
   });

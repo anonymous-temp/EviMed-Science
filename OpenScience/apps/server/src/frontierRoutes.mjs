@@ -139,6 +139,11 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
       // `?window=week|month`: that window's ranking instead of the current list.
       return reply(await service.hot(url.searchParams));
     }
+    if (parts.length === 3 && parts[0] === "events" && parts[2] === "read" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["mark"]);
+      sendJson(res, 200, { data: await service.markEventRead(user, parts[1], body.mark) });
+      return true;
+    }
     if (parts.length === 2 && parts[0] === "events" && method === "GET") {
       const answer = await service.event(user, parts[1]);
       if (answer.redirect) {

@@ -141,8 +141,11 @@ def _summary(data: dict) -> tuple[str, list[str], list[str]]:
     )
 
 
-def search(arguments: dict) -> dict:
+def search(arguments: dict, execution_context: dict | None = None) -> dict:
     payload = _validated(arguments)
+    if execution_context is not None:
+        # Injected by the native execution wrapper, never part of the model's public tool schema.
+        payload["sessionId"] = execution_context["sessionId"]
     url, token = _gateway()
     request = urllib.request.Request(
         url,

@@ -77,6 +77,7 @@ ON CONFLICT (version) DO NOTHING;
 -- ones the researcher brought into it from the knowledge base): their ids, or null for all of them. It belongs to the
 -- conversation, so a reload, a second window and the runtime all see the same scope.
 ALTER TABLE ${schema}.research_sessions ADD COLUMN IF NOT EXISTS source_scope jsonb;
+ALTER TABLE ${schema}.research_sessions ADD COLUMN IF NOT EXISTS origin_reference jsonb;
 
 -- 2026-09-18 (contract C4). A project can be archived rather than deleted:
 -- out of the way, still whole, still exportable.

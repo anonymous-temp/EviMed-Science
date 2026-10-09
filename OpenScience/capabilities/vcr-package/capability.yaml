@@ -43,14 +43,19 @@ produces:
 - contractKind: vcr-study-package
   outputs:
   - path: study-package.md
+    role: report
     required: true
   - path: results.json
+    role: data
     required: true
   - path: assumption-register.md
+    role: document
     required: true
   - path: execution-record.md
+    role: document
     required: true
   - path: cde-communication-pack.md
+    role: document
     required: false
   checks:
   - requiredOutputsExist

@@ -90,6 +90,9 @@ test("a small library is answered with the files to read, and a deleted source l
     // Only the named sources are in scope when the run names them.
     const narrowed = await app.kbIndex.search({ userId: user.id, projectId: project.id, query: "x", sourceIds: [sources[0].id] });
     assert.deepEqual(narrowed.files.map((file) => file.sourceId), [sources[0].id]);
+    const emptyScope = await app.kbIndex.search({ userId: user.id, projectId: project.id, query: "x", sourceIds: [] });
+    assert.deepEqual(emptyScope.files ?? [], [], 'an empty intersection must not expand into the whole library');
+    assert.deepEqual(emptyScope.hits, []);
 
     // Deleting a source removes its index document on the next pass.
     const removal = await fetch(`${base}/api/sources/${sources[0].id}`, { method: "DELETE", headers,

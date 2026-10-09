@@ -35,23 +35,28 @@
       "outputs": [
         {
           "path": "geo-insight.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "claims.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "question-map.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "journey.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "revision-notes.md",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

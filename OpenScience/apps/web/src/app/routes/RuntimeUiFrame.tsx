@@ -1,3 +1,4 @@
+import { putConversationReference } from "@/lib/apiClient";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { errorCodeMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "@evimed/domain";
@@ -6,6 +7,7 @@ import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } fr
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { TASKS_PATH, taskPath } from "@/lib/taskLocation";
 import { saveToKnowledgeBase } from "@/lib/sourceClient";
+import { getWebSessionSourceScope, putWebSessionSourceScope } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { provideFrameSessionSearch, reportPathOf, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { useFrameReplyChecks } from "@/lib/replyChecks";
@@ -18,6 +20,9 @@ import { useUiStore } from "@/lib/store";
 import { isGeoTab } from "@/components/geo/geoTabs";
 import { geoProjectPath, useFrameGeoOptions } from "@/components/geo/useFrameGeoOptions";
 import { useFrameVcrOptions } from "@/components/vcr/useFrameVcrOptions";
+import { locateSourceQuote } from "@/lib/sourceClient";
+import { PreservedConversation } from "@/components/chat/PreservedConversation";
+import { cancelWebAgentRun } from "@/lib/apiClient";
 
 /** What a refused start asks of the reader (`runtimeStartRecovery`). */
 type StartRecovery = ReturnType<typeof runtimeStartRecovery>;
@@ -826,6 +831,48 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         settle(message.ok === true
           ? { ok: true, items, hasMore: message.hasMore === true }
           : { ok: false, items: [], hasMore: false, error: typeof message.error === "string" ? message.error.slice(0, 80) : "search_failed" });
+      } else if (message.type === "evimed.runtime-ui.stop-run" && typeof message.runId === "string" && SESSION_ID.test(message.runId)) {
+        incoming.current = message.seq;
+        void listWebAgentRuns({ projectId }).then(async runs => {
+          const run = runs.find(item => item.id === message.runId && item.sessionId === (sessionId ?? frameTask));
+          if (!run?.availableActions?.some(action => action.kind === "stop" && action.targetId === run.id)) return;
+          await cancelWebAgentRun(run.id);
+        }).catch(failure => toast.error(webErrorMessage(failure)));
+      } else if (message.type === "evimed.runtime-ui.source-citations"
+        && typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.requestId)
+        && Array.isArray(message.references) && message.references.length <= 20
+        && message.references.every((ref: { sourceId?: unknown; quote?: unknown }) => typeof ref?.sourceId === "string"
+          && /^src_[a-f0-9]{32}$/.test(ref.sourceId) && typeof ref.quote === "string" && ref.quote.length >= 4 && ref.quote.length <= 2000)) {
+        incoming.current = message.seq;
+        void Promise.all(message.references.map((ref: { sourceId: string; quote: string }) => locateSourceQuote(ref.sourceId, ref.quote)))
+          .then(items => postToFrame("source-citations-result", { requestId: message.requestId, ok: true, items }))
+          .catch(() => postToFrame("source-citations-result", { requestId: message.requestId, ok: false, items: [] }));
+      } else if (message.type === "evimed.runtime-ui.open-event" && typeof message.eventId === "string" && /^[a-z0-9]{12,32}$/.test(message.eventId)) {
+        incoming.current = message.seq;
+        navigate(`/app/frontier/events/${encodeURIComponent(message.eventId)}`);
+      } else if (message.type === "evimed.runtime-ui.open-source"
+        && typeof message.sourceId === "string" && /^src_[a-f0-9]{32}$/.test(message.sourceId)) {
+        incoming.current = message.seq;
+        const params = new URLSearchParams({ tab: "original" });
+        if (Number.isInteger(message.page) && message.page > 0 && message.page <= 100_000) params.set("page", String(message.page));
+        if (Number.isSafeInteger(message.start) && message.start >= 0 && Number.isSafeInteger(message.end)
+          && message.end > message.start && message.end - message.start <= 2000 && /^[a-f0-9]{64}$/.test(message.sha)) {
+          params.set("start", String(message.start)); params.set("end", String(message.end)); params.set("sha", message.sha);
+        }
+        navigate(`/app/files/${encodeURIComponent(message.sourceId)}?${params}`);
+      } else if (message.type === "evimed.runtime-ui.source-scope"
+        && typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.requestId)
+        && typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId)
+        && (message.sourceIds === undefined || (Array.isArray(message.sourceIds) && message.sourceIds.length <= 50
+        && message.sourceIds.every((id: unknown) => typeof id === "string" && /^src_[a-f0-9]{32}$/.test(id))))) {
+        incoming.current = message.seq;
+        const requestId = message.requestId;
+        const operation = message.sourceIds === undefined ? getWebSessionSourceScope(message.sessionId, projectId)
+          : putWebSessionSourceScope(message.sessionId, message.sourceIds, projectId);
+        void operation.then(
+          value => postToFrame("source-scope-result", { requestId, ok: true, sessionId: message.sessionId, sourceIds: value.sourceScope ?? [], originReference: value.originReference ?? null }),
+          () => postToFrame("source-scope-result", { requestId, ok: false }),
+        );
       } else if (message.type === "evimed.runtime-ui.kb-query"
         && typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.requestId)) {
         // The frame's `@` menu asking for the project's parsed sources. The
@@ -915,7 +962,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [binding, origin, projectId, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait, mirrorAddress]);
+  }, [binding, origin, projectId, sessionId, frameTask, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait, mirrorAddress]);
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;
@@ -923,11 +970,18 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     const key = `${binding.frameId}:${intent.requestId}`;
     if (lastSent.current === key) return;
     lastSent.current = key; currentRequest.current = intent; setPending(true);
-    iframe.current.contentWindow.postMessage({
+    let alive = true;
+    void (async () => {
+      if (intent.originReference) await putConversationReference(intent.sessionId, projectId, intent.originReference);
+      if (!alive) return;
+      iframe.current?.contentWindow?.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}) },
+      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(intent.references ? { references: intent.references } : {}) },
     }, origin);
+    })().catch(() => { if (alive) setError(frameFailure("无法保存引用，请重试")); });
+    return () => { alive = false; };
+
   }, [ready, readyGeneration, error, binding, intent, projectId, origin]);
 
   // The shell's light/dark/system choice, in the frame (C9 `theme`). The
@@ -1106,7 +1160,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       <div className="min-h-0 flex-1" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         <div className="relative h-full w-full">
           {error ? (
-            <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-ui text-error">
+            <div className="absolute inset-0 flex flex-col">
+            <div role="alert" className="flex flex-col items-center justify-center gap-3 px-6 py-6 text-center text-ui text-error">
               <p>{error.text}</p>
               {error.retryable && <Button ref={retryButton} variant="ghost" onClick={retry}>重试</Button>}
               {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
@@ -1116,6 +1171,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
               {/* The usage section of settings, where a spend ceiling is stated — or,
                   for a simulated allowance that ran out, the page that tops it up. */}
               {error.recovery === "spend" && (error.code === SIMULATED_CREDITS_EXHAUSTED ? <SimulatedRechargeButton /> : <UsageButton />)}
+            </div>
+            <PreservedConversation projectId={projectId} sessionId={sessionId ?? frameTask} />
             </div>
           ) : (
             <>

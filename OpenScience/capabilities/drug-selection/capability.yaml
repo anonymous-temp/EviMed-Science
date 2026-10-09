@@ -36,12 +36,16 @@ produces:
 - contractKind: drug-selection-report
   outputs:
   - path: drug-selection-report.md
+    role: report
     required: true
   - path: selection-scorecard.csv
+    role: data
     required: true
   - path: decision-summary.json
+    role: data
     required: true
   - path: evidence-snapshot.json
+    role: data
     required: true
   checks:
   - requiredOutputsExist

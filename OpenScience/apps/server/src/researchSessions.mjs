@@ -1,3 +1,4 @@
+import { conversationReference } from '@evimed/domain';
 import path from "node:path";
 import {
   HttpError,
@@ -83,6 +84,7 @@ function validateStoredRecord(value) {
     agentVersion: value.agentVersion,
     runtimeAgent: value.runtimeAgent,
     sourceScope: storedSourceScope(value.sourceScope),
+    originReference: conversationReference(value.originReference),
     createdAt: validateTimestamp(value.createdAt, "createdAt"),
     updatedAt: validateTimestamp(value.updatedAt, "updatedAt"),
   });
@@ -283,6 +285,7 @@ export class ResearchSessionStore {
         sessionId,
         ...selection,
         sourceScope: existing?.sourceScope ?? null,
+        originReference: existing?.originReference ?? null,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       });
@@ -290,6 +293,25 @@ export class ResearchSessionStore {
       sessions.push(record);
       sessions.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
       const nextState = { version: 1, sessions };
+      assertSerializedStateSize(nextState);
+      await writeJsonFileAtomicNoFollow(project.metaDir, stateFile(project), nextState);
+      return record;
+    });
+  }
+
+  /** Set the canonical object this conversation came from, without changing its tool binding. */
+  async setOriginReference(project, rawSessionId, value) {
+    const sessionId = safeId(rawSessionId, "research session id");
+    const reference = conversationReference(value);
+    if (!reference) throw new HttpError(400, "invalid_request", "Invalid conversation reference.");
+    if (!(await this.get(project, sessionId))) await this.putRecord(project, sessionId, { mode: "open-domain" });
+    if (this.stateStore?.setResearchSessionOriginReference) return this.stateStore.setResearchSessionOriginReference(project, sessionId, reference);
+    return withProjectStorageMutation(project, async () => {
+      const state = await readState(project);
+      const existing = state.sessions.find(record => record.sessionId === sessionId);
+      if (!existing) throw new HttpError(404, "research_session_not_found", "Research session not found.");
+      const record = { ...existing, originReference: reference, updatedAt: new Date().toISOString() };
+      const nextState = { version: 1, sessions: [...state.sessions.filter(item => item.sessionId !== sessionId), record] };
       assertSerializedStateSize(nextState);
       await writeJsonFileAtomicNoFollow(project.metaDir, stateFile(project), nextState);
       return record;

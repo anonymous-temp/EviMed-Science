@@ -25,23 +25,28 @@
       "outputs": [
         {
           "path": "matching-assessment.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "matching.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "criterion-funnel.md",
-          "required": false
+          "required": false,
+          "role": "document"
         },
         {
           "path": "recruitment-drafts.md",
-          "required": false
+          "required": false,
+          "role": "draft"
         },
         {
           "path": "revision-notes.md",
-          "required": false
+          "required": false,
+          "role": "work"
         }
       ],
       "checks": [

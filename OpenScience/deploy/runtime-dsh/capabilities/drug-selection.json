@@ -30,19 +30,23 @@
       "outputs": [
         {
           "path": "drug-selection-report.md",
-          "required": true
+          "required": true,
+          "role": "report"
         },
         {
           "path": "selection-scorecard.csv",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "decision-summary.json",
-          "required": true
+          "required": true,
+          "role": "data"
         },
         {
           "path": "evidence-snapshot.json",
-          "required": true
+          "required": true,
+          "role": "data"
         }
       ],
       "checks": [

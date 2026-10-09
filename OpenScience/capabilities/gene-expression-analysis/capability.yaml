@@ -23,20 +23,28 @@ produces:
 - contractKind: gene-expression-analysis-package
   outputs:
   - path: gene-expression-report.md
+    role: report
     required: false
   - path: gene-expression-results.json
+    role: data
     required: false
   - path: gene-expression-top-table.md
+    role: document
     required: false
   - path: gene-expression-de-table.tsv
+    role: data
     required: false
   - path: gene-expression-analysed-matrix.tsv.gz
+    role: matrix
     required: false
   - path: gene-expression-request.json
+    role: work
     required: false
   - path: gene_expression.py
+    role: work
     required: false
   - path: gene-expression-receipt.json
+    role: work
     required: false
   checks:
   - skillsLoaded

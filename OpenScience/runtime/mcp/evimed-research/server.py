@@ -1887,7 +1887,7 @@ def _managed_status_with_wait(status_call, arguments):
 # wrapper (packages/harness-port/src/engineContext.mjs) attaches it to exactly
 # these, replacing anything a model wrote under that name;
 # apps/server/test/engineToolContract.test.mjs holds the two rosters equal.
-ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", *specialist_jobs.SPECS})
+ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", "kb_search", *specialist_jobs.SPECS})
 
 
 def call_tool(name, arguments):
@@ -2137,7 +2137,8 @@ def _dispatch(name, arguments, execution_context=None):
         return result
     if name == "kb_search":
         try:
-            result = kb_search.search(arguments)
+            result = (kb_search.search(arguments, execution_context=execution_context) if execution_context
+                      else kb_search.search(arguments))
         except kb_search.KbSearchError as error:
             return failure(
                 error.code,
