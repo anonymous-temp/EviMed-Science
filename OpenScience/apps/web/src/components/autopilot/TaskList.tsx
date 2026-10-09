@@ -83,7 +83,7 @@ export function TaskList({ agendas, episodes, selectedId, search, onSearch, proj
       {error && <LoadError message={error} onRetry={onRetry} className="mx-2" />}
       {agendas === null ? <FilesSkeleton /> : <>
         {groups.map(([label, items]) => <TaskGroup key={label} label={label}><List>{items.map(row)}</List></TaskGroup>)}
-        {visible.length === 0 && !error && <p className="px-4 text-ui text-text-3">{search.trim() ? "没有匹配的任务" : "还没有定时任务"}</p>}
+        {visible.length === 0 && !error && <p className="px-2 text-ui text-text-3">{search.trim() ? "没有匹配的任务" : "还没有定时任务"}</p>}
       </>}
     </div>
   </div>;
