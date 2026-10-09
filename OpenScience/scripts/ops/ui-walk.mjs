@@ -124,6 +124,9 @@ export const ROUTES = [
   // The evidence zones' home (2026-10-01). A zone and a reading page are
   // content addresses with ids; the home is the one every account can open.
   ["frontier-zones", "/app/frontier/zones"],
+  // A day that has no issue (R13, A11): the page says which day and when issues come, and reads as an empty day and not as a failure. Its own
+  // read answers 404 by design, and the day is one nobody published (the feed did not exist in 2020).
+  ["frontier-daily-empty", "/app/frontier?view=daily&day=2020-01-01"],
   ["capabilities", "/app/capabilities"],
   // 循证 GEO's home — its one sentence where the account is not offered the
   // module; one project's seven tabs (and an answer) are added when the
@@ -265,6 +268,7 @@ export const BUDGET_BY_PAGE = {
   // field — the measured number of the first live walk of R10 (2026-10-07), not a wish: the field is the page's one input, and the
   // other three are the tabs' and the list's own. A fifth is a new kind of border, which is what this budget is for.
   "frontier-zones": { ...FRONTIER_BUDGET, borders: 4 },
+  "frontier-daily-empty": FRONTIER_BUDGET,
   "extensions-plugins": EXTENSION_BUDGET, "extensions-skills": EXTENSION_BUDGET,
   geo: DATA_BUDGET,
   ...Object.fromEntries(GEO_TABS.map(([name]) => [name, GEO_BUDGET])),
@@ -298,7 +302,7 @@ export const PROVISIONAL_PAGES = new Set([
   "geo-answer",
   "virtual-research-models", "virtual-research-precedents", "virtual-research-definitions",
   "account-notifications", "account-ops", "memory-shared-missing", "extensions-plugin-missing", "extensions-skill-missing",
-  "evidence-matrix", "files-reader",
+  "evidence-matrix", "files-reader", "frontier-daily-empty",
 ]);
 
 /**
@@ -337,7 +341,18 @@ export const SECTION_SHAPES_BY_PAGE = {
   "extensions-plugins": 2, "extensions-skills": 2,
   "virtual-research": 2,
   ...Object.fromEntries(VCR_TABS_WALK.map(([name]) => [name, 3])),
+  // R13 (V-7): the pages the reference named (design reference §21.3). The numbers are the designed ones — a pinned list over the list of the
+  // rest (the inbox), the project list beside its one sentence (循证 GEO's home), the zones of each kind and the topic request (the zones'
+  // home), a list column and a main area (the scheduled tasks), a settings page's own sections — and they are not measured: a page of
+  // `NOTICE_SECTION_PAGES` that stacks more says so as a notice, with its shapes, until a walk has reported them.
+  inbox: 2, geo: 2, "frontier-zones": 3, autopilot: 2, account: 3,
 };
+/**
+ * The pages whose section budget is new in R13: stacking more kinds of section than the budget says is a notice there, with the shapes in
+ * it, and not a failure (principle 4: a check ships as a notice until it has a distribution). The pages of the table above that are not
+ * named here keep failing, as they have since R10.
+ */
+export const NOTICE_SECTION_PAGES = new Set(["inbox", "geo", "frontier-zones", "autopilot", "account"]);
 
 /**
  * The pages whose lists are clicked: the first row of each list must show
@@ -610,7 +625,11 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
     }
     const sectionBudget = SECTION_SHAPES_BY_PAGE[key];
     const shapes = measured.sectionShapes ?? [];
-    if (sectionBudget !== undefined && shapes.length > sectionBudget) budgetFindings.push(`${current}: the page stacks ${shapes.length} kinds of section (budget ${sectionBudget}): ${shapes.join(", ")}`);
+    if (sectionBudget !== undefined && shapes.length > sectionBudget) {
+      const finding = `${current}: the page stacks ${shapes.length} kinds of section (budget ${sectionBudget}): ${shapes.join(", ")}`;
+      if (NOTICE_SECTION_PAGES.has(key)) notices.push(`${finding} — new in R13: reported, not failed, until a walk has measured this page`);
+      else budgetFindings.push(finding);
+    }
     const pairs = measured.sizeWeightPairs ?? [];
     if (pairs.length > TYPE_PAIR_NOTICE) notices.push(`${current}: ${pairs.length} font-size × weight pairs (rule ${TYPE_PAIR_NOTICE}): ${pairs.join(", ")}`);
   }
@@ -624,6 +643,7 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
  * (and a malformed or closed share, 400 and 410), and the page is expected to say so in words. Every other refusal stays a failure.
  */
 export const EXPECTED_REFUSALS = {
+  "frontier-daily-empty": [404],
   "extensions-skill-missing": [404],
   "memory-shared-missing": [400, 404, 410],
 };
@@ -980,6 +1000,20 @@ export function pageProbe([kind, arg]) {
     const text = dialog ? words(dialog) : "";
     return { dialog: Boolean(dialog), said: Boolean(sentence) && text.includes(sentence), back: Boolean(dialog) && all("button", dialog).some((el) => visible(el) && words(el) === back), failedWord: words(document.body).includes("操作未完成") };
   }
+  if (kind === "dailyEmpty") {
+    // What the daily view says for a day that has no issue: an empty state (a title and a description) or an error (a alert with 重试).
+    const alert = all("[role='alert']").find(visible);
+    const lines = all("p, div").filter((el) => visible(el) && el.children.length === 0).map(words).filter(Boolean);
+    const title = lines.find((text) => /没有日报|日报.{0,24}发布|暂无日报|尚未发布/.test(text)) ?? null;
+    return {
+      // The alert's text is the message and its button (「…重试」); the message is what is said.
+      alert: alert ? words(alert).replace(/重试$/, "").trim() : null,
+      retry: alert ? all("button", alert).some((el) => visible(el) && words(el) === "重试") : false,
+      title,
+      description: lines.find((text) => text !== title && /不出刊/.test(text)) ?? null,
+      past: all("button").some((el) => visible(el) && words(el) === "往期"),
+    };
+  }
   if (kind === "readingFolds") {
     const text = words(main).toLowerCase();
     return {
@@ -1015,6 +1049,7 @@ export const PAGE_PROBES = {
   "extensions-plugin-missing": [["missingRecord", ["desktop"]]],
   "extensions-skill-missing": [["missingRecord", ["desktop"]]],
   "frontier-evidence": [["readingFolds", ["desktop"]]],
+  "frontier-daily-empty": [["dailyEmpty", ["desktop", "phone"]]],
 };
 
 /** The record that is not there on each walked missing-record address: what the drawer says, its button, and the list it returns to. */
@@ -1107,6 +1142,20 @@ export function probeFindings(name, viewportName, kind, r) {
       if (!r.dialog || !r.said) failures.push(`${current}: the missing record's drawer does not say “${expected?.sentence ?? ""}”`);
       else if (!r.back) failures.push(`${current}: the missing record's drawer has no button ${expected?.back ?? ""}`);
       if (r.failedWord) failures.push(`${current}: 「操作未完成」 on a record that is not there`);
+      break;
+    }
+    case "dailyEmpty": {
+      // R13 (E-3, A11), notices: a day with no issue reads as an empty day, names the day, and says when issues come and in which zone. A
+      // page the account is not offered, or one that drew neither, is not observable.
+      if (r.alert) {
+        notices.push(`${current}: a day nobody published reads as a failure: “${r.alert.slice(0, 60)}”${r.retry ? " with 重试" : ""} (an empty day and a failed one are different, A11)`);
+      } else if (!r.title) {
+        notices.push(`${current}: not observable: the daily view drew neither an empty day nor an error (the feed may not be offered to this account)`);
+      } else {
+        if (!/\d{1,2}月\d{1,2}日/.test(r.title)) notices.push(`${current}: the empty day does not name the day it is about: “${r.title.slice(0, 40)}”`);
+        const time = /(\d{1,2}:\d{2})(（[^）]+）)?/.exec(`${r.title} ${r.description ?? ""}`);
+        if (time && !time[2]) notices.push(`${current}: the empty day names a publication time (${time[1]}) and not whose clock it is`);
+      }
       break;
     }
     case "readingFolds":
@@ -2294,6 +2343,14 @@ async function main() {
       }
     }
     notices.push(...leftEdgeNotices(report.pages));
+    // R13 (V-7), the cases that are more than a page's measure and run at the desktop width: where the reader is lives in the address (A08), and
+    // the event page's hand-off to the conversation (A01). Each is a notice that says "not observable" when the account has nothing to try it on.
+    await page.setViewportSize(VIEWPORTS[0][1]);
+    current = "address@desktop";
+    await recordStep(report, failures, notices, "address-state", () => walkAddressState(page, base));
+    const eventRoute = found.routes.find(([name]) => name === "frontier-event")?.[1] ?? null;
+    if (eventRoute) await recordStep(report, failures, notices, "frontier-event-handoff", () => walkEventHandoff(page, base, eventRoute));
+    else notices.push("frontier-event@desktop: not observable: the hot list names no event, so the hand-off of 深入研究 to the conversation (A01) was not read");
     if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
       current = "chat@desktop";
       allowRuntimeStart = true;
@@ -2341,6 +2398,285 @@ async function main() {
   console.log(`${Object.keys(report.pages).length} page views walked, ${failures.length} failure(s), ${notices.length} notice(s), `
     + `${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
   return failures.length ? 1 : 0;
+}
+
+/* ------------------------------------------------------------------------- R13: where the reader is lives in the address (A08, A01) */
+
+/**
+ * Presses a control that only chooses what a list shows and goes nowhere: a chip of a group (the inbox's 未读), a tab of a page (the
+ * memory page's 项目), or a link of the sidebar (to leave a page and come back). Never a button that writes.
+ * @param {["chip" | "tab" | "link", string?, string?]} args `["chip", group, label-prefix]`, `["tab", label-prefix]`, `["link", href]`
+ * @returns {boolean} whether the control was found and pressed
+ */
+export function addressAct([kind, first = "", second = ""]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  let target = null;
+  if (kind === "chip") {
+    const group = [...document.querySelectorAll("[role='group']")].find((el) => el.getAttribute("aria-label") === first && visible(el));
+    target = group ? [...group.querySelectorAll("button")].find((el) => visible(el) && words(el).startsWith(second)) ?? null : null;
+  } else if (kind === "tab") {
+    target = [...document.querySelectorAll("[role='tab']")].find((el) => visible(el) && words(el).startsWith(first)) ?? null;
+  } else if (kind === "link") {
+    target = [...document.querySelectorAll("aside a")].find((el) => visible(el) && el.getAttribute("href") === first) ?? null;
+  }
+  if (!target) return false;
+  target.click();
+  return true;
+}
+
+/**
+ * Where a list page is and what its controls say, read in the page: the address, and — per `kind` — the inbox's pressed chip, or the memory
+ * page's selected tab and the text of its search box.
+ * @param {["inbox" | "memory"]} args
+ */
+export function addressProbe([kind]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const base = { path: location.pathname, search: location.search, dialog: [...document.querySelectorAll("[role='dialog']")].some(visible) };
+  if (kind === "inbox") {
+    const group = [...document.querySelectorAll("[role='group']")].find((el) => el.getAttribute("aria-label") === "消息筛选" && visible(el));
+    const pressed = group ? [...group.querySelectorAll("button[aria-pressed='true']")].map(words) : [];
+    return { ...base, found: Boolean(group), pressed: pressed[0] ?? null };
+  }
+  if (kind === "memory") {
+    const tabs = [...document.querySelectorAll("[role='tab']")].filter(visible);
+    const selected = tabs.find((el) => el.getAttribute("aria-selected") === "true");
+    const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
+    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null };
+  }
+  return null;
+}
+
+/**
+ * The pages whose list state is in the address (R13 E-8; design reference A08): what the walk chooses on each, what the address must then
+ * say, and what the page must show — after the choice, after leaving for another page and pressing Back, and after the address is loaded
+ * again. The choices only filter a list; nothing here writes. `state` values match by prefix, because a chip and a tab carry their count.
+ */
+export const ADDRESS_CASES = [
+  { page: "inbox", route: "/app/inbox", probe: "inbox", act: [["chip", "消息筛选", "未读"]], fill: null, search: { filter: "unread" }, state: { pressed: "未读" } },
+  { page: "memory", route: "/app/memory", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
+];
+
+/**
+ * Whether a page's state is what a case says. Strings match by prefix, except a search box's text, which is exact.
+ * @param {Record<string, string>} wanted @param {any} read
+ */
+export function addressStateHolds(wanted, read) {
+  if (!read) return false;
+  return Object.entries(wanted).every(([key, value]) => (key === "query" ? read[key] === value : typeof read[key] === "string" && read[key].startsWith(value)));
+}
+
+/**
+ * One list page's way back, judged (A08): the choice is in the address, the page shows it, and both Back from another page and loading the
+ * address again find it. `read` is what the walk read at each stage; a stage that was not reached is null. Notices only (new in R13).
+ * @param {typeof ADDRESS_CASES[number]} c
+ * @param {{ pressed: boolean[], first: any, away: string | null, back: any, reload: any }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function addressStateFindings(c, read) {
+  const current = `${c.page}@desktop`;
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (!read.first || !read.first.found) {
+    notices.push(`${current}: not observable: the page's list controls were not found, so what it keeps in its address was not read`);
+    return { failures, notices };
+  }
+  if (read.pressed.includes(false) || (c.fill && read.first.query === null)) {
+    notices.push(`${current}: not observable: a control of the case was not on the page (${[...read.pressed.map((found) => (found ? "found" : "missing")), ...(c.fill ? [read.first.query === null ? "search box missing" : "search box found"] : [])].join(", ")}), so the choice was not made`);
+    return { failures, notices };
+  }
+  const params = new URLSearchParams(read.first.search);
+  for (const [name, value] of Object.entries(c.search)) {
+    if (params.get(name) !== value) notices.push(`${current}: the choice is not in the address after it was made: ${name}=${value} is not in “${read.first.search}”`);
+  }
+  if (!addressStateHolds(c.state, read.first)) notices.push(`${current}: the page does not show the choice it was given (${JSON.stringify(c.state)})`);
+  for (const [way, stage] of [["Back from another page", read.back], ["loading the address again", read.reload]]) {
+    if (!stage) {
+      notices.push(`${current}: not observable: ${way} was not taken`);
+      continue;
+    }
+    if (stage.search !== read.first.search) notices.push(`${current}: after ${way} the address is “${stage.search}” and was “${read.first.search}”`);
+    if (!addressStateHolds(c.state, stage)) notices.push(`${current}: after ${way} the page shows ${JSON.stringify(Object.fromEntries(Object.keys(c.state).map((key) => [key, stage[key] ?? null])))} (${JSON.stringify(c.state)})`);
+  }
+  if (read.away !== null && read.away === read.first.path) notices.push(`${current}: not observable: the sidebar link did not leave the page (${read.away}), so Back came from nowhere`);
+  return { failures, notices };
+}
+
+/**
+ * A row that opens in a drawer is in the address while it is open, and Back closes it (A08; `useAddressOpen`). Judged from the address and
+ * the dialog right after the row was opened and right after Back. Notices only; a page with no row says so.
+ * @param {string} page the report's page name @param {{ rows: number, opened: any, closed: any }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function addressOpenFindings(page, read) {
+  const current = `${page}@desktop`;
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (read.rows === 0) {
+    notices.push(`${current}: not observable: no row of the list opens, so an open row's place in the address was not read`);
+    return { failures, notices };
+  }
+  if (!read.opened?.dialog) notices.push(`${current}: not observable: the first row did not open a drawer, so its place in the address was not read`);
+  else {
+    if (!/[?&]open=/.test(read.opened.search)) notices.push(`${current}: the open row is not in the address (“${read.opened.search}”)`);
+    if (!read.closed) notices.push(`${current}: not observable: Back was not taken`);
+    else {
+      if (read.closed.dialog) notices.push(`${current}: Back leaves the drawer open`);
+      if (/[?&]open=/.test(read.closed.search)) notices.push(`${current}: Back leaves the row in the address (“${read.closed.search}”)`);
+    }
+  }
+  return { failures, notices };
+}
+
+/**
+ * A08 on the inbox and the memory page: the filter, the tab and the search are chosen, the address is read, another page is opened by the
+ * sidebar and Back is pressed, the address is loaded again — and a memory row is opened and closed by Back. The choices only change what a
+ * list shows. The walk's window is the desktop's.
+ */
+async function walkAddressState(page, base) {
+  /** @type {string[]} */ const notices = [];
+  const reads = {};
+  for (const c of ADDRESS_CASES) {
+    await openRoute(page, base, c.route);
+    const pressed = [];
+    for (const act of c.act) {
+      pressed.push(Boolean(await page.evaluate(addressAct, act)));
+      await page.waitForTimeout(400);
+    }
+    if (c.fill) {
+      // A page without the box says so in the probe (its text is null); the fill gives up soon and is not what fails the step.
+      await page.getByRole("searchbox", { name: c.fill[0] }).fill(c.fill[1], { timeout: 5_000 }).catch(() => null);
+      await page.waitForTimeout(1_200);
+    }
+    const first = await page.evaluate(addressProbe, [c.probe]);
+    let away = null;
+    let back = null;
+    let reload = null;
+    if (first && first.found && !pressed.includes(false) && !(c.fill && first.query === null)) {
+      // Leave by the sidebar (another page of the same shell), and come back by the browser's Back.
+      if (await page.evaluate(addressAct, ["link", "/app/capabilities"])) {
+        await page.waitForTimeout(1_500);
+        away = await page.evaluate(() => location.pathname);
+        await page.goBack();
+        await page.waitForTimeout(1_500);
+        back = await page.evaluate(addressProbe, [c.probe]);
+      }
+      // The address loaded again: a reload, a pasted link.
+      await openRoute(page, base, `${first.path}${first.search}`);
+      reload = await page.evaluate(addressProbe, [c.probe]);
+    }
+    const read = { pressed, first, away, back, reload };
+    reads[c.page] = read;
+    notices.push(...addressStateFindings(c, read).notices);
+  }
+  // A memory row that opens in a drawer: in the address while open, closed by Back.
+  await openRoute(page, base, "/app/memory");
+  const rows = (await page.evaluate(rowProbe, ["targets"])) ?? [];
+  /** @type {{ rows: number, opened: any, closed: any }} */ const open = { rows: rows.length, opened: null, closed: null };
+  if (rows.length > 0) {
+    await page.evaluate(rowProbe, ["click", 0]);
+    await page.waitForTimeout(1_200);
+    open.opened = await page.evaluate(addressProbe, ["memory"]);
+    await page.goBack();
+    await page.waitForTimeout(1_200);
+    open.closed = await page.evaluate(addressProbe, ["memory"]);
+  }
+  reads["memory-open"] = open;
+  notices.push(...addressOpenFindings("memory", open).notices);
+  return { failures: [], notices, read: reads };
+}
+
+/**
+ * The event page's 「深入研究」 (A01): the draft that goes to the conversation. The click is a route change whose state (React Router's
+ * `history.state.usr`) holds the hand-off; read there, it is the event's title, a link to its sources and a draft that is never sent (the
+ * hand-off has no field that sends). `["event"]` reads the page before; `["intent"]` reads the address and the hand-off after.
+ * @param {["event" | "intent"]} args
+ */
+export function handoffProbe([action]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  if (action === "event") {
+    const heading = document.querySelector("main h1");
+    return {
+      path: `${location.pathname}${location.search}`,
+      title: heading ? words(heading) : null,
+      button: [...document.querySelectorAll("main button")].some((el) => visible(el) && words(el) === "深入研究"),
+    };
+  }
+  const state = window.history.state && typeof window.history.state === "object" ? window.history.state.usr : null;
+  const intent = state && typeof state === "object" ? state.runtimeUiIntent ?? null : null;
+  return {
+    path: `${location.pathname}${location.search}`,
+    intent: intent && typeof intent === "object"
+      ? { keys: Object.keys(intent).sort(), kind: intent.kind ?? null, draft: typeof intent.draft === "string" ? intent.draft : null, requestId: typeof intent.requestId === "string" ? intent.requestId : null }
+      : null,
+  };
+}
+
+/** The fields a hand-off to the conversation may carry (`RuntimeUiIntent`): none of them sends. */
+export const HANDOFF_FIELDS = ["draft", "kind", "projectId", "requestId", "resultRevision", "sessionId"];
+
+/**
+ * The event page's hand-off, judged (A01). `before` is the event page, `after` the address and state once 「深入研究」 was pressed, and
+ * `back` the address after Back. Notices only (new in R13); an account with no event, or a page without the button, says so.
+ * @param {any} before @param {any} after @param {string | null} back
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function handoffFindings(before, after, back) {
+  const current = "frontier-event@desktop";
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (!before || !before.button) {
+    notices.push(`${current}: not observable: the event page has no 深入研究 button, so the hand-off to the conversation was not read`);
+    return { failures, notices };
+  }
+  if (!after || !/^\/app\/chat(?:[/?]|$)/.test(after.path ?? "")) {
+    notices.push(`${current}: not observable: 深入研究 did not go to the conversation (${after?.path ?? "nowhere"}), so its draft was not read`);
+    return { failures, notices };
+  }
+  const intent = after.intent;
+  if (!intent) {
+    notices.push(`${current}: the hand-off to the conversation carries no intent in the address's state`);
+    return { failures, notices };
+  }
+  if (intent.kind !== "create") notices.push(`${current}: the hand-off is a “${intent.kind}” intent (create: a new conversation)`);
+  if (!intent.draft) notices.push(`${current}: the hand-off carries no draft`);
+  else {
+    if (before.title && !intent.draft.includes(before.title)) notices.push(`${current}: the draft does not hold the event's title “${before.title.slice(0, 30)}”`);
+    if (!/https?:\/\/\S+/.test(intent.draft)) notices.push(`${current}: the draft holds no link to a source`);
+  }
+  if (!intent.requestId) notices.push(`${current}: the hand-off has no request id, so a reload cannot tell it from a new one`);
+  const extra = intent.keys.filter((key) => !HANDOFF_FIELDS.includes(key));
+  if (extra.length) notices.push(`${current}: the hand-off carries fields a draft does not need: ${extra.join(", ")}`);
+  if (back !== null && back !== before.path) notices.push(`${current}: Back from the conversation leaves the address at ${back} and the event page was ${before.path}`);
+  return { failures, notices };
+}
+
+/** A01: the event page's 「深入研究」, read at the hand-off, and Back to the event page. Nothing is sent: the draft is in the address's state. */
+async function walkEventHandoff(page, base, route) {
+  await openRoute(page, base, route);
+  const before = await page.evaluate(handoffProbe, ["event"]);
+  if (!before || !before.button) return { failures: [], notices: handoffFindings(before, null, null).notices, read: { before } };
+  await page.evaluate(clickNamed, ["button", "深入研究", "main"]);
+  await page.waitForTimeout(1_500);
+  const after = await page.evaluate(handoffProbe, ["intent"]);
+  let back = null;
+  if (after && /^\/app\/chat(?:[/?]|$)/.test(after.path ?? "")) {
+    await page.goBack();
+    await page.waitForTimeout(1_500);
+    back = await page.evaluate(() => `${location.pathname}${location.search}`);
+  }
+  return { ...handoffFindings(before, after, back), read: { before, after, back } };
 }
 
 /* ------------------------------------------------------------------------- R13: the composer */

@@ -23,7 +23,8 @@ import {
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings, PROVISIONAL_PAGES,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, ROW_LINK_BY_PAGE, ROW_REVEAL_BY_PAGE, rowClickFindings, rowClickShown,
   rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
-  composerFindings, composerProbe, COMPOSER_BOTTOM_PX, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, composerFindings, composerProbe, COMPOSER_BOTTOM_PX,
+  handoffFindings, handoffProbe, HANDOFF_FIELDS, NOTICE_SECTION_PAGES, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -578,6 +579,15 @@ function probe(kind, arg, search) {
     case "notFound": return { said: !wrong };
     case "missingRecord": return wrong ? { dialog: true, said: false, back: false, failedWord: true } : { dialog: true, said: true, back: true, failedWord: false };
     case "readingFolds": return { folds: [{ label: "编写与核查", open: wrong }, { label: "评议与讨论（0）", open: false }], models: wrong ? ["deepseek"] : [] };
+    // FAKE_DAILY=error|off|nameless|zoneless: the empty day read as a failure, a feed the account is not offered, an empty day that names no day, a time with no zone.
+    case "dailyEmpty": {
+      const mode = process.env.FAKE_DAILY || "";
+      if (mode === "error") return { alert: "这条动态已不再提供。", retry: true, title: null, description: null, past: false };
+      if (mode === "off") return { alert: null, retry: false, title: null, description: null, past: false };
+      if (mode === "nameless") return { alert: null, retry: false, title: "今日日报尚未发布", description: "当天没有符合条件的内容时不出刊。", past: false };
+      if (mode === "zoneless") return { alert: null, retry: false, title: "1月1日 周三没有日报", description: "日报每天 07:30发布；当天没有符合条件的内容时不出刊。", past: true };
+      return { alert: null, retry: false, title: "1月1日 周三没有日报", description: "日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。", past: true };
+    }
     default: return null;
   }
 }
@@ -607,6 +617,9 @@ function context() {
     const failed = [];
     const pageRoutes = [];
     let phone = false;
+    // The page one sidebar link left, for Back; and how often each list page's address was read (the walk reads it in a fixed order).
+    let previousUrl = null;
+    const addressCalls = {};
     // FAKE_CHAT=network-changed: the chat page drops its requests with
     // ERR_NETWORK_CHANGED and shows 打开超时 until 重试 is pressed;
     // FAKE_CHAT=broken: 重试 does not help either.
@@ -623,7 +636,7 @@ function context() {
       keyboard: { press: async (key) => log({ key, at: target().pathname }) },
       on(event, handler) { if (event === "requestfailed") failed.push(handler); }, off() {},
       async setViewportSize(size) { phone = size.width < 600; }, async close() {}, async screenshot() {}, async waitForTimeout() {},
-      async goBack() { log({ goBack: true }); },
+      async goBack() { log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
       async route(pattern, handler) { pageRoutes.push([pattern, handler]); log({ route: String(pattern) }); },
       async unroute() { pageRoutes.length = 0; log({ unroute: true }); },
       async waitForFunction() {
@@ -708,6 +721,30 @@ function context() {
           return true;
         }
         if (typeof fn === "function" && fn.name === "clickRowTitled") return true;
+        if (typeof fn === "function" && fn.name === "addressAct") {
+          log({ act: arg });
+          if (arg[0] === "link") { previousUrl = url; url = new URL(arg[1], url).href; }
+          return true;
+        }
+        // The inbox is read after the choice, after Back and after the address is loaded again; the memory page the same three times, then with a
+        // row open and after Back. FAKE_ADDRESS=lost: the address does not come back; FAKE_ADDRESS=open: Back leaves the row open.
+        if (typeof fn === "function" && fn.name === "addressProbe") {
+          const kind = arg[0];
+          const n = (addressCalls[kind] = (addressCalls[kind] ?? 0) + 1);
+          const lost = process.env.FAKE_ADDRESS === "lost" && n > 1 && n < 4;
+          if (kind === "inbox") return { path: "/app/inbox", search: lost ? "" : "?filter=unread", dialog: false, found: true, pressed: lost ? "全部" : "未读 3" };
+          const search = "?tab=project&q=" + encodeURIComponent("探针");
+          if (n === 4) return { path: "/app/memory", search: search + "&open=r1", dialog: true, found: true, selected: "项目 5", query: "探针" };
+          if (n === 5) return { path: "/app/memory", search: process.env.FAKE_ADDRESS === "open" ? search + "&open=r1" : search, dialog: process.env.FAKE_ADDRESS === "open", found: true, selected: "项目 5", query: "探针" };
+          return { path: "/app/memory", search: lost ? "" : search, dialog: false, found: true, selected: lost ? "关于你" : "项目 5", query: lost ? "" : "探针" };
+        }
+        // FAKE_HANDOFF=bad: a draft with no link to a source and a field that would send; FAKE_HANDOFF=nobutton: an event page without 深入研究.
+        if (typeof fn === "function" && fn.name === "handoffProbe") {
+          if (arg[0] === "event") return { path: new URL(url).pathname, title: "某事件", button: process.env.FAKE_HANDOFF !== "nobutton" };
+          const bad = process.env.FAKE_HANDOFF === "bad";
+          return { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"].concat(bad ? ["send"] : []), kind: "create",
+            draft: bad ? "请深入研究" : "请围绕这个事件做一次深入研究。\n\n事件：某事件\n一手来源：\n- 官方：标题（https://example.org/a）", requestId: "req_1" } };
+        }
         if (typeof fn === "function" && fn.name === "pdfProbe") return { width: process.env.FAKE_PDF === "narrow" ? 559 : 896, src: "blob:x#view=FitH&navpanes=0" };
         // FAKE_KB=lost: the way back does not find the list as it was left.
         if (typeof fn === "function" && fn.name === "readerProbe") {
@@ -940,7 +977,7 @@ test("R13 first-row clicks: the closed groups of 问题与回答 are opened firs
   // The walk starts no runtime, so the task's frame container is compared and the notice says there was no iframe to compare.
   assert.ok(report.notices.includes("autopilot@desktop: not observable: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared"), report.notices.join("\n"));
   // The knowledge base: a PDF opened on its own page, then the way back to a long list with the search it was found by.
-  assert.equal(log.filter((entry) => entry.goBack).length, 1);
+  assert.ok(report.steps["files-return"].browserBack && report.steps["files-return"].back);
   assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索资料和内容"), [["搜索资料和内容", "一份指南"]]);
   assert.deepEqual(report.steps["files-return"].reader.back, { text: "知识库", href: "/app/files?q=" + encodeURIComponent("一份指南") });
 });
@@ -1020,7 +1057,9 @@ function walkedNames() {
 }
 
 test("the refusals a page is walked to meet are not failures, and any other refusal still is", () => {
-  assert.deepEqual(Object.keys(EXPECTED_REFUSALS).sort(), ["extensions-skill-missing", "memory-shared-missing"]);
+  assert.deepEqual(Object.keys(EXPECTED_REFUSALS).sort(), ["extensions-skill-missing", "frontier-daily-empty", "memory-shared-missing"]);
+  // A day nobody published answers 404, and the page is walked to say so in words.
+  assert.deepEqual(unexpectedRefusals("frontier-daily-empty", ["404 /api/frontier/dailies/2020-01-01", "500 /api/frontier/dailies"]), ["500 /api/frontier/dailies"]);
   assert.deepEqual(unexpectedRefusals("extensions-skill-missing", ["404 /api/skills/impeccable-audit-missing", "500 /api/skills"]), ["500 /api/skills"]);
   assert.deepEqual(unexpectedRefusals("memory-shared-missing", ["404 /api/capsules/shares/x", "410 /api/capsules/shares/x", "403 /api/capsules"]), ["403 /api/capsules"]);
   // A page with no expected refusal keeps all of them, and a refusal that is not the API's was never a refusal of the page.
@@ -1608,7 +1647,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
   const routeAt = log.findLastIndex((entry, index) => index < pressedAt && entry.route === String("**/api/**"));
   assert.ok(pressedAt >= 0 && routeAt >= 0 && log.findIndex((entry, index) => index > pressedAt && entry.unroute) > pressedAt);
   assert.equal(log.filter((entry) => entry.aborted).length, 0);
-  assert.deepEqual(Object.keys(report.steps).sort(), ["evidence-matrix@desktop", "evidence-matrix@phone", "extensions-skills-create", "files-pdf", "files-return"]);
+  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-skills-create", "files-pdf", "files-return", "frontier-event-handoff"]);
 });
 
 test("a page that regresses on what R11 fixed fails the walk and names the page and the defect", async () => {
@@ -1801,6 +1840,200 @@ test("with the chat asked for, the walk reads the composer at both widths, resto
   const hero = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_COMPOSER: "hero" });
   assert.ok(hero.report.notices.some((notice) => notice.includes("the conversation is the blank one")));
   void log;
+});
+
+test("the pages the reference named have a section budget, and stacking more is a notice there until a walk has measured them; every other budget still fails", () => {
+  for (const name of ["inbox", "geo", "frontier-zones", "autopilot", "account"]) {
+    assert.ok(Number.isInteger(SECTION_SHAPES_BY_PAGE[name]) && NOTICE_SECTION_PAGES.has(name), `${name} has a notice-first section budget`);
+  }
+  const stacked = ["ul>li", "table>thead+tbody", "svg>g", "section>h2+ul"];
+  const inbox = pageFindings("inbox", "desktop", clean({ sectionShapes: stacked.slice(0, 3) }), []);
+  assert.deepEqual(inbox.failures, []);
+  assert.deepEqual(inbox.notices, ["inbox@desktop: the page stacks 3 kinds of section (budget 2): ul>li, table>thead+tbody, svg>g — new in R13: reported, not failed, until a walk has measured this page"]);
+  assert.deepEqual(pageFindings("inbox", "desktop", clean({ sectionShapes: stacked.slice(0, 2) }), []), { failures: [], notices: [] });
+  // The budget of the page R10 rebuilt is a failure still; so is everything else a page spends past a number.
+  assert.equal(pageFindings("memory", "desktop", clean({ sectionShapes: stacked.slice(0, 3) }), []).failures.length, 1);
+  assert.equal(pageFindings("inbox", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
+  assert.deepEqual(pageFindings("account", "desktop", clean({ sectionShapes: stacked }), []).failures, []);
+  assert.equal(pageFindings("account", "desktop", clean({ sectionShapes: stacked }), []).notices.length, 1);
+  assert.deepEqual(pageFindings("inbox", "phone", clean({ sectionShapes: stacked }), []), { failures: [], notices: [] });
+  // The budgeted pages of R10 are not among them.
+  for (const name of ["files", "memory", "frontier", "capabilities", "virtual-research"]) assert.ok(!NOTICE_SECTION_PAGES.has(name), name);
+});
+
+test("the daily of a day nobody published is read for the day it names, the clock and zone it gives, and for not reading as a failure", () => {
+  const view = (...blocks) => node("body", {}, [node("main", {}, [node("div", { attrs: { role: "tabpanel" } }, blocks)])]);
+  const empty = (title, description, extra = []) => view(node("div", {}, [node("p", { text: title }), ...(description ? [node("div", { text: description })] : []), ...extra]));
+  const read = (root) => inPage(root, () => pageProbe(["dailyEmpty"]));
+  assert.deepEqual(read(empty("1月1日 周三没有日报", "日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。", [node("button", { text: "往期" })])), {
+    alert: null, retry: false, title: "1月1日 周三没有日报", description: "日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。", past: true,
+  });
+  const failed = read(view(node("div", { attrs: { role: "alert" } }, [node("span", { text: "这条动态已不再提供。" }), node("button", { text: "重试" })])));
+  assert.deepEqual([failed.alert, failed.retry, failed.title], ["这条动态已不再提供。", true, null]);
+  assert.equal(read(view(node("p", { text: "一条普通的段落" }))).title, null);
+  const one = (r) => probeFindings("frontier-daily-empty", "desktop", "dailyEmpty", r);
+  assert.deepEqual(one(read(empty("1月1日 周三没有日报", "日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。"))), { failures: [], notices: [] });
+  assert.deepEqual(one(failed).notices, ["frontier-daily-empty@desktop: a day nobody published reads as a failure: “这条动态已不再提供。” with 重试 (an empty day and a failed one are different, A11)"]);
+  assert.deepEqual(one(read(view(node("p", { text: "一条普通的段落" })))).notices, ["frontier-daily-empty@desktop: not observable: the daily view drew neither an empty day nor an error (the feed may not be offered to this account)"]);
+  assert.deepEqual(one(read(empty("今日日报尚未发布", "当天没有符合条件的内容时不出刊。"))).notices, ["frontier-daily-empty@desktop: the empty day does not name the day it is about: “今日日报尚未发布”"]);
+  assert.deepEqual(one(read(empty("1月1日 周三没有日报", "日报每天 07:30发布；当天没有符合条件的内容时不出刊。"))).notices, ["frontier-daily-empty@desktop: the empty day names a publication time (07:30) and not whose clock it is"]);
+  // The time may stand in the title (「今日日报 07:30（北京时间）发布」), and then it carries its zone.
+  assert.deepEqual(one(read(empty("今日日报 07:30（北京时间）发布", "当天没有符合条件的内容时不出刊。"))).notices, ["frontier-daily-empty@desktop: the empty day does not name the day it is about: “今日日报 07:30（北京时间）发布”"]);
+  assert.deepEqual(one(null), { failures: [], notices: [] });
+  assert.deepEqual(PAGE_PROBES["frontier-daily-empty"], [["dailyEmpty", ["desktop", "phone"]]]);
+  assert.ok(PROVISIONAL_PAGES.has("frontier-daily-empty") && BUDGET_BY_PAGE["frontier-daily-empty"]);
+  assert.ok(ROUTES.some(([name, route]) => name === "frontier-daily-empty" && route === "/app/frontier?view=daily&day=2020-01-01"));
+});
+
+/** The inbox's filter chips and the memory page's tabs and search box, as the pages draw them. */
+const listPage = ({ pressed = "未读 3", selected = "项目 5", query = "探针", search = true, dialog = false } = {}) => node("body", {}, [
+  node("aside", {}, [node("a", { attrs: { href: "/app/capabilities" }, text: "科研工具" }), node("a", { attrs: { href: "/app/inbox" }, text: "收件箱" })]),
+  node("main", {}, [
+    node("div", { attrs: { role: "group", "aria-label": "消息筛选" } }, [node("button", { attrs: { "aria-pressed": String(pressed === "全部") }, text: "全部" }), node("button", { attrs: { "aria-pressed": String(pressed.startsWith("未读")) }, text: pressed.startsWith("未读") ? pressed : "未读" })]),
+    node("div", { attrs: { role: "tablist" } }, ["关于你", "项目 5", "做法 2", "成长"].map((name) => node("button", { attrs: { role: "tab", "aria-selected": String(name === selected) }, text: name }))),
+    ...(search ? [node("input", { attrs: { "aria-label": "搜索记忆" }, value: query })] : []),
+    ...(dialog ? [node("div", { attrs: { role: "dialog" } })] : []),
+  ]),
+]);
+
+test("where a list page keeps its place is read from the address and from what its controls show: chips, tabs, the search box, the open row", () => {
+  const at = (path, search, fn, root = listPage()) => inPage(root, () => { globalThis.location.search = search; return fn(); }, { path });
+  assert.deepEqual(at("/app/inbox", "?filter=unread", () => addressProbe(["inbox"])), { path: "/app/inbox", search: "?filter=unread", dialog: false, found: true, pressed: "未读 3" });
+  assert.deepEqual(at("/app/memory", "?tab=project&q=%E6%8E%A2", () => addressProbe(["memory"]), listPage({ dialog: true })),
+    { path: "/app/memory", search: "?tab=project&q=%E6%8E%A2", dialog: true, found: true, selected: "项目 5", query: "探针" });
+  assert.equal(inPage(page(header()), () => addressProbe(["inbox"])).found, false);
+  assert.equal(inPage(listPage({ search: false }), () => addressProbe(["memory"])).query, null);
+  assert.equal(inPage(page(header()), () => addressProbe(["other"])), null);
+  // The controls are pressed by what they are called (a chip and a tab carry their count), or by where a sidebar link goes; nothing else.
+  const body = listPage();
+  inPage(body, () => {
+    assert.equal(addressAct(["chip", "消息筛选", "未读"]), true);
+    assert.equal(addressAct(["chip", "消息筛选", "不存在"]), false);
+    assert.equal(addressAct(["chip", "别的组", "未读"]), false);
+    assert.equal(addressAct(["tab", "项目"]), true);
+    assert.equal(addressAct(["tab", "不存在"]), false);
+    assert.equal(addressAct(["link", "/app/capabilities"]), true);
+    assert.equal(addressAct(["link", "/app/nowhere"]), false);
+    assert.equal(addressAct(["other"]), false);
+  });
+  assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["科研工具", "未读 3", "项目 5"]);
+  assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory"]);
+  assert.equal(addressStateHolds({ pressed: "未读" }, { pressed: "未读 3" }), true);
+  assert.equal(addressStateHolds({ query: "探针" }, { query: "探针 " }), false);
+  assert.equal(addressStateHolds({ pressed: "未读" }, null), false);
+
+  // Judged.
+  const inbox = ADDRESS_CASES[0];
+  const memory = ADDRESS_CASES[1];
+  const shown = { path: "/app/inbox", search: "?filter=unread", dialog: false, found: true, pressed: "未读 3" };
+  const good = { pressed: [true], first: shown, away: "/app/capabilities", back: shown, reload: shown };
+  assert.deepEqual(addressStateFindings(inbox, good), { failures: [], notices: [] });
+  assert.deepEqual(addressStateFindings(inbox, { ...good, first: { ...shown, search: "" } }).notices, [
+    "inbox@desktop: the choice is not in the address after it was made: filter=unread is not in “”",
+    "inbox@desktop: after Back from another page the address is “?filter=unread” and was “”",
+    "inbox@desktop: after loading the address again the address is “?filter=unread” and was “”",
+  ]);
+  assert.deepEqual(addressStateFindings(inbox, { ...good, back: { ...shown, search: "", pressed: "全部" }, reload: { ...shown, pressed: "全部" } }).notices, [
+    "inbox@desktop: after Back from another page the address is “” and was “?filter=unread”",
+    "inbox@desktop: after Back from another page the page shows {\"pressed\":\"全部\"} ({\"pressed\":\"未读\"})",
+    "inbox@desktop: after loading the address again the page shows {\"pressed\":\"全部\"} ({\"pressed\":\"未读\"})",
+  ]);
+  assert.deepEqual(addressStateFindings(inbox, { ...good, first: { ...shown, pressed: "全部" } }).notices, ["inbox@desktop: the page does not show the choice it was given ({\"pressed\":\"未读\"})"]);
+  assert.deepEqual(addressStateFindings(inbox, { ...good, back: null, reload: null }).notices, ["inbox@desktop: not observable: Back from another page was not taken", "inbox@desktop: not observable: loading the address again was not taken"]);
+  assert.deepEqual(addressStateFindings(inbox, { ...good, away: "/app/inbox" }).notices, ["inbox@desktop: not observable: the sidebar link did not leave the page (/app/inbox), so Back came from nowhere"]);
+  assert.deepEqual(addressStateFindings(inbox, { pressed: [false], first: shown, away: null, back: null, reload: null }).notices,
+    ["inbox@desktop: not observable: a control of the case was not on the page (missing), so the choice was not made"]);
+  assert.deepEqual(addressStateFindings(inbox, { pressed: [], first: { ...shown, found: false }, away: null, back: null, reload: null }).notices,
+    ["inbox@desktop: not observable: the page's list controls were not found, so what it keeps in its address was not read"]);
+  const kept = { path: "/app/memory", search: "?tab=project&q=%E6%8E%A2%E9%92%88", dialog: false, found: true, selected: "项目 5", query: "探针" };
+  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: kept, away: "/app/capabilities", back: kept, reload: kept }), { failures: [], notices: [] });
+  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: { ...kept, query: null }, away: null, back: null, reload: null }).notices,
+    ["memory@desktop: not observable: a control of the case was not on the page (found, search box missing), so the choice was not made"]);
+  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: { ...kept, search: "?tab=project" }, away: "/app/capabilities", back: { ...kept, search: "?tab=project" }, reload: { ...kept, search: "?tab=project" } }).notices,
+    ["memory@desktop: the choice is not in the address after it was made: q=探针 is not in “?tab=project”"]);
+
+  // A row that opens in a drawer: in the address while open, and Back closes it.
+  const opened = { ...kept, search: `${kept.search}&open=r1`, dialog: true };
+  assert.deepEqual(addressOpenFindings("memory", { rows: 3, opened, closed: kept }), { failures: [], notices: [] });
+  assert.deepEqual(addressOpenFindings("memory", { rows: 0, opened: null, closed: null }).notices, ["memory@desktop: not observable: no row of the list opens, so an open row's place in the address was not read"]);
+  assert.deepEqual(addressOpenFindings("memory", { rows: 1, opened: kept, closed: kept }).notices, ["memory@desktop: not observable: the first row did not open a drawer, so its place in the address was not read"]);
+  assert.deepEqual(addressOpenFindings("memory", { rows: 1, opened: { ...opened, search: kept.search }, closed: opened }).notices, [
+    "memory@desktop: the open row is not in the address (“?tab=project&q=%E6%8E%A2%E9%92%88”)", "memory@desktop: Back leaves the drawer open",
+    "memory@desktop: Back leaves the row in the address (“?tab=project&q=%E6%8E%A2%E9%92%88&open=r1”)"]);
+  assert.deepEqual(addressOpenFindings("memory", { rows: 1, opened, closed: null }).notices, ["memory@desktop: not observable: Back was not taken"]);
+});
+
+test("the event page's 深入研究 is read at the hand-off: the title, a link to a source, a create intent that cannot send, and Back to the event", () => {
+  const eventPage = (button = true) => node("body", {}, [node("main", {}, [node("header", {}, [node("h1", { text: "某事件" })]), ...(button ? [node("button", { text: "深入研究" })] : [])])]);
+  assert.deepEqual(inPage(eventPage(), () => handoffProbe(["event"]), { path: "/app/frontier/events/ev_1" }), { path: "/app/frontier/events/ev_1", title: "某事件", button: true });
+  assert.equal(inPage(eventPage(false), () => handoffProbe(["event"])).button, false);
+  const withState = (usr) => inPage(eventPage(), () => { globalThis.window.history = { state: usr === undefined ? null : { usr, key: "k", idx: 2 } }; return handoffProbe(["intent"]); }, { path: "/app/chat" });
+  const draft = "请围绕这个事件做一次深入研究。\n\n事件：某事件\n一手来源：\n- 官方：标题（https://example.org/a）";
+  const intent = { kind: "create", projectId: "p", requestId: "req_1", sessionId: "s", draft };
+  assert.deepEqual(withState({ runtimeUiIntent: intent }), { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } });
+  assert.deepEqual(withState({}), { path: "/app/chat", intent: null });
+  assert.deepEqual(withState(undefined), { path: "/app/chat", intent: null });
+  assert.deepEqual(HANDOFF_FIELDS, ["draft", "kind", "projectId", "requestId", "resultRevision", "sessionId"]);
+
+  const before = { path: "/app/frontier/events/ev_1", title: "某事件", button: true };
+  const after = { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } };
+  assert.deepEqual(handoffFindings(before, after, before.path), { failures: [], notices: [] });
+  assert.deepEqual(handoffFindings({ ...before, button: false }, null, null).notices, ["frontier-event@desktop: not observable: the event page has no 深入研究 button, so the hand-off to the conversation was not read"]);
+  assert.deepEqual(handoffFindings(null, null, null).notices.length, 1);
+  assert.deepEqual(handoffFindings(before, { path: "/app/frontier/events/ev_1", intent: null }, null).notices, ["frontier-event@desktop: not observable: 深入研究 did not go to the conversation (/app/frontier/events/ev_1), so its draft was not read"]);
+  assert.deepEqual(handoffFindings(before, { path: "/app/chat", intent: null }, null).notices, ["frontier-event@desktop: the hand-off to the conversation carries no intent in the address's state"]);
+  assert.deepEqual(handoffFindings(before, { ...after, intent: { ...after.intent, kind: "open", draft: null, requestId: null, keys: [...after.intent.keys, "send"] } }, before.path).notices, [
+    "frontier-event@desktop: the hand-off is a “open” intent (create: a new conversation)", "frontier-event@desktop: the hand-off carries no draft",
+    "frontier-event@desktop: the hand-off has no request id, so a reload cannot tell it from a new one", "frontier-event@desktop: the hand-off carries fields a draft does not need: send"]);
+  assert.deepEqual(handoffFindings(before, { ...after, intent: { ...after.intent, draft: "请深入研究" } }, before.path).notices, [
+    "frontier-event@desktop: the draft does not hold the event's title “某事件”", "frontier-event@desktop: the draft holds no link to a source"]);
+  assert.deepEqual(handoffFindings(before, after, "/app/chat").notices, ["frontier-event@desktop: Back from the conversation leaves the address at /app/chat and the event page was /app/frontier/events/ev_1"]);
+});
+
+test("the walk tries the address of the inbox and the memory page, the event's hand-off and a day nobody published; what it cannot try it says", async () => {
+  const { code, stdout, stderr, log, report } = await walk();
+  assert.equal(code, 0, stdout + stderr);
+  assert.deepEqual(report.failures, []);
+  // The daily of a day with no issue is a page of the walk at both widths, and its 404 is the refusal it is walked to meet.
+  const visited = log.filter((entry) => entry.goto).map((entry) => entry.goto);
+  assert.ok(visited.includes("https://evimed.example.org/app/frontier?view=daily&day=2020-01-01"));
+  assert.ok(report.pages["frontier-daily-empty@desktop"] && report.pages["frontier-daily-empty@phone"]);
+  assert.equal(report.notices.filter((notice) => /^(inbox|memory|frontier-event)@desktop: /.test(notice) && /address|hand-off|draft|Back/.test(notice)).length, 0, report.notices.join("\n"));
+  // Both cases were made, then Back, then the address again; the memory row was opened and Back closed it.
+  assert.deepEqual(log.filter((entry) => entry.act).map((entry) => entry.act),
+    [["chip", "消息筛选", "未读"], ["link", "/app/capabilities"], ["tab", "项目"], ["link", "/app/capabilities"]]);
+  assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索记忆"), [["搜索记忆", "探针"]]);
+  assert.deepEqual(Object.keys(report.steps["address-state"]), ["inbox", "memory", "memory-open"]);
+  assert.equal(report.steps["frontier-event-handoff"].after.path, "/app/chat");
+
+  // The address that does not come back, a row that stays open after Back.
+  const lost = await walk({ FAKE_ADDRESS: "lost" });
+  assert.equal(lost.code, 0, lost.stdout + lost.stderr);
+  assert.ok(lost.report.notices.includes("inbox@desktop: after Back from another page the address is “” and was “?filter=unread”"), lost.report.notices.join("\n"));
+  assert.ok(lost.report.notices.some((notice) => notice.startsWith("memory@desktop: after loading the address again the address is “”")));
+  const open = await walk({ FAKE_ADDRESS: "open" });
+  assert.ok(open.report.notices.includes("memory@desktop: Back leaves the drawer open"));
+  // The hand-off with no link, and an event page without the button; no event at all.
+  const bad = await walk({ FAKE_HANDOFF: "bad" });
+  assert.equal(bad.code, 0);
+  assert.ok(bad.report.notices.includes("frontier-event@desktop: the draft holds no link to a source"));
+  assert.ok((await walk({ FAKE_HANDOFF: "nobutton" })).report.notices.some((notice) => notice.includes("the event page has no 深入研究 button")));
+  const empty = await walk({ FAKE_EMPTY_LISTS: "1" });
+  assert.equal(empty.code, 0, empty.stdout + empty.stderr);
+  assert.ok(empty.report.notices.includes("frontier-event@desktop: not observable: the hot list names no event, so the hand-off of 深入研究 to the conversation (A01) was not read"));
+  assert.equal(empty.report.steps?.["frontier-event-handoff"], undefined);
+
+  // The daily of a day nobody published: read as a failure, as an account without the feed, with no day, with a time and no zone — notices all.
+  for (const [mode, wanted] of [
+    ["error", "frontier-daily-empty@desktop: a day nobody published reads as a failure: “这条动态已不再提供。” with 重试 (an empty day and a failed one are different, A11)"],
+    ["off", "frontier-daily-empty@desktop: not observable: the daily view drew neither an empty day nor an error (the feed may not be offered to this account)"],
+    ["nameless", "frontier-daily-empty@phone: the empty day does not name the day it is about: “今日日报尚未发布”"],
+    ["zoneless", "frontier-daily-empty@desktop: the empty day names a publication time (07:30) and not whose clock it is"],
+  ]) {
+    const daily = await walk({ FAKE_DAILY: mode });
+    assert.equal(daily.code, 0, daily.stdout + daily.stderr);
+    assert.ok(daily.report.notices.includes(wanted), `${mode}\n${daily.report.notices.join("\n")}`);
+  }
 });
 
 test("with the chat asked for, the walk answers a start with the cleanup refusal itself, reads the cover and the alert after the wait, and starts nothing", async () => {
