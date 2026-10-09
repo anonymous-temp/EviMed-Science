@@ -282,6 +282,8 @@ export const BUDGET_BY_PAGE = {
   "geo-answer": GEO_BUDGET,
   "virtual-research-models": DATA_BUDGET, "virtual-research-precedents": DATA_BUDGET, "virtual-research-definitions": DATA_BUDGET,
   "evidence-matrix": DATA_BUDGET,
+  // R13 (E-19): a document has a page of its own, the original beside what it says; the first walk of it reports its numbers.
+  "files-reader": DATA_BUDGET,
 };
 
 /**
@@ -296,7 +298,7 @@ export const PROVISIONAL_PAGES = new Set([
   "geo-answer",
   "virtual-research-models", "virtual-research-precedents", "virtual-research-definitions",
   "account-notifications", "account-ops", "memory-shared-missing", "extensions-plugin-missing", "extensions-skill-missing",
-  "evidence-matrix",
+  "evidence-matrix", "files-reader",
 ]);
 
 /**
@@ -431,6 +433,19 @@ export function pdfSourceTitle(page) {
 }
 
 /**
+ * The address of a document's own page (`/app/files/:sourceId`, R13 E-19), from the project's knowledge-base list: the first document
+ * that has been read to the end. Like the zone, the card and the answer, a page whose address holds an id is walked at the id the
+ * deployment's own list names, and not at all (with a notice saying why) where the list names none.
+ * @param {unknown} page `GET /api/sources` → `data`
+ * @returns {string | null}
+ */
+export function sourceReaderRoute(page) {
+  const items = Array.isArray(/** @type {any} */ (page)?.items) ? /** @type {any} */ (page).items : [];
+  const found = items.find((item) => item?.payload?.status === "complete" && typeof item?.id === "string" && item.id);
+  return found ? `/app/files/${encodeURIComponent(found.id)}` : null;
+}
+
+/**
  * The data sources that need no key and that nobody has given one: each reads 可选 in 设置 → 数据源, never 未配置 (that word is for a
  * source a capability cannot work without).
  * @param {unknown} connectors `GET /api/connectors` → `data`
@@ -498,8 +513,13 @@ async function discoverRoutes(context, base, notices) {
 
   const matrix = matrixRoute(await readData(context, base, "/api/agent-runs"));
   if (!matrix) skip("evidence-matrix", "no run of this account delivered a clinical-evidence package");
-  const pdfTitle = pdfSourceTitle(await readData(context, base, "/api/sources?projectId=default&limit=50"));
+  const sources = await readData(context, base, "/api/sources?projectId=default&limit=50");
+  const pdfTitle = pdfSourceTitle(sources);
   if (!pdfTitle) skip("files: the original of a PDF", "the knowledge base holds no finished PDF");
+  // A document's own page (R13): the reader is a page of the knowledge base, found from its list like the other pages with an id.
+  const reader = sourceReaderRoute(sources);
+  if (reader) routes.push(["files-reader", reader]);
+  else skip("files-reader", "the knowledge base holds no finished document");
   return { routes, matrix, pdfTitle, keyless: keylessTitles(await readData(context, base, "/api/connectors")) };
 }
 

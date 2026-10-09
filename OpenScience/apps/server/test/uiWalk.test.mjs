@@ -21,14 +21,14 @@ import {
   frontierTargets, GEO_TABS, geoAnswerSnapshot, HEADING_ORDER_PAGES, keylessTitles, leftEdgeNotices, matrixFindings, matrixProbe, matrixRoute,
   measure, measureStructure, MISSING_RECORDS, pageFindings, pageProbe, PAGE_PROBES, pdfPreviewFindings, pdfProbe, pdfSourceTitle,
   pickVcrStudies, probeFindings, PROVISIONAL_PAGES, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown, rowProbe,
-  SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, structureFindings, tabOrderFindings, TYPE_PAIR_NOTICE, unexpectedRefusals,
+  SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings, TYPE_PAIR_NOTICE, unexpectedRefusals,
   VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["geo-answer", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix"];
+const DISCOVERED_PAGES = ["geo-answer", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
@@ -76,12 +76,17 @@ test("every page the router serves at a fixed address is walked, or says why it 
   // written by hand and nothing compared it with the router.
   const router = await readFile(path.join(repoRoot, "apps/web/src/app/router.tsx"), "utf8");
   const app = router.slice(router.indexOf('path: "/app"'), router.indexOf('{ path: "*", element: <NotFound /> }'));
-  const pages = [...app.matchAll(/\{ path: "([^"]+)", element: <(\w+)/g)]
-    .filter(([, address, element]) => element !== "Navigate" && !address.includes(":") && !address.includes("*"))
-    .map(([, address]) => `/app/${address}`);
-  assert.ok(pages.length >= 12 && pages.includes("/app/frontier") && pages.includes("/app/account"), `read ${pages.length} fixed pages from the router; the scan did not walk`);
+  // One route with an optional last parameter serves the fixed page in front of it too: `autopilot/:taskId?` is /app/autopilot (the list)
+  // and /app/autopilot/<id> (one task), and R13 made the task page one route with the list. An address with any other parameter, or a
+  // splat, is not a fixed page: its pages are found from the deployment's lists (`discoverRoutes`).
+  const pages = [...new Set([...app.matchAll(/\{ path: "([^"]+)", element: <(\w+)/g)]
+    .filter(([, , element]) => element !== "Navigate")
+    .map(([, address]) => address.replace(/\/:\w+\?$/, ""))
+    .filter((address) => !address.includes(":") && !address.includes("*"))
+    .map((address) => `/app/${address}`))];
+  assert.ok(pages.length >= 12 && ["/app/frontier", "/app/account", "/app/autopilot"].every((page) => pages.includes(page)), `read ${pages.length} fixed pages from the router; the scan did not walk`);
   const notWalked = {
-    // The conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it.
+    "/app/chat": "the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it",
     "/app/handoff": "opens only with a hand-off in the address; without one it returns to the conversation",
     "/app/runs": "a redirect to the newest run's conversation, decided at run time",
   };
@@ -673,7 +678,7 @@ function context() {
         if (url.endsWith("/api/frontier/zones/z_official/evidence")) return json(200, { data: { items: [{ id: "card_1" }] } });
         if (url.endsWith("/api/frontier/evidence/card_1/links")) return json(200, { data: { author: { id: "au_1", name: "平台" } } });
         if (url.endsWith("/api/agent-runs")) return json(200, { data: [{ id: "run_1", deliverables: [{ id: "pkg", capability: "clinical-evidence-synthesis", status: "delivered" }] }] });
-        if (url.includes("/api/sources?")) return json(200, { data: { items: [{ display: { format: "pdf", title: "一份指南" }, payload: { status: "complete" } }] } });
+        if (url.includes("/api/sources?")) return json(200, { data: { items: [{ id: "src_1", display: { format: "pdf", title: "一份指南" }, payload: { status: "complete" } }] } });
         if (url.endsWith("/api/connectors")) return json(200, { data: [{ title: "Semantic Scholar", keyless: true, source: "none" }, { title: "PubMed", keyless: false, source: "none" }] });
         if (url.endsWith("/api/me")) return loggedIn ? json(200, { data: { csrfToken: "t" } }) : json(401, {});
         return json(404, {});
@@ -903,6 +908,13 @@ test("the studies and ids the walk opens are read from the lists, and a missing 
   const sources = { items: [{ display: { format: "docx", title: "报告" }, payload: { status: "complete" } }, { display: { format: "pdf", title: " 一份指南 " }, payload: { status: "parsing" } }, { display: { format: "pdf", title: " 另一份指南 " }, payload: { status: "complete" } }] };
   assert.equal(pdfSourceTitle(sources), "另一份指南");
   assert.equal(pdfSourceTitle({ items: [] }), null);
+
+  // A document's own page: the first document read to the end, whatever it is; none, no page.
+  const documents = { items: [{ id: "src_a", display: { format: "docx" }, payload: { status: "parsing" } }, { id: "src b/1", display: { format: "docx" }, payload: { status: "complete" } }, { id: "src_c", payload: { status: "complete" } }] };
+  assert.equal(sourceReaderRoute(documents), "/app/files/src%20b%2F1");
+  assert.equal(sourceReaderRoute({ items: [{ payload: { status: "complete" } }, { id: "", payload: { status: "complete" } }] }), null);
+  assert.equal(sourceReaderRoute({ items: [] }), null);
+  assert.equal(sourceReaderRoute(undefined), null);
 
   assert.deepEqual(keylessTitles([{ title: "Semantic Scholar", keyless: true, source: "none" }, { title: "PubMed", keyless: false, source: "none" }, { title: "NCBI", keyless: true, source: "user" }]), ["Semantic Scholar"]);
   assert.deepEqual(keylessTitles(null), []);
@@ -1265,7 +1277,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
     "/app/frontier/events/ev_1", "/app/frontier?view=following", "/app/virtual-research?tab=models", "/app/virtual-research?tab=precedents",
     "/app/virtual-research?tab=definitions", "/app/account?tab=notifications", "/app/account?tab=ops", "/app/account/simulated/membership",
     "/app/account/simulated/refunds", "/app/memory/shared/impeccable-audit-missing", "/app/extensions/plugins/impeccable-audit-missing",
-    "/app/extensions/skills/impeccable-audit-missing", "/app/runs/run_1/files/deliverables/pkg/clinical-evidence-matrix.json",
+    "/app/extensions/skills/impeccable-audit-missing", "/app/runs/run_1/files/deliverables/pkg/clinical-evidence-matrix.json", "/app/files/src_1",
   ]) assert.ok(visited.has(address), `walked ${address}`);
   assert.deepEqual(report.discovered.routes.filter((name) => name.endsWith("@2")).length, 7);
   assert.deepEqual([report.discovered.evidenceMatrix, report.discovered.pdf, report.discovered.keylessConnectors], [true, true, 1]);
@@ -1344,12 +1356,13 @@ test("a page whose id the lists do not name is not walked, and the notice says w
   const empty = await walk({ FAKE_EMPTY_LISTS: "1" });
   assert.equal(empty.code, 0, empty.stdout + empty.stderr);
   const visited = empty.log.filter((entry) => entry.goto).map((entry) => new URL(entry.goto).pathname);
-  assert.ok(visited.every((address) => !/\/(std_|answers|zones\/z_|authors|events\/ev_|runs\/run_)/.test(address)), visited.join("\n"));
+  assert.ok(visited.every((address) => !/\/(std_|answers|zones\/z_|authors|events\/ev_|runs\/run_|files\/src_)/.test(address)), visited.join("\n"));
   for (const wanted of [
     "geo-answer: not walked — the first project lists no wrong sentence with an answer",
     "frontier-zone: not walked — the evidence zones are not offered to this account or the list is empty",
     "frontier-evidence: not walked — no official zone holds a card", "frontier-author: not walked — the first card names no author page", "frontier-event: not walked — the hot list is empty or not offered",
     "evidence-matrix: not walked — no run of this account delivered a clinical-evidence package", "files: the original of a PDF: not walked — the knowledge base holds no finished PDF",
+    "files-reader: not walked — the knowledge base holds no finished document",
   ]) assert.ok(empty.report.notices.includes(wanted), `${wanted}\n${empty.report.notices.join("\n")}`);
   assert.ok(empty.report.notices.some((notice) => notice.startsWith("account-connectors@desktop: no data source without a key is unset")));
   assert.equal(empty.report.steps?.["files-pdf"], undefined);
