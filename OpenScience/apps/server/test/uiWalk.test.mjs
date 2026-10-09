@@ -11,11 +11,13 @@
 // the browser (2026-09-26 fusion audit, F-G2, F-G14 and F-G20).
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import {
   AFTER_CLICK_KIND, afterClickFindings, afterClickProbe, BACK_OFFICE, BUDGET_BY_PAGE, budgetKey, cleanupFindings, cleanupNotices, clickNamed, clickRowTitled,
   EXPECTED_REFUSALS, focusProbe, frontierTargets, GEO_TABS, geoAnswerSnapshot, HEADING_ORDER_PAGES, keylessTitles, knowledgeProbe, knowledgeReturnFindings,
@@ -23,7 +25,8 @@ import {
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings, PROVISIONAL_PAGES,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, ROW_LINK_BY_PAGE, ROW_REVEAL_BY_PAGE, rowClickFindings, rowClickShown,
   rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
-  addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, composerFindings, composerProbe, COMPOSER_BOTTOM_PX,
+  addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
+  axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   handoffFindings, handoffProbe, HANDOFF_FIELDS, NOTICE_SECTION_PAGES, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
@@ -620,6 +623,8 @@ function context() {
     // The page one sidebar link left, for Back; and how often each list page's address was read (the walk reads it in a fixed order).
     let previousUrl = null;
     const addressCalls = {};
+    // Whether axe-core is in the document: a new document does not have it.
+    let axeInjected = false;
     // FAKE_CHAT=network-changed: the chat page drops its requests with
     // ERR_NETWORK_CHANGED and shows 打开超时 until 重试 is pressed;
     // FAKE_CHAT=broken: 重试 does not help either.
@@ -653,7 +658,7 @@ function context() {
       }],
       getByRole: (role, { name }) => locator(role, name),
       async goto(target, options) {
-        url = target; routeSettled = false; dialogOpen = false; log({ goto: target });
+        url = target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
         const start = new URL("/api/commands/start_runtime", target).href;
         // A page's own route answers before the context's: the walk's cleanup cover answers the start itself.
         const own = pageRoutes.find(([pattern]) => typeof pattern.test === "function" && pattern.test(start));
@@ -662,6 +667,20 @@ function context() {
         if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
       },
       async evaluate(fn, arg) {
+        // axe-core's source is put into the page as a string; the scan is a function. FAKE_AXE=clean|fail: nothing to report, a scan that throws.
+        if (typeof fn === "string") {
+          if (fn.includes("axe v")) { axeInjected = true; log({ axe: "injected", at: target().pathname }); }
+          return undefined;
+        }
+        if (typeof fn === "function" && fn.name === "axeLoaded") return axeInjected;
+        if (typeof fn === "function" && fn.name === "axeRun") {
+          const mode = process.env.FAKE_AXE || "";
+          if (mode === "fail") throw new Error("axe blew up");
+          if (mode === "clean") return { version: "4.12.1", violations: [], incomplete: 0 };
+          const shell = { id: "region", impact: "moderate", nodes: 1, target: "aside", help: "Page content should be contained by landmarks" };
+          const own = target().pathname === "/app/files" ? [{ id: "color-contrast", impact: "serious", nodes: 4, target: ".text-text-3", help: "Elements must meet minimum color contrast" }] : [];
+          return { version: "4.12.1", violations: [shell, ...own], incomplete: 2 };
+        }
         if (url.endsWith("/app/chat") && typeof fn === "function" && String(fn).includes("document.body.innerText")) return chatFailing() ? "打开超时，请重试\n重试" : "";
         // FAKE_ROWS=dead: a row that does nothing when clicked; FAKE_ROWS=two: two lists on every page, so the walk loads the page again between clicks.
         if (typeof fn === "function" && fn.name === "rowProbe") {
@@ -808,9 +827,13 @@ function context() {
 module.exports = { chromium: { launch: async () => ({ newContext: async () => context(), close: async () => {} }) } };
 `;
 
-async function walk(env = {}) {
+/** What the walk takes for axe-core's build: a banner and `axe.run`. The fake page never runs it. */
+const FAKE_AXE_SOURCE = "/*! axe v4.12.1\n * a stand-in for the test\n */\nwindow.axe = { version: \"4.12.1\" };\nwindow.axe.run = function () {};\n";
+
+async function walk(env = {}, { axe = false } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "ui-walk-"));
   await mkdir(path.join(dir, "playwright-core"));
+  if (axe) await writeFile(path.join(dir, "axe.min.js"), FAKE_AXE_SOURCE);
   await writeFile(path.join(dir, "playwright-core", "index.js"), FAKE_PLAYWRIGHT);
   await writeFile(path.join(dir, "password"), "not-a-real-password\n");
   const result = await new Promise((resolve) => {
@@ -824,6 +847,7 @@ async function walk(env = {}) {
         OPEN_SCIENCE_WALK_OUT: path.join(dir, "out"),
         OPEN_SCIENCE_WALK_CHAT: "",
         OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS: "0",
+        OPEN_SCIENCE_WALK_AXE: axe ? path.join(dir, "axe.min.js") : "",
         FAKE_PLAYWRIGHT_LOG: path.join(dir, "log.jsonl"),
         ...env,
       },
@@ -2034,6 +2058,154 @@ test("the walk tries the address of the inbox and the memory page, the event's h
     assert.equal(daily.code, 0, daily.stdout + daily.stderr);
     assert.ok(daily.report.notices.includes(wanted), `${mode}\n${daily.report.notices.join("\n")}`);
   }
+});
+
+test("axe-core is looked for where the walk was told, in the copy it carries and beside a checkout; a source that is not axe's is not used; absence is an answer", async () => {
+  const banner = (version) => `/*! axe v${version}\n * Copyright (c) Deque */\n!function(){window.axe={};axe.run=function(){}}();`;
+  assert.equal(axeVersionOf(banner("4.12.1")), "4.12.1");
+  assert.equal(axeVersionOf(`  \n${banner("4.9.0")}`), "4.9.0");
+  assert.equal(axeVersionOf("/*! axe v4.12.1 */ nothing runs"), null);
+  assert.equal(axeVersionOf("console.log('axe.run')"), null);
+  assert.equal(axeVersionOf(""), null);
+  const files = { "/mounted/axe.min.js": banner("4.13.0"), "/found/axe.min.js": banner("4.12.1"), "/other/lib.js": "console.log(1)" };
+  const read = async (file) => { if (!(file in files)) throw Object.assign(new Error("missing"), { code: "ENOENT" }); return files[file]; };
+  const embedded = (version) => {
+    const source = banner(version);
+    return { version, sha256: createHash("sha256").update(source).digest("hex"), gzipBase64: gzipSync(source).toString("base64") };
+  };
+  const none = () => null;
+  // The file the walk is told about comes first, then the copy it carries, then what a checkout resolves.
+  assert.deepEqual(await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "/mounted/axe.min.js" }, read, resolve: () => "/found/axe.min.js", embedded: embedded("4.12.1") }),
+    { source: banner("4.13.0"), version: "4.13.0", from: "/mounted/axe.min.js", why: null });
+  const carried = await loadAxeSource({ env: {}, read, resolve: () => "/found/axe.min.js", embedded: embedded("4.12.1") });
+  assert.deepEqual([carried.version, carried.from, carried.why], ["4.12.1", "embedded in the walk (axe-core 4.12.1)", null]);
+  const resolved = await loadAxeSource({ env: {}, read, resolve: () => "/found/axe.min.js", embedded: null });
+  assert.deepEqual([resolved.version, resolved.from], ["4.12.1", "/found/axe.min.js"]);
+  // Off is off; a path that cannot be read or is not axe's is said, and the next place is tried.
+  assert.deepEqual(await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "off" }, read, resolve: () => "/found/axe.min.js", embedded: embedded("4.12.1") }),
+    { source: null, version: null, from: null, why: "the scan is switched off (OPEN_SCIENCE_WALK_AXE=off)" });
+  const missing = await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "/nowhere.js" }, read, resolve: none, embedded: null });
+  assert.deepEqual([missing.source, missing.why], [null, "/nowhere.js could not be read (ENOENT)"]);
+  const wrong = await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "/other/lib.js" }, read, resolve: none, embedded: null });
+  assert.deepEqual([wrong.source, wrong.why], [null, "/other/lib.js is not axe-core's build"]);
+  assert.equal((await loadAxeSource({ env: { OPEN_SCIENCE_WALK_AXE: "/other/lib.js" }, read, resolve: () => "/found/axe.min.js", embedded: null })).from, "/found/axe.min.js");
+  assert.deepEqual(await loadAxeSource({ env: {}, read, resolve: none, embedded: null }), { source: null, version: null, from: null, why: "no copy was given, embedded or installed beside the walk" });
+  // A copy that does not match its checksum is not used, and says so.
+  const tampered = { ...embedded("4.12.1"), sha256: "0".repeat(64) };
+  const refused = await loadAxeSource({ env: {}, read, resolve: none, embedded: tampered });
+  assert.deepEqual([refused.source, refused.why], [null, "the copy embedded in the walk does not match its checksum"]);
+  assert.deepEqual(AXE_TAGS, ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]);
+});
+
+test("axe-core runs in the page over a document and is cut down to rule, impact, nodes and the first node's selector; a scan that fails or runs out is null", async () => {
+  // In the page: `axeLoaded` says whether it is there; `axeRun` gives the rules it was told to run on the document, with no frames.
+  assert.equal(inPage(page(header()), () => axeLoaded()), false);
+  const calls = [];
+  const fakeAxe = { version: "4.12.1", run: async (context, options) => {
+    calls.push([context === globalThis.document, options]);
+    return { violations: [
+      { id: "color-contrast", impact: "serious", help: "Elements must meet minimum color contrast ratio thresholds", nodes: [{ target: [".a", ".b"] }, { target: [".c"] }] },
+      { id: "region", impact: null, help: "x".repeat(300), nodes: [{ target: [["#frame", "main p"]] }] },
+      { id: "bare", impact: "minor", nodes: [{}] },
+    ], incomplete: [{}, {}], passes: [] };
+  } };
+  const withAxe = (fn) => inPage(page(header()), () => { globalThis.window.axe = fakeAxe; return fn(); });
+  assert.equal(withAxe(() => axeLoaded()), true);
+  const result = await withAxe(() => axeRun([{ tags: AXE_TAGS }]));
+  assert.deepEqual(calls, [[true, { iframes: false, resultTypes: ["violations"], runOnly: { type: "tag", values: AXE_TAGS } }]]);
+  assert.deepEqual(result, { version: "4.12.1", incomplete: 2, violations: [
+    { id: "color-contrast", impact: "serious", nodes: 2, target: ".a .b", help: "Elements must meet minimum color contrast ratio thresholds" },
+    { id: "region", impact: null, nodes: 1, target: "#frame,main p", help: "x".repeat(100) },
+    { id: "bare", impact: "minor", nodes: 1, target: "", help: "" },
+  ] });
+  // A page without axe-core has nothing to run; a scope is a selector axe is given instead of the document.
+  assert.equal(await inPage(page(header()), () => axeRun([{ tags: AXE_TAGS }])), null);
+  await withAxe(() => axeRun([{ tags: ["wcag2a"], scope: "main" }]));
+  assert.equal(calls[1][0], false);
+  assert.deepEqual(calls[1][1].runOnly.values, ["wcag2a"]);
+
+  // From the walk: the source goes into the page only where axe is not, and a scan that fails or runs out is null, not an exception.
+  const pageOf = ({ loaded = false, run = async () => ({ version: "4.12.1", violations: [], incomplete: 0 }) } = {}) => {
+    const evaluated = [];
+    return { evaluated, evaluate: async (fn, arg) => {
+      evaluated.push(typeof fn === "string" ? "source" : fn.name);
+      if (typeof fn === "string") return undefined;
+      return fn.name === "axeLoaded" ? loaded : run(arg);
+    } };
+  };
+  const fresh = pageOf();
+  assert.deepEqual(await scanWithAxe(fresh, "AXE SOURCE"), { version: "4.12.1", violations: [], incomplete: 0 });
+  assert.deepEqual(fresh.evaluated, ["axeLoaded", "source", "axeRun"]);
+  const there = pageOf({ loaded: true });
+  await scanWithAxe(there, "AXE SOURCE");
+  assert.deepEqual(there.evaluated, ["axeLoaded", "axeRun"]);
+  assert.equal(await scanWithAxe(pageOf({ run: async () => { throw new Error("axe blew up"); } }), "AXE SOURCE"), null);
+  assert.equal(await scanWithAxe(pageOf({ run: () => new Promise(() => {}) }), "AXE SOURCE", { timeoutMs: 20 }), null);
+});
+
+test("what axe found is told once per page: new rules by impact with their first node, what repeats from an earlier page counted, and one line for the walk", () => {
+  const violation = (id, impact, nodes, target) => ({ id, impact, nodes, target, help: "" });
+  const shell = violation("region", "moderate", 1, "aside");
+  const scan = (view, violations) => ({ view, result: { version: "4.12.1", violations, incomplete: 0 } });
+  assert.deepEqual(axeNotices([]), []);
+  assert.deepEqual(axeNotices([scan("capabilities@desktop", [])]), ["axe-core 4.12.1: 1 page view(s) scanned, 0 with violations, 0 node(s) in all; never a failure, the whole list is in the report"]);
+  const notices = axeNotices([
+    scan("capabilities@desktop", [shell]),
+    scan("files@desktop", [shell, violation("color-contrast", "serious", 4, ".text-text-3"), violation("label", "critical", 1, "input.q")]),
+    scan("memory@desktop", [shell]),
+    { view: "inbox@desktop", result: null },
+  ]);
+  assert.deepEqual(notices, [
+    "capabilities@desktop: axe-core: 1 rule(s) violated: region (moderate, 1 node, aside)",
+    "files@desktop: axe-core: 2 rule(s) violated: label (critical, 1 node, input.q); color-contrast (serious, 4 nodes, .text-text-3); 1 more as on an earlier page",
+    "inbox@desktop: axe-core could not scan this page",
+    "axe-core 4.12.1: 3 page view(s) scanned, 3 with violations, 8 node(s) in all (region on 3, color-contrast on 1, label on 1); never a failure, the whole list is in the report",
+  ]);
+  // A page names at most AXE_RULES_PER_NOTICE rules and counts the rest.
+  const many = Array.from({ length: AXE_RULES_PER_NOTICE + 2 }, (_, index) => violation(`rule-${index}`, "minor", 1, `.n${index}`));
+  const named = axeNotices([scan("geo@desktop", many)])[0];
+  assert.equal(named.split("; ").length, AXE_RULES_PER_NOTICE + 1, named);
+  assert.match(named, /; and 2 more$/);
+  // The same rule at another node is another finding.
+  assert.match(axeNotices([scan("a@desktop", [shell]), scan("b@desktop", [violation("region", "moderate", 1, "main")])])[1], /^b@desktop: axe-core: 1 rule\(s\) violated: region \(moderate, 1 node, main\)$/);
+});
+
+test("the walk scans each desktop page with axe-core when it has it, never fails on what it finds, and says once when it does not have it", async () => {
+  // Without a source: one notice, no scan, and everything else as it was.
+  const none = await walk();
+  assert.equal(none.code, 0, none.stdout + none.stderr);
+  assert.deepEqual(none.report.notices.filter((notice) => notice.startsWith("axe-core not available in this image")), ["axe-core not available in this image: no copy was given, embedded or installed beside the walk"]);
+  assert.equal(none.log.filter((entry) => entry.axe).length, 0);
+  assert.deepEqual([none.report.axe.scanned, none.report.axe.from, none.report.axe.version], [0, null, null]);
+  assert.equal(none.report.pages["files@desktop"].axe, undefined);
+  // With one: the source goes into every desktop page view once and into no phone page view; the report holds each page's list.
+  const scanned = await walk({}, { axe: true });
+  assert.equal(scanned.code, 0, scanned.stdout + scanned.stderr);
+  assert.deepEqual(scanned.report.failures, []);
+  assert.ok(!scanned.report.notices.some((notice) => notice.startsWith("axe-core not available")));
+  const desktopViews = Object.keys(scanned.report.pages).filter((view) => view.endsWith("@desktop") && scanned.report.pages[view].axe !== undefined);
+  assert.ok(desktopViews.length > 30, `${desktopViews.length} desktop page views were scanned`);
+  assert.equal(scanned.log.filter((entry) => entry.axe).length, desktopViews.length);
+  assert.ok(Object.keys(scanned.report.pages).filter((view) => view.endsWith("@phone")).every((view) => scanned.report.pages[view].axe === undefined));
+  assert.deepEqual(scanned.report.pages["files@desktop"].axe.violations.map((violation) => violation.id), ["region", "color-contrast"]);
+  assert.deepEqual([scanned.report.axe.scanned, scanned.report.axe.version], [desktopViews.length, "4.12.1"]);
+  assert.equal(scanned.report.axe.from.endsWith("axe.min.js"), true);
+  // The shell's rule is named on the first page only; the page's own rule on its page; the line for the walk counts all.
+  const lines = scanned.report.notices.filter((notice) => notice.includes("axe-core"));
+  assert.equal(lines.filter((notice) => notice.includes("region (moderate")).length, 1);
+  assert.ok(lines.some((notice) => notice.startsWith("files@desktop: axe-core: 1 rule(s) violated: color-contrast (serious, 4 nodes, .text-text-3); 1 more as on an earlier page")), lines.join("\n"));
+  assert.ok(lines.at(-1).startsWith(`axe-core 4.12.1: ${desktopViews.length} page view(s) scanned, ${desktopViews.length} with violations`), lines.at(-1));
+  // A scan that throws is a notice for the page, a page with nothing is quiet, and switching it off scans nothing.
+  const failed = await walk({ FAKE_AXE: "fail" }, { axe: true });
+  assert.equal(failed.code, 0, failed.stdout + failed.stderr);
+  assert.ok(failed.report.notices.includes("files@desktop: axe-core could not scan this page"));
+  assert.equal(failed.report.axe.scanned, 0);
+  const clean = await walk({ FAKE_AXE: "clean" }, { axe: true });
+  assert.equal(clean.code, 0);
+  assert.ok(!clean.report.notices.some((notice) => /axe-core: \d+ rule/.test(notice)));
+  const off = await walk({ OPEN_SCIENCE_WALK_AXE: "off" });
+  assert.ok(off.report.notices.includes("axe-core not available in this image: the scan is switched off (OPEN_SCIENCE_WALK_AXE=off)"));
+  assert.equal(off.log.filter((entry) => entry.axe).length, 0);
 });
 
 test("with the chat asked for, the walk answers a start with the cleanup refusal itself, reads the cover and the alert after the wait, and starts nothing", async () => {

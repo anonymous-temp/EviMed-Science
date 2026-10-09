@@ -103,11 +103,13 @@
  * Exit 0 when every assertion holds, 1 when one does not (the report names
  * which), 2 when the walk could not run at all.
  */
+import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 
 /**
  * The pages, by the name the report uses. 知识库 and 记忆胶囊 are one page each
@@ -2220,6 +2222,10 @@ async function main() {
     const operator = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data?.operator === true : false;
     const found = await discoverRoutes(context, base, notices);
     const routes = [...ROUTES, ...found.routes];
+    // axe-core (V-6): looked for once; its absence is one notice and the walk goes on.
+    const axe = await loadAxeSource();
+    if (!axe.source) notices.push(`axe-core not available in this image: ${axe.why}`);
+    /** @type {Array<{ view: string, result: any }>} */ const axeScans = [];
     report.discovered = { routes: found.routes.map(([name]) => name), evidenceMatrix: found.matrix !== null, pdf: found.pdfTitle !== null, keylessConnectors: found.keyless.length };
     const page = await context.newPage();
     // A row that opens a link in a new tab has shown something: the tab is
@@ -2312,6 +2318,12 @@ async function main() {
             failures.push(...judged.failures);
             notices.push(...judged.notices);
           }
+          // A scan of the page as it loaded, at the desktop width (V-6); before any click changes it. Never a failure.
+          if (viewportName === "desktop" && axe.source) {
+            const result = await scanWithAxe(page, axe.source);
+            report.pages[current].axe = result;
+            axeScans.push({ view: current, result });
+          }
           if (viewportName === "desktop" && MISSING_RECORDS[name]) {
             // The way back is a click that only navigates: the button names the list and the address must be that list's.
             const record = MISSING_RECORDS[name];
@@ -2343,6 +2355,8 @@ async function main() {
       }
     }
     notices.push(...leftEdgeNotices(report.pages));
+    notices.push(...axeNotices(axeScans));
+    report.axe = { from: axe.from, version: axe.version, scanned: axeScans.filter((scan) => scan.result).length, why: axe.why };
     // R13 (V-7), the cases that are more than a page's measure and run at the desktop width: where the reader is lives in the address (A08), and
     // the event page's hand-off to the conversation (A01). Each is a notice that says "not observable" when the account has nothing to try it on.
     await page.setViewportSize(VIEWPORTS[0][1]);
@@ -2398,6 +2412,174 @@ async function main() {
   console.log(`${Object.keys(report.pages).length} page views walked, ${failures.length} failure(s), ${notices.length} notice(s), `
     + `${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
   return failures.length ? 1 : 0;
+}
+
+/* ------------------------------------------------------------------------- R13: axe-core (V-6) */
+
+/** The rules axe runs: WCAG 2.0, 2.1 and 2.2 at A and AA, and its best practices (design reference §19.1). */
+export const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"];
+/** How long one page's scan may take before the walk gives up on it. */
+export const AXE_SCAN_TIMEOUT_MS = 30_000;
+/** The rules one page's notice names; the report holds all of them. */
+export const AXE_RULES_PER_NOTICE = 6;
+
+/**
+ * Whether a text is the source of axe-core's browser build (`axe.min.js` starts with its banner), and which version.
+ * @param {string} source @returns {string | null} the version, or null when it is not axe-core
+ */
+export function axeVersionOf(source) {
+  const banner = /^\s*\/\*!\s*axe v(\d+\.\d+\.\d+)/.exec(String(source).slice(0, 400));
+  return banner && String(source).includes("axe.run") ? banner[1] : null;
+}
+
+/**
+ * axe-core's source, for the walk to put into each page it scans. The walk runs in a throwaway container with one file mounted, so it
+ * cannot count on a package being installed there; it looks, in this order, at the file `OPEN_SCIENCE_WALK_AXE` names (`off` switches the
+ * scan off), at the copy embedded in this file when there is one (`AXE_EMBEDDED`, below), and at the `axe-core` package a checkout resolves
+ * beside the walk or beside playwright-core. A source that is not axe-core's is not used. Absence is an answer, not an error.
+ * @param {{ env?: Record<string, string | undefined>, read?: (file: string) => Promise<string>, resolve?: (from: string) => string | null,
+ *   embedded?: { version: string, sha256: string, gzipBase64: string } | null }} [options]
+ * @returns {Promise<{ source: string | null, version: string | null, from: string | null, why: string | null }>}
+ */
+export async function loadAxeSource({ env = process.env, read = (file) => readFile(file, "utf8"), resolve = resolveAxe, embedded = AXE_EMBEDDED } = {}) {
+  const wanted = (env.OPEN_SCIENCE_WALK_AXE ?? "").trim();
+  if (wanted === "off") return { source: null, version: null, from: null, why: "the scan is switched off (OPEN_SCIENCE_WALK_AXE=off)" };
+  /** @type {string[]} */ const unusable = [];
+  const accept = (source, from) => {
+    const version = axeVersionOf(source);
+    if (version) return { source, version, from, why: null };
+    unusable.push(`${from} is not axe-core's build`);
+    return null;
+  };
+  if (wanted) {
+    try {
+      const found = accept(await read(wanted), wanted);
+      if (found) return found;
+    } catch (error) {
+      unusable.push(`${wanted} could not be read (${String(error?.code ?? error).slice(0, 40)})`);
+    }
+  }
+  if (embedded) {
+    const source = gunzipSync(Buffer.from(embedded.gzipBase64, "base64")).toString("utf8");
+    if (createHash("sha256").update(source).digest("hex") === embedded.sha256) {
+      const found = accept(source, `embedded in the walk (axe-core ${embedded.version})`);
+      if (found) return found;
+    } else unusable.push("the copy embedded in the walk does not match its checksum");
+  }
+  for (const from of [import.meta.url, process.env.OPEN_SCIENCE_PLAYWRIGHT_CORE ?? ""].filter(Boolean)) {
+    try {
+      const file = resolve(from);
+      if (!file) continue;
+      const found = accept(await read(file), file);
+      if (found) return found;
+    } catch {
+      // Not installed beside this one: the next place.
+    }
+  }
+  return { source: null, version: null, from: null, why: unusable.length ? unusable.join("; ") : "no copy was given, embedded or installed beside the walk" };
+}
+
+/** The `axe-core` package that resolves from a file or directory, or null. */
+function resolveAxe(from) {
+  try {
+    const anchor = from.startsWith("file:") ? from : path.join(from.startsWith("/") ? from : process.cwd(), "package.json");
+    return createRequire(anchor).resolve("axe-core/axe.min.js");
+  } catch {
+    return null;
+  }
+}
+
+/** Whether axe-core is already in the page (a page of a single-page app keeps it across a route change). */
+export function axeLoaded() {
+  return typeof window.axe === "object" && typeof window.axe.run === "function";
+}
+
+/**
+ * axe-core run over a page already holding it (`page.evaluate(source)` first), and cut down to what the report keeps. The frames are not
+ * scanned (`iframes: false`): the kernel's is another origin without axe, and waiting for it is a minute per page. The scan reads and
+ * changes nothing on the page.
+ * @param {[{ tags: string[], scope?: string | null }]} args
+ */
+export async function axeRun([options]) {
+  const axe = window.axe;
+  if (!axe) return null;
+  const result = await axe.run(options.scope ? options.scope : document, { iframes: false, resultTypes: ["violations"], runOnly: { type: "tag", values: options.tags } });
+  const target = (violation) => String((violation.nodes[0] && violation.nodes[0].target ? [].concat(violation.nodes[0].target).join(" ") : "")).slice(0, 140);
+  return {
+    version: axe.version ?? null,
+    violations: result.violations.map((violation) => ({
+      id: violation.id, impact: violation.impact ?? null, nodes: violation.nodes.length, target: target(violation), help: String(violation.help ?? "").slice(0, 100),
+    })),
+    incomplete: Array.isArray(result.incomplete) ? result.incomplete.length : 0,
+  };
+}
+
+const IMPACT_RANK = { critical: 0, serious: 1, moderate: 2, minor: 3 };
+const impactRank = (impact) => IMPACT_RANK[/** @type {keyof typeof IMPACT_RANK} */ (impact)] ?? 4;
+
+/**
+ * What axe found on each page view, as notices (V-6; a scan is never a failure): one line for each page that has something new to say —
+ * the rules it violates by impact, with the nodes counted and the first one named by its selector — and one line for the walk. A
+ * violation the walk already named on an earlier page view (the same rule at the same first node: the shell's own, which every page
+ * carries) is counted, not named again. The report holds every page's whole list.
+ * @param {Array<{ view: string, result: { version: string | null, violations: Array<{ id: string, impact: string | null, nodes: number, target: string, help: string }>, incomplete: number } | null }>} scans
+ * @returns {string[]}
+ */
+export function axeNotices(scans) {
+  /** @type {string[]} */ const notices = [];
+  const seen = new Set();
+  let scanned = 0;
+  let withViolations = 0;
+  let total = 0;
+  const rules = new Map();
+  let version = null;
+  for (const { view, result } of scans) {
+    if (!result) {
+      notices.push(`${view}: axe-core could not scan this page`);
+      continue;
+    }
+    scanned += 1;
+    version = result.version ?? version;
+    if (result.violations.length) withViolations += 1;
+    const fresh = result.violations.filter((violation) => !seen.has(`${violation.id}|${violation.target}`))
+      .sort((a, b) => impactRank(a.impact) - impactRank(b.impact) || b.nodes - a.nodes);
+    for (const violation of result.violations) {
+      seen.add(`${violation.id}|${violation.target}`);
+      total += violation.nodes;
+      rules.set(violation.id, (rules.get(violation.id) ?? 0) + 1);
+    }
+    if (!fresh.length) continue;
+    const named = fresh.slice(0, AXE_RULES_PER_NOTICE).map((violation) => `${violation.id} (${violation.impact ?? "unrated"}, ${violation.nodes} node${violation.nodes === 1 ? "" : "s"}, ${violation.target || "no selector"})`);
+    const repeated = result.violations.length - fresh.length;
+    const more = fresh.length - named.length;
+    notices.push(`${view}: axe-core: ${fresh.length} rule(s) violated: ${named.join("; ")}${more > 0 ? `; and ${more} more` : ""}${repeated > 0 ? `; ${repeated} more as on an earlier page` : ""}`);
+  }
+  if (scans.length) {
+    const common = [...rules.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([id, pages]) => `${id} on ${pages}`);
+    notices.push(`axe-core${version ? ` ${version}` : ""}: ${scanned} page view(s) scanned, ${withViolations} with violations, ${total} node(s) in all${common.length ? ` (${common.join(", ")})` : ""}; never a failure, the whole list is in the report`);
+  }
+  return notices;
+}
+
+/**
+ * One page view scanned with axe-core: the source is put into the page when it is not there, and the scan is given
+ * `AXE_SCAN_TIMEOUT_MS`; a scan that fails or runs out is `null` (and said so by `axeNotices`), never an exception into the walk.
+ * @param {any} page @param {string} source axe-core's source
+ * @param {{ tags?: string[], timeoutMs?: number }} [options]
+ */
+export async function scanWithAxe(page, source, { tags = AXE_TAGS, timeoutMs = AXE_SCAN_TIMEOUT_MS } = {}) {
+  try {
+    if (!await page.evaluate(axeLoaded)) await page.evaluate(source);
+    /** @type {any} */ let timer;
+    const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(null), timeoutMs); });
+    try {
+      return await Promise.race([page.evaluate(axeRun, [{ tags }]), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return null;
+  }
 }
 
 /* ------------------------------------------------------------------------- R13: where the reader is lives in the address (A08, A01) */
@@ -2865,6 +3047,13 @@ async function walkChat(page, base) {
     page.off?.("requestfailed", onFailed);
   }
 }
+
+/**
+ * The copy of axe-core that travels with the walk (V-6), when there is one: the walk is the one file the release switch mounts into its
+ * container, so a dependency that is to run there has to be in it. `null` here means none is embedded.
+ * @type {{ version: string, sha256: string, gzipBase64: string } | null}
+ */
+const AXE_EMBEDDED = null;
 
 // Run only as a program: the tests import the budgets and the verdict. By
 // real path, because the host runs it through `current`, a symlink.
