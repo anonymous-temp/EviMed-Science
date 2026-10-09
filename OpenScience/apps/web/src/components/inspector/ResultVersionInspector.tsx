@@ -270,10 +270,10 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       </Disclosure>
       {text !== null && /\.(md|markdown|txt)$/i.test(version.path) && <DocumentExportActions source={{ versionId: version.versionId }} groupLabel="导出此版本" />}
       <ResultCorrectionPanel key={`correction:${version.versionId}`} versionId={version.versionId} onOpen={(id) => void openSuccessor(id)} />
-      <ResultLineagePanel key={version.versionId} version={version} selectedText={anchor && anchor.versionId === version.versionId ? anchor.selection.selectedText : null}
+      <ResultLineagePanel key={`lineage:${version.versionId}`} version={version} selectedText={anchor && anchor.versionId === version.versionId ? anchor.selection.selectedText : null}
         onOpen={({ versionId, path: target, runId: targetRun }) => navigate(`/app/runs/${encodeURIComponent(targetRun ?? version.producer.runId ?? version.producer.sessionId ?? "result")}/files/${target.split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(versionId)}`)} />
       {items.length > 1 && <label className="block">与历史版本比较<select aria-label="比较版本" value={comparisonId} className={inputClasses({ className: "mt-2" })} onChange={(event) => setComparisonId(event.target.value)}><option value="">选择比较版本</option>{items.filter((item) => item.versionId !== selectedId && canCompareResults(version, item)).map((item) => <option key={item.versionId} value={item.versionId}>{item.path !== path ? `${item.path.split("/").pop()} · ` : ""}{new Date(item.capturedAt).toLocaleString("zh-CN")} · {item.digest.slice(0, 8)}</option>)}</select></label>}
-      <ResultImpactPanel key={version.versionId} projectId={version.projectId} versionId={version.versionId} digest={version.digest} />
+      <ResultImpactPanel key={`impact:${version.versionId}`} projectId={version.projectId} versionId={version.versionId} digest={version.digest} />
       {comparing && <Loading text="正在比较版本" />}
       {comparisonError && <div role="alert" className="space-y-2 text-error"><p>{comparisonError}</p><Button variant="secondary" onClick={() => setCompareAttempt((n) => n + 1)}>重试比较</Button></div>}
       {comparison && <ResultComparison current={version} prior={comparison.prior} before={comparison.text} after={text} />}

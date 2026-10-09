@@ -13,8 +13,8 @@ vi.mock("@/lib/resultProvenance", async (original) => ({ ...await original<typeo
   exportResult: api.export, saveResultBlob: api.save,
 }));
 vi.mock("@/components/report/ReportReader", () => ({ ReportReader: ({ text, immutableVersion }: { text: string; immutableVersion: ResultVersion }) => <p data-version={immutableVersion.versionId}>{text}</p> }));
-vi.mock("./ResultImpactPanel", () => ({ ResultImpactPanel: () => null }));
-vi.mock("./ResultLineagePanel", () => ({ ResultLineagePanel: () => null }));
+vi.mock("./ResultImpactPanel", () => ({ ResultImpactPanel: ({ versionId }: { versionId: string }) => <p data-testid="impact" data-version={versionId} /> }));
+vi.mock("./ResultLineagePanel", () => ({ ResultLineagePanel: ({ version }: { version: ResultVersion }) => <p data-testid="lineage" data-version={version.versionId} /> }));
 vi.mock("./ResultCorrectionPanel", () => ({ ResultCorrectionPanel: ({ versionId }: { versionId: string }) => <p data-testid="corrections" data-version={versionId} /> }));
 vi.mock("@/components/document/DocumentExportActions", () => ({ DocumentExportActions: ({ source, groupLabel }: { source: unknown; groupLabel?: string }) => <p data-testid="export" data-source={JSON.stringify(source)} data-label={groupLabel} /> }));
 const old: ResultVersion = { artifactId: "a", versionId: "rv_old", projectId: "default", path: "report.md", digest: "a".repeat(64), size: 10, mimeType: "text/markdown", capturedAt: "2026-10-01T00:00:00Z",
@@ -52,6 +52,18 @@ describe("publishing a clinical result as an evidence card", () => {
   });
 });
 describe("immutable result inspection", () => {
+  it("keeps exactly one lineage and impact panel for the selected version after loading and switching", async () => {
+    mount(old.versionId);
+    await screen.findByText("旧结论");
+    for (const target of [latest, old, latest]) {
+      await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), target.versionId);
+      await screen.findByText(target.versionId === old.versionId ? "旧结论" : "新结论");
+      for (const panel of ["lineage", "impact"]) {
+        expect(screen.getAllByTestId(panel)).toHaveLength(1);
+        expect(screen.getByTestId(panel)).toHaveAttribute("data-version", target.versionId);
+      }
+    }
+  });
   it("opens a requested old version and its findings without reading current workspace bytes", async () => {
     mount(old.versionId);
     expect(await screen.findByText("旧结论")).toHaveAttribute("data-version", old.versionId);

@@ -511,11 +511,14 @@ const runMatching = (principal, criteria = MATCH_CRITERIA) => {
 };
 /** @type {string} */ let STUDY_FOR_MATCH = "";
 
-test("a study whose subjects arrived as one cohort table is matched from the subject table: every row a candidate, judged for the owner, nothing written", options, async () => {
+test("a study whose subjects arrived as one cohort table is matched from the subject table: every row a candidate, judged for the owner, nothing written", options, async (t) => {
   const studyId = await seedStudy();
   STUDY_FOR_MATCH = studyId;
   await seedSnapshot(studyId);
   const before = (await q("SELECT count(*)::int AS n FROM evimed_vcr.matching_facts")).at(0).n;
+  // Wall-clock seconds such as 43.830 can coincide with a cohort fingerprint (43.83).
+  // Keep the full privacy scan deterministic, including the executor's timestamps.
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-05T00:00:00.000Z") });
   const result = await runMatching(OWNER);
   assert.equal(result.assessments.length, COHORT_SIZE, "one candidate per row of the subject table");
   // Independently of the evaluator: the fixture's own rule for each person.
