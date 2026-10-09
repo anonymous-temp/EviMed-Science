@@ -3,23 +3,34 @@ import { getDocument, GlobalWorkerOptions, TextLayer, type PDFDocumentProxy } fr
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { previewUrl } from "@/lib/artifactFile";
 import { Button } from "@/components/ui/Button";
-import { markPdfQuotation } from "@/lib/pdfQuotation";
+import { findPdfQuotationPage, markPdfQuotation } from "@/lib/pdfQuotation";
 import "./sourcePdf.css";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
 /** One page at a time bounds canvas memory, including long documents on phones. */
-export function SourcePdf({ path, projectId, initialPage, quote }: { path: string; projectId: string; initialPage: number; quote: string }) {
+export function SourcePdf({ path, projectId, initialPage, quote }: { path: string; projectId: string; initialPage: number | null; quote: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
-  const [page, setPage] = useState(initialPage);
+  const [page, setPage] = useState(initialPage ?? 1);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState(false);
   const [marked, setMarked] = useState<boolean | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(560);
   const displayedPage = Math.min(Math.max(1, page), pdf?.numPages ?? Infinity);
   useEffect(() => {
-    setPage(initialPage);
+    setPage(initialPage ?? 1);
   }, [initialPage]);
+  useEffect(() => {
+    if (!pdf || initialPage !== null) { setLocating(false); return; }
+    const controller = new AbortController();
+    setLocating(true);
+    void findPdfQuotationPage(pdf, quote, controller.signal).then(found => {
+      if (!controller.signal.aborted && found !== null) setPage(found);
+    }).catch(() => { /* The verified text excerpt and manual page navigation remain available. */ })
+      .finally(() => { if (!controller.signal.aborted) setLocating(false); });
+    return () => controller.abort();
+  }, [pdf, initialPage, quote]);
   useEffect(() => {
     const element = root.current;
     if (!element) return;
@@ -77,12 +88,13 @@ export function SourcePdf({ path, projectId, initialPage, quote }: { path: strin
   }, [pdf, displayedPage, width, quote]);
   return <div className="min-h-0 overflow-y-auto bg-surface-2">
     <div className="sticky top-0 z-sticky flex items-center justify-center gap-3 border-b border-border bg-surface p-2">
-      <Button variant="text" size="sm" disabled={!pdf || displayedPage <= 1} onClick={() => setPage(displayedPage - 1)}>上一页</Button>
+      <Button variant="text" size="sm" disabled={!pdf || locating || displayedPage <= 1} onClick={() => setPage(displayedPage - 1)}>上一页</Button>
       <span className="text-caption text-text-2">{pdf ? `${displayedPage} / ${pdf.numPages}` : "正在打开 PDF"}</span>
-      <Button variant="text" size="sm" disabled={!pdf || displayedPage >= pdf.numPages} onClick={() => setPage(displayedPage + 1)}>下一页</Button>
+      <Button variant="text" size="sm" disabled={!pdf || locating || displayedPage >= pdf.numPages} onClick={() => setPage(displayedPage + 1)}>下一页</Button>
     </div>
     {error && <p role="alert" className="p-3 text-caption text-text-2">PDF 暂时无法显示，可下载原件核对上方引文。</p>}
-    {!error && marked === false && <p className="p-3 text-caption text-text-2">这一页未能标出引文，请对照上方原文摘录。</p>}
+    {locating && <p role="status" className="p-3 text-caption text-text-2">正在定位 PDF 中的引文</p>}
+    {!error && !locating && marked === false && <p className="p-3 text-caption text-text-2">这一页未能标出引文，请对照上方原文摘录。</p>}
     <div ref={root} className="relative w-full" />
   </div>;
 }

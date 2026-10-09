@@ -64,7 +64,7 @@ test("every page the budget table names is a page the walk visits", () => {
   assert.equal(pageFindings("files", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
 });
 
-test("the evidence zones' home may draw the four kinds of border it was measured at, the daily nine controls — and no more", () => {
+test("the evidence zones' home keeps four borders and a published daily's lead allows ten controls", () => {
   const zones = (overrides) => pageFindings("frontier-zones", "desktop", clean({ controlKinds: 8, colorKinds: 5, ...overrides }), []).failures;
   assert.deepEqual(zones({ borderKinds: 4 }), []);
   assert.deepEqual(zones({ borderKinds: 5 }), ["frontier-zones@desktop: 5 kinds of border (budget 4)"]);
@@ -72,7 +72,8 @@ test("the evidence zones' home may draw the four kinds of border it was measured
   assert.deepEqual(pageFindings("frontier", "desktop", clean({ controlKinds: 8, borderKinds: 4 }), []).failures, ["frontier@desktop: 4 kinds of border (budget 3)"]);
   const daily = (controlKinds) => pageFindings("frontier-daily", "desktop", clean({ controlKinds }), []).failures;
   assert.deepEqual(daily(9), []);
-  assert.deepEqual(daily(10), ["frontier-daily@desktop: 10 kinds of control (budget 9)"]);
+  assert.deepEqual(daily(10), []);
+  assert.deepEqual(daily(11), ["frontier-daily@desktop: 11 kinds of control (budget 10)"]);
 });
 
 test("every page the router serves at a fixed address is walked, or says why it is not", async () => {
@@ -444,8 +445,11 @@ test("rowProbe finds the first row of each list whose title is a control, clicks
     assert.deepEqual(rowProbe(["state"]), { dialog: false, path: "/app/files", expanded: 0 });
     assert.equal(rowProbe(["click", 0]), true);
     assert.equal(rowProbe(["click", 5]), false);
+    assert.equal(rowProbe(["has", "资料"]), true);
+    assert.equal(rowProbe(["has", "仍在载入的列表"]), false);
+    assert.equal(rowProbe(["click", "资料"]), true);
   });
-  assert.equal(descendants(open).find((el) => el.text === "第一行").clicks, 1);
+  assert.equal(descendants(open).find((el) => el.text === "第一行").clicks, 2);
   assert.equal(descendants(open).find((el) => el.text === "第二行").clicks, 0);
   // A list that holds another list finds the inner list's first row as its own: one row, one target. 问题与回答's groups hold their questions.
   const nested = page(header(), node("ul", {}, [node("li", { attrs: { "data-geo-group": "g1" } }, [
@@ -979,7 +983,7 @@ test("with two lists on a page the walk loads the page again before the second c
   const events = log.filter((entry) => (entry.goto && entry.goto.endsWith("/app/files")) || entry.rowClick === "/app/files");
   // The page, the first click, the page again, the second click — then the knowledge base's PDF step and its way-back step each open the page
   // once more, and the phone's view is the last.
-  assert.deepEqual(events.map((entry) => (entry.rowClick ? `click ${entry.index}` : "goto")), ["goto", "click 0", "goto", "click 1", "goto", "goto", "goto"]);
+  assert.deepEqual(events.map((entry) => (entry.rowClick ? `click ${entry.index}` : "goto")), ["goto", "click 第一张清单", "goto", "click 第二张清单", "goto", "goto", "goto"]);
 });
 
 test("R13 first-row clicks: the closed groups of 问题与回答 are opened first, the cards of 准确与安全 are clicked on their link, the task page and the drawer are read", async () => {

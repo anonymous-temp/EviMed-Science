@@ -1,3 +1,28 @@
+interface PdfTextDocument {
+  numPages: number;
+  getPage(page: number): Promise<{ getTextContent(): Promise<{ items: readonly unknown[] }> }>;
+}
+
+/** Locate a verified quotation in the original PDF when the parser supplied no page map. Ambiguous passages stay unknown. */
+export async function findPdfQuotationPage(pdf: PdfTextDocument, quote: string, signal: AbortSignal): Promise<number | null> {
+  const needle = quote.replace(/\s/g, "");
+  if (!needle) return null;
+  let found: number | null = null;
+  for (let page = 1; page <= pdf.numPages; page++) {
+    if (signal.aborted) return null;
+    const source = await pdf.getPage(page);
+    if (signal.aborted) return null;
+    const content = await source.getTextContent();
+    if (signal.aborted) return null;
+    const text = content.items.map(item => item && typeof item === "object" && "str" in item && typeof item.str === "string" ? item.str : "").join("").replace(/\s/g, "");
+    const start = text.indexOf(needle);
+    if (start < 0) continue;
+    if (found !== null || text.indexOf(needle, start + 1) >= 0) return null;
+    found = page;
+  }
+  return found;
+}
+
 /** The server has verified the preserved quotation. This mapping only paints its unique match in a PDF text layer. */
 export function markPdfQuotation(divs: readonly HTMLElement[], strings: readonly string[], quote: string): boolean {
   const flat: Array<{ index: number; start: number; end: number }> = [];

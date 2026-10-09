@@ -27,7 +27,7 @@ export function SourceQuotation({ source, span, page, onNoteSaved }: {
     </div>
     <div className="min-h-0 flex-1 overflow-y-auto">
       {available && path?.toLowerCase().endsWith(".pdf")
-        ? <Suspense fallback={<p className="p-4 text-caption text-text-3">正在打开 PDF</p>}><SourcePdf path={path} projectId={source.projectId} initialPage={excerpt.page ?? page ?? 1} quote={excerpt.quote!} /></Suspense>
+        ? <Suspense fallback={<p className="p-4 text-caption text-text-3">正在打开 PDF</p>}><SourcePdf path={path} projectId={source.projectId} initialPage={excerpt.page ?? page ?? null} quote={excerpt.quote!} /></Suspense>
         : <SourceOriginal source={source} page={page} onNoteSaved={onNoteSaved} />}
     </div>
   </div>;

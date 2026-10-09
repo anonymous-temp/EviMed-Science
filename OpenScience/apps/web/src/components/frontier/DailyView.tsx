@@ -150,7 +150,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
   const { previous, next } = neighbours(issue, state.index);
   const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
   const lanes = [
-    ...(issue.safety.length > 0 ? [{ id: "safety", title: "安全警示", count: issue.safety.length }] : []),
+    ...(issue.safety.length > 0 ? [{ id: "safety-alerts", title: "安全警示", count: issue.safety.length }] : []),
     ...issue.sections.map((section) => ({ id: section.lane, title: section.laneLabel || "其他", count: section.items.length })),
   ];
   return (
@@ -189,7 +189,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
         </section>
       )}
 
-      {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety`} id="safety" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
+      {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
       {issue.sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
 
       {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}

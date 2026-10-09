@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 // Host-importable on purpose: this script runs from a release directory that
 // has no `node_modules`, and `modelGateway.mjs` imports nothing outside Node.
@@ -10,6 +11,19 @@ function failure(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
+}
+
+/** Resolve one complete package from this run's ledger, including managed deliverable directories. */
+export function specialistOutputs(artifacts) {
+  const paths = new Set((artifacts ?? []).filter(value => typeof value === "string"
+    && !value.includes("\\") && value.split("/").every(part => part && part !== "." && part !== "..")));
+  const packages = [...paths].filter(value => value === "safety-report.md" || value.endsWith("/safety-report.md"))
+    .map(report => ({ report, signals: report.slice(0, -"safety-report.md".length) + "signals.csv" }))
+    .filter(pair => paths.has(pair.signals));
+  if (packages.length !== 1) {
+    throw failure("hosted_e2e_specialist_output_untracked", `The run ledger must track one complete safety-report.md and signals.csv package; found ${packages.length}.`);
+  }
+  return packages[0];
 }
 
 /**
@@ -320,11 +334,7 @@ async function main() {
     if (run.mode !== "specialist" || run.runtimeAgent !== "evimed-adr-analysis" || run.model !== `deepseek/${certifiedModel}`) {
       throw failure("hosted_e2e_provenance_invalid", "The agent-run ledger does not prove specialist DeepSeek routing.");
     }
-    for (const requiredPath of ["safety-report.md", "signals.csv"]) {
-      if (!run.artifacts?.includes(requiredPath)) {
-        throw failure("hosted_e2e_specialist_output_untracked", `The run ledger does not track ${requiredPath}.`);
-      }
-    }
+    const outputs = specialistOutputs(run.artifacts);
     const transcript = await jsonFetch(
       `${runtimeUrl}/sessions/${encodeURIComponent(sessionId)}/transcript`,
       { headers: scoped },
@@ -360,7 +370,7 @@ async function main() {
     try { evidence = JSON.parse(artifactText); } catch { throw failure("hosted_e2e_artifact_invalid", "The production artifact is not valid JSON."); }
     assertExact(evidence, { marker, knowledge: knowledgeMarker, agent: "evimed-adr-analysis", model: certifiedModel });
 
-    const safetyReport = await command(base, "read_artifact", { path: "safety-report.md" }, scoped);
+    const safetyReport = await command(base, "read_artifact", { path: outputs.report }, scoped);
     const reportText = safetyReport.body?.data?.data;
     if (safetyReport.body?.data?.encoding !== "utf8" || typeof reportText !== "string" || reportText.length < 800) {
       throw failure("hosted_e2e_safety_report_invalid", "The production safety report is missing or too small for a substantive result.");
@@ -371,7 +381,7 @@ async function main() {
       || !(reportText.includes("局限") || normalizedReport.includes("limitation"))) {
       throw failure("hosted_e2e_safety_report_invalid", "The production safety report lacks drug, provenance, or limitation content.");
     }
-    const signals = await command(base, "read_artifact", { path: "signals.csv" }, scoped);
+    const signals = await command(base, "read_artifact", { path: outputs.signals }, scoped);
     const signalsText = signals.body?.data?.data;
     // Delivery is the platform's job and stays blocking: the file has to exist,
     // be readable, and not be empty.
@@ -495,7 +505,7 @@ function reportNotices() {
   for (const entry of notices) process.stdout.write(`  notice ${entry.code}: ${entry.observed}\n`);
 }
 
-main().then(reportNotices).catch((error) => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().then(reportNotices).catch((error) => {
   process.stderr.write(`${error?.code ?? "hosted_production_e2e_failed"}: ${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;
 });

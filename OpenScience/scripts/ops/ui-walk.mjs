@@ -279,7 +279,10 @@ export const VCR_TABS_WALK = [
  */
 const EXTENSION_BUDGET = { controls: 9, borders: 5 };
 export const BUDGET_BY_PAGE = {
-  frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
+  frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
+  // A published issue with a lead has both its 24px headline link and 16px row links. The live R14 issue measured ten;
+  // the empty fixture that established nine carried no lead. Keep this allowance local to the issue, not the other feed views.
+  "frontier-daily": { ...FRONTIER_BUDGET, controls: 10 },
   // The zones' home is a frontier page: the same rail and tabs, measured at nine. It also draws four kinds of border where the feed
   // draws two — the tab row's hairline and the selected tab's underline, the rule between zones, and the frame of the topic request's
   // field — the measured number of the first live walk of R10 (2026-10-07), not a wish: the field is the page's one input, and the
@@ -1851,11 +1854,12 @@ export function rowProbe([action, index = 0, option = null]) {
     if (link) targets.push({ control: link, label: String(option.label ?? "").slice(0, 40) });
   }
   if (action === "targets") return targets.map(({ label }) => label);
+  const target = typeof index === "string" ? targets.find(({ label }) => label === index) : targets[index];
+  if (action === "has") return Boolean(target);
   if (action === "external") {
-    const control = targets[index]?.control;
+    const control = target?.control;
     return Boolean(control && control.tagName === "A" && control.getAttribute("target") === "_blank" && /^https?:\/\//i.test(control.getAttribute("href") ?? ""));
   }
-  const target = targets[index];
   if (!target) return false;
   target.control.click();
   return true;
@@ -2066,9 +2070,12 @@ async function walkRowClicks(page, base, route, name, popups) {
         await prepare();
       }
       const before = await page.evaluate(rowProbe, ["state"]);
-      const external = await page.evaluate(rowProbe, ["external", index, link]);
+      // A route's shell can be ready while its issue is still loading. Wait for the named list after each reload;
+      // carrying its earlier numeric position into a partial response could click nothing or a different lane.
+      await page.waitForFunction(rowProbe, ["has", labels[index], link], { timeout: 30_000 });
+      const external = await page.evaluate(rowProbe, ["external", labels[index], link]);
       popups.count = 0;
-      await page.evaluate(rowProbe, ["click", index, link]);
+      await page.evaluate(rowProbe, ["click", labels[index], link]);
       await page.waitForTimeout(1_500);
       const after = await page.evaluate(rowProbe, ["state"]);
       rows.push({ label: labels[index], shown: rowClickShown(before, after, popups.count, external === true) });

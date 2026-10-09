@@ -1368,7 +1368,7 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
     'run.runtimeAgent !== "evimed-adr-analysis"',
     'run.model !== `deepseek/${certifiedModel}`',
     'agent.requiredInputs?.includes("drug")',
-    'run.artifacts?.includes(requiredPath)',
+    'specialistOutputs(run.artifacts)',
     'item.kind === "preference"',
     'memoryRecord.evidenceCount < 1',
   ]) assert.equal(script.includes(proof), true, `Hosted E2E is missing proof: ${proof}`);

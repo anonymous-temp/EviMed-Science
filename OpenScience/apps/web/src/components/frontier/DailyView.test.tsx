@@ -46,6 +46,17 @@ describe("the issue's header", () => {
     expect(screen.queryByRole("button", { name: "分类" })).not.toBeInTheDocument();
   });
 
+  it("keeps the safety alerts and drug-safety lane separately named and addressable", async () => {
+    show(issue({ sections: [lane("safety", "药物安全", 2), lane("guideline", "指南共识", 1)] }));
+    expect(screen.getByRole("region", { name: "安全警示 1" })).not.toBe(screen.getByRole("region", { name: "药物安全 2" }));
+    for (const [name, id] of [["安全警示 1", "daily-safety-alerts"], ["药物安全 2", "daily-safety"]]) {
+      await userEvent.click(screen.getByRole("button", { name: "分类" }));
+      await userEvent.click(screen.getByRole("menuitem", { name }));
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(document.getElementById(id));
+      expect(document.querySelectorAll(`#${id}`)).toHaveLength(1);
+    }
+  });
+
   it("counts the safety alerts as a lane, so two lanes and an alert are three", () => {
     show(issue({ sections: [lane("evidence", "临床证据", 3), lane("guideline", "指南共识", 2)] }));
     expect(screen.getByRole("button", { name: "分类" })).toBeInTheDocument();
