@@ -350,9 +350,33 @@ export const ROW_CLICK_PAGES = new Set([
   "files", "memory", "memory-project", "memory-methods", "memory-growth",
   "frontier", "frontier-hot", "frontier-daily", "frontier-all",
   "extensions-plugins", "extensions-skills", "virtual-research",
-  // R11: a source opens its three conditions in place; a scheduled task opens its drawer. Both read what the row holds and write nothing.
+  // R11 (re-aimed in R13, V-11): a source row opens a drawer (it opened its three conditions in place), a scheduled-task row goes to the
+  // task's own page (it opened a drawer). Both read what the row holds and write nothing.
   "geo-sources", "autopilot",
+  // R13 (V-11, V-7): the rows of 问题与回答 and the findings of 准确与安全 (the 看回答 link), and the pages the reference named for a
+  // first-row click (design reference §21.3): the inbox, settings, 循证 GEO's home and the evidence zones' home. New coverage, so a
+  // click that shows nothing there is a notice (`NOTICE_ROW_CLICK_PAGES`).
+  "geo-questions", "geo-accuracy", "inbox", "account", "geo", "frontier-zones",
 ]);
+/**
+ * The pages of `ROW_CLICK_PAGES` whose first-row click is new in R13: what it shows is reported, and a click that shows nothing is a
+ * notice, not a failure, until a walk has reported how these pages behave (principle 4: a check ships as a notice first). The pages that
+ * were clicked before R13 keep failing on a row that does nothing.
+ */
+export const NOTICE_ROW_CLICK_PAGES = new Set(["geo-questions", "geo-accuracy", "inbox", "account", "geo", "frontier-zones"]);
+/**
+ * Pages whose first rows are not on the page when it loads. 问题与回答 draws its groups closed, and a group's measured questions — the
+ * rows — are inside it: the walk opens the groups (a click on a disclosure toggle, which only shows more of the page) before it looks
+ * for a row. The selector names the toggles; at most `ROW_REVEAL_LIMIT` are opened.
+ */
+export const ROW_REVEAL_BY_PAGE = { "geo-questions": "[data-geo-group] button[aria-expanded='false']" };
+const ROW_REVEAL_LIMIT = 12;
+/**
+ * Pages whose findings are cards, not rows of a list: the one thing on a card that opens is its link. 准确与安全's 讲错清单 draws each
+ * finding as an `<article>` with a 「看回答」 link to the answer that says it, in no list and with no row title, so the list probe finds
+ * nothing there. The selector names those links; the first one is the page's first "row".
+ */
+export const ROW_LINK_BY_PAGE = { "geo-accuracy": { label: "讲错清单", selector: "[data-geo-error-list] a[href*='/answers/']" } };
 /** The lists of one page the walk clicks at most; a skills page has six groups, and the first row of each is enough to prove the pattern. */
 const ROW_CLICK_LISTS_PER_PAGE = 8;
 
@@ -625,6 +649,23 @@ export function unexpectedRefusals(name, httpErrors) {
 export function rowClickFindings(name, rows) {
   return rows.filter((row) => !row.shown)
     .map((row) => `${name}@desktop: clicking the first row of the list “${row.label}” showed nothing — no drawer, no page, no opened row`);
+}
+
+/**
+ * What the first-row clicks of a page come to: a row that shows nothing fails the pages that have been clicked since R10/R11, and is a
+ * notice on the pages whose click is new in R13 (`NOTICE_ROW_CLICK_PAGES`). A page where nothing could be clicked — the account has no
+ * row there, or the page draws none — says so, so that the absence of a failure is not read as a pass: the assertion has to prove it
+ * reached its target.
+ * @param {string} name the report's page name
+ * @param {Array<{ label: string, shown: boolean }>} rows one entry per list clicked
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function rowClickVerdict(name, rows) {
+  const nothing = rowClickFindings(name, rows);
+  const notices = rows.length === 0
+    ? [`${name}@desktop: not observable: no list on the page has a first row that opens (an empty list, a page without rows, or an account with none), so no click was made`]
+    : [];
+  return NOTICE_ROW_CLICK_PAGES.has(budgetKey(name)) ? { failures: [], notices: [...nothing, ...notices] } : { failures: nothing, notices };
 }
 
 /**
@@ -1079,8 +1120,16 @@ export function probeFindings(name, viewportName, kind, r) {
 }
 
 /**
- * What an opened row shows, read while it is open: the source's detail in place, the task's drawer. Per `kind`; judged by
- * `afterClickFindings`.
+ * What an opened row shows, read while it is open. Per `kind`; judged by `afterClickFindings`.
+ *
+ *  - `sourceDrawer` (R13, E-15): a 信源 row opens the site's drawer — a dialog holding `[data-geo-source-drawer]` — and no longer its
+ *    three conditions in place. The drawer's wrapper is drawn the moment it opens, whatever the measurements hold, so it is read here;
+ *    what is in it (the answers behind a row's three numbers) needs a measured round and is held by the page's own tests.
+ *  - `taskPage` (R13, E-18): a task row is a link to the task's own page, `/app/autopilot/:taskId`, and no longer a drawer. The page is
+ *    a list column and a main area whose pane is the kernel's conversation: the shell keeps one resident frame and places it over the
+ *    pane, so the page itself draws no input box and no dialog for the conversation. Read: the layout and its hooks, which pane is on
+ *    (`conversation`, `progress`, `waiting`, `no-conversation`, `never-run`), the pane's box and the frame's, the text inputs of the
+ *    page's own DOM, the dialogs, and the task bar's text for a time-zone identifier.
  * @param {[string]} args
  */
 export function afterClickProbe([kind]) {
@@ -1089,21 +1138,106 @@ export function afterClickProbe([kind]) {
     return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
   };
   const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
-  if (kind === "sourceDetail") return { details: [...document.querySelectorAll("[data-geo-source-detail]")].filter(visible).length };
-  if (kind === "taskDrawer") {
+  if (kind === "sourceDrawer") {
     const dialog = [...document.querySelectorAll("[role='dialog']")].find(visible);
-    const header = dialog ? [...dialog.querySelectorAll("header p")].find(visible) : null;
-    if (!dialog || !header) return { header: null };
-    const text = words(dialog);
+    return { dialog: Boolean(dialog), drawers: dialog ? [...dialog.querySelectorAll("[data-geo-source-drawer]")].filter(visible).length : 0 };
+  }
+  if (kind === "taskPage") {
+    const rect = (el) => {
+      if (!el) return null;
+      const box = el.getBoundingClientRect();
+      return { left: Math.round(box.left), top: Math.round(box.top), width: Math.round(box.width), height: Math.round(box.height) };
+    };
+    const layout = document.querySelector("[data-autopilot-layout]");
+    const main = document.querySelector("[data-task-main]");
+    const bar = document.querySelector("[data-task-bar]");
+    const pane = document.querySelector("[data-task-pane]");
+    const holder = document.querySelector("[data-task-frame]");
+    const frame = holder ? [...holder.querySelectorAll("iframe")].find(visible) ?? null : null;
+    const surface = document.querySelector("[data-session-surface]");
+    const barText = bar ? [...bar.querySelectorAll("p")].filter(visible).map(words).join(" ") : "";
     const zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone").filter((zone) => zone.includes("/")) : [];
-    const files = [...dialog.querySelectorAll("a, button")].filter((el) => visible(el) && /\.py$/i.test(words(el)));
     return {
-      header: words(header),
-      zoneIds: zones.filter((zone) => text.includes(zone)).slice(0, 3),
-      workingFilesOpen: files.filter((el) => !el.closest("details")).map(words).slice(0, 3),
+      path: location.pathname,
+      layout: layout ? layout.getAttribute("data-autopilot-layout") : null,
+      list: Boolean(document.querySelector("[data-task-list]")),
+      main: Boolean(main),
+      bar: Boolean(bar),
+      // The open task's row is marked in a list beside the task; with the list not beside it there is no row to mark.
+      marked: [...document.querySelectorAll("[data-task-list] [data-task-id][aria-current='page']")].length,
+      pane: pane ? pane.getAttribute("data-task-pane") : null,
+      paneBox: rect(pane),
+      surface: surface ? surface.getAttribute("data-session-surface") : null,
+      holderBox: rect(holder),
+      frameBox: rect(frame),
+      // A box for typing that the page itself draws: the sidebar's search is the shell's, the list's search is not in the main area.
+      editors: [...document.querySelectorAll("textarea, [contenteditable='true'], [role='textbox']")].filter((el) => visible(el) && !el.closest("aside, nav")).length,
+      inputsInMain: main ? [...main.querySelectorAll("input")].filter((el) => visible(el) && !["checkbox", "radio", "hidden", "file", "button", "submit"].includes(el.getAttribute("type") ?? "")).length : 0,
+      dialogs: [...document.querySelectorAll("[role='dialog']")].filter(visible).length,
+      zoneIds: zones.filter((zone) => barText.includes(zone)).slice(0, 3),
     };
   }
   return null;
+}
+
+/** The pane's box and the frame's are one rectangle, to the pixel the shell rounds to. */
+const PANE_TOLERANCE_PX = 2;
+
+/**
+ * Whether two boxes (`{ left, top, width, height }`) are the same rectangle, give or take the shell's rounding.
+ * @param {{ left: number, top: number, width: number, height: number } | null} a @param {{ left: number, top: number, width: number, height: number } | null} b
+ */
+export function sameBox(a, b, tolerance = PANE_TOLERANCE_PX) {
+  return Boolean(a && b) && ["left", "top", "width", "height"].every((key) => Math.abs(/** @type {any} */ (a)[key] - /** @type {any} */ (b)[key]) <= tolerance);
+}
+
+const boxText = (box) => (box ? `${box.width}×${box.height} at ${box.left},${box.top}` : "none");
+
+/**
+ * The task page as a reader meets it right after a task's row was clicked (R13, V-11). The shell places the kernel's conversation over
+ * the pane, so what the walk can hold the page to is where that frame is and what the page does not draw: every one of these is a
+ * NOTICE (new in R13), each says "not observable" and why when the thing it looks at is not there — a throwaway account has no task,
+ * a task that never ran has no conversation, and the walk starts no runtime, so the frame's container is placed but may hold no
+ * iframe. The one failure is carried over from the drawer it replaces: a time zone is named, never shown by its identifier.
+ * @param {string} name the report's page name @param {any} r what `afterClickProbe` returned for `taskPage`
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function taskPageFindings(name, r) {
+  const current = `${name}@desktop`;
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (!r) return { failures, notices };
+  if (!/^\/app\/autopilot\/[^/]+$/.test(r.path ?? "")) {
+    notices.push(`${current}: not observable: the first row did not go to a task's own page (the address is ${r.path}), so the task page was not read`);
+    return { failures, notices };
+  }
+  if (!r.main) notices.push(`${current}: the task page has no main area (data-task-main)`);
+  if (!r.bar) notices.push(`${current}: the task page has no task bar (data-task-bar)`);
+  if (r.layout === "split") {
+    if (!r.list) notices.push(`${current}: the split layout has no task list beside the task (data-task-list)`);
+    else if (r.marked !== 1) notices.push(`${current}: ${r.marked} row(s) of the list are marked as the open task (aria-current=page; one)`);
+  } else if (r.layout === null) notices.push(`${current}: the task page declares no layout (data-autopilot-layout)`);
+  if (r.editors > 0 || r.inputsInMain > 0) {
+    notices.push(`${current}: the task page draws ${r.editors + r.inputsInMain} text box(es) of its own; the conversation's input is the kernel's, inside the frame`);
+  }
+  if (r.dialogs > 0) notices.push(`${current}: ${r.dialogs} dialog(s) open on the task page right after the task opened (the conversation is not in a dialog)`);
+  if (r.pane === null) notices.push(`${current}: not observable: the task's pane (data-task-pane) had not rendered, so the conversation's place was not read`);
+  else if (r.pane !== "conversation") notices.push(`${current}: not observable: the first task's pane reads ${r.pane}, so no conversation frame is placed over it`);
+  else {
+    if (r.surface !== "task") notices.push(`${current}: the conversation surface reads ${r.surface ?? "nothing"} while the task's conversation is on (task)`);
+    if (!r.holderBox) notices.push(`${current}: not observable: the pane reads conversation and no frame container (data-task-frame) is placed over it`);
+    else {
+      // The iframe when the runtime is up; otherwise its container, which the shell places at the same rectangle.
+      const box = r.frameBox ?? r.holderBox;
+      if (!sameBox(box, r.paneBox)) {
+        notices.push(`${current}: the kernel frame${r.frameBox ? "" : "'s container"} is ${boxText(box)} and the pane ${boxText(r.paneBox)} (the same rectangle)`);
+      } else if (!r.frameBox) {
+        notices.push(`${current}: not observable: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared`);
+      }
+    }
+  }
+  if (r.zoneIds.length) failures.push(`${current}: the task bar names a time zone by its identifier: ${r.zoneIds.join(", ")}`);
+  return { failures, notices };
 }
 
 /**
@@ -1115,15 +1249,9 @@ export function afterClickFindings(name, kind, r) {
   /** @type {string[]} */ const failures = [];
   /** @type {string[]} */ const notices = [];
   if (!r) return { failures, notices };
-  if (kind === "sourceDetail" && r.details === 0) failures.push(`${current}: clicking the first source opened no detail in place`);
-  if (kind === "taskDrawer") {
-    if (r.header === null) notices.push(`${current}: the first row did not open a task drawer (no task, or a recommendation), so its header was not read`);
-    else {
-      if (!r.header.includes("单次上限 ¥")) failures.push(`${current}: the task drawer's header does not say what one run may spend`);
-      if (r.zoneIds.length) failures.push(`${current}: the task drawer's text names a time zone by its identifier: ${r.zoneIds.join(", ")}`);
-      if (r.workingFilesOpen.length) failures.push(`${current}: working files are listed outside 其他文件: ${r.workingFilesOpen.join(", ")}`);
-    }
-  }
+  // The old form opened the conditions in place and failed on no detail; the drawer is the same thing in its R13 form.
+  if (kind === "sourceDrawer" && r.drawers === 0) failures.push(`${current}: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)`);
+  if (kind === "taskPage") return taskPageFindings(name, r);
   return { failures, notices };
 }
 
@@ -1144,23 +1272,91 @@ export function leftEdgeNotices(pages) {
 }
 
 /**
- * The pdf the knowledge base's drawer shows for a document's original: wide, and fit to the page's width with no thumbnail column.
+ * The original column of a document's page is never narrower than this: below it a page of a PDF is read at a size nobody reads at, and
+ * the original and the key points go back to being two tabs (R13 E-19, `useReaderBox`'s `ORIGINAL_MIN_WIDTH`). The drawer it replaces
+ * was held to 576 px; the page holds the original wider than that.
+ */
+export const ORIGINAL_MIN_WIDTH = 560;
+
+/**
+ * The pdf a document's page shows for its original: in a column not narrower than `ORIGINAL_MIN_WIDTH`, and fit to the column's width
+ * with no thumbnail column. The same two defects R11 fixed for the drawer, read where the original is now.
  * @param {{ width: number, src: string | null } | null} r @returns {string[]} failures
  */
 export function pdfPreviewFindings(r) {
   if (!r) return [];
   const failures = [];
-  if (r.width <= 576) failures.push(`files@desktop: the original of a PDF opens in a ${r.width} px drawer (wider than 576)`);
+  if (r.width < ORIGINAL_MIN_WIDTH) failures.push(`files@desktop: the original of a PDF is ${r.width} px wide on its page (at least ${ORIGINAL_MIN_WIDTH})`);
   if (r.src !== null && !r.src.endsWith("view=FitH&navpanes=0")) failures.push("files@desktop: the PDF is not opened fit to width without the thumbnail column");
   return failures;
 }
 
-/** What the original of a PDF in the open drawer is shown in: the drawer's width and the address its viewer was given. */
+/** What the original of a PDF on a document's page is shown in: the original column's width and the address its viewer was given. */
 export function pdfProbe() {
-  const dialog = [...document.querySelectorAll("[role='dialog']")].find((el) => el.getBoundingClientRect().width > 0);
-  if (!dialog) return null;
-  const frame = [...dialog.querySelectorAll("iframe")].find((el) => (el.getAttribute("title") ?? "").includes("PDF"));
-  return { width: Math.round(dialog.getBoundingClientRect().width), src: frame ? frame.getAttribute("src") ?? "" : null };
+  const column = [...document.querySelectorAll("[data-reader-column='original']")].find((el) => el.getBoundingClientRect().width > 0);
+  if (!column) return null;
+  const frame = [...column.querySelectorAll("iframe")].find((el) => (el.getAttribute("title") ?? "").includes("PDF"));
+  return { width: Math.round(column.getBoundingClientRect().width), src: frame ? frame.getAttribute("src") ?? "" : null };
+}
+
+/**
+ * A document's own page (`/app/files/:sourceId`, R13 E-19), read in the page: where it is, which layout the page chose (two columns, or
+ * two tabs when the original would be narrower than `ORIGINAL_MIN_WIDTH`), its heading, the way back and what it names, whether a
+ * dialog is open (a document is a page, not a drawer), and the sentence of a document that is not there.
+ */
+export function readerProbe() {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const layout = document.querySelector("[data-reader-layout]");
+  const heading = document.querySelector("main h1");
+  const back = document.querySelector("nav[aria-label='返回'] a");
+  const tabs = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "资料视图");
+  return {
+    path: `${location.pathname}${location.search}`,
+    layout: layout ? layout.getAttribute("data-reader-layout") : null,
+    title: heading ? words(heading) : null,
+    back: back ? { text: words(back), href: back.getAttribute("href") } : null,
+    dialogs: [...document.querySelectorAll("[role='dialog']")].filter(visible).length,
+    columns: [...document.querySelectorAll("[data-reader-column]")].filter(visible).map((el) => el.getAttribute("data-reader-column")),
+    tabs: tabs ? [...tabs.querySelectorAll("[role='tab']")].map(words) : [],
+    missing: words(document.body).includes("这份资料不存在或已删除。"),
+  };
+}
+
+/**
+ * The document's page as a reader meets it after a row of the list was opened (R13 E-19, A08): the page is the document's own address,
+ * its heading is the row's title, the way back reads 知识库 and goes to the list as it was left, and nothing is open in a dialog. All
+ * notices — new in R13 — and each says "not observable" when the page did not render what it looks at.
+ * @param {any} r what `readerProbe` returned @param {{ title: string, list: string }} expected the row's title and the list's address
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function readerFindings(r, expected) {
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  const current = "files@desktop";
+  if (!r || !/^\/app\/files\/[^/?]+/.test(r.path ?? "")) {
+    notices.push(`${current}: not observable: opening the first row did not go to a document's own page (${r?.path ?? "no page"}), so the reader was not read`);
+    return { failures, notices };
+  }
+  if (r.missing) {
+    notices.push(`${current}: the reader of the first row says the document does not exist`);
+    return { failures, notices };
+  }
+  if (r.layout === null) {
+    notices.push(`${current}: not observable: the document's page drew no layout (data-reader-layout) within the wait`);
+    return { failures, notices };
+  }
+  const same = (a, b) => String(a ?? "").replace(/\s+/g, " ").trim() === String(b ?? "").replace(/\s+/g, " ").trim();
+  if (!same(r.title, expected.title)) notices.push(`${current}: the reader's heading is “${String(r.title ?? "").slice(0, 40)}” and the row it was opened from is “${expected.title.slice(0, 40)}”`);
+  if (!r.back || !same(r.back.text, "知识库")) notices.push(`${current}: the way back on the document's page reads “${r.back?.text ?? "nothing"}” (知识库)`);
+  else if (r.back.href !== expected.list) notices.push(`${current}: the way back goes to ${r.back.href} and the list was ${expected.list}`);
+  if (r.dialogs > 0) notices.push(`${current}: a dialog is open on the document's page (a document is a page, not a drawer)`);
+  if (r.layout === "tabs" && !(r.tabs.includes("内容") && r.tabs.includes("原文"))) notices.push(`${current}: the reader is in tabs and its tab strip reads ${r.tabs.join("/") || "nothing"} (内容/原文)`);
+  if (r.layout === "columns" && !(r.columns.includes("original") && r.columns.includes("points"))) notices.push(`${current}: the reader is in two columns and shows ${r.columns.join("/") || "none"} (original/points)`);
+  return { failures, notices };
 }
 
 /** What the new-skill drawer shows: its captions, the switch for this project, and the words a refused empty form puts beside its fields. */
@@ -1318,7 +1514,10 @@ export function matrixFindings(viewportName, { state, filtered, dialog, closed }
   if (state.overflow) failures.push(`${current}: the page overflows sideways`);
   if (state.markInView === false) failures.push(`${current}: the 核对 text of the first claim is outside the screen`);
   if (state.headers.length > 1 && state.headers[1] !== "核对") failures.push(`${current}: the second column is “${state.headers[1]}” (核对)`);
-  if (state.marks.includes("核对中") && state.marks.includes("未核对")) failures.push(`${current}: some claims read 未核对 while others read 核对中`);
+  // R13 (E-5): the column is ✓, ⚠ or blank, and says 核对中 only while the checks are on their way; the words it used to write for a claim
+  // nobody had checked are gone. They were a failure together with 核对中 on the same page; they are a notice alone.
+  const retired = [...new Set(state.marks.filter((mark) => ["未核对", "暂无核对结果"].includes(mark)))];
+  if (retired.length) notices.push(`${current}: the 核对 column still reads ${retired.join(", ")} for a claim (R13: ✓, ⚠ or blank)`);
   if (filtered && (filtered.rows !== 1 || !/^显示 1 \/ \d+ 条$/.test(filtered.status ?? ""))) {
     failures.push(`${current}: searching for ${state.firstId} leaves ${filtered.rows} row(s) and “${filtered.status ?? "no count"}”`);
   }
@@ -1536,8 +1735,13 @@ export function routeReady() {
  * new tab; `["state"]` reports what is on screen: whether a dialog is open, the
  * address, and how many rows are open in place. A row whose title is not a
  * control — a list of results, not a place to go — is not a target.
+ *
+ * R13: `["reveal", 0, { selector, limit }]` opens the disclosure toggles that hold
+ * a page's rows (`ROW_REVEAL_BY_PAGE`) and says how many it opened; a third
+ * argument `{ label, selector }` on the other actions adds the first link of a
+ * page whose findings are cards (`ROW_LINK_BY_PAGE`) to the targets.
  */
-export function rowProbe([action, index = 0]) {
+export function rowProbe([action, index = 0, option = null]) {
   const visible = (el) => {
     const box = el.getBoundingClientRect();
     const style = getComputedStyle(el);
@@ -1550,14 +1754,27 @@ export function rowProbe([action, index = 0]) {
       expanded: document.querySelectorAll("main [aria-expanded='true']").length,
     };
   }
+  if (action === "reveal") {
+    // Opens the disclosure toggles that hold the page's rows (`ROW_REVEAL_BY_PAGE`): it only shows more of the page.
+    const { selector = "", limit = 0 } = option && typeof option === "object" ? option : {};
+    const toggles = selector ? [...document.querySelectorAll(selector)].filter((el) => visible(el) && !el.closest("[role='dialog'], nav, aside")).slice(0, limit) : [];
+    for (const toggle of toggles) toggle.click();
+    return toggles.length;
+  }
   const targets = [];
   for (const list of document.querySelectorAll("main ul, main ol")) {
     if (!visible(list) || list.closest("[role='dialog'], nav, aside")) continue;
     const title = [...list.querySelectorAll(":scope > li [data-row-title]")].find(visible);
     if (!title) continue;
     const control = title.matches("a, button, [role='button']") ? title : title.querySelector("a, button, [role='button']");
-    if (!control) continue;
+    // A list that holds another list (问题与回答's groups hold their questions) finds the inner list's first row as its own: one row, one target.
+    if (!control || targets.some((target) => target.control === control)) continue;
     targets.push({ control, label: (list.getAttribute("aria-label") || title.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40) });
+  }
+  // A page whose findings are cards (`ROW_LINK_BY_PAGE`): the first link of the cards is its one first row.
+  if (option && typeof option === "object" && typeof option.selector === "string" && action !== "reveal") {
+    const link = [...document.querySelectorAll(option.selector)].find((el) => visible(el) && !el.closest("[role='dialog'], nav, aside"));
+    if (link) targets.push({ control: link, label: String(option.label ?? "").slice(0, 40) });
   }
   if (action === "targets") return targets.map(({ label }) => label);
   if (action === "external") {
@@ -1571,7 +1788,7 @@ export function rowProbe([action, index = 0]) {
 }
 
 /** What the first row of a page's first list opened to, and the probe that reads it (`afterClickProbe`). */
-const AFTER_CLICK_KIND = { "geo-sources": "sourceDetail", autopilot: "taskDrawer" };
+export const AFTER_CLICK_KIND = { "geo-sources": "sourceDrawer", autopilot: "taskPage" };
 
 /** How long the walk waits for a cleanup that never finishes to give up (`CLEANUP_WAIT_MS` of the shell, plus the margin of a slow start). */
 const CLEANUP_WALK_WAIT_MS = 135_000;
@@ -1601,20 +1818,206 @@ async function openRoute(page, base, route, settle = 1_500) {
   await page.waitForTimeout(settle);
 }
 
+/** A document's page has drawn its layout: the reader is on screen, whatever it holds. */
+export function readerReady() {
+  return Boolean(document.querySelector("[data-reader-layout]"));
+}
+
+/** A PDF's viewer is in the original's column (the file is fetched before its frame is drawn). */
+export function pdfFrameReady() {
+  return Boolean(document.querySelector("[data-reader-column='original'] iframe[title*='PDF']"));
+}
+
+/** A task's page has drawn its pane (the conversation's place, or what stands in for it). */
+export function taskPaneReady() {
+  return Boolean(document.querySelector("[data-task-pane]"));
+}
+
 /**
- * The knowledge base's drawer for a PDF: its 原文 tab opens wide, fit to the page's width, without the viewer's thumbnails. The
- * document is the first finished PDF the API lists; opening it and switching tabs read the original and write nothing.
+ * A document's page for a PDF (R13, E-19): the original is in a column not narrower than 560 px, fit to its width, without the
+ * viewer's thumbnails. The document is the first finished PDF the API lists; its row is a link to its page, so opening it is a route
+ * change, and reading it (switching to its 原文 tab when the page chose tabs) writes nothing. It was a drawer's 原文 tab before.
  */
 async function walkPdfPreview(page, base, route, title) {
   await openRoute(page, base, route);
   const opened = await page.evaluate(clickRowTitled, [title]);
   if (!opened) return { failures: [], notices: [`files@desktop: the PDF “${title.slice(0, 24)}” was not among the rows on the first screen`] };
-  await page.waitForTimeout(1_500);
-  if (!await page.evaluate(clickNamed, ["tab", "原文", "[role='dialog']"])) return { failures: [], notices: ["files@desktop: the PDF's drawer has no 原文 tab"] };
-  await page.waitForTimeout(3_000);
+  await page.waitForFunction(readerReady, undefined, { timeout: 12_000 }).catch(() => null);
+  const page1 = await page.evaluate(readerProbe);
+  if (!page1 || page1.layout === null) return { failures: [], notices: ["files@desktop: not observable: the PDF's page drew no layout within twelve seconds"], read: page1 };
+  // Two tabs when the page has no room for both columns: the original is the second tab.
+  if (page1.layout === "tabs" && !await page.evaluate(clickNamed, ["tab", "原文", null])) return { failures: [], notices: ["files@desktop: the PDF's page has no 原文 tab"], read: page1 };
+  await page.waitForFunction(pdfFrameReady, undefined, { timeout: 8_000 }).catch(() => null);
   const read = await page.evaluate(pdfProbe);
-  if (read && read.src === null) return { failures: [], notices: ["files@desktop: the original of the PDF showed no viewer within three seconds"], read };
+  if (read && read.src === null) return { failures: [], notices: ["files@desktop: the original of the PDF showed no viewer within eight seconds"], read };
   return { failures: pdfPreviewFindings(read), read };
+}
+
+/**
+ * What the knowledge base's list holds, read in the page: its first row's title, the address, what the search box holds, how many rows
+ * the list has and whether one of them is the row of `title`.
+ * @param {[string, string?]} args `["first"]` or `["state", title]`
+ */
+export function knowledgeProbe([action, title = ""]) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const rows = [...document.querySelectorAll("main ul[aria-label='资料'] a[data-row-title]")].filter(visible);
+  if (action === "first") return rows[0] ? { title: words(rows[0]), href: rows[0].getAttribute("href") } : null;
+  const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === "搜索资料和内容" && visible(el)) ?? null;
+  return {
+    path: `${location.pathname}${location.search}`,
+    query: box ? box.value : null,
+    rows: rows.length,
+    listed: rows.some((row) => words(row) === title),
+  };
+}
+
+/**
+ * The way back to a long list (A08, R13 E-8/E-19), on the knowledge base: the search of a document's own title is in the address, the
+ * document opens on its own page with the list's state in its address, and both ways back — 「知识库」 on the page and the browser's
+ * Back — find the list with the search in the box and the document in the list. The search is the page's own filter box and nothing
+ * here writes. Every verdict is a notice; an account with no document says so.
+ */
+async function walkKnowledgeReturn(page, base, route) {
+  await openRoute(page, base, route);
+  const first = await page.evaluate(knowledgeProbe, ["first"]);
+  if (!first) return { failures: [], notices: ["files@desktop: not observable: the knowledge base lists no document, so there is nothing to open and come back from"] };
+  const title = first.title.slice(0, 80);
+  await page.getByRole("searchbox", { name: "搜索资料和内容" }).fill(title);
+  await page.waitForTimeout(1_500);
+  const filtered = await page.evaluate(knowledgeProbe, ["state", first.title]);
+  /** @type {any} */ const read = { filtered, reader: null, back: null, browserBack: null };
+  if (await page.evaluate(clickRowTitled, [title])) {
+    await page.waitForFunction(readerReady, undefined, { timeout: 12_000 }).catch(() => null);
+    read.reader = await page.evaluate(readerProbe);
+  }
+  if (read.reader && read.reader.layout !== null) {
+    // 「知识库」 on the page.
+    if (await page.evaluate(clickNamed, ["link", "知识库", "nav[aria-label='返回']"])) {
+      await page.waitForTimeout(1_500);
+      read.back = await page.evaluate(knowledgeProbe, ["state", first.title]);
+    }
+    // The browser's Back, from the same document opened again.
+    if (read.back && await page.evaluate(clickRowTitled, [title])) {
+      await page.waitForFunction(readerReady, undefined, { timeout: 12_000 }).catch(() => null);
+      await page.goBack();
+      await page.waitForTimeout(1_500);
+      read.browserBack = await page.evaluate(knowledgeProbe, ["state", first.title]);
+    }
+  }
+  const verdict = knowledgeReturnFindings(first.title, read);
+  return { ...verdict, read };
+}
+
+/**
+ * The knowledge base's way back, judged (A08). `read` is what `walkKnowledgeReturn` read at each stage. Notices only.
+ * @param {string} title the first row's title @param {{ filtered: any, reader: any, back: any, browserBack: any }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function knowledgeReturnFindings(title, read) {
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  const current = "files@desktop";
+  const { filtered } = read;
+  if (!filtered || filtered.rows === 0 || !filtered.listed) {
+    notices.push(`${current}: not observable: searching for the first document's own title left ${filtered?.rows ?? 0} row(s) and not that document, so it was not opened`);
+    return { failures, notices };
+  }
+  if (!/[?&]q=/.test(filtered.path)) notices.push(`${current}: the search is not in the address after typing (${filtered.path})`);
+  if (!read.reader) {
+    notices.push(`${current}: not observable: the document's row was not on the filtered list to open`);
+    return { failures, notices };
+  }
+  const reader = readerFindings(read.reader, { title, list: filtered.path });
+  notices.push(...reader.notices);
+  if (read.reader.layout === null || read.reader.missing) return { failures, notices };
+  if (!/[?&]q=/.test(read.reader.path)) notices.push(`${current}: the document's address does not carry the list's search (${read.reader.path})`);
+  for (const [way, back] of [["「知识库」 on the document's page", read.back], ["the browser's Back", read.browserBack]]) {
+    if (!back) {
+      notices.push(`${current}: not observable: ${way} was not taken`);
+      continue;
+    }
+    if (back.path !== filtered.path) notices.push(`${current}: after ${way} the address is ${back.path} and the list was ${filtered.path}`);
+    if (back.query !== null && back.query.trim() !== filtered.query?.trim()) notices.push(`${current}: after ${way} the search box holds “${String(back.query).slice(0, 30)}” and held “${String(filtered.query ?? "").slice(0, 30)}”`);
+    if (!back.listed) notices.push(`${current}: after ${way} the document is not in the list`);
+  }
+  return { failures, notices };
+}
+
+/**
+ * The first row of each list of one page, clicked, and what that showed (R10 rule 6; R13 V-11). Lists are found by `rowProbe`; a page
+ * whose rows are inside closed groups has them opened first (`ROW_REVEAL_BY_PAGE`), and one whose findings are cards is clicked on its
+ * first link (`ROW_LINK_BY_PAGE`). The first list's first row is read again with `afterClickProbe` while it is open. The pages that are
+ * new to this check in R13 are clicked behind a guard that refuses every request that is not a read, so the walk's clicks write nothing
+ * there even where a row marks itself read on the way (the inbox); what the guard refused is a notice.
+ * @param {any} page @param {string} base @param {string} route @param {string} name the report's page name
+ * @param {{ count: number }} popups the tabs the page opened since the walk last zeroed it
+ * @returns {Promise<{ rows: Array<{ label: string, shown: boolean, after?: any }>, failures: string[], notices: string[] }>}
+ */
+async function walkRowClicks(page, base, route, name, popups) {
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  const guarded = NOTICE_ROW_CLICK_PAGES.has(name);
+  const selector = ROW_REVEAL_BY_PAGE[/** @type {keyof typeof ROW_REVEAL_BY_PAGE} */ (name)];
+  const reveal = selector ? { selector, limit: ROW_REVEAL_LIMIT } : null;
+  const link = ROW_LINK_BY_PAGE[/** @type {keyof typeof ROW_LINK_BY_PAGE} */ (name)] ?? null;
+  /** @type {string[]} */ const writes = [];
+  const guard = (/** @type {any} */ request) => {
+    const method = request.request().method();
+    const url = request.request().url();
+    // The context's own route answers `start_runtime` (and counts it): the guard hands it on.
+    if (["GET", "HEAD"].includes(method) || /\/api\/commands\/start_runtime(?:[/?]|$)/.test(url)) return request.fallback();
+    writes.push(`${method} ${new URL(url).pathname.slice(0, 60)}`);
+    return request.abort();
+  };
+  if (guarded) await page.route("**/api/**", guard);
+  /** @type {Array<{ label: string, shown: boolean, after?: any }>} */ const rows = [];
+  try {
+    const prepare = async () => {
+      if (!reveal) return;
+      await page.evaluate(rowProbe, ["reveal", 0, reveal]);
+      await page.waitForTimeout(400);
+    };
+    await prepare();
+    const labels = ((await page.evaluate(rowProbe, ["targets", 0, link])) ?? []).slice(0, ROW_CLICK_LISTS_PER_PAGE);
+    for (let index = 0; index < labels.length; index += 1) {
+      if (index > 0) {
+        // The last click may have opened a drawer or left the page: start the next from the page as it loads.
+        await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+        await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
+        await page.waitForTimeout(1_500);
+        await prepare();
+      }
+      const before = await page.evaluate(rowProbe, ["state"]);
+      const external = await page.evaluate(rowProbe, ["external", index, link]);
+      popups.count = 0;
+      await page.evaluate(rowProbe, ["click", index, link]);
+      await page.waitForTimeout(1_500);
+      const after = await page.evaluate(rowProbe, ["state"]);
+      rows.push({ label: labels[index], shown: rowClickShown(before, after, popups.count, external === true) });
+      const kind = AFTER_CLICK_KIND[/** @type {keyof typeof AFTER_CLICK_KIND} */ (name)];
+      if (index === 0 && kind) {
+        // The first list's first row is open: read what it opened to, before the next load closes it. A task's page draws its pane once
+        // the task and its executions are read.
+        if (kind === "taskPage") await page.waitForFunction(taskPaneReady, undefined, { timeout: 6_000 }).catch(() => null);
+        const opened = await page.evaluate(afterClickProbe, [kind]);
+        rows[0].after = opened;
+        const judged = afterClickFindings(name, kind, opened);
+        failures.push(...judged.failures);
+        notices.push(...judged.notices);
+      }
+    }
+  } finally {
+    if (guarded) await page.unroute("**/api/**", guard).catch(() => {});
+  }
+  const verdict = rowClickVerdict(name, rows);
+  failures.push(...verdict.failures);
+  notices.push(...verdict.notices);
+  if (writes.length) notices.push(`${name}@desktop: clicking the first row tried ${writes.length} write(s), refused in the browser: ${[...new Set(writes)].join(", ")}`);
+  return { rows, failures, notices };
 }
 
 /**
@@ -1768,8 +2171,8 @@ async function main() {
     const page = await context.newPage();
     // A row that opens a link in a new tab has shown something: the tab is
     // counted and closed.
-    let popups = 0;
-    page.on("popup", (popup) => { popups += 1; popup.close?.().catch(() => {}); });
+    const popups = { count: 0 };
+    page.on("popup", (popup) => { popups.count += 1; popup.close?.().catch(() => {}); });
     const consoleErrors = {};
     const httpErrors = {};
     page.on("console", (message) => { if (message.type() === "error") (consoleErrors[current] ||= []).push(message.text().slice(0, 160)); });
@@ -1865,36 +2268,15 @@ async function main() {
             if (!clicked || where !== record.to) failures.push(`${current}: ${record.back} ${clicked ? `goes to ${where}` : "is not on the page"} (${record.to})`);
           }
           if (viewportName === "desktop" && ROW_CLICK_PAGES.has(name)) {
-            // Read-only by construction: a row's title opens a drawer, a page
-            // or itself; nothing on these pages writes when it is clicked.
-            const rows = [];
-            const labels = ((await page.evaluate(rowProbe, ["targets"])) ?? []).slice(0, ROW_CLICK_LISTS_PER_PAGE);
-            for (let index = 0; index < labels.length; index += 1) {
-              if (index > 0) {
-                // The last click may have opened a drawer or left the page: start the next from the page as it loads.
-                await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
-                await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
-                await page.waitForTimeout(1_500);
-              }
-              const before = await page.evaluate(rowProbe, ["state"]);
-              const external = await page.evaluate(rowProbe, ["external", index]);
-              popups = 0;
-              await page.evaluate(rowProbe, ["click", index]);
-              await page.waitForTimeout(1_500);
-              const after = await page.evaluate(rowProbe, ["state"]);
-              rows.push({ label: labels[index], shown: rowClickShown(before, after, popups, external === true) });
-              if (index === 0 && AFTER_CLICK_KIND[name]) {
-                // The first list's first row is open: read what it opened to, before the next load closes it.
-                const opened = await page.evaluate(afterClickProbe, [AFTER_CLICK_KIND[name]]);
-                rows[0].after = opened;
-                const judged = afterClickFindings(name, AFTER_CLICK_KIND[name], opened);
-                failures.push(...judged.failures);
-                notices.push(...judged.notices);
-              }
-            }
-            report.pages[current].rowClicks = rows;
-            failures.push(...rowClickFindings(name, rows));
+            // Read-only by construction: a row's title opens a drawer, a page or itself; the pages new to the walk in R13 also have
+            // every request that is not a read refused in the browser while their row is clicked (`walkRowClicks`).
+            const clicked = await walkRowClicks(page, base, route, name, popups);
+            report.pages[current].rowClicks = clicked.rows;
+            failures.push(...clicked.failures);
+            notices.push(...clicked.notices);
             if (name === "files" && found.pdfTitle) await recordStep(report, failures, notices, "files-pdf", () => walkPdfPreview(page, base, route, found.pdfTitle));
+            // A08 on the knowledge base: a search, a document opened from it, and both ways back (only where there is a document to open).
+            if (name === "files" && clicked.rows.length > 0) await recordStep(report, failures, notices, "files-return", () => walkKnowledgeReturn(page, base, route));
             if (name === "extensions-skills") await recordStep(report, failures, notices, "extensions-skills-create", () => walkSkillDrawer(page, base, route));
           }
         } catch (error) {
