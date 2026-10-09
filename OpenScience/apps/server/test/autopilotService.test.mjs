@@ -1094,7 +1094,7 @@ test("an episode from before the number of re-checks was recorded reads it from 
 test("a per-episode cap below what one run needs is refused when it is set, with the minimum named, and the minimum itself is accepted", async () => {
   const { service } = fixture();
   const sentence = knownErrorCodeMessage("autopilot_episode_budget_too_small");
-  assert.match(sentence, new RegExp(`¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)}`), "the researcher's sentence states the minimum");
+  assert.match(sentence, new RegExp(`${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)} 灵豆`), "the researcher's sentence states the minimum, in 灵豆");
   for (const maxEpisodeCny of [0.01, 0.02, 1, 1.19]) {
     await assert.rejects(() => service.create("user-one", { ...agendaInput, maxEpisodeCny }),
       (error) => error.status === 400 && error.code === "autopilot_episode_budget_too_small" && /1\.20/.test(error.message), `create at ¥${maxEpisodeCny}`);
