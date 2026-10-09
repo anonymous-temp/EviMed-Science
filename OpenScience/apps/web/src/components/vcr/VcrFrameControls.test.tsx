@@ -1,9 +1,9 @@
-// The 虚拟临床研究 chip in a browser DOM: what the two selects and the starters do
-// when the reader uses them. The body is the one the socket's build serializes
+// The 虚拟临床研究 chip in a browser DOM: what the chip's menu (起点 and 预期用途, as
+// radio groups that open above the composer) and the starters do when the reader uses them. The body is the one the socket's build serializes
 // into the kernel's page; here it runs against a recording slot registry, the
 // same arrangement `RuntimeUiFrameCards.test.tsx` uses for the GEO chip.
 import * as React from "react";
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
 import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runtimeUiFrame.mjs";
@@ -43,6 +43,8 @@ function vcrFrame() {
   const target = {
     __EVIMED_FRAME__: { version: 1, frameId: "f", projectId: "p", shellOrigin: "https://app.example", cwd: "/workspace", capabilities: [] },
     parent: { postMessage() {} }, addEventListener() {}, removeEventListener() {}, console,
+    // The menu closes on Escape and on a press outside it: it listens on the page.
+    document,
   };
   const kit = createFrameKit(ctx, target, (id: string) => (id === "react" ? React : undefined), FRAME_VOCABULARY);
   const sent: Array<[string, Record<string, unknown>]> = [];
@@ -54,29 +56,44 @@ function vcrFrame() {
 describe("the 虚拟临床研究 chip", () => {
   afterEach(() => { cleanup(); });
 
-  it("says 「虚拟临床研究」, changes where the study starts and what it is for through the shell, and never sends the composer", () => {
+  it("says 「虚拟临床研究」, changes where the study starts and what it is for from the chip's menu through the shell, and never sends the composer", () => {
     const f = vcrFrame();
     const Hero = f.components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<Hero />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "vcr-protocol", sessionId: "session-a" }));
     expect(view.getByText("虚拟临床研究")).toBeInTheDocument();
-    expect(view.queryByRole("combobox", { name: "起点" })).toBeNull();
+    // Without the study's options there is nothing to set: the chip is a name and a way out.
+    expect(view.container.querySelector("[aria-haspopup]")).toBeNull();
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", study(["read", "write", "manage_study"]))));
 
-    const start = view.getByRole("combobox", { name: "起点" });
-    expect(start).toHaveValue("auto");
-    expect(Array.from((start as HTMLSelectElement).options).map((option) => option.textContent))
-      .toEqual(["起点：自动", "起点：队列", "起点：患者", "起点：对照", "起点：试验"]);
-    fireEvent.change(start, { target: { value: "trial" } });
+    // At the defaults the chip says nothing more; the settings are one click away, in a menu that opens above it.
+    const trigger = view.getByRole("button", { name: "虚拟临床研究，设置" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(view.queryByRole("radiogroup", { name: "起点" })).toBeNull();
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const menu = view.getByRole("dialog", { name: "虚拟临床研究设置" });
+    const start = within(menu).getByRole("radiogroup", { name: "起点" });
+    expect(within(start).getAllByRole("radio").map((option) => option.textContent)).toEqual(["自动", "队列", "患者", "对照", "试验"]);
+    expect(within(start).getByRole("radio", { name: "自动" })).toBeChecked();
+    fireEvent.click(within(start).getByRole("radio", { name: "试验" }));
     expect(f.sent.at(-1)).toEqual(["vcr-options", { sessionId: "session-a", start: "trial" }]);
-    expect(start).toHaveValue("trial");
+    expect(within(start).getByRole("radio", { name: "试验" })).toBeChecked();
+    // One setting off its default is named on the chip.
+    expect(view.getByRole("button", { name: "虚拟临床研究 · 试验，设置" })).toBeInTheDocument();
 
-    const use = view.getByRole("combobox", { name: "预期用途" });
-    expect(use).toHaveValue("exploratory");
-    expect(use).toHaveDisplayValue("预期用途：探索");
-    fireEvent.change(use, { target: { value: "design_support" } });
+    const use = within(menu).getByRole("radiogroup", { name: "预期用途" });
+    expect(within(use).getByRole("radio", { name: "探索" })).toBeChecked();
+    fireEvent.click(within(use).getByRole("radio", { name: "研究设计支持" }));
     expect(f.sent.at(-1)).toEqual(["vcr-options", { sessionId: "session-a", intendedUse: "design_support" }]);
-    expect(use).toHaveValue("design_support");
+    expect(within(use).getByRole("radio", { name: "研究设计支持" })).toBeChecked();
+    // Both settings off their defaults: a count, not a sentence.
+    expect(view.getByRole("button", { name: "虚拟临床研究 · 2 项设置，设置" })).toBeInTheDocument();
+
+    // Escape closes the menu and puts focus back on the chip.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(view.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(view.getByRole("button", { name: "虚拟临床研究 · 2 项设置，设置" }));
 
     // A starter fills the composer; nothing is sent.
     fireEvent.click(view.getByRole("button", { name: "估算样本量" }));
@@ -84,19 +101,20 @@ describe("the 虚拟临床研究 chip", () => {
     expect(f.sent.filter(([type]) => type !== "vcr-options")).toEqual([]);
   });
 
-  it("draws the six starting points of a new study on the blank conversation — with the chip's options or, with no study found, without them — and a pill only fills the composer", () => {
+  it("draws the six starting points of a new study on the blank conversation — with the chip's menu or, with no study found, without it — and a pill only fills the composer", () => {
     const f = vcrFrame();
     const Hero = f.components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<Hero />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "vcr-protocol", sessionId: "session-a" }));
     const labels = ["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"];
-    // No study yet (the shell could not read one): the pills are still there, and the chip has no options to offer.
+    // No study yet (the shell could not read one): the pills are still there, and the chip has no menu to offer.
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", null)));
     expect(labels.every((label) => view.queryByRole("button", { name: label }))).toBe(true);
-    expect(view.queryByRole("combobox", { name: "起点" })).toBeNull();
-    // The study the shell found by its project — a draft nobody has spoken in — gives the chip its options, and the pills stay.
+    expect(view.container.querySelector("[aria-haspopup]")).toBeNull();
+    // The study the shell found by its project — a draft nobody has spoken in — gives the chip its menu, and the pills stay.
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", { ...study(["read", "write", "manage_study"]), status: "draft" } as VcrStudy)));
-    expect(view.getByRole("combobox", { name: "起点" })).toHaveValue("auto");
+    fireEvent.click(view.getByRole("button", { name: "虚拟临床研究，设置" }));
+    expect(within(view.getByRole("radiogroup", { name: "起点" })).getByRole("radio", { name: "自动" })).toBeChecked();
     expect(labels.every((label) => view.queryByRole("button", { name: label }))).toBe(true);
     fireEvent.click(view.getByRole("button", { name: "模拟试验方案" }));
     expect(f.drafts).toEqual(["帮我模拟几个试验方案：比较样本量、功效、成功把握、周期和成本，研究是："]);
@@ -109,11 +127,14 @@ describe("the 虚拟临床研究 chip", () => {
     const view = render(<Chip />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "vcr-package", sessionId: "session-a" }));
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", study(["read", "write", "manage_study"]))));
-    const use = view.getByRole("combobox", { name: "预期用途" });
-    fireEvent.change(use, { target: { value: "submission_preparation" } });
-    expect(use).toHaveValue("submission_preparation");
+    fireEvent.click(view.getByRole("button", { name: "虚拟临床研究，设置" }));
+    const use = () => within(view.getByRole("dialog", { name: "虚拟临床研究设置" })).getByRole("radiogroup", { name: "预期用途" });
+    fireEvent.click(within(use()).getByRole("radio", { name: "申报准备" }));
+    expect(within(use()).getByRole("radio", { name: "申报准备" })).toBeChecked();
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", study(["read", "write", "manage_study"]))));
-    expect(view.getByRole("combobox", { name: "预期用途" })).toHaveValue("exploratory");
+    expect(within(use()).getByRole("radio", { name: "探索" })).toBeChecked();
+    expect(within(use()).getByRole("radio", { name: "申报准备" })).not.toBeChecked();
+    expect(view.getByRole("button", { name: "虚拟临床研究，设置" })).toBeInTheDocument();
     // The starters are the blank conversation's: not under the composer.
     expect(view.queryByRole("button", { name: "完整研究" })).toBeNull();
   });
@@ -124,11 +145,14 @@ describe("the 虚拟临床研究 chip", () => {
     const view = render(<Chip />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "vcr-matching", sessionId: "session-a" }));
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", study(["read", "write"]))));
-    expect(view.getByRole("combobox", { name: "起点" })).toBeInTheDocument();
-    expect(view.queryByRole("combobox", { name: "预期用途" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "虚拟临床研究，设置" }));
+    const menu = view.getByRole("dialog", { name: "虚拟临床研究设置" });
+    expect(within(menu).getByRole("radiogroup", { name: "起点" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("radiogroup", { name: "预期用途" })).toBeNull();
+    // A reader who can change nothing has no menu at all: the chip is a name and a way out.
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", study(["read"]))));
-    expect(view.queryByRole("combobox", { name: "起点" })).toBeNull();
-    expect(view.queryByRole("combobox", { name: "预期用途" })).toBeNull();
+    expect(view.queryByRole("dialog")).toBeNull();
+    expect(view.container.querySelector("[aria-haspopup]")).toBeNull();
     expect(view.getByText("虚拟临床研究")).toBeInTheDocument();
   });
 });
