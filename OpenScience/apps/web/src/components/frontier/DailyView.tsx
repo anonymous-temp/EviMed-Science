@@ -137,10 +137,11 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
     const when = state.schedule ? scheduleLabel(state.schedule) : null;
     const asked = !weekly ? state.day ?? state.publication?.day ?? null : null;
     const outcome = !weekly ? state.publication?.state : null;
+    const dateLabel = asked ? shortDate(asked) : "今日";
     return (
       <EmptyState
         icon={CalendarDays}
-        title={outcome === "failed" ? "日报生成失败" : outcome === "empty" ? `${state.day ? shortDate(state.day) : "今日"}没有符合条件的内容` : outcome === "pending" ? (when ? `日报尚未发布，每天 ${when}发布` : "日报尚未发布") : weekly ? "暂无周报" : asked ? `${shortDate(asked)}没有日报` : when ? `今日日报 ${when}发布` : "今日日报尚未发布"}
+        title={outcome === "failed" ? `${dateLabel}日报生成失败` : outcome === "empty" ? `${dateLabel}没有符合条件的内容` : outcome === "pending" ? (when ? `${dateLabel}日报尚未发布，每天 ${when}发布` : `${dateLabel}日报尚未发布`) : weekly ? "暂无周报" : asked ? `${shortDate(asked)}没有日报` : when ? `今日日报 ${when}发布` : "今日日报尚未发布"}
         description={outcome === "failed" ? "暂未生成这一期日报，可以先阅读往期。" : outcome === "empty" ? `${asked ? shortDate(asked) : "这一天"}未出刊，可以阅读往期。` : weekly ? undefined : asked && when ? `日报每天 ${when}发布；当天没有符合条件的内容时不出刊。` : "当天没有符合条件的内容时不出刊。"}
         action={pastIssues(asked) || undefined}
       />

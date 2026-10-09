@@ -682,8 +682,27 @@ export const EXPECTED_REFUSALS = {
  * @returns {string[]}
  */
 export function unexpectedRefusals(name, httpErrors) {
+  // Before the publication time, today's issue is absent too. Only that
+  // resource's 404 is expected; an unavailable index or any 5xx still fails.
+  if (budgetKey(name) === "frontier-daily") {
+    return httpErrors.filter((entry) => !/^404 \/api\/frontier\/dailies\/\d{4}-\d{2}-\d{2}$/.test(entry));
+  }
   const allowed = EXPECTED_REFUSALS[/** @type {keyof typeof EXPECTED_REFUSALS} */ (budgetKey(name))] ?? [];
   return httpErrors.filter((entry) => !(allowed.includes(Number(entry.split(" ")[0])) && / \/api\//.test(entry)));
+}
+
+/** A Docker network change can leave Chromium retrying its error page. Reset it before one recorded retry. */
+export async function navigateForWalk(page, url, onRetry) {
+  const options = { waitUntil: "domcontentloaded", timeout: 60_000 };
+  try {
+    return await page.goto(url, options);
+  } catch (error) {
+    if (!/net::ERR_NETWORK_CHANGED\b/.test(String(error))) throw error;
+    onRetry();
+    await page.goto("about:blank", options);
+    await page.waitForTimeout(1_000);
+    return page.goto(url, options);
+  }
 }
 
 /**
@@ -2306,7 +2325,7 @@ async function main() {
       for (const [name, route] of routes) {
         current = `${name}@${viewportName}`;
         try {
-          await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+          await navigateForWalk(page, `${base}${route}`, () => notices.push(`${current}: retried once after Chromium reported a host network change`));
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
           await page.waitForTimeout(3_000);
           await page.screenshot({ path: path.join(out, `${current}.png`) });

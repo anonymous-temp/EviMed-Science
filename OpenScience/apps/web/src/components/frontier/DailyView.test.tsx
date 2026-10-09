@@ -130,6 +130,19 @@ describe("a day without an issue", () => {
   const showEmpty = (state: DailyState, props: Partial<Parameters<typeof DailyIssue>[0]> = {}) =>
     render(<MemoryRouter><DailyIssue state={state} onDay={() => {}} {...props} /></MemoryRouter>);
 
+  it.each([
+    ["pending", "10月1日 周四日报尚未发布"],
+    ["failed", "10月1日 周四日报生成失败"],
+    ["empty", "10月1日 周四没有符合条件的内容"],
+  ] as const)("keeps the real publication date for a %s outcome and offers past issues", (outcome, title) => {
+    showEmpty(empty({
+      publication: { day: "2026-10-01", state: outcome },
+      index: [{ day: "2026-09-30", title: null, itemCount: 3, generatedAt: null }],
+    }));
+    expect(screen.getByText(title)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "往期" })).toBeInTheDocument();
+  });
+
   it("names the publication time and time zone the server reports, not a time written into the page", () => {
     showEmpty(empty({ schedule: { time: "08:15", timeZone: "Asia/Shanghai" } }));
     expect(screen.getByText("今日日报 08:15（北京时间）发布")).toBeInTheDocument();

@@ -27,7 +27,7 @@ import {
   rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
   addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
-  handoffFindings, handoffProbe, HANDOFF_FIELDS, NOTICE_SECTION_PAGES, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  handoffFindings, handoffProbe, HANDOFF_FIELDS, navigateForWalk, NOTICE_SECTION_PAGES, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -1101,12 +1101,28 @@ test("the refusals a page is walked to meet are not failures, and any other refu
   assert.deepEqual(Object.keys(EXPECTED_REFUSALS).sort(), ["extensions-skill-missing", "frontier-daily-empty", "memory-shared-missing"]);
   // A day nobody published answers 404, and the page is walked to say so in words.
   assert.deepEqual(unexpectedRefusals("frontier-daily-empty", ["404 /api/frontier/dailies/2020-01-01", "500 /api/frontier/dailies"]), ["500 /api/frontier/dailies"]);
+  assert.deepEqual(unexpectedRefusals("frontier-daily", ["404 /api/frontier/dailies/2026-10-10", "404 /api/frontier/dailies", "404 /api/me", "500 /api/frontier/dailies/2026-10-10"]), ["404 /api/frontier/dailies", "404 /api/me", "500 /api/frontier/dailies/2026-10-10"]);
   assert.deepEqual(unexpectedRefusals("extensions-skill-missing", ["404 /api/skills/impeccable-audit-missing", "500 /api/skills"]), ["500 /api/skills"]);
   assert.deepEqual(unexpectedRefusals("memory-shared-missing", ["404 /api/capsules/shares/x", "410 /api/capsules/shares/x", "403 /api/capsules"]), ["403 /api/capsules"]);
   // A page with no expected refusal keeps all of them, and a refusal that is not the API's was never a refusal of the page.
   assert.deepEqual(unexpectedRefusals("memory", ["404 /api/memory"]), ["404 /api/memory"]);
   assert.deepEqual(pageFindings("extensions-skill-missing", "desktop", clean(), unexpectedRefusals("extensions-skill-missing", ["404 /api/skills/x"])).failures, []);
   assert.equal(pageFindings("extensions-skill-missing", "desktop", clean(), unexpectedRefusals("extensions-skill-missing", ["502 /api/skills/x"])).failures.length, 1);
+});
+
+test("navigation resets Chromium's error page after a network change and retries only once", async () => {
+  const visited = [];
+  let notices = 0;
+  const page = { goto: async (url) => { visited.push(url); if (visited.length === 1) throw new Error("page.goto: net::ERR_NETWORK_CHANGED"); return "loaded"; }, waitForTimeout: async () => {} };
+  assert.equal(await navigateForWalk(page, "https://example.org/app/files", () => notices++), "loaded");
+  assert.deepEqual(visited, ["https://example.org/app/files", "about:blank", "https://example.org/app/files"]);
+  assert.equal(notices, 1);
+  let attempts = 0;
+  page.goto = async (url) => { if (url !== "about:blank") { attempts++; throw new Error("net::ERR_NETWORK_CHANGED"); } };
+  await assert.rejects(navigateForWalk(page, "https://example.org/app/files", () => {}), /ERR_NETWORK_CHANGED/);
+  assert.equal(attempts, 2);
+  page.goto = async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); };
+  await assert.rejects(navigateForWalk(page, "https://example.org/app/files", () => { throw new Error("unexpected retry"); }), /ERR_CONNECTION_REFUSED/);
 });
 
 test("the studies and ids the walk opens are read from the lists, and a missing id is a page not walked", () => {
