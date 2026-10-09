@@ -9,7 +9,9 @@ async function fixture(t) {
   /** @type {any[]} */ const calls = []
   const server = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk
-    const body = JSON.parse(raw); calls.push({ path: req.url, body, token: req.headers.authorization })
+    const body = JSON.parse(raw)
+    // The current document selection is refreshed separately; these assertions track handbook receipts only.
+    if (!req.url?.endsWith('/session')) calls.push({ path: req.url, body, token: req.headers.authorization })
     const data = req.url?.endsWith('/handbook-context') ? { contexts: (body.inputs ?? []).map((/** @type {any} */ input) => ({ requestId: input.requestId, digest: 'd'.repeat(64), context: `Supplement ${input.requestId}` })) }
       : req.url?.endsWith('/handbook-attached') ? { attached: body.receipts.map((/** @type {any} */ item) => item.requestId) } : { context: '' }
     res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(data))

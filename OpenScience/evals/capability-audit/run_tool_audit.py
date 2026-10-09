@@ -113,6 +113,12 @@ TASK_FIXTURES = {
     # `semantics_disabled`, with no recorded dataset it answers an empty list, and either certifies the route
     # and the token.
     "dataset_semantics": {"action": "read"},
+    # Non-mutating refusal probes. The past date cannot create a scheduled task,
+    # and the fixture id cannot name a generated agenda. Successful task creation
+    # and edits are exercised in evals/task-conversation against real DSH instead.
+    "schedule_task": {"instruction": "Release audit: do not create a task.",
+                      "schedule": {"kind": "once", "date": "2000-01-01", "time": "00:00", "timeZone": "UTC"}},
+    "update_task": {"taskId": "agenda-release-audit-probe", "paused": True},
     # `op: providers` asks the probe which front-ends this deployment can reach
     # and is the only operation with no side effect: `ask` would drive real
     # browser sessions against five consumer products. The tool was declared,

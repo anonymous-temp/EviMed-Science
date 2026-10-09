@@ -1428,24 +1428,29 @@ jobs:
           assert.ok(['core', 'vcr'].includes(subset));
           const root = path.join(process.env.RUNNER_TEMP, `evimed-${subset}-release`);
           fs.mkdirSync(root, { mode: 0o700 });
+          const full = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'evimed-release/manifest.json'), 'utf8'));
+          assert.equal(full.sourceRevision, process.env.OPEN_SCIENCE_SOURCE_REVISION);
           const selected = subset === 'core' ? {
             web: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
             controller: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
             backup: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
             runtime: process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE,
             resultReplay: process.env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE,
-            evidenceAdapter: process.env.EVIMED_DRUG_EVIDENCE_ADAPTER_IMAGE,
+            evidenceAdapter: full.images.flatMap(image => image.references)
+              .find(reference => reference.startsWith('evimed-drug-evidence-adapter:')),
           } : { vcr: process.env.EVIMED_VCR_ENGINE_IMAGE };
-          const full = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'evimed-release/manifest.json'), 'utf8'));
-          assert.equal(full.sourceRevision, process.env.OPEN_SCIENCE_SOURCE_REVISION);
           const roles = {}, images = [], files = [];
           for (const [role, reference] of Object.entries(selected)) {
             const recorded = full.images.find(image => image.references.includes(reference));
             assert.ok(recorded, `Missing full-release image for ${role}`);
             const inspected = JSON.parse(execFileSync('docker', ['image', 'inspect', reference], { encoding: 'utf8' }))[0];
             assert.equal(inspected.Id, recorded.configDigest);
-            assert.equal(inspected.Config.Labels['org.opencontainers.image.revision'], process.env.OPEN_SCIENCE_SOURCE_REVISION);
-            assert.equal(inspected.Config.Labels['org.opencontainers.image.version'], process.env.OPEN_SCIENCE_RELEASE_ID);
+            // The adapter has its own stable service version. Its exact config
+            // and layers are bound to this source by the full CI image inventory.
+            if (role !== 'evidenceAdapter') {
+              assert.equal(inspected.Config.Labels['org.opencontainers.image.revision'], process.env.OPEN_SCIENCE_SOURCE_REVISION);
+              assert.equal(inspected.Config.Labels['org.opencontainers.image.version'], process.env.OPEN_SCIENCE_RELEASE_ID);
+            }
             assert.deepEqual(inspected.RootFS.Layers, recorded.rootfs.diff_ids);
             assert.equal(`${inspected.Os}/${inspected.Architecture}`, 'linux/amd64');
             roles[role] = { imageId: inspected.Id, reference };

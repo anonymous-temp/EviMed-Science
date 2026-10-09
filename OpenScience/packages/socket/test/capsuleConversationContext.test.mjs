@@ -3,6 +3,7 @@ import { createServer } from 'node:http'
 import test from 'node:test'
 
 import { apply } from '../plugins/capsule.mjs'
+import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from '@evimed/domain'
 
 // 2026-09-28: a 「试用一次」 conversation is opened in the kernel's own
 // surface, and the pack it was trying was added only to a dispatch from the
@@ -16,8 +17,9 @@ const TRIAL = '<evimed-capsule-trial>\n用户正在试用别人分享的胶囊�
 /**
  * A control plane that answers `session` for one trial conversation.
  * @param {import('node:test').TestContext} t
+ * @param {(sessionId: string) => string} [contextFor]
  */
-async function controlPlane(t) {
+async function controlPlane(t, contextFor = sessionId => sessionId === 'ses_trial' ? TRIAL : '') {
   /** @type {any[]} */
   const asked = []
   const server = createServer((req, res) => {
@@ -26,7 +28,7 @@ async function controlPlane(t) {
     req.on('end', () => {
       asked.push({ path: req.url, body: JSON.parse(body) })
       res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ context: JSON.parse(body).sessionId === 'ses_trial' ? TRIAL : '' }))
+      res.end(JSON.stringify({ context: contextFor(JSON.parse(body).sessionId) }))
     })
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)))
@@ -102,12 +104,32 @@ test('an ordinary conversation is handed nothing, a delegated child is never ask
   assert.equal(unconfigured.hooks.has('agent/pre-step'), false)
 })
 
-test('a control plane that cannot answer costs the conversation its context, never its step', async () => {
+test('a control plane that cannot answer keeps the turn usable without widening knowledge-base access', async () => {
   const { ctx, hooks, degraded } = pluginContext()
   await apply(ctx, { enabled: true, methodsDir: '', recallUrl: 'http://127.0.0.1:9/internal/capsules/v1', tokenFile: '', recallTimeoutMs: 500 })
   const decision = await hooks.get('agent/pre-step')(stepOf('ses_trial').payload, async () => ({ kind: 'enter', messages: [] }))
   assert.equal(decision.kind, 'enter')
-  assert.deepEqual(decision.messages, [])
+  assert.equal(decision.messages.at(-1).content[0].text, SOURCE_SCOPE_UNAVAILABLE_CONTEXT)
   assert.equal(degraded.length, 1)
   assert.match(degraded[0], /conversation context not read/)
+})
+
+test('source selection is refreshed for a later input, survives a rejected step, and can be cleared', async t => {
+  let current = 'Use only document A.'
+  const plane = await controlPlane(t, () => current)
+  const { ctx, hooks } = pluginContext()
+  await apply(ctx, { enabled: true, methodsDir: '', recallUrl: plane.url, tokenFile: '', recallTimeoutMs: 3000 })
+  const preStep = hooks.get('agent/pre-step')
+  const at = (/** @type {number} */ turn) => ({ ...stepOf('ses_sources', { turn }).payload,
+    messages: [{ role: 'user', source: { kind: 'user', rpcId: `input-${turn}` }, content: [{ type: 'text', text: 'Use the selected sources.' }] }] })
+  const enter = (/** @type {any} */ payload) => preStep(payload, async () => ({ kind: 'enter', messages: payload.messages }))
+  assert.equal((await enter(at(1))).messages.at(-1).content[0].text, current)
+  current = 'Use only document B; this replaces earlier selections.'
+  await preStep(at(2), async () => ({ kind: 'reject' }))
+  assert.equal((await enter(at(2))).messages.at(-1).content[0].text, current)
+  current = 'No document selection is currently applied.'
+  assert.equal((await enter(at(3))).messages.at(-1).content[0].text, current)
+  const count = plane.asked.filter(call => call.path.endsWith('/session')).length
+  await enter(at(3))
+  assert.equal(plane.asked.filter(call => call.path.endsWith('/session')).length, count)
 })

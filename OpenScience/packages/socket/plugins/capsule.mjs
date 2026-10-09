@@ -32,6 +32,7 @@ import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, 
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
 import { isLearnedMethod } from '../src/learnedMethods.mjs'
 import { sendWithFreshWorkloadToken } from '../src/workloadRequest.mjs'
+import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from '@evimed/domain'
 
 const Schema = await configSchema()
 
@@ -159,8 +160,9 @@ export async function apply(ctx, config) {
   })
   ctx.effect(() => registerTool(ctx, noteTool))
 
-  // What the conversation's own state adds to it, asked for once, at its first
-  // step: today, the pack a 「试用一次」 conversation is trying, with the one
+  // What the conversation's current state adds to each entering input: the
+  // selected knowledge sources can change between turns, as can the pack a
+  // 「试用一次」 conversation is trying, with the one
   // sentence the model owes the reader about it (build spec §9.4 #5, #8). The
   // control plane used to add it only to a dispatch from the shell, and a
   // trial is opened in the kernel's own conversation surface, whose prompts
@@ -168,23 +170,26 @@ export async function apply(ctx, config) {
   // pack. Delivered inside the entering step, as run-policy delivers a brief,
   // so it reaches the request that answers the first question.
   if (config.recallUrl) {
-    /** Conversations already asked for, so a step counted first twice asks once. @type {Set<string>} */
+    /** Inputs already attached, so a rejected step can retry without losing context. @type {Set<string>} */
     const asked = new Set()
     ctx.effect(() => onPreStep(ctx, async (step, payload) => {
       const agent = payload?.agent
-      if (!step.first || !step.root || !agent || !step.sessionId || asked.has(step.sessionId)) return { allow: true }
-      asked.add(step.sessionId)
-      if (asked.size > 1_000) {
-        const oldest = asked.values().next().value
-        if (oldest !== undefined) asked.delete(oldest)
-      }
+      const inputs = stepUserInputs(payload).map(input => input.requestId)
+      const key = JSON.stringify([step.sessionId, step.turn, inputs])
+      if ((!step.first && !inputs.length) || !step.root || !agent || !step.sessionId || asked.has(key)) return { allow: true }
       const response = await callControlPlane(ctx, config, 'session', { sessionId: step.sessionId })
-      const text = response.ok && typeof response.data?.context === 'string' ? response.data.context.trim() : ''
+      const text = response.ok ? (typeof response.data?.context === 'string' ? response.data.context.trim() : '') : SOURCE_SCOPE_UNAVAILABLE_CONTEXT
       if (text) injectContext(agent, text, name)
       // Memory is an enhancement: the conversation goes on without it, and
       // says so where an operator looks.
       if (!response.ok) ctx.get('evimedDiagnostics')?.degrade?.(`conversation context not read: ${response.message}`)
-      return { allow: true }
+      return { allow: true, discardOnReject: true, onEntered: () => {
+        asked.add(key)
+        if (asked.size > 1_000) {
+          const oldest = asked.values().next().value
+          if (oldest !== undefined) asked.delete(oldest)
+        }
+      } }
     }, (payload) => ({
       first: Number(payload?.turn ?? 0) <= 1 && Number(payload?.step ?? 0) <= 1,
       root: !isSubagentSession(payload?.agent),

@@ -122,6 +122,7 @@ import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.m
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
 import { sourceConversationContext } from "./sourceConversationContext.mjs";
+import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 import {
   OPEN_DOMAIN_ANSWER_AGENT_ID,
   classifierFailureReason,
@@ -4449,9 +4450,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const dispatched = (await agentRuns.activeRuns(project)).some((/** @type {any} */ run) => run.sessionId === sessionId && run.dispatchId);
           const session = await researchSessions.get(project, sessionId);
           return [dispatched ? null : boundConversationNote(session, await agentRegistry),
-            await sourceConversationContext(sourceService, project, session)].filter(Boolean).join("\n") || null;
-        })().catch(() => "The conversation's knowledge-base scope is temporarily unavailable. Do not read knowledge-base files or search the knowledge base on this turn; explain that the selected materials are temporarily unavailable if the question needs them.");
-        return [...(bound ? [bound] : []), ...await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, userId, projectId, sessionId)];
+            await sourceConversationContext(sourceService, project, session, true)].filter(Boolean).join("\n") || null;
+        })().catch(() => SOURCE_SCOPE_UNAVAILABLE_CONTEXT);
+        return [...(bound ? [bound] : []), ...await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, userId, projectId, sessionId).catch(() => [])];
       },
       recordRecall: (project, runId, items) => agentRuns.recordLearning(project, runId, {
         appendRecalledMemories: items.map((item) => (item.source === "capsule"

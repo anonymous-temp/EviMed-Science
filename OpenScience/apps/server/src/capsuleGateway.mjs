@@ -1,4 +1,4 @@
-import { CAPSULE_FACT_KINDS } from "@evimed/domain";
+import { CAPSULE_FACT_KINDS, SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 import { recallAcrossMemory } from "./memoryRecall.mjs";
 import { HttpError, readJson, sendError, sendJson } from "./security.mjs";
 
@@ -81,9 +81,9 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         if (typeof body.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId)) {
           throw new HttpError(400, "capsule_payload_invalid", "Invalid session id.");
         }
-        // Best effort, like every read of a conversation's own state: nothing
-        // to add is an answer, and so is a store that cannot say.
-        const notes = sessions?.notes ? await sessions.notes(currentUser.id, identity.projectId, body.sessionId).catch(() => []) : [];
+        // An unreadable selection cannot silently widen the knowledge-base scope.
+        const notes = sessions?.notes ? await sessions.notes(currentUser.id, identity.projectId, body.sessionId)
+          .catch(() => [SOURCE_SCOPE_UNAVAILABLE_CONTEXT]) : [];
         sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "session-memory", { context: notes.join("\n\n") }) : { context: notes.join("\n\n") });
         return;
       }

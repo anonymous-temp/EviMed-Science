@@ -1,5 +1,7 @@
 import { quoteIsPresent } from './clinicalEvidence.mjs'
 
+export const SOURCE_SCOPE_UNAVAILABLE_CONTEXT = "The conversation's current knowledge-base scope could not be read. Do not read knowledge-base files or search the knowledge base on this turn. If the question needs those materials, explain that they are temporarily unavailable."
+
 /** Keep citation metadata out of visible prose, including an unfinished streaming comment.
  * @param {string} text
  */

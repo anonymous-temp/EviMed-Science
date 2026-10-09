@@ -5,6 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
+import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 
 async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
@@ -253,7 +254,7 @@ test("a conversation's first step asks what its own state adds: the pack a trial
   // A store that cannot say, or a deployment without research memory, adds nothing.
   const broken = { ...sessionsDouble([]), notes: async () => { throw new Error("down"); } };
   const g = await fixture(t, { sessions: broken });
-  assert.deepEqual(await (await g.request("session", { sessionId: "ses_trial" })).json(), { context: "" });
+  assert.deepEqual(await (await g.request("session", { sessionId: "ses_trial" })).json(), { context: SOURCE_SCOPE_UNAVAILABLE_CONTEXT });
   const h = await fixture(t);
   assert.deepEqual(await (await h.request("session", { sessionId: "ses_trial" })).json(), { context: "" });
 });

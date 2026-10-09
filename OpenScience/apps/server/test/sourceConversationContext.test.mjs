@@ -16,6 +16,7 @@ test("a selected library, even a small one, names only readable selected documen
   assert.doesNotMatch(note, /Do not read|private|deleted/);
   assert.match(note, /including when reading files directly/);
   assert.equal(await sourceConversationContext(service, { id: "p" }, { sourceScope: null }), null);
+  assert.match(await sourceConversationContext(service, { id: "p" }, { sourceScope: null }, true), /replaces any document selection stated in earlier turns/);
 });
 
 test("an unavailable scoped library never becomes an instruction to read everything", async () => {

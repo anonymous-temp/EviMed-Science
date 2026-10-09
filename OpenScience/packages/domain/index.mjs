@@ -32,9 +32,8 @@ export { webVitalRoute, validWebVital } from './src/webVitals.mjs'
 export { conversationReference } from './src/conversationReference.mjs'
 /** @typedef {import('./src/artifactPresentation.mjs').ArtifactRole} ArtifactRole */
 /** @typedef {import('./src/runActions.mjs').RunAction} RunAction */
-export { sourceCitationProse, sourceCitationReferences, locateSourceQuotation } from './src/sourceCitations.mjs'
+export { SOURCE_SCOPE_UNAVAILABLE_CONTEXT, sourceCitationProse, sourceCitationReferences, locateSourceQuotation } from './src/sourceCitations.mjs'
 
-export { agendaResultKind } from './src/agenda.mjs'
 /** @typedef {import('./src/agenda.mjs').AgendaResultKind} AgendaResultKind */
 
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */
@@ -623,6 +622,7 @@ export {
   VERIFICATION_BUDGET_SHARE,
   VERIFICATION_CANCELED_BY_STOP,
   VERIFICATION_UNSCHEDULED_REASONS,
+  agendaResultKind,
   datasetPartitionOf,
   digestPlacement,
   directionVerdict,

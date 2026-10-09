@@ -160,7 +160,10 @@ describe("the files after the answer that delivered them", () => {
     act(() => f.kit.hub.deliver("run-state", live));
     expect(registered).toEqual([]);
     expect(f.find("conversation.view")).toBeUndefined();
-    expect(f.find("conversation.input.dock")).toBeUndefined();
+    const Dock = f.find("conversation.input.dock")!;
+    const dock = render(<Dock />);
+    expect(dock.container).toBeEmptyDOMElement();
+    dock.unmount();
     const Answer = f.find("conversation.chat.node", "assistant-step")!;
     render(<Answer {...answerProps} />);
     // The document's name, as the shell's reader titles it; the size the kernel reports.
