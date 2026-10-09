@@ -3,7 +3,7 @@
  */
 export function webVitalRoute(pathname) {
   const area = /^\/app(?:\/([a-z-]+))?(?:\/|$)/.exec(String(pathname).split('?')[0])?.[1] ?? '';
-  return ['chat', 'files', 'autopilot', 'frontier', 'geo', 'vcr', 'settings', 'inbox', 'memory', 'tools'].includes(area)
+  return ['chat', 'files', 'autopilot', 'frontier', 'geo', 'virtual-research', 'account', 'inbox', 'memory', 'capabilities', 'extensions', 'runs'].includes(area)
     ? `/app/${area}` : /^\/app(?:\/|$)/.test(pathname) ? '/app' : null;
 }
 
