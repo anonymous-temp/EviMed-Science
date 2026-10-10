@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
+import { CAPABILITY_DISPLAY } from "@evimed/domain";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { useToastStore } from "@/lib/toast";
@@ -12,7 +13,7 @@ const skills = vi.hoisted(() => ({
   getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), personalSkillSupply: vi.fn(), createPersonalSkill: vi.fn(), saveProjectSkills: vi.fn(),
 }));
 const extensions = vi.hoisted(() => ({ pluginInventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), installExtension: vi.fn() }));
-const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn(), listWebPluginRevisions: vi.fn(), retryWebPlugin: vi.fn(), rollbackWebPlugin: vi.fn() }));
+const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn(), listWebPluginRevisions: vi.fn(), retryWebPlugin: vi.fn(), rollbackWebPlugin: vi.fn(), listWebResearchAgents: vi.fn(), putWebResearchSession: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), ...extensions }));
 vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), ...api }));
@@ -43,10 +44,25 @@ const citePlugin = {
   desired: { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, effective: null, phase: "saved", error: null, removed: false, limits: { minTimeoutMs: 2000, maxTimeoutMs: 15000 },
 };
 
+// The curated tools the catalogue lists, as `GET /api/agents` returns them, and the module-only one it leaves out (`display.listed:
+// false`): the same records 科研工具 reads.
+const toolRecord = (id: string) => ({
+  id, version: "1.0.0", title: id, category: "", description: "", skill: id, estimatedMinutes: [20, 40] as [number, number],
+  starterPrompts: [], requiredInputs: [], optionalInputs: [], requiredTools: [], optionalTools: [], dataSources: [], outputs: [],
+  completionChecks: [], runtimeAgent: `evimed-${id}`,
+});
+const TOOL_IDS = ["statistical-analysis", "meta-analysis", "evidence-appraisal", "clinical-evidence-synthesis", "peer-review", "drug-selection"];
+const catalogue = [...TOOL_IDS.map(toolRecord), toolRecord("geo-insight")];
+const toolTitle = (id: string) => CAPABILITY_DISPLAY[id].title;
 function Where() { return <p data-testid="where">{useLocation().pathname}</p>; }
 function open(path: string) {
   return render(<MemoryRouter initialEntries={[path]}><Where />
     <Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>);
+}
+/** The same page, with the conversation route beside it: a tool row opens a conversation, and that is where it lands. */
+function openWithChat(path: string) {
+  return render(<MemoryRouter initialEntries={[path]}><Where />
+    <Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /><Route path="/app/chat" element={<p>对话</p>} /></Routes></MemoryRouter>);
 }
 beforeEach(() => {
   vi.resetAllMocks();
@@ -64,6 +80,8 @@ beforeEach(() => {
   extensions.extensionInstallations.mockResolvedValue({ items: [], nextCursor: null });
   api.listWebPlugins.mockResolvedValue([citePlugin]);
   api.listWebPluginRevisions.mockResolvedValue([]);
+  api.listWebResearchAgents.mockResolvedValue([]);
+  api.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
 });
 
 it("lists the platform's skills by use with the reader's own first, four to a group and the rest on request", async () => {
@@ -97,6 +115,60 @@ it("is one page titled for both tabs, with the counts, and has no runtime sectio
   expect(skills.listPlatformSkills).toHaveBeenCalledTimes(1);
 });
 
+// The header says what the page holds in its search box, the way 科研工具 does, and carries no sentence under the title:
+// PageHeader has no place for one (DESIGN.md, 页头).
+it("names its search box for what the page holds, and the header has no sentence under the title", async () => {
+  open("/app/extensions/skills");
+  await screen.findByRole("region", { name: "科研分析" });
+  expect(screen.getByRole("searchbox", { name: "搜索插件与技能" })).toHaveAttribute("placeholder", "搜索插件与技能");
+  expect(screen.getByRole("heading", { level: 1, name: "插件与技能" }).closest("header")?.querySelectorAll("p")).toHaveLength(0);
+});
+
+// 2026-10-10 ruling: 科研工具 is the platform's own curated set and 插件与技能 holds everything, so the tools 科研工具 lists are a group
+// here too — the same records and filter, and a row opens the conversation its card opens.
+it("lists the curated research tools as a 平台内置 group on the skills tab, four to a group, and counts them with the skills", async () => {
+  api.listWebResearchAgents.mockResolvedValue(catalogue);
+  open("/app/extensions/skills");
+  const group = await screen.findByRole("region", { name: "平台内置" });
+  expect(within(group).getAllByRole("listitem")).toHaveLength(4);
+  await userEvent.click(within(group).getByRole("button", { name: "展开其余 2 个" }));
+  expect(within(group).getAllByRole("listitem")).toHaveLength(6);
+  for (const id of TOOL_IDS) expect(within(group).getByRole("button", { name: toolTitle(id) })).toBeInTheDocument();
+  // Nine platform skills and six tools: the module-only capability is left out, as 科研工具 leaves it out, and the tab counts what it lists.
+  expect(await screen.findByRole("tab", { name: /^技能\s*15$/ })).toBeInTheDocument();
+});
+
+it("a tool row opens a new conversation bound to that tool, as its 科研工具 card does", async () => {
+  api.listWebResearchAgents.mockResolvedValue(catalogue);
+  openWithChat("/app/extensions/skills");
+  const group = await screen.findByRole("region", { name: "平台内置" });
+  await userEvent.click(within(group).getByRole("button", { name: toolTitle("statistical-analysis") }));
+  await waitFor(() => expect(api.putWebResearchSession).toHaveBeenCalledWith(
+    expect.stringMatching(/^web-/), { mode: "specialist", agentId: "statistical-analysis", agentVersion: "1.0.0" }));
+  expect(await screen.findByTestId("where")).toHaveTextContent("/app/chat");
+});
+
+it("a catalogue of tools that cannot be read says so with a way to try again, and the skills still show", async () => {
+  api.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("down", { status: 503 })).mockResolvedValue(catalogue);
+  open("/app/extensions/skills");
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "科研分析" })).toBeInTheDocument();
+  await userEvent.click(within(screen.getByRole("alert")).getByRole("button", { name: "重试" }));
+  expect(await screen.findByRole("region", { name: "平台内置" })).toBeInTheDocument();
+});
+
+it("the group follows the search box, and a search that matches no tool leaves it out", async () => {
+  api.listWebResearchAgents.mockResolvedValue(catalogue);
+  open("/app/extensions/skills");
+  await screen.findByRole("region", { name: "平台内置" });
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "统计分析");
+  expect(within(screen.getByRole("region", { name: "平台内置" })).getAllByRole("listitem")).toHaveLength(1);
+  await userEvent.clear(screen.getByRole("searchbox", { name: "搜索插件与技能" }));
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "没有这个");
+  expect(await screen.findByText("没有找到技能")).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "平台内置" })).not.toBeInTheDocument();
+});
+
 it("one primary action creates or imports, and an empty library says what it can be given", async () => {
   open("/app/extensions/skills");
   const own = await screen.findByRole("region", { name: "我的技能" });
@@ -111,12 +183,12 @@ it("one primary action creates or imports, and an empty library says what it can
 it("a search shows every match across the groups, unfolded", async () => {
   open("/app/extensions/skills");
   await screen.findByRole("region", { name: "科研分析" });
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "技能 f");
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "技能 f");
   const analysis = screen.getByRole("region", { name: "科研分析" });
   expect(within(analysis).getAllByRole("listitem")).toHaveLength(1);
   expect(screen.queryByRole("region", { name: "办公文档" })).not.toBeInTheDocument();
-  await userEvent.clear(screen.getByRole("searchbox", { name: "搜索" }));
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "没有这个");
+  await userEvent.clear(screen.getByRole("searchbox", { name: "搜索插件与技能" }));
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "没有这个");
   expect(await screen.findByText("没有找到技能")).toBeInTheDocument();
 });
 
@@ -124,7 +196,7 @@ it("a module's retired name still finds the module's skills, as its current name
   skills.listPlatformSkills.mockResolvedValue({ ...platformList, items: [...platformList.items, row("geo-x", "循证 GEO", { id: "geo-private:geo-x", canCopy: false })] });
   open("/app/extensions/skills");
   await screen.findByRole("region", { name: "科研分析" });
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "循证传播");
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "循证传播");
   const pack = await screen.findByRole("region", { name: "循证 GEO" });
   expect(within(pack).getAllByRole("listitem")).toHaveLength(1);
   expect(screen.queryByRole("region", { name: "科研分析" })).not.toBeInTheDocument();
@@ -269,10 +341,10 @@ it("an inventory that cannot be read says so with a way to try again", async () 
 it("switching tabs keeps one page and clears the search", async () => {
   open("/app/extensions/skills");
   await screen.findByRole("region", { name: "科研分析" });
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "没有这个");
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "没有这个");
   await userEvent.click(screen.getByRole("tab", { name: /^插件/ }));
   expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/plugins");
-  expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveValue("");
+  expect(screen.getByRole("searchbox", { name: "搜索插件与技能" })).toHaveValue("");
   await screen.findByRole("region", { name: "对话里的工具" });
   expect(screen.queryByRole("button", { name: "新建技能" })).not.toBeInTheDocument();
   // Both lists were read once, on arrival: going back and forth reads nothing again.
