@@ -98,6 +98,18 @@ async function fixture() {
       await db.query(`INSERT INTO evimed_geo.ledger (id, user_id, geo_project_id, order_id, kind, amount_cny, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [checked.id, null, checked.geoProjectId, checked.orderId, checked.kind, checked.amountCny, checked.createdAt]);
     },
+    // What another writer does to a row while the market is working on it (a finding that opens, a pause).
+    alter: {
+      article: async (/** @type {string} */ id, /** @type {Record<string, any>} */ patch) => {
+        const columns = { status: "status", safety: "safety", gate: "gate", contentSha256: "content_sha256" };
+        for (const [key, value] of Object.entries(patch)) {
+          await db.query(`UPDATE evimed_geo.articles SET ${/** @type {Record<string, string>} */ (columns)[key]} = $2, updated_at = now() WHERE id = $1`, [id, value]);
+        }
+      },
+      project: async (/** @type {string} */ id, /** @type {Record<string, any>} */ patch) => {
+        await db.query(`UPDATE evimed_geo.projects SET status = $2, updated_at = now() WHERE id = $1`, [id, patch.status]);
+      },
+    },
     async close() {},
   };
 }

@@ -13,6 +13,25 @@ export const EPSILON_CNY = 0.01;
 
 const round2 = (/** @type {number} */ value) => Math.round(value * 100) / 100;
 
+/**
+ * Why the article an order is about to be sent for may not go, as `reserveForSend` reads it inside its transaction (M-1) — the
+ * rules of `articleProblems` (geoMarket.mjs) that can change between the check and the send: still publishable, placed or
+ * published; no open clinical-safety finding (clear or released); its gate not failed; and the bytes the review passed.
+ * One function for the SQL store and its double, so they cannot disagree. Null when it may go.
+ * @param {{ status?: string | null, safety?: string | null, gate?: string | null, contentSha256?: string | null } | null | undefined} article
+ *   the article as it stands now
+ * @param {string | null | undefined} checkedSha256 the hash the sender checked the file it read against
+ * @returns {"article_not_placeable" | "article_changed_since_review" | null}
+ */
+export function articleRefusalAtSend(article, checkedSha256) {
+  if (!article) return "article_not_placeable";
+  if (!["publishable", "placed", "published"].includes(String(article.status))) return "article_not_placeable";
+  if (article.safety !== "clear" && article.safety !== "released") return "article_not_placeable";
+  if (article.gate === "failed") return "article_not_placeable";
+  if (checkedSha256 != null && article.contentSha256 !== checkedSha256) return "article_changed_since_review";
+  return null;
+}
+
 /** The refusal a second live order for one article gets, from this store and its double alike. */
 export function articleLiveError() {
   return new HttpError(409, "geo_order_article_live", "The article already has a live order.");
@@ -661,12 +680,23 @@ export class GeoMarketStore {
    * one already being sent. The budget and the day's cap are checked here,
    * against the ledger as it stands inside the transaction, under the
    * project's row lock — a budget lowered a moment ago is the one that holds.
+   *
+   * So are the two things the send was checked against some milliseconds ago,
+   * outside any lock (M-1): the article — still publishable, no open safety
+   * finding, its gate not failed, the bytes the review passed (`articleSha256`),
+   * read `FOR SHARE` so a finding that opens now waits for this write — and
+   * the project, still active. "An article with an open clinical-safety finding
+   * is never placed" and "paused is paused" are invariants of this write, not of
+   * the earlier reading. The article's lock is taken before the project's, the
+   * order every writer of both keeps.
    * @param {string} orderId
-   * @param {{ at: string, dayStart: string, reserveDetail?: Record<string, any>, sendDetail: Record<string, any>, patch?: Record<string, any> }} move
-   * @returns {Promise<{ order: ReturnType<typeof mapOrder> } | { refused: "budget_exhausted" | "daily_cap_reached" | "project_missing" } | null>}
+   * @param {{ at: string, dayStart: string, reserveDetail?: Record<string, any>, sendDetail: Record<string, any>, patch?: Record<string, any>,
+   *   articleSha256?: string | null }} move
+   * @returns {Promise<{ order: ReturnType<typeof mapOrder> } | { refused: "budget_exhausted" | "daily_cap_reached" | "project_missing" | "project_not_active"
+   *   | "article_not_placeable" | "article_changed_since_review" } | null>}
    *   null when the order was not planned any more
    */
-  async reserveForSend(orderId, { at, dayStart, reserveDetail = {}, sendDetail, patch = {} }) {
+  async reserveForSend(orderId, { at, dayStart, reserveDetail = {}, sendDetail, patch = {}, articleSha256 = null }) {
     const when = assertAt(at);
     const since = assertAt(dayStart);
     assertDetail(reserveDetail);
@@ -676,8 +706,13 @@ export class GeoMarketStore {
       const current = await client.query(`SELECT * FROM evimed_geo.orders WHERE id = $1 FOR UPDATE`, [String(orderId)]);
       const row = current.rows[0];
       if (!row || row.state !== "planned") return null;
-      const project = await client.query(`SELECT budget FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [row.geo_project_id]);
+      const article = await client.query(`SELECT status, safety, gate, content_sha256 FROM evimed_geo.articles WHERE id = $1 FOR SHARE`, [row.article_id]);
+      const refusal = articleRefusalAtSend(article.rows[0] ? { status: article.rows[0].status, safety: article.rows[0].safety, gate: article.rows[0].gate,
+        contentSha256: article.rows[0].content_sha256 } : null, articleSha256);
+      if (refusal) return { refused: refusal };
+      const project = await client.query(`SELECT budget, status FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [row.geo_project_id]);
       if (!project.rows[0]) return { refused: "project_missing" };
+      if (project.rows[0].status !== "active") return { refused: "project_not_active" };
       const reserve = Number(row.reserve_cny);
       const money = projectMoney({ budget: project.rows[0].budget }, await ledgerSumsWith(client, row.geo_project_id, null));
       if (money.availableCny == null || money.availableCny + EPSILON_CNY < reserve) return { refused: "budget_exhausted" };

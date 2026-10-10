@@ -993,9 +993,15 @@ async function placeOrder(ctx, project, order, state) {
     reserveDetail: { reserveCny: order.reserveCny, priceCny: order.priceCny, chargeAt: "submit" },
     sendDetail: { title, bodySha256, spans, spanCount: spans.length, terms: drugTerms(project).slice(0, 50) },
     patch: { bodySha256 },
+    // What the checks above read, outside any lock: the write reads the article and the project again under its own (M-1).
+    articleSha256: article.contentSha256,
   });
   if (!reservation) return "conflict";
-  if ("refused" in reservation) return reservation.refused;
+  if ("refused" in reservation) {
+    // The article stopped being placeable while the file was read (a safety finding opened, it was withdrawn): the plan goes, as at the first check.
+    if (reservation.refused === "article_not_placeable") return withdraw("article_not_placeable");
+    return reservation.refused;
+  }
   const current = reservation.order;
   /** @type {{ orderNid: string } | null} */
   let answer = null;

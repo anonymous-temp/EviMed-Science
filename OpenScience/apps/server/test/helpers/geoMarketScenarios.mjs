@@ -114,6 +114,8 @@ export function standardCatalogue() {
  * @property {{ project: (row: any) => Promise<void>, group: (row: any) => Promise<void>, article: (row: any) => Promise<void>,
  *   source: (row: any) => Promise<void>, target: (row: any) => Promise<void> }} seed
  * @property {(row: { geoProjectId: string, orderId: string, kind: string, amountCny: number }) => Promise<void>} tamperLedger
+ * @property {{ article: (id: string, patch: Record<string, any>) => Promise<void>, project: (id: string, patch: Record<string, any>) => Promise<void> }} [alter]
+ *   what a second writer does to a row meanwhile: an article's status, safety, gate or hash, a project's status
  * @property {() => Promise<void>} close
  */
 
@@ -735,6 +737,58 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
         assert.equal(order.state, "submitted");
       }
       assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
+    } finally { await w.close(); }
+  });
+
+  /**
+   * A tick in which `change` happens while the file is being read: after the article was checked and before the reserve (M-1).
+   * @param {any} w @param {(p: { id: string, articleIds: string[] }) => Promise<void>} change
+   */
+  const tickWith = async (w, change) => {
+    const p = await w.project();
+    const inner = w.deps.articleBody;
+    w.deps.articleBody = async (/** @type {any} */ article, /** @type {any} */ project) => { await change(p); return inner(article, project); };
+    const counts = await tickOrders(w.deps);
+    const [order] = await orders(w.fixture.store, p.id);
+    return { p, counts, order, sends: w.fake.requestsTo("/api/media/send").length, money: await moneyOf(w.fixture.store, p.id) };
+  };
+
+  for (const [name, patch] of /** @type {Array<[string, Record<string, any>]>} */ ([
+    ["a clinical-safety finding that opens", { safety: "open", status: "draft" }], ["a withdrawal", { status: "withdrawn" }], ["a failed gate", { gate: "failed" }],
+  ])) {
+    test(`race (M-1): ${name} after the article was checked stops the send, and the plan with it`, options, async () => {
+      const w = await world(makeFixture);
+      try {
+        const { counts, order, sends, money, p } = await tickWith(w, (p) => w.fixture.alter.article(p.articleIds[0], patch));
+        assert.equal(sends, 0, "an article with a finding against it is never placed");
+        assert.equal(order.state, "cancelled", "the plan is withdrawn, as at the first check");
+        assert.equal(counts.submitted, 0);
+        assert.equal(counts.skipped.article_not_placeable, 1);
+        assert.deepEqual([money.reservedCny, money.settledCny], [0, 0], "nothing was held");
+        assert.deepEqual(projectIdentityBreaks(await orders(w.fixture.store, p.id), await w.fixture.store.ledgerSums({ geoProjectId: p.id })), []);
+      } finally { await w.close(); }
+    });
+  }
+
+  test("race (M-1): an article re-reviewed after its file was read is not sent as the file that was read", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const { counts, order, sends, money } = await tickWith(w, (p) => w.fixture.alter.article(p.articleIds[0], { contentSha256: "b".repeat(64) }));
+      assert.equal(sends, 0, "what goes out is what passed review, and the review moved");
+      assert.equal(order.state, "planned", "the plan waits for the next tick, which reads the new file against the new hash");
+      assert.equal(counts.skipped.article_changed_since_review, 1);
+      assert.deepEqual([money.reservedCny, money.settledCny], [0, 0]);
+    } finally { await w.close(); }
+  });
+
+  test("race (M-1): a project paused after the tick listed it is not sent for", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const { counts, order, sends, money } = await tickWith(w, (p) => w.fixture.alter.project(p.id, { status: "paused" }));
+      assert.equal(sends, 0, "paused is paused");
+      assert.equal(order.state, "planned", "the plan stays for when it is resumed");
+      assert.equal(counts.skipped.project_not_active, 1);
+      assert.deepEqual([money.reservedCny, money.settledCny], [0, 0]);
     } finally { await w.close(); }
   });
 
