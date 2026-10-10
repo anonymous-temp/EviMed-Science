@@ -4,8 +4,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { readDeliveryReceipt } from "../src/agentRuns.mjs";
-import { receiptFileFor, workspaceLayout } from "@evimed/domain";
+import { loadAgentRegistry } from "../src/agentRegistry.mjs";
+import { readDeliveryReceipt, requiredSpecialistArtifactsForTest } from "../src/agentRuns.mjs";
+import { deliverySummaryFileFor, receiptFileFor, workspaceLayout } from "@evimed/domain";
 
 // A run's receipt is its own file (`receiptFileFor`). It used to be one file at
 // the workspace root that the run writing last owned, so two runs alive in one
@@ -13,6 +14,8 @@ import { receiptFileFor, workspaceLayout } from "@evimed/domain";
 // run's artifacts from its receipt, silently dropped the files from both
 // records (2026-10-10). Here the reader's half: each run reads its own file,
 // and the project-wide file older runs wrote still serves the run it names.
+// The summary the run policy ends a turn with moved the same way, and the last
+// test says what a researcher sees of that.
 
 const sha = (text) => createHash("sha256").update(text).digest("hex");
 
@@ -90,4 +93,45 @@ test("a conversation turn finds the receipt under the id its workflow was named,
 
   assert.deepEqual(ids(await readDeliveryReceipt(f.project, turn("native_aaa"))), ["d1"]);
   assert.equal(await readDeliveryReceipt(f.project, turn("native_bbb")), null, "another session's workflow has a file of its own, and it holds nothing");
+});
+
+test("a capability that declares a delivery summary lists its own, which the platform's per-run record neither replaces nor shadows", async (t) => {
+  // The run policy ends a turn with a summary of the run (its id, the deliverables, what is open). It was one file at the
+  // workspace root, and three capabilities declare a `delivery-summary.md` of their own as a required output. The server
+  // looks for a declared output at the root first, so for them the platform's record stood in for the capability's own
+  // summary in the run's file list -- the researcher's 「交付摘要」 opened a process record, the project-wide file at that,
+  // which the next run replaced (the recorded run evals/evidence-appraisal/results/2026-10-03-appraisal-001-sglt2-hfpef
+  // lists both, the real summary and the bare root one). Nothing else ever listed it: the file routes need a path, the
+  // hosted frame has no workspace tree (runtimeUiShell.mjs removes the kernel's sidebar), and the web's `listDir` has no caller.
+  // It is a per-run record under the protected run directory now, and the capability's own summary is the one that is listed.
+  const registry = await loadAgentRegistry({ packageDirs: [new URL("../../../runtime/skills/evimed", import.meta.url).pathname], capabilityDirs: [new URL("../../../capabilities", import.meta.url).pathname] });
+  const name = workspaceLayout.deliverySummaryFile;
+  const owners = registry.list({ includeInternal: true }).filter((agent) => agent.outputs.some((output) => output.path === name && output.required));
+  assert.ok(owners.length >= 3, `the walk found ${owners.length} capabilities that declare ${name}`);
+  for (const agent of owners) {
+    const f = await workspace(t);
+    const run = { id: "run_x", sessionId: "ses_x", effectiveAgentId: agent.id, effectiveAgentVersion: agent.version, effectiveRuntimeAgent: agent.runtimeAgent,
+      startedAt: new Date(Date.now() - 60_000).toISOString(), mountedSkills: [agent.skill, ...(agent.companionSkills ?? [])] };
+    // The package, as the run-side gate accepts it: every required file in the deliverable's own directory.
+    for (const output of agent.outputs.filter((candidate) => candidate.required)) await f.put(`deliverables/d1/${output.path}`, `# ${output.path}\n内容。\n`);
+    // The platform's record of this run, where the run policy files it, and an earlier run's at the root from before it did.
+    await f.put(deliverySummaryFileFor(run.id), "# 交付摘要\n\n- 运行 id：run_x\n");
+    await f.put(name, "# 交付摘要\n\n- 运行 id：an_earlier_run\n");
+    const earlier = new Date(Date.now() - 2 * 3_600_000);
+    await fs.utimes(path.join(f.project.workspaceDir, name), earlier, earlier);
+
+    for (const asked of [run, { ...run, nativeTurn: { startSeq: 1 } }]) {
+      const outcome = await requiredSpecialistArtifactsForTest(f.project, asked, registry);
+      assert.equal(outcome.errorCode, null, `${agent.id}: ${JSON.stringify(outcome.qualityIssues)}`);
+      assert.ok(outcome.artifacts.includes(`deliverables/d1/${name}`), `${agent.id}: its own summary is listed: ${JSON.stringify(outcome.artifacts)}`);
+      assert.equal(outcome.artifacts.includes(name), false, `${agent.id}: the root file of an earlier run is not`);
+      assert.equal(outcome.artifacts.some((file) => file.startsWith(".evimed-run/")), false, `${agent.id}: nor is the platform's record, which is not a deliverable`);
+    }
+
+    // The negative control, which is why the record is not filed at the root any more: a fresh file there is found first
+    // and is what the run lists in the capability's place.
+    await f.put(name, "# 交付摘要\n\n- 运行 id：run_x\n");
+    const shadowed = await requiredSpecialistArtifactsForTest(f.project, run, registry);
+    assert.ok(shadowed.artifacts.includes(name) && !shadowed.artifacts.includes(`deliverables/d1/${name}`), `${agent.id}: ${JSON.stringify(shadowed.artifacts)}`);
+  }
 });
