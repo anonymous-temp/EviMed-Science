@@ -47,7 +47,7 @@ const factId = () => `fac_${randomUUID().replace(/-/g, "").slice(0, 22)}`;
 
 /**
  * The outcomes recorded by every batch of one candidate denominator (the batches whose manifests differ only by offset), oldest
- * first: one equality on the stored digest, through `vcr_matching_inputs_digest_idx`, and no manifest is read.
+ * first: one equality on the stored digest, through the study-and-digest index (vcr_matching_inputs_digest_idx), and no manifest is read.
  */
 export const MATCHING_BATCHES_SQL = `SELECT outcomes FROM ${VCR_SCHEMA}.matching_inputs WHERE study_id=$1 AND manifest_digest=$2 ORDER BY created_at,id`;
 
