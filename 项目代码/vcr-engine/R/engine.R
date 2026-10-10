@@ -1499,12 +1499,22 @@ vcr_job_design_analytic <- function(job, ...) {
     }
     if (!is.null(sc$accrual)) {
       dist <- vcr_control_distribution(tr)
-      lam <- if (identical(dist$kind %||% "exponential", "exponential")) dist$rate else log(2) / vcr_dist_median(dist)
       eta <- vcr_dropout_hazard(vcr_scalar(sc$accrual$dropoutAnnual, 0))
       A <- vcr_scalar(sc$accrual$duration, 0); Fu <- vcr_scalar(sc$accrual$followup, NA_real_)
       if (is.na(Fu)) vcr_abort("scenario_field_missing", "scenario.accrual.followup", "The required-patients calculation needs the follow-up after accrual.")
-      p0 <- vcr_event_probability(lam, A, Fu, eta)
-      p1 <- vcr_event_probability(lam * hr, A, Fu, eta)
+      # The event probability is computed for the control distribution the scenario declares: the closed form for
+      # an exponential one, quadrature of the same quantity for a Weibull or a piecewise one (an exponential matched
+      # on the median asked for 22.8% too many patients at a Weibull shape of 2, E10). The result says which.
+      if (identical(dist$kind %||% "exponential", "exponential")) {
+        p0 <- vcr_event_probability(dist$rate, A, Fu, eta)
+        p1 <- vcr_event_probability(dist$rate * hr, A, Fu, eta)
+        diag$eventProbability <- list(route = "closed_form", basis = "lachin_foulkes_exponential", controlDistribution = "exponential")
+      } else {
+        p0 <- vcr_event_probability_dist(dist, 1, A, Fu, eta)
+        p1 <- vcr_event_probability_dist(dist, hr, A, Fu, eta)
+        diag$eventProbability <- list(route = "numerical_integration", basis = "survival_function_of_the_declared_distribution",
+                                      controlDistribution = as.character(dist$kind))
+      }
       # Lachin-Foulkes: the expected event probability of a randomized subject
       # averages the two arms' probabilities, weighted by allocation; the first
       # version used the control arm's alone and so overstated the events per

@@ -47,6 +47,7 @@ export const NUMERIC_REFERENCES = {
   N01b: { methods: ['design.analytic'], anchors: ['rpact::getDesignGroupSequential(', 'd_rp < 1e-4 && d_g4 < 1e-4'] },
   N06b: { methods: ['design.analytic'], anchors: ['Required patients (Lachin-Foulkes) against rpact', 'rpact::getSampleSizeSurvival(', 'abs(r$events - r$want_events) < 1e-3'] },
   N06c: { methods: ['design.analytic'], anchors: ["Simon (1989)'s published designs", 'all(a$opt == c(1, 10, 5, 29))'] },
+  N06f: { methods: ['design.analytic'], anchors: ['References that share no code with the engine', 'x$d_ref < 1e-8 && x$z_mc < 4.5'] },
   N09c: { methods: ['comparator.entropy_balance', 'comparator.propensity_weight'], anchors: ['against WeightIt and', 'abs(est$value - att_wi) / abs(att_wi) < 1e-6', 'abs(est_p$value - att_pw) / abs(att_pw) < 1e-6'] },
   N11b: { methods: ['comparator.rmst'], anchors: ['against survRM2', 'abs(est$value - ref_est) < 1e-9'] },
   N12: { methods: ['comparator.evalue'], anchors: ['against the EValue package', 'g$d < 1e-6'] },

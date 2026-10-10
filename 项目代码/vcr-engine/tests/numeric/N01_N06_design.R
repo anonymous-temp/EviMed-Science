@@ -413,6 +413,88 @@ vcr_case("N06e", c("AC-04", "AC-28", "AC-31"), function() {
                         identical(p1$scenarioHash, hash_of(pw)), identical(p2$scenarioHash, hash_of(pw_fast)), ev1, ev2))
 })
 
+vcr_case("N06f", c("AC-30", "AC-29"), function() {
+  # Required patients for the control distribution the scenario DECLARES. `design.analytic` took the
+  # event probability from an exponential matched on the control's median whatever the distribution was,
+  # so a Weibull or a piecewise control got another trial's number (shape 2, median 12, HR 0.7, 12 months of
+  # accrual and 12 of follow-up: 0.5758 against 0.7072, 22.8% too many patients) and the result did not
+  # say it had approximated. Now an exponential control keeps the Lachin-Foulkes closed form (N06b holds
+  # it to rpact) and a Weibull or piecewise one is integrated, and the result names the route.
+  # References that share no code with the engine: (1) the density f(t) G(t) integrated in the case by
+  # stats::integrate, where G is the share of a randomized subject still under observation at t;
+  # (2) a plain-R simulation of the whole trial -- entry, event, dropout, administrative censoring -- of
+  # 2 million subjects per arm (each share within 4.5 binomial standard errors); (3) the shape-1 Weibull
+  # and the constant-rate piecewise control equal the exponential closed form.
+  weibull_inv <- function(shape, scale) function(H) scale * H^(1 / shape)
+  pw_breaks <- c(6, 18); pw_rates <- c(0.05, 0.02, 0.04)
+  pw_cum <- c(0, cumsum(pw_rates[-3] * diff(c(0, pw_breaks))))
+  piecewise_inv <- function(H) { k <- findInterval(H, pw_cum); c(0, pw_breaks)[k] + (H - pw_cum[k]) / pw_rates[k] }
+  surv_w <- function(shape, scale) function(t, hr) exp(-hr * (t / scale)^shape)
+  dens_w <- function(shape, scale) function(t, hr) hr * (shape / scale) * (t / scale)^(shape - 1) * exp(-hr * (t / scale)^shape)
+  surv_p <- function(t, hr) exp(-hr * (pw_cum[findInterval(t, c(0, pw_breaks))] + pw_rates[findInterval(t, c(0, pw_breaks))] * (t - c(0, pw_breaks)[findInterval(t, c(0, pw_breaks))])))
+  dens_p <- function(t, hr) hr * pw_rates[findInterval(t, c(0, pw_breaks))] * surv_p(t, hr)
+  # (1) the density integral: G is 1 up to the follow-up F, falls linearly to 0 at A + F, and thins by the dropout
+  integral_of <- function(dens, hr, A, Fu, eta) {
+    G <- function(t) ifelse(t <= Fu, 1, (A + Fu - t) / A) * exp(-eta * t)
+    stats::integrate(function(t) dens(t, hr) * G(t), 0, Fu, rel.tol = 1e-11, subdivisions = 2000L)$value +
+      stats::integrate(function(t) dens(t, hr) * G(t), Fu, A + Fu, rel.tol = 1e-11, subdivisions = 2000L)$value
+  }
+  # (2) the simulated trial
+  sim_share <- function(inv_cumhaz, hr, A, Fu, eta, n, seed) {
+    set.seed(seed)
+    entry <- stats::runif(n, 0, A); t_event <- inv_cumhaz(-log(stats::runif(n)) / hr)
+    t_drop <- if (eta > 0) stats::rexp(n, eta) else Inf
+    mean(t_event <= pmin(t_drop, A + Fu - entry))
+  }
+  scenarios <- list(
+    list(id = "weibull2", dist = list(kind = "weibull", shape = 2, scale = 12 / log(2)^(1 / 2)), dens = dens_w(2, 12 / log(2)^(1 / 2)), inv = weibull_inv(2, 12 / log(2)^(1 / 2)), drop = 0),
+    list(id = "weibull0.7+dropout", dist = list(kind = "weibull", shape = 0.7, scale = 20), dens = dens_w(0.7, 20), inv = weibull_inv(0.7, 20), drop = 0.15),
+    list(id = "piecewise+dropout", dist = list(kind = "piecewise", breaks = as.list(pw_breaks), rates = as.list(pw_rates)), dens = dens_p, inv = piecewise_inv, drop = 0.10))
+  hr <- 0.7; A <- 12; Fu <- 12
+  rows <- lapply(seq_along(scenarios), function(i) {
+    s <- scenarios[[i]]
+    sc <- list(design = list(kind = "two_arm_fixed"), endpoint = list(type = "time_to_event"), truth = list(hazardRatio = hr, controlDistribution = s$dist),
+               accrual = list(duration = A, followup = Fu, dropoutAnnual = s$drop), analysis = list(alpha = 0.025, power = 0.9))
+    r <- vcr_test_run(vcr_test_job("design.analytic", sc))
+    eta <- vcr_dropout_hazard(s$drop)
+    ref0 <- integral_of(s$dens, 1, A, Fu, eta); ref1 <- integral_of(s$dens, hr, A, Fu, eta)
+    n_mc <- 2e6
+    mc0 <- sim_share(s$inv, 1, A, Fu, eta, n_mc, 1100L + i); mc1 <- sim_share(s$inv, hr, A, Fu, eta, n_mc, 2200L + i)
+    se <- function(p) sqrt(p * (1 - p) / n_mc)
+    p0 <- vcr_measure_value(r, "event_probability_control"); p1 <- vcr_measure_value(r, "event_probability_treatment")
+    ev <- vcr_measure_value(r, "required_events_exact")
+    list(id = s$id, status = r$status, route = r$diagnostics$eventProbability$route %||% "none", p0 = p0, p1 = p1, ref0 = ref0, ref1 = ref1,
+         d_ref = max(abs(p0 - ref0), abs(p1 - ref1)), z_mc = max(abs(p0 - mc0) / se(p0), abs(p1 - mc1) / se(p1)),
+         pev = vcr_measure_value(r, "event_probability"), req = vcr_measure_value(r, "required_patients"), want_req = ceiling(ev / ((ref0 + ref1) / 2)))
+  })
+  ok_rows <- all(vapply(rows, function(x) identical(x$status, "succeeded") && identical(x$route, "numerical_integration") &&
+    x$d_ref < 1e-8 && x$z_mc < 4.5 && x$req == x$want_req && abs(x$pev - (x$ref0 + x$ref1) / 2) < 1e-8, logical(1)))
+  # the figure the median-matched exponential gave for the first scenario, which must no longer be the answer
+  old_pev <- {
+    lam <- log(2) / 12; eta0 <- 0
+    ((1 - 0.5) * vcr_event_probability(lam, A, Fu, eta0) + 0.5 * vcr_event_probability(lam * hr, A, Fu, eta0))
+  }
+  ok_moved <- abs(rows[[1]]$pev - old_pev) > 0.1
+  # (3) special cases: the exponential, a shape-1 Weibull and a constant-rate piecewise control are one trial
+  base <- list(design = list(kind = "two_arm_fixed"), endpoint = list(type = "time_to_event"),
+               accrual = list(duration = A, followup = Fu, dropoutAnnual = 0.1), analysis = list(alpha = 0.025, power = 0.9))
+  run_with <- function(dist) vcr_test_run(vcr_test_job("design.analytic", c(base, list(truth = list(hazardRatio = hr, controlDistribution = dist)))))
+  lam <- 0.04
+  expo <- run_with(list(kind = "exponential", rate = lam)); weib1 <- run_with(list(kind = "weibull", shape = 1, scale = 1 / lam))
+  pw_const <- run_with(list(kind = "piecewise", breaks = list(5, 15), rates = list(lam, lam, lam)))
+  d_special <- max(abs(vcr_measure_value(weib1, "event_probability") - vcr_measure_value(expo, "event_probability")),
+                   abs(vcr_measure_value(pw_const, "event_probability") - vcr_measure_value(expo, "event_probability")))
+  route_of <- function(r) r$diagnostics$eventProbability$route %||% "none"
+  ok_special <- identical(route_of(expo), "closed_form") && identical(route_of(weib1), "numerical_integration") &&
+    d_special < 1e-10 && vcr_measure_value(weib1, "required_patients") == vcr_measure_value(expo, "required_patients") &&
+    vcr_measure_value(pw_const, "required_patients") == vcr_measure_value(expo, "required_patients")
+  list(pass = ok_rows && ok_moved && ok_special,
+       detail = sprintf("%s; the median-matched exponential's %.4f for the first scenario is no longer the answer (%.4f); exponential vs shape-1 Weibull vs constant-rate piecewise: max |d| = %.1e, route %s / %s",
+                        paste(vapply(rows, function(x) sprintf("%s: control %.6f/%.6f treatment %.6f/%.6f (engine/integral), |d| = %.1e, %.2f binomial SE from the simulated trial, required %d (route %s)",
+                                      x$id, x$p0, x$ref0, x$p1, x$ref1, x$d_ref, x$z_mc, as.integer(x$req), x$route), character(1)), collapse = "; "),
+                        old_pev, rows[[1]]$pev, d_special, route_of(expo), route_of(weib1)))
+})
+
 vcr_case("N04d", c("AC-29", "AC-30"), function() {
   # The analytic cross-check at a high replicate count. The log-rank power is a
   # first-order approximation, documented to sit within about a percentage point
