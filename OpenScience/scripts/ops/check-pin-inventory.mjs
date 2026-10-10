@@ -119,6 +119,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/packages\/contracts\/dsh\/client-locale\.json$/,
+    why: "the kernel client's Chinese dictionaries recorded from the published packages of this release; a test holds the recorded version equal to the pin, so moving the pin fails until `record-client-locale.mjs` is run again — the record is re-taken, never re-dated",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/packages\/design-tokens\/src\/kernel\.mjs$/,
     why: "the kernel-token mapping names which `--dsw-*` aliases read which ramp step, read off this exact client's stylesheets; the mapping is only true of the client it was read from, so it is re-read when the pin moves rather than moved with it",
   },
