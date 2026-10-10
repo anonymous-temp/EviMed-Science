@@ -985,7 +985,7 @@ function maicTimeToEventPlan(configuration) {
  */
 function forecastPlan(model, row, forecast) {
   const asked = object(row.scenario);
-  /** @param {string} code @param {string} reason @param {string} title */
+  /** @param {string} code @param {string} reason @param {string} title @returns {VcrPlan} */
   const unavailable = (code, reason, title) => ({ ok: false, unavailable: { rule: "forecast_path", reason,
     gaps: [{ title, detail: knownErrorCodeMessage(code), answers: "导入一份预测文件，或继续用文献情景分析；其他步骤照常。" }] } });
   const providers = list(forecast?.providers).map(object);
@@ -996,6 +996,7 @@ function forecastPlan(model, row, forecast) {
   const historyId = asked.historyId ?? list(forecast?.histories).map(object)[0]?.id;
   if (!historyId) return unavailable("vcr_history_required", "forecast_history_missing", "还没有冻结的事件历史");
   const { providerId: _providerId, historyId: _historyId, ...rest } = asked;
+  /** @type {Record<string, any>} */
   const scenario = {
     historyId, providerId: provider.id, ...rest,
     // The model's version is asked of the provider only when the provider states the same one: an unknown version stays unknown.
