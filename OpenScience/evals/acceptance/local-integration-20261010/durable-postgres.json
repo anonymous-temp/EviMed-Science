@@ -1,0 +1,343 @@
+{
+  "schemaVersion": 1,
+  "scope": "Final unique-file durable PostgreSQL audit; local only, no deployment or production tests",
+  "complete": false,
+  "method": "104 valid original prefix files plus133 manifest-ordered resumed files; latest explicit focused retest supersedes earlier same-file count. No duplicate sums. Initial failures retained. Engine-extra file results remain separate.",
+  "totals": {
+    "tests": 1797,
+    "pass": 1794,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 3,
+    "todo": 0
+  },
+  "combinedUniqueFilesIncludingAppendix": 238,
+  "combinedTotalsIncludingAppendix": {
+    "tests": 1804,
+    "pass": 1801,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 3,
+    "todo": 0
+  },
+  "remainingFailures": [],
+  "initialFailures": [
+    {
+      "file": "extensionPreparationWorker.integration.test.mjs",
+      "attempt": {
+        "stage": "durable-prefix",
+        "counts": {
+          "tests": 11,
+          "suites": 0,
+          "pass": 9,
+          "fail": 2,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "durationMs": 1516.73727
+        },
+        "skips": [],
+        "evidence": "durable-state.log",
+        "logLine": 1530,
+        "exitCode": null,
+        "verdict": "failed"
+      }
+    },
+    {
+      "file": "geoPersistence.integration.test.mjs",
+      "attempt": {
+        "stage": "durable-resume",
+        "counts": {
+          "tests": 8,
+          "suites": 0,
+          "pass": 7,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "durationMs": 2042.738197
+        },
+        "skips": [],
+        "evidence": "durable-state-resume.log",
+        "logLine": 382,
+        "exitCode": 1,
+        "verdict": "failed"
+      }
+    },
+    {
+      "file": "sourceUnderstandingRuntime.integration.test.mjs",
+      "attempt": {
+        "stage": "durable-resume",
+        "counts": {
+          "tests": 6,
+          "suites": 0,
+          "pass": 5,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "durationMs": 13642.825719
+        },
+        "skips": [],
+        "evidence": "durable-state-resume.log",
+        "logLine": 1455,
+        "exitCode": 1,
+        "verdict": "failed"
+      }
+    },
+    {
+      "file": "sourceUnderstandingRuntime.integration.test.mjs",
+      "attempt": {
+        "stage": "intermediate-focused-retest",
+        "counts": {
+          "tests": 6,
+          "suites": 0,
+          "pass": 5,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "durationMs": 13806.697543
+        },
+        "skips": [],
+        "evidence": "source-understanding-retest.log",
+        "logLine": 8,
+        "exitCode": 1,
+        "verdict": "failed"
+      }
+    },
+    {
+      "file": "usageLedgerApp.integration.test.mjs",
+      "attempt": {
+        "stage": "durable-resume",
+        "counts": {
+          "tests": 2,
+          "suites": 0,
+          "pass": 1,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "durationMs": 6711.290714
+        },
+        "skips": [],
+        "evidence": "durable-state-resume.log",
+        "logLine": 1552,
+        "exitCode": 1,
+        "verdict": "failed"
+      }
+    },
+    {
+      "file": "vcrDataPlane.integration.test.mjs",
+      "attempt": {
+        "stage": "durable-resume",
+        "counts": {
+          "tests": 18,
+          "suites": 0,
+          "pass": 15,
+          "fail": 3,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "durationMs": 24158.752909
+        },
+        "skips": [],
+        "evidence": "durable-state-resume.log",
+        "logLine": 1763,
+        "exitCode": 1,
+        "verdict": "failed"
+      }
+    },
+    {
+      "file": "vcrPlatformPacks.integration.test.mjs",
+      "attempt": {
+        "stage": "durable-resume",
+        "counts": {
+          "tests": 8,
+          "suites": 0,
+          "pass": 7,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "durationMs": 5139.280493
+        },
+        "skips": [],
+        "evidence": "durable-state-resume.log",
+        "logLine": 2075,
+        "exitCode": 1,
+        "verdict": "failed"
+      }
+    }
+  ],
+  "excludedInfrastructureAbort": {
+    "file": "frontierProfileEntities.integration.test.mjs",
+    "evidence": "durable-state.log",
+    "summary": {
+      "counts": {
+        "tests": 7,
+        "suites": 0,
+        "pass": 3,
+        "fail": 4,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0,
+        "durationMs": 3878.062964
+      },
+      "skips": [],
+      "evidence": "durable-state.log",
+      "logLine": 1798
+    },
+    "reason": "PostgreSQL/home disk outage terminated clients; this105th originalfile excluded, subsequent actual resumed6tests verdict used"
+  },
+  "finalSkips": [
+    {
+      "file": "documentExport.render.integration.test.mjs",
+      "skipped": 1,
+      "details": [
+        "﹣ real isolated runtime renders Chinese tables, figures, math and all three formats (5.769774ms) # Set OPEN_SCIENCE_DOCUMENT_RENDER_TEST_IMAGE to a renderer-enabled test runtime."
+      ],
+      "evidence": "durable-state.log"
+    },
+    {
+      "file": "nativeSkillDuplication.integration.test.mjs",
+      "skipped": 2,
+      "details": [
+        "﹣ actual Linux scoped builtin bytes duplicate via native private validation and pool1 durable history, without restoring authority (0.355204ms) # Isolated PG and actual native snapshot/validator image are required",
+        "﹣ duplicate row and idempotency pointer roll back together when durable receipt publication fails (0.093059ms) # Isolated PG and actual native snapshot/validator image are required"
+      ],
+      "evidence": "durable-state-resume.log"
+    }
+  ],
+  "coworkGaps": {
+    "actualContainerCasesUnverified": 0,
+    "actualContainerCasesPassed": 2,
+    "file": "extensionPreparationWorker.integration.test.mjs",
+    "evidence": "cowork-attempt/postgres-final.log",
+    "observations": {
+      "imageId": "sha256:767c46024b8248868663ced7a23ddb3b7ca98ab6c24b4974e7b9d5d59d8dd266",
+      "integrity": "sha256:f5c552280dfe212044e845d49cce419afdb1dc7059142a1778b386bb0d650ee0",
+      "closureExpectedSHA": "0028f7c6c35d4c22a69dfa80a08f500d5656e278f0a3b7ecad66ddd5094fef06",
+      "sourceCommit": "2ae5cf755c4294a1e988eebf3b12dd062425d84c",
+      "qualified": false
+    },
+    "qualification": "unverified; portable local adapter preparation only",
+    "additionalSkippedComposition": null,
+    "prerequisites": "cowork-attempt/source-receipt.json; cowork-attempt/receipts/overlay-attestation.json; cowork-attempt/receipts/image-identity.json",
+    "actualCompositionPassed": 1,
+    "compositionEvidence": "cowork-attempt/composition-final.log",
+    "authorizationLimit": "Existing composition test receipt/runtime invocation stamp synthetic authorization fixtures; actual factory, PostgreSQL, immutable manifest and Docker IO; no SaaS qualification."
+  },
+  "durableAppendix": [
+    {
+      "file": "postgresStore.integration.test.mjs",
+      "verdict": "passed",
+      "counts": {
+        "tests": 7,
+        "suites": 0,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0,
+        "durationMs": 8122.799671
+      },
+      "evidence": "postgres-store-final.log",
+      "execution": {
+        "file": "postgresStore.integration.test.mjs",
+        "exitCode": 0,
+        "database": "evimed_test_geo_review_20261010_pgstoreappendix_9363561d",
+        "evidence": "/tmp/evimed-integration-audit/postgres-store-final.log",
+        "droppedAfterExecution": true
+      },
+      "reasonPreviouslyExcluded": "This destructive schema-reset integration test was absent from the resumed manifest; no earlier durable pass found. Executed now against its own dedicated new database, then dropped only that database."
+    }
+  ],
+  "additionalPostPrerequisiteRetests": [
+    {
+      "file": "managedBrowserHttp.integration.test.mjs",
+      "counts": {
+        "tests": 1,
+        "suites": 0,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/managed-browser-real.log",
+      "scope": "Explicit disposable Chromium; actual CDP, cookie and physical context cleanup. Controlled transport fixture, no production qualification."
+    },
+    {
+      "file": "managedBrowserService.integration.test.mjs",
+      "counts": {
+        "tests": 1,
+        "suites": 0,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/managed-browser-real.log",
+      "scope": "Explicit disposable Chromium; actual CDP, cookie and physical context cleanup. Controlled transport fixture, no production qualification."
+    },
+    {
+      "file": "vcrPostgresCaptureFence.integration.test.mjs",
+      "counts": {
+        "tests": 1,
+        "suites": 0,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "vcr-engine/postgres-capture-fence.log",
+      "scope": "Actual private Docker PostgreSQL container and writer/backend fencing; unrelated activity preserved."
+    },
+    {
+      "file": "skillValidationController.integration.test.mjs",
+      "counts": {
+        "tests": 7,
+        "suites": 0,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/native-fixture-retest.log",
+      "scope": "Actual pinned native parser image on the matching default Docker socket, private Linux UID projections and controller lifecycle; no full DSH conversation qualification."
+    },
+    {
+      "file": "personalSkillGeneration.integration.test.mjs",
+      "counts": {
+        "tests": 14,
+        "suites": 0,
+        "pass": 14,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/native-fixture-retest.log",
+      "scope": "Actual pinned native parser image on the matching default Docker socket, private Linux UID projections and controller lifecycle; no full DSH conversation qualification."
+    },
+    {
+      "file": "personalSkillUnicode.integration.test.mjs",
+      "counts": {
+        "tests": 1,
+        "suites": 0,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/native-fixture-retest.log",
+      "scope": "Actual pinned native parser image on the matching default Docker socket, private Linux UID projections and controller lifecycle; no full DSH conversation qualification."
+    }
+  ],
+  "privateFullRecord": "durable-final-summary.json"
+}

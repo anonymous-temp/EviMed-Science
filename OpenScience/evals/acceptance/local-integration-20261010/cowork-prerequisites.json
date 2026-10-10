@@ -1,0 +1,119 @@
+{
+  "localOnly": true,
+  "executed": true,
+  "qualification": "unverified",
+  "reason": "Pinned portable Cowork overlay built and both existing actual-container PostgreSQL cases passed locally; full SaaS qualification remains unverified.",
+  "source": {
+    "repository": "Jesse-njx/dsh-cowork",
+    "commit": "2ae5cf755c4294a1e988eebf3b12dd062425d84c",
+    "archiveBytes": 141905,
+    "archiveSHA256": "20e4b808fe3c97f5de3546fee200e22cc6639ffa47eef497c5c855e3cc26046c",
+    "inventoryFiles": 32
+  },
+  "pinnedNodeBase": "node:22.23.2-bookworm-slim@sha256:43aeff40f4afc22e83f7589a2f37e111cff5ca84529571f1c8415bcc5fcc21b2",
+  "dshVersion": "0.1.7-rc.2",
+  "coworkCompilerPackageManager": "pnpm@11.8.0",
+  "overlayPins": {
+    "schemaVersion": 1,
+    "sourceCommit": "2ae5cf755c4294a1e988eebf3b12dd062425d84c",
+    "upstreamLockSha256": "778574f95773f5297e3725434ea7067ad6cdd6c44314e2d10c0bcc3142e797c9",
+    "overrides": {
+      "exceljs@4.4.0>unzipper": "0.12.3"
+    },
+    "purpose": "Replace the ExcelJS ZIP reader dependency closure with explicitly licensed upstream artifacts; preserve the Cowork source pin.",
+    "primaryManifest": "https://raw.githubusercontent.com/ZJONSSON/node-unzipper/v0.12.3/package.json",
+    "forbiddenPublishedPackages": [
+      "buffers",
+      "binary"
+    ],
+    "qualification": "unverified",
+    "admittedLockSha256": "5dc0baba3530c82cddb375ae5e5a3f6a3e355efbd572a903b9854816dbf9974c"
+  },
+  "admittedLockSHA256": "5dc0baba3530c82cddb375ae5e5a3f6a3e355efbd572a903b9854816dbf9974c",
+  "strictBoundary": [
+    "Exact source archive and 32-file inventory hashes",
+    "Frozen admitted lock; dependency lifecycle scripts disabled; vendor compilation in disposable Docker state",
+    "Image, closure and adapter identities must come from actual immutable observations",
+    "Admission, qualification and cloud permission checks remain enforced",
+    "Preparation remains qualified:false; no production enablement"
+  ],
+  "portableTwoCasePrerequisites": [
+    "Build the pinned portable Cowork image using overlay/build.sh only after storage and transport bounds are verified",
+    "Record the real image ID, dependency closure content digest and closure SHA256",
+    "Set COWORK_TEST_IMAGE, COWORK_TEST_INTEGRITY and COWORK_TEST_CLOSURE_SHA256 from those observations; the helper recomputes adapter hashes",
+    "Run the two existing PostgreSQL/container cases in an isolated test database",
+    "Assert qualified:false, effective:false and physical container join"
+  ],
+  "fullPreparationAdditionalPrerequisites": [
+    "The owned preparer builds the pinned 273-package DSH SDK, dsh-cite and catalogue snapshot image",
+    "Immutable acceptance-inputs.json binds image IDs, closure, adapter and catalogue hashes",
+    "The validator-only native image does not establish the required pinned Node base or complete acceptance inputs"
+  ],
+  "transport": "Owned Docker PATH wrapper reaches handed-over private daemon only; provider credentials absent. Build uses original contained bridge boundary; operation containers retain original isolation.",
+  "storageObserved": {
+    "finalTmpFreeMB": 4767,
+    "privateDockerImagesMB": 504.7,
+    "authorizedNewTmpLimitGB": 3,
+    "minimumFreeMB": 800
+  },
+  "testsNotExecuted": [],
+  "initialPrerequisiteGap": {
+    "reason": "The pinned Cowork/base image and immutable artifact closure are absent. Portable overlay build growth could not be demonstrated below the authorized 500 MB bound while numerical tests shared /tmp. Full preparation also requires a pinned DSH SDK and citation fixture.",
+    "executed": false,
+    "qualification": "unverified"
+  },
+  "actualLocalResult": {
+    "file": "extensionPreparationWorker.integration.test.mjs",
+    "tests": 11,
+    "pass": 11,
+    "fail": 0,
+    "skip": 0,
+    "previouslyMissingActualContainerCases": 2,
+    "qualified": false,
+    "effective": false,
+    "cancellationPhysicalJoin": true,
+    "database": "fresh isolated test database, dropped after execution",
+    "observations": {
+      "imageId": "sha256:767c46024b8248868663ced7a23ddb3b7ca98ab6c24b4974e7b9d5d59d8dd266",
+      "integrity": "sha256:f5c552280dfe212044e845d49cce419afdb1dc7059142a1778b386bb0d650ee0",
+      "closureExpectedSHA": "0028f7c6c35d4c22a69dfa80a08f500d5656e278f0a3b7ecad66ddd5094fef06",
+      "sourceCommit": "2ae5cf755c4294a1e988eebf3b12dd062425d84c",
+      "qualified": false
+    },
+    "rawReceipts": [
+      "cowork-attempt/source-receipt.json",
+      "cowork-attempt/receipts/overlay-attestation.json",
+      "cowork-attempt/receipts/image-identity.json",
+      "cowork-attempt/receipts/dependency-closure.json",
+      "cowork-attempt/receipts/contained-build.log",
+      "cowork-attempt/receipts/image-build.log",
+      "cowork-attempt/postgres-final.log",
+      "cowork-attempt/postgres-final.json"
+    ],
+    "initialInfraAttempt": "Original networkless private daemon produced actual EAI_AGAIN; preserved separately, then scoped private bridge enabled compilation."
+  },
+  "actualControllerComposition": {
+    "tests": 1,
+    "pass": 1,
+    "fail": 0,
+    "skip": 0,
+    "priorSkipRetained": true,
+    "evidence": "cowork-attempt/composition-final.log",
+    "authorization": "Existing test receipt and runtime/invocation stamp synthetic; actual factory, signed state, PostgreSQL identities, immutable manifest and Docker IO",
+    "productionQualification": false
+  },
+  "status": "verified_actual_local_cases",
+  "productionQualified": false,
+  "qualified": false,
+  "verificationScope": "Both previously unavailable Cowork real-container preparation/cancellation cases and existing real-container controller-composition case executed successfully. This is local verification, not a SaaS qualification.",
+  "cleanup": {
+    "coworkImagesRemoved": true,
+    "coworkContainersAndVolumesAbsent": true,
+    "ownedBuildBridgeAndThreeRulesRemoved": true,
+    "globalForwardingUnchanged": true,
+    "defaultDockerStateUntouched": true,
+    "rawReceipt": "cowork-attempt/cleanup-receipt.json",
+    "privateDaemonFinalStop": "Completed after capture-fence handoff; no images, containers or volumes remain",
+    "allOwnedNetworkChangesRestored": true
+  }
+}

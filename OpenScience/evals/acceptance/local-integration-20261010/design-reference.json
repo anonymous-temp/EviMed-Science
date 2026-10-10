@@ -1,0 +1,403 @@
+{
+  "schemaVersion": 1,
+  "reviewDate": "2026-10-10",
+  "plan": "docs/ui-ux-audit/2026-10-08-evimed-design-reference.md",
+  "baselineCommit": "5d8d24e55950",
+  "reviewedCommit": "b4a4d7a5c",
+  "mode": "read-only implementation and existing-evidence reconciliation",
+  "fullNativeAcceptance": false,
+  "findings": {
+    "substantiveMergeRegressionFound": false,
+    "meaning": "No missing implementation surfaced in this scoped review; this is not full fresh native acceptance."
+  },
+  "evidenceScope": {
+    "historicalNative": "OpenScience/PROGRESS.md 2026-10-09 09:52 and 10:39 report prior pinned DSH/browser composer, account visibility, stall and PDF acceptance; inherited, not rerun against merged hosted image.",
+    "currentBrowser": "Private ui/acceptance-summary.json: real local HTTP and PostgreSQL; conversation runtime mock protocol. 111 walk page results, 112 screenshots, 55 axe scans. Four initial unconfigured-route failures retained and separately resolved by configured-route retry.",
+    "currentNativeSubset": "Skill CRUD uses isolated pinned native DSH parser validation-only image; does not qualify full chat/runtime image.",
+    "currentDurable": "Private durable-final-summary.json keeps initial failures, focused superseding results and explicit Cowork gaps; no all-green claim.",
+    "performance": "Web Vitals collector implementation reviewed; representative live-user route/device p75 acceptance unverified."
+  },
+  "requirements": [
+    {
+      "id": "N-1",
+      "requirement": "Preserved read-only conversation when runtime unavailable",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/conversationHistory.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/components/chat/PreservedConversation.tsx",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "conversationHistory.test.mjs",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/apps/server/test/conversationHistory.test.mjs"
+      ]
+    },
+    {
+      "id": "N-2",
+      "requirement": "Server-declared supported run actions",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/packages/domain/src/runActions.mjs",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "runActions.test.mjs",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/packages/domain/test/runActions.test.mjs"
+      ]
+    },
+    {
+      "id": "N-3",
+      "requirement": "Explicit artifact presentation roles and ordering",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/packages/domain/src/artifactPresentation.mjs",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "artifactPresentation.test.mjs",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/packages/domain/test/artifactPresentation.test.mjs"
+      ]
+    },
+    {
+      "id": "N-4",
+      "requirement": "Comparable GEO coverage uses engine, pool and round basis",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/geoCoverage.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/components/geo/geoOverviewModel.ts",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "geoPersistence.integration.test.mjs",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/apps/server/test/geoPersistence.integration.test.mjs"
+      ]
+    },
+    {
+      "id": "N-5",
+      "requirement": "Frontier reports, independent sources and studies counted distinctly",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/packages/domain/src/frontierEventEvidence.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/server/src/frontierEventReading.mjs",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "frontierEvents.integration.test.mjs",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/apps/server/test/frontierEvents.integration.test.mjs"
+      ]
+    },
+    {
+      "id": "N-6",
+      "requirement": "Daily published, no-content and failed states",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/frontierDaily.mjs",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "frontierDaily.integration.test.mjs",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/apps/server/test/frontierDaily.integration.test.mjs"
+      ]
+    },
+    {
+      "id": "N-7",
+      "requirement": "Typed handoff references navigate to original object",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/web/src/lib/runtimeUiNavigation.ts",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/app/routes/RuntimeUiFrame.tsx",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "researchSessions.test.mjs; runtimeUiNavigation typed references and frame originReference persistence",
+      "nativeLimit": "Full current native conversational acceptance not asserted.",
+      "testCodePaths": [
+        "OpenScience/apps/server/test/researchSessions.test.mjs"
+      ]
+    },
+    {
+      "id": "N-8",
+      "requirement": "Task outcomes distinguish result, no new evidence and failure; incorporated in N-12",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/autopilotOutcome.mjs",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "autopilotMaterial.integration.test.mjs",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/apps/server/test/autopilotMaterial.integration.test.mjs"
+      ]
+    },
+    {
+      "id": "N-9",
+      "requirement": "Stall notice and stop available in native frame",
+      "status": "implementation_preserved; acceptance_partial",
+      "actualCode": [
+        {
+          "path": "OpenScience/packages/harness-port/src/runtimeUiPanels.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/app/routes/RuntimeUiFrame.tsx",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "historical native browser milestone only for native visual acceptance",
+      "nativeLimit": "Full current native conversational acceptance not asserted."
+    },
+    {
+      "id": "N-10",
+      "requirement": "Route and device Web Vitals collection and percentile reporting",
+      "status": "implementation_preserved; acceptance_partial",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/webVitals.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/lib/webVitals.ts",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "webVitals.test.mjs; no representative current user-population measurements",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/apps/server/test/webVitals.test.mjs"
+      ]
+    },
+    {
+      "id": "N-11",
+      "requirement": "GEO source drawer cited pages and coverage-comparable trends",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/geoSourceAnswers.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/components/geo/tabs/GeoSourceDrawer.tsx",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/components/geo/tabs/sourceHistory.ts",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "geoSourceAnswers.test.mjs; current local modules browser",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/apps/server/test/geoSourceAnswers.test.mjs"
+      ]
+    },
+    {
+      "id": "N-12",
+      "requirement": "Continuous task conversation with per-turn capability and separate verification",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/autopilotService.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/server/src/autopilotRunCompletion.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/app/routes/AutopilotPage.tsx",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "autopilotInteractiveEpisode.integration.test.mjs; current local foundation browser",
+      "nativeLimit": "Full current native conversational acceptance not asserted.",
+      "testCodePaths": [
+        "OpenScience/apps/server/test/autopilotInteractiveEpisode.integration.test.mjs"
+      ]
+    },
+    {
+      "id": "N-13",
+      "requirement": "Project-scoped schedule/update tools and task navigation",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/taskToolsGateway.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/components/autopilot/TaskPane.tsx",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "taskToolsGateway.test.mjs; current local task lifecycle",
+      "nativeLimit": "Full current native conversational acceptance not asserted.",
+      "testCodePaths": [
+        "OpenScience/apps/server/test/taskToolsGateway.test.mjs"
+      ]
+    },
+    {
+      "id": "N-14",
+      "requirement": "Multi-source selection, references and session source scope",
+      "status": "implementation_preserved; acceptance_partial",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/web/src/app/routes/SourcesPage.tsx",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/server/src/sourceConversationContext.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/packages/harness-port/src/runtimeUiSources.mjs",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "current local knowledge source navigation; native reference chips inherited",
+      "nativeLimit": "Full current native conversational acceptance not asserted."
+    },
+    {
+      "id": "N-15",
+      "requirement": "Exact quotation location independent of kb_search and PDF highlighting",
+      "status": "implementation_preserved; acceptance_partial",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/sourceQuotations.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/components/sources/SourcePdf.tsx",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/web/src/app/routes/SourceReaderPage.tsx",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "sourceQuotations.test.mjs; PDF/native browser proof inherited",
+      "nativeLimit": "Full current native conversational acceptance not asserted.",
+      "testCodePaths": [
+        "OpenScience/apps/server/test/sourceQuotations.test.mjs"
+      ]
+    },
+    {
+      "id": "N-16",
+      "requirement": "Reverse source uses from gateway and direct tool reads; body search",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/apps/server/src/sourceUses.mjs",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/server/src/sourceRoutes.mjs",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "sourceUses.integration.test.mjs; sourceUsesWiring.test.mjs",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/apps/server/test/sourceUses.integration.test.mjs",
+        "OpenScience/apps/server/test/sourceUsesWiring.test.mjs"
+      ]
+    },
+    {
+      "id": "N-17",
+      "requirement": "Explicit contents and limitations, no synthesized summary slicing",
+      "status": "implementation_preserved",
+      "actualCode": [
+        {
+          "path": "OpenScience/capabilities/source-understanding/SKILL.md",
+          "baselineRelation": "byte_identical"
+        },
+        {
+          "path": "OpenScience/apps/server/src/sourceUnderstandingRuntime.mjs",
+          "baselineRelation": "byte_identical"
+        }
+      ],
+      "evidence": "sourceUnderstandingRuntime.integration.test.mjs",
+      "nativeLimit": null,
+      "testCodePaths": [
+        "OpenScience/apps/server/test/sourceUnderstandingRuntime.integration.test.mjs"
+      ]
+    }
+  ],
+  "ownerDecisions": [
+    {
+      "id": "B-5",
+      "status": "pending_owner_decision",
+      "requirement": "Owner review of 15 process-state memories in cdss-access before clearing",
+      "action": "No production data inspection or deletion in this review."
+    },
+    {
+      "id": "B-6",
+      "status": "pending_owner_decision",
+      "requirement": "Decide evolved-tool presentation and whether astronomy, quantum and materials skills remain in research group",
+      "action": "No product scope change."
+    }
+  ],
+  "researchInputs": [
+    {
+      "path": "docs/ui-ux-audit/2026-10-08-design-reference-assets/research/F1-geo-sources-and-chat-bottom.md",
+      "scope": "Historical R12 static/source and npm bundle research; no served-image byte equality",
+      "sha256": "c0d8e3c9682bc50ef15d643d4bdabe310c875bcc73ef92d4bad4104b850567ce"
+    },
+    {
+      "path": "docs/ui-ux-audit/2026-10-08-design-reference-assets/research/F2-tasks-and-kb.md",
+      "scope": "Historical R12 source/runtime investigation; older README examples explicitly version-qualified",
+      "sha256": "364c4d4b4beb92dd256a222257c5ae210aa4f3b9503441ff3e1abb8c58df1b12"
+    },
+    {
+      "path": "docs/ui-ux-audit/2026-10-08-design-reference-assets/research/G-web-patterns.md",
+      "scope": "Historical design-pattern references; not current product acceptance",
+      "sha256": "a6453c3b13c3328071025d63fdc21711f41bb383c8ad6ad4eb39e11983c6a603"
+    },
+    {
+      "path": "docs/ui-ux-audit/2026-10-08-design-reference-assets/research/H-impeccable-critique.md",
+      "scope": "Degraded static screenshot critique, not measured browser acceptance",
+      "sha256": "fbd231b557a3452648ce57ce4ae4f30490fe51a1ad09897de67fb36f6b5fc791"
+    },
+    {
+      "path": "docs/ui-ux-audit/2026-10-08-design-reference-assets/research/I-v1.2-review.md",
+      "scope": "Plan corrections: hidden machine prompts, direct-source citations/uses, continuous task conversation; code paths above preserve these mechanisms",
+      "sha256": "26020427a18a6bb52050bed237cca919639769effeb767c46d4913b4aa70d917"
+    }
+  ],
+  "mergePreservation": {
+    "reviewedImplementationFiles": 34,
+    "baselineByteIdenticalFiles": 34,
+    "limit": "Representative implementation paths rather than every file in the plan. Shared server composition changed; N-1 route and source/task bridges remain connected in current server/frame code."
+  }
+}

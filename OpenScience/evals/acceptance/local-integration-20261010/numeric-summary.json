@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "scope": "local deterministic VCR foundation acceptance; no deployment or production tests",
+  "status": "incomplete_crosscheck_prerequisites",
+  "sourceRevisionAtRun": "862519ff371e5f92fbd3686d7cc8b89469beeb59",
+  "sourceExecution": {
+    "handlersAndTests": "read-only bind-mounted integration checkout",
+    "domain": "read-only bind-mounted current domain; host Node v24.18.0",
+    "imageCodeUsed": false,
+    "sourceManifestSha256": "10b1b0b7dd088f3a5f85b180d71b4c33d2e0b7bf4fc2fd47532003b8101f9f83",
+    "sourceFilesChangedDuringRun": [],
+    "runtimePackageLockSha256": "caa9be87d79e938d63a02a9aebecb09f77e95d82c3bdb4e90200bda6520bf814",
+    "crosscheckPackageLockSha256": "0ebc34e56069ef9f42960a5f70ba3e799900c3801bba3af95b15975a84fffb9a"
+  },
+  "environment": {
+    "image": "evimed-vcr-engine:ci-adcd02e6b3d4",
+    "imageId": "sha256:f730e3a570cc86a467839074f8bfc6a4c409ce74cc7543d1795d72bc4a46a89e",
+    "rVersion": "4.3.3",
+    "runtimePackagesPinnedAndVerified": 62,
+    "crosscheckPackagesMissing": 96,
+    "packageLockHash": "56edc6432ad43b12fcef2e44938bdb111ae8889b2532b298aac2ebbb3317c692",
+    "network": "none",
+    "cpuLimit": 2,
+    "memoryLimitBytes": 3221225472,
+    "dockerDataRoot": "/tmp/evimed-vcr-docker/data"
+  },
+  "fullUnfilteredRun": {
+    "attempted": 182,
+    "passed": 159,
+    "failed": 23,
+    "skipped": 0,
+    "complete": false,
+    "summedCaseSeconds": 1658.385,
+    "receiptSha256": "86fd6bab8620817ee43e7456a9c7a907a8a67523647730c7614c59328a65828b",
+    "logSha256": "05276dc9d4fc18a672ca321a5cc1117dbd8b41d86ccc5bb4323fe1941bceaadf"
+  },
+  "methodCoverage": {
+    "declared": 32,
+    "actuallyExecuted": 32,
+    "withNumericalAcceptanceCase": 29,
+    "structuralOnly": [
+      "evidence.pool",
+      "comparator.evalue",
+      "comparator.map_prior"
+    ],
+    "allHandlerExecution": "E05: 40/40 handler jobs succeeded, validated and carried provenance/output hashes"
+  },
+  "unmetCrosscheckPrerequisites": {
+    "deSolve": [
+      "C2-10"
+    ],
+    "rpact": [
+      "N01",
+      "N01b",
+      "N06b",
+      "N47a",
+      "N47b"
+    ],
+    "WeightIt": [
+      "N07",
+      "N09c",
+      "N33a",
+      "N35a",
+      "N36a",
+      "N37c"
+    ],
+    "survRM2": [
+      "N10",
+      "N11b",
+      "N24c"
+    ],
+    "EValue": [
+      "N12"
+    ],
+    "RBesT": [
+      "N18",
+      "N21",
+      "N21b"
+    ],
+    "metafor": [
+      "N27d",
+      "N37a"
+    ]
+  },
+  "otherFullRunFailures": [
+    {
+      "id": "N49c",
+      "detail": "error: cannot open the connection"
+    },
+    {
+      "id": "Z99",
+      "detail": "32/32 declared methods went through vcr_run_job in this run, 29/32 in a case that asserts numbers; run only by structural cases: evidence.pool, comparator.evalue, comparator.map_prior"
+    }
+  ],
+  "boundedHarnessRetest": {
+    "id": "N49c",
+    "fixedPrerequisite": "mount current runtime/mcp/evimed-research/vcr_scenario_help.json read-only",
+    "passed": true,
+    "domainExamplesActuallyExecuted": 9,
+    "methods": 5,
+    "receiptSha256": "64f5332e1a6f2a4f00f5daaefe6ae8f353f85cd10b85f298cc1749b683dad9e7",
+    "fullRunRewritten": false
+  },
+  "effectiveUniqueCasesAfterRetest": {
+    "passed": 160,
+    "failed": 22,
+    "complete": false
+  },
+  "limits": [
+    "Runtime image verifies only runtime lock; full independent reference acceptance requires WITH_CROSSCHECK=1 image matching both locks.",
+    "All methods execute; numerical acceptance is incomplete for three methods and 21 reference-dependent cases.",
+    "No missing-reference case was hidden or changed into a passing skip."
+  ],
+  "privateEvidenceRoot": "/tmp/evimed-integration-audit/vcr-engine"
+}

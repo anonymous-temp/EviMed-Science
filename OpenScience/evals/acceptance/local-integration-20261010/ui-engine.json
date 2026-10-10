@@ -1,0 +1,351 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "scope": "Local synthetic acceptance only; no deployment or production tests",
+  "evidenceRoot": "ui/",
+  "browser": {
+    "base": "http://127.0.0.1:18980",
+    "state": "Real PostgreSQL; mock conversation protocol; native skill parser separately real Docker-isolated",
+    "walk": {
+      "distinctNormalRoutes": 55,
+      "desktopNormalCaptures": 55,
+      "phoneNormalCaptures": 55,
+      "staleChunkFaultCapture": 1,
+      "pageRecords": 111,
+      "retainedScreenshotFiles": 111,
+      "desktopAxeScans": 55,
+      "axeVersion": "4.12.1",
+      "axeViolatingPages": 0,
+      "axeViolatingNodes": 0,
+      "observedRowClicks": 10,
+      "addressAndReaderActionGroups": 3,
+      "notices": 92,
+      "runtimeStartsRefused": 123,
+      "logoutHTTP": 200,
+      "sessionAfterLogoutHTTP": 401,
+      "report": "walk/report.json"
+    },
+    "moduleFocused": {
+      "GEOtabs": 7,
+      "VCRtabs": 7,
+      "viewports": [
+        1512,
+        390
+      ],
+      "pageCaptures": 28,
+      "horizontalOverflowFailures": 0,
+      "report": "modules-report.json"
+    },
+    "functionalScenarios": {
+      "passed": 9,
+      "assertionGroups": 29,
+      "countMeaning": "Reported check groups, not an inferred total click count",
+      "results": [
+        {
+          "name": "foundation",
+          "checks": [
+            "Real PostgreSQL knowledge note creation and readback",
+            "Knowledge source row opens readable content",
+            "Research schedule create/start/stop state persists",
+            "Task list opens dedicated task page",
+            "Memory settings update, persistence and restoration",
+            "Plugin and personal skill lists render API data",
+            "Foreign project write refuses"
+          ],
+          "report": "foundation-report.json"
+        },
+        {
+          "name": "modules",
+          "checks": [
+            "GEO project persists with control-plane project identity",
+            "VCR study persists with control-plane project identity",
+            "All seven GEO and seven VCR tabs render at desktop and390px without horizontal overflow",
+            "Matching rejects caller-supplied patient scenario"
+          ],
+          "report": "modules-report.json"
+        },
+        {
+          "name": "cloud-permission",
+          "checks": [
+            "Synthetic source explicit cloud approval and revocation persist",
+            "Cloud grant rejects nonHTTPS destination",
+            "Real data tab renders protected source state"
+          ],
+          "report": "cloud-permission-report.json"
+        },
+        {
+          "name": "value-browser",
+          "checks": [
+            "1512px actual persisted value scope, certainty, dates and source identity readable",
+            "390px actual persisted value scope, certainty, dates and source identity readable"
+          ],
+          "report": "value-browser-report.json"
+        },
+        {
+          "name": "result-browser",
+          "checks": [
+            "1512px version switches update prose+URL, retain one provenance panel and show comparison",
+            "390px version switches update prose+URL, retain one provenance panel and show comparison",
+            "Preserved original bytes unchanged after version switches"
+          ],
+          "report": "result-browser-report.json"
+        },
+        {
+          "name": "plugin-state",
+          "checks": [
+            "Plugin desired state write/readback, stale CAS rejection, restoration and revision history"
+          ],
+          "report": "plugin-state-report.json"
+        },
+        {
+          "name": "configured-pages",
+          "checks": [
+            "1512px frontier-zones actual configured service renders graceful empty/unconfigured source state",
+            "1512px connectors actual configured service renders graceful empty/unconfigured source state",
+            "390px frontier-zones actual configured service renders graceful empty/unconfigured source state",
+            "390px connectors actual configured service renders graceful empty/unconfigured source state"
+          ],
+          "report": "configured-pages-report.json"
+        },
+        {
+          "name": "matching-browser",
+          "checks": [
+            "Initial empty study has one action and no meaningless direction toolbar; protocol fixture enables meaningful direction controls",
+            "Direction change performs actual patient_to_trial backend read",
+            "Reverse direction performs trial_to_patient backend read"
+          ],
+          "report": "matching-browser-report.json"
+        },
+        {
+          "name": "extensions-browser",
+          "checks": [
+            "Blank native purpose is refused inline before any POST and focuses purpose",
+            "Browser create/edit/remove persisted through real isolated native DSH parser and PostgreSQL; stale revision409 preserves latest content"
+          ],
+          "report": "extensions-browser-report.json"
+        }
+      ]
+    },
+    "originalWalkFailures": [
+      "frontier-zones@desktop: the page's API refused it: 404 /api/frontier/status, 404 /api/frontier/zones",
+      "account-connectors@desktop: the page's API refused it: 503 /api/connectors",
+      "frontier-zones@phone: the page's API refused it: 404 /api/frontier/zones, 404 /api/frontier/status",
+      "account-connectors@phone: the page's API refused it: 503 /api/connectors"
+    ],
+    "focusedConfigRetest": {
+      "captures": 4,
+      "passed": true,
+      "cause": "Local Frontier disabled and connector gateway signing configuration absent",
+      "resolution": "Enabled local Frontier with 1h polling; provided own local signing configuration; actual unconfigured feed/connector state renders gracefully",
+      "report": "configured-pages-report.json"
+    },
+    "frontendDefectsAndVerification": {
+      "originalFullWebFailures": 7,
+      "fixes": [
+        "compact GEO type weight and source section type hierarchy",
+        "GEO tests include value endpoint contract",
+        "omit empty semantic value list",
+        "matching fresh empty state suppresses meaningless controls, preserves protocol/timeline facts",
+        "both matching directions remain functional",
+        "native skill purpose required inline before parser submission"
+      ],
+      "mergeFocusedTestsPassed": 119,
+      "purposeFocusedTestsPassed": 43,
+      "eslint": "pass for 9 owned frontend files",
+      "finalBuild": "../build-final.log exit0",
+      "currentBuildBrowser": [
+        "matching initial empty then synthetic protocol-backed actual direction transitions; own protocol removed",
+        "native blank-purpose no-POST/focus, actual isolated create/edit/read/revision conflict/remove"
+      ],
+      "reports": [
+        "matching-browser-report.json",
+        "extensions-browser-report.json"
+      ]
+    },
+    "managedBrowserIntegration": {
+      "testsPassed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 8116.164209,
+      "log": "managed-browser-real.log",
+      "files": [
+        "managedBrowserHttp.integration.test.mjs",
+        "managedBrowserService.integration.test.mjs"
+      ],
+      "chromium": "Playwright Chromium1208, explicit owned executable",
+      "storage": "Tests use their own temporary filesystem auth/state; PostgreSQL is not a prerequisite",
+      "actual": "Real disposable CDP browser contexts, HTTP login/cookies and signed frame boundary; tenant404, bounded640x480 JPEG pixels, logout401, physical context join, frame/owner close and2bfcache history restores",
+      "controlledFixtures": [
+        "Native kernel session inventory",
+        "Public DNS and page egress transport redirected to ownedloopback site"
+      ],
+      "qualification": "Local CDPmechanics only; no production/Tokyo/network qualification; full hostedDSHbrowser conversation remains unverified"
+    }
+  },
+  "nativeSkillValidation": {
+    "image": "sha256:12e2639a0b02992fd3a955552f31b197eed625b7d5f9ec29b30a2dbbd01d24b2",
+    "dshVersion": "0.1.7-rc.2",
+    "nodeVersion": "24.18.0",
+    "nativeDependencyPackages": 28,
+    "scriptSHA256": "f34ff016780d6854bf37aafcb8e592a44b00ce330150109b30c789e5c3a1406c",
+    "personalSkillsSHA256": "a7db8b7924ef6e69b738b4b903bbadd4d5b168a5246ddb98b5296747c4ca20fd",
+    "isolation": "Unchanged controller: fixed image-owned parser, immutable imageID, read-only root/input, network none, nonroot, capdrop, no-new-privileges, PID/CPU/memory limits",
+    "qualification": "Local parser-only image; not full hosted DSH runtime qualification",
+    "provenance": "native-validation-image.json",
+    "retest": {
+      "image": "sha256:661e319ff7790654b25f03159923ffe4c13c1273eabc90d235d246ab775d9371",
+      "baseImage": "sha256:4f228bc1cbcfc794e4878312cfc241d368eff55a21c08d1e2bb263116c4ef524",
+      "networkPulls": 0,
+      "newHomeDiskGrowthMiB": 133,
+      "minimumObservedHomeFreeMiB": 446,
+      "testsPassed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "newlyAvailableImageBackedCases": 8,
+      "countForDedupe": "6 controller image cases +1 personal-generation +1 Unicode; other14 cases were alreadycovered",
+      "files": {
+        "skillValidationController.integration.test.mjs": 7,
+        "personalSkillGeneration.integration.test.mjs": 14,
+        "personalSkillUnicode.integration.test.mjs": 1
+      },
+      "log": "native-fixture-retest.log",
+      "assertions": "Native actual provider invocation/text, malformedYAML refusal withoutimportedtext leak, immutableidentity, actual deadlinephysicalcleanup, near-limit Unixdata envelope, UID1000privateoriginal vsUID10001readonlyprojection, success/failure/timeout/cancel joins, same-name/replacementcontainer ownership, UnicodeZIP/canonicalresource/depth16chain, PGpool1generation/history/admission",
+      "qualification": "Disposable parser-only fixture with existing product/test isolation unchanged; not fullkernel/model qualification",
+      "retainedForOtherAuthorizedTests": false,
+      "cleanup": "Exact owned image removed without force after all authorized tests; build context removed. Evidence retained: native-final-cleanup.json."
+    }
+  },
+  "actualEngines": {
+    "image": "sha256:f730e3a570cc86a467839074f8bfc6a4c409ce74cc7543d1795d72bc4a46a89e",
+    "RVersion": "4.3.3",
+    "RLibraryClosure": "62 exact pinned runtime packages in /opt/vcr-rlib; numerical/crosscheck qualification belongs to separate OpenMed report",
+    "vcrTests": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "files": [
+        {
+          "name": "vcrEngineContract.integration.test.mjs",
+          "passed": 13,
+          "report": "engine-integration/contract.log",
+          "assertions": "signed receipt/output hashes, fullT0, changedassumption lineage, T1rows weighting, MCSE/replicatefloor, grid placement, actual refusal, cancelpartial and aggregatebasis"
+        },
+        {
+          "name": "vcrIntake.integration.test.mjs",
+          "passed": 21,
+          "report": "engine-integration/intake.log",
+          "assertions": "filehashes/maps/freezes,sealing/readpermissions,pseudonyms/no patientrow leakage,xlsx,actualR rawprofile/cohort/RMST, deletion"
+        },
+        {
+          "name": "vcrKnowledgeEngine.integration.test.mjs",
+          "passed": 1,
+          "report": "engine-integration/knowledge.log",
+          "assertions": "actualRcohort comparison independently recomputed sizes/overlap and age/ecogSMD1e-9,versionbinding/idempotency"
+        }
+      ]
+    },
+    "replay": {
+      "coveredBehaviors": 21,
+      "environmentSplit": {
+        "signedRAndLifecycle": {
+          "passed": 17,
+          "report": "engine-integration/replay-final.log",
+          "recipes": [
+            "design.analytic",
+            "comparator.evalue"
+          ]
+        },
+        "pinnedPythonAdapter": {
+          "passed": 4,
+          "report": "engine-integration/python-replay-pinned.log",
+          "recipes": [
+            "meta.dl",
+            "faers.signals",
+            "bibliometric.network"
+          ],
+          "python": "3.12",
+          "dependencyVersions": {
+            "numpy": "2.0.2",
+            "pandas": "2.2.3",
+            "python-dateutil": "2.9.0.post0",
+            "pytz": "2026.3.post1",
+            "scipy": "1.13.1",
+            "six": "1.17.0",
+            "tzdata": "2026.3",
+            "networkx": "3.4.2"
+          },
+          "exactNumericLocksMatch": true,
+          "adapterRequirements": "deploy/specialist-adapter/requirements.lock",
+          "numericLocks": [
+            "项目代码/meta/requirements.lock",
+            "项目代码/文献剂量分析/requirements.lock"
+          ],
+          "temporaryDependencyFootprintMiB": 270
+        }
+      },
+      "originalContainerRun": {
+        "passed": 17,
+        "failed": 4,
+        "skipped": 0,
+        "reason": "VCR image lacks Python replay numerical dependencies: three unsupported recipes and parent; preserved as environment failure, not called a green full-file run",
+        "report": "engine-integration/replay-final.log"
+      },
+      "evidenceWriteRetest": "Initial nonroot evidence directory permission failure corrected in owned local directory; R numerical and signed receipt checks passed on rerun",
+      "unpinnedHostProbe": "engine-integration/python-replay.log retained but not used for pinned identity",
+      "assertions": "Actual numerical values, content digests and artifact hashes, independently verified signed R receipts, frozen-input reruns with identical machine numbers, original bytes preserved, cancellation tombstones, durable recovery/lease ownership",
+      "results": {
+        "required_events_exact": 330.3779139638096,
+        "required_events": 331,
+        "e_value": 7.263034344160047,
+        "e_value_confidence_limit": 3,
+        "pooled_effect": 1.3333333333333335,
+        "tau_squared": 2.2333333333333334,
+        "ROR": 10.444444444444445,
+        "PRR": 9.5,
+        "nodeCount": 2,
+        "edgeCount": 1
+      },
+      "artifactDirectories": [
+        "engine-integration/replay",
+        "engine-integration/python-replay-pinned"
+      ]
+    }
+  },
+  "remainingGaps": [
+    "Full browser-to-hosted isolated DSH conversation/model effects not exercised",
+    "Plugin effective runtime activation not verified; desired config/revision rollback verified",
+    "External PDF/Office parser not exercised by deterministic knowledge-note fixture",
+    "Local integration proves mechanics; scientificApplicability remains not_assessed"
+  ],
+  "archivePolicy": {
+    "include": "Sanitized JSON/logs and numerical evidence; bulk screenshots may be separate archive",
+    "exclude": [
+      "pnpm-virtual-store",
+      "state",
+      "private local authentication/gateway credential material",
+      "pinned-python installed dependencies",
+      "skill-validator-image build context"
+    ],
+    "noSecretsIncluded": true
+  },
+  "cleanupAfterArchive": {
+    "safeToStopOwnedProcesses": [],
+    "ownedActiveContainers": 0,
+    "safeToRemoveOwnedResources": [
+      "ui/pnpm-virtual-store633MiB only after final integrated build/tests no longer need node_modules links",
+      "ui/state and local private credentials after root confirms no more UI checks"
+    ],
+    "retainUntilExplicitRootCleanup": [
+      "All evidence JSON/logs/numerical outputs/screenshots",
+      "Local test PostgreSQL database until evidence archived and root no longer needs fixtures"
+    ],
+    "notOwnedDoNotStop": [
+      "Private VCR Docker daemon/socket",
+      "OpenMed evimed-local-vcr-numeric-review container",
+      "Shared PostgreSQL service",
+      "Existing default Docker containers/base images"
+    ],
+    "completedOwnedCleanup": "UI/API and native controller stopped; owned parser images, build contexts and pinned Python dependency target removed with authorization. See local-cleanup.json and native-final-cleanup.json."
+  },
+  "coworkFollowup": "Actual immutable Cowork preparation, cancellation and controller-composition tests passed; see cowork-prerequisites.json. Qualification remains false."
+}

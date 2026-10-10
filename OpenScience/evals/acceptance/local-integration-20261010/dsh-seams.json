@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-10T02:49:26.081439+00:00",
+  "localOnly": true,
+  "source": "Fresh pinned closure installed with the deployment publishedBefore cutoff; install scripts disabled.",
+  "kernel": "0.1.7-rc.2",
+  "kernelPackageSha256": "b6a8e28158f1bc67862e5d0c671430bfa4867a57be864e6007524877644555aa",
+  "seamManifestSha256": "24ba8ae8291dc9ac2a52b861be9047e899624096ba12a81c7642804adcfe8e62",
+  "kernelPackages": 273,
+  "wireMethodsObserved": 135,
+  "classifiedMethodsIncludingOwned": 140,
+  "initialFailure": [
+    "session/modelCatalog and session/selectModel absent from run-wire classification"
+  ],
+  "fix": "Classified both as denied on the ordinary run wire. Browser model selection retains its separate authenticated, certified-model proxy policy.",
+  "finalSeamCheck": "pass",
+  "focusedBoundary": {
+    "tests": 121,
+    "pass": 120,
+    "fail": 0,
+    "skipped": 1
+  },
+  "focusedContracts": {
+    "tests": 42,
+    "pass": 42,
+    "fail": 0,
+    "skipped": 0
+  },
+  "logs": [
+    "seams-final.log",
+    "seams-final-retest.log",
+    "dsh-boundary-final.log",
+    "dsh-boundary-retest.log",
+    "dsh-contract-retest.log"
+  ]
+}

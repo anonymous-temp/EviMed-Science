@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-10T03:08:48.916273+00:00",
+  "decision": "Branches integrated and locally reviewed; available regressions and effect checks completed, with explicit unverified dependencies and scientific effectiveness limitations.",
+  "wholePlatformQualified": false,
+  "wholeScientificPlanAccepted": false,
+  "deploymentPerformed": false,
+  "newProductionFunctionalTestsPerformed": false,
+  "source": {
+    "integrationBranch": "codex/integration-local-review-20261010",
+    "reviewedProductCommit": "019729f6baa1b65fcbfc5dae79a775618c8a7064",
+    "designReference": "docs/ui-ux-audit/2026-10-08-evimed-design-reference.md",
+    "designReferenceLines": 1592,
+    "designReferenceBaseline": "5d8d24e55950e9489f5c2773a7875ba63e679fe5",
+    "branches": [
+      {
+        "name": "codex/geo-drug-value-integration-20261009",
+        "requestedCommit": "688ab9f5a",
+        "reviewedHead": "50023fcff"
+      },
+      {
+        "name": "codex/openmed-adoption-20261009",
+        "requestedCommit": "f8567451a",
+        "reviewedHead": "3561e64bd"
+      }
+    ],
+    "scope": "Current source is the merged integration worktree. Individual model/image measurements retain their own original source identities; older baseline evidence is not current local acceptance."
+  },
+  "implementationReview": {
+    "geo": {
+      "requirements": 27,
+      "review": "local-integration-20261010/geo-requirements.json",
+      "realModelScenarios": 16,
+      "effectivenessFullyAccepted": false
+    },
+    "openmed": {
+      "implemented": 38,
+      "nativeReused": 6,
+      "conditionalNotActivated": 7,
+      "independentValidationRequired": 1,
+      "review": "../vcr-matching/openmed-scorecard.json",
+      "enhancedExtractionDefault": "off; empty study allow-list"
+    }
+  },
+  "defectsFixed": [
+    "Preserved GEO specialist artifacts, original article bases and partial research across imports and source/profile changes.",
+    "Scoped GEO semantic coverage by profile version, audience, question group and engine; distinguished unmeasured coverage from an opportunity or indexing claim.",
+    "Made valueCoverage explicit in the judge output schema and retained missing applicability conditions as partial or uncertain.",
+    "Required nonempty, safely readable project files before runtime article registration; refused missing/empty/symlink items without discarding valid partial drafts.",
+    "Removed fabricated qualitative-source guidance and allowed useful content without making a claim library a universal prerequisite.",
+    "Corrected clinical lookback denials and required literal evidence for unlisted laboratory units; grounded extracted spans in source surfaces.",
+    "Preserved frozen matching/table identities, both matching directions and meaningful empty-state navigation.",
+    "Used readable platform knowledge-pack metadata while retaining the bound immutable clinical body.",
+    "Resolved full project context for clinical cloud egress and producer runs; prevented ordinary model-gateway calls from failing with an incomplete user object.",
+    "Validated personal-skill purpose before submission, matching the actual native DSH parser.",
+    "Restored merge-damaged progress history/domain exports, regenerated capability manifests/tool graphs, and advanced changed method versions.",
+    "Classified native model-catalog/selection methods at the ordinary run wire while preserving the browser proxy selection policy."
+  ],
+  "localChecks": {
+    "web": {
+      "files": 286,
+      "tests": 3322,
+      "pass": 3322,
+      "fail": 0,
+      "log": "web-tests-final.log"
+    },
+    "server": {
+      "fullRun": {
+        "tests": 8821,
+        "pass": 6980,
+        "fail": 1,
+        "skipped": 1840,
+        "cancelled": 0
+      },
+      "fullRunLog": "server-regression-final.log",
+      "remainingFailure": "Composition inventory did not list the newly wired articleExists hook.",
+      "afterFix": {
+        "tests": 42,
+        "pass": 42,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "afterFixLog": "server-composition-final.log",
+      "verdict": "No unresolved observed failure after focused correction; not represented as a second all-green full sweep. PostgreSQL and engine prerequisites are exercised separately below."
+    },
+    "durablePostgres": {
+      "files": 238,
+      "tests": 1804,
+      "pass": 1801,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 3,
+      "todo": 0,
+      "record": "local-integration-20261010/durable-postgres.json",
+      "unresolved": "Any remaining environment-dependent cases are listed individually in the linked record; initial failures are retained after successful focused retests."
+    },
+    "mcpResearch": {
+      "tests": 955,
+      "pass": 954,
+      "fail": 0,
+      "skipped": 1
+    },
+    "mcpMemory": {
+      "tests": 9,
+      "pass": 9,
+      "fail": 0
+    },
+    "domain": {
+      "tests": 1024,
+      "pass": 1024,
+      "fail": 0
+    },
+    "harnessPort": {
+      "tests": 299,
+      "pass": 298,
+      "fail": 0,
+      "skipped": 1
+    },
+    "socket": {
+      "tests": 246,
+      "pass": 246,
+      "fail": 0
+    },
+    "contracts": {
+      "tests": 56,
+      "pass": 51,
+      "fail": 0,
+      "skipped": 5
+    },
+    "opsPython": {
+      "tests": 67,
+      "pass": 63,
+      "fail": 0,
+      "skipped": 4
+    },
+    "opsNode": {
+      "tests": 211,
+      "pass": 205,
+      "fail": 0,
+      "skipped": 6
+    },
+    "tokens": {
+      "tests": 30,
+      "pass": 29,
+      "fail": 0,
+      "skipped": 1
+    },
+    "vcrService": {
+      "pass": 53,
+      "fail": 0,
+      "skipped": 1,
+      "note": "CPU hard-limit test retains the refusal assertion with clock-tick accounting tolerance."
+    },
+    "lintTypesBuildAndGenerated": [
+      {
+        "name": "lint-final",
+        "exitCode": 0,
+        "seconds": 64.12,
+        "log": "/tmp/evimed-integration-audit/lint-final.log"
+      },
+      {
+        "name": "types-final",
+        "exitCode": 0,
+        "seconds": 55.61,
+        "log": "/tmp/evimed-integration-audit/types-final.log"
+      },
+      {
+        "name": "web-types-final",
+        "exitCode": 0,
+        "seconds": 57.53,
+        "log": "/tmp/evimed-integration-audit/web-types-final.log"
+      },
+      {
+        "name": "build-final",
+        "exitCode": 0,
+        "seconds": 123.63,
+        "log": "/tmp/evimed-integration-audit/build-final.log"
+      },
+      {
+        "name": "capabilities-final",
+        "exitCode": 0,
+        "seconds": 1.95,
+        "log": "/tmp/evimed-integration-audit/capabilities-final.log"
+      },
+      {
+        "name": "tool-graph-final",
+        "exitCode": 0,
+        "seconds": 2.89,
+        "log": "/tmp/evimed-integration-audit/tool-graph-final.log"
+      },
+      {
+        "name": "skill-packages-final",
+        "exitCode": 0,
+        "seconds": 3.18,
+        "log": "/tmp/evimed-integration-audit/skill-packages-final.log"
+      },
+      {
+        "name": "source-secrets-final",
+        "exitCode": 0,
+        "seconds": 16.93,
+        "log": "/tmp/evimed-integration-audit/source-secrets-final.log"
+      },
+      {
+        "name": "hosted-compliance-final",
+        "exitCode": 0,
+        "seconds": 2.91,
+        "log": "/tmp/evimed-integration-audit/hosted-compliance-final.log"
+      },
+      {
+        "name": "tokens-final",
+        "exitCode": 0,
+        "seconds": 2.17,
+        "log": "/tmp/evimed-integration-audit/tokens-final.log"
+      },
+      {
+        "name": "acceptance-ledger-final",
+        "exitCode": 0,
+        "seconds": 2.32,
+        "log": "/tmp/evimed-integration-audit/acceptance-ledger-final.log"
+      }
+    ],
+    "architectureChecks": [
+      {
+        "name": "pin-inventory-final",
+        "exitCode": 0,
+        "seconds": 9.83,
+        "log": "pin-inventory-final.log"
+      },
+      {
+        "name": "composition-references-final",
+        "exitCode": 0,
+        "seconds": 1.04,
+        "log": "composition-references-final.log"
+      },
+      {
+        "name": "kernel-defaults-final",
+        "exitCode": 0,
+        "seconds": 0.3,
+        "log": "kernel-defaults-final.log"
+      },
+      {
+        "name": "seams-final",
+        "exitCode": 1,
+        "seconds": 78.76,
+        "log": "seams-final.log"
+      }
+    ],
+    "architectureFollowup": "local-integration-20261010/dsh-seams.json",
+    "countScope": "Focused retests overlap full suites; these counts must not be summed as distinct test cases.",
+    "acceptanceRecords": [
+      {
+        "name": "acceptance-source-secrets",
+        "exitCode": 0,
+        "seconds": 1.7,
+        "log": "acceptance-source-secrets.log"
+      },
+      {
+        "name": "acceptance-pin-inventory",
+        "exitCode": 0,
+        "seconds": 8.06,
+        "log": "acceptance-pin-inventory.log"
+      },
+      {
+        "name": "acceptance-manifests",
+        "exitCode": 0,
+        "seconds": 0.56,
+        "log": "acceptance-manifests.log"
+      },
+      {
+        "name": "acceptance-skill-packages",
+        "exitCode": 0,
+        "seconds": 0.65,
+        "log": "acceptance-skill-packages.log"
+      }
+    ]
+  },
+  "actualBehavior": {
+    "browser": {
+      "distinctRoutes": 55,
+      "viewports": 2,
+      "walkRecordsIncludingStaleChunk": 111,
+      "screenshots": 111,
+      "axeScans": 55,
+      "axeViolations": 0,
+      "scope": "Local browser and real PostgreSQL; conversation transport mocked. Native skill validation uses the actual pinned DSH parser.",
+      "record": "local-integration-20261010/ui-engine.json",
+      "effects": [
+        "Knowledge create/read/open",
+        "Task create/start/stop",
+        "Settings persist/restore and cross-project refusal",
+        "Cloud permission grant/revoke/readback denial",
+        "Plugin desired configuration CAS/revision rollback",
+        "Result version comparison and original-byte preservation",
+        "Personal skill create/edit/conflict/delete and missing-purpose focus",
+        "Two-way matching and empty-study navigation"
+      ]
+    },
+    "engines": {
+      "vcrIntegration": {
+        "tests": 35,
+        "pass": 35,
+        "fail": 0,
+        "skipped": 0
+      },
+      "replayCoverage": {
+        "behaviors": 21,
+        "pinnedPythonTests": 4,
+        "signedRAndLifecycleTests": 17
+      },
+      "record": "local-integration-20261010/ui-engine.json",
+      "scope": "Current source mounted into the local R image; exact locked Python dependencies used separately. The original all-in-image replay run retained four failures from missing Python dependencies and is not relabeled green.",
+      "numerical": {
+        "record": "local-integration-20261010/numeric-summary.json",
+        "fullRun": {
+          "attempted": 182,
+          "passed": 159,
+          "failed": 23,
+          "skipped": 0,
+          "complete": false,
+          "summedCaseSeconds": 1658.385,
+          "receiptSha256": "86fd6bab8620817ee43e7456a9c7a907a8a67523647730c7614c59328a65828b",
+          "logSha256": "05276dc9d4fc18a672ca321a5cc1117dbd8b41d86ccc5bb4323fe1941bceaadf"
+        },
+        "effectiveUniqueCasesAfterRetest": {
+          "passed": 160,
+          "failed": 22,
+          "complete": false
+        },
+        "methodCoverage": {
+          "declared": 32,
+          "actuallyExecuted": 32,
+          "withNumericalAcceptanceCase": 29,
+          "structuralOnly": [
+            "evidence.pool",
+            "comparator.evalue",
+            "comparator.map_prior"
+          ],
+          "allHandlerExecution": "E05: 40/40 handler jobs succeeded, validated and carried provenance/output hashes"
+        }
+      }
+    },
+    "geoOfficialDeepSeek": {
+      "scenarios": 16,
+      "nativeHarness": "DSH",
+      "record": "local-integration-20261010/geo-scenarios.json",
+      "limits": [
+        "Contained harness lacks Office/file generation and consumer-engine visibility measurements.",
+        "Partial-research drafting still intermittently treated a claim library as a prerequisite; engineering permission and model behavior are reported separately."
+      ]
+    },
+    "openmedOfficialDeepSeek": {
+      "syntheticCells": 72,
+      "sourceGroups": 12,
+      "enhanced": {
+        "correct": 22,
+        "total": 24,
+        "falseInclusions": 0,
+        "eligibleRecall": 0.75
+      },
+      "nativeAndOffEach": {
+        "correct": 21,
+        "total": 24,
+        "falseInclusions": 2,
+        "eligibleRecall": 0.875
+      },
+      "nativePrivacyTurns": 7,
+      "observedCanaryLeaks": 0,
+      "publicAbstracts": 10,
+      "publicStrictNerF1": 0.7386363636363636,
+      "publicRelationF1": 0.052980132450331126,
+      "scope": "Synthetic paired development cases and a small public DrugProt pilot; no independent Chinese clinical holdout. Enhanced guidance traded lower observed false inclusion for lower eligible recall. No clinical qualification or default enablement.",
+      "record": "../vcr-matching/openmed-scorecard.json"
+    },
+    "freshLocalTools": {
+      "accounted": 56,
+      "called": 50,
+      "success": 19,
+      "warning": 17,
+      "error": 14,
+      "unverifiedSpecialists": 6,
+      "record": "local-integration-20261010/tool-probe.json",
+      "independentNumericalChecks": [
+        "12488 gene-expression probe means, Welch probabilities and BH adjustment matched independent SciPy calculations.",
+        "FAERS ROR/PRR matched preserved public contingency cells.",
+        "Located quotations matched preserved source bytes and offsets."
+      ],
+      "scope": "Actual local MCP calls, no fabricated runtime credentials. Gateway-dependent errors and warnings do not certify operational capability."
+    }
+  },
+  "remainingQualificationGaps": [
+    "The formal capability release audit remains red: old evidence covers 40 of the current 56 registry entries and lacks source identity. The fresh partial local probe does not replace a qualified full runtime probe.",
+    "Any remaining isolated-renderer or native-catalogue prerequisites retain individual reasons in the durable PostgreSQL record. Actual Cowork preparation, cancellation and controller composition were exercised successfully without promoting the extension to qualified.",
+    "Full current browser-to-hosted isolated DSH conversation, effective plugin runtime activation and external PDF/Office parser behavior were not exercised by the mock-transport browser walk.",
+    "Seven OpenMed conditional integrations remain unactivated; an independent rights-cleared Chinese labeled dataset and held-out clinical validation remain absent.",
+    "Observed OpenMed public relation extraction is poor, and GEO partial drafting remains inconsistent; no whole-model effectiveness acceptance is claimed.",
+    "Numerical crosschecks requiring packages absent from the production R runtime retain their failures; see the exact numeric case record."
+  ],
+  "productionCleanup": {
+    "performedAt": "2026-10-10T01:59:29Z",
+    "currentRelease": "2ff9e5fe7973",
+    "currentReleaseUnchanged": true,
+    "removed": [
+      "Unserved 5d8d24e55950 source/build staging",
+      "Archived old browser-walk directories",
+      "Package-manager cache",
+      "Owned earlier acceptance fixture account/project/runtime"
+    ],
+    "bytesFreeBefore": 18069028864,
+    "bytesFreeAfter": 18583375872,
+    "images": {
+      "total": 33,
+      "usedByCurrentContainers": 31,
+      "otherwiseUnreferencedButCurrentComposePrerequisites": 2,
+      "obsoleteUnreferencedHistoricalImagesRemaining": 0
+    },
+    "preserved": [
+      "Current release and serving containers",
+      "Current base/Caddy/init dependencies",
+      "All business data and volumes"
+    ],
+    "postCleanupReadiness": "pass; passive health/readiness only, no new production functional acceptance",
+    "rawRecord": "production-cleanup.json"
+  },
+  "evidence": {
+    "privateRoot": "/tmp/evimed-integration-audit",
+    "componentRecords": [
+      "local-integration-20261010/numeric-summary.json",
+      "local-integration-20261010/design-reference.json",
+      "local-integration-20261010/cowork-prerequisites.json",
+      "local-integration-20261010/dsh-seams.json",
+      "local-integration-20261010/durable-postgres.json",
+      "local-integration-20261010/geo-requirements.json",
+      "local-integration-20261010/geo-scenarios.json",
+      "local-integration-20261010/postgres-capture-fence-summary.json",
+      "local-integration-20261010/tool-probe.json",
+      "local-integration-20261010/ui-engine.json"
+    ],
+    "retention": "Sanitized compact records committed; private raw logs, initial failures, model receipts, numeric results and screenshots archived separately with hashes. Credentials, session state and installed dependencies excluded.",
+    "archive": {
+      "path": "/home/coder/workspace/EviMedScience/.evimed-local/acceptance/integration-local-20261010/local-evidence-20261010T030845Z.tar.gz",
+      "sha256": "b7bf1e8fb94b43e3b3fa3cef8407028890d6b806bc27f5d5329743d1624f4f41",
+      "bytes": 13261026,
+      "evidenceFiles": 1034,
+      "uncompressedEvidenceBytes": 37601535,
+      "manifestSha256": "33a29fda7c61d80290b49c1a486b898ad7a41221edd63555d7f6f5a4919996e8",
+      "allArchivedFileHashesVerified": true,
+      "permissions": "0600; parent 0700",
+      "credentialsAndDependenciesExcluded": true,
+      "recordedAt": "2026-10-10T03:08:48.867197+00:00"
+    }
+  }
+}

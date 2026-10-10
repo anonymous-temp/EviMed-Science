@@ -1,0 +1,130 @@
+[
+  {
+    "id": "scope",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "sparse",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "journey",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "signals",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "comparators",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "priority",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "partial_or_retry",
+    "note": "Original inferred easy gains from assessed0; followup correctly leaves visibility unmeasured."
+  },
+  {
+    "id": "sources",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "counterexample_fixed_scoped_retest",
+    "note": "Final actual value write persisted, unrelated findings preserved, invented provenance absent and no phantom articles"
+  },
+  {
+    "id": "lifecycle",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "faers",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "qualitative",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "counterexample_fixed_scoped_retest",
+    "note": "Final actual value write persisted, unrelated findings preserved, invented provenance absent and no phantom articles"
+  },
+  {
+    "id": "economic",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "partial-research",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "partial",
+    "note": "Preserves partial report/local gap and no retry; residual claim-library prerequisite sentence contradicts partial draft guidance"
+  },
+  {
+    "id": "semantic",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "basis-change",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "updates",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Preserved fixture observations and limits; synthetic context only, no claim of office deliverable generation"
+  },
+  {
+    "id": "learning",
+    "officialNativeExit": 0,
+    "substantiveOutput": true,
+    "stateVerified": true,
+    "verdict": "scoped_behavior_observed",
+    "note": "Fresh official DSH completion with real value writes and preserved uncertainty, supplied outcome only; actual consumer probes absent"
+  }
+]

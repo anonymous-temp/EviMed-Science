@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "scope": "local real Docker and PostgreSQL capture-fencing test",
+  "counts": {
+    "tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0
+  },
+  "durationMs": 6102.926096,
+  "sourceRevision": "019729f6baa1b65fcbfc5dae79a775618c8a7064",
+  "testSha256": "51c5636de5fa23e52e837d2197222ac7c9a6667b8c9d835e2aa44d99273c9ca4",
+  "postgresBackupSha256": "4c75006d97fa02fd92342a618f29ee4cb56386ccb0336f065178f3e4bb5a06e9",
+  "logSha256": "128b52900e8687a78a388e398eb58a5248177214cfa3ba5d76b9d5650b5669ac",
+  "image": "postgres:16.14-bookworm",
+  "imageId": "sha256:b255e1e796ac1e321d303c04a2a53730128ddd4e9d2a9575aec213e395e48b53",
+  "dockerContext": "evimed-vcr-fence-local",
+  "dockerDataRoot": "/tmp/evimed-vcr-docker/data",
+  "isolation": {
+    "network": "none",
+    "memoryBytes": 268435456,
+    "cpuLimit": 0.5,
+    "postgresDataTmpfsBytes": 134217728
+  },
+  "verifiedBehavior": [
+    "Actual capture contains two fixture rows and archive SHA256.",
+    "Killing Docker clients leaves a real daemon-side writer alive before fencing.",
+    "Fencing stops operation-owned PostgreSQL backend and daemon-side writer before acknowledgement.",
+    "Unrelated live PostgreSQL backend survives; postmaster PID and start time unchanged.",
+    "No database interruption/recovery appears in logs.",
+    "Late operation admission is refused and marker remains unchanged."
+  ],
+  "cleanup": "Only uniquely labelled test container removed by original test cleanup; private daemon/image cleanup handed back to GEO.",
+  "privateLog": "/tmp/evimed-integration-audit/vcr-engine/postgres-capture-fence.log"
+}
