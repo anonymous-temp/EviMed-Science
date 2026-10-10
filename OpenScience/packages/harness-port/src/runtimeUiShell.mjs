@@ -29,6 +29,8 @@
  *    bound by the control plane and `workspace/create` is refused for any
  *    other path. Hiding a control is presentation; the refusal lives in
  *    `@evimed/domain`'s runtime-UI surface and does not depend on this body.
+ *    The composer's model seat is withdrawn the same way for a researcher: it
+ *    reads a provider's model id, and every deployment runs one model.
  *
  * The language pack is its own body (`runtimeUiLocale.mjs`), so either can be
  * switched off without the other.
@@ -294,6 +296,14 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     // The picker is a popup the chip opens; an occupant that renders nothing
     // removes the choice (the chip itself is hidden by the stylesheet).
     kit.guarded('workspace picker', () => kit.occupy({ slot: 'conversation.hero.workspace', priority: below }, Nothing));
+    // The composer's model seat (`conversation.input.model`, the right end of the toolbar) draws the catalogue's own
+    // model id and an English effort name — 「deepseek-flash High」, cut to 「deepseek-flash H…」 on a phone (live walk
+    // 2026-10-10, L-2). Every deployment runs one model, so for a researcher it is a provider's id on the page; the
+    // names come from the adapter's catalogue, which no locale key reaches, so the pack cannot say them in Chinese.
+    // Withdrawn the way the workspace picker is, below the kernel's own occupant. An operator keeps the native seat,
+    // as with the session statistics. The server still admits the certified model's thinking intensity
+    // (`assertNativeModelSelection`), so a Chinese-labelled control can take this seat later without a server change.
+    if (!kit.operator) kit.guarded('model seat', () => kit.occupy({ slot: 'conversation.input.model', priority: below }, Nothing));
     // The draft's attachment strip (`conversation.input.attachments`) is the
     // kernel's own again: it was occupied by nothing here while uploads were
     // refused, and with them allowed it hid every attached file — the upload

@@ -25,12 +25,12 @@ test('the shell requires only the slot registry', () => {
   assert.deepEqual(inject, ['slots']);
 });
 
-test('the left column, the three brand slots and the hero workspace picker are occupied below the kernel, nothing else', () => {
+test('the left column, the three brand slots, the hero workspace picker and the composer model seat are occupied below the kernel, nothing else', () => {
   const f = fixture();
   apply(f.ctx, {}, f.target, undefined, f.kit);
   const occupants = f.occupants();
   assert.deepEqual(Object.keys(occupants).sort(), [
-    'conversation.hero.brand.mark', 'conversation.hero.workspace', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name',
+    'conversation.hero.brand.mark', 'conversation.hero.workspace', 'conversation.input.model', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name',
   ]);
   // The draft's attachment strip is the kernel's own: occupied by nothing, it
   // hid every attached file once uploads were allowed (2026-09-22).
@@ -141,6 +141,26 @@ test('the context ring goes with the session statistics for a researcher, and an
   assert.doesNotMatch(researcher, /\.[A-Za-z0-9]{6}_[A-Za-z]/);
 });
 
+test('a researcher\'s composer has no model seat, and an operator keeps the kernel\'s own', () => {
+  // L-2 (live walk 2026-10-10): the kernel's seat draws the catalogue's own model id and an English effort name — 「deepseek-flash High」,
+  // cut to 「deepseek-flash H…」 on a phone. Every deployment runs one model, so for a researcher it is a provider's id on the page; the
+  // names and the effort levels come from the adapter's catalogue, not from a locale key, so the pack cannot say them in Chinese. The seat
+  // is the single `conversation.input.model` slot, and an occupant below the kernel's own that draws nothing withdraws it (the way the
+  // hero's workspace picker is). An operator keeps the native seat, as with the session statistics.
+  const researcher = fixture();
+  apply(researcher.ctx, {}, researcher.target, undefined, researcher.kit);
+  const seat = researcher.occupants()['conversation.input.model'];
+  assert.ok(seat, 'the model seat is occupied for a researcher');
+  assert.ok(seat.options.priority < 0, 'below the kernel\'s own occupant, which sits at 0');
+  assert.equal(renderStatic(seat.component, { locked: false }), '', 'and it draws nothing');
+  assert.equal(renderStatic(seat.component, { locked: true }), '', 'locked or not');
+  const operator = fixture();
+  operator.target.__EVIMED_FRAME__.operator = true;
+  apply(operator.ctx, {}, operator.target, undefined, kitFor(operator.ctx, operator.target));
+  assert.equal(operator.occupants()['conversation.input.model'], undefined, 'an operator\'s seat is the kernel\'s own');
+  assert.ok(Object.keys(operator.occupants()).includes('sidebar'), 'the rest of the shell is still applied for an operator');
+});
+
 test('the composer keeps at least 16 px, or the device inset when that is larger, under its card', () => {
   // E-17: the kernel's own `.root{padding:0 16px 4px}` is all there was (measured
   // on 0.1.7-rc.2: 4 px under the lowest control), and the shell added none.
@@ -164,7 +184,7 @@ test('a slot the kernel refuses costs that slot, never the rest of the body', ()
     return register(options, component);
   };
   assert.doesNotThrow(() => apply(f.ctx, {}, f.target, undefined, f.kit));
-  assert.deepEqual(Object.keys(f.occupants()).sort(), ['conversation.hero.brand.mark', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name']);
+  assert.deepEqual(Object.keys(f.occupants()).sort(), ['conversation.hero.brand.mark', 'conversation.input.model', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name']);
 });
 
 test('without React the brand is left to the kernel fallback and the stylesheet still applies', () => {
