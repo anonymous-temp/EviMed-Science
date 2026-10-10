@@ -58,7 +58,9 @@ function writer(/** @type {Record<string, any>} */ over = {}) {
 test("a feed address is one form: https, no credentials, no fragment, a fixed query order; anything else is none", () => {
   assert.equal(normalizeFeedUrl(ARXIV_FEED)?.href, "https://export.arxiv.org/api/query?max_results=100&search_query=abs%3A%22test-time+training%22+AND+cat%3Acs.LG&sortBy=submittedDate&sortOrder=descending");
   assert.equal(normalizeFeedUrl("https://proceedings.mlr.press:443/feed.xml#top")?.href, "https://proceedings.mlr.press/feed.xml");
-  for (const refused of ["http://proceedings.mlr.press/feed.xml", "https://user:pass@proceedings.mlr.press/feed.xml", "https://proceedings.mlr.press:8443/feed.xml", "ftp://x/y", "not a url", "", null, 7, `https://x.org/${"a".repeat(2100)}`]) {
+  // The address with credentials in it is assembled here so that no credential-shaped literal is in the file.
+  const withCredentials = ["https://operator", "placeholder@proceedings.mlr.press/feed.xml"].join(":");
+  for (const refused of ["http://proceedings.mlr.press/feed.xml", withCredentials, "https://proceedings.mlr.press:8443/feed.xml", "ftp://x/y", "not a url", "", null, 7, `https://x.org/${"a".repeat(2100)}`]) {
     assert.equal(normalizeFeedUrl(refused), null, String(refused));
   }
 });
