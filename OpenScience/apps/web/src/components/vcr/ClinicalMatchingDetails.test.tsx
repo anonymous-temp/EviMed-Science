@@ -41,7 +41,7 @@ describe('evaluating from the controls',()=>{
     controls(page({direction:'trial_to_patient'}),{direction:'patient_to_trial',protocolId:'p1'});
     const start=screen.getByRole('button',{name:'开始评估'});
     expect(start).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('受试者'),{target:{value:'P-001'}});
+    fireEvent.change(screen.getByLabelText('患者'),{target:{value:'P-001'}});
     expect(start).toBeEnabled();
     fireEvent.click(start);
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
@@ -100,7 +100,7 @@ describe('clinical matching controls',()=>{
     expect(button).toBeDisabled();
     for(const box of within(screen.getByRole('group',{name:'选择方案（最多 10 项）'})).getAllByRole('checkbox'))fireEvent.click(box);
     expect(button).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('受试者'),{target:{value:'P-001'}});
+    fireEvent.change(screen.getByLabelText('患者'),{target:{value:'P-001'}});
     fireEvent.click(button);
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1','p2'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
     expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估');
@@ -115,6 +115,17 @@ describe('clinical matching controls',()=>{
     fireEvent.click(screen.getByRole('button',{name:'查看对应原文'}));
     expect(await screen.findByText('受保护的合成原文')).toBeVisible();
     expect(api.quote).toHaveBeenCalledWith('s1','prj_fixture',{start:0,end:13,quote:'肌酐 2.4 mg/dL'});
+  });
+  it('names the person whose records the fold holds, when it is told whose they are',()=>{
+    const data={timeline:[{id:'f1',variable:'creatinine',at:null,assertion:'affirmed',experiencer:'patient',quote:'肌酐 2.4 mg/dL',locator:null}]} as unknown as VcrMatchingTab;
+    render(<ClinicalTimeline studyId="s1" data={data} mayReadOriginal={false} subject="P-0192"/>);
+    expect(screen.getByText('P-0192 的临床记录与更正')).toBeInTheDocument();
+  });
+  it('says 患者, once and the same, where the controls ask for the person',()=>{
+    render(<MatchingPanelControls studyId="s1" data={{protocols:[{id:'p1',version:1,title:'方案一'}],direction:'patient_to_trial',candidateRoster:['P-001']} as unknown as VcrMatchingTab} canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}}/>);
+    expect(screen.getByLabelText('患者')).toBeInTheDocument();
+    expect(screen.getByRole('option',{name:'请选择患者'})).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/受试者/);
   });
   it('preserves Unicode offsets and requires renewed permission when a source authorization expired',()=>{
     const text='😀王小明住院。王小明否认胸痛。';

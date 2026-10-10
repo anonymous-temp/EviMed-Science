@@ -26,6 +26,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DataTable } from "@/components/ui/DataTable";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Tag } from "@/components/ui/Tag";
+import { evidenceCaveats, type EvidenceCaveat } from "../evidenceCaveats";
 import { VcrJudgmentDrawer } from "../VcrJudgmentDrawer";
 import { VcrForecastChart } from "../VcrCharts";
 import { VcrFunnelBar } from "../VcrDiagrams";
@@ -186,7 +187,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       {view === "referral" && <ReferralView studyId={studyId} data={data} abilities={study.abilities} />}
       {view === "sites" && <SitesView data={data} />}
       {view === "followup" && <FollowupView data={data} />}
-      {view === "matching" && <ClinicalTimeline studyId={studyId} data={data} mayReadOriginal={study.abilities.includes("read_patient_level")} />}
+      {view === "matching" && <ClinicalTimeline studyId={studyId} data={data} subject={data.selected?.candidate.id ?? candidate} mayReadOriginal={study.abilities.includes("read_patient_level")} />}
     </div>
   );
 }
@@ -409,7 +410,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
               columns={[
                 { key: "code", header: "编号", rowHeader: true, width: "w-16", cell: (row) => <span className="tabular-nums text-text-3">{row.code}</span> },
                 { key: "text", header: "方案原文", cell: (row) => <span className="text-text">{row.text}</span> },
-                { key: "state", header: "状态", width: "w-24", cell: (row) => <CriterionState row={row} /> },
+                { key: "state", header: "状态", width: "w-24", cell: (row) => <CriterionState row={row} caveats={evidenceCaveats(row.evidence, data.timeline)} /> },
                 {
                   key: "evidence",
                   header: "患者证据",
@@ -559,8 +560,12 @@ function CandidateButton({ candidate, current, onPick }: { candidate: VcrCandida
   );
 }
 
-/** A rule's state for one person — or 「不适用」, which is its own mark and never 未知. */
-function CriterionState({ row }: { row: VcrCriterionJudgement }) {
+/**
+ * A rule's state for one person — or 「不适用」, which is its own mark and never 未知. Under the mark, what the rule's evidence has been
+ * through (denied, since corrected, contradicted): the platform's judgment stays as it is and the row says how far to trust the sentence
+ * under it.
+ */
+function CriterionState({ row, caveats = [] }: { row: VcrCriterionJudgement; caveats?: readonly EvidenceCaveat[] }) {
   if (row.applicable === false) {
     return (
       <span data-vcr-not-applicable="" className="inline-flex items-center gap-1.5 whitespace-nowrap text-text-3">
@@ -570,7 +575,7 @@ function CriterionState({ row }: { row: VcrCriterionJudgement }) {
     );
   }
   const Icon = STATE_ICON[row.state] ?? CircleHelp;
-  return (
+  const mark = (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap",
       row.state === "satisfied" ? "text-ok" : row.state === "not_satisfied" ? "text-danger-strong" : "text-warn-strong")}
     >
@@ -578,6 +583,15 @@ function CriterionState({ row }: { row: VcrCriterionJudgement }) {
       {criterionStateLabel(row.state)}
       {/* The state shown is a person's: the platform's own answer is kept beside it. */}
       {row.overridden && <span data-vcr-overridden=""><Tag>人工改判</Tag></span>}
+    </span>
+  );
+  if (caveats.length === 0) return mark;
+  return (
+    <span className="flex flex-col items-start gap-1">
+      {mark}
+      <span data-vcr-caveats="" className="flex flex-wrap gap-1">
+        {caveats.map((caveat) => <Tag key={caveat.key} tone={caveat.needsChecking ? "warn" : "neutral"}>{caveat.label}</Tag>)}
+      </span>
     </span>
   );
 }
@@ -600,7 +614,7 @@ function ReferralLedger({ studyId, sites }: { studyId: string; sites: NonNullabl
         label="转诊台账"
         minWidth="min-w-[40rem]"
         columns={[
-          { key: "subject", header: "受试者", rowHeader: true, cell: (row) => <span className="tabular-nums text-text">{row.subjectKey}</span> },
+          { key: "subject", header: "患者", rowHeader: true, cell: (row) => <span className="tabular-nums text-text">{row.subjectKey}</span> },
           { key: "state", header: "状态", cell: (row) => <Tag>{referralStateLabel(row.state)}</Tag> },
           { key: "site", header: "中心", isEmpty: (row) => !siteName(row.siteId), cell: (row) => siteName(row.siteId) ?? "—" },
           {

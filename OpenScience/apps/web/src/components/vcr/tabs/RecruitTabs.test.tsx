@@ -629,6 +629,83 @@ describe("匹配与招募 — 复核这份评估, a reviewer's countersignature"
   });
 });
 
+describe("匹配与招募 — what the evidence of a rule has been through", () => {
+  // Review V-M8: negation, a correction and a conflict were told only in the folded timeline at the foot of the tab, so a 满足 or 不满足
+  // on a rule's own row said nothing of its evidence having been denied, corrected or contradicted, nor whose records the fold held.
+  const AT = (start: number) => ({ documentId: "doc_192", start, end: start + 8 });
+  const entry = (extra: Record<string, unknown>) => ({ id: "f_x", variable: "v", value: null, unit: null, at: null, assertion: "affirmed", experiencer: "patient",
+    medicationState: null, correctionOf: null, quote: null, superseded: false, conflictFactIds: [], correctionReason: null, locator: null, ...extra });
+  const cite = (code: string, quote: string, locator: unknown) => (payload: any) => {
+    payload.selected.criteria.find((row: any) => row.code === code).evidence = { quote, locator, source: "病历原文", at: "9 月 1 日" };
+  };
+  async function open(change: (payload: any) => void, reader: VcrStudy = study()) {
+    const payload = addressed(fixture("ev201/matching-p0192.json"));
+    change(payload);
+    server = installVcrServer(network.productRequest, { [P0192]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={reader} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+  }
+  const timeline = (payload: any) => {
+    cite("I1", "否认脑转移", AT(10))(payload);
+    cite("I2", "ECOG 1 分", AT(40))(payload);
+    cite("I3", "一线含铂双药", AT(70))(payload);
+    payload.timeline = [
+      entry({ id: "f_1", variable: "brain_mets", quote: "否认脑转移", assertion: "negated", locator: AT(10) }),
+      entry({ id: "f_2", variable: "ecog", quote: "ECOG 1 分", superseded: true, conflictFactIds: ["f_4"], locator: AT(40) }),
+      entry({ id: "f_3", variable: "platinum", quote: "一线含铂双药", correctionOf: "f_0", correctionReason: "检验科更正", locator: AT(70) }),
+      entry({ id: "f_4", variable: "ecog", quote: "ECOG 2 分", conflictFactIds: ["f_2"], locator: AT(120) }),
+    ];
+  };
+
+  it("tags a rule whose evidence was denied, one that has since been corrected or contradicted, and one that is itself a correction — on the rule's own row", async () => {
+    await open(timeline);
+    expect(within(criterionRow("I1")).getByText("已否认")).toBeInTheDocument();
+    expect(within(criterionRow("I2")).getByText("已有更正")).toBeInTheDocument();
+    expect(within(criterionRow("I2")).getByText("记录有冲突")).toBeInTheDocument();
+    expect(within(criterionRow("I3")).getByText("更正记录")).toBeInTheDocument();
+    // The mark itself is unchanged: the tag says what the evidence went through, the state says what the platform judged.
+    expect(criterionRow("I1")).toHaveAttribute("data-vcr-criterion-state", "satisfied");
+  });
+
+  it("tags nothing on a rule that has no evidence, or whose evidence is a cell of the data table", async () => {
+    await open(timeline);
+    // I1..I3 carry caveats; the rule with no evidence and the snapshot cells do not.
+    for (const code of ["E1", "E2", "E3"]) expect(criterionRow(code).querySelector("[data-vcr-caveats]")).toBeNull();
+  });
+
+  it("tags nothing on a rule whose evidence no recorded fact stands behind", async () => {
+    await open((payload) => { timeline(payload); payload.timeline = payload.timeline.filter((fact: any) => fact.id === "f_4"); });
+    expect(document.querySelectorAll("[data-vcr-caveats]")).toHaveLength(0);
+  });
+
+  it("tags nothing when the page carries no timeline — a reader who may not read patient-level records sees no facts to tag", async () => {
+    await open((payload) => { timeline(payload); payload.timeline = []; });
+    expect(document.querySelectorAll("[data-vcr-caveats]")).toHaveLength(0);
+  });
+
+  it("names whose records the fold holds", async () => {
+    await open(timeline);
+    expect(screen.getByText("P-0192 的临床记录与更正")).toBeInTheDocument();
+  });
+});
+
+describe("匹配与招募 — one word for the person", () => {
+  // Review V-M9: the direction switch said 患者 and the select beside it 受试者. The product's own word in the recruiting tab
+  // is 患者 (给试验找患者, 患者证据, 匹配患者, 联系真实患者).
+  it("says 患者 in the controls and in the referral ledger, and never 受试者", async () => {
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    expect(screen.getByLabelText("患者")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "全部已登记患者" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/受试者/);
+    await userEvent.click(screen.getByRole("radio", { name: "转诊" }));
+    expect(await screen.findByRole("columnheader", { name: "患者" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/受试者/);
+  });
+});
+
 describe("匹配与招募 — the other three views", () => {
   it("reads the referral ledger and the forecast from the server's referral view", async () => {
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);

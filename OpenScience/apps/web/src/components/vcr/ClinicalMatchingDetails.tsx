@@ -6,9 +6,9 @@ import { Select } from '@/components/ui/Input';
 import { enqueueVcrMatching, resolveVcrQuote, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
 import { webErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/cn';
+import { ASSERTION_WORDS as assertions } from './evidenceCaveats';
 
 const summaries: Record<string, string> = { eligible: '全部满足', ineligible: '有不满足条件', insufficient_evidence: '证据不足', pending: '待复评' };
-const assertions: Record<string, string> = { affirmed: '已记录', negated: '已否认', possible: '疑似', hypothetical: '假设', conditional: '有条件', unknown: '未知', family: '家族史' };
 const experiencers: Record<string, string> = { patient: '本人', family: '家属', other: '他人', unknown: '主体不明' };
 const medicationStates: Record<string, string> = { prescribed: '处方', administered: '已给药', stopped: '已停药', planned: '计划用药', historical_list: '历史用药清单', unknown: '用药状态不明' };
 
@@ -111,8 +111,8 @@ export function MatchingPanelControls({ studyId, data, direction, protocolId, se
         </Select>
       </div>
       <div className="w-full min-w-0 sm:w-64">
-        <Select label="受试者" value={subject} onChange={event => { setSubject(event.target.value); if (event.target.value) onCandidate(event.target.value); }}>
-          <option value="">{way === 'patient_to_trial' ? '请选择受试者' : '全部已登记受试者'}</option>
+        <Select label="患者" value={subject} onChange={event => { setSubject(event.target.value); if (event.target.value) onCandidate(event.target.value); }}>
+          <option value="">{way === 'patient_to_trial' ? '请选择患者' : '全部已登记患者'}</option>
           {(data.candidateRoster ?? []).map(key => <option key={key} value={key}>{key}</option>)}
         </Select>
       </div>
@@ -140,7 +140,11 @@ export function MatchingPanelControls({ studyId, data, direction, protocolId, se
   </div>;
 }
 
-export function ClinicalTimeline({ studyId, data, mayReadOriginal }: { studyId: string; data: VcrMatchingTab; mayReadOriginal: boolean }) {
+export function ClinicalTimeline({ studyId, data, mayReadOriginal, subject }: {
+  studyId: string; data: VcrMatchingTab; mayReadOriginal: boolean;
+  /** Whose records these are: the person the page is about. The fold names them, so a reader never wonders whose facts they are reading. */
+  subject?: string | null;
+}) {
   const [originals, setOriginals] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState('');
@@ -155,7 +159,7 @@ export function ClinicalTimeline({ studyId, data, mayReadOriginal }: { studyId: 
     } catch (error) { setProblem(webErrorMessage(error, { fallback: '原文暂时无法打开，请重试。' })); }
     finally { setBusy(null); }
   };
-  return <Disclosure summary="临床记录与更正">
+  return <Disclosure summary={subject ? `${subject} 的临床记录与更正` : '临床记录与更正'}>
     <ol className="divide-y divide-faint">
       {entries.map(entry => <li key={entry.id} className="flex flex-col gap-2 py-3">
         <p className="text-caption text-text-3">{[entry.at?.slice(0, 10) ?? '日期未记载', assertions[entry.assertion] ?? '未知',
