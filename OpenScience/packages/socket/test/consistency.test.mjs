@@ -1819,6 +1819,43 @@ test("a capability's tools that stay out of reach, a silent assembly seam and a 
   assert.ok(degraded.some((line) => /no live agent for its id/.test(line)), `a missing agent is named: ${JSON.stringify(degraded)}`);
 });
 
+test("a root step whose agent the registry cannot find still enters: the run-scope message and the budget notice are skipped, and said so", async () => {
+  // 2026-10-10 review D4: both were `injectContext(registry.get(agentId), ...)` with no check, and `injectContext(undefined)` throws.
+  // The scope message runs at the first root step of every run, so a registry that has lost the agent for a moment failed the step
+  // it was meant to explain; the sibling that delivers the dispatch's context had the guard.
+  const scopeMessage = (/** @type {any} */ f) => f.injected.filter((/** @type {any} */ message) => String(message.content?.[0]?.text ?? "").startsWith("当前运行作用域"));
+  const budgetNotice = (/** @type {any} */ f) => f.injected.filter((/** @type {any} */ message) => String(message.content?.[0]?.text ?? "").includes("<evimed-budget>"));
+
+  const f = await nativePolicyFixture();
+  /** @type {string[]} */
+  const degraded = [];
+  f.ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+  dispatchContext(f, "本轮的题面与记忆。\n", { protocol: RUN_CONTEXT_PROTOCOL });
+  f.start();
+  f.ctx.provide("agents", { get: () => undefined });
+  await f.step(1);
+  assert.deepEqual(scopeMessage(f), [], "nothing could be handed to an agent that is not there");
+  assert.ok(degraded.some((line) => /no live agent for its id/.test(line)), `and the step says so: ${JSON.stringify(degraded)}`);
+  // It was not delivered, so it is not marked delivered: the next step with a live agent sends it, once.
+  f.ctx.provide("agents", { get: () => f.agent });
+  await f.step(2);
+  await f.step(3);
+  assert.equal(scopeMessage(f).length, 1, "the first step that has an agent to tell sends it, and only once");
+
+  // The budget notice, with the agent there and without it.
+  for (const live of [true, false]) {
+    const g = await nativePolicyFixture();
+    g.files.set("/workspace/.evimed-brief/sessions/native-session/index.json", JSON.stringify({ protocol: RUN_CONTEXT_PROTOCOL, runId: "run_dispatched", contextRevision: "req_1", budget: { maxSteps: 1 } }));
+    g.files.set("/workspace/.evimed-brief/sessions/native-session/context.md", "本轮的题面与记忆。\n");
+    g.start();
+    await g.step(1);
+    for (const handler of g.ctx.listeners.get(SEAMS.events.sessionEvent) ?? []) handler(g.agent.session, { type: "assistant/message", seq: 3, data: { usage: {} } });
+    if (!live) g.ctx.provide("agents", { get: () => undefined });
+    await g.step(2);
+    assert.equal(budgetNotice(g).length, live ? 1 : 0, live ? "a live agent is told why its step was refused" : "an absent one is not, and the step is still refused rather than thrown");
+  }
+});
+
 test("two capabilities in one plan are delegations, not an inline method", async () => {
   // What delegation is actually for: independent work that can run in
   // parallel. A plan naming two capabilities is that case, and neither method

@@ -968,17 +968,24 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         entry.runId = `native_${(await sha256Hex(`${entry.cwd}\n${step.sessionId}`)).slice(0, 32)}`
         await putRunMirror(ctx, entry, config.bundleVersion)
       }
+      // Both messages go to an agent the registry has to produce, and `injectContext(undefined)` throws: a registry that has lost
+      // the agent for a moment must not fail the step (the step already said so above, where it handed over the dispatch's
+      // context). The scope message is marked delivered only once it was, so the next step that has an agent tells it.
       if (step.root && entry.runId && entry.pathContextRunId !== entry.runId) {
-        injectContext(ctx.get('agents')?.get?.(step.agentId),
-          `当前运行作用域：本次运行 ${entry.runId}，会话 ${entry.sessionId}。本次计划在 ${planFileFor(entry.runId)}，本次状态在 ${runStateFileFor(entry.runId)}；需要计划进度时用 evimed_plan action:status。项目资料和已交付成果仍共享；根目录 ${workspaceLayout.planFile} 与 ${workspaceLayout.runStateFile} 是旧运行历史，不代表本次任务，不得用其他会话的计划或状态替代当前用户请求。`, name)
-        entry.pathContextRunId = entry.runId
+        const scopeAgent = ctx.get('agents')?.get?.(step.agentId)
+        if (scopeAgent) {
+          injectContext(scopeAgent,
+            `当前运行作用域：本次运行 ${entry.runId}，会话 ${entry.sessionId}。本次计划在 ${planFileFor(entry.runId)}，本次状态在 ${runStateFileFor(entry.runId)}；需要计划进度时用 evimed_plan action:status。项目资料和已交付成果仍共享；根目录 ${workspaceLayout.planFile} 与 ${workspaceLayout.runStateFile} 是旧运行历史，不代表本次任务，不得用其他会话的计划或状态替代当前用户请求。`, name)
+          entry.pathContextRunId = entry.runId
+        }
       }
       const decision = stepPolicy(entry.budget, entry.limits)
       if (!decision.allow) {
         // Rejecting a step without saying why teaches the model nothing. The
         // explanation is injected first so it arrives on the next step the
         // model does get.
-        injectContext(ctx.get('agents')?.get?.(step.agentId), `<evimed-budget>${decision.reason}</evimed-budget>`, name)
+        const budgetAgent = ctx.get('agents')?.get?.(step.agentId)
+        if (budgetAgent) injectContext(budgetAgent, `<evimed-budget>${decision.reason}</evimed-budget>`, name)
         diagnostics(step.sessionId)?.notice?.(decision.reason)
       }
       return decision.allow ? { allow: true } : { allow: false, code: decision.code, reason: decision.reason }
