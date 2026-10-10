@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {applyPolicyProposal,DEFAULT_EVOLUTION_POLICY,createEvolutionPolicy,replayPolicyPrefixes,policyRankingAccuracy} from '../src/evolutionPolicy.mjs';
+import {applyPolicyProposal,DEFAULT_EVOLUTION_POLICY,createEvolutionPolicy,replayPolicyPrefixes,policyRankingAccuracy,evolutionPolicyProposalMessages} from '../src/evolutionPolicy.mjs';
 import {rankHandbookEntries,handbookRetirementReason,handbookUtility} from '../src/handbookUtility.mjs';
 const store=()=>{const rows=new Map();return {get:async id=>rows.get(id),list:async type=>[...rows.values()].filter(r=>r.type===type),save:async(type,id,payload)=>{const row={type,id,payload,revision:1};rows.set(id,row);return row;}};};
 test('policy cannot modify evaluator or more than one policy field',()=>{assert.throws(()=>applyPolicyProposal(DEFAULT_EVOLUTION_POLICY,{field:'evaluator',value:[],hypothesis:'x'}));assert.throws(()=>applyPolicyProposal(DEFAULT_EVOLUTION_POLICY,{field:'weights',value:{demand:4},hypothesis:'x',budgetShares:{}}));assert.throws(()=>applyPolicyProposal(DEFAULT_EVOLUTION_POLICY,{field:'budgetShares',value:{research:1.5},hypothesis:'x'}));});
@@ -15,4 +15,29 @@ test('policy audit subset retains every failed cost and needs two observed pairs
  const observed=(policyVersion,id)=>({id,month:'2026-11',epoch:'default',auditEpoch:'default',policyVersion,completed:true,researchCostCny:1,regressions:0,auditReceiptId:id,developmentGain:0.1,auditGain:0.1,overfitGap:0,confirmedOnNewTasks:true,confirmedPromotions:1});
  const missions=[observed(1,'a'),observed(1,'b'),observed(2,'c'),observed(2,'d'),{month:'2026-11',epoch:'default',policyVersion:2,completed:false,researchCostCny:30,regressions:0}];
  const [result]=await p.evaluateTrial({missions});assert.equal(result.payload.status,'rolled_back');assert.equal(result.payload.candidateObjective.cost,32);assert.equal(result.payload.candidateObjective.comparableAudits,2);assert.equal(result.payload.candidateObjective.failures,1);assert.equal(result.payload.candidateObjective.overfitGap,0);
+});
+test('a malformed proposal is recorded as invalid with its reason, not asked for again that month, and is no trial',async()=>{
+ const service=store();let asked=0;
+ const p=createEvolutionPolicy({service,now:()=>new Date('2026-10-02'),propose:async()=>{asked++;return {field:'weights',value:{demand:4},hypothesis:'x'};}});
+ const trial=await p.monthly({});
+ assert.equal(trial.payload.status,'proposal_invalid');assert.equal(trial.payload.reason,'evolution_policy_value_invalid');assert.equal(trial.payload.proposalMonth,'2026-10');assert.equal(trial.payload.proposal.field,'weights');
+ assert.equal((await p.monthly({})).payload.status,'proposal_invalid');assert.equal(asked,1);
+ assert.deepEqual(await p.evaluateTrial(),[]);assert.equal((await p.assignedPolicy('m',new Date('2026-11-12'))).policy.version,1);
+ // Only the proposal is judged here: the proposer failing (a spent budget, a provider outage) is still the caller's to retry.
+ const broken=createEvolutionPolicy({service:store(),now:()=>new Date('2026-10-02'),propose:async()=>{throw Object.assign(new Error('spent'),{code:'usage_budget_exceeded'});}});
+ await assert.rejects(broken.monthly({}),{code:'usage_budget_exceeded'});
+});
+test('the proposer is shown bounded summaries of missions and cards, never their payloads',()=>{
+ const mission=index=>({id:`m${index}`,moduleId:'frontier',kind:'research',status:'rejected',month:'2026-09',policyVersion:1,epoch:'e',completed:true,createdAt:`2026-09-${String(1+index%28).padStart(2,'0')}T00:00:00Z`,
+  result:{outcome:'regressed',reason:'floor'},researchCostCny:2.5,confirmedPromotions:0,newSupportedFamilies:0,regressions:1,round:3,
+  decisions:[{opportunities:Array.from({length:50},(_,i)=>({id:`o${i}`}))}],policySnapshot:DEFAULT_EVOLUTION_POLICY,baseline:{policy:{text:'x'.repeat(5000)}},results:[{big:'y'.repeat(5000)}]});
+ const card=index=>({mechanism:`mechanism ${index} ${'z'.repeat(1000)}`,problem:'problem',falsifiableExpectation:'expect',targetObjects:['frontier'],quote:'q'.repeat(4000),source:{url:'https://example.test',digest:'d'}});
+ const [system,user]=evolutionPolicyProposalMessages({baseline:DEFAULT_EVOLUTION_POLICY,epoch:'e',missions:Array.from({length:400},(_,i)=>mission(i)),mechanismCards:Array.from({length:100},(_,i)=>card(i))});
+ assert.equal(system.role,'system');
+ const sent=JSON.parse(user.content);
+ assert.ok(sent.missions.length<=120&&sent.missions.length>0);assert.ok(sent.mechanismCards.length<=40&&sent.mechanismCards.length>0);
+ assert.deepEqual(Object.keys(sent.missions[0]).sort(),['completed','confirmedPromotions','id','kind','moduleId','month','newSupportedFamilies','outcome','policyVersion','reason','regressions','researchCostCny','round','status']);
+ assert.equal(sent.missions[0].outcome,'regressed');assert.equal(sent.missions[0].researchCostCny,2.5);
+ assert.ok(user.content.length<80_000,`the message is ${user.content.length} characters`);
+ assert.ok(!user.content.includes('policySnapshot')&&!user.content.includes('zzzzzzzzzzzz'.repeat(30)));
 });
