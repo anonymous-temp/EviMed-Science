@@ -453,6 +453,16 @@ export interface WebResearchAgentOutput {
  */
 export type WebAvailabilityState = "source-planned" | "installed" | "executable" | "limited" | "unavailable" | "unverified";
 
+/**
+ * The states a reader can act on, and so the only ones drawn — a label and its sentence. The rest (installed, executable,
+ * unverified) are operational history: how often something ran on this deployment, or that nothing could be proven about
+ * it, which opens the same conversation either way and which a researcher could not change — the system explaining itself
+ * (AGENTS.md, 「The interface never explains the system」). They are not drawn to the eye and they are not read out to
+ * assistive technology; the label stays in the API for operators. Still a label, never a gate.
+ */
+export const availabilityIsDrawn = (state: WebAvailabilityState | undefined): boolean =>
+  state === "limited" || state === "unavailable" || state === "source-planned";
+
 export interface WebCapabilityAvailability {
   kind: "capability" | "tool" | "skill" | "extension";
   id: string;

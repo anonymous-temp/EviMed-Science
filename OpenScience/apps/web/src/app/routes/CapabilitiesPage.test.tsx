@@ -339,18 +339,23 @@ describe("CapabilitiesPage", () => {
     ];
 
     // A state a reader can act on is drawn; operational history (ran here / carried / not measured) is not — it is the
-    // system explaining itself and opens the same conversation either way. It stays for assistive technology.
-    it("draws a state only where the reader can act on it, and keeps the rest for assistive technology", async () => {
+    // system explaining itself and opens the same conversation either way. It is not drawn to the eye, and it is not read out
+    // to assistive technology either (owner ruling 2026-10-10: the platform's confidence in itself is not a line anyone reads).
+    it("draws a state only where the reader can act on it, and nothing of the rest, to the eye or to assistive technology", async () => {
       mocks.listWebResearchAgents.mockResolvedValue(labelled());
       renderPage();
       await screen.findByRole("button", { name: /药品安全性分析/ });
       expect(card("超说明书用药分析")).toHaveTextContent("受限");
       expect(card("自动化 Meta 分析")).toHaveTextContent("不可用");
-      expect(card("药品安全性分析")).toHaveAccessibleDescription(/成功运行过/);
-      expect(card("论文审稿")).toHaveAccessibleDescription(/模拟运行环境/);
-      // No label of those states is drawn anywhere on the page (the sentence is for assistive technology only).
+      expect(card("超说明书用药分析")).toHaveAccessibleDescription(/现在连不上/);
+      for (const name of ["药品安全性分析", "论文审稿"]) {
+        expect(card(name)).not.toHaveAttribute("aria-describedby");
+        expect(card(name)).not.toHaveAccessibleDescription(/成功运行过|模拟运行环境/);
+      }
       expect(screen.queryByText(/^(可运行|已安装|未验证)$/)).not.toBeInTheDocument();
-      expect(document.querySelectorAll(".sr-only")).toHaveLength(2);
+      // The sentences that used to be kept for a screen reader are not in the page at all.
+      expect(document.querySelectorAll(".sr-only")).toHaveLength(0);
+      expect(document.body.textContent).not.toMatch(/成功运行过|不能证明真实可运行/);
     });
 
     it("draws an installed or planned tool by the same rule: installed says nothing, planned says so", async () => {
@@ -372,21 +377,19 @@ describe("CapabilitiesPage", () => {
       expect(card("药品安全性分析")).toHaveTextContent(/约 20～40 分钟$/);
     });
 
-    it("says why in a sentence only where the reader can act on it, and keeps the rest for assistive technology", async () => {
+    it("says why in a sentence only where the reader can act on it", async () => {
       mocks.listWebResearchAgents.mockResolvedValue(labelled());
       renderPage();
       await screen.findByRole("button", { name: /药品安全性分析/ });
-      const shown = (name: string) => {
-        const sentence = document.getElementById(card(name).getAttribute("aria-describedby")!)!;
-        return !sentence.classList.contains("sr-only");
+      const sentence = (name: string) => {
+        const id = card(name).getAttribute("aria-describedby");
+        return id ? document.getElementById(id) : null;
       };
-      expect(shown("超说明书用药分析")).toBe(true);
-      expect(shown("自动化 Meta 分析")).toBe(true);
-      // How often something ran is the system explaining itself; it is a label alone on the screen.
-      expect(shown("药品安全性分析")).toBe(false);
-      expect(shown("论文审稿")).toBe(false);
-      expect(card("药品安全性分析")).toHaveAccessibleDescription(/1\.0\.0 版已在这个部署上成功运行过/);
-      expect(card("超说明书用药分析")).toHaveAccessibleDescription(/现在连不上/);
+      expect(sentence("超说明书用药分析")).toHaveTextContent(/现在连不上/);
+      expect(sentence("自动化 Meta 分析")).toHaveTextContent(/这个部署没有配置/);
+      // How often something ran, or that nothing could be proven, is the system explaining itself: no sentence at all.
+      expect(sentence("药品安全性分析")).toBeNull();
+      expect(sentence("论文审稿")).toBeNull();
     });
 
     it("never hides a tool or disables its card for what its label says", async () => {

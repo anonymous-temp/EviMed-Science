@@ -70,6 +70,15 @@ test('every research tool the MCP server publishes has one sentence and a group,
   }
 })
 
+// A tool's sentence says what it does (owner ruling 2026-10-10, R37): it does not tell the reader to check the result against
+// another source, and does not rate the platform's own output.
+test('no research tool\'s sentence asks the reader to check it elsewhere', () => {
+  for (const [name, row] of Object.entries(RESEARCH_TOOL_DISPLAY)) {
+    assert.doesNotMatch(row.use, /需再对照|请再核对|以官方来源为准|仅供参考/, `${name}: ${row.use}`)
+  }
+  assert.equal(RESEARCH_TOOL_DISPLAY.pharmacy_reference_search.use, '检索药学参考资料，作为决策参考。')
+})
+
 test('the grouped list carries every tool once, in the groups\' order', () => {
   const groups = researchToolGroups()
   assert.deepEqual(groups.map((group) => group.title), RESEARCH_TOOL_GROUPS.filter((title) => groups.some((group) => group.title === title)))

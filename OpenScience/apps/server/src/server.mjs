@@ -336,7 +336,6 @@ import { composeVcr, vcrMetricFamilies, vcrMetricsSnapshot, withVcrEngineWarning
 import { createAvailability } from "./availabilityModule.mjs";
 import { availabilityMetricFamilies } from "./availabilityService.mjs";
 import { evolutionOpsMetricFamilies, evolutionOpsSnapshot } from "./evolutionOpsMetrics.mjs";
-import { loadMethodValidation } from "./vcrMethodValidation.mjs";
 import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
@@ -2733,7 +2732,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const availability = createAvailability({
     config, authStore: store, registry: agentRegistry, database: productDatabase, jobs: productJobs, documents: productDocuments,
     agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService, skillSupply,
-    methodValidation: () => loadMethodValidation({ file: config.vcrMethodValidationFile, engine: vcr?.engine }),
     vcrEngine: () => vcr?.engineProbe?.snapshot() ?? null,
     vcrEngineRefresh: () => vcr?.engineProbe?.refresh?.() ?? Promise.resolve(null),
     mutation: maintenanceMutation,

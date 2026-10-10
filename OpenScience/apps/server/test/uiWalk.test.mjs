@@ -239,6 +239,17 @@ test("the back-office list catches the virtual clinical research authorship mark
   }
 });
 
+test("the back-office list catches the trust sentences the skills and tools pages drew, and not a tool's own words", () => {
+  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
+  for (const text of ["尚未完成原生验证，确认导入后逐个版本验证并保存。", "包摘要\naaaaaaaaaaaa", "方法的数值验证还没有完成，结果按未验证的方法对待。", "检索药学参考资料，作为决策参考，需再对照最新的官方来源。",
+    "当前是模拟运行环境，不能证明真实可运行。", "它需要的「rdkit」暂时无法核对是否具备，无法确认能否运行。", "这个部署没有统计实际运行的情况，无法确认。", "实际运行的情况暂时读不到，无法确认。", "科研工具\n未验证\n约 20～40 分钟"]) {
+    assert.equal(caught(text), true, text);
+  }
+  for (const text of ["检索药学参考资料，作为决策参考。", "它用到的软件「rdkit」运行环境里没有；需要它的方法会受阻，其余部分照常。", "一项还未验证的假设需要进一步研究", "目录里列了它，这个部署还没有安装。"]) {
+    assert.equal(caught(text), false, text);
+  }
+});
+
 /** A list row's title: a text button with no height of its own, `lines` lines of 22 px. */
 const title = (lines) => ({ tag: "button", text: "一个很长的资料标题".repeat(lines), height: 22 * lines });
 

@@ -101,6 +101,12 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["AI 草拟", "a knowledge pack is not tagged with who drafted it, and its option in the picker carries no suffix"],
   ["AI 写入", "a model assessment does not say that the run wrote it; a person's edit is named"],
   ["AI 最小版本", "a finished step is 已完成, whoever made it"],
+  // The skills and tools pages (R37): a package's digest, the import's verification state, and how far the platform trusts its own
+  // methods are the back office's. A tool's sentence says what it does; the capability and skill panels draw a state only where the
+  // reader can act on it.
+  ["尚未完成原生验证", "a migration preview does not announce a verification step"],
+  ["按未验证的方法对待", "no label says the platform treats its own method as unverified"],
+  ["需再对照最新的官方来源", "a tool's sentence does not tell the reader to check its result elsewhere"],
   // 数据含义 (R34): who vouches for a meaning is the contract; on the page it is a fact's own line (「依据：AI 判断」), not a count and not a tag.
   ["模型推断", "the page says 「依据：AI 判断」 on a fact's own line; there is no count of inferred facts and no tag"],
   ["你已确认", "same"],
@@ -140,6 +146,9 @@ const RETIRED_VISIBLE: ReadonlyArray<readonly [string, string]> = [
   ["approved", "a method's review state is internal; the page says 在用 or nothing"],
   ["SKILL.md", "a method is shown as its title and steps, never as the file it is stored in"],
   ["digest", "a content digest is how versions are told apart internally; the reader sees 版本"],
+  ["包摘要", "a skill package's digest is how the platform tells versions apart, not a row the reader is shown (R37)"],
+  ["兼容核对", "an extension's qualification is not worded as a label on the page (R37)"],
+  ["尚未验证", "no label says something has not been verified (R37)"],
   ["AI 设定", "a value, a card or a version carries no chip saying an AI set it (R36)"],
   ["未复核", "a cover, a card or a package does not announce what has not been countersigned (R36)"],
 ];

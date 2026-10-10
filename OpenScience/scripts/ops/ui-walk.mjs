@@ -230,6 +230,9 @@ export const BACK_OFFICE = [
   // value, the card or the cover. 「AI 设定」 stands on its own as the chip did; inside a sentence it is the headline's or the nag's.
   /(?<![\p{Script=Han}\w])AI 设定(?![\p{Script=Han}\w])/u, /由 AI 设定/, /去复核/, /复核后有变更/, /AI 草拟/, /AI 写入/, /AI 最小版本/,
   /(?:临床|统计)复核[：:]?\s*(?:未复核|已复核（)/,
+  // The skills and tools pages: no digest row, no verification state of an import, no trust sentence about a package, a method or
+  // a tool's result — not even for assistive technology, which the walk reads too.
+  /尚未完成原生验证/, /包摘要/, /按未验证的方法对待/, /需再对照最新的官方来源/, /不能证明真实可运行/, /无法确认能否运行/, /没有统计实际运行的情况/, /实际运行的情况暂时读不到/, /^未验证$/m,
 ];
 
 /**
