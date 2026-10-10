@@ -52,7 +52,7 @@ export const ALERT_NOTICES = Object.freeze({
   FrontierTitleOnlyHigh: { title: "只发出标题的条目偏多", sentence: "今天超过 5% 的条目编辑结果两次没通过核对（摘要太长、数字与原文不符等），只发布了原标题。" },
   FrontierBudgetNearLimit: { title: "前沿动态今日预算快用完", sentence: "模块今天的模型预算已用掉八成，超过之后新条目只收集、不再编辑。" },
   FrontierFewSelectedByNoon: { title: "今天入选的动态偏少", sentence: "北京时间中午已过，今天入选的条目还不到五条。" },
-  FrontierEdgeRelayDown: { title: "东京中转节点不通", sentence: "经东京节点的请求三十分钟全部失败，依赖它的信源读不到内容。" },
+  FrontierExitDown: { title: "知识源插件有出口不通", sentence: "知识源插件经 {egress} 出口的请求三十分钟全部失败，依赖它的信源读不到内容，而各信源的健康状态不会显示这一点。" },
   FrontierEdgeProxyCertificateExpiring: { title: "东京代理的证书快到期", sentence: "东京代理的证书不到一天就过期，自动续期可能已经停了。" },
   FrontierPluginPullStale: { title: "前沿动态三十分钟没有拉到新内容", sentence: "平台已经三十分钟没能从知识源插件拉取内容。" },
   FrontierPluginLagHigh: { title: "前沿动态落后知识源插件", sentence: "平台落后知识源插件超过 2000 条，新内容会晚很多才出现。" },

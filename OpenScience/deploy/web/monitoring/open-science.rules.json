@@ -365,15 +365,15 @@
           }
         },
         {
-          "alert": "FrontierEdgeRelayDown",
-          "expr": "open_science_frontier_plugin_egress_state{egress=\"relay\",state=\"down\"} == 1",
+          "alert": "FrontierExitDown",
+          "expr": "open_science_frontier_plugin_egress_state{egress=~\"relay|browser|evimed-api\",state=\"down\"} == 1",
           "for": "30m",
           "labels": {
             "severity": "warning"
           },
           "annotations": {
-            "summary": "The knowledge plugin's Tokyo exit is failing",
-            "description": "Every recent request through the relay exit failed for thirty minutes; the relay sources read nothing (plan 10.5.8)."
+            "summary": "The knowledge plugin's {{ $labels.egress }} exit is failing",
+            "description": "Every recent request through the {{ $labels.egress }} exit failed for thirty minutes; the sources that read through it read nothing, and no per-source health shows it because an unavailable exit is a neutral outcome in the plugin (plan 10.5.8; the relay is the Tokyo node, the browser the Chromium container, evimed-api the team's API key and service)."
           }
         },
         {

@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { ALERT_NOTICES, alertNoticeText } from "../src/alertNotices.mjs";
 import { frontierMetricFamilies } from "../src/frontierService.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -67,6 +68,36 @@ test("D-12: no alert guards the plugin's model calls while the plugin has no mod
   assert.match(gauge?.help ?? "", /reserved/);
   assert.match(gauge?.help ?? "", /always 0 until the plugin has a model client/);
   assert.doesNotMatch(gauge?.help ?? "", /self-heal proposals/);
+});
+
+test("D-14: the exit-outage alert covers every exit that serves sources and can go down unseen: the relay, the browser and the EviMed API", async () => {
+  // An unavailable exit is a neutral outcome in the plugin (it reschedules the poll without a failure), so no source turns
+  // unhealthy when Chromium is down: 23 browser sources and two safety feeds went silent under every health state `healthy`.
+  const rules = JSON.parse(await readFile(path.join(repoRoot, "deploy/web/monitoring/open-science.rules.json"), "utf8"));
+  const group = rules.groups.find((/** @type {any} */ entry) => entry.name === "evimed-frontier");
+  const exitRules = group.rules.filter((/** @type {any} */ rule) => String(rule.expr).includes("open_science_frontier_plugin_egress_state"));
+  assert.equal(exitRules.length, 1, "one rule over the exits");
+  const [rule] = exitRules;
+  assert.equal(rule.for, "30m");
+  assert.equal(rule.labels.severity, "warning");
+  // PromQL matchers are fully anchored: `=` is equality, `=~` a regular expression matching the whole value.
+  const matcher = /egress(=~|=)"([^"]+)"/.exec(String(rule.expr).replace(/\\"/g, '"'));
+  assert.ok(matcher, "the rule selects by exit");
+  const selects = (/** @type {string} */ exit) => (matcher[1] === "=" ? matcher[2] === exit : new RegExp(`^(?:${matcher[2]})$`).test(exit));
+  assert.match(String(rule.expr), /state="down"\} == 1$/);
+  const view = snapshot({ ...HEALTH, egress: { direct: "ok", api: "ok", relay: "down", browser: "down", bridge: "unconfigured", "evimed-api": "down" } });
+  const down = family(frontierMetricFamilies(true, view), "open_science_frontier_plugin_egress_state").series
+    .filter((/** @type {any} */ row) => row.labels.state === "down" && row.value === 1).map((/** @type {any} */ row) => row.labels.egress).sort();
+  assert.deepEqual(down, ["browser", "evimed-api", "relay"]);
+  for (const exit of down) assert.ok(selects(exit), `${exit} is covered`);
+  for (const exit of ["direct", "api", "bridge"]) assert.ok(!selects(exit), `${exit} is not this rule's`);
+  // The alert names its exit, in the rule and in the operator's inbox.
+  assert.match(rule.annotations.description, /\{\{ \$labels\.egress \}\}/);
+  assert.match(ALERT_NOTICES[rule.alert].sentence, /\{egress\}/);
+  assert.match(alertNoticeText({ alertname: rule.alert, summary: "", description: "", labels: { egress: "browser" } }).sentence, /经 browser 出口/);
+  const runbook = await readFile(path.join(repoRoot, "docs/WEB_OPERATIONS_RUNBOOK.md"), "utf8");
+  assert.ok(runbook.includes(`\`${rule.alert}\``), "the runbook has a row for it");
+  for (const exit of ["relay", "browser", "evimed-api"]) assert.match(runbook.slice(runbook.indexOf(`\`${rule.alert}\``)).split("\n")[0], new RegExp(`\`${exit}\``), `the row names the ${exit} exit`);
 });
 
 test("weekly and notification metrics distinguish unavailable delivery and scan gaps", () => {
