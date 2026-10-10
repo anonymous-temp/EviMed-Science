@@ -4,6 +4,7 @@ import { HttpError } from './security.mjs';
 import { exportHash, freezeDocumentAssets } from './documentExport.mjs';
 import { renderVcrNumbers, vcrReportReviewRevision } from './vcrRender.mjs';
 import { renderModelDocument } from './vcrModelDocuments.mjs';
+import { markdownTable, scheduleTable } from './vcrScheduleView.mjs';
 import { readVcrReviewExportProof } from './vcrReview.mjs';
 import { studyReviewDigest } from './studyReview.mjs';
 import { randomUUID } from 'node:crypto';
@@ -52,7 +53,12 @@ export function canonicalVcrDocument(study, row) {
   const modelDocument = renderModelDocument(row.kind, model, reports);
   const sections = modelDocument ? [modelDocument.markdown]
     : reports.map(report => `${report.section === 'main' ? '' : `## ${report.section}\n\n`}${renderVcrNumbers(report.template, model).text}`);
-  const canonicalMarkdown = [...header, ...sections].join('\n\n');
+  // What the platform prints itself, after the words a run wrote: the protocol's visit schedule (the frozen report model carries it;
+  // a package frozen before it was part of it has none and prints nothing).
+  const records = modelDocument ? [] : [
+    ...(model.schedule?.visits?.length ? [`## 访视日程\n\n${markdownTable(scheduleTable(model.schedule.visits))}`] : []),
+  ];
+  const canonicalMarkdown = [...header, ...sections, ...records].join('\n\n');
   return { title, canonicalMarkdown, cover: { exportKind: row.kind, reviews: reviewRecords, stale: model.stale ?? [], seal: model.seal ?? null, intendedUse: model.intendedUse ?? model.study.intendedUse ?? study.intendedUse }, assets: [],
     revision: exportHash(documentExportDigest({ reports, model, ...(refreshed ? { reviewRecords } : {}) })) };
 }

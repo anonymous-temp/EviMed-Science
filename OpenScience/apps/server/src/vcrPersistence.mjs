@@ -242,6 +242,15 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.soa_items (
   burden              jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at          timestamptz NOT NULL DEFAULT now()
 );
+-- A row is one activity at one visit (2026-10-10): the visit's name, day and window repeat on each of its rows, ordinal is the visit's
+-- place in the schedule as it was written, position the activity's place within its visit, visit_note the visit's own note and note
+-- the activity's. burden is kept for the calculated cost of an activity (plan section 2.2); nothing writes it yet. The schedule
+-- belongs to a protocol version and a new version starts with a copy of the one before it.
+ALTER TABLE evimed_vcr.soa_items ADD COLUMN IF NOT EXISTS ordinal integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_vcr.soa_items ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_vcr.soa_items ADD COLUMN IF NOT EXISTS visit_note text NOT NULL DEFAULT '';
+ALTER TABLE evimed_vcr.soa_items ADD COLUMN IF NOT EXISTS note text NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS vcr_soa_items_protocol_idx ON evimed_vcr.soa_items (protocol_version_id, ordinal, position);
 
 -- ---------------------------------------------------------------------------
 -- Evidence and assumptions (plan §6)

@@ -11,6 +11,7 @@
   "runRecord": [],
   "forecasts": [],
   "milestones": [],
+  "schedule": null,
   "counts": null,
   "stale": null,
   "partial": null

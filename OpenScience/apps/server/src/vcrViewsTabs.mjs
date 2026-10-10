@@ -45,6 +45,7 @@ import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { POPULATION_METHOD_WORDS, PROFILE_MISSING_SENTENCE, constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
+import { reportSchedule } from "./vcrScheduleView.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
   presentModelCard, registryDesignWords, resultNode, scenarioName, valueString,
@@ -900,6 +901,8 @@ export function presentTrialTab(bundle) {
     runRecord,
     forecasts: forecastRows,
     milestones,
+    // The protocol's visit schedule (「访视日程」): a record of the protocol, not a result.
+    schedule: reportSchedule(bundle.schedule),
     counts: headlineRow ? countsView(headlineRow._result?.counts, { tier: study.dataTier, scope: `方案 ${headlineRow.code}` }) : null,
     stale: staleNote(marks),
     partial: partialOf(bundle, ["trial_scenario", "design_grid"], "这次模拟"),

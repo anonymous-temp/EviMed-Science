@@ -839,6 +839,23 @@ export interface VcrForecast {
   lines: Array<{ key: string; label: string; predicted: string; actual: string | null }>;
 }
 
+/** One visit of a protocol's schedule of activities: the day it falls on, the window around it and what is done at it. */
+export interface VcrScheduleVisit {
+  visit: string;
+  /** Null for a visit with no planned day (an end-of-treatment visit). */
+  day: number | null;
+  windowDays: number | null;
+  note: string;
+  procedures: Array<{ name: string; note: string }>;
+}
+
+/** The protocol's schedule of activities, by day; null while the study has none. */
+export interface VcrSchedule {
+  protocolVersion: number | null;
+  visits: VcrScheduleVisit[];
+  totals: { visits: number; activities: number; entries: number; firstDay: number | null; lastDay: number | null };
+}
+
 export interface VcrTrialTab {
   headline?: string | null;
   /** ADEMP, one line each. */
@@ -878,6 +895,8 @@ export interface VcrTrialTab {
   forecasts: VcrForecast[];
   /** The milestone timeline: when each design would reach its landmarks. */
   milestones: Array<{ design: string; name: string; items: Array<{ key: string; label: string; value: VcrValue }> }>;
+  /** 「访视日程」: a record of the protocol, not a result of a computation. */
+  schedule: VcrSchedule | null;
   counts: VcrCounts | null;
   stale: VcrStaleNote | null;
   partial: VcrPartial | null;
@@ -1702,9 +1721,35 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
       design: text(row.design) ?? "", name: text(row.name) ?? "",
       items: arr(row.items).map((item) => ({ key: text(item.key) ?? "", label: text(item.label) ?? "", value: readVcrValue(item.value) })),
     })),
+    schedule: readVcrSchedule(value.schedule),
     counts: readVcrCounts(value.counts),
     stale: readStale(value.stale),
     partial: readPartial(value.partial),
+  };
+}
+
+/** The protocol's schedule, or nothing: a schedule with no visit is not drawn. */
+export function readVcrSchedule(raw: unknown): VcrSchedule | null {
+  const value = obj(raw);
+  const visits = arr(value.visits).map((visit): VcrScheduleVisit => ({
+    visit: text(visit.visit) ?? "",
+    day: finite(visit.day),
+    windowDays: finite(visit.windowDays),
+    note: text(visit.note) ?? "",
+    procedures: arr(visit.procedures).map((entry) => ({ name: text(entry.name) ?? "", note: text(entry.note) ?? "" })).filter((entry) => entry.name),
+  })).filter((visit) => visit.visit);
+  if (visits.length === 0) return null;
+  const totals = obj(value.totals);
+  return {
+    protocolVersion: finite(value.protocolVersion),
+    visits,
+    totals: {
+      visits: finite(totals.visits) ?? visits.length,
+      activities: finite(totals.activities) ?? 0,
+      entries: finite(totals.entries) ?? visits.reduce((sum, visit) => sum + visit.procedures.length, 0),
+      firstDay: finite(totals.firstDay),
+      lastDay: finite(totals.lastDay),
+    },
   };
 }
 

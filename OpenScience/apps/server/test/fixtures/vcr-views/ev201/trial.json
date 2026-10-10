@@ -1263,6 +1263,7 @@
       ]
     }
   ],
+  "schedule": null,
   "counts": {
     "realPatients": 0,
     "events": 138,

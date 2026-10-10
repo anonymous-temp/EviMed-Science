@@ -18,6 +18,7 @@ import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrMilestoneTimeline, VcrTradeoffScatter, canDrawTradeoff } from "../VcrDiagrams";
 import { ReviewChip } from "../VcrMarks";
 import { VcrPredictionsDrawer } from "../VcrPredictionsDrawer";
+import { VcrScheduleCard } from "../VcrSchedule";
 import { VcrNumber } from "../VcrNumber";
 import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
@@ -81,7 +82,9 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const failed = study.steps.trial?.status === "failed";
-  const nothing = data.designs.length === 0 && data.ademp.length === 0 && data.forecasts.length === 0 && data.milestones.length === 0;
+  // The protocol's visit schedule is a record of the study, not a result of this step: a study that has one is not empty.
+  const nothing = data.designs.length === 0 && data.ademp.length === 0 && data.forecasts.length === 0 && data.milestones.length === 0
+    && !data.schedule;
   if (nothing) {
     return failed
       ? <VcrStepFailed studyId={studyId} study={study} step="trial" partial={data.partial} />
@@ -254,6 +257,8 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
 
         </div>
       </Stale>
+
+      {data.schedule && <VcrScheduleCard schedule={data.schedule} />}
 
       {data.runRecord.length > 0 && (
         <Card title="本次运行">
