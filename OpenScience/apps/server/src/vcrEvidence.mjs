@@ -99,8 +99,9 @@ import {
 } from "@evimed/domain";
 import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
 
-import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS } from "./trialRegistryClient.mjs";
+import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS, confidenceLevelOf } from "./trialRegistryClient.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
+import { candidateTrialFromRecord } from "./vcrPatientTrials.mjs";
 
 /** The two-sided 95% normal quantile every interval here is read with. */
 export const Z_95 = 1.959963984540054;
@@ -560,7 +561,8 @@ export function analysisScaleInput(item, { scale }) {
   const low = finite(item?.ci_low ?? item?.ciLow);
   const high = finite(item?.ci_high ?? item?.ciHigh);
   const n = finite(item?.sample_size ?? item?.sampleSize);
-  const level = finite(item?.detail?.confidenceLevel ?? item?.applicability?.confidenceLevel) ?? 0.95;
+  // A row extracted while the registry client stored an analysis's level as a percent holds 95, not 0.95.
+  const level = confidenceLevelOf(item?.detail?.confidenceLevel ?? item?.applicability?.confidenceLevel) ?? 0.95;
   /** @param {number | null} raw */
   const on = (raw) => {
     if (raw === null) return null;
@@ -1299,6 +1301,22 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         logger?.warn?.("vcr.evidence.registry_read_failed", { registryId, reason });
         return registryFailure({ status: REGISTRY_UNAVAILABLE, reason }, registryName, String(registryId ?? ""), fetchedAt);
       }
+    },
+
+    /**
+     * A registry trial as a candidate for one patient (「给患者找试验」): the record is fetched like any registry read and what
+     * identifies the trial is read out of it in code (`candidateTrialFromRecord`) — the run names a registry and an id, never a
+     * status or a site. Nothing is written: a candidate is a lead, not evidence a card may cite, so the precedent library is
+     * left alone. A registry that cannot answer is named, and is not a trial that does not exist.
+     * @param {{ userId?: string, registry?: string, registryId: string }} input
+     */
+    async candidateRecord({ userId = "", registry: registryName = "clinicaltrials.gov", registryId }) {
+      const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""), userId);
+      if (!built) {
+        const notFound = failure?.status === REGISTRY_NOT_FOUND;
+        return { status: notFound ? REGISTRY_NOT_FOUND : (failure?.status ?? REGISTRY_UNAVAILABLE), reason: failure?.reason ?? "registry_record_unreadable", registryId };
+      }
+      return { status: "ok", trial: candidateTrialFromRecord(built) };
     },
 
     /**

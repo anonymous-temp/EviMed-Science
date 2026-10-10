@@ -72,7 +72,7 @@ test('a whole source-bound run qualifies only methods with executed explicit num
   assert.ok(evidence.methods.length >= 27, 'the 24 methods of the first release and the robustness methods');
   assert.ok(evidence.methods.every(entry => entry.numericTests.caseIds.length >= 1 && entry.numericTests.referenceCases.length >= 1));
   const analytic = evidence.methods.find(entry => entry.method === 'design.analytic');
-  assert.deepEqual(analytic.numericTests.caseIds, ['N01b', 'N06b', 'N06c']);
+  assert.deepEqual(analytic.numericTests.caseIds, ['N01b', 'N06b', 'N06c', 'N06f']);
   assert.match(analytic.numericTests.referenceCases[0].reference, /rpact::getDesignGroupSequential/);
   assert.match(analytic.numericTests.referenceCases[0].reference, /d_rp < 1e-4 && d_g4 < 1e-4/);
   assert.equal(analytic.version, VCR_ENGINE_METHODS['design.analytic'].version);

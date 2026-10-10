@@ -973,6 +973,45 @@
       }
     },
     {
+      "name": "an anchored MAIC that names its outcome and its arm columns",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age"
+          ],
+          "targets": {
+            "age": 60
+          },
+          "anchored": true,
+          "aggregateEstimate": -0.2,
+          "aggregateSe": 0.1,
+          "unadjustedEffectModifiers": [
+            "ecog"
+          ],
+          "outcomeColumn": "response",
+          "treatmentColumn": "arm"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
       "name": "evalue #18",
       "job": {
         "jobId": "job_1",
@@ -1636,7 +1675,7 @@
       }
     },
     {
-      "name": "accrual forecast with an event target at the patients still to enrol",
+      "name": "accrual forecast with an event target at every patient, the enrolled ones included",
       "job": {
         "jobId": "job_1",
         "studyId": "std_1",
@@ -1664,12 +1703,55 @@
             }
           ],
           "target": 120,
-          "eventTarget": 116,
+          "eventTarget": 120,
           "eventHazard": 0.05,
           "screenFailure": {
             "alpha": 2,
             "beta": 6
           },
+          "byTimes": [
+            6,
+            12,
+            18
+          ]
+        },
+        "inputs": [],
+        "replicates": 20000
+      }
+    },
+    {
+      "name": "accrual forecast with every patient already enrolled and an event target among them",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "accrual_forecast",
+        "method": "accrual.poisson_gamma",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "sites": [
+            {
+              "id": "site_a",
+              "alpha": 2,
+              "beta": 4,
+              "startTime": 0,
+              "enrolled": 70,
+              "exposureTime": 10
+            },
+            {
+              "id": "site_b",
+              "alpha": 3,
+              "beta": 5,
+              "startTime": 0,
+              "enrolled": 60,
+              "exposureTime": 8
+            }
+          ],
+          "target": 120,
+          "eventTarget": 125,
+          "eventHazard": 0.05,
           "byTimes": [
             6,
             12,
@@ -10800,7 +10882,7 @@
       ]
     },
     {
-      "name": "an event target beyond the patients still to enrol",
+      "name": "an event target beyond the enrolment target with some patients enrolled",
       "job": {
         "jobId": "job_1",
         "studyId": "std_1",
@@ -10828,12 +10910,58 @@
             }
           ],
           "target": 120,
-          "eventTarget": 117,
+          "eventTarget": 121,
           "eventHazard": 0.05,
           "screenFailure": {
             "alpha": 2,
             "beta": 6
           },
+          "byTimes": [
+            6,
+            12,
+            18
+          ]
+        },
+        "inputs": [],
+        "replicates": 20000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.eventTarget"
+      ]
+    },
+    {
+      "name": "an event target beyond the patients already enrolled, more than the target",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "accrual_forecast",
+        "method": "accrual.poisson_gamma",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "sites": [
+            {
+              "id": "site_a",
+              "alpha": 2,
+              "beta": 4,
+              "startTime": 0,
+              "enrolled": 70,
+              "exposureTime": 10
+            },
+            {
+              "id": "site_b",
+              "alpha": 3,
+              "beta": 5,
+              "startTime": 0,
+              "enrolled": 60,
+              "exposureTime": 8
+            }
+          ],
+          "target": 120,
+          "eventTarget": 131,
+          "eventHazard": 0.05,
           "byTimes": [
             6,
             12,

@@ -11,6 +11,7 @@ import { VCR_MEMBER_ROLES, roleAllows } from "@evimed/domain";
 
 import { VCR_ACCESS_CODES } from "../src/vcrAccess.mjs";
 import { VCR_MANAGING_ROLES, VCR_MEMBER_CODES, VcrMembers, abilitiesOfRoles } from "../src/vcrMembers.mjs";
+import { VCR_MEMBER_NAME_FALLBACK, VcrStoreBase } from "../src/vcrStoreBase.mjs";
 
 class StoreDouble {
   constructor() {
@@ -111,6 +112,34 @@ test("a member is listed by name, never by account id: the name when there is on
   assert.deepEqual((await members.list({ actor: "owner", studyId: "std_1" })).map((person) => person.name), [null, null, null]);
   store.personNames = async () => { throw new Error("users table down"); };
   assert.equal((await members.list({ actor: "owner", studyId: "std_1" })).length, 3);
+});
+
+test("D-personNames the name another member sees is a display name: never the login name, an address or nothing", async () => {
+  // The real store's `personNames`, over the rows its query would return: a local account's display name defaults to its login name
+  // (which is the account id) and an external identity's to its e-mail address, and both would otherwise be shown to the study's members.
+  const store = new VcrStoreBase({ database: {} });
+  /** @type {unknown[][]} */
+  const asked = [];
+  store.rows = async (/** @type {string} */ _sql, /** @type {unknown[]} */ values = []) => {
+    asked.push(values);
+    return [
+      { id: "wang-dm", name: "wang-dm" },                 // the login name of a local account
+      { id: "WANG-DM2", name: "wang-dm2" },               // the same, in another case
+      { id: "usr_a", name: "li.mei@lab.example.org" },    // an external identity's address
+      { id: "usr_b", name: "李主任 (li.mei@lab.example.org)" },
+      { id: "usr_c", name: "  李   主任 " },              // a real display name, whitespace as typed
+      { id: "usr_d", name: "" },                          // an account that exists and has no name to show
+      { id: "usr_e", name: "刘负责人" },
+    ];
+  };
+  const names = await store.personNames(["wang-dm", "WANG-DM2", "usr_a", "usr_b", "usr_c", "usr_d", "usr_e", "usr_gone", "not an id!"]);
+  assert.deepEqual(asked[0], [["wang-dm", "WANG-DM2", "usr_a", "usr_b", "usr_c", "usr_d", "usr_e", "usr_gone"]], "only account-id shaped ids are asked for");
+  assert.equal(VCR_MEMBER_NAME_FALLBACK, "研究成员");
+  assert.deepEqual([...names.entries()], [
+    ["wang-dm", "研究成员"], ["WANG-DM2", "研究成员"], ["usr_a", "研究成员"], ["usr_b", "研究成员"], ["usr_c", "李 主任"], ["usr_d", "研究成员"], ["usr_e", "刘负责人"],
+  ]);
+  assert.equal(names.has("usr_gone"), false, "an account the join does not find is absent, so the page says 「已注销的账号」");
+  assert.doesNotMatch(JSON.stringify([...names.values()]), /@|wang-dm/i, "no login name and no address reaches another member");
 });
 
 test("AC-17 a non-member cannot list the members and is told the study does not exist", async () => {

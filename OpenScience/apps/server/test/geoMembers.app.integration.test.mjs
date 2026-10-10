@@ -295,3 +295,17 @@ test("doctor use: a doctor project writes cards under their own name, and an art
   assert.equal(references.status, 200, JSON.stringify(references.body));
   assert.equal(references.body.data.ok, true);
 });
+
+test("a member whose display name is their login name, or an address, is listed under a neutral word", options, async () => {
+  const id = await made();
+  // A local account's display name defaults to its login name; a member list is shown to everyone on the project.
+  await context.app.store.createUser("plain_login_member", PASSWORD, "plain_login_member");
+  await context.app.store.createUser("address_named_member", PASSWORD, "someone@example.invalid");
+  assert.equal((await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: "plain_login_member", role: "viewer" })).status, 201);
+  assert.equal((await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: "address_named_member", role: "viewer" })).status, 201);
+  const listed = await call("owner", "GET", `/api/geo/projects/${id}/members`);
+  const byId = Object.fromEntries(listed.body.data.members.map((/** @type {any} */ member) => [member.userId, member]));
+  assert.equal(byId.plain_login_member.name, "项目成员");
+  assert.equal(byId.address_named_member.name, "项目成员");
+  assert.equal(byId[accounts.owner].name, "王负责人", "a real display name is kept");
+});

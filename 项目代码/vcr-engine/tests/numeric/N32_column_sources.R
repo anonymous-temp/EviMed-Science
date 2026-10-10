@@ -157,3 +157,90 @@ vcr_case("N32d", c("AC-04"), function() {
        detail = sprintf("%d/%d refusals as the domain words them (%s); a bad source word through a whole run -> status %s, code %s, %d measures",
                         sum(got == want), length(want), paste(names(want)[got != want], collapse = ","), r$status, paste(vcr_test_issue_codes(r), collapse = ","), length(r$measures)))
 })
+
+vcr_case("N32e", c("AC-04", "AC-08"), function() {
+  # The three robustness comparators read the sources of the columns they used. Their measures hard-coded `calculated` (the
+  # tipping-point count of people took the whole table's label), so an estimate resting on an imputed column read `calculated` while the
+  # weighting jobs, AIPW, the weighted Cox model and the MAIC all said `imputed` (N32b), and none of the three listed which columns it read.
+  # Each job runs twice on the same data, a table labelled `imputed` whose per-column sources say which column is: the column the method
+  # USES (variant A) and a column it never reads (variant B). By the domain's order (observed < extracted < calculated < imputed) the
+  # estimates of A are `imputed` and those of B `calculated` with the weakest used column `observed`; the numbers do not move with the label.
+  set.seed(3232L, kind = VCR_RNG_KIND)
+  n <- 120L; arm <- rep(0:1, each = n / 2L)
+  x1 <- stats::rnorm(n) + 0.15 * arm; x2 <- stats::rbinom(n, 1L, 0.5); x3 <- stats::rnorm(n); score <- stats::rnorm(n)
+  base <- data.frame(USUBJID = sprintf("R%03d", seq_len(n)), arm = arm, x1 = x1, x2 = x2, x3 = x3,
+                     fracture = stats::rbinom(n, 1L, 0.25), cataract = stats::rbinom(n, 1L, 0.3), death = stats::rbinom(n, 1L, 0.2), score = score)
+  base$y <- stats::rbinom(n, 1L, stats::plogis(-0.6 + 0.8 * arm + 1.2 * score))
+  base$y01 <- ifelse(stats::runif(n) < 0.1, NA, stats::rbinom(n, 1L, 0.3 + 0.2 * arm))
+  all_observed <- as.list(stats::setNames(rep("observed", ncol(base) - 1L), setdiff(names(base), "USUBJID")))
+  with_sources <- function(df, id, shape, imputed) {
+    inp <- vcr_test_input(df, id, shape, source = "imputed")
+    src <- all_observed[intersect(names(all_observed), names(df))]
+    for (cn in imputed) src[[cn]] <- "imputed"
+    inp$columnSources <- src
+    inp
+  }
+  weakest <- function(r) r$diagnostics$valueSourcesUsed$weakest
+  srcs <- function(r) unique(vapply(r$measures, function(m) as.character(m$source), character(1)))
+  # --- the negative controls analysed in the engine, adjusted by x1 and x2
+  nc <- function(imputed, id) vcr_test_run(vcr_test_job("comparator.negative_control",
+    list(covariates = list("x1", "x2"), treatmentColumn = "arm", controls = list(list(name = "fracture", column = "fracture"), list(name = "cataract", column = "cataract")),
+         primary = list(name = "death", column = "death")), list(with_sources(base, paste0("snp_", id, ":subject"), "subject", imputed)), seed = 5L, replicates = 200L, job_id = paste0("job_", id)))
+  nc_a <- nc("x1", "n32e_nca"); nc_b <- nc("x3", "n32e_ncb")
+  # --- the binary tipping point, from the table: the outcome (with missing values) and the arm
+  tp <- function(imputed, id) vcr_test_run(vcr_test_job("comparator.tipping_point",
+    list(endpoint = list(type = "binary"), design = list(kind = "two_arm"), outcomeColumn = "y01", treatmentColumn = "arm", analysis = list(method = "fisher_exact", alpha = 0.025, sided = 1)),
+    list(with_sources(base, paste0("snp_", id, ":subject"), "subject", imputed)), seed = 5L, job_id = paste0("job_", id)))
+  tp_a <- tp("y01", "n32e_tpa"); tp_b <- tp("x3", "n32e_tpb")
+  # --- the time-to-event tipping point: the arm from the subject table, time and status from the event table
+  tt_t <- stats::rexp(n, 0.08 * ifelse(arm == 1L, 0.6, 1)); tt_d <- stats::rexp(n, 0.05); tm <- pmin(tt_t, tt_d, 24); st <- as.integer(tt_t <= pmin(tt_d, 24))
+  subj_tt <- data.frame(USUBJID = base$USUBJID, arm = arm, x3 = x3)
+  ev_tt <- data.frame(USUBJID = base$USUBJID, PARAMCD = "OS", AVAL = tm, CNSR = 1L - st)
+  tte <- function(imputed_event, imputed_subject, id) {
+    in_e <- vcr_test_input(ev_tt, paste0("snp_", id, ":events"), "event", source = "imputed")
+    in_e$columnSources <- list(AVAL = if (imputed_event) "imputed" else "observed", CNSR = "observed")
+    in_s <- vcr_test_input(subj_tt, paste0("snp_", id, ":subject"), "subject", source = "imputed")
+    in_s$columnSources <- list(arm = "observed", x3 = if (imputed_subject) "imputed" else "observed")
+    vcr_test_run(vcr_test_job("comparator.tipping_point", list(endpoint = list(type = "time_to_event"), horizon = 24, treatmentColumn = "arm", deltas = list(1, 1.5, 2, 4)),
+                              list(in_s, in_e), seed = 5L, replicates = 40L, job_id = paste0("job_", id)))
+  }
+  tte_a <- tte(TRUE, FALSE, "n32e_tta"); tte_b <- tte(FALSE, TRUE, "n32e_ttb")
+  # --- prognostic adjustment, binary: the arm, the score and the outcome
+  pa <- function(imputed, id) vcr_test_run(vcr_test_job("comparator.prognostic_adjustment",
+    list(endpoint = list(type = "binary"), prognosticScoreColumn = "score", treatmentColumn = "arm", outcomeColumn = "y"),
+    list(with_sources(base, paste0("snp_", id, ":subject"), "subject", imputed)), seed = 5L, replicates = 200L, job_id = paste0("job_", id)))
+  pa_a <- pa("score", "n32e_paa"); pa_b <- pa("x3", "n32e_pab")
+  # the counts a caller typed are still a summary, and say so
+  agg <- vcr_test_run(vcr_test_job("comparator.tipping_point", list(endpoint = list(type = "binary"), design = list(kind = "two_arm"),
+    counts = list(treatment = list(n = 60, responders = 36, missing = 6), control = list(n = 60, responders = 22, missing = 8)),
+    analysis = list(method = "fisher_exact", alpha = 0.025, sided = 1)), job_id = "job_n32e_agg"))
+  runs <- list(nc_a, nc_b, tp_a, tp_b, tte_a, tte_b, pa_a, pa_b)
+  cols_of <- function(r) sort(vapply(r$diagnostics$valueSourcesUsed$columns, function(x) x$column, character(1)))
+  checks <- c(
+    runs_valid = all(vapply(runs, function(r) identical(r$status, "succeeded") && length(vcr_validate_result(r)) == 0L, logical(1))),
+    nc_imputed = identical(srcs(nc_a), "imputed") && identical(weakest(nc_a), "imputed"),
+    nc_unread = identical(srcs(nc_b), "calculated") && identical(weakest(nc_b), "observed"),
+    nc_columns = identical(cols_of(nc_b), sort(c("x1", "x2", "arm", "fracture", "cataract", "death"))),
+    tp_imputed = identical(srcs(tp_a), "imputed") && identical(weakest(tp_a), "imputed"),
+    tp_unread = identical(srcs(tp_b), "calculated") && identical(weakest(tp_b), "observed"),
+    tp_columns = identical(cols_of(tp_b), sort(c("arm", "y01"))),
+    tte_imputed = identical(vcr_get_measure(tte_a, "primary_hazard_ratio")$source, "imputed") && identical(vcr_get_measure(tte_a, "imputed_early_censored_people")$source, "imputed") && identical(weakest(tte_a), "imputed"),
+    tte_unread = identical(vcr_get_measure(tte_b, "primary_hazard_ratio")$source, "calculated") && identical(vcr_get_measure(tte_b, "imputed_early_censored_people")$source, "observed") && identical(weakest(tte_b), "observed"),
+    tte_columns = identical(cols_of(tte_b), sort(c("AVAL", "CNSR", "arm"))),
+    pa_imputed = identical(srcs(pa_a), "imputed") && identical(weakest(pa_a), "imputed"),
+    pa_unread = identical(srcs(pa_b), "calculated") && identical(weakest(pa_b), "observed"),
+    pa_columns = identical(cols_of(pa_b), sort(c("arm", "score", "y"))),
+    typed_counts = identical(srcs(agg), "aggregate") && is.null(agg$diagnostics$valueSourcesUsed),
+    # the label is a label: the same job with another column marked imputed gives the same numbers
+    same_numbers = identical(vcr_measure_value(nc_a, "primary_log_effect"), vcr_measure_value(nc_b, "primary_log_effect")) &&
+      identical(vcr_measure_value(tp_a, "primary_p_value"), vcr_measure_value(tp_b, "primary_p_value")) &&
+      identical(vcr_measure_value(pa_a, "marginal_risk_difference"), vcr_measure_value(pa_b, "marginal_risk_difference")))
+  ok <- all(checks); same <- checks[["same_numbers"]]
+  list(pass = ok,
+       detail = sprintf("imputed column used -> imputed, an imputed column never read -> calculated (weakest used observed): negative controls %s / %s, binary tipping point %s / %s, time-to-event tipping point %s / %s (people count %s / %s), prognostic adjustment %s / %s; typed counts stay %s; the numbers are the same: %s%s",
+                        paste(srcs(nc_a), collapse = "+"), paste(srcs(nc_b), collapse = "+"), paste(srcs(tp_a), collapse = "+"), paste(srcs(tp_b), collapse = "+"),
+                        vcr_get_measure(tte_a, "primary_hazard_ratio")$source, vcr_get_measure(tte_b, "primary_hazard_ratio")$source,
+                        vcr_get_measure(tte_a, "imputed_early_censored_people")$source, vcr_get_measure(tte_b, "imputed_early_censored_people")$source,
+                        paste(srcs(pa_a), collapse = "+"), paste(srcs(pa_b), collapse = "+"), paste(srcs(agg), collapse = "+"), same,
+                        if (ok) "" else paste0("; FAILED CHECKS: ", paste(names(checks)[!checks], collapse = ", "))))
+})

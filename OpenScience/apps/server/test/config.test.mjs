@@ -91,6 +91,15 @@ test("the deployment's provider agreements are on unless the deployment says oth
   }
 });
 
+test("the number of candidate trials a study holds has a key, a default and bounds", () => {
+  // 「给患者找试验」: each candidate costs an evaluation for every patient the study judges against it.
+  assert.equal(loadConfig({ rootDir: repoRoot }).vcrCandidateTrialsMax, 60);
+  assert.equal(loadConfig({ rootDir: repoRoot, vcrCandidateTrialsMax: "120" }).vcrCandidateTrialsMax, 120);
+  for (const value of ["0", "501", "many"]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, vcrCandidateTrialsMax: value }), /OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX/);
+  }
+});
+
 test("memory extraction is given longer than one extraction actually takes", () => {
   // Measured against deepseek-v4-pro, one extraction request takes 40-46s. At
   // the previous 30s budget every request aborted, so the store only ever held
@@ -767,6 +776,45 @@ test("Jev's model, gate and ceilings are the pin and nothing else, and it is on 
     assert.throws(() => loadConfig({ rootDir: repoRoot }), /OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS must be a whole number from 1000 to 120000/);
   } finally {
     for (const [name, value] of [["OPEN_SCIENCE_REVIEW_JEV_ENABLED", saved.enabled], ["OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS", saved.timeout]]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("OPEN_SCIENCE_JEV_ENABLED is the one switch for every Jev site: on by default wherever the key is, off with it, and an empty value reads as unset", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "evimed-jev-master-"));
+  const saved = { master: process.env.OPEN_SCIENCE_JEV_ENABLED, reply: process.env.OPEN_SCIENCE_REVIEW_JEV_ENABLED, sites: process.env.OPEN_SCIENCE_JEV_DISABLED_SITES };
+  try {
+    delete process.env.OPEN_SCIENCE_JEV_ENABLED;
+    delete process.env.OPEN_SCIENCE_REVIEW_JEV_ENABLED;
+    delete process.env.OPEN_SCIENCE_JEV_DISABLED_SITES;
+    const keyFile = path.join(root, "typesafe.api-key");
+    await writeFile(keyFile, "apikey_test-typesafe\n", { mode: 0o600 });
+    const keyed = () => loadConfig({ rootDir: repoRoot, typesafeApiKeyFile: keyFile });
+    assert.equal(loadConfig({ rootDir: repoRoot }).jevEnabled, false, "no key, no Jev");
+    assert.equal(keyed().jevEnabled, true, "a key present turns every site on");
+    assert.equal(keyed().reviewJevEnabled, true);
+    process.env.OPEN_SCIENCE_JEV_ENABLED = "";
+    assert.equal(keyed().jevEnabled, true, "empty reads as unset");
+    for (const off of ["false", "0", "no", "off", "FALSE"]) {
+      process.env.OPEN_SCIENCE_JEV_ENABLED = off;
+      const config = keyed();
+      assert.equal(config.jevEnabled, false, `OPEN_SCIENCE_JEV_ENABLED=${off} keeps the key and stops every site`);
+      assert.equal(config.reviewJevEnabled, false, "the reply check's own lever is read under the master switch, not beside it");
+    }
+    process.env.OPEN_SCIENCE_JEV_ENABLED = "true";
+    assert.equal(keyed().jevEnabled, true);
+    // A test or an embedding caller can still say it outright.
+    delete process.env.OPEN_SCIENCE_JEV_ENABLED;
+    assert.equal(loadConfig({ rootDir: repoRoot, typesafeApiKeyFile: keyFile, jevEnabled: false }).jevEnabled, false);
+    // The per-site list and the master switch are separate levers.
+    process.env.OPEN_SCIENCE_JEV_DISABLED_SITES = "J4";
+    assert.deepEqual(keyed().jevDisabledSites, ["J4"]);
+    assert.equal(keyed().jevEnabled, true);
+  } finally {
+    for (const [name, value] of [["OPEN_SCIENCE_JEV_ENABLED", saved.master], ["OPEN_SCIENCE_REVIEW_JEV_ENABLED", saved.reply], ["OPEN_SCIENCE_JEV_DISABLED_SITES", saved.sites]]) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
     }

@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
-import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, conversationMemorySources } from "../src/memoryIntelligence.mjs";
+import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, conversationMemorySources, extractionEmptyCause } from "../src/memoryIntelligence.mjs";
+import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
 class MemoryStoreDouble {
   constructor() {
@@ -553,6 +554,98 @@ test("seeing a stated memory again by inference neither relabels it nor rewrites
   assert.deepEqual(result.written.map((entry) => entry.change), ["observed"], "evidence, not news");
 });
 
+// Review M-5 / R1 (owner ruling of 2026-10-10): nobody is asked to confirm what the model wrote, and the researcher's own later
+// word makes it theirs on its own. The model judges that a message says the same thing; code checks that the pointer is a
+// message of the researcher's, quoted verbatim, that the record did not already rest on.
+const upgradeCounter = () => memoryMetricFamilies().find((family) => family.name === "open_science_memory_inference_upgraded_total").series[0].value;
+
+/** @param {string} origin @param {string} value @param {string} ref a message id the candidate quotes */
+const sayingOf = (origin, value, ref) => (sources) => {
+  const source = sources.find((item) => item.sourceRef.endsWith(`/${ref}`));
+  return [{
+    scope: "user", kind: "preference", key: "preference.output_language", value, summary: value, origin,
+    importance: 0.7, sensitive: false, sourceRef: source.sourceRef, evidenceQuote: source.text,
+  }];
+};
+
+async function storeWithInference() {
+  resetMemoryMetrics();
+  const store = new MemoryStoreDouble();
+  await new MemoryIntelligence({ ...config, memoryInferredTtlDays: 30 }, store, { fetchImpl: modelFetch(sayingOf("inferred", "回答请用中文", "u_old")) })
+    .recordRun(project(), run("run_infer", "2026-08-01T01:01:00.000Z"), [message("u_old", "这份先看中文版。")]);
+  const record = () => [...store.records.values()].find((item) => item.key === "preference.output_language");
+  assert.equal(record().origin, "inferred");
+  assert.ok(record().expiresAt, "an inference fades");
+  return { store, record };
+}
+
+test("an inference becomes the researcher's own word when a later message of theirs states it", async () => {
+  const { store, record } = await storeWithInference();
+  const notifications = notificationsDouble();
+  const result = await new MemoryIntelligence({ ...config, memoryInferredTtlDays: 30 }, store, {
+    notifications, fetchImpl: modelFetch(sayingOf("explicit", "回答请用中文", "u_new")),
+  }).recordRun(project(), run("run_stated", "2026-08-05T01:01:00.000Z"), [message("u_old", "这份先看中文版。"), message("u_new", "以后回答请用中文。")]);
+
+  assert.equal(record().origin, "explicit", "the researcher said it themselves");
+  assert.equal(record().confidence, 1);
+  assert.equal(record().expiresAt, null, "and a statement does not fade");
+  assert.ok(record().lastConfirmedAt);
+  assert.equal(record().evidenceCount, 2, "their message is kept as evidence beside the one the inference rested on");
+  assert.equal(result.upgraded, 1);
+  assert.match(store.reasons.at(-1).reason, /stated by the researcher in a later message: upgraded from an inference/, "and the record's history says so");
+  assert.deepEqual(result.written.map((entry) => entry.change), ["observed"], "an upgrade is evidence, not news");
+  assert.equal(notifications.attempts.length, 0, "nobody is told, nobody is asked");
+  assert.equal(upgradeCounter(), 1);
+});
+
+test("the researcher's own different words for the same fact make it theirs too, and the older wording stays in the history", async () => {
+  const { store, record } = await storeWithInference();
+  const notifications = notificationsDouble();
+  const result = await new MemoryIntelligence(config, store, {
+    notifications, fetchImpl: modelFetch(sayingOf("explicit", "报告和回答都用中文", "u_new")),
+  }).recordRun(project(), run("run_reworded", "2026-08-05T01:01:00.000Z"), [message("u_old", "这份先看中文版。"), message("u_new", "报告和回答都用中文")]);
+
+  assert.equal(record().value, "报告和回答都用中文");
+  assert.equal(record().origin, "explicit");
+  assert.equal(result.upgraded, 1);
+  assert.equal(record().revisions.length, 1, "the inference's wording is the first revision");
+  assert.equal(notifications.attempts.length, 0, "an inference replaced by the researcher's word is not a confirmed memory rewritten");
+});
+
+test("nothing but the researcher's own new message upgrades an inference", async () => {
+  // The same words read again: the model changing its mind about one utterance is no new word of the researcher's.
+  const sameMessage = await storeWithInference();
+  const reread = await new MemoryIntelligence(config, sameMessage.store, { fetchImpl: modelFetch(sayingOf("explicit", "回答请用中文", "u_old")) })
+    .recordRun(project(), run("run_reread", "2026-08-03T01:01:00.000Z"), [message("u_old", "这份先看中文版。")]);
+  assert.equal(sameMessage.record().origin, "inferred");
+  assert.equal(reread.upgraded, 0);
+
+  // Seen again, however often, in a later message and still inferred: a count of observations promotes nothing.
+  const again = await storeWithInference();
+  for (const [id, at] of [["u_2", "2026-08-03"], ["u_3", "2026-08-04"], ["u_4", "2026-08-05"]]) {
+    await new MemoryIntelligence(config, again.store, { fetchImpl: modelFetch(sayingOf("inferred", "回答请用中文", id)) })
+      .recordRun(project(), run(`run_${id}`, `${at}T01:01:00.000Z`), [message(id, `第 ${id} 次：继续中文。`)]);
+  }
+  assert.equal(again.record().origin, "inferred");
+  assert.equal(again.record().evidenceCount, 4);
+
+  // An assistant's sentence, or a tool's, is not the researcher's word: the candidate is refused and the inference stands.
+  const assistant = await storeWithInference();
+  const refused = await new MemoryIntelligence(config, assistant.store, {
+    fetchImpl: modelFetch((sources) => [{
+      scope: "user", kind: "preference", key: "preference.output_language", value: "回答请用中文", summary: "中文回答", origin: "explicit",
+      importance: 0.7, sensitive: false, sourceRef: sources.find((item) => item.role === "assistant").sourceRef, evidenceQuote: "好的，之后都用中文。",
+    }]),
+  }).recordRun(project(), run("run_assistant", "2026-08-06T01:01:00.000Z"), [
+    message("u_old", "这份先看中文版。"), { info: { id: "a_1", role: "assistant" }, parts: [{ type: "text", text: "好的，之后都用中文。" }] },
+  ]);
+  assert.equal(refused.rejected, 1);
+  assert.match(refused.rejectionReasons.join(" "), /must cite a user message/);
+  assert.equal(assistant.record().origin, "inferred");
+
+  assert.equal(upgradeCounter(), 0, "none of the three was an upgrade");
+});
+
 test("a sensitive memory is kept in force and flagged, never parked behind a confirmation that changes nothing", async () => {
   // Both recall paths drop a sensitive record whatever its status, so parking
   // it as "pending until confirmed" only ever implied that a confirmation would
@@ -577,9 +670,11 @@ test("a sensitive memory is kept in force and flagged, never parked behind a con
   assert.doesNotMatch(client.reasons.find((entry) => entry.key === "project.fact.dedup_rule").reason, /pending|held/);
 });
 
-test("the one checkpoint: a lasting preference naming a high-alert medicine waits for its owner, a project fact does not", async () => {
-  // Owner ruling 2026-09-19: the only human checkpoint is content that hits
-  // clinical-safety-rules.json. Matched by the domain's own closed vocabulary.
+// Review R12 (owner ruling of 2026-10-10): the medicine-safety hold is retired. It parked a lasting preference that named a
+// high-alert medicine or a toxic herb until its owner looked, and showed the researcher 「待确认（用药安全）」: a confirmation
+// step for something they had said in their own words. A memory takes effect like any other; a medicine is guarded where it
+// is advised (the report and the answer, `clinical-safety-rules.json`).
+test("a lasting preference naming a high-alert medicine takes effect like any other, with no hold and no reason to wait", async () => {
   const client = new MemoryStoreDouble();
   const statement = "以后华法林的剂量我都按 INR 自己调。这个项目研究华法林的出血风险。";
   const intelligence = new MemoryIntelligence(config, client, {
@@ -598,18 +693,14 @@ test("the one checkpoint: a lasting preference naming a high-alert medicine wait
   });
   const result = await intelligence.recordRun(project(), run("run_safety"), [message("u1", statement)]);
   const byKey = (key) => [...client.records.values()].find((record) => record.key === key);
-  assert.equal(byKey("preference.warfarin_dosing").status, "pending", "a lasting habit about a high-alert medicine is held");
-  assert.equal(byKey("project.scope.drug").status, "active", "a fact about the project's subject is not a habit, and takes effect");
-  assert.equal(result.pending, 1);
-  assert.deepEqual(result.pendingReasons.map((item) => item.reason), ["clinical_safety"]);
-  assert.match(result.pendingReasons[0].text, /高警示药品/);
-  assert.match(client.reasons.find((entry) => entry.key === "preference.warfarin_dosing").reason, /held for its owner/);
+  assert.equal(byKey("preference.warfarin_dosing").status, "active", "a habit about a high-alert medicine is in force at once");
+  assert.equal(byKey("project.scope.drug").status, "active");
+  assert.equal(result.pending, 0);
+  assert.deepEqual(result.pendingReasons, []);
+  for (const entry of client.reasons) assert.doesNotMatch(entry.reason, /held for its owner|clinical-safety/, "and its revision says nothing about a hold");
 });
 
-// 2026-09-26 audit (M-13): the checkpoint's vocabulary was western high-alert
-// medicines only, so a TCM clinician's standing habit about a toxic herb — the
-// CDSS's whole subject — took effect unseen.
-test("a lasting preference naming a toxic Chinese herb, or its dose above the Pharmacopoeia bound, waits for its owner", async () => {
+test("a lasting preference naming a toxic Chinese herb, or its dose above the Pharmacopoeia bound, takes effect like any other", async () => {
   const client = new MemoryStoreDouble();
   const statement = "我开附子一般用 30 g，先煎两小时。细辛我习惯不超过 3 g。";
   const intelligence = new MemoryIntelligence(config, client, {
@@ -624,20 +715,13 @@ test("a lasting preference naming a toxic Chinese herb, or its dose above the Ph
         value: "细辛用量不超过 3 g", summary: "细辛不超过 3 g", origin: "explicit",
         importance: 0.7, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "细辛我习惯不超过 3 g",
       },
-      {
-        scope: "user", kind: "preference", key: "preference.report_order",
-        value: "报告先写结论再写证据", summary: "先结论后证据", origin: "inferred",
-        importance: 0.6, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "我开附子一般用 30 g",
-      },
     ]),
   });
   const result = await intelligence.recordRun(project(), run("run_tcm_safety"), [message("u1", statement)]);
   const byKey = (key) => [...client.records.values()].find((record) => record.key === key);
-  assert.equal(byKey("preference.fuzi_dose").status, "pending", "a toxic herb above its 15 g bound is held");
-  assert.equal(byKey("behavior.xixin_limit").status, "pending", "a toxic herb named in a lasting habit is held, whatever the dose");
-  assert.equal(byKey("preference.report_order").status, "active", "a preference that names no medicine takes effect");
-  assert.equal(result.pending, 2);
-  assert.match(result.pendingReasons[0].text, /毒性中药/);
+  assert.equal(byKey("preference.fuzi_dose").status, "active");
+  assert.equal(byKey("behavior.xixin_limit").status, "active");
+  assert.equal(result.pending, 0);
 });
 
 /**
@@ -907,10 +991,12 @@ test("a change the model inferred is a different notice from the same change the
 
   assert.equal(notifications.rows.size, 3);
   assert.deepEqual(audit.failures, []);
-  // The researcher's own words carry no mark; EviMed's inference carries the
-  // one the memory page keeps too (principle 18, plan 2026-09-23 §5.6).
+  // Neither carries a mark of whose words it was (review R13, owner ruling of 2026-10-10): that is for the model and the
+  // operator. The two stay two notices because the key still tells them apart.
   assert.equal(notifications.attempts[0].body, "「回答请用中文」已改为「回答请用英文」");
-  assert.equal(notifications.attempts.at(-1).body, "「回答请用中文」已改为「回答请用英文」（推断）");
+  assert.equal(notifications.attempts.at(-1).body, "「回答请用中文」已改为「回答请用英文」");
+  assert.notEqual(notifications.attempts[0].idempotencyKey, notifications.attempts.at(-1).idempotencyKey);
+  for (const attempt of notifications.attempts) assert.doesNotMatch(`${attempt.title}${attempt.body}`, /推断|助手|模型|未经/);
 });
 
 test("an inbox that refuses the notice costs the run neither its memory nor its visibility", async () => {
@@ -941,13 +1027,11 @@ test("an inbox that refuses the notice costs the run neither its memory nor its 
     "an inbox that stopped accepting these must not be invisible");
 });
 
-test("the checkpoint and the platform vocabulary are the domain's closed lists, not patterns of this module", async () => {
+test("the platform vocabulary is the domain's closed list, not a pattern of this module", async () => {
   const source = await readFile(new URL("../src/memoryIntelligence.mjs", import.meta.url), "utf8");
   assert.ok(source.length > 1_000, "the module source must actually have been read");
-  // One reading shared with the capsule import scan: the high-alert medicines,
-  // the toxic Chinese herbs and their dose bounds, all rows of the rules file.
-  assert.match(source, /import \{[^}]*medicationSafetyIn[^}]*\} from "@evimed\/domain"/s);
-  assert.match(source, /const safety = medicationSafetyIn\(text\)/);
+  // The medicine-safety hold is gone (review R12): extraction no longer reads the rules file's medicines at all.
+  assert.doesNotMatch(source, /medicationSafetyIn/);
   assert.match(source, /import \{[^}]*platformIdentifiersIn[^}]*\} from "@evimed\/domain"/s);
   assert.match(source, /carriesPlatformContext\(unwrapUserWrappers\(messageText\(message\)\)\)/);
   // The four-tag framing pattern it replaced must be gone, not kept beside it.
@@ -1099,7 +1183,17 @@ test("what the extractor refused reaches the run's audit line and its quality no
   // cannot tell an empty conversation from a transcript that was mostly our
   // own injection.
   assert.match(serverSource, /excluded=\$\{memoryResult\.excluded\.map\(/, "the refusals do not reach the audit ledger");
-  assert.match(serverSource, /未读取 \$\{memoryResult\.excluded\.map\(/, "the refusals do not reach the zero-extraction notice");
+  // And the counter of empty extractions (review R14: it is no notice on the run any more) tells them apart by cause.
+  assert.match(serverSource, /recordExtractionEmpty\(extractionEmptyCause\(memoryResult\)\)/, "the refusals do not reach the extraction-empty counter");
+});
+
+test("an extraction that wrote nothing is counted by why, and the cause is read from the result and not guessed", () => {
+  assert.equal(extractionEmptyCause({ extractionError: "the model timed out", proposed: 0 }), "error");
+  assert.equal(extractionEmptyCause({ extractionError: "the model timed out", proposed: 3, excluded: [{ reason: "injected", count: 5 }] }), "error", "a failure outranks what was read");
+  assert.equal(extractionEmptyCause({ proposed: 3, rejected: 3 }), "all_rejected");
+  assert.equal(extractionEmptyCause({ proposed: 0, excluded: [{ reason: "injected", count: 9 }] }), "unread");
+  assert.equal(extractionEmptyCause({ proposed: 0, excluded: [] }), "none_proposed");
+  assert.equal(extractionEmptyCause({}), "none_proposed");
 });
 
 test("extraction is reserved and settled on the usage ledger, like every other model call", async () => {
@@ -1361,17 +1455,20 @@ test("the run-finished notice reads the shared set, not a single literal", async
   // A second skip source was added once and the notice missed it. Read the
   // composition root, because the notice's condition is the thing that drifted.
   const source = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
-  const at = source.indexOf("记忆抽取未产出记录");
-  assert.ok(at > 0, "the notice moved; this test must follow it");
-  const condition = source.slice(Math.max(0, at - 1_200), at);
+  const at = source.indexOf("recordExtractionEmpty(extractionEmptyCause(memoryResult))");
+  assert.ok(at > 0, "the counter moved; this test must follow it");
+  const condition = source.slice(Math.max(0, at - 300), at);
   assert.match(condition, /MEMORY_WRITE_SKIPPED_SOURCES\.has\(memoryResult\.source\)/);
   assert.doesNotMatch(condition, /memoryResult\.source !== "disabled"/);
 
-  // And it does not downgrade the run's verification. `unchecked` means a gate
-  // layer did not run; the inbox tells the researcher so. Extracting nothing is
-  // a legitimate outcome, not a skipped check.
-  const call = source.slice(at, source.indexOf(".catch(", at) + 20);
-  assert.doesNotMatch(call, /unchecked:\s*true/, "a memory notice must not mark a gated run as unchecked");
+  // And it is a counter, not a notice on the run (review R14, owner ruling of 2026-10-10): the sentence 「记忆抽取未产出记录：
+  // 消息 N 条、候选 N 条…」 was printed to the person reading their result as a warning, and it marked nothing they could act
+  // on. The hook raises none of the three memory notices it used to.
+  const hook = source.slice(Math.max(0, at - 2_500), at + 1_500);
+  assert.doesNotMatch(hook, /appendQualityNotices|runNotice\(/, "the memory branch of the hook says nothing on the run");
+  for (const sentence of ["记忆抽取未产出记录", "等你看过再用", "改写了 ${memoryResult.conflicts"]) {
+    assert.ok(!source.includes(sentence), `"${sentence}" is back in the composition root`);
+  }
 });
 
 test("extraction enabled still writes the run summary for a conversation with nothing to learn", async () => {

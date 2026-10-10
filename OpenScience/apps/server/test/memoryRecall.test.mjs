@@ -51,7 +51,12 @@ test("scope all searches both stores, records first, and tags every item with it
   // `countUsage` says whether this read is a run being handed memories: the
   // memory page's own search goes through the same port and must not move
   // 「用过 N 次」 (memoryRoutes.mjs).
-  assert.deepEqual(s.calls[1].slice(1), ["u1", "简短", { projectId: "p1", sessionId: null, countUsage: true }]);
+  // `standing` says whether the researcher's standing profile is among the answer: it is for the agent API, which reads
+  // as it always did, and not for the recall tool (`standing: false`, capsuleGateway.mjs).
+  assert.deepEqual(s.calls[1].slice(1), ["u1", "简短", { projectId: "p1", sessionId: null, countUsage: true, standing: true }]);
+  s.calls.length = 0;
+  await recallAcrossMemory(s, user, { query: "简短", projectId: "p1", standing: false });
+  assert.equal(s.calls[1][3].standing, false, "the recall tool asks for what the question reaches and nothing else");
 });
 
 test("conversation leaves the capsule alone and capsule leaves the records alone", async () => {
@@ -143,6 +148,6 @@ test("the memory block marks an uncertain memory once and says how to read the m
   assert.match(flagged, /caveats="not_yet_valid"/);
   assert.equal((flagged.match(/带 caveats 属性的记忆/g) ?? []).length, 1);
   assert.match(flagged, /有效期：2024-03-01T00:00:00Z 起，至今 止/);
-  assert.match(flagged, /与此冲突的另一条记忆（project\.dose\.said，用户所述）：研究者说 10 mg &lt;b&gt;/, "text out of a record is escaped, as everything in the block is; and who made the statement is said");
+  assert.match(flagged, /与此冲突的另一条记忆（project\.dose\.said，origin user）：研究者说 10 mg &lt;b&gt;/, "text out of a record is escaped, as everything in the block is; and who made the statement is said, as a word");
   assert.match(flagged, /所依据的来源 10\.1000\/x：已更正或数据已修订/);
 });

@@ -88,6 +88,8 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_payload_invalid",
   "vcr_study_not_found",
   "vcr_study_paused",
+  // 「为该患者找试验」 for a patient the study does not hold.
+  "vcr_subject_not_found",
   "vcr_name_invalid",
   "vcr_action_invalid",
   "vcr_criterion_state_invalid",
@@ -162,6 +164,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "PATCH /studies/:id dataTier,intendedUse,status": ["manage_study"],
   "DELETE /studies/:id": ["manage_study"],
   "POST /studies/:id/run": ["run"],
+  "POST /studies/:id/trial-search": ["run"],
   "GET /studies/:id/jobs": ["read"],
   "GET /studies/:id/jobs/:job": ["read"],
   "POST /studies/:id/jobs": ["run"],
@@ -225,6 +228,8 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
 const NOT_ENABLED = () => new HttpError(404, "vcr_not_enabled", "虚拟临床研究 is not enabled.");
 const UNAVAILABLE = () => new HttpError(503, "vcr_unavailable", "This 虚拟临床研究 action is not available on this deployment yet.");
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
+/** A patient's key in the study (the pseudonym the plane stores): one token of plain characters. */
+const SUBJECT_KEY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/;
 /** A study name is one line; the same ceiling a project name has. */
 const NAME_MAX = 40;
 const QUESTION_MAX = 2_000;
@@ -250,7 +255,7 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
   if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
-  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
+  const known = [...VCR_TABS, "run", "trial-search", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -1066,6 +1071,30 @@ export function createVcrRoutes(dependencies) {
       if (!hooks.orchestrator?.runStep) throw UNAVAILABLE();
       return reply(await audited("vcr.step.run", () => ({ code: id, detail: step }), { code: id, detail: step },
         () => hooks.orchestrator.runStep(user, study, step)));
+    }
+
+    // --- 「为该患者找试验」 ---------------------------------------------------------
+    // The page's one action of the patient → trials direction: a run of the matching capability that searches the registries for this
+    // patient, dispatched like any other step. What the study already holds is judged for the patient by code at once (when the caller
+    // may read patient-level data, as a matching job asks), so the list does not wait for the run; a judgment that cannot be made
+    // leaves the run's request standing.
+    if (parts.length === 3 && method === "POST" && section === "trial-search") {
+      const body = await bodyOf(req, maxJsonBytes, ["subjectKey"]);
+      if (typeof body.subjectKey !== "string" || !SUBJECT_KEY.test(body.subjectKey)) {
+        throw new HttpError(400, "vcr_payload_invalid", "subjectKey is the study's own key for the patient.");
+      }
+      const subjectKey = body.subjectKey;
+      const { study, roles } = await authorize(id, "run");
+      if (!hooks.orchestrator?.requestTrialSearch) throw UNAVAILABLE();
+      const roster = service.packages?.matchStore?.candidateSubjects ? await service.packages.matchStore.candidateSubjects({ studyId: study.id }) : [];
+      if (!roster.includes(subjectKey)) throw new HttpError(404, "vcr_subject_not_found", "所选受试者不在本研究已登记的名单中。");
+      const answer = await audited("vcr.trial_search.request", () => ({ code: id, detail: subjectKey }), { code: id, detail: subjectKey },
+        () => hooks.orchestrator.requestTrialSearch(user, study, { subjectKey }));
+      const trials = service.packages?.patientTrials ?? null;
+      if (trials) trials.counters.searches += 1;
+      const evaluated = trials?.evaluate && roles.some((role) => roleHolds(role, "read_patient_level"))
+        ? await trials.evaluate(study, { subjectKeys: [subjectKey] }).then((done) => done.evaluated.length).catch(() => null) : null;
+      return reply({ ...answer, evaluated });
     }
 
     // --- jobs ------------------------------------------------------------------

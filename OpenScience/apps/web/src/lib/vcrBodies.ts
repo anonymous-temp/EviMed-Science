@@ -171,6 +171,11 @@ export function runBody(step: string) {
   return { step };
 }
 
+/** 「为该患者找试验」: the patient, by the study's own key, and nothing else. */
+export function trialSearchBody(subjectKey: string) {
+  return { subjectKey };
+}
+
 export function jobBody(input: VcrJobBody) {
   return said({
     kind: input.kind, scenario: input.scenario, inputs: input.inputs, seed: input.seed, replicates: input.replicates,

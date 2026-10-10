@@ -55,9 +55,11 @@ const CAPSULE_RECALL_MAX_LIMIT = 30;
  * @param {{ capsules?: { recall: Function } | null, memorySubstrate?: { recall: Function, recallEnabled?: boolean } | null }} services
  * @param {{ id: string, accountCreatedAt?: string }} user
  * @param {{ query: string, projectId?: string | null, sessionId?: string | null, limit?: number, factKinds?: readonly string[], since?: string | null, scope?: string,
- *   asOf?: string | null, now?: number, countUsage?: boolean }} input
+ *   asOf?: string | null, now?: number, countUsage?: boolean, standing?: boolean }} input
  *   `countUsage: false` for a read that is not a run being handed memories.
  *   `asOf`: an ISO date or instant the question is about; refused when it is not one.
+ *   `standing: false`: the recall tool's reading — what the question reaches and nothing else, so that a lookup that finds
+ *   nothing can say so (review M6). The agent API reads as it always did, with the researcher's standing profile among the answer.
  * @returns {Promise<{ items: Record<string, any>[], mode: string, contextOnly: true, sources: { memory: number, capsule: number } }>}
  */
 export async function recallAcrossMemory({ capsules = null, memorySubstrate = null }, user, input) {
@@ -88,7 +90,7 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
       : { items: [], mode: "none" },
     scope !== "capsule" && memorySubstrate
       ? memorySubstrate.recall(user.id, input.query, {
-        projectId, sessionId: input.sessionId ?? null, countUsage: input.countUsage !== false,
+        projectId, sessionId: input.sessionId ?? null, countUsage: input.countUsage !== false, standing: input.standing !== false,
         // Only when the question names a time: a recall about now is the call it always was.
         ...(asOf != null ? { asOf } : {}),
         ...(Number.isFinite(input.now) ? { now: input.now } : {}),

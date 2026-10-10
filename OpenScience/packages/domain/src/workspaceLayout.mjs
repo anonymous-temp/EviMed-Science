@@ -54,11 +54,15 @@ export const workspaceLayout = Object.freeze({
   briefFile: `${BRIEF_DIR}/research-brief.md`,
   /** Knowledge slices + memory + capability catalogue, injected for each dispatch revision. */
   briefContextFile: `${BRIEF_DIR}/context.md`,
-  /** The memories the control plane recalled for this dispatch, rendered the
-   *  way the root sees them. The root already receives them inside `context.md`;
-   *  this copy exists so a delegation can hand its child the same block
-   *  verbatim — the child never sees `context.md`, and a parent's paraphrase of
-   *  a memory is a memory without provenance. Empty when nothing was recalled. */
+  /** The researcher's resident profile as it stands at this dispatch (profile,
+   *  preference, behavior and correction records, the capsule's own entries and
+   *  the line that says what else can be looked up), rendered the way the root
+   *  sees it when it is handed it. The root receives it inside `context.md` once
+   *  per conversation (at the first dispatch, again when it changed or the
+   *  conversation was compacted); this copy is written at every dispatch so a
+   *  delegation can hand its child the same block verbatim — the child never
+   *  sees `context.md`, and a parent's paraphrase of a memory is a memory
+   *  without provenance. Empty when the researcher has no profile. */
   briefMemoryFile: `${BRIEF_DIR}/memory.md`,
   /** Run identity handed into the container. */
   briefIndexFile: `${BRIEF_DIR}/index.json`,
@@ -89,7 +93,11 @@ export const workspaceLayout = Object.freeze({
   revisionNotesFile: 'revision-notes.md',
   /** Projection of the run mirror the control plane and UI read. */
   runStateFile: `${RUN_STATE_DIR}/state.json`,
-  /** Resident capsule profile block, <= 1500 tokens. */
+  /** The capsule's workspace-level profile file. It was the resident profile
+   *  block (<= 1500 tokens) every conversation of the project read at the start
+   *  of every run; since 2026-10-10 the profile is one block in the conversation's
+   *  own context (`memory.md` is its copy for a delegation) and the control plane
+   *  empties this file, which the socket still reads and reads as nothing. */
   capsuleProfileFile: `${CAPSULE_DIR}/profile.md`,
   /** Handle for the recall tool. */
   capsuleIndexFile: `${CAPSULE_DIR}/index.json`,
