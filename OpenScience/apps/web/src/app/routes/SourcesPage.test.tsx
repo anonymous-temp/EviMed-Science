@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate, useNavigationType, useRoutes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -185,15 +185,39 @@ describe("知识库", () => {
       expect(mocks.listSources).toHaveBeenCalledWith({ kind: "project", projectId: "default" }, { q: "", limit: 50 });
     });
 
-    it("is, when empty, one sentence about what to put in and the 「添加」 button", async () => {
+    it("is, when empty, one sentence about what to put in and the 「添加」 button — which is then not also in the header", async () => {
       mocks.listSources.mockResolvedValue(listing([]));
       renderPage();
       const empty = await screen.findByText("把文献、指南、方案、数据表、网页或笔记放进来，对话里会读它们并标出处。");
       const state = empty.parentElement!;
       expect(within(state).getAllByRole("button")).toHaveLength(1);
       expect(within(state).getByRole("button", { name: "添加" })).toBeInTheDocument();
+      // Review L-5: two solid 「添加」, one in the header and one in the empty state, with the same menu behind both.
+      expect(screen.getAllByRole("button", { name: "添加" })).toHaveLength(1);
+      expect(within(screen.getByRole("heading", { level: 1, name: "知识库" }).closest("header")!).queryByRole("button", { name: "添加" })).not.toBeInTheDocument();
       expect(screen.queryByRole("group", { name: "资料类型" })).not.toBeInTheDocument();
       expect(screen.queryByText(/支持 PDF/)).not.toBeInTheDocument();
+    });
+
+    it("keeps the header's 「添加」 while the list is read, and where the empty state offers none: a search with no hit, the shared library", async () => {
+      mocks.listSources.mockReturnValue(new Promise(() => undefined));
+      renderPage();
+      expect(await screen.findByRole("button", { name: "添加" })).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "添加" })).toHaveLength(1);
+      cleanup();
+      mocks.listSources.mockReset();
+      mocks.listSources.mockResolvedValue(listing([]));
+      renderPage("/app/files?q=没有这个");
+      expect(await screen.findByText("没有找到相关资料")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "添加" })).toHaveLength(1);
+      expect(within(screen.getByRole("heading", { level: 1, name: "知识库" }).closest("header")!).getByRole("button", { name: "添加" })).toBeInTheDocument();
+      cleanup();
+      mocks.listSources.mockImplementation(async (scope) => scope.kind === "shared" ? listing([]) : listing([guideline]));
+      renderPage();
+      await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
+      await userEvent.click(await screen.findByRole("menuitemradio", { name: "所有项目共享" }));
+      expect(await screen.findByText("还没有资料设为所有项目可用。")).toBeInTheDocument();
+      expect(within(screen.getByRole("heading", { level: 1, name: "知识库" }).closest("header")!).getByRole("button", { name: "添加" })).toBeInTheDocument();
     });
 
     it("says it could not load, with a way to try again, and keeps a notice for a failed read or delete off the list", async () => {

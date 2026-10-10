@@ -14,7 +14,7 @@ import { snapshotHref } from "@/lib/readPages";
 import { splitArtifacts } from "@/lib/artifactNames";
 import { taskPath } from "@/lib/taskLocation";
 import { cn } from "@/lib/cn";
-import { buttonClasses } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
 import { FormDialog } from "@/components/ui/FormDialog";
@@ -42,6 +42,9 @@ const KNOWLEDGE_ROOT = "knowledge-base";
  */
 const LIST_COLUMN = 300;
 const PANE_MIN = 640;
+
+/** What a scheduled task is, said where there is none yet: the work, and where the result is. */
+const FIRST_RUN_SENTENCE = "按你定的时间，让 EviMed 自己去跟进一个研究问题，比如每天一份文献简报，结果留在这里。";
 
 /** How often the page reads the project again: quickly while an execution is on its way, quietly otherwise. */
 const POLL_ACTIVE_MS = 5_000;
@@ -351,8 +354,15 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   });
 
   const closeEditor = () => setEditor(null);
+  // A project with no task: the page says what a scheduled task is and offers the one button to make the first — in the pane beside
+  // the list, or in the list itself where the list is the page. Asking for a task to be chosen, with none to choose, is not an answer.
+  const none = agendas !== null && !error && !agendas.some(agenda => !agenda.payload.archivedAt);
+  const firstRun = <EmptyState icon={CalendarClock} title="还没有定时任务" description={FIRST_RUN_SENTENCE}
+    action={<Button onClick={() => setEditor({})}>新建任务</Button>} className="min-h-0 flex-1" />;
   const main = !selectedId
-    ? <EmptyState icon={CalendarClock} title="选择一项任务" description="任务的对话在这里打开。" className="min-h-0 flex-1" />
+    ? agendas === null || error ? null
+      : none ? firstRun
+        : <EmptyState icon={CalendarClock} title="选择一项任务" description="任务的对话在这里打开。" className="min-h-0 flex-1" />
     : agendas === null ? <div className="px-6 py-6"><FilesSkeleton /></div>
       : !selected ? <EmptyState icon={CalendarClock} title="未找到这个任务" description="它可能已经删除。从列表选择其他任务。" className="min-h-0 flex-1"
         // Beside the list the way on is the list; without it the list is a link away.
@@ -381,7 +391,8 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
     <PageTitle page={selected?.payload.title ?? "定时任务"} section={selected ? "定时任务" : undefined} />
     {showList && <section key="list" aria-label="任务列表" data-task-list="" className={cn("flex min-h-0 flex-col", split ? "shrink-0 border-r border-border" : "min-w-0 flex-1")} style={split ? { width: LIST_COLUMN } : undefined}>
       <TaskList agendas={agendas} episodes={episodes} selectedId={selectedId} search={search} onSearch={onSearch} projectName={projectName} error={error}
-        onRetry={() => void load()} onCreate={() => setEditor({})} busy={busy} actions={rowActions} singleColumn={!split} />
+        onRetry={() => void load()} onCreate={() => setEditor({})} busy={busy} actions={rowActions} singleColumn={!split}
+        firstRun={none ? (split ? null : firstRun) : undefined} />
     </section>}
     {showMain && <section key="main" aria-label="任务" data-task-main="" className="flex min-h-0 min-w-0 flex-1 flex-col">{main}</section>}
     {progressOpen && selected && <Drawer title="研究进展" onClose={() => setProgressOpen(false)}>

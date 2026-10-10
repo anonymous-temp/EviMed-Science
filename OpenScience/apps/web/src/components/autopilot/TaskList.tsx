@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
 import type { AgendaRecord, EpisodeRecord } from "@/lib/autopilotClient";
 import { taskPath } from "@/lib/taskLocation";
@@ -28,7 +29,7 @@ export interface TaskRowActions {
  * a group with nothing in it not drawn. A row is the task's name and one line — when it runs next and how often, that it is running,
  * why it stopped — and its 「⋯」, always visible. It is a link: it opens the task's page, and the open task's row is marked.
  */
-export function TaskList({ agendas, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn }: {
+export function TaskList({ agendas, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, firstRun }: {
   agendas: AgendaRecord[] | null;
   /** The project's newest executions: which tasks are running now. */
   episodes: readonly EpisodeRecord[];
@@ -43,6 +44,11 @@ export function TaskList({ agendas, episodes, selectedId, search, onSearch, proj
   actions: TaskRowActions;
   /** The list is the page: it keeps to the list column's measure instead of the width of its container. */
   singleColumn: boolean;
+  /**
+   * What the list says when the project has no task at all: what a scheduled task is and the one button to make the first. Drawn
+   * only where the list is the page; beside a conversation pane the pane says it, and the list stays quiet.
+   */
+  firstRun?: ReactNode;
 }) {
   const needle = search.trim().toLocaleLowerCase();
   const visible = (agendas ?? []).filter(agenda => !agenda.payload.archivedAt
@@ -83,7 +89,8 @@ export function TaskList({ agendas, episodes, selectedId, search, onSearch, proj
       {error && <LoadError message={error} onRetry={onRetry} className="mx-2" />}
       {agendas === null ? <FilesSkeleton /> : <>
         {groups.map(([label, items]) => <TaskGroup key={label} label={label}><List>{items.map(row)}</List></TaskGroup>)}
-        {visible.length === 0 && !error && <p className="px-2 text-ui text-text-3">{search.trim() ? "没有匹配的任务" : "还没有定时任务"}</p>}
+        {visible.length === 0 && !error && (search.trim() ? <p className="px-2 text-ui text-text-3">没有匹配的任务</p>
+          : firstRun !== undefined ? firstRun : <p className="px-2 text-ui text-text-3">还没有定时任务</p>)}
       </>}
     </div>
   </div>;

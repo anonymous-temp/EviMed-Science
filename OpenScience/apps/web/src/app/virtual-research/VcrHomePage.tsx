@@ -29,6 +29,9 @@ import { VcrPrecedentsPanel } from "@/components/vcr/VcrPrecedentsPanel";
 import { tierLabel } from "@/components/vcr/vcrText";
 import { vcrTabPath } from "@/components/vcr/vcrTabs";
 
+/** What the module is for, said to a researcher who has not started one: the work, and what comes of it. */
+const EMPTY_SENTENCE = "在真实入组前，用已有证据和你的数据模拟人群与试验方案，估算样本量，再匹配合适的患者。";
+
 type HomeTab = "studies" | "models" | "precedents" | "definitions";
 
 const TABS: ReadonlyArray<{ value: HomeTab; label: string }> = Object.freeze([
@@ -53,6 +56,10 @@ type Listing =
  * said in it has named it. The four action cards and the box of recent reviews
  * this page used to carry are gone — five ways in that all led to the same empty
  * composer, and a review box nobody could act on from here.
+ *
+ * With no study yet the page says in one sentence what the module is for and offers 「新建研究」 in the empty state; the header has no
+ * button then, so the page has one solid button, not two with the same name. While the list is read, or cannot be, and on the other
+ * three views, the header's is the one.
  *
  * Each row says what the study asks, what it has found and how far it has come
  * in words; a study that needs somebody (a coordinator's confirmations, 招募待办)
@@ -116,9 +123,11 @@ export function VcrHomePage() {
     </Button>
   );
   const todosOf = (study: VcrStudySummary): VcrRecruitTodo[] => (ready?.todos ?? []).filter((todo) => todo.studyId === study.id);
+  // The empty state carries the button, so the header does not.
+  const none = tab === "studies" && feature !== "loading" && ready !== null && ready.studies.length === 0;
 
   return (
-    <PageShell title="虚拟临床研究" width="wide" actions={newStudy}>
+    <PageShell title="虚拟临床研究" width="wide" actions={none ? undefined : newStudy}>
       <Tabs
         label="虚拟临床研究的视图"
         items={TABS.map((item) => ({ value: item.value, label: item.label, ...(item.value === "studies" && ready ? { count: ready.studies.length } : {}) }))}
@@ -137,7 +146,7 @@ export function VcrHomePage() {
               : feature === "loading" || listing.kind === "loading" ? <VcrListSkeleton />
                 : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
                   : listing.home.studies.length === 0
-                    ? <EmptyState icon={UsersRound} title="还没有研究" action={newStudy} />
+                    ? <EmptyState icon={UsersRound} title="还没有研究" description={EMPTY_SENTENCE} action={newStudy} />
                     : shown.length === 0
                       ? <EmptyState icon={UsersRound} title="没有匹配的研究" />
                       : (
