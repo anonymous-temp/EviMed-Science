@@ -10,14 +10,21 @@ import {
   FRONTIER_SCREEN_INSTRUCTIONS,
   FRONTIER_TEXT_LIMITS,
   FrontierEditor,
+  abstractNumberSource,
+  aiMinuteNumberSource,
+  buildAbstractInput,
+  buildAiMinuteInput,
   buildDigestInput,
   buildModelInput,
+  digestNumberSource,
+  editNumberSource,
   isChineseProse,
   isChineseTitle,
   parseModelJson,
   sha256,
   trimToWholeSentences,
   validateScreen,
+  verifyAbstract,
   verifyEdit,
 } from "../src/frontierEditor.mjs";
 
@@ -311,6 +318,60 @@ test("every kind of failed Chinese text is named: empty, length, link, language,
     ...kinds({ summary_zh: "Semaglutide lowered events." }), ...kinds({ summary_zh: "降低 25%。" }),
   ].map(({ kind }) => kind));
   assert.deepEqual([...seen].sort(), [...FRONTIER_PROSE_ISSUE_KINDS].sort(), "every kind is produced, and none outside the set");
+});
+
+test("D-06: a number the source does not state is not found in the lines the platform wrote around the source: the date, the names, the glossary", () => {
+  // The review's example: an abstract that states only a hazard ratio and its interval, published on 2026-10-09. The summary
+  // below invents a count (10) and a date (2026, 10), which the 「发布日期：2026-10-09」 line used to supply.
+  const bare = item({ abstract: "Hazard ratio 0.80 (95% CI 0.70 to 0.92).", publishedAt: "2026-10-09T00:00:00.000Z", trialFacts: null, journal: "Journal 2026" });
+  const input = buildModelInput(bare);
+  assert.match(input, /发布日期：2026-10-09/, "the model is still told the date");
+  const invented = verifyEdit(answer({ title_zh: "司美格鲁肽的心血管结局研究", summary_zh: "试验入组 10 例患者，事件减少 20%。2026 年 10 月发表。" }), bare, input);
+  assert.equal(invented.numbers.checked, 4);
+  assert.deepEqual(invented.numbers.missing.map(({ raw }) => raw), ["10", "20%", "2026", "10"]);
+  assert.deepEqual(invented.kinds, [{ field: "summary_zh", kind: "number" }, { field: "summary_zh", kind: "number" }, { field: "summary_zh", kind: "number" }, { field: "summary_zh", kind: "number" }]);
+  // What the source states passes, in the title and the summary.
+  const stated = verifyEdit(answer({ title_zh: "司美格鲁肽风险比 0.80", summary_zh: "风险比 0.80（95% 置信区间 0.70 至 0.92）。" }), bare, input);
+  assert.deepEqual(stated.issues, []);
+  assert.equal(stated.numbers.checked, 5);
+  // The trial facts and the body excerpt are source lines too.
+  const facts = item({ abstract: "Hazard ratio 0.80.", bodyExcerpt: "Median follow-up was 33 months.", trialFacts: { phase: "Phase 3", enrollment: 17604 } });
+  assert.deepEqual(verifyEdit(answer({ title_zh: "司美格鲁肽的心血管结局研究", summary_zh: "该试验入组 17604 例患者，随访中位数 33 个月。" }), facts, buildModelInput(facts)).issues, []);
+  // …and the picked lines are exactly those, in the order the input has them.
+  assert.equal(editNumberSource(input), ["标题：Semaglutide and Cardiovascular Outcomes in Obesity without Diabetes", "摘要：Hazard ratio 0.80 (95% CI 0.70 to 0.92)."].join("\n"));
+  assert.equal(editNumberSource(buildModelInput(facts)).split("\n").map((line) => line.split("：")[0]).join(","), "试验信息,标题,摘要,正文节选");
+});
+
+test("D-06: a digest and an AI minute are held to the reports' and items' own words, not to their dates and numbering", async () => {
+  const digestInput = buildDigestInput({ reports, previousDigest: "此前报道称降低 15%。" });
+  assert.deepEqual(digestNumberSource(digestInput).split("\n").map((line) => line.split("：")[0]),
+    ["上一版综述", "标题", "中文标题", "导读", "原文", "标题", "中文标题", "导读"], "the numbering and the dated header lines are not source");
+  const dated = stubModel([
+    () => ({ digest_zh: "2026 年 9 月 21 日，STAT 报道了试验结果，NEJM 发表的试验降低 20%。", latest_zh: "最新进展。" }),
+    () => ({ digest_zh: "2026 年 9 月 21 日，STAT 报道了试验结果，NEJM 发表的试验降低 20%。", latest_zh: "最新进展。" }),
+  ]);
+  const droppedDigest = await new FrontierEditor(config, { owner, callModel: dated.callModel }).writeEventDigest({ reports });
+  assert.equal(droppedDigest.verification, "dropped", "a date only the header states is a number the reports do not state");
+  assert.deepEqual(droppedDigest.issues.map((issue) => issue.match(/「(\d+)」/)?.[1]), ["2026", "9", "21"]);
+
+  const items = [{ titleRaw: "AI triage model validated", titleZh: "AI 分诊模型完成验证", summaryZh: "该模型在 3 家医院的回顾性数据中完成验证。", sourceName: "Lancet Digital Health" }];
+  const minuteInput = buildAiMinuteInput({ day: "2026-09-22", items });
+  assert.equal(aiMinuteNumberSource(minuteInput), "AI 分诊模型完成验证\n导读：该模型在 3 家医院的回顾性数据中完成验证。", "the day, the numbering and the source name are not source");
+  const wrongDay = stubModel([() => ({ ai_minute_zh: "9 月 22 日发布的模型在 3 家医院完成验证。" }), () => ({ ai_minute_zh: "9 月 22 日发布的模型在 3 家医院完成验证。" })]);
+  const droppedMinute = await new FrontierEditor(config, { owner, callModel: wrongDay.callModel }).writeDaily({ day: "2026-09-22", items });
+  assert.equal(droppedMinute.verification, "dropped");
+  assert.deepEqual(droppedMinute.issues.map((issue) => issue.match(/「(\d+)」/)?.[1]), ["9", "22"]);
+});
+
+test("D-06: the Chinese abstract is held to the title and the abstract, not to the glossary lines between them", () => {
+  const input = buildAbstractInput({ titleRaw: "Cohort outcomes", abstract: "Results are reported for the primary cohort.\n\nMortality was 12%.",
+    glossary: [{ termEn: "cohort", termZh: "第 7 队列", keepOriginal: false }] });
+  assert.match(input, /- cohort → 第 7 队列/);
+  assert.equal(abstractNumberSource(input), "标题：Cohort outcomes\n摘要：Results are reported for the primary cohort.\n\nMortality was 12%.", "the abstract keeps its paragraphs");
+  assert.deepEqual(verifyAbstract({ abstract_zh: "主要队列的结果见下。\n死亡率为 12%。" }, input).issues, []);
+  const glossaryOnly = verifyAbstract({ abstract_zh: "结果见第 7 队列。\n死亡率为 12%。" }, input);
+  assert.equal(glossaryOnly.issues.length, 1);
+  assert.match(glossaryOnly.issues[0], /「7」在原文里找不到/);
 });
 
 test("a rewrite whose summary is only too long is published with its whole sentences that fit, repaired", async () => {
@@ -628,7 +689,9 @@ test("an item with nothing but its title gets no summary rather than its title a
   const bare = item({ abstract: null, summary: null, bodyExcerpt: null });
   const bareInput = buildModelInput(bare);
   assert.match(bareInput, /正文：无/);
-  const withoutSummary = verifyEdit(answer({ summary_zh: "" }), bare, bareInput);
+  // (The title is numberless: the default answer's 「20%」 used to pass here on the 20th of 「发布日期：2026-09-20」, a number the
+  // title-only source does not state — D-06.)
+  const withoutSummary = verifyEdit(answer({ title_zh: "司美格鲁肽与心血管结局", summary_zh: "" }), bare, bareInput);
   assert.deepEqual(withoutSummary.issues, []);
   assert.equal(withoutSummary.output.summaryZh, null);
   const full = item();
