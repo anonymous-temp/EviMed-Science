@@ -231,6 +231,25 @@ describe("LoginPage", () => {
     }
   });
 
+  // Live walk 2026-10-10: the six-character rule was shown only after a refused request, as a line under the buttons.
+  it("states the password rule with the field while registering, and checks it before any request", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: true });
+    renderLogin();
+    expect(await screen.findByLabelText("密码")).not.toHaveAttribute("aria-describedby");
+    await userEvent.click(screen.getByRole("button", { name: "还没有账号？注册一个" }));
+    const password = screen.getByLabelText("密码");
+    expect(password).toHaveAccessibleDescription("至少 6 位");
+    await userEvent.type(screen.getByLabelText("账号"), "bob");
+    await userEvent.type(password, "abc");
+    await userEvent.click(screen.getByRole("button", { name: "注册并进入" }));
+    expect(mocks.registerWeb).not.toHaveBeenCalled();
+    expect(password).toHaveAttribute("aria-invalid", "true");
+    expect(password).toHaveAccessibleErrorMessage("密码至少 6 位。");
+    expect(password).toHaveFocus();
+    await userEvent.type(password, "defgh");
+    expect(password).not.toHaveAttribute("aria-invalid");
+  });
+
   it("goes back to signing in from the register form", async () => {
     mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: true });
     renderLogin();

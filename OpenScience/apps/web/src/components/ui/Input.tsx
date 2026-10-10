@@ -53,12 +53,14 @@ interface FieldShellProps {
   id: string;
   label?: ReactNode;
   error?: ReactNode;
+  /** What the field expects, said before anything goes wrong (`${id}-hint`); the error takes its place when there is one. */
+  hint?: ReactNode;
   children: ReactNode;
 }
 
-/** Label above, control in the middle, error message below — one field block. */
-function FieldShell({ id, label, error, children }: FieldShellProps) {
-  if (!label && !error) return <>{children}</>;
+/** Label above, control in the middle, error message (or the hint) below — one field block. */
+function FieldShell({ id, label, error, hint, children }: FieldShellProps) {
+  if (!label && !error && !hint) return <>{children}</>;
   return (
     <div className="min-w-0">
       {label != null && (
@@ -67,9 +69,13 @@ function FieldShell({ id, label, error, children }: FieldShellProps) {
         </label>
       )}
       {children}
-      {error != null && (
+      {error != null ? (
         <p id={`${id}-error`} role="alert" className="mt-2 text-ui text-error">
           {error}
+        </p>
+      ) : hint != null && (
+        <p id={`${id}-hint`} className="mt-2 text-caption text-text-3">
+          {hint}
         </p>
       )}
     </div>
@@ -85,10 +91,12 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
    * One `IconButton` `size="sm"` (28 in a 36 field); the text stops before it.
    */
   trailing?: ReactNode;
+  /** What the field expects, under the control and in its description (`aria-describedby`), until an error replaces it. */
+  hint?: ReactNode;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, error, id, className, trailing, ...rest },
+  { label, error, hint, id, className, trailing, ...rest },
   ref,
 ) {
   const autoId = useId();
@@ -100,12 +108,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       id={inputId}
       aria-invalid={hasError || undefined}
       aria-errormessage={hasError ? `${inputId}-error` : undefined}
+      aria-describedby={!hasError && hint != null ? `${inputId}-hint` : undefined}
       className={inputClasses({ error: hasError, className: cn(trailing != null && "pr-11", className) })}
       {...rest}
     />
   );
   return (
-    <FieldShell id={inputId} label={label} error={error}>
+    <FieldShell id={inputId} label={label} error={error} hint={hint}>
       {trailing == null ? control : (
         <div className="relative">
           {control}

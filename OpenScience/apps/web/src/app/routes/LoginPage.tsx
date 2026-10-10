@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { MIN_PASSWORD_LENGTH } from "@evimed/domain";
 import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -32,6 +32,10 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A password the registration refuses is said on the password field, not in a line under the buttons
+  // (live walk 2026-10-10): the rule is shown with the field while registering, and checked before a request.
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const passwordInput = useRef<HTMLInputElement>(null);
   const [registering, setRegistering] = useState(false);
   // The password is shown only while the person asks for it, and only until they leave the page.
   const [revealed, setRevealed] = useState(false);
@@ -78,15 +82,25 @@ function signInMessage(error: unknown): string {
       setError("请输入账号和密码。");
       return;
     }
+    if (registering && [...password].length < MIN_PASSWORD_LENGTH) {
+      setError(null);
+      setPasswordError(`密码至少 ${MIN_PASSWORD_LENGTH} 位。`);
+      passwordInput.current?.focus();
+      return;
+    }
     setSubmitting(true);
     setError(null);
+    setPasswordError(null);
     try {
       if (registering) await registerWeb(username.trim(), password);
       else if (methods?.mode === "development") await loginDevelopmentWeb();
       else await loginWeb(username.trim(), password);
       navigate(returnTo, { replace: true });
     } catch (err) {
-      setError(registering ? registrationMessage(err) : signInMessage(err));
+      if (registering && err instanceof WebApiError && err.code === "weak_password") {
+        setPasswordError(registrationMessage(err));
+        passwordInput.current?.focus();
+      } else setError(registering ? registrationMessage(err) : signInMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -130,12 +144,15 @@ function signInMessage(error: unknown): string {
               onChange={(event) => setUsername(event.target.value)}
             />
             <Input
+              ref={passwordInput}
               id="login-password"
               label="密码"
+              hint={registering ? `至少 ${MIN_PASSWORD_LENGTH} 位` : undefined}
               type={revealed ? "text" : "password"}
               autoComplete={registering ? "new-password" : "current-password"}
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              error={passwordError ?? undefined}
+              onChange={(event) => { setPassword(event.target.value); setPasswordError(null); }}
               // One name for the button and a pressed state, not a name that flips under the reader: 「显示密码」, pressed while it is shown.
               trailing={(
                 <IconButton
@@ -157,6 +174,7 @@ function signInMessage(error: unknown): string {
                 onClick={() => {
                   setRegistering((value) => !value);
                   setError(null);
+                  setPasswordError(null);
                 }}
               >
                 {registering ? "已有账号？返回登录" : "还没有账号？注册一个"}
