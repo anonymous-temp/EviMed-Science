@@ -1,0 +1,49 @@
+{
+  "taskMarker": "ALPHA-20261010",
+  "inputValues": [
+    2,
+    5,
+    11
+  ],
+  "sum": 18.0,
+  "mean": 6.0,
+  "planState": {
+    "revision": 1,
+    "deliverableCount": 1,
+    "itemCount": 1,
+    "itemIds": [
+      "concurrency-alpha"
+    ],
+    "itemStatuses": [
+      "planned"
+    ],
+    "observedThrough": "evimed_plan action=status",
+    "observedStatus": "planned",
+    "observedAt": "2026-10-10T05:10:02.279Z",
+    "note": "revision still 1 and the single deliverable still reports status 'planned' at the observation time: the plan is not marked delivered until this package is submitted; both observations returned the same revision."
+  },
+  "runState": {
+    "runId": "run_cfca9aaeaa4f6070bec435d455e537cf",
+    "sessionId": "session-2186db96-469e-40f0-88b4-3b9171c5500d",
+    "stateFile": ".evimed-run/runs/run_cfca9aaeaa4f6070bec435d455e537cf/state.json",
+    "planFile": ".evimed-run/runs/run_cfca9aaeaa4f6070bec435d455e537cf/task-plan.json",
+    "formatVersion": 1,
+    "bundleVersion": "0.1.0",
+    "updatedAt": "2026-10-10T05:10:02.279Z",
+    "observedThrough": "current-run state file (.evimed-run/runs/<runId>/state.json)"
+  },
+  "computation": {
+    "tool": "native Python 3.12 execution of analysis.py (statistics.fsum / statistics.fmean)",
+    "crossCheck": {
+      "sum_via_sumprod": 18,
+      "mean_times_n": 18.0,
+      "identityMeanTimesNEqualsSum": true
+    },
+    "platformCalculationService": "refused (result_engine_unavailable) — numbers produced by native execution instead",
+    "scope": "bounded local arithmetic; no external data, no patient data"
+  },
+  "observations": {
+    "currentPlan": "revision 1, 1 deliverable (concurrency-alpha), 1 plan item, status planned at observation time",
+    "currentRun": "run run_cfca9aaeaa4f6070bec435d455e537cf / session session-2186db96-469e-40f0-88b4-3b9171c5500d"
+  }
+}

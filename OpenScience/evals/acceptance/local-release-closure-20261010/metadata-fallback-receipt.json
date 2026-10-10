@@ -1,0 +1,460 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-10T04:31:50.374129+00:00",
+  "observedAt": "2026-10-10T04:31:54.489119+00:00",
+  "scope": "Actual local control-plane production gateway handler; no production deployment or production tests",
+  "publicSourceSha256": "8356f84c020e2e03434733d738bb1350be1b072ec8cdfb46eb6f83feee2d3310",
+  "allPassed": true,
+  "results": [
+    {
+      "source": "who-gho",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "maternal mortality",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from who-gho.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "MDG_0000000026",
+            "MDG_0000000032",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000026",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000032"
+          ],
+          "elapsedMs": 897,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "life expectancy",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from who-gho.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "WHOSIS_000002",
+            "WHOSIS_000015",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000002",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000015"
+          ],
+          "elapsedMs": 871,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1768
+    },
+    {
+      "source": "wikipathways",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "insulin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from wikipathways.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "WP1313",
+            "WP17",
+            "https://www.wikipathways.org/instance/WP1313",
+            "https://www.wikipathways.org/instance/WP17"
+          ],
+          "elapsedMs": 1784,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "apoptosis",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from wikipathways.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "WP1018",
+            "WP1082",
+            "https://www.wikipathways.org/instance/WP1018",
+            "https://www.wikipathways.org/instance/WP1082"
+          ],
+          "elapsedMs": 563,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2347
+    }
+  ],
+  "rawToolResults": [
+    {
+      "tool": "biomedical_source_search",
+      "arguments": {
+        "source": "who-gho",
+        "query": "maternal mortality",
+        "limit": 2
+      },
+      "result": {
+        "status": "warning",
+        "summary": "Retrieved 2 traceable records from who-gho.",
+        "data": {
+          "source": "who-gho",
+          "items": [
+            {
+              "id": "MDG_0000000032",
+              "title": "Maternal mortality ratio (per 100 000 live births) - Country reported estimates",
+              "url": "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000032",
+              "sourceType": "other"
+            },
+            {
+              "id": "MDG_0000000026",
+              "title": "Maternal mortality ratio (per 100 000 live births)",
+              "url": "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000026",
+              "sourceType": "other"
+            }
+          ],
+          "resolution": {
+            "mode": "complete-official-metadata-index",
+            "url": "https://ghoapi.azureedge.net/api/Indicator",
+            "recordsInspected": 3099,
+            "completeIndex": true,
+            "queryMode": "indicator-name-substring"
+          },
+          "provenance": {
+            "tool": "biomedical_source_search",
+            "arguments": {
+              "source": "who-gho",
+              "query": "maternal mortality",
+              "limit": 2
+            },
+            "scope": {
+              "tenantId": "integrationlocal",
+              "userId": "integrationlocal",
+              "projectId": "default",
+              "workspaceDir": "/tmp/evimed-integration-20261010/OpenScience/.r/users/integrationlocal/projects/default/workspace"
+            }
+          }
+        },
+        "sources": [
+          {
+            "id": "MDG_0000000032",
+            "source": "who-gho",
+            "retrievedAt": "2026-10-10T04:31:51.270536Z",
+            "url": "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000032",
+            "title": "Maternal mortality ratio (per 100 000 live births) - Country reported estimates",
+            "sourceType": "other"
+          },
+          {
+            "id": "MDG_0000000026",
+            "source": "who-gho",
+            "retrievedAt": "2026-10-10T04:31:51.270559Z",
+            "url": "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000026",
+            "title": "Maternal mortality ratio (per 100 000 live births)",
+            "sourceType": "other"
+          }
+        ],
+        "warnings": [
+          "This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation.",
+          "The filtered WHO endpoint was unavailable; matching used its complete official indicator-name index. These are indicator metadata, not observation values."
+        ],
+        "next_actions": [
+          "Open and verify the cited primary record before using it in a material claim."
+        ]
+      }
+    },
+    {
+      "tool": "biomedical_source_search",
+      "arguments": {
+        "source": "who-gho",
+        "query": "life expectancy",
+        "limit": 2
+      },
+      "result": {
+        "status": "warning",
+        "summary": "Retrieved 2 traceable records from who-gho.",
+        "data": {
+          "source": "who-gho",
+          "items": [
+            {
+              "id": "WHOSIS_000015",
+              "title": "Life expectancy at age 60 (years)",
+              "url": "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000015",
+              "sourceType": "other"
+            },
+            {
+              "id": "WHOSIS_000002",
+              "title": "Healthy life expectancy (HALE) at birth (years)",
+              "url": "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000002",
+              "sourceType": "other"
+            }
+          ],
+          "resolution": {
+            "mode": "complete-official-metadata-index",
+            "url": "https://ghoapi.azureedge.net/api/Indicator",
+            "recordsInspected": 3099,
+            "completeIndex": true,
+            "queryMode": "indicator-name-substring"
+          },
+          "provenance": {
+            "tool": "biomedical_source_search",
+            "arguments": {
+              "source": "who-gho",
+              "query": "life expectancy",
+              "limit": 2
+            },
+            "scope": {
+              "tenantId": "integrationlocal",
+              "userId": "integrationlocal",
+              "projectId": "default",
+              "workspaceDir": "/tmp/evimed-integration-20261010/OpenScience/.r/users/integrationlocal/projects/default/workspace"
+            }
+          }
+        },
+        "sources": [
+          {
+            "id": "WHOSIS_000015",
+            "source": "who-gho",
+            "retrievedAt": "2026-10-10T04:31:52.141826Z",
+            "url": "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000015",
+            "title": "Life expectancy at age 60 (years)",
+            "sourceType": "other"
+          },
+          {
+            "id": "WHOSIS_000002",
+            "source": "who-gho",
+            "retrievedAt": "2026-10-10T04:31:52.141846Z",
+            "url": "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000002",
+            "title": "Healthy life expectancy (HALE) at birth (years)",
+            "sourceType": "other"
+          }
+        ],
+        "warnings": [
+          "This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation.",
+          "The filtered WHO endpoint was unavailable; matching used its complete official indicator-name index. These are indicator metadata, not observation values."
+        ],
+        "next_actions": [
+          "Open and verify the cited primary record before using it in a material claim."
+        ]
+      }
+    },
+    {
+      "tool": "biomedical_source_search",
+      "arguments": {
+        "source": "wikipathways",
+        "query": "insulin",
+        "limit": 2
+      },
+      "result": {
+        "status": "warning",
+        "summary": "Retrieved 2 traceable records from wikipathways.",
+        "data": {
+          "source": "wikipathways",
+          "items": [
+            {
+              "id": "WP1313",
+              "title": "Insulin signaling",
+              "url": "https://www.wikipathways.org/instance/WP1313",
+              "species": "Danio rerio",
+              "revision": "2021-05-14",
+              "sourceType": "other"
+            },
+            {
+              "id": "WP17",
+              "title": "daf-2 or insulin signaling pathway",
+              "url": "https://www.wikipathways.org/instance/WP17",
+              "species": "Caenorhabditis elegans",
+              "revision": "2025-03-03",
+              "sourceType": "other"
+            }
+          ],
+          "resolution": {
+            "mode": "complete-official-metadata-index",
+            "url": "https://www.wikipathways.org/json/getPathwayInfo.json",
+            "recordsInspected": 2218,
+            "completeIndex": true,
+            "queryMode": "pathway-title-substring"
+          },
+          "provenance": {
+            "tool": "biomedical_source_search",
+            "arguments": {
+              "source": "wikipathways",
+              "query": "insulin",
+              "limit": 2
+            },
+            "scope": {
+              "tenantId": "integrationlocal",
+              "userId": "integrationlocal",
+              "projectId": "default",
+              "workspaceDir": "/tmp/evimed-integration-20261010/OpenScience/.r/users/integrationlocal/projects/default/workspace"
+            }
+          }
+        },
+        "sources": [
+          {
+            "id": "WP1313",
+            "source": "wikipathways",
+            "retrievedAt": "2026-10-10T04:31:53.925777Z",
+            "url": "https://www.wikipathways.org/instance/WP1313",
+            "title": "Insulin signaling",
+            "sourceType": "other"
+          },
+          {
+            "id": "WP17",
+            "source": "wikipathways",
+            "retrievedAt": "2026-10-10T04:31:53.925792Z",
+            "url": "https://www.wikipathways.org/instance/WP17",
+            "title": "daf-2 or insulin signaling pathway",
+            "sourceType": "other"
+          }
+        ],
+        "warnings": [
+          "This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation.",
+          "The SPARQL endpoint was unavailable; matching used the complete official WikiPathways title index. These are pathway metadata, not gene membership or interaction evidence."
+        ],
+        "next_actions": [
+          "Open and verify the cited primary record before using it in a material claim."
+        ]
+      }
+    },
+    {
+      "tool": "biomedical_source_search",
+      "arguments": {
+        "source": "wikipathways",
+        "query": "apoptosis",
+        "limit": 2
+      },
+      "result": {
+        "status": "warning",
+        "summary": "Retrieved 2 traceable records from wikipathways.",
+        "data": {
+          "source": "wikipathways",
+          "items": [
+            {
+              "id": "WP1018",
+              "title": "Apoptosis",
+              "url": "https://www.wikipathways.org/instance/WP1018",
+              "species": "Bos taurus",
+              "revision": "2025-08-09",
+              "sourceType": "other"
+            },
+            {
+              "id": "WP1082",
+              "title": "Apoptosis modulation by HSP70",
+              "url": "https://www.wikipathways.org/instance/WP1082",
+              "species": "Bos taurus",
+              "revision": "2021-05-16",
+              "sourceType": "other"
+            }
+          ],
+          "resolution": {
+            "mode": "complete-official-metadata-index",
+            "url": "https://www.wikipathways.org/json/getPathwayInfo.json",
+            "recordsInspected": 2218,
+            "completeIndex": true,
+            "queryMode": "pathway-title-substring"
+          },
+          "provenance": {
+            "tool": "biomedical_source_search",
+            "arguments": {
+              "source": "wikipathways",
+              "query": "apoptosis",
+              "limit": 2
+            },
+            "scope": {
+              "tenantId": "integrationlocal",
+              "userId": "integrationlocal",
+              "projectId": "default",
+              "workspaceDir": "/tmp/evimed-integration-20261010/OpenScience/.r/users/integrationlocal/projects/default/workspace"
+            }
+          }
+        },
+        "sources": [
+          {
+            "id": "WP1018",
+            "source": "wikipathways",
+            "retrievedAt": "2026-10-10T04:31:54.488565Z",
+            "url": "https://www.wikipathways.org/instance/WP1018",
+            "title": "Apoptosis",
+            "sourceType": "other"
+          },
+          {
+            "id": "WP1082",
+            "source": "wikipathways",
+            "retrievedAt": "2026-10-10T04:31:54.488592Z",
+            "url": "https://www.wikipathways.org/instance/WP1082",
+            "title": "Apoptosis modulation by HSP70",
+            "sourceType": "other"
+          }
+        ],
+        "warnings": [
+          "This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation.",
+          "The SPARQL endpoint was unavailable; matching used the complete official WikiPathways title index. These are pathway metadata, not gene membership or interaction evidence."
+        ],
+        "next_actions": [
+          "Open and verify the cited primary record before using it in a material claim."
+        ]
+      }
+    }
+  ]
+}

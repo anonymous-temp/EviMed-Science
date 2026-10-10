@@ -1,0 +1,242 @@
+---
+name: mendelian-randomization
+description: Run EviMed's managed Mendelian-randomization specialist and preserve its GWAS, statistical, sensitivity-analysis, and STROBE-MR boundaries.
+metadata:
+  evimed-agent: mendelian-randomization
+---
+
+# Mendelian randomization
+
+Use this skill to assess a causal exposure-outcome relationship using genetic
+instruments. It is not a generic association analysis. Require an explicit
+exposure and outcome, and distinguish forward from bidirectional analysis.
+
+## Execute the managed analysis
+
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
+1. Call `mcp__evimed__mendelian_randomization` with `action=capabilities`. Report missing R, model or Python runtime explicitly. Missing OpenGWAS credentials blocks OpenGWAS data, text-based GWAS selection and online LD clumping; it does not block open GWAS Catalog studies (below) or two supplied local files with declared preclumped instruments.
+2. Start the job with the normalized exposure, outcome, language, direction and the explicit source objects below when using uploaded files.
+   Record the job id and poll it with `waitSeconds=45` until terminal.
+   The job alone can take most of this capability's 30–180 minutes. Keep polling while `updatedAt` advances (every 30 s); treat the job as failed only on a terminal failure or when `updatedAt` has not moved for 10 minutes, and record the state you observed either way.
+3. Do not invent SNPs, instrument counts, F statistics, effect estimates,
+   heterogeneity, pleiotropy, Steiger direction, or sensitivity results. Those
+   values must come from the deterministic MR engines and their files.
+4. Treat zero instruments, weak instruments, unresolved sample overlap,
+   harmonization failure, and missing sensitivity checks as limits on the
+   affected calculations; preserve available source rows and completed results. Statistical significance does not by itself establish a valid
+   causal interpretation.
+
+## Open GWAS Catalog sources (no OpenGWAS token)
+
+When OpenGWAS is blocked, or the requested study is on the NHGRI-EBI GWAS
+Catalog, give both sides as catalogue studies:
+`{"type": "gwas_catalog", "accession": "GCST..."}`. Find the study from its
+paper (`mcp__evimed__literature_search`), then pass that PubMed id as
+`{"type": "gwas_catalog", "pubmedId": "..."}` or an accession a tool result
+showed you; a paper with several studies is refused with the list to choose
+from. Never write an accession or PubMed id you have not seen in a tool result.
+One direction per job: for the reverse direction start a second forward job
+with the roles swapped.
+
+The engine reads the catalogue's harmonised files itself: exposure variants at
+p < 5e-8, clumped by PLINK against an LD reference when the deployment has one,
+otherwise one variant per 10,000 kb window (a distance-based approximation;
+no LD was measured and independence is not established), and the outcome's rows for the same variants;
+a variant missing from the outcome is dropped, never proxied. Report both
+accessions and PubMed ids, and the ancestry and sample size as the catalogue
+states them (`mendelian-randomization-open-sources.json`; `sampleMetadata` has
+the sample size and case-control design as numbers, and `sampleSize` says which
+rows took the study total because the file has no per-variant n), the selection method
+and counts (`instrument-selection.json`), and the variants unavailable in the
+outcome. On every path, `harmonisation.json` in the analysis data gives the
+instruments retained, dropped as palindromic-ambiguous and missing from the
+outcome: report those numbers, not your own count. The catalogue cannot tell whether two studies share participants:
+name the cohorts the papers report and never claim independent samples.
+Keep `inputs/open-*.csv` and the replay package: they are the rows analysed.
+
+## Uploaded local GWAS inputs
+
+Uploaded source objects require the configured isolated hosted MR adapter. If it
+is absent, stop with the reported dependency error; do not switch to same-container
+execution or silently replace the supplied data with a remote text search. The
+legacy text-only fallback and the independent `run_mr_local` library remain separate.
+
+Use the workspace-relative paths returned by upload, such as `data/bmi.csv`.
+Inspect the actual headers and ask for any unresolved exposure/outcome roles or
+column meanings. Never infer that instruments were clumped from a small row
+count, a filename, or statistical significance.
+
+For a local source, pass `type: "local_file"`, `path`, `columnMapping`, and a
+JSON boolean `instrumentsPreclumped`. The mapping must explicitly name all seven
+keys: `snp`, `beta`, `se`, `effect_allele`, `other_allele`, `eaf`, and `pval`, each
+pointing to a distinct original header. Optional `samplesize` maps a per-variant
+sample-size column without replacing those values by catalogue totals. Optional `sampleSize` and `population`
+are provider declarations, not independently verified repository metadata.
+`instrumentsPreclumped: true` requires `clumpingProvenance` identifying the source
+and instrument-selection method. Do not invent this statement or change a false
+flag merely to make a failed request pass.
+
+Whenever a local source is used, specify both `exposureSource` and
+`outcomeSource`. For forward analysis without an OpenGWAS credential, use
+GWAS Catalog sources, or both must be local and the exposure instruments must be
+declared preclumped with their provenance. For bidirectional analysis, each side becomes an exposure and must
+independently satisfy that condition. The input manifest retains
+`provided_local_data`, `supplied_not_independently_verified`, and
+`ld_rechecked: false`; supplied selection is not an LD verification performed by
+this run.
+
+A mixed request may give the remote side as
+`{"type": "opengwas", "gwasId": "<explicit source identifier>"}` only with the
+existing configured OpenGWAS credential. A missing credential is a blocker, not
+permission to claim an authenticated result. Omit both source objects for legacy
+remote text selection; explicit remote-only source pairs are not supported here.
+
+Only ordinary UTF-8 CSV/TSV files are accepted, up to 128 MiB and 2,000,000 rows
+per file. Missing/duplicate headers or SNPs, nonfinite values, invalid SE,
+frequency or p-value, unsafe paths, or changes after admission fail visibly.
+The accepted request and file bindings are held in protected project metadata,
+outside the customer workspace mount. Workspace notes or `.jobs` files cannot
+replace that accepted queue record. Status is read from the same protected queue.
+
+The worker preserves original uploads and stages standard columns under fixed
+filenames in its isolated execution directory. Its in-memory provenance reaches
+the fixed runner through an anonymous pipe; a workspace-editable manifest is
+never the authority. Published input copies and the manifest remain relative,
+reproducible artifacts; never rename, overwrite or replace those bound copies.
+
+## Deliverables
+
+Write `mendelian-randomization-report.md` with the question, instrument sources,
+harmonization, primary and sensitivity estimates, diagnostics, interpretation,
+limitations, and STROBE-MR-aligned discussion. Write
+`mendelian-randomization-run.json` with the terminal job state and exact returned
+artifacts. Every number must match the managed analysis output. For local inputs, also preserve `mendelian-randomization-inputs.json` and the returned standard input CSV artifacts. The manifest binds original relative paths, byte counts, SHA-256 digests, actual mappings and supplied clumping provenance; retain it without adding repository IDs, years, or absolute host paths.
+
+Numbers in prose and tables are the engine's display strings. Each record that
+carries a statistic has a `display` beside its raw values, rendered to one
+convention: ratios (OR, ROR, PRR, EBGM) and their intervals to two decimals, p
+values to two or three decimals and `<0.001`, with genetic studies writing
+smaller p values as 3.5×10⁻¹¹, other estimates to three significant figures,
+percentages to two, counts with thousands separators. Write those strings as
+they are; the raw values are for machines and replay. A number the engine does
+not display is written to the same convention, never with more digits.
+In `mendelian-randomization-run.json` each result has `display` (instruments
+and F statistics, Steiger, MR-PRESSO, Radial MR, contamination mixture), and
+each entry of `mr_results`, `heterogeneity` and `pleiotropy` has its own.
+
+Scientific scale and denominators. Each source can carry optional `effectScale`
+with `unit`, `transformation` and source-linked `evidence`; these are declarations,
+not proof of repository confirmation. Results preserve `exposure_scale` and
+`outcome_scale` with unknown, declared, repository-reported or conflicting status.
+Use only the documented unit and transformation. Unknown units mean per source
+exposure unit, never automatically per SD from the phenotype name, F statistic or
+coefficient. A documented SD applies to that exact transformed or original trait;
+retain beta, OR and CI unchanged. Preserve a declaration/repository conflict as a
+limitation rather than choosing a convenient unit.
+
+Keep catalogue sample totals distinct from `variant_sample_sizes` and the
+`originalVariantSampleSizes` recorded before any existing catalogue-N fill.
+Neither denominator establishes exact ancestry shares in the analyzed variants.
+`sample_overlap` records unknown or possible overlap from the prefix heuristic;
+this does not measure overlapping participants, independence, or the direction
+or magnitude of bias. Discuss directional mechanisms only conditionally with
+explicit assumptions and actual overlap evidence. F>10 is a diagnostic heuristic,
+not proof of instrument validity; skipped Egger/PRESSO remains skipped.
+
+A failed managed job may return top-level `artifacts` with `partial-research.json`,
+`partial-research.md` and bounded scientific CSV projections. Keep the original
+failed state and error code. Inspect only the returned public artifact paths;
+private diagnostics, runner logs and model responses are not deliverables. Use
+available primary numbers when explicitly marked available. With 0–2 candidate
+or retained variants, preserve observed source/selection/harmonized rows and
+state that unsupported downstream estimates were not computed. Candidate rows
+before clumping are not independently verified instruments. Missing modules are
+not negative findings, and an incomplete job is not a successful full analysis.
+
+Direction and outliers. `display.steiger.status` is `computed`,
+`not_computable` or `failed`; when the test was not computed, say that
+direction was not tested and why, from its `reason`. The test approximates each
+variant's r² from its p-value and sample size and treats both traits as
+quantitative; for a case-control outcome (`case_control_study` in the outcome
+metadata) say that this is the observed-scale approximation. `display.mr_presso`
+gives the global test, the variants the outlier test removed, the
+outlier-corrected estimate and the distortion test: report the corrected
+estimate beside the IVW estimate, or its `reason` when there is none. An
+`outlier_resolution` above 0.05 means the simulation could not resolve the
+outlier threshold for this many variants: say the outlier set is unstable.
+
+For paired local inputs with a declared-preclumped exposure, preserve the
+returned `analysis-data/<pair>/replay/` package in full: its complete manifest,
+exact input CSVs, options and seed, observed R/package versions, `run.R` and
+`analysis.R`. The original run uses that same entry and seed. In a clean copy,
+`Rscript --vanilla run.R` replays the local statistical analysis into `results/`
+with installed dependencies, without a model, JWT or network. Preserve the
+supplied clumping declaration; this does not independently verify LD selection.
+Remote and mixed-source runs do not deliver this replay package. Do not claim
+reproducible code delivery unless the complete package is in returned artifacts,
+or claim that the script regenerates the model-written manuscript.
+
+## Method priors
+
+The statistics are the engine's; the reading of them is yours, and two shipped
+skills carry the method priors for it — load them before you write the results:
+`statistical-analysis` (the estimand, assumptions and their diagnostics, effect
+sizes with intervals, multiplicity, missing data, sensitivity analyses) and
+`stats-integrity` (report the estimate and its uncertainty as the software
+produced it; no causal reading the design does not support). The independent
+review checks the report against the reporting checklist for this design and
+traces every stated result to the job's own output files, so a number typed from
+memory comes back as a finding. Write each result from the display value the
+engine record gives; rounding is checked, not forbidden.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.

@@ -1,0 +1,14 @@
+[
+  {
+    "workspacePath": "/workspace/task-plan.json",
+    "hostPath": "/tmp/evimed-integration-20261010/OpenScience/.r/users/integrationlocal/projects/default/workspace/task-plan.json",
+    "bytes": 3398,
+    "sha256": "3cde03abde026b49cb25e19ca4a538149f3ddbff809757b22c810c5c8e79d91d"
+  },
+  {
+    "workspacePath": "/workspace/.evimed-run/state.json",
+    "hostPath": "/tmp/evimed-integration-20261010/OpenScience/.r/users/integrationlocal/projects/default/workspace/.evimed-run/state.json",
+    "bytes": 699,
+    "sha256": "4171d7098ddecef247bfe68457c3ed604f28bd0beb69550f43f7ffabde83659f"
+  }
+]

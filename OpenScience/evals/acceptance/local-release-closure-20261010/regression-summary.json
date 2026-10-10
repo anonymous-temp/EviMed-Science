@@ -1,0 +1,283 @@
+{
+  "schemaVersion": 1,
+  "scope": "Local candidate. Full sweeps retain environment failures and skips; focused actual-prerequisite retests are separate evidence, not a fabricated second green full sweep.",
+  "baseCommit": "7dfd529e68a25587f216d1caa12da66356f3182f",
+  "closureSourceChangesUncommittedAtMeasurement": true,
+  "serverFull": {
+    "tests": 8822,
+    "pass": 6979,
+    "fail": 2,
+    "skipped": 1841,
+    "cancelled": 0,
+    "log": {
+      "path": "checks/server-full-current.log",
+      "bytes": 1057229,
+      "sha256": "d886c581b817f6e8462840066b6b00323b646008f75bc7ba45ffd611e9482ab3"
+    },
+    "failures": [
+      {
+        "test": "every occurrence of the pin is classified",
+        "cause": "New live scorecard kernel observation needed narrow provenance classification",
+        "closure": "Generated-focused 3/3 below"
+      },
+      {
+        "test": "the committed graphs are what the builder would produce today",
+        "cause": "Regenerate graphs after current source changes",
+        "closure": "Generated-focused 3/3 below"
+      }
+    ]
+  },
+  "focusedGeneratedChecks": {
+    "tests": 3,
+    "pass": 3,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "log": {
+      "path": "checks/generated-focused-current.log",
+      "bytes": 332,
+      "sha256": "98ef5d56026db5a7e3a53ca2282abf8ae37337459abfdecab9406c9cb3dc6289"
+    }
+  },
+  "postgresFull": {
+    "tests": 1797,
+    "pass": 1780,
+    "fail": 2,
+    "skipped": 15,
+    "cancelled": 0,
+    "files": 237,
+    "log": {
+      "path": "checks/product-full-current.log",
+      "bytes": 260438,
+      "sha256": "d36d46ee8ba8cbbec208b0acd510a1503a0baa631d3903cf5729da26b76e9895"
+    },
+    "rawSkipReasons": [
+      "﹣ real isolated runtime renders Chinese tables, figures, math and all three formats (0.807255ms) # Set OPEN_SCIENCE_DOCUMENT_RENDER_TEST_IMAGE to a renderer-enabled test runtime.",
+      "﹣ default controller composition independently validates actual ledger/grants/generation/proof and executes joined public documents (2.55326ms) # SKIP",
+      "﹣ signed native frames reach real isolated pages and logout physically joins their contexts (0.508182ms) # An explicit disposable Chromium executable is required; missing is not pass",
+      "﹣ actual isolated CDP contexts enforce cookie/tenant boundaries, bounded pixels and joined owner/frame cleanup (4.824438ms) # An explicit owned local Chromium executable is required; absence is not pass",
+      "﹣ actual Linux scoped builtin bytes duplicate via native private validation and pool1 durable history, without restoring authority (0.359061ms) # Isolated PG and actual native snapshot/validator image are required",
+      "﹣ duplicate row and idempotency pointer roll back together when durable receipt publication fails (0.083722ms) # Isolated PG and actual native snapshot/validator image are required",
+      "﹣ actual Linux UID1000 generation is read by UID10001 native provider only after immutable readable projection (0.1987ms) # A trusted existing local native SDK image is required.",
+      "﹣ one actual Chinese ZIP/native/private generation/readonly Docker/validator chain preserves canonical resources and depth16 (0.557531ms) # SKIP",
+      "﹣ actual isolated Docker native provider returns content and invocation with no host locator (0.408802ms) # Set EVIMED_SKILL_VALIDATION_TEST_IMAGE to an existing offline native SDK fixture.",
+      "﹣ actual pinned parser rejects malformed native YAML without exposing imported text (0.133582ms) # Set EVIMED_SKILL_VALIDATION_TEST_IMAGE to an existing offline native SDK fixture.",
+      "﹣ actual immutable package identity selects the expected personal native namespace (0.174247ms) # Set EVIMED_SKILL_VALIDATION_TEST_IMAGE to an existing offline native SDK fixture.",
+      "﹣ actual Docker deadline removes its labeled container before rejection (0.142218ms) # Set EVIMED_SKILL_VALIDATION_TEST_IMAGE to an existing offline native SDK fixture.",
+      "﹣ near-limit native JSON survives the actual Unix client data envelope without cancellation (0.216753ms) # Set EVIMED_SKILL_VALIDATION_TEST_IMAGE to an existing offline native SDK fixture.",
+      "﹣ actual Linux author UID1000 keeps originals private while native UID10001 reads only disposable projection and joined cleanup (0.300235ms) # An existing offline native SDK image is required.",
+      "﹣ real Docker exec writers and PostgreSQL backends stop before the fence acknowledges, and late admission stays refused (0.525604ms) # OPEN_SCIENCE_TEST_VCR_DOCKER_CONTEXT is not configured"
+    ],
+    "failureCause": "Two actual Cowork tests require an immutable image. Initial full sweep omitted it; an attempted old-image rerun failed after confirming that prior cleanup deleted that image. A full pinned rebuild then passed all 11 worker and 1 composition tests.",
+    "closure": "../local-integration-20261010/cowork-current.json"
+  },
+  "newActualPrerequisiteClosures": "../local-integration-20261010/runtime-closure.json",
+  "unchangedTestSourceHistoricalPrerequisiteProofs": [
+    {
+      "file": "managedBrowserHttp.integration.test.mjs",
+      "counts": {
+        "tests": 1,
+        "suites": 0,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/managed-browser-real.log",
+      "scope": "Explicit disposable Chromium; actual CDP, cookie and physical context cleanup. Controlled transport fixture, no production qualification.",
+      "historicalEvidenceReused": true,
+      "testSourceUnchanged": true,
+      "testSourceSha256": "aa474922a98c566cdcab66174119c1f39e2052e18fdadb38ee55bce7ea87e830"
+    },
+    {
+      "file": "managedBrowserService.integration.test.mjs",
+      "counts": {
+        "tests": 1,
+        "suites": 0,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/managed-browser-real.log",
+      "scope": "Explicit disposable Chromium; actual CDP, cookie and physical context cleanup. Controlled transport fixture, no production qualification.",
+      "historicalEvidenceReused": true,
+      "testSourceUnchanged": true,
+      "testSourceSha256": "12f6bf758b101175ebc9e3f653a6ad9ae50278672551f4102ba4e082d80968ed"
+    },
+    {
+      "file": "vcrPostgresCaptureFence.integration.test.mjs",
+      "counts": {
+        "tests": 1,
+        "suites": 0,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "vcr-engine/postgres-capture-fence.log",
+      "scope": "Actual private Docker PostgreSQL container and writer/backend fencing; unrelated activity preserved.",
+      "historicalEvidenceReused": true,
+      "testSourceUnchanged": true,
+      "testSourceSha256": "51c5636de5fa23e52e837d2197222ac7c9a6667b8c9d835e2aa44d99273c9ca4"
+    },
+    {
+      "file": "skillValidationController.integration.test.mjs",
+      "counts": {
+        "tests": 7,
+        "suites": 0,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/native-fixture-retest.log",
+      "scope": "Actual pinned native parser image on the matching default Docker socket, private Linux UID projections and controller lifecycle; no full DSH conversation qualification.",
+      "historicalEvidenceReused": true,
+      "testSourceUnchanged": true,
+      "testSourceSha256": "bb505c9660a409b456a26a0b056da4059f5d22d533dd1b02e8127d0d651e8de6"
+    },
+    {
+      "file": "personalSkillGeneration.integration.test.mjs",
+      "counts": {
+        "tests": 14,
+        "suites": 0,
+        "pass": 14,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/native-fixture-retest.log",
+      "scope": "Actual pinned native parser image on the matching default Docker socket, private Linux UID projections and controller lifecycle; no full DSH conversation qualification.",
+      "historicalEvidenceReused": true,
+      "testSourceUnchanged": true,
+      "testSourceSha256": "493cd8bd200066057ccf4df745b0309cded37d095278b6635a0f804a9111f0a8"
+    },
+    {
+      "file": "personalSkillUnicode.integration.test.mjs",
+      "counts": {
+        "tests": 1,
+        "suites": 0,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "evidence": "ui/native-fixture-retest.log",
+      "scope": "Actual pinned native parser image on the matching default Docker socket, private Linux UID projections and controller lifecycle; no full DSH conversation qualification.",
+      "historicalEvidenceReused": true,
+      "testSourceUnchanged": true,
+      "testSourceSha256": "5fcadb7b5789cfe154e4b732f6708cb1d8f1153f42fc425dfc3248f5d8367b88"
+    }
+  ],
+  "isolatedSchemaResetAppendix": [
+    {
+      "file": "postgresStore.integration.test.mjs",
+      "verdict": "passed",
+      "counts": {
+        "tests": 7,
+        "suites": 0,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0,
+        "durationMs": 8122.799671
+      },
+      "evidence": "postgres-store-final.log",
+      "execution": {
+        "file": "postgresStore.integration.test.mjs",
+        "exitCode": 0,
+        "database": "evimed_test_geo_review_20261010_pgstoreappendix_9363561d",
+        "evidence": "/tmp/evimed-integration-audit/postgres-store-final.log",
+        "droppedAfterExecution": true
+      },
+      "reasonPreviouslyExcluded": "This destructive schema-reset integration test was absent from the resumed manifest; no earlier durable pass found. Executed now against its own dedicated new database, then dropped only that database."
+    }
+  ],
+  "duplicateSummingAvoided": true,
+  "clinicalQualification": false,
+  "deploymentPerformed": false,
+  "serverAfterCiDeploymentFixes": {
+    "tests": 8828,
+    "pass": 6982,
+    "fail": 0,
+    "skipped": 1846,
+    "cancelled": 0,
+    "durationMs": 442548.029316,
+    "log": {
+      "path": "checks/server-after-ci-fixes.log",
+      "bytes": 1051312,
+      "sha256": "78841350bcf363f4a65dcf9a3a9b75175380e08e97a848a8b111f40adb3866e8"
+    },
+    "scope": "Full local server sweep after IUPHAR compose wiring, retained skill copy synchronization and clinical relation evidence correction. Later session-isolation changes require their own validation."
+  },
+  "remoteCiPriorFailures": {
+    "runId": 38023908409,
+    "productCommit": "64e4f8da85f525b32ef006215866c50b5fa94bbd",
+    "failures": [
+      "IUPHAR credential never reached the web container",
+      "Comprehensive drug evaluation retained skill copy omitted the design-classification correction",
+      "Environment completeness check detected the same missing IUPHAR passthrough"
+    ],
+    "fixes": [
+      "Added the optional control-plane-only compose environment entry and documented it",
+      "Synchronized the retained skill body without changing the known divergence threshold"
+    ],
+    "focusedRetest": {
+      "tests": 3,
+      "pass": 3,
+      "fail": 0,
+      "log": "checks/ci-deployment-fix.log"
+    },
+    "fullLocalRetest": "serverAfterCiDeploymentFixes"
+  },
+  "serverBeforeFinalFixtureBinding": {
+    "tests": 8831,
+    "pass": 6984,
+    "fail": 1,
+    "cancelled": 0,
+    "skipped": 1846,
+    "todo": 0,
+    "log": {
+      "path": "checks/server-final-scope.log",
+      "bytes": 1053121,
+      "sha256": "9b7cdc8ad38909f311932e4f9a821856d73bb7c682333a4301766e4bed6900f9"
+    },
+    "remainingFailure": "One runToolFailureVerdict synthetic shared projection lacked its actual run identity. The fixture now uses dispatch().id and all verdict assertions are unchanged."
+  },
+  "finalVerdictFixtureRetest": {
+    "tests": 17,
+    "pass": 17,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "log": {
+      "path": "checks/run-tool-verdict-final.log",
+      "bytes": 2572,
+      "sha256": "1c2b0b88e10ecf7d19fa58eae0a2773389073f585121694781063e784e4661c7"
+    }
+  },
+  "serverFinalFrozen": {
+    "tests": 8831,
+    "pass": 6985,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 1846,
+    "todo": 0,
+    "productCommit": "3f43524d2dac41646bbca00d0e4a528e7860c358",
+    "log": {
+      "path": "checks/server-final-frozen.log",
+      "bytes": 1051577,
+      "sha256": "f70269f95135d12c799267875a960a38c9511adba2d359d0802d61c1070a39ff"
+    },
+    "scope": "Complete local server sweep after final session identity and test fixture corrections. PostgreSQL/image prerequisite tests retain explicit skips and their separate actual-prerequisite records."
+  }
+}

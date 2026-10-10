@@ -1,0 +1,658 @@
+Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real method work and write requested artifacts using available tools. No external publication or patient data.
+
+<current-skill index="0">
+---
+name: evidence-appraisal
+description: Appraise a set of studies the researcher already holds — design, risk of bias, indirectness, imprecision per study — and roll them up into one certainty judgement per outcome.
+metadata:
+  evimed-agent: evidence-appraisal
+---
+
+# Evidence appraisal
+
+Use this skill when someone hands you studies and asks **how good they are**.
+The studies are the input. You are not being asked to find literature; you are
+being asked what the literature they already have is worth for the question they
+are asking it.
+
+If the request is "what does the evidence say about X", that is synthesis, not
+appraisal — it belongs to `clinical-evidence-synthesis`, which searches. The
+line between the two is whether the studies arrived with the request.
+
+Unless the user asks otherwise, work and write in Simplified Chinese. Keep study
+titles, journal names, registry numbers, instrument names, effect estimates and
+their units in the original form — a translated confidence interval is one
+nobody can check.
+
+---
+
+## The studies are given, and they stay given
+
+Every study handed to you appears in `appraisal-table.json`. All of them. A
+study that turns out to be weak is a row that says so; a study you could not
+appraise is a row with `appraised: false` and a `notAppraisedReason` giving what
+stopped it — no full text, retracted, wrong population, a conference abstract
+with no method section.
+
+**Never substitute.** Replacing a poor study with a better one you found is the
+single most damaging thing available here, because the researcher's next
+sentence is "so my nine papers support this" and three of them are no longer
+their papers. If the set is too weak to answer the question, that *is* the
+finding: say what is missing and what kind of study would supply it.
+
+Two rows that are the same trial reported twice is the other direction of the
+same error — it double-counts a single study into an apparent consistency.
+Check with `mcp__evimed__evidence_deduplicate` and, where a registry number is
+available, with `mcp__evimed__clinical_trial_search`; companion publications
+share one row and name both papers in the citation.
+
+## One row per study
+
+Every row carries an identifier a reader can resolve: `{type, value}` with type
+one of `doi`, `pmid`, `pmcid`, `nct`, `isrctn`, `url`. A URL is the last resort,
+for a report that genuinely has no other identifier.
+
+### Design, from a fixed list
+
+`systematic-review` · `randomized-controlled-trial` ·
+`non-randomized-interventional` · `prospective-cohort` · `retrospective-cohort`
+· `case-control` · `cross-sectional` · `case-series` · `case-report` ·
+`diagnostic-accuracy` · `modelling-study` · `guideline` · `other`
+
+It is a fixed word rather than a description because design is what every bias
+judgement below is read against, and "a large multicentre observational study
+with matched controls" is three designs' worth of ambiguity. Use `other` when
+none of them fits and say what it actually is in `designNote`.
+
+Take the design from the methods, never from what the paper calls itself.
+"随机" in a title with alternate-day allocation in the methods is not a
+randomized trial.
+
+### Three domains, each a rating and a reason
+
+Every appraised study is rated on **`riskOfBias`**, **`indirectness`** and
+**`imprecision`**. The other two GRADE domains are properties of a *set* of
+studies and cannot be assessed one row at a time; they appear in the roll-up.
+
+The three ratings live together under a `domains` object on the study, each
+as a `rating` and a `reason`:
+
+```json
+{
+  "id": "S1",
+  "design": "randomized-controlled-trial",
+  "domains": {
+    "riskOfBias":   { "rating": "low",     "reason": "中心随机、分配隐藏、终点委员会设盲" },
+    "indirectness": { "rating": "low",     "reason": "人群、干预、对照、结局四轴与问题一致" },
+    "imprecision":  { "rating": "serious", "reason": "区间跨越临床决策阈值" }
+  }
+}
+```
+
+Put them there, not at the top level of the study.
+
+Ratings: `low` · `moderate` · `serious` · `critical` · `unclear`
+
+- **`riskOfBias`** — where in *this study's conduct* a systematic error could
+  enter: allocation, blinding, attrition, outcome measurement, selective
+  reporting. Name the step. "质量较低" is not a risk-of-bias judgement; "开放标签
+  且主要结局为患者报告" is.
+- **`indirectness`** — the distance between what was studied and what is being
+  asked, on four axes: population, intervention, comparator, outcome. A surrogate
+  outcome standing in for the one that matters is the most common instance, and
+  the most commonly unrecorded.
+- **`imprecision`** — whether the interval is narrow enough to act on. Judge the
+  interval, not the p-value, and against the decision at stake: an interval that
+  spans "worth doing" and "not worth doing" is imprecise even when it excludes
+  the null.
+
+`unclear` is an honest answer and requires the same reason as any other —
+say what was not reported, not that you are unsure.
+
+**A rating with no reason cannot be disagreed with, which is the only thing an
+appraisal is for.** The reason is the deliverable; the word is its index.
+
+### If you used a real instrument, record it as itself
+
+Applying RoB 2, ROBINS-I, ROBINS-E, QUADAS-2, AMSTAR 2, AGREE II,
+Newcastle-Ottawa, Jadad or MINORS is a legitimate way to do this work. Where you
+did, put the instrument in `instrument` and **its own verbatim level** in
+`instrumentRating` — `some concerns`, `serious`, `7/9`, whatever the instrument
+says — alongside the rating above.
+
+Do not convert between systems, in either direction. RoB 2's `some concerns` is
+not ROBINS-I's `moderate`, and mapping one onto the other invents a
+correspondence their authors did not define. Naming an instrument is a promise
+that you applied it; if you did not apply it, do not name it.
+
+## The roll-up: the ladder is arithmetic
+
+One body per outcome. Each names the study ids it rolls up, and lands on one of
+`high` · `moderate` · `low` · `very-low`.
+
+It gets there by counting:
+
+1. **`startingCertainty`** — `high` for a body of randomized trials, `low` for a
+   body of observational studies. That is the whole rule. If a randomized body
+   deserves less, take the step in the domain that earns it, so the reason is on
+   the record instead of buried in where you chose to start.
+2. **`downgrades`** — each names a domain from `riskOfBias`, `inconsistency`,
+   `indirectness`, `imprecision`, `publicationBias`, with `steps` and a reason.
+   `inconsistency` and `publicationBias` are the two you can only see here:
+   effects pointing in different directions with no explanation, and a set of
+   small positive studies with no small negative ones.
+3. **`upgrades`** — only from an observational start, and only from
+   `largeEffect`, `doseResponse`, `plausibleConfoundingReducesEffect`.
+4. `certainty` = start − downgrade steps + upgrade steps, floored at `very-low`
+   and capped at `high`.
+
+**`steps: 0` is a real answer**, and a useful one: a concern you saw, considered
+and did not act on. It is not the same as no concern, and recording it is how
+the next reader knows you looked.
+
+The certainty must equal what your own steps produce. When it does not, one of
+the two is wrong — and a reader checking your table finds it in one subtraction.
+
+### `whatWouldChange`
+
+Every body says what would move it: a named trial reporting, an individual-data
+reanalysis, a registry linkage. A certainty judgement that nothing could change
+is not a judgement about evidence.
+
+## What this is not
+
+- **Not a certified GRADE assessment**, and not a certified run of any
+  instrument. It uses GRADE's domains and its four-rung ladder because they are
+  the clearest available way to write this down. Say so where the audience might
+  assume otherwise.
+- **Not a recommendation.** You appraise the certainty of evidence. Dosing,
+  substitution, who should take what — none of it belongs in an appraisal, at
+  any certainty level.
+- **Not a re-analysis.** If a number in a paper looks wrong, say which number
+  and why it looks wrong. Do not recompute the study.
+
+## The files
+
+- `appraisal-table.json` — the structured appraisal: `question`, `studies[]`,
+  `bodies[]`. Everything else is a rendering of it, so this is the one that has
+  to be right.
+- `appraisal-table.csv` — one row per study, study id in the first column.
+  This is the copy that gets pasted into a supplementary appendix, so a study
+  missing here is a study that was never delivered.
+- `appraisal-table.md` — the readable appraisal: the question, what the set
+  contains, the per-study judgements in prose, then the certainty per outcome
+  with its reasoning. Someone who reads only this file should be able to say why
+  each body landed where it did.
+- `citation-ledger.csv` — header row plus one row per study, carrying the
+  identifier from the table.
+- `delivery-summary.md` — one page for whoever commissioned the appraisal:
+  how many studies were appraised and which outcomes, one line per body with
+  its certainty, and every assumption you made where the brief was silent.
+
+All five are required, at exactly these names, inside this deliverable's
+`deliverables/<id>/` directory. The manifest checks for them by name before it
+reads any of them: an appraisal written into a differently named file — or into
+a `clinical-evidence-report.md`, which belongs to another capability — is an
+appraisal that was never delivered, however good it is. This capability does
+not write a clinical evidence report; it writes the table.
+
+### Registers do not mix
+
+`appraisal-table.md` is what a reader sees. Anything about *how the work went* —
+what you revised, which full text you could not get, what you would do
+differently — goes in `revision-notes.md`. That file exists so the appraisal can
+be held to a register the notes are not; it is an outlet, not a trap, and
+nothing in it is scanned for tone.
+
+Do not write tool names, gateway names, internal ids or first-person retrieval
+narration into the appraisal. "我检索后发现…" is a diary entry; the reader needs
+the judgement and the citation.
+
+---
+
+## Before delivering: two fixed steps
+
+Both run on the finished package, in this order, every time. They are steps of
+this capability, not options the run weighs — a pass that happens only when the
+model remembers it is a pass that happens on the easy runs and not the hard ones.
+
+1. **`traceability-review`** — every citation resolves, every study id in the
+   table appears in the CSV and the ledger, and every certainty equals its own
+   arithmetic. Repair findings before the next step: polishing the prose around
+   a certainty that does not follow only makes the error read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index, rating word and certainty level
+   byte-identical. It is the last thing that touches the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory — revision notes, replies to a rejection, and process description all
+live there, and the appraisal itself carries none of them.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.
+
+## Then submit
+
+```
+evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
+```
+
+It answers with the verdict, in place. A first submission that comes back with
+issues is the normal case, not a failure: fix everything listed as 必修, submit
+again, repeat until it answers `ok`. The rules it applies are the same ones the
+server applies afterwards.
+
+The advisory issues are the ones to read closely here, because they are about
+the parts of an appraisal a reader can check without knowing the field: a
+malformed identifier, a rating with no reason, a study appraised and then left
+out of every body, a certainty that does not equal its own steps. They do not
+decide the outcome. Shipping with one still standing is choosing not to defend
+the arithmetic, which is the first thing a methodologist will redo.
+
+Do not read the gate's source to work out what will pass. A table written to
+satisfy a checker rather than a reader is the failure this arrangement exists to
+prevent, and it is visible in the output.
+
+## What this capability does not do
+
+- It does not search for studies, extend the set, or drop one from it.
+- It does not pool effects. If the question needs a pooled estimate, that is
+  `meta-analysis`.
+- It does not decide whether the evidence is sufficient to act on. It says how
+  certain it is, and who has to decide that is not this run.
+
+</current-skill>
+<current-skill index="1">
+---
+name: reporting-guidelines
+description: Complete the reporting checklist of the one study a deliverable reports or designs — every item of its reporting guideline, and where the deliverable reports it — as a journal asks its authors to submit. Applies when the plan declared the deliverable's study type and that type has a guideline.
+---
+
+# Reporting checklist
+
+A journal asks the authors of a trial for the completed CONSORT checklist, of a
+prediction model for TRIPOD+AI, of a systematic review for PRISMA: every item,
+and where it is reported. A deliverable carries the same thing when its plan
+declared the study type and that type has a guideline — `reporting-checklist.md`,
+in the deliverable's own directory. The delegation message (or the plan's own
+answer) names the guideline and its item table.
+
+## The item tables
+
+The guidelines' own published checklists, item numbers and wording as printed,
+one file each in `checklists/` beside this skill:
+
+| Study type | Guideline | Table |
+| --- | --- | --- |
+| rct | CONSORT 2025 | `checklists/consort-2025.md` |
+| prediction-model | TRIPOD+AI | `checklists/tripod-ai.md` |
+| systematic-review | PRISMA 2020 | `checklists/prisma-2020.md` |
+| mendelian-randomization | STROBE-MR | `checklists/strobe-mr.md` |
+
+Copy the whole table into `reporting-checklist.md`, under a first line naming
+the guideline and its citation, and fill in 报告位置 for every row. Do not
+translate, merge, renumber or drop a row: an item a reader cannot find by its
+number is one they cannot check.
+
+## Filling in 报告位置
+
+- **Reported** — the heading the item is reported under, as it reads in the
+  deliverable (资料与方法 › 随机化); where the package has several documents,
+  which one as well (研究方案 › 样本量). Precise enough to be found without
+  searching.
+- **Not reported** — 「未报告：原因」, and the reason is the useful part:
+  - one section reports only its own part — 「未报告：属于结果部分」;
+  - a protocol or a proposal reports a design, not results — 「未报告：方案阶段，结果待试验完成后报告」;
+  - the item does not apply to this study — 「未报告：不适用（单中心试验）」;
+  - the sources do not have it — 「未报告：资料未提供，需补充……」.
+
+## What the checklist may not do
+
+- **Claim what the text does not say.** An item marked as reported has to be
+  there, at the heading given. The independent reviewer reads the checklist
+  against the text, and a row that points at nothing is a finding against the
+  package.
+- **Stand in for the text.** A row does not report an item. If the item belongs
+  in this deliverable, write it into the deliverable and point the row at it.
+- **Carry process.** No tool names, file paths or retrieval narrative — the same
+  rule as the report itself.
+
+Say in `delivery-summary.md`, in one line, which guideline the checklist
+follows.
+
+</current-skill>
+<current-skill index="2">
+---
+name: manuscript-support
+description: Draft or revise one section of a research manuscript against a fixed source set, keeping every claim bound to the claim ledger, every citation resolvable in the citation ledger, and every note about the writing itself out of the section.
+metadata:
+  evimed-agent: manuscript-support
+---
+
+# Manuscript support
+
+Use this when someone has their sources — their own results, an earlier run's
+evidence package, a folder of PDFs — and needs **one section** of the manuscript
+written or rewritten: 引言, 资料与方法, 结果, 讨论, 局限性, 结论.
+
+Unless the user asks otherwise, write in Simplified Chinese. Keep source titles,
+identifiers, statistical symbols, units, gene and drug names, and the reporting
+guideline's own item names in their original form — a translated item name is
+one a reviewer cannot look up.
+
+---
+
+## One section. The sources are already chosen
+
+This is not a small evidence review. The retrieval happened before you: the
+researcher supplied the sources, or an earlier run produced them. **Your job is
+that the finished prose still points at them.**
+
+That has three consequences worth stating before you write a sentence:
+
+- **You do not go looking for a better source to make a paragraph work.** If the
+  section needs a claim the sources do not carry, that is a gap, and a gap is
+  written as a gap. The search tools are here for one thing — resolving a
+  citation the researcher gave you incompletely (a title with no DOI, a PMID
+  with no year). Not for filling an argument.
+- **You write one section.** If the request names none, ask which one. 「写一下
+  讨论」 and 「把方法学补完」 produce different documents, and a section nobody
+  asked for is thrown away whole.
+- **The other sections are context, not your output.** Read them if they were
+  supplied, so the section you write does not contradict them or repeat them.
+  Do not rewrite them.
+
+## What each section is for, and what it must not do
+
+The commonest failure is not bad prose. It is content in the wrong section,
+which no amount of rewriting fixes because the reader is looking for it
+somewhere else.
+
+| Section | Carries | Never carries |
+|---|---|---|
+| 引言 | The problem, what is known, the specific gap, the objective — narrowing to it | Results. A summary of your own findings |
+| 资料与方法 | Design, population, definitions, variables, statistics, ethics — reproducible from the text alone | Any number that is a result; justification of the finding |
+| 结果 | What was observed, in the order the methods promised, with the estimates and their uncertainty | Interpretation, comparison with other studies, 「提示」 |
+| 讨论 | What the findings mean, against what is already known, with the mechanisms and the alternatives | New results. Restating 结果 paragraph by paragraph |
+| 局限性 | What could have produced the finding other than the effect, and in which direction it would bias | Defences that dissolve the limitation you just named |
+| 结论 | What the study supports, at the strength it supports it | Anything the results did not measure |
+
+Write to the reporting guideline the study needs (STROBE, CONSORT, PRISMA,
+TRIPOD…) when one applies, and map it item by item (see *The reporting
+guideline is the section's checklist*) — a guideline invoked and never mapped
+is a citation, not a method.
+
+## The gap stays a gap
+
+A section that needs something the sources do not have is the ordinary case, not
+a failure state. What you must not do is dissolve it: 「有待进一步研究」 costs
+nothing to write and tells the reader nothing.
+
+Write it as a gap the next study could close — the design, the population, the
+comparator, the outcome, the order of magnitude of sample. And **absence of
+evidence is never a finding**: 未检索到 supporting studies is insufficient
+evidence to judge, never evidence of no effect, so it cannot carry 无效 or
+不推荐.
+
+## The two ledgers
+
+They are what make the section checkable after it has been rewritten three
+times. Both are deliverables, and the contract reads them.
+
+### section-claims.json
+
+Same claim shape as the evidence matrix everything else in this platform
+writes, so the verifier can be pointed straight at it:
+
+```json
+{
+  "schemaVersion": 1,
+  "section": "discussion",
+  "claims": [
+    { "claimId": "CLM-001", "claimType": "direct", "claim": "……",
+      "referenceNumber": 3, "sourceTitle": "……", "sourceUrl": "https://doi.org/……",
+      "supportQuote": "verbatim from the source, not paraphrased",
+      "applicability": "……", "uncertainty": "……" },
+    { "claimId": "CLM-007", "claimType": "derived", "claim": "……",
+      "derivedFrom": ["CLM-001", "CLM-004"],
+      "method": "the arithmetic or the bound that takes those inputs to this result",
+      "assumptions": "……", "sensitivity": "……",
+      "applicability": "……", "uncertainty": "……" }
+  ]
+}
+```
+
+Three claim types, and the difference is who is speaking:
+
+- **`direct`** — one source says it. A verbatim `supportQuote` bonds the
+  sentence to that source.
+- **`synthesized`** — you concluded it across sources. Name at least two, quote
+  each, and say how confident you are.
+- **`derived`** — *you* computed or estimated it. It has no quote to give, so it
+  carries its inputs (`derivedFrom`), its `method`, its `assumptions` and its
+  `sensitivity` instead.
+
+Mark each claim in the section with a hidden marker on the sentence it belongs
+to: `<!-- claim:CLM-001 -->`. That marker is what survives every later rewrite
+and lets a reviewer ask "where did this sentence come from" a year from now.
+
+**A derived result is labelled 〔推导〕 in the section itself, every time it
+appears.** Not once at the top, not in a footnote — on the sentence. A reader
+who takes an estimate for a measurement has been misled by the document, and
+this is the only thing standing between them and that.
+
+### citation-ledger.csv
+
+Header naming `claimId`, `referenceNumber`, `supportQuote` (any order, extra
+columns welcome — `sourceTitle`, `sourceUrl`, `identifier` are all useful):
+
+```csv
+claimId,referenceNumber,supportQuote,sourceTitle,sourceUrl
+CLM-001,3,"verbatim passage","……","https://doi.org/……"
+```
+
+**Every `[n]` in the section must be a `referenceNumber` in this file**, and
+every reference number here should be cited somewhere in the section. A derived
+claim is not a row — it cites no source of its own; its inputs are the rows, and
+they are what a reader traces.
+
+**Write multiple citations as `[1,2]` or `[1，2]`, never as a range `[1-2]`.**
+The gate that decides whether this package ships reads comma-separated lists
+only; a range reads to it as no citation at all, and it then reports those
+references as listed but never cited. Ranges are an ordinary convention and one
+day the shared rule may take them, but until it does, writing one costs the run
+a repair cycle for a formatting choice.
+
+### Reference format: say which standard, then hold to it
+
+Two are in scope, and which one applies is the journal's decision, not yours:
+
+- **Vancouver / ICMJE** for the international journals — authors inverted, up to
+  six then `et al.`, journal title abbreviated to its NLM form, year;volume(issue):pages.
+- **GB/T 7714** for Chinese journals — the national standard, and the one whose
+  detail is most often lost: every entry carries its document-type marker
+  (`[J]` journal, `[M]` monograph, `[S]` standard, `[D]` dissertation, `[EB/OL]`
+  online), and Chinese-language entries take `等` where the English take `et al.`
+
+Name the standard you used in `delivery-summary.md`. A reference list in no
+declared format cannot be checked by anyone, and the copy-editor who finds out
+at proof stage rewrites all of it by hand.
+
+### The reporting guideline is the section's checklist
+
+If the brief names one — CONSORT for a trial, STROBE for an observational study,
+PRISMA for a systematic review, SPIRIT for a protocol, and the rest of the
+EQUATOR set — then it says what this section must contain, item by item.
+
+When the plan declared the study's type and that type has a guideline — CONSORT
+2025, TRIPOD+AI, PRISMA 2020 or STROBE-MR — the delegation message names it and
+its item table, and the deliverable carries the completed checklist:
+`reporting-checklist.md`, every item of the guideline with the heading of this
+section that reports it, and 「未报告：属于<哪一部分>」 for the items other
+sections carry. Fill it in by the `reporting-guidelines` method. For a guideline
+no item table ships for, say in `delivery-summary.md` which of its items this
+section is responsible for and where each is answered.
+
+Either way, do not claim the checklist is satisfied as a whole: you wrote one
+section, and the claim belongs to whoever assembles the manuscript.
+
+## Backstage prose has a destination, so the section may refuse it
+
+The section is the front of the house. Three genres belong elsewhere, and each
+has one place to be:
+
+| Genre | Where it goes |
+|---|---|
+| What you changed and why, what you cut, which source you rejected and on what grounds | `revision-notes.md` |
+| Your own review findings on the draft, and any reply to a reviewer's comment | `revision-notes.md` |
+| What was delivered, what is still open, which guideline items this section covers | `delivery-summary.md`; item by item in `reporting-checklist.md` when the plan declared the study type |
+| How the work was produced — tools called, gateways, files fetched, artifact paths, 「我先检索了……」 | Nowhere in the deliverable. The retrieval record is the citation ledger |
+
+`revision-notes.md` is a required output, not a courtesy. It is the thing that
+entitles the section to carry none of this: a prohibition with nowhere to put
+the prohibited thing is one every run quietly works around by leaving the note
+in the section where nobody asked for it.
+
+The section also never mentions the manuscript as an object — 「本节旨在回应审稿
+人第 2 条意见」, 「本文修改后删去了……」, 「以下内容供参考」. Say the scientific
+thing plainly, or say it in the notes.
+
+## Numbers are a sweep, not a replacement
+
+Every number in the section is a rendered fact: it came from a result table, a
+source, or a derivation you recorded. It was never typed from memory.
+
+So **changing one number is a sweep, not an edit.** Before you declare it done:
+
+1. Find *every* occurrence — the abstract line, the 结果 sentence, the table
+   cell, the 讨论 paragraph that compares it with somebody else's, the figure
+   caption.
+2. Find every **dependent** claim: a percentage computed from it, a difference,
+   a 「约为对照组的两倍」, an ordering ("the largest of the three"). Each of those
+   is a derived claim and each has to be re-derived, not adjusted by eye.
+3. Update `section-claims.json` and `citation-ledger.csv` to match.
+4. Record the sweep in `revision-notes.md`: which number, from what to what, and
+   every place it reached.
+
+A number changed in one place and left standing in another is the single
+hardest error for a reviewer to catch and the easiest for a reader to find.
+
+## Revising a draft you were given
+
+When `existingDraft` is present, you are editing, not regenerating.
+
+**Edit in place with the edit tool.** Do not rewrite the file with the write
+tool: a whole-file regeneration reconstructs the document from what you still
+hold in context, and measured across this project's repairs, every whole-file
+rewrite lost content — one shed 1,863 characters and the next 4,125.
+
+Snapshot before you start (`cp manuscript-section.md manuscript-section.pre-edit.md`),
+and delete the snapshot once the verification below is clean — it is not a
+deliverable. That filename is fixed and the contract checks it: shipped, it
+arrives as a second copy of the section that a reader cannot tell from the real
+one, and you will be told so rather than left to remember.
+
+---
+
+## Before delivering: two fixed steps
+
+Both run on the finished section, in this order, every time. They are steps of
+this capability, not options you weigh — a pass that happens only when you
+remember it is a pass that happens on the easy runs and not the hard ones.
+
+1. **`traceability-review`** — every `[n]` resolves to a ledger row, every claim
+   marker resolves to `section-claims.json`, every number in the prose has a
+   source in the artifacts, and every `supportQuote` is verbatim in the source
+   it names. Repair what it finds before the next step.
+
+2. **`manuscript-humanize`** — register cleanup over the prose, and the last
+   thing that touches the document. Load it and follow it; do not re-implement
+   what it says. Its whole contract is that **quotations, numbers, citation
+   indices, claim markers, 〔推导〕 marks and headings come out byte-identical**,
+   so the section that passed still matches its sources afterwards.
+
+   Read the section with fresh eyes before editing: **the reviewer is never the
+   writer.** Read the whole document first — a pass that rewrites paragraph by
+   paragraph produces uniform paragraphs, which is the defect it was there to
+   remove. Then prove only prose moved:
+
+```bash
+python "manuscript-humanize/scripts/verify_preserved.py" \
+  --before manuscript-section.pre-edit.md \
+  --after manuscript-section.md \
+  --matrix section-claims.json
+```
+
+   A non-empty report means an edit broke a quotation, a numeral, a citation
+   index, a claim marker, `〔推导〕`, or a heading. Fix it and rerun.
+
+Then write what changed and why to `revision-notes.md`.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.
+
+## Then submit
+
+```
+evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
+```
+
+It answers with the verdict, in place. A first submission that comes back with
+issues is the normal case: fix everything listed as 必修, submit again, repeat
+until `ok`. The rules it applies are the same ones the server applies afterwards.
+
+Its advisory findings are about the bindings a reader cannot reconstruct for
+themselves — a citation with no ledger row, a claim marker pointing at nothing,
+a derived result that reads as a measurement, a revision note left standing in
+the section. They do not decide the outcome. Shipping with one still open is
+choosing to hand the reviewer the sentence you could not account for.
+
+## What this capability does not do
+
+- **It does not assemble a manuscript.** One section, one deliverable. Four
+  sections are four runs, and they stay consistent because each reads the
+  others as context.
+- **It does not do the evidence review.** A question with no source set behind
+  it belongs to `clinical-evidence-synthesis`, and the section is written from
+  what that produced.
+- **It does not decide the study.** Design, analysis and their defence come from
+  the researcher; where the draft asserts something the sources do not support,
+  say so in `revision-notes.md` rather than writing around it.
+
+</current-skill>
+TASK:
+Bounded method verification with fabricated nonclinical teaching studies, explicitly label all outputs synthetic. Do not claim literature search or a full capability package. Two source excerpts are fixed inputs: S1, identifier url https://example.org/teaching-study-1, "Participants were allocated alternately by day. Outcome assessors knew allocation. At 8 weeks, 24/40 versus 20/40 participants improved. No prespecified protocol was provided." S2, identifier url https://example.org/teaching-study-2, "A computer-generated sequence assigned 60 participants equally. Allocation concealment was not described. Outcome assessors were blinded. At 8 weeks the mean difference was 1.2 points (95% CI -0.5 to 2.9). Attrition was 12/60 without reasons." Question concerns adult population and 8-week outcomes; no population details supplied. For evidence-appraisal create skill-closure/appraisal/appraisal.json with exactly S1/S2 rows, design, bias/indirectness/imprecision ratings and excerpt-supported reasons; S1 must not be called randomized based on alternate-day allocation. For reporting-guidelines create skill-closure/appraisal/checklist.json with bounded CONSORT checks for sequence, concealment, blinding, attrition, prespecification, classify reported/missing and preserve source excerpts, no invented compliance. For manuscript-support create skill-closure/appraisal/limitations.txt, a short source-fixed paragraph naming S1/S2, uncertainty and inability to draw practice conclusions, preserving 95% CI -0.5 to 2.9 exactly. Use tools to save all three and run a verification script that asserts two rows, non-randomized S1, concealment missing, original interval retained. Do not fetch substitute studies. This task tests supplied-source appraisal, checklist mapping and grounded writing only.

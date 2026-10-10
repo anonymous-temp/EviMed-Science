@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "scope": "Local deterministic VCR foundation acceptance; no production deployment or production tests",
+  "status": "complete",
+  "sourceRevisionAtRun": "7dfd529e68a25587f216d1caa12da66356f3182f",
+  "sourceExecution": {
+    "currentCheckoutHandlersAndTests": true,
+    "imageCodeUsed": false,
+    "sourceManifestSha256": "c8dddef8e6500919ef762ff88ec41b177df466595c79716df6387f333de0a1e2",
+    "sourceFilesRecorded": 80,
+    "sourceFilesChangedDuringRun": []
+  },
+  "environment": {
+    "rVersion": "4.3.3",
+    "runtimePackagesPinnedAndVerified": 62,
+    "crosscheckPackagesPinnedAndVerified": 96,
+    "totalPackagesPinnedAndVerified": 158,
+    "library": "/tmp/openmed-r-library",
+    "cpuAffinity": [
+      0,
+      1
+    ],
+    "testCores": 2,
+    "packageLockHash": "56edc6432ad43b12fcef2e44938bdb111ae8889b2532b298aac2ebbb3317c692",
+    "runtimeLockSha256": "caa9be87d79e938d63a02a9aebecb09f77e95d82c3bdb4e90200bda6520bf814",
+    "crosscheckLockSha256": "0ebc34e56069ef9f42960a5f70ba3e799900c3801bba3af95b15975a84fffb9a"
+  },
+  "fullUnfilteredRun": {
+    "attempted": 182,
+    "passed": 182,
+    "failed": 0,
+    "skipped": 0,
+    "complete": true,
+    "summedCaseSeconds": 2431.284,
+    "receiptSha256": "de60809e31e77ec29ec9ba15004a138b92a3788dadc107b15501797af737ce10",
+    "logSha256": "f3d8ef52ca427463aab6824522505475889e7f9f5f6f5321dfb19ebc60524b29",
+    "wholeRunCheck": "check-numeric-log: PASSED 182/182, 182 declared, none skipped"
+  },
+  "methodCoverage": {
+    "declared": 32,
+    "actuallyExecuted": 32,
+    "withNumericalAcceptanceCase": 32,
+    "structuralOnly": [],
+    "coverageCase": "32/32 declared methods went through vcr_run_job in this run, 32/32 in a case that asserts numbers"
+  },
+  "serviceTests": {
+    "passed": 54,
+    "failed": 0,
+    "skipped": 0,
+    "pythonVersion": "3.12.3",
+    "fastapi": "0.115.6",
+    "uvicorn": "0.34.0",
+    "pyarrow": "25.0.0",
+    "healthStatus": 200
+  },
+  "qualificationChanges": "Installed the exact independent reference package closure and supplied current source paths. No numerical algorithm, case, tolerance or acceptance criterion was changed.",
+  "historicalIncompleteEvidencePreserved": "evals/acceptance/local-integration-20261010/numeric-summary.json",
+  "privateEvidenceRoot": "/tmp/evimed-release-closure-20261010/numeric"
+}

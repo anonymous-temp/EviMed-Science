@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T04:12:11.012932+00:00",
+  "scope": "Actual current local immutable Cowork overlay build and isolated PostgreSQL/Docker tests; no production changes",
+  "sourceCommit": "2ae5cf755c4294a1e988eebf3b12dd062425d84c",
+  "sourceArchiveSHA256": "20e4b808fe3c97f5de3546fee200e22cc6639ffa47eef497c5c855e3cc26046c",
+  "observations": {
+    "imageId": "sha256:93fd7df37391744492b8fd9b15e75ac286e1596430f0ced780129d49dd209df2",
+    "integrity": "sha256:f5c552280dfe212044e845d49cce419afdb1dc7059142a1778b386bb0d650ee0",
+    "closureExpectedSHA": "0028f7c6c35d4c22a69dfa80a08f500d5656e278f0a3b7ecad66ddd5094fef06",
+    "sourceCommit": "2ae5cf755c4294a1e988eebf3b12dd062425d84c",
+    "qualified": false
+  },
+  "dependencyClosure": {
+    "packages": 184,
+    "files": 7314,
+    "contentDigest": "sha256:f5c552280dfe212044e845d49cce419afdb1dc7059142a1778b386bb0d650ee0",
+    "reproducesEarlierActualClosure": true,
+    "admittedLockSha256": "5dc0baba3530c82cddb375ae5e5a3f6a3e355efbd572a903b9854816dbf9974c",
+    "forbiddenPackagesAbsent": [
+      "buffers",
+      "binary"
+    ],
+    "unknownLicenses": 0
+  },
+  "tests": [
+    {
+      "file": "extensionPreparationWorker.integration.test.mjs",
+      "pass": 11,
+      "fail": 0,
+      "skip": 0,
+      "isolatedDatabaseDropped": true
+    },
+    {
+      "file": "extensionControllerComposition.integration.test.mjs",
+      "pass": 1,
+      "fail": 0,
+      "skip": 0,
+      "isolatedDatabaseDropped": true
+    }
+  ],
+  "cleanup": {
+    "ownedBuildVolumeAndBuilderReaders": "joined",
+    "ownNetworkAndThreeExactCommentRulesRemoved": true,
+    "globalIpForwardUnchanged": 1,
+    "sharedDockerChainsModified": false,
+    "imageRetainedForReview": true
+  },
+  "privateEvidence": [
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/immutable-observations.json",
+      "bytes": 356,
+      "sha256": "c796037bab5696a4808fee1abbe5d093fe949977b858930a0d3677a9a6df59d2"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/postgres-final.json",
+      "bytes": 676,
+      "sha256": "7ceaafeceeb771a010dafd172ed0eb4c709c9373377f3e05b0be7e1e856b2859"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/postgres-final.log",
+      "bytes": 1389,
+      "sha256": "12386ee3e173a48cd43cd8f4d74d731d673e0011f011f441070f6db055a5b9d6"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/composition-final.json",
+      "bytes": 680,
+      "sha256": "e4b2cc0b504f29f3791e66f1186865ea9d9e0eab112e0754f551890e6bc81d30"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/composition-final.log",
+      "bytes": 268,
+      "sha256": "a3c58b5117406056c70181944c92afff3987ecba4b6b5c9289752daf0a7aa09d"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/operator-wrapper.json",
+      "bytes": 341,
+      "sha256": "2eec7789101432a2141a4e020157f2c69de51a71b8a834a4aa890d8556a409a0"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/build/cleanup.txt",
+      "bytes": 7,
+      "sha256": "65968943a426fad3cd56b9100d8c84d25c15763d9d11012b37dca895f6ff804e"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/build/context/dependency-closure.json",
+      "bytes": 1897316,
+      "sha256": "0028f7c6c35d4c22a69dfa80a08f500d5656e278f0a3b7ecad66ddd5094fef06"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/build/context/overlay-attestation.json",
+      "bytes": 99570,
+      "sha256": "75afbe06d3694b6dcb333108968a4103a1401f73c279092cd8b89aac19cc6c16"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/checks/cowork-rebuild-20261010/build/image-identity.json",
+      "bytes": 1703,
+      "sha256": "9ac2ebc5bce1ff46e37ac0f334add7783147e55a8fc30fecbf26f4cdd317c381"
+    }
+  ],
+  "claimBoundary": "A preparation artifact is not an installation-wide qualification grant; qualification remains per-user/project/installation revision/epoch. Prior failed runs and historical proofs were preserved."
+}

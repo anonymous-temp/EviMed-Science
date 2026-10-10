@@ -1,0 +1,1499 @@
+{
+  "schemaVersion": 1,
+  "lowerBound": "2026-10-10T04:33:22.361663+00:00",
+  "upperBound": "2026-10-10T04:35:31.370337+00:00",
+  "lowerBoundBasis": "Retained pre-dispatch cooldown-context file modification time",
+  "scope": "Actual control-plane public-source fetches during this interval; concurrent local module work may contribute requests. No per-audit correlation identifier was injected.",
+  "observations": [
+    {
+      "at": "2026-10-10T04:33:22.456Z",
+      "host": "www.cbioportal.org",
+      "path": "/api/studies",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:23.032Z",
+      "host": "www.cbioportal.org",
+      "path": "/api/studies",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:23.310Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/ols4/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:24.556Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/ols4/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:27.696Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:28.365Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:28.969Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:29.580Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:30.187Z",
+      "host": "api.crossref.org",
+      "path": "/works",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:30.871Z",
+      "host": "api.crossref.org",
+      "path": "/works",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:31.158Z",
+      "host": "dailymed.nlm.nih.gov",
+      "path": "/dailymed/services/v2/spls.json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:32.015Z",
+      "host": "dailymed.nlm.nih.gov",
+      "path": "/dailymed/services/v2/spls.json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:32.261Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:32.601Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:32.941Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:33.569Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:33.851Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/ena/portal/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:35.020Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/ena/portal/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:35.486Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/europepmc/webservices/rest/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:35.918Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/europepmc/webservices/rest/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:36.423Z",
+      "host": "api.gdc.cancer.gov",
+      "path": "/projects",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:37.304Z",
+      "host": "api.gdc.cancer.gov",
+      "path": "/projects",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:37.544Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/ols4/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:38.456Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/ols4/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:38.958Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/interpro/api/entry/all",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:39.093Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:39.245Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/interpro/api/entry/all",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:39.433Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:39.528Z",
+      "host": "jaspar.elixir.no",
+      "path": "/api/v1/matrix/",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:49.775Z",
+      "host": "jaspar.elixir.no",
+      "path": "/api/v1/matrix/",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:56.876Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:57.500Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:58.099Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:58.440Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:58.658Z",
+      "host": "api.monarchinitiative.org",
+      "path": "/v3/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:59.291Z",
+      "host": "api.monarchinitiative.org",
+      "path": "/v3/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:33:59.524Z",
+      "host": "mygene.info",
+      "path": "/v3/query",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:00.294Z",
+      "host": "mygene.info",
+      "path": "/v3/query",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:00.476Z",
+      "host": "myvariant.info",
+      "path": "/v1/query",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:01.175Z",
+      "host": "myvariant.info",
+      "path": "/v1/query",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:01.354Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:02.015Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:02.617Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:03.270Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:03.869Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:04.473Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:04.814Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:05.153Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 429
+    },
+    {
+      "at": "2026-10-10T04:34:06.363Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:06.985Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:07.347Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:08.112Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:08.452Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:09.056Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:09.397Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:09.996Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:10.333Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:10.546Z",
+      "host": "api.openalex.org",
+      "path": "/works",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:11.614Z",
+      "host": "api.openalex.org",
+      "path": "/works",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:12.154Z",
+      "host": "www.evimed.com",
+      "path": "/api-evimed/medicine-api/ai-api/review/api/instruction",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:13.770Z",
+      "host": "www.evimed.com",
+      "path": "/api-evimed/medicine-api/ai-api/review/api/instruction",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:15.680Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:16.245Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:16.944Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:18.098Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:18.784Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/pride/ws/archive/v2/search/projects",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:20.438Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/pride/ws/archive/v2/search/projects",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:20.855Z",
+      "host": "pubchem.ncbi.nlm.nih.gov",
+      "path": "/rest/pug/compound/name/aspirin/property/Title,MolecularFormula,MolecularWeight,CanonicalSMILES,InChIKey/JSON",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:21.585Z",
+      "host": "pubchem.ncbi.nlm.nih.gov",
+      "path": "/rest/pug/compound/name/metformin/property/Title,MolecularFormula,MolecularWeight,CanonicalSMILES,InChIKey/JSON",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:22.322Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:23.315Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:24.003Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:24.400Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:25.052Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/QuickGO/services/ontology/go/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:26.242Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/QuickGO/services/ontology/go/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:26.565Z",
+      "host": "reactome.org",
+      "path": "/ContentService/search/query",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:27.549Z",
+      "host": "reactome.org",
+      "path": "/ContentService/search/query",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:27.889Z",
+      "host": "rxnav.nlm.nih.gov",
+      "path": "/REST/drugs.json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:28.908Z",
+      "host": "rxnav.nlm.nih.gov",
+      "path": "/REST/drugs.json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:29.109Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:29.869Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:30.487Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esearch.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:31.412Z",
+      "host": "eutils.ncbi.nlm.nih.gov",
+      "path": "/entrez/eutils/esummary.fcgi",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:32.051Z",
+      "host": "string-db.org",
+      "path": "/api/json/resolve",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:32.497Z",
+      "host": "string-db.org",
+      "path": "/api/json/resolve",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:32.791Z",
+      "host": "rest.uniprot.org",
+      "path": "/uniprotkb/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:34.825Z",
+      "host": "rest.uniprot.org",
+      "path": "/uniprotkb/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:35.196Z",
+      "host": "ghoapi.azureedge.net",
+      "path": "/api/Indicator",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 502
+    },
+    {
+      "at": "2026-10-10T04:34:36.017Z",
+      "host": "ghoapi.azureedge.net",
+      "path": "/api/Indicator",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:36.053Z",
+      "host": "ghoapi.azureedge.net",
+      "path": "/api/Indicator",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 502
+    },
+    {
+      "at": "2026-10-10T04:34:36.852Z",
+      "host": "ghoapi.azureedge.net",
+      "path": "/api/Indicator",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:36.959Z",
+      "host": "www.evimed.com",
+      "path": "/api-evimed/medicine-api/ai-api/review/api/clinical-trial",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:38.070Z",
+      "host": "www.evimed.com",
+      "path": "/api-evimed/medicine-api/ai-api/review/api/clinical-trial",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:38.873Z",
+      "host": "www.isrctn.com",
+      "path": "/api/query/format/default",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:39.576Z",
+      "host": "www.isrctn.com",
+      "path": "/api/query/format/default",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:40.206Z",
+      "host": "api.biorxiv.org",
+      "path": "/details/biorxiv/10.64898/2026.06.26.734908/na/json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:40.839Z",
+      "host": "api.biorxiv.org",
+      "path": "/details/biorxiv/10.64898/2026.01.24.701325/na/json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:41.053Z",
+      "host": "api.biorxiv.org",
+      "path": "/details/medrxiv/10.1101/2025.08.29.25334726/na/json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:41.279Z",
+      "host": "api.biorxiv.org",
+      "path": "/details/medrxiv/10.1101/2025.10.19.25337876/na/json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:41.497Z",
+      "host": "bindingdb.org",
+      "path": "/rest/getLigandsByUniprots",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:44.622Z",
+      "host": "bindingdb.org",
+      "path": "/rest/getLigandsByUniprots",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:51.369Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/chembl/api/data/molecule/search.json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:52.640Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/chembl/api/data/molecule/search.json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:53.024Z",
+      "host": "api.clinpgx.org",
+      "path": "/v1/data/chemical",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:53.526Z",
+      "host": "api.clinpgx.org",
+      "path": "/v1/data/chemical",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:53.672Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/gwas/rest/api/v2/studies",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:54.562Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/gwas/rest/api/v2/studies",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:55.512Z",
+      "host": "alphafold.ebi.ac.uk",
+      "path": "/api/prediction/P38398",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:55.622Z",
+      "host": "alphafold.ebi.ac.uk",
+      "path": "/api/prediction/P04637",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:55.738Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/emdb/api/search/title:ribosome",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:57.068Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/emdb/api/search/title:hemoglobin",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:57.500Z",
+      "host": "www.encodeproject.org",
+      "path": "/search/",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:58.018Z",
+      "host": "www.encodeproject.org",
+      "path": "/search/",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:58.202Z",
+      "host": "rest.ensembl.org",
+      "path": "/lookup/symbol/homo_sapiens/BRCA1",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:59.370Z",
+      "host": "rest.ensembl.org",
+      "path": "/lookup/symbol/homo_sapiens/TP53",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:59.681Z",
+      "host": "gtexportal.org",
+      "path": "/api/v2/reference/gene",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:34:59.909Z",
+      "host": "gtexportal.org",
+      "path": "/api/v2/reference/gene",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:00.116Z",
+      "host": "www.proteinatlas.org",
+      "path": "/api/search_download.php",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:01.182Z",
+      "host": "www.proteinatlas.org",
+      "path": "/api/search_download.php",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:01.567Z",
+      "host": "alliancemine.alliancegenome.org",
+      "path": "/alliancemine/service/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:02.283Z",
+      "host": "alliancemine.alliancegenome.org",
+      "path": "/alliancemine/service/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:02.492Z",
+      "host": "www.metabolomicsworkbench.org",
+      "path": "/rest/study/study_id/ST000001/summary",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:03.829Z",
+      "host": "www.metabolomicsworkbench.org",
+      "path": "/rest/study/study_id/ST000002/summary",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:03.980Z",
+      "host": "data.rcsb.org",
+      "path": "/rest/v1/core/entry/4HHB",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:04.479Z",
+      "host": "data.rcsb.org",
+      "path": "/rest/v1/core/entry/1TUP",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:04.612Z",
+      "host": "api.genome.ucsc.edu",
+      "path": "/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:06.689Z",
+      "host": "api.genome.ucsc.edu",
+      "path": "/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:09.510Z",
+      "host": "sparql.wikipathways.org",
+      "path": "/sparql",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 502
+    },
+    {
+      "at": "2026-10-10T04:35:10.420Z",
+      "host": "www.wikipathways.org",
+      "path": "/json/getPathwayInfo.json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:11.201Z",
+      "host": "sparql.wikipathways.org",
+      "path": "/sparql",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 502
+    },
+    {
+      "at": "2026-10-10T04:35:11.498Z",
+      "host": "www.wikipathways.org",
+      "path": "/json/getPathwayInfo.json",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:11.784Z",
+      "host": "api.platform.opentargets.org",
+      "path": "/api/v4/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:12.727Z",
+      "host": "api.platform.opentargets.org",
+      "path": "/api/v4/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:13.173Z",
+      "host": "dgidb.org",
+      "path": "/api/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:14.081Z",
+      "host": "dgidb.org",
+      "path": "/api/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:14.292Z",
+      "host": "gnomad.broadinstitute.org",
+      "path": "/api",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:14.545Z",
+      "host": "gnomad.broadinstitute.org",
+      "path": "/api",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:14.761Z",
+      "host": "openneuro.org",
+      "path": "/crn/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:15.050Z",
+      "host": "openneuro.org",
+      "path": "/crn/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:15.221Z",
+      "host": "civicdb.org",
+      "path": "/api/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:15.778Z",
+      "host": "civicdb.org",
+      "path": "/api/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:15.950Z",
+      "host": "service.azul.data.humancellatlas.org",
+      "path": "/index/projects",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:16.852Z",
+      "host": "service.azul.data.humancellatlas.org",
+      "path": "/index/projects",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:17.395Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/ena/portal/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:18.527Z",
+      "host": "www.ebi.ac.uk",
+      "path": "/ena/portal/api/search",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:18.835Z",
+      "host": "maayanlab.cloud",
+      "path": "/sigpy/meta/quicksearch",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:23.800Z",
+      "host": "maayanlab.cloud",
+      "path": "/sigpy/meta/quicksearch",
+      "method": "GET",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:27.825Z",
+      "host": "rummageo.com",
+      "path": "/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    },
+    {
+      "at": "2026-10-10T04:35:30.535Z",
+      "host": "rummageo.com",
+      "path": "/graphql",
+      "method": "POST",
+      "https": true,
+      "allowlisted": true,
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "httpStatus": 200
+    }
+  ]
+}

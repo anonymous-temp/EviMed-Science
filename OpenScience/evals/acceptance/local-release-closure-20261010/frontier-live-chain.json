@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-10T05:16:53.123740+00:00",
+  "status": "qualified-local-live-nonempty-chain",
+  "scope": "Actual isolated local plugin protected fetch \u2192 authenticated plugin HTTP seq stream \u2192 production FrontierIngest/Pipeline/Editor/UsageLedger \u2192 actual FrontierService keyword search. This does not qualify the current browser UI or native MCP frontier_search path.",
+  "environment": {
+    "pluginPort": 19086,
+    "crawlEnabled": false,
+    "databaseIsolation": [
+      "evimed_test_kp_live20261010",
+      "evimed_test_frontier_live20261010"
+    ],
+    "reusedExactPinnedVenv": true,
+    "newDependencyDownloads": 0,
+    "newImages": 0,
+    "automaticCrawlSources": 0,
+    "manualPolledSources": 1,
+    "operatorContact": "No contact email was configured; the genuine plugin User-Agent retained its existing no-mailto behavior, explicitly warned in service logs."
+  },
+  "source": {
+    "id": "europepmc-preprint-rct",
+    "owner": "EMBL-EBI Europe PMC",
+    "officialRequest": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20(ABSTRACT:%22randomised%20controlled%20trial%22%20OR%20ABSTRACT:%22randomized%20controlled%20trial%22))%20AND%20FIRST_IDATE:%5B2026-10-03%20TO%202026-10-10%5D&format=json&resultType=core&pageSize=100&cursorMark=*",
+    "httpStatus": 200,
+    "rawBodySha256": "f7ee7d2d007d4318d5c0d0591a137840d603e0da45e81d15494a3a20152a6f05",
+    "poll": {
+      "source_id": "europepmc-preprint-rct",
+      "outcome": "ok",
+      "detail": null,
+      "requests": 1,
+      "seen": 25,
+      "new": 24,
+      "backfilled": 1,
+      "revised": 0,
+      "rejected": {},
+      "notes": {},
+      "duration_ms": 1723
+    }
+  },
+  "platform": {
+    "actualClasses": [
+      "KnowledgePluginClient",
+      "FrontierIngest",
+      "FrontierPipeline",
+      "FrontierEditor",
+      "UsageLedger",
+      "FrontierService"
+    ],
+    "boundedStreamPageLimit": 1,
+    "seq": "1",
+    "pluginEntryId": "europepmc-preprint-rct:3fe462914d96c979df23948cee6ac994",
+    "doi": "10.21203/rs.3.rs-10714129/v1",
+    "url": "https://doi.org/10.21203/rs.3.rs-10714129/v1",
+    "publicationDate": "2026-10-05T00:00:00.000Z",
+    "receivedAt": "2026-10-10T05:13:39.901Z",
+    "visibleAt": "2026-10-10T05:13:39.906Z",
+    "state": "published",
+    "verification": "repaired",
+    "score": 40,
+    "selected": false,
+    "flags": [
+      "preprint"
+    ],
+    "searchHttpStatus": 200,
+    "searchMode": "keyword",
+    "searchReturnedItems": 1,
+    "samePublishedItemReturned": true,
+    "scheduleOnlyOverride": "Existing frontierOffpeak=false in private isolated acceptance config executes editing immediately. No verification/selection threshold, date, content or gate changed.",
+    "enrichmentBoundary": "Plugin real text worker fetched a 2373-character Europe PMC abstract and /text reports available. The already-published platform item retains its original preserved-summary edit; the entry remains held/text-pending until its ordinary scheduled retry. No retry timestamp was altered."
+  },
+  "model": {
+    "observedModels": [
+      "deepseek-flash"
+    ],
+    "realResponses": 3,
+    "steps": [
+      "screen",
+      "edit",
+      "one existing validation repair"
+    ],
+    "settledRequests": 3,
+    "actualCostCny": "0.00275424",
+    "requestResponseHashes": [
+      {
+        "prefix": "model-1",
+        "requestSha256": "b33c7fade000837a68fb42da02ce6e7f7228171eca8bd4f105f8a9de07ddd21f",
+        "responseSha256": "9db2c5a746fccba3fff4779cc44e3700fc058b02dabe2ba93a975049a38854ce",
+        "retainedFromInitialExecution": true,
+        "responseModel": "deepseek-flash"
+      },
+      {
+        "prefix": "model-2",
+        "requestSha256": "f03f289f9b0f97ce1aa4b5a98dc4aabb7e67586bd30d1f01a3c49db352871344",
+        "responseSha256": "693a9f908f939d0d2ce16c974ba06d43fddac5c14dd622fdcde6c15d2743e8d8",
+        "retainedFromInitialExecution": true,
+        "responseModel": "deepseek-flash"
+      },
+      {
+        "prefix": "model-3",
+        "requestSha256": "4c0605f17acfdbac8e5c2f76c86bcb77943bb86be1c74139a66c764303ec395e",
+        "responseSha256": "6e5ca9b2bf02a009967b22df4035389c3ae453dde470e164983243edf540dc85",
+        "retainedFromInitialExecution": true,
+        "responseModel": "deepseek-flash"
+      }
+    ]
+  },
+  "privateHarnessFailuresPreserved": [
+    "platform.log: first readback used nonexistent title_original column after genuine pipeline had finished",
+    "platform-final.log: next readback used nonexistent link column; both were corrected only in private evidence script, with no product source change or repeated model calls"
+  ],
+  "artifacts": {
+    "database-snapshot.json": "097e0e5111d5dbd24006d3bb81dc9f88c6521e0945c961ccb77f4d7efa3975b8",
+    "fetch-1.body.gz": "ff0e1c6d97d67056d7da347bb8c5d55b37159b958765e3620203ac0b218957ec",
+    "model-1-request.json": "b33c7fade000837a68fb42da02ce6e7f7228171eca8bd4f105f8a9de07ddd21f",
+    "model-1-response.json": "9db2c5a746fccba3fff4779cc44e3700fc058b02dabe2ba93a975049a38854ce",
+    "model-2-request.json": "f03f289f9b0f97ce1aa4b5a98dc4aabb7e67586bd30d1f01a3c49db352871344",
+    "model-2-response.json": "693a9f908f939d0d2ce16c974ba06d43fddac5c14dd622fdcde6c15d2743e8d8",
+    "model-3-request.json": "4c0605f17acfdbac8e5c2f76c86bcb77943bb86be1c74139a66c764303ec395e",
+    "model-3-response.json": "6e5ca9b2bf02a009967b22df4035389c3ae453dde470e164983243edf540dc85",
+    "plugin-first-stream.json": "02cfaf56fdb4ceada46c03f83ea17e0a236f60bf901c1a9357834c8abdfcadca",
+    "plugin-health.json": "d1f685c46ffe098e966553045a5825ed23b07e9c5bab776f554b26f5ca45855b",
+    "plugin-http-evidence.json": "d75d9098bd26e0c4f5415e0a4b77b2b60ccacbf5b11d31481a7b2977acebe5c6",
+    "plugin-manifest.json": "11d1b8ef57e527f9251981b297f54f208057aee5612d083a3066df5fdd2ada22",
+    "plugin-text.json": "beb1b924ddecbac73213268b6c198a44d699cf39b075973ea01d80948fcccf69",
+    "poll-report.json": "2f2d133b063d1c216a2c398588fd4dbad17b74ba836deecebd0a6f144fe25338",
+    "receipt.json": "aaed68a8f59f79896305c59cc85427f92cae2de7205c773066d5612a493c8145",
+    "text-fetch-1.body.gz": "74b12f6302f2e7478e19d62aec49dd33fa535f8d7fb91840e5ff24d31c431965",
+    "text-worker-report.json": "6d132233d4ae0db16871483157c7dd7e87fc42a04b713fdae92bca80040cd7af",
+    "shutdown.json": "c37fe9e8cbd3c96f3383dc953d881cd4cdb7fb2d007be83be77bfd25d0cc7cda"
+  },
+  "sourceHashes": {
+    "knowledgePluginClient.mjs": "748b279cea6550e380ec7bed0f00cc17152ad09610636ca13386940be33ce568",
+    "frontierIngest.mjs": "5d6f9bbffeecf8f399e1aa05ec0a2b47ad169b0d92a07fd349f45091b54209d8",
+    "frontierPipeline.mjs": "f3d5f72965b425e72901c668e3eb2cf6274ce63759340f049fecde89ea1c5738",
+    "frontierEditor.mjs": "1782a965baf4b3773f71da946349db3cb082922c72f572de4e72fb6c7952039f",
+    "frontierService.mjs": "ed70f98ea6bb04e366eae4930721ecd45adcb5fdd21816ce2db4967ad4e94285"
+  },
+  "privateEvidenceRoot": "/tmp/evimed-release-closure-20261010/frontier-live",
+  "lifecycle": "Owned plugin service is stopped after evidence collection; Node and Python pools were closed; independent databases retained for review.",
+  "shutdown": {
+    "observedAt": "2026-10-10T05:17:40.387495+00:00",
+    "ownedPluginPort19086Stopped": true,
+    "independentDatabasesActiveConnections": 0,
+    "nodePythonPoolsClosed": true,
+    "databasesRetained": true,
+    "productionConfigurationChanged": false,
+    "sharedPGAndR19059Preserved": true
+  }
+}

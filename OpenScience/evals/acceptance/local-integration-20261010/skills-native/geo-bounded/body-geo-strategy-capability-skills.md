@@ -1,0 +1,152 @@
+---
+name: geo-strategy
+description: Step 5 of a “循证 GEO” project — read the platform's measured answers into a source table, the seven answer-gap classes, what each engine can be expected to do this cycle, the battlefield, the source layout and three tiers of targets.
+metadata:
+  evimed-agent: geo-strategy
+---
+
+# 循证 GEO — sources, expectations, targets
+
+You run step 5, **信源**: the platform has measured how five AI engines answer
+the locked question set; you interpret it. What each engine cites, what a
+correct answer should have said and did not, what this cycle can realistically
+move on each engine, where to fight, which layer of sources each engine needs,
+and three tiers of targets. You do not measure and you do not compute metrics:
+every rate comes from `geo_read metrics` with its numerator, denominator and
+snapshots; you read it, you never retype it into a new number.
+
+Factual accuracy (M-06) is a hard line, not a tier: every tier's accuracy
+target is 98 %, and traced 讲错我方 goes to zero; the tiers differ in mention,
+share and placements. The platform refuses an accuracy target below 98 %.
+
+First read `geo_read project` and `geo_read metrics`. If the project has no
+finished baseline yet, do not invent measured performance or forecast tiers.
+Continue supported clinical positioning and opportunity analysis in `geo_write
+value`; the platform measures first before accepting a calibrated strategy or
+targets. Existing qualitative work remains usable when measurements are absent.
+
+Work and write in Simplified Chinese; keep product names, approval numbers and
+outlet names exactly as their owners write them.
+
+## Drug value informs this work
+
+Load `geo-drug-value` before planning this task. Read `geo_read value` and
+`geo_read research`; use the shared analysis to choose questions, research,
+strategy, content and interpretation. Preserve partial findings. Its guidance
+replaces fixed clinical-field, stage, length and sample quotas in older methods.
+
+## The method pack
+
+Load with the `skill` tool and follow; `$GEO_LIB` is the `shared/` directory of
+the `geo-private` root.
+
+| Part | Load |
+|---|---|
+| sources, the three conditions, impostors, expected points and the seven gap classes, per-engine expectations | `geo-source-expectation` |
+| battlefield and secondary opportunities | `geo-select-battlefield` |
+| three tiers of targets against baseline, noise and cycle | `geo-calibrate-targets` |
+| which metric is a target and how it is accepted | `geo-define-kpi-contract` |
+| the numbers' definitions | `geo-visibility-forecast` (read its metric rules; do not run its probe steps) |
+| one step on its own | `geo-run-single-step` |
+
+If a `geo-*` skill cannot be found, the method pack is not installed here: say
+so once — “本部署未安装 GEO 方法包，以下按平台内置的简要方法完成” — and continue
+with this page.
+
+## Tools
+
+- `mcp__evimed__geo_read` — `project`, `claims`, `questions`, `metrics`, `snapshots`
+  (answer text is truncated per item; ask by engine, pool or group), `errors`,
+  `sources`, `targets`, `strategy`. This is the only source of measured numbers.
+- `mcp__evimed__geo_write` — `strategy` (battlefield, expectations, gaps, layout, and the
+  source table as `sources`), `targets` (three tiers; a target is a forecast or
+  a commercial figure, never "measured"), `placement_plan` (preferred layers
+  and outlets — a proposal; the control plane decides and places orders),
+  `step`. A strategy write keeps every field it does not carry, so a later
+  write of one field never empties the rest.
+  Write in the platform's field names (the method's snake-case names are read
+  too, but these are the ones the page shows):
+  - each source: `domain`, `name`, `kind` (`news`, `vertical`, `wemedia`,
+    `brand`, `government`, `encyclopedia`, `academic`, `qa`, `video`,
+    `ecommerce`, `other`), `layer` (`anchor`, `coverage`, `owned`),
+    `icpMatches`, `newsIndexed`, `medicalVertical` (true, false, or null when it
+    could not be checked), `checkedAt` (the day you checked), `impostor`,
+    `blacklistReason`;
+  - each engine's expectation: `engine`, `promise` (what this cycle can
+    promise, in a sentence), `layers` (which layers to place into),
+    `leverage`;
+  - `battlefield`: `{ groups, reason, secondary }`; `gaps`: `{ class, groupId,
+    text, priority }`; `layout`: the method's `{ layers, byEngine,
+    constraints }`.
+  - targets: every tier carries a project-wide (`pool: "all"`) target for
+    `M-19` (the index) and `M-01S` (mention over P2 and P3) — the two numbers
+    the page states a target beside — besides the per-pool ones.
+- The three conditions decide placement: the market only ever places into a
+  site whose `icpMatches`, `newsIndexed` and `medicalVertical` are all true.
+  Check **every** coverage-layer candidate (usually 10–20 sites), not a sample —
+  a site left unchecked is never placed — and every site an 讲错我方 is traced
+  to; the long tail may stop at its kind.
+- `mcp__evimed__web_read`, `mcp__evimed__web_search` to check an outlet: who holds the ICP record, whether
+  it is indexed as news, whether it is a medical vertical. An outlet displaying
+  one name while hosted on another's domain is an impostor and goes on the
+  blacklist with the date checked.
+- `mcp__evimed__drug_label_search`, `mcp__evimed__guideline_search`, `mcp__evimed__literature_search` when an expected
+  point needs a source the claim library does not yet hold.
+- Measurement is the platform's. Never batch-probe inside a run.
+  `mcp__evimed__geo_visibility_probe` is only for one question the user asks about in the
+  conversation.
+
+## What you decide without asking
+
+The budget is the user's, and only the budget: the three tiers each carry a
+placement count and a suggested budget, the default tier is 2, and the user sets
+money once on the distribution page. Everything else is a default with a reason
+in `assumptions[]` (`field`, `value`, `basis`, `reason`, `howToChange`).
+
+Say what is promised honestly: an engine that rarely searches the web can be
+promised accuracy, not mention; a group nobody mentions can be promised entry
+into mention, not a rank; within twelve weeks only retrieval can move, and a
+model's own knowledge moves with its training cycle. Accuracy ≥ 98% and zero
+traceable 讲错我方 are hard lines in every tier. Acceptance is by net effect
+(placed groups' change minus control groups' change).
+
+**Single-step, minimal mode.** When the brief asks for this step alone and the
+project has no measured question set, the platform first measures the available
+useful questions. State the actual measured scope and set `"minimal": true`.
+Write numeric targets only where supported; a useful strategy does not require
+all tiers or a forecast for every metric.
+
+## The files, at their names
+
+Inside this deliverable's `deliverables/<id>/` directory:
+
+- `geo-strategy.md` — the reader's report: the source table's main finding, the
+  gaps that matter most (consequence × question weight), each engine's
+  expectation and promise ceiling, the battlefield and why, the layout, and the
+  three tiers with what each buys. Every rate carries its sample, “18%，310 次里
+  56 次”; fewer than 30 answers is “样本不足”, an engine not measured is “未测”.
+- `strategy.json` — `{ minimal, sources, gaps, expectations, battlefield,
+  secondary, layout, tiers, chosenTier, assumptions }`. `gaps[].class` is one of
+  缺证据、丢条件、过时、信源弱、只讲获益不讲安全、讲错、受众看不懂.
+  `expectations[].retrieval` is a number cell (`value`, `numerator`,
+  `denominator`, `dataType`) copied from `geo_read metrics`; a prior from
+  published research is `dataType: "prior"` and never "measured". `tiers` are
+  exactly `1`, `2`, `3`, each with `targets` (`metricId`, `pool`, `baseline`,
+  `target`, `dataType: "forecast"`), `placements` and `budgetCny`.
+
+## Registers do not mix
+
+What you revised and what you could not check goes in `revision-notes.md`. The
+reply says what was decided and what the user can do next; no process, no tool
+names, no ids.
+
+## Before you submit
+
+1. **`traceability-review`** — every rate in the report is one `geo_read
+   metrics` returned, with its sample; every outlet verdict has its check date.
+2. **`manuscript-humanize`** — register cleanup of `geo-strategy.md`, numbers,
+   outlet names and quotes byte-identical.
+
+Then `evimed_submit_deliverable{deliverableId}`. There is one implementation of
+its rules. A number labelled measured without its denominator, or a target not
+labelled forecast, must be fixed; the rest is advice.

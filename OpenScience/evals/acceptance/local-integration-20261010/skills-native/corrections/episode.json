@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 2,
+  "episodeId": "corrections-local-run-002",
+  "scope": "bounded-local-verification, corrective re-run",
+  "agenda": {
+    "objective": "count a frozen ledger's outcomes with the denominator kept explicit",
+    "authorizedAction": "inspect the frozen local table once",
+    "authorizedInspectSteps": 1,
+    "stopCondition": "stop when the single authorized inspect step is done"
+  },
+  "budget": {
+    "authorizedInspectSteps": 1,
+    "inspectStepsExecuted": 1,
+    "remainingInspectSteps": 0,
+    "exhausted": true,
+    "whatCountedAsTheStep": "reading frozen.csv once and counting from it",
+    "whatDidNotCountAsAStep": "writing this record from that step's own output is the record of the step, not a second look at the data"
+  },
+  "execution": [
+    {
+      "step": 1,
+      "action": "inspect the frozen local table",
+      "status": "completed",
+      "howRun": "the local inspection script in this folder, executed in the workspace",
+      "command": "python3 inspect_frozen.py frozen.csv > inspection-result.json",
+      "input": {
+        "file": "frozen.csv",
+        "sha256": "c64e8192a90a366af24d8146810084ad8e7eee2cb1f606ff5ea5573d619551b6",
+        "bytes": 41,
+        "header": [
+          "record_id",
+          "outcome"
+        ]
+      },
+      "outputFile": "inspection-result.json",
+      "outputSha256": "838741f292232c628d2fabe7937a90c21b27f70aa6dc7a0ad3299f577ff895ec",
+      "counts": {
+        "denominator": 6,
+        "known": 5,
+        "missing": 1,
+        "zero": 2,
+        "one": 3,
+        "other_recorded_values": 0
+      },
+      "countsReconcile": true,
+      "rowAccount": [
+        {
+          "record_id": "1",
+          "outcome": "1",
+          "state": "1"
+        },
+        {
+          "record_id": "2",
+          "outcome": "0",
+          "state": "zero"
+        },
+        {
+          "record_id": "3",
+          "outcome": "1",
+          "state": "1"
+        },
+        {
+          "record_id": "4",
+          "outcome": "",
+          "state": "missing"
+        },
+        {
+          "record_id": "5",
+          "outcome": "0",
+          "state": "zero"
+        },
+        {
+          "record_id": "6",
+          "outcome": "1",
+          "state": "1"
+        }
+      ],
+      "statement": "The denominator is the number of rows read. A row whose outcome field is empty is counted as missing and is not counted as a zero."
+    }
+  ],
+  "fourAccounting": {
+    "denominator": 6,
+    "known": 5,
+    "missing": 1,
+    "zero": 2,
+    "recordedOnes": 3,
+    "otherRecordedValues": 0,
+    "reconciles": true,
+    "ruleApplied": "A row is in the denominator because it was read. A row whose outcome field is empty is missing and is not a zero. A recorded zero is a value, so the ledger's single missing outcome and its two zeros are three different things and stay three different things.",
+    "whyItMatters": "Folding the missing outcome into the zero count would report five zeros out of six, and every rate computed from that would be wrong in a way that looks like a finding rather than a gap."
+  },
+  "authorization": {
+    "externalAccess": false,
+    "externalAccessAttempted": false,
+    "durableServiceWrite": false,
+    "durableServiceWriteAttempted": false,
+    "networkCalls": 0,
+    "patientData": false,
+    "publication": false,
+    "detail": "This episode read one local file and wrote its own local artifacts. It made no external access of any kind and wrote nothing durable outside this folder: no service record, no registry, no shared state."
+  },
+  "stoppingReason": "Budget exhausted: one inspect step was authorized and that step is complete. No further inspect step was attempted, and none is pending.",
+  "openItems": [],
+  "openItemsReason": "Nothing is left open from this episode. External replication was neither authorized nor needed to count a local file, so no such item is carried as unresolved.",
+  "whatIsNotClaimed": [
+    "no causal, clinical, efficacy or safety statement of any kind",
+    "no claim about where the ledger came from; it is local teaching material",
+    "no external validation, replication or comparison with any outside source",
+    "no repair, imputation, aggregation or rewriting of the ledger"
+  ],
+  "correctionOfEarlierRun": {
+    "earlierArtifact": "skill-closure/method-learning/episode.json",
+    "preservedUntouched": true,
+    "defectsInTheEarlierRecord": [
+      "It reported the denominator and the known count, but never separated the recorded zeros from the known outcomes, so a reader could not check five known outcomes against the ledger's actual values and could not see that two of them were zeros.",
+      "It closed with an item labelled unresolved for external replication, which reads as an open task even though nothing external was authorized and nothing external is needed to count a local file.",
+      "It carried a block of claims marked unverified inside a record whose whole purpose was to show one executed step, mixing what was observed with what was proposed."
+    ],
+    "whatThisRecordDoesInstead": [
+      "Every count here comes from the executed step's own output file, including the two zeros and the three ones, so the accounting closes against the ledger: 5 known + 1 missing = 6 rows read.",
+      "There is no unresolved item: the episode ends because its budget is spent, not because something is pending.",
+      "Observation and proposal are kept apart; this record contains no claims about the world beyond the file it read."
+    ]
+  },
+  "limits": [
+    "Bounded local verification on invented teaching material: this is not a platform delivery, not an acceptance test and not a compliance statement.",
+    "The ledger holds six rows. A count over six invented rows supports no rate, no comparison and no inference beyond the file.",
+    "The two zeros are counts of a recorded value, not evidence about any person or any treatment.",
+    "This record states what the step produced; it does not certify that the ledger's values are correct."
+  ]
+}

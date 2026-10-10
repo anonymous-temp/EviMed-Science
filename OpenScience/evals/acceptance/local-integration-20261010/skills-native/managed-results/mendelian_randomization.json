@@ -1,0 +1,490 @@
+{
+ "tool": "mendelian_randomization",
+ "task": "Interpretation of one already-admitted managed MR job; no new job was started and none was restarted.",
+ "jobId": "mr-20261010033028-8ebf5b45e76c",
+ "status": "succeeded (the job's own result file records status succeeded; see the no-queue-record limitation)",
+ "statusSource": "No live status call was made, because this session exposes no status interface for the specialist that ran this job. The state recorded below comes from the preserved job record, checked against the files on disk: every declared artifact was re-hashed and re-counted. This job directory also carries no queue record, so there is no queue-level status field at all. The state above comes from the job's own result module block, from the analysis and interpretation status in its run record, and from the artifact hashes.",
+ "terminalEvidence": {
+  "resultJsonStatus": "succeeded",
+  "degraded": true,
+  "analysisPairs": 1,
+  "instruments": 79,
+  "analysisStatus": "completed",
+  "interpretationStatus": "succeeded",
+  "recordTimestamp": "2026-10-10T03:33:03.485864",
+  "declaredOutputs": 37,
+  "outputsMissing": 0,
+  "queueRecordPresent": false
+ },
+ "method": {
+  "request": {
+   "exposure": "body mass index",
+   "outcome": "coronary heart disease",
+   "outputLanguage": "en",
+   "analysisDirection": "forward",
+   "exposureSource": {
+    "type": "local_file",
+    "path": "inputs/exposure.csv",
+    "columnMapping": {
+     "snp": "SNP",
+     "beta": "beta",
+     "se": "se",
+     "effect_allele": "effect_allele",
+     "other_allele": "other_allele",
+     "eaf": "eaf",
+     "pval": "pval"
+    },
+    "sampleSize": 339224,
+    "instrumentsPreclumped": true,
+    "clumpingProvenance": "MRCIEU/TwoSampleMR commit c14776b89056e88422d9dff92b517b870a1339a4 official vignette cache bmi_exp_dat, created by extract_instruments(ieu-a-2). Supplied instrument set; original clumping parameters are not serialized and LD independence was not rechecked."
+   },
+   "outcomeSource": {
+    "type": "local_file",
+    "path": "inputs/outcome.csv",
+    "columnMapping": {
+     "snp": "SNP",
+     "beta": "beta",
+     "se": "se",
+     "effect_allele": "effect_allele",
+     "other_allele": "other_allele",
+     "eaf": "eaf",
+     "pval": "pval"
+    },
+    "sampleSize": 184305,
+    "instrumentsPreclumped": false,
+    "clumpingProvenance": "The official chd_out_dat cache contains outcome associations for the BMI SNP set from extract_outcome_data(..., ieu-a-7), not independently selected CHD instruments."
+   }
+  },
+  "engineModules": {
+   "instrumentSelection": {
+    "status": "ok"
+   },
+   "primaryEstimate": {
+    "status": "ok"
+   },
+   "interpretation": {
+    "status": "ok"
+   },
+   "diagnosticPlots": {
+    "status": "ok",
+    "checks": [
+     {
+      "scatter_plot": {
+       "status": "ok",
+       "pages": 1,
+       "images": 1
+      },
+      "forest_plot": {
+       "status": "ok",
+       "pages": 1,
+       "images": 1
+      },
+      "funnel_plot": {
+       "status": "ok",
+       "pages": 1,
+       "images": 1
+      },
+      "loo_plot": {
+       "status": "ok",
+       "pages": 1,
+       "images": 1
+      }
+     }
+    ]
+   },
+   "sensitivityAnalyses": {
+    "status": "degraded",
+    "reason": "steiger: not computable: no instrument has samplesize.exposure, samplesize.outcome"
+   },
+   "steigerDirection": {
+    "status": "degraded",
+    "reason": "not computable: no instrument has samplesize.exposure, samplesize.outcome"
+   },
+   "reverseMR": {
+    "status": "skipped",
+    "reason": "bidirectional analysis was not requested"
+   }
+  },
+  "moduleStatus": {
+   "primaryEstimate": {
+    "status": "completed"
+   },
+   "instrumentStrength": {
+    "status": "completed"
+   },
+   "heterogeneity": {
+    "status": "completed"
+   },
+   "pleiotropy": {
+    "status": "completed"
+   },
+   "steiger": {
+    "status": "unavailable"
+   },
+   "presso": {
+    "status": "completed"
+   },
+   "radial": {
+    "status": "completed"
+   },
+   "conmix": {
+    "status": "completed"
+   },
+   "selectedSourceRows": {
+    "status": "observed"
+   },
+   "harmonisedRows": {
+    "status": "observed"
+   },
+   "analysisError": {
+    "status": "unavailable",
+    "reason": "not_produced_by_this_attempt"
+   }
+  },
+  "analysisDirection": "forward (body mass index to coronary heart disease); reverse MR skipped by the engine as not requested"
+ },
+ "sourceEvidence": {
+  "exposure": {
+   "trait": "body mass index",
+   "sampleSize": 339224,
+   "sourceType": "local_file",
+   "declaredSourceFile": {
+    "bytes": 5850,
+    "sha256": "6544c9f2869dc517c7dc59fc9bd6ad8de229a8e9a12f80f1c45545979920c0a8",
+    "rows": 79,
+    "declaredInstrumentsPreclumped": true
+   },
+   "jobCopy": {
+    "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/inputs/exposure.csv",
+    "bytes": 3703,
+    "sha256": "adebf5c904678756bcb3c5ee6d817b8c4952ac19b1b9c9d20ae9c53e5a7030a1"
+   },
+   "preparedCopyBytes": 3703,
+   "preparedCopySha256": "adebf5c904678756bcb3c5ee6d817b8c4952ac19b1b9c9d20ae9c53e5a7030a1",
+   "verificationStatus": "supplied_not_independently_verified",
+   "ldRechecked": false,
+   "clumpingProvenance": "MRCIEU/TwoSampleMR commit c14776b89056e88422d9dff92b517b870a1339a4 official vignette cache bmi_exp_dat, created by extract_instruments(ieu-a-2). Supplied instrument set; original clumping parameters are not serialized and LD independence was not rechecked."
+  },
+  "outcome": {
+   "trait": "coronary heart disease",
+   "sampleSize": 184305,
+   "sourceType": "local_file",
+   "declaredSourceFile": {
+    "bytes": 6437,
+    "sha256": "533fdcce39a4899e57c0412c8f6a8f6dbe9ecbb1c1f8667a7eac13ebb1c3d5af",
+    "rows": 79,
+    "declaredInstrumentsPreclumped": false
+   },
+   "jobCopy": {
+    "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/inputs/outcome.csv",
+    "bytes": 4132,
+    "sha256": "051c65b8277188bb69619679b772556ebd123677c68e43fb468a2d5ca2fe43cd"
+   },
+   "preparedCopyBytes": 4132,
+   "preparedCopySha256": "051c65b8277188bb69619679b772556ebd123677c68e43fb468a2d5ca2fe43cd",
+   "verificationStatus": "supplied_not_independently_verified",
+   "ldRechecked": false,
+   "selectionProvenance": "The official chd_out_dat cache contains outcome associations for the BMI SNP set from extract_outcome_data(..., ieu-a-7), not independently selected CHD instruments."
+  },
+  "fixtureProvenance": {
+   "repository": "MRCIEU/TwoSampleMR",
+   "commit": "c14776b89056e88422d9dff92b517b870a1339a4",
+   "note": "The public fixture manifest identifies the two supplied row files by the SHA-256 values recorded in the job's input record above: bmi_exposure.csv (5,850 bytes) and chd_outcome.csv (6,437 bytes), each with 79 data rows.",
+   "preparedCopiesAreByteIdenticalToSource": false
+  },
+  "replayPackage": {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/analysis-data/1-exposure.csv-outcome.csv/replay/manifest.json",
+   "bytes": 5659,
+   "sha256": "6a098e102062b239789f5a70ad8ecc2edd669fc8cf6fd55300eea2fda7d3b3e4"
+  },
+  "harmonisationFile": {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/analysis-data/1-exposure.csv-outcome.csv/harmonisation.json",
+   "bytes": 159,
+   "sha256": "9c95dd783e63ed47a1ac89131e8019442339baf80992eb1a7241369f0ce6d10b"
+  }
+ },
+ "artifactRefs": [
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/mendelian-randomization-report.md",
+   "bytes": 21631,
+   "sha256": "b80cc782e80879b9d68b9c9aa22319c71ee58763064efbff35c7db72603744be"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/result.json",
+   "bytes": 3782,
+   "sha256": "da70723b0f8433384577c2ad1c8ec2acf5a5f6c0806f8c018a2773cc69749419"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/mendelian-randomization-run.json",
+   "bytes": 20382,
+   "sha256": "c7d2da6eb5da2e3fd1b74de564914df303e72fc9b9672fb9f532435cb62acb81"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/mendelian-randomization-inputs.json",
+   "bytes": 2262,
+   "sha256": "54a4c708cc962d9fd975c00d82899380d17641e3ea5711932089a0a52dbd3dcd"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/analysis-data/1-exposure.csv-outcome.csv/mr_results.csv",
+   "bytes": 943,
+   "sha256": "19834cee49ca8e7e321fb29c2f17d8e76c67129e72ada4c00fc5d0771ffef23c"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/analysis-data/1-exposure.csv-outcome.csv/mr_summary.json",
+   "bytes": 251,
+   "sha256": "5d11b00607e1d0bc20e4702976e469319a7252f7ea2cb240d58f2aa44bcd1848"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/analysis-data/1-exposure.csv-outcome.csv/mrpresso.csv",
+   "bytes": 531,
+   "sha256": "25540e75e864bcbf4e78098c4f85b63e433d280fa771998e139acc48bb1dd9e1"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/analysis-data/1-exposure.csv-outcome.csv/pleiotropy.csv",
+   "bytes": 174,
+   "sha256": "ed6ab854efaf3016c95c5b67aff5526cdec3634cbe416fd257340ddded2049c9"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/analysis-data/1-exposure.csv-outcome.csv/heterogeneity.csv",
+   "bytes": 276,
+   "sha256": "924061638cdec9990fbbc0880085757ef42f88fd44176a48c6737dab8f7b51db"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/analysis-data/1-exposure.csv-outcome.csv/f_statistics.csv",
+   "bytes": 4314,
+   "sha256": "f3e6c8e182c2624c976008e3dc63044b9e1f181f0de386c5bc8dbdda665b3386"
+  },
+  {
+   "path": "mendelian-randomization-runs/mr-20261010033028-8ebf5b45e76c/output/analysis-data/1-exposure.csv-outcome.csv/harmonised-rows.csv",
+   "bytes": 17409,
+   "sha256": "b790820b6d7dc9c52beae50c5bc847408acd8b2171a1c2ae03232063ea5404bd"
+  }
+ ],
+ "contractDeliverable": {
+  "name": "mendelian-randomization-report.md",
+  "presentInWorkspace": true,
+  "note": "Present, together with the run record, the input record, the harmonised rows and a replay package."
+ },
+ "contentObservations": {
+  "estimates": {
+   "source": "Engine display values transcribed verbatim from the run record's display block and the method comparison table; nothing here was recomputed.",
+   "primary": "Inverse-variance-weighted odds ratio 1.56 (95% CI 1.39-1.75), p=4.0x10^-14, 79 instruments.",
+   "methodComparison": [
+    {
+     "method": "MR Egger",
+     "display": {
+      "nsnp": "79",
+      "beta": "0.502",
+      "se": "0.144",
+      "pval": "8.0×10⁻⁴",
+      "or_value": "1.65",
+      "ci_lower": "1.25",
+      "ci_upper": "2.19",
+      "or_ci": "1.25–2.19"
+     }
+    },
+    {
+     "method": "Weighted median",
+     "display": {
+      "nsnp": "79",
+      "beta": "0.387",
+      "se": "0.0754",
+      "pval": "2.9×10⁻⁷",
+      "or_value": "1.47",
+      "ci_lower": "1.27",
+      "ci_upper": "1.71",
+      "or_ci": "1.27–1.71"
+     }
+    },
+    {
+     "method": "Inverse variance weighted",
+     "display": {
+      "nsnp": "79",
+      "beta": "0.446",
+      "se": "0.0590",
+      "pval": "4.0×10⁻¹⁴",
+      "or_value": "1.56",
+      "ci_lower": "1.39",
+      "ci_upper": "1.75",
+      "or_ci": "1.39–1.75"
+     }
+    },
+    {
+     "method": "Simple mode",
+     "display": {
+      "nsnp": "79",
+      "beta": "0.340",
+      "se": "0.155",
+      "pval": "0.03",
+      "or_value": "1.41",
+      "ci_lower": "1.04",
+      "ci_upper": "1.90",
+      "or_ci": "1.04–1.90"
+     }
+    },
+    {
+     "method": "Weighted mode",
+     "display": {
+      "nsnp": "79",
+      "beta": "0.389",
+      "se": "0.0972",
+      "pval": "1.4×10⁻⁴",
+      "or_value": "1.48",
+      "ci_lower": "1.22",
+      "ci_upper": "1.79",
+      "or_ci": "1.22–1.79"
+     }
+    }
+   ],
+   "meanFStatistic": "65.6"
+  },
+  "instrumentStrength": {
+   "display": {
+    "n": "79",
+    "mean": "65.6",
+    "median": "40.6",
+    "min": "29.9",
+    "max": "716",
+    "below_10": "0",
+    "min_snp": "rs3800229",
+    "max_snp": "rs1421085"
+   },
+   "reading": "No instrument falls below the conventional mean-F>10 relevance heuristic, the minimum being 29.9 and the median 40.6. That number tests relevance and nothing else. It says nothing about independence or the exclusion restriction."
+  },
+  "instrumentSelection": {
+   "mode": "provided_preclumped",
+   "ldRechecked": false
+  },
+  "harmonisation": {
+   "exposureInstruments": 79,
+   "unavailableInOutcome": 0,
+   "harmonisedPairs": 79,
+   "palindromic": 4,
+   "droppedPalindromicAmbiguous": 0,
+   "droppedOther": 0,
+   "retained": 79,
+   "reading": "All 79 supplied instruments were retained. Four palindromic variants resolved without being dropped, and none was lost for absence of outcome data."
+  },
+  "heterogeneity": {
+   "display": [
+    {
+     "method": "MR Egger",
+     "q": 143.304576132034,
+     "q_df": 77,
+     "q_pval": 6.84158545728111e-06,
+     "display": {
+      "q": "143",
+      "q_df": "77",
+      "q_pval": "6.8×10⁻⁶"
+     }
+    },
+    {
+     "method": "Inverse variance weighted",
+     "q": 143.650840925034,
+     "q_df": 78,
+     "q_pval": 8.72841995247562e-06,
+     "display": {
+      "q": "144",
+      "q_df": "78",
+      "q_pval": "8.7×10⁻⁶"
+     }
+    }
+   ],
+   "reading": "Q is significant under both the MR-Egger model and the inverse-variance-weighted model. A fixed-effect reading is not supported, and at this instrument count the between-instrument spread is real."
+  },
+  "pleiotropy": {
+   "display": {
+    "egger_intercept": -0.001719304084956,
+    "se": 0.0039859623645883,
+    "pval": 0.667426592112651,
+    "display": {
+     "egger_intercept": "-0.00172",
+     "se": "0.00399",
+     "pval": "0.67"
+    }
+   },
+   "reading": "The MR-Egger intercept is indistinguishable from zero (p=0.67). Under the InSIDE assumption that is a check for directional pleiotropy, not evidence that pleiotropy is absent, and at this configuration its power is low."
+  },
+  "presso": {
+   "display": {
+    "global_pval": "<0.001",
+    "n_outliers": "2",
+    "outlier_snps": [
+     "rs6713510",
+     "rs7903146"
+    ],
+    "outlier_resolution": "0.0500",
+    "corrected_beta": "0.480",
+    "corrected_se": "0.0510",
+    "corrected_pval": "2.2×10⁻¹⁴",
+    "corrected_or": "1.62",
+    "corrected_or_ci": "1.46–1.79",
+    "distortion_pval": "0.54",
+    "reason": ""
+   },
+   "computed": {
+    "globalPValue": "<",
+    "nOutliers": 2,
+    "outlierResolution": 0.05,
+    "distortionPValue": "=",
+    "nDistributions": 1580,
+    "correctedEstimate": "1.46–1.79"
+   },
+   "reading": "The global test sits below the display floor and 2 outlier variants were corrected. The corrected estimate falls inside the primary interval and the distortion test shows no change. The outlier resolution equals the 0.0500 threshold exactly, which points to an unstable outlier set and not to a clean correction."
+  },
+  "radialAndConmix": {
+   "radial": {
+    "global_q_pval": "1.7×10⁻⁵",
+    "n_outliers": "10"
+   },
+   "conmix": {
+    "estimate": "0.505",
+    "ci": "0.385–0.695",
+    "pval": "2.6×10⁻¹¹",
+    "n_intervals": "1"
+   },
+   "reading": "Both secondary diagnostics point beyond the primary model to further heterogeneity: a radial global test well below the display floor with 10 outlier variants, and a contamination estimate near one half whose interval excludes zero."
+  },
+  "assumptionStatus": {
+   "steiger": {
+    "status": "not_computable",
+    "reason": "no instrument has samplesize.exposure, samplesize.outcome"
+   },
+   "sampleOverlap": {
+    "status": "unknown",
+    "biasDirection": "unestablished",
+    "warningFlag": false
+   },
+   "exposureScale": {
+    "status": "unknown",
+    "unit": null,
+    "transformation": null,
+    "source": null,
+    "evidence": null,
+    "raw_fields": {}
+   },
+   "outcomeScale": {
+    "status": "unknown",
+    "unit": null,
+    "transformation": null,
+    "source": null,
+    "evidence": null,
+    "raw_fields": {}
+   },
+   "skippedAnalyses": [
+    "steiger: not computable: no instrument has samplesize.exposure, samplesize.outcome"
+   ],
+   "reading": "Direction cannot be tested, because no instrument row carries both sample sizes, which leaves the Steiger check unavailable instead of negative. Whether the exposure and outcome samples overlap is undetermined, so the direction of any overlap bias is unestablished too. Scale metadata for both sides is unknown: the exposure effect is expressed per the supplied SD unit and the outcome on the log-odds scale, and nothing in the supplied columns allowed a unit check."
+  }
+ },
+ "limitationsVisibleInOutput": [
+  "This job directory has no queue record, so terminal state rests on the job's own result file instead of an independent queue entry.",
+  "No live status query was possible this session.",
+  "The instruments are a historical pre-clumped cache export. The original clumping parameters were never serialized, and LD independence was not rechecked.",
+  "Steiger directionality cannot be computed from the supplied columns, which leaves causal direction resting on the design and not on a computed test.",
+  "Whether the two GWAS sources overlap is undetermined, and the direction of any overlap bias is unestablished.",
+  "The outcome associations belong to the BMI variant set and not to an independently selected coronary heart disease instrument set. The analysis runs forward only.",
+  "Instrument strength is a relevance check and does not validate the exclusion restriction. The funnel-style asymmetry diagnostics carry assumptions of their own.",
+  "On effect scale: the exposure effect is per one SD of the supplied unit and the outcome is on the log-odds scale, and neither could be verified from the supplied columns."
+ ]
+}

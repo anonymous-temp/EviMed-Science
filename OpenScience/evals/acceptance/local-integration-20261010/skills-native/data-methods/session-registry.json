@@ -1,0 +1,108 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/research-sessions",
+    "projectId": "default"
+  },
+  "response": [
+    {
+      "sessionId": "session-5fc40140-f883-4f22-aeaf-3bdc857d002b",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T03:56:40.037Z",
+      "updatedAt": "2026-10-10T03:56:40.037Z"
+    },
+    {
+      "sessionId": "session-850d4a17-838c-4169-bba8-dc48763d99fb",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T03:56:00.308Z",
+      "updatedAt": "2026-10-10T03:56:00.308Z"
+    },
+    {
+      "sessionId": "session-9a277cd8-a26d-405a-915b-ae3ee6e0f661",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T03:55:46.900Z",
+      "updatedAt": "2026-10-10T03:55:46.900Z"
+    },
+    {
+      "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T03:55:31.574Z",
+      "updatedAt": "2026-10-10T03:55:31.574Z"
+    },
+    {
+      "sessionId": "session-9ae4611e-3a3c-47d3-bc0b-54ceb05019c2",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T03:54:57.662Z",
+      "updatedAt": "2026-10-10T03:54:57.662Z"
+    },
+    {
+      "sessionId": "session-05580a41-7ee0-48aa-a96a-b81ac9a8e4c4",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T03:54:34.328Z",
+      "updatedAt": "2026-10-10T03:54:34.328Z"
+    },
+    {
+      "sessionId": "session-4a13db29-256c-4243-a429-4d7612952b54",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T03:53:57.530Z",
+      "updatedAt": "2026-10-10T03:53:57.530Z"
+    },
+    {
+      "sessionId": "session-2b812dea-9c2d-4ee9-bd93-8ba5907700f3",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T03:53:05.734Z",
+      "updatedAt": "2026-10-10T03:53:05.734Z"
+    },
+    {
+      "sessionId": "session-97fd8d66-0f92-47f0-9880-7bf8a5ba33f9",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T03:52:58.777Z",
+      "updatedAt": "2026-10-10T03:52:58.777Z"
+    }
+  ]
+}

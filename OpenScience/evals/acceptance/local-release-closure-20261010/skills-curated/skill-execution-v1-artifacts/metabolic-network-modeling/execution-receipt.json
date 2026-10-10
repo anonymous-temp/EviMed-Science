@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 210,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/metabolic-network-modeling/results.json",
+      "sha256": "a56c8ce3140e9766ceea58f65be101b0fbbd16dcb3e25e40dee629be38e084a8"
+    },
+    {
+      "bytes": 767,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/metabolic-network-modeling/metabolic-network-modeling-report.md",
+      "sha256": "5a90141c553e5608f149c6854eaec8020c9daa984defb2fea76ef5b2abc2682e"
+    }
+  ],
+  "finishedAt": "2026-10-10T03:44:58.420947Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "metabolic-network-modeling",
+  "startedAt": "2026-10-10T03:44:58.392836Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for metabolic-network-modeling and wrote 2 verified artifacts.",
+  "warnings": [
+    "FBA conclusions depend on reaction directionality, bounds, objective choice, and model curation."
+  ]
+}

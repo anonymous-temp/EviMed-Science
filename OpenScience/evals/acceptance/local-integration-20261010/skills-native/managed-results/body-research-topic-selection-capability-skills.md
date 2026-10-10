@@ -1,0 +1,288 @@
+---
+name: research-topic-selection
+description: Run EviMed's evidence-grounded research-topic specialist to identify gaps, contradictions, feasible questions, and a prioritized research agenda.
+metadata:
+  evimed-agent: research-topic-selection
+---
+
+# Research topic selection
+
+Use this skill when a user has a broad biomedical direction and needs concrete,
+testable research questions. Topic novelty must be supported by the retrieved
+evidence set; absence from a small search is not proof of novelty.
+
+Use `dataset-research-scoping` instead when the user already has a file. That
+entry point starts from the data and decides what it can carry; this one starts
+from a direction and never touches data.
+
+## The specialist job is an input, not the report
+
+`mcp__evimed__research_topic_selection` runs the topic agent. Its retrieval starts
+with the internal evidence service and also queries PubMed for public identifiers
+and metadata. Inspect the returned source records and diagnostics: availability,
+coverage and failures are response-dependent. The specialist result is a first
+map for the wider novelty and feasibility assessment below.
+
+The job gives you a first map. The evidence expansion below is what turns it
+into a judgment, and where the two disagree, say so — a candidate the job ranked
+highly that the wider search shows was answered in 2024 is a finding.
+
+## Execute
+
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
+1. Preserve the user's disease, population, intervention or exposure, outcomes,
+   available data, methods, and feasibility constraints. State only assumptions
+   that do not materially change the direction.
+2. Call `mcp__evimed__research_topic_selection` with `action=capabilities`, start the
+   job, record the job id, and poll with `waitSeconds=45` until terminal.
+   The job alone can take most of this capability's 20–90 minutes. Keep polling
+   while `updatedAt` advances (every 30 s); treat the job as failed only on a
+   terminal failure or when `updatedAt` has not moved for 10 minutes, and record
+   the state you observed either way.
+   Keep `researchDirection` as the original retrieval direction. Pass supplied
+   context separately as `availableData` (string, at most 4000 characters),
+   `population` and `studySetting` (strings, at most 1000 characters each), and
+   `resourceConstraints` (at most 20 nonempty strings, at most 200 characters
+   each). Omit unspecified fields; do not stringify arrays/objects, silently
+   shorten a brief, or place infrastructure settings into these fields. A data
+   description is not permission or confirmation of data access.
+3. Run the evidence expansion below **while the job runs** — it is long, and the
+   two do not depend on each other.
+4. Keep the evidence landscape, contradictions, candidate gaps, proposed study
+   designs, feasibility, risks, and prioritization rationale distinct. A topic
+   is not high priority merely because it sounds novel.
+5. Do not fabricate search counts, citations, data availability, sample sizes,
+   effect assumptions, or publication probability.
+6. Use `mcp__evimed__pharmacy_reference_search` only when configured private
+   terminology or rule coverage materially informs feasibility, phenotype or
+   exposure definition, or data-readiness questions. Private rows are
+   institution-specific discovery context, not proof of novelty, prevalence,
+   clinical validity, or current guidance; verify material assumptions against
+   current authoritative sources.
+
+## Evidence expansion
+
+Use the configured MCP tools for evidence expansion. Consult
+`mcp__evimed__data_source_catalog` and each response for supported operations,
+limits, source provenance and availability. The channels below serve different
+questions; use those relevant to the candidate rather than a fixed channel quota.
+
+| Channel | Tool call | What only this one gives you |
+|---|---|---|
+| PubMed | `mcp__evimed__literature_search`, or `mcp__evimed__biomedical_source_search` with `sourceId: pubmed` | MeSH-indexed subject search; publication types |
+| Europe PMC | `sourceId: europe-pmc` | **Full-text** search — a method or a limitation stated only in a Discussion section |
+| OpenAlex | `sourceId: openalex` | Citation counts, concepts, publication year: how large a topic is and how fast it is moving |
+| Semantic Scholar | `sourceId: semantic-scholar` | References and citing works — who built on a paper, and who did not. Rate-limited without a key; retry with backoff |
+| Crossref | `sourceId: crossref` | Very recent DOIs, ahead of MEDLINE indexing |
+| Preprints | `mcp__evimed__biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
+| Full text | `mcp__evimed__open_access_full_text` | The actual Methods and Limitations paragraphs |
+| Ongoing studies | `mcp__evimed__clinical_trial_search` | Registered questions, recruitment state and planned outcomes; a registration is not a completed finding |
+| Guidelines | `mcp__evimed__guideline_search`, `mcp__evimed__web_read` | What practice already recommends, and on what evidence grade |
+| Drug and gene facts | `sourceId: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` | Label text, adverse-event counts, pharmacogenomic annotation |
+| Trend analysis | `mcp__evimed__bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
+| Open web | `mcp__evimed__web_search` | Everything the indexes do not carry — funding calls, conference programmes, society pages, registries, a method a group describes only on its own site |
+
+Do not infer a permanent outage from an old host probe. Inspect current tool
+responses; use bounded retries for transient errors and record unavailable
+channels as limitations. An unavailable source is not an empty literature.
+
+Check the material actually returned. A title alone cannot support study design,
+evidence level, outcomes or effect size. Abstracts support only what they state;
+retrieve full text for Methods or Limitations on which the proposed design rests.
+Respect limits advertised by the current tool schema rather than assuming a
+universal maximum.
+
+Open-web results are discovery leads. Follow material claims to the primary
+record and preserve its identifier and URL when available. Official registry,
+funder or society pages can document their own records; an unreviewed summary
+cannot substitute for the underlying study. Engine coverage varies by response
+and language. Record which searches answered and which failed, including both
+Chinese and English queries when relevant to the user's population or setting.
+
+Search every candidate direction four ways. A missing axis is what makes an
+agenda thin:
+
+1. **Subject** — the direction as the user framed it.
+2. **Method** — how a question of this shape is answered: the design, the
+   estimator, the reporting guideline. A design without a precedent is a risk
+   the user has to be told about.
+3. **Comparator** — the published numbers a result would be placed against.
+4. **Absence** — what a recent review or a preprint says is still open. This is
+   where an unoccupied question actually shows up; nothing else finds it.
+
+## The novelty ledger
+
+Every candidate question gets: **what already answers it, at what n, in which
+population, published where and when — and what precisely is left.** Three
+outcomes, all legitimate, each stated out loud:
+
+- **No direct answer identified in this search** — state the bounded search
+  scope, unresolved coverage gaps and closest neighbours. Do not assert that the
+  question is unoccupied across the whole field.
+- **Occupied, but not in this population, setting, or era** — name the closest
+  work and the exact axis of difference. Most real papers live here.
+- **Answered** — drop it and say so. A direction removed because the field has
+  settled it is a finding, not a failure.
+
+"Clinically important" is not a novelty statement. The field agreeing that a
+topic matters is the reason it may already be answered.
+
+Check the closest completed work and relevant ongoing or registered studies.
+State which endpoints and settings they already cover before proposing a new
+question. Separate a proposed hypothesis or method from an established finding;
+a registry entry or protocol establishes a planned study, not an observed effect.
+If the relevant registry is unavailable, record the unresolved overlap check.
+
+## Proportional evidence coverage
+
+Evidence count is a coverage diagnostic, not proof of novelty or a universal
+completion threshold. Match search breadth and full-text depth to the claim and
+candidate. A rare topic may have few records; a mature topic may require broader
+comparison to show that its proposed question has not already been answered.
+Record source availability, search scope, closest prior work and unresolved
+gaps. Retrieve methods evidence for designs you recommend. Do not pad citations
+to meet a count, invent scores or sample sizes, or promote sparse retrieval into
+a claim of novelty. Explain feasibility against the supplied resources; mark
+missing information and incompatible conditions explicitly.
+
+## Deliverables
+
+Write `research-topic-report.md` with search scope, field map, evidence gaps,
+candidate questions, design and data needs, feasibility, risks, prioritization,
+and a recommended next step. Each candidate question carries a labelled
+`新颖性：` / `Novelty:` line.
+
+Write `evidence-map.md`, one row per work:
+
+```
+| Work | Identifier | URL | Channel | Axis | Used for | Full text |
+|---|---|---|---|---|---|---|
+| Tveit 2020, national TDM audit | PMID 31000417 | https://pubmed.ncbi.nlm.nih.gov/31000417/ | pubmed | comparator | population C/D percentiles for Q1 | yes |
+```
+
+`Used for` is the column that keeps this honest: a row that cannot say which
+sentence depends on it should not be in the table.
+
+Every number the report states has one of three origins, and the sentence it is
+in says which. A published figure carries the `[n]` of the work it comes from in
+the same sentence. A figure from the specialist job is copied as the display
+string beside it in the job's own output files (`display` in
+`evidence-stats.json`, and beside the M2 keyword centralities) — never
+re-derived by hand; rounding is checked, not forbidden. A design choice or
+projection (a window, a sample size, an event-count
+estimate) is stated as the proposal's own, with its inputs. The independent
+review traces every uncited result to the job's outputs, and each one it cannot
+find is a finding you answer.
+
+Write `research-topic-run.json` with the terminal job state and exact returned
+artifacts. `research-portfolio.json` and `evidence-records.json` are required:
+preserve the specialist job's actual files and IDs. If the managed job fails,
+build fallback records only from identifiers returned by evidence tools, record
+the failed job in the run receipt, and never recreate IDs from report prose.
+A fallback uses the job's own shapes, field for field: `evidence-records.json`
+is a top-level JSON array of records, each with a string `id`; each entry of
+`research-portfolio.json` → `candidates` carries `candidateId`, `title`, one
+`sourceOpportunityId` (a string, not a list), `supportLevel` (`direct`,
+`indirect` or `speculative`), `sourceEvidenceIds` (the record ids it rests on,
+at least one), `sourceEvidencePmids` (may be empty) and `gaps` (strings).
+Keep each candidate linked to its source
+opportunity and evidence IDs, with the supplied researcher context, hypothesis,
+study design/estimand, data requirements, falsification, feasibility and novelty
+basis. Null fields and `gaps` mean information was not supplied; they are not
+permission to invent it. Reconcile the companion with any candidate removed or
+reframed after evidence expansion, keeping the original lineage and documenting
+the reason.
+
+An evidence record used by a candidate must carry the publication status
+returned by the current bibliographic lookup: `publicationStatus` is
+`active`, `corrected`, `retracted`, or `unknown`, with
+`statusCheckedAt` and `statusSource`. A retracted or unchecked record may be
+discussed as excluded context, but cannot support a recommended candidate.
+
+## Before claiming completion
+
+Run this capability's preflight to verify required paths and mapped citations,
+and inspect proportional coverage diagnostics. Review novelty and feasibility
+as evidence-based judgments; numeric counts cannot establish them.
+
+```bash
+python3 "scripts/preflight.py" --workspace .
+```
+
+It is this capability's tooling, not a second delivery gate: fix what it reports
+as an issue and assess its advisory warnings. Then submit the package.
+
+Submission runs the delivery gate and the independent scientific reviewer in one
+call and answers with both. Repair each finding that applies, and answer every
+finding marked 需回应 in the next submission's `responses`: `fixed`, or
+`declined` with a one-sentence reason. A submission that changes no file and
+only answers is fine. The review reads only `responses`; an answer written in
+`revision-notes.md` reaches nobody, and an unanswered finding is shown to the
+reader as ignored. The files stay editable for the rest of this conversation
+turn — what freezes them is the turn ending — so a finding that arrives with an
+acceptance can still be repaired. To hear the reviewer mid-draft instead, call
+it yourself:
+
+```
+evimed_review_run{deliverableId: "<your deliverable id>"}
+```
+
+```
+evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
+```
+
+The submission answers with the delivery verdict in place. A first submission
+that comes back with issues is the normal case, not a failure: fix everything it
+lists as 必修 and submit again until it answers `ok`.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.

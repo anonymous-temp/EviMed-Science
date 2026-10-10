@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 764,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/phylogenetic-analysis/results.json",
+      "sha256": "a20bbf3f787e4c901be4ced19665a62e8af5df6863b88cbc96b187caf55b410e"
+    },
+    {
+      "bytes": 1341,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/phylogenetic-analysis/phylogenetic-analysis-report.md",
+      "sha256": "af15a6fd79bc8404b56607640dae950a98abd1364e070f3a1581a9545b3016bf"
+    }
+  ],
+  "finishedAt": "2026-10-10T03:45:00.959853Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "phylogenetic-analysis",
+  "startedAt": "2026-10-10T03:45:00.959309Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for phylogenetic-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "Confirm sequence alphabet, orientation, reference build, alignment method, and evolutionary model before inferential use."
+  ]
+}

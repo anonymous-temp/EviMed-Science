@@ -1,0 +1,760 @@
+{
+  "counts": {
+    "unknown": 56,
+    "bounded-historical-task-matched": 38
+  },
+  "rows": [
+    {
+      "packageId": "capability-skills/adr-analysis",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/autopilot-episode",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/bibliometric-analysis",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/biomedical-database-search",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/citation-integrity",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/clinical-evidence-synthesis",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/comprehensive-drug-evaluation",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/dataset-research-scoping",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/deep-research",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/drug-selection",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/evidence-appraisal",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/evolution-scout",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/gene-expression-analysis",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/geo-content",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/geo-drug-value",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/geo-insight",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/geo-proposal",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/geo-strategy",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/manuscript-humanize",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/manuscript-support",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/mendelian-randomization",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/meta-analysis",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/method-distillation",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/method-relations",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/off-label-analysis",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/peer-review",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/reporting-guidelines",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/research-grant-development",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/research-topic-selection",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/source-understanding",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/statistical-analysis",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/tool-builder",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/vcr-analysis",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/vcr-evidence",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/vcr-matching",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/vcr-package",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "capability-skills/vcr-protocol",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "community/deep-structural-analysis",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "community/dsh-ppt",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/deep-research",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/domain-check",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/hpc-slurm",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/humanizer",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/humanizer-zh",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/large-file",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/manuscript-humanize",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/modal-run",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/publication-figures",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/remote-compute",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/stats-integrity",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "core/traceability-review",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "curated-scientific/astronomy-data-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/bayesian-modeling",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/biomedical-database-search",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/biomedical-knowledge-graph",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/biomedical-signal-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/biosequence-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/bulk-rna-seq",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/cancer-functional-genomics",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/cheminformatics",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/citation-integrity",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/clinical-machine-learning",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/digital-pathology-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/drug-discovery-data",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/experimental-design",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/exploratory-data-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/flow-cytometry-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/genome-variant-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/geospatial-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/hypothesis-development",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/markdown-mermaid-writing",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/mass-spectrometry-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/materials-science-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/matplotlib",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/medical-imaging-data",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/metabolic-network-modeling",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/pathway-enrichment",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/phylogenetic-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/quantum-computing-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/reproducible-workflows",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/research-grant-development",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/scientific-data-engineering",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/scientific-deep-learning",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/simulation-optimization",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/single-cell-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/statistical-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/statistical-power",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/survival-analysis",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "curated-scientific/time-series-forecasting",
+      "state": "bounded-historical-task-matched",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": "skill-execution-v1.json",
+      "reason": null
+    },
+    {
+      "packageId": "evimed/open-domain-answer",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "office/docx",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "office/pdf",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "office/pptx",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    },
+    {
+      "packageId": "office/xlsx",
+      "state": "unknown",
+      "currentImageExecution": "unknown",
+      "fullPackageExecution": "unknown",
+      "evidence": null,
+      "reason": "no-current-matching-task-evidence"
+    }
+  ]
+}

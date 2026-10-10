@@ -1,0 +1,220 @@
+{
+  "schema": "vcr-protocol-corrected/protocol/1",
+  "artifactId": "protocol",
+  "version": "0.1.0",
+  "title": "当前全身性糖皮质激素暴露排除条件的结构化编码（有界方法核验）",
+  "scope": {
+    "kind": "bounded_method_verification",
+    "establishes": [
+      "把「排除当前全身性糖皮质激素暴露」编码成封闭文法内的结构化要求",
+      "把时间语义写成显式规则：当前暴露与历史暴露的区分，以及什么不做阈值",
+      "把「判不了」写成显式状态策略，而不是隐式并入不符合",
+      "每条条件逐字保留定义原句与其出处"
+    ],
+    "does_not_establish": [
+      "完整虚拟临床研究引擎程序的有效性",
+      "任何临床可用性、临床接受度或验证结论",
+      "任何真实入排判定结果、任何人数或候选名单"
+    ],
+    "patientData": "none",
+    "platformStudyOrResultRegistered": false,
+    "engineInvoked": false
+  },
+  "statedDefinition": {
+    "verbatim": [
+      "adults >=18",
+      "exclude CURRENT systemic glucocorticoid exposure"
+    ],
+    "sourceId": "task-stated-study-definition",
+    "clauses": [
+      {
+        "clause": "inclusion",
+        "text": "adults >=18"
+      },
+      {
+        "clause": "exclusion",
+        "text": "exclude CURRENT systemic glucocorticoid exposure"
+      }
+    ]
+  },
+  "criteria": [
+    {
+      "id": "crit-inclusion-adult",
+      "kind": "inclusion",
+      "criterionType": "demographic",
+      "requirement": {
+        "op": "compare",
+        "variable": "age",
+        "comparator": "gte",
+        "value": 18,
+        "unit": "years"
+      },
+      "applicability": null,
+      "sourceText": "adults >=18",
+      "sourceLocator": {
+        "origin": "task-specified study definition",
+        "clause": "inclusion"
+      },
+      "evidenceNeeded": [
+        "出生日期或年龄记录，其记录时间不晚于判定日"
+      ]
+    },
+    {
+      "id": "crit-exclusion-current-glucocorticoid",
+      "kind": "exclusion",
+      "criterionType": "concomitant_medication",
+      "requirement": {
+        "op": "present",
+        "variable": "systemic_glucocorticoid"
+      },
+      "applicability": null,
+      "sourceText": "exclude CURRENT systemic glucocorticoid exposure",
+      "sourceLocator": {
+        "origin": "task-specified study definition",
+        "clause": "exclusion"
+      },
+      "evidenceNeeded": [
+        "判定日的在用药物清单",
+        "用药起止时间（含「仍在继续」「已停用」的原文表述）",
+        "明确否认当前暴露的记录（与空白病史是两回事）"
+      ]
+    }
+  ],
+  "criterionEncoding": {
+    "exclusionWrittenAsARequirementToSatisfy": true,
+    "requirement": {
+      "op": "present",
+      "variable": "systemic_glucocorticoid"
+    },
+    "satisfiedMeans": "受试者不被本条排除：判定时点没有在用的全身性糖皮质激素暴露。",
+    "notSatisfiedMeans": "受试者被本条排除：判定时点仍有全身性糖皮质激素暴露。",
+    "unknownMeans": "证据不足以确定判定时点的暴露状态；既不是「排除」，也不是「不被排除」。",
+    "whyPresentAndNotElapsedSince": "定义只说当前暴露，没有给出任何时长阈值。历史暴露的「多久以前停的」不构成本条要求的组成部分，因此本条编码成对「当前暴露」这一事实的直接要求；停用时间只作为事实的时间锚点记录，不进入条件。",
+    "whyNoWindow": "window 会引入一个回溯区间，而定义没有给出这个区间。加 window 等于给方案添了一条用户没写的阈值，因此不写 window。日后若研究者给出明确的时长阈值，应作为新版本写入，而不是在本版本里默认一个值。",
+    "variableNamingRule": "同一概念在整份方案里只用一个变量名；写患者事实必须使用同名变量。若数据源提供的是暴露状态这一变量，需另行声明对应关系，不得把它当作本条件的同一个变量。",
+    "alternativeStateVariableNotUsed": {
+      "variable": "systemic_glucocorticoid_exposure_state",
+      "reason": "状态取值需要额外定义 current / not_current 的编码表；在定义未给出阈值时，直接要求「当前暴露存在」更小、更不易被读宽读严。"
+    }
+  },
+  "temporalSemantics": {
+    "anchor": "判定日（asOf）；评估以该日为准，不早于任何被引用记录的可见时间。",
+    "classes": [
+      {
+        "class": "current",
+        "definition": "在判定日仍在继续的暴露，包括原文写明「昨日开始并继续」的用药。",
+        "requirementJudgement": "not_satisfied",
+        "triggerWordsInSource": [
+          "is current",
+          "continues"
+        ]
+      },
+      {
+        "class": "historical",
+        "definition": "曾经暴露但已停用：停用这一事实由原文给出，停用时间的远近不改变它是历史暴露这一性质。",
+        "requirementJudgement": "satisfied",
+        "triggerWordsInSource": [
+          "was discontinued"
+        ]
+      },
+      {
+        "class": "unknown",
+        "definition": "用药史不可得、记录不完整或记录互相矛盾，无法确定判定日的暴露状态。",
+        "requirementJudgement": "unknown",
+        "triggerWordsInSource": [
+          "was not available"
+        ]
+      }
+    ],
+    "noThresholdIsEncoded": {
+      "threshold": null,
+      "reason": "定义没有时长阈值，方案里就不出现阈值。",
+      "notEncoded": [
+        "elapsed_since（洗脱期）：定义没有要求任何洗脱期",
+        "window（回溯区间）：定义没有给出区间长度",
+        "任何以自然月折合成固定天数的换算"
+      ]
+    },
+    "temporalFactsRecordedNotEncoded": [
+      {
+        "sourceKey": "C1",
+        "statedStop": "discontinued6months ago",
+        "statedUnit": "months",
+        "recordedAs": "该次暴露的停用时间锚点",
+        "encodesCriterion": false
+      },
+      {
+        "sourceKey": "C4",
+        "statedStop": "discontinued2days ago",
+        "statedUnit": "days",
+        "recordedAs": "该次暴露的停用时间锚点",
+        "encodesCriterion": false,
+        "recencyIsRecordedNotJudged": "2 天是原文给出的近时点，照原文记录；定义没有给出阈值，本方案不据此判定该来源是否被排除，也不为它设定任何洗脱期。近期停用是否需要额外处理，属于定义层面的缺口，不是方案可以自行补上的规则。"
+      }
+    ],
+    "unitsPreserved": "原文给什么单位就记什么单位（months / days），不做天与月的换算。",
+    "forbiddenInference": [
+      "不得把「有既往用药记录」推成「当前在用」",
+      "不得把「已停用」推成「从未使用」",
+      "不得从「记录里没写」推出任何暴露状态",
+      "不得为缺失的时间点补一个日期，也不得把病例里的时长反推成方案阈值"
+    ]
+  },
+  "unknownPolicy": {
+    "principle": "判不了不等于不符合；缺失的历史既不是阳性也不是阴性。",
+    "missingIsNotDenial": "记录里缺少用药史时，结论是「无法确定」，不是「没有暴露」。明确的否认需要有否认的原句。",
+    "closure": "fail_closed_for_inclusion",
+    "rules": [
+      {
+        "id": "up-1",
+        "condition": "适用条件所需的证据完全缺失",
+        "state": "unknown",
+        "mustNot": "不得写成 satisfied 或 not_satisfied",
+        "consequence": "只要有一条适用的排除条件为「未知」，该来源就不能是「符合」（判定规则，不是本文件给出的判定结果）"
+      },
+      {
+        "id": "up-2",
+        "condition": "证据足以确定判定日的暴露状态",
+        "state": "按 temporalSemantics 给出 satisfied 或 not_satisfied",
+        "mustNot": "不得为了稳妥而一律写「未知」"
+      },
+      {
+        "id": "up-3",
+        "condition": "记录互相矛盾",
+        "state": "unknown",
+        "mustNot": "不得挑选与排除结论一致的一条"
+      },
+      {
+        "id": "up-4",
+        "condition": "只有停用时间、没有「是否仍在继续」的表述",
+        "state": "unknown",
+        "mustNot": "不得默认按「已停用」处理"
+      }
+    ],
+    "notEligibleIsNotNotSatisfied": "「未知」导致的是「证据不足、不能判为符合」，不是「不符合」；两者在改判与复核上的含义不同。"
+  },
+  "provenance": {
+    "sources": [
+      {
+        "id": "task-stated-study-definition",
+        "kind": "study definition supplied in the task brief",
+        "usedFor": [
+          "两条条件的 sourceText 与 sourceLocator",
+          "temporalSemantics 与 unknownPolicy 的对象"
+        ],
+        "patientData": false
+      },
+      {
+        "id": "synthetic-C1-C4",
+        "kind": "synthetic clinical source excerpts supplied in the task brief",
+        "usedFor": [
+          "只用于 matching-annotation.json 的事实标注，不作为条件来源"
+        ],
+        "patientData": false
+      }
+    ],
+    "criterionProvenanceRule": "条件只来自研究者的明示定义；来源片段提供用于评估条件的事实，不产生新条件。",
+    "noPopulationCounts": "本文件不含任何人数、比例、合格数或候选名单。",
+    "boundary": "本文件是方法层面的条件编码，不是任何真实研究的方案，也不构成临床判断或临床建议。"
+  }
+}

@@ -1,0 +1,207 @@
+{
+  "artifact": "core-research.json",
+  "task": "Bounded local verification of research methods. Not medical guidance, not a systematic review.",
+  "question": {
+    "text": "what methodological limitation prevents treating alternate-day allocation as concealed randomization?",
+    "domain": "clinical trial methodology - allocation concealment and selection bias",
+    "decomposition": {
+      "q1": "what, exactly, does the term 'allocation concealment' require of a trial?",
+      "q2": "is alternate-day allocation classified as an adequate or an inadequate procedure, and by whom?",
+      "q3": "if it is inadequate, what is the mechanism of the limitation rather than merely the label?",
+      "q4": "does the limitation hold independently of the trial's other quality features (blinding, outcome type)?"
+    },
+    "what_would_settle_it": "a methodological source that names alternate-day or calendar-based allocation explicitly, plus empirical work separating effect estimates or baseline imbalance by allocation mechanism; the first was not obtained in this run"
+  },
+  "acquisition": {
+    "search_calls_used": 2,
+    "search_calls_allowed": 2,
+    "source_reads_used": 2,
+    "source_reads_allowed": 2,
+    "on_topic_records_from_the_two_searches": 0,
+    "sources_inspected": 1,
+    "sources_available_but_refused": 1,
+    "note": "both mandated queries were executed; both returned off-topic clinical records. The single inspected source is what remained available within the budget."
+  },
+  "sources_inspected": [
+    {
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "title": "Empirical evidence of bias in treatment effect estimates in controlled trials with different interventions and outcomes: meta-epidemiological study.",
+      "publication": "BMJ, 2008",
+      "doi": "10.1136/bmj.39465.451748.ad",
+      "canonical_url": "https://doi.org/10.1136/bmj.39465.451748.ad",
+      "access_level": "full text (open-access published PDF, parsed to text)",
+      "preserved_sha256_fulltext_md": "f421b0166e0a2c629d7bd12dbd9abdc8fcdf99952846b0f387ee04b9dbdcbbbc",
+      "preserved_sha256_pdf": "ea4229b8357589053586bba158a7e8b957b9967f03cdcebdac9888a385717271",
+      "what_it_is": "a meta-epidemiological study combining 102 meta-analyses (804 trials) that re-examines whether inadequate allocation concealment and lack of blinding are associated with treatment-effect estimates, and how that association varies with the type of outcome",
+      "why_it_serves_q1_and_q2": "its methods box states the working definition of allocation concealment used in the included meta-epidemiological studies, and lists which procedures are usually considered adequate and which inadequate - the second list names alternation",
+      "why_it_cannot_serve_alone": "it never uses the term alternate-day, never analyses a calendar-based allocation schedule, and its empirical estimates concern concealment adequacy as already classified by other studies; it cannot supply an effect estimate attributable to alternate-day allocation"
+    },
+    {
+      "source_id": "PMC3424273",
+      "status": "unavailable",
+      "access_level": "unavailable (source refused: in the open-access index without an open licence)",
+      "used_for": "nothing; the second-source comparison is marked unavailable rather than substituted"
+    }
+  ],
+  "source_inspection": [
+    {
+      "observation_id": "O1",
+      "serves": "q1",
+      "kind": "definition, direct",
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "source_lines": [72],
+      "quote": "Allocation concealment: procedures that secure strict implementation of the schedule of random assignments by preventing foreknowledge of forthcoming allocations by study participants or by those recruiting them to the trial",
+      "reading": "concealment is defined as an operational property of the enrolment step: the people who recruit participants must not be able to know a forthcoming assignment. The definition presupposes that there is a schedule of random assignments to implement. It is about foreknowledge, not about the physical opacity of a container."
+    },
+    {
+      "observation_id": "O2",
+      "serves": "q3",
+      "kind": "consequence, direct",
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "source_lines": [76],
+      "quote": "\u00b7 Failureto concealallocation may leadto biased selectionof participants into intervention groups",
+      "reading": "the named failure mode is selection of participants into groups - the decision of whom to enrol, made by someone who can anticipate the arm."
+    },
+    {
+      "observation_id": "O3",
+      "serves": "q2",
+      "kind": "classification, direct - the load-bearing statement",
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "source_lines": [80],
+      "quote": "Examples of procedures usually considered inadequate include using an open random allocationschedule; assignment envelopeswithout appropriatesafeguards(forexample, unsealed or non-opaque or not sequentially numbered); and alternation or rotation",
+      "reading": "alternation is placed in the inadequate column not together with the mechanically porous options (unsealed or non-opaque envelopes) but as a distinct kind of entry. The pairing with 'rotation' matters: both are calendar- or order-driven sequences. The sentence classifies the method itself, so no envelope, seal or numbering can move it into the adequate column."
+    },
+    {
+      "observation_id": "O4",
+      "serves": "q3",
+      "kind": "mechanism, direct",
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "source_lines": [48],
+      "quote": "bias associated with inade-quate allocation concealment may be greater when patients\u2019 prognosis can readily be assessed at the time of recruitment to trials, leading to the possibility of selection bias",
+      "reading": "the bias route is recruiter knowledge at the moment of recruitment, which is exactly the knowledge that a predictable schedule hands over. This tells us when the failure bites: when the recruiter can form a view of prognosis before deciding to enrol."
+    },
+    {
+      "observation_id": "O5",
+      "serves": "q4",
+      "kind": "dependency between quality domains, direct",
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "source_lines": [205],
+      "quote": "It can be argued that, unless allocation is adequately concealed, it is impossible for a trial to be adequately blinded.",
+      "reading": "concealment is treated as upstream of blinding: if the person enrolling can anticipate the arm, a double-blind appearance downstream does not restore the protection."
+    },
+    {
+      "observation_id": "O6",
+      "serves": "q2",
+      "kind": "classification, second observation inside the same source (definition summary)",
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "source_lines": [94],
+      "quote": "Definitions of adequate allocation concealment and blinding were similar in all three studies. Allocation concealment was assessed as adequate, unclear, or inadequate in two studies4 7 and as adequate or inadequate in the other.6",
+      "reading": "the source reports that the three pooled meta-epidemiological studies had convergent definitions, and that concealment was a graded judgement reported as a separate domain. The agreement is on the definition, not on any single method."
+    },
+    {
+      "observation_id": "O7",
+      "serves": "q3",
+      "kind": "uncertainty, direct",
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "source_lines": [266],
+      "quote": "Exceptwhentheoutcomewas allcause mortality, the sizeof biasvaried between meta-analyses. Therefore, in situations when bias is likely the size of such bias is unpredictable",
+      "reading": "the source's own summary of its quantitative result. This is why the limitation cannot be expressed as a fixed numeric penalty: the direction of concern is known, the magnitude is not, and it varies between meta-analyses."
+    },
+    {
+      "observation_id": "O8",
+      "serves": "q4",
+      "kind": "outcome-dependence and evidentiary caution, direct",
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "source_lines": [234],
+      "quote": "Therewas little evidence of bias in trials assessing all cause mortality or other objectively assessed outcomes. In contrast, inadequate allocation concealment and lack of blinding were associated with over-optimistic estimates of inter-vention effects for subjectively assessed outcomes.",
+      "reading": "the association concentrates in subjectively assessed outcomes and is not visible for all-cause mortality. So the methodological defect is unconditional, while the detectable effect of the defect is outcome-dependent."
+    },
+    {
+      "observation_id": "O9",
+      "serves": "q3",
+      "kind": "mechanism applied to alternation - DERIVED from O1 + O3, not stated by the source",
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "source_lines": [72, 80],
+      "quote": "preventing foreknowledge of forthcoming allocations by study participants or by those recruiting them to the trial",
+      "derivation": "Under alternation the sequence is a deterministic function of the previous assignments and the alternation rule. Anyone who observes or infers one assignment therefore knows the next: alternation, monday-arm-A; next enrolled participant, arm B. This follows from the definition in O1 combined with the classification in O3.",
+      "status": "derived, not quoted. The source does not say this sentence and does not name alternate-day allocation. Confidence: high for the logic, moderate for any empirical claim about magnitudes."
+    }
+  ],
+  "contradictory_or_uncertain_information": [
+    {
+      "issue": "the source's own empirical association is contested in the literature it reviews",
+      "detail": "the preserved source reports that several studies found inadequate concealment associated with exaggerated effects while 'other studies have failed to confirm these associations.8 9' It reports the same tension again in its discussion. Nothing in this run resolves it, and it does not need resolving for the answer here: the question is what concealment is defined to require, not how large the resulting bias is.",
+      "resolution_in_this_run": "carried as uncertainty; the classification in O3 is not an empirical estimate and is not weakened by it"
+    },
+    {
+      "issue": "the magnitude of bias is explicitly unpredictable in the source's own words",
+      "detail": "O7 states the size of bias varies between meta-analyses. A bounded answer therefore cannot report a percentage or a ratio of odds ratios for alternate-day allocation; none is attributable from this source.",
+      "resolution_in_this_run": "no numeric magnitude is stated anywhere in these artifacts"
+    },
+    {
+      "issue": "graded versus binary classification of concealment",
+      "detail": "O6 reports that two of the three pooled studies graded concealment as adequate / unclear / inadequate while the third used a binary adequate / inadequate. A trial using alternation could therefore appear in the literature as 'unclear' rather than 'inadequate' depending on the tool used, which is a reporting-tool artefact, not a difference in the method.",
+      "resolution_in_this_run": "recorded; the classification quoted in O3 is unaffected because it names the procedure directly"
+    },
+    {
+      "issue": "outcome-dependence could be mistaken for conditionality of the defect",
+      "detail": "O8 shows the detectable bias concentrates in subjectively assessed outcomes, with little evidence for all-cause mortality. That is a statement about what the meta-epidemiological method can detect, not about when the sequence is legible to a recruiter.",
+      "resolution_in_this_run": "kept separate in the wording: the defect is unconditional; the detectable effect is outcome-dependent"
+    },
+    {
+      "issue": "the source never mentions alternate-day allocation",
+      "detail": "no passage in the preserved text contains 'alternate day', 'alternate date', 'odd/even' or any calendar rule. What it contains is the general category statement in O3. The specific application to alternate-day allocation is the derived step O9.",
+      "resolution_in_this_run": "marked as derived and as an inference from the source's category, never attributed to it"
+    },
+    {
+      "issue": "the second mandated search produced a large, entirely off-topic set",
+      "detail": "query 2 returned 25 of 1231 matching records and none was a method source; the union of the two queries contained no record on allocation concealment methodology. This is a retrieval outcome under a two-call cap.",
+      "resolution_in_this_run": "recorded as an evidence gap; explicitly not reported as absence of literature, and no inference is drawn from the empty relevance"
+    },
+    {
+      "issue": "a second independent source could not be obtained",
+      "detail": "the second source read was refused by the source itself (in the open-access index without an open licence); the refusal is non-retryable.",
+      "resolution_in_this_run": "marked unavailable; the comparison the task requested is met at the level of two distinct observations reconciled inside one source, and this substitution is stated rather than hidden"
+    }
+  ],
+  "bounded_conclusion": {
+    "answer": "An alternate-day allocation is not concealed randomization because there is no unpredictable random assignment to conceal. Concealment, as the inspected methodological source defines it, means securing strict implementation of a schedule of random assignments by preventing foreknowledge of forthcoming allocations among the people recruiting and enrolled. An alternate-day rule is a deterministic function of the calendar: once the pattern and one assignment are known, the next assignment follows from arithmetic rather than from chance. The people enrolling participants therefore have foreknowledge by construction, which is precisely the condition the definition forbids, and the named failure mode - biased selection of participants into intervention groups - becomes possible. Because the deficiency sits in whether the assignment is predictable in principle, no envelope, seal, opacity or third-party handling of envelopes can repair it: those measures protect an unpredictable sequence and cannot make a predictable one unpredictable.",
+    "status": "synthesized; the classification of alternation as an inadequate procedure is direct from the source (O3), the mechanism is synthesized from the source's definition and failure mode (O1, O4) and the specific step from 'alternation' to 'alternate-day allocation' is derived (O9)",
+    "confidence": {
+      "that the inspected source classifies alternation among inadequate concealment procedures": "high - the statement is verbatim in the preserved text (O3)",
+      "that the definition requires preventing foreknowledge by recruiters": "high - verbatim definition (O1)",
+      "that alternate-day allocation falls under that classification": "moderate-to-high - the step from 'alternation' to a specific calendar rule is an inference of category membership, not a quotation, and no inspected source names alternate-day allocation",
+      "that the magnitude of the resulting bias can be stated": "none - the source states the size of such bias is unpredictable (O7); no magnitude is given here"
+    },
+    "what_would_overturn_it": [
+      "a methodological source that explicitly treats a calendar-based or alternation schedule as an acceptable concealed randomisation method, or that defines concealment in a way that does not require the next assignment to be unpredictable to recruiters",
+      "evidence that in alternate-day trials the recruiter cannot in fact anticipate the arm (for example a design in which the alternation is generated remotely and enrolment order is decoupled from the calendar in a verified way)",
+      "a demonstration that selection bias does not arise in such trials - which would not alter the definitional conclusion but would change its practical weight"
+    ],
+    "what_this_run_does_not_establish": [
+      "that the inspected source names alternate-day allocation - it does not; it names alternation and rotation",
+      "any effect estimate, baseline-imbalance figure, or percentage attributable to alternate-day allocation",
+      "any comparison of alternate-day allocation against a concealed method within one trial or one synthesis",
+      "that the wider literature agrees; the preserved source itself reports studies that failed to confirm the concealment-effect association, and only one source was accessible"
+    ],
+    "gaps_and_what_would_close_them": [
+      {
+        "gap": "no source that names the exact allocation rule in the question",
+        "what_would_close_it": "a trial-methodology text or guidance document that enumerates non-random or quasi-random allocation methods and names alternate-day or calendar-based allocation, read in full rather than as a metadata record"
+      },
+      {
+        "gap": "no empirical estimate for this mechanism",
+        "what_would_close_it": "a meta-epidemiological analysis that classifies trials by allocation mechanism (alternation / quasi-random versus unpredictable concealed) and compares effect estimates and baseline imbalance between those classes"
+      },
+      {
+        "gap": "no document describing what recruiters actually do with a legible schedule",
+        "what_would_close_it": "a documented case series or audit of enrolment decisions within an alternate-day trial, recording out-of-order enrolments and the arms thereby avoided"
+      }
+    ]
+  },
+  "verification": {
+    "local_checker": "verify_artifacts.py",
+    "scope": "verifies that every quote above occurs verbatim in the preserved text, records its source line, and that the failure and budget records match what the tools returned",
+    "not_verified_by_it": "the substantive reasoning; a checker confirms provenance, not correctness"
+  }
+}

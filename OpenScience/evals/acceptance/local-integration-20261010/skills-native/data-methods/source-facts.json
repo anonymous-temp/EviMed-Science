@@ -1,0 +1,557 @@
+{
+  "schemaVersion": 1,
+  "artifact": "source-facts.json",
+  "skill": "source-understanding",
+  "sourceId": "input.csv",
+  "generation": "g1",
+  "docType": "table",
+  "depth": "structured",
+  "generatedAtUtc": "2026-10-10T03:58:23Z",
+  "syntheticStatus": {
+    "synthetic": true,
+    "statement": "This source is a SYNTHETIC TEACHING TABLE created for a bounded method test. It is not a publication, not a protocol, not a label and not patient data; nothing in it may be cited as literature or as a research result.",
+    "confirmedBy": "the task statement that commissioned the file",
+    "whereRecorded": "this field, repeated in every sibling artifact"
+  },
+  "source": {
+    "file": "input.csv",
+    "sha256": "d6687cb19e9460557aa85ef5854fb6056579d7ab375e4feeaef61a84e5a5567d",
+    "utf8Bytes": 82,
+    "utf16CodeUnits": 82,
+    "newline": "lf",
+    "trailingNewline": true,
+    "lines": 8
+  },
+  "typingKey": {
+    "source_stated": "Carried by the document's own bytes, quoted with exact UTF-16 offsets; nothing is added to it.",
+    "analyst_derived": "A computation over the document's bytes, reproducible from the script.",
+    "analyst_inferred": "A reading of the document's wording against convention, stated as such and carried with low confidence; never presented as something the document says."
+  },
+  "anchorConvention": {
+    "startInclusive": true,
+    "endExclusive": true,
+    "offsetUnit": "characters over the complete decoded text",
+    "utf16SpanCarriedAlongside": true,
+    "note": "For this ASCII document character offsets and UTF-16 code-unit offsets coincide; the assertion block checks that rather than assuming it."
+  },
+  "sourceStatedFacts": [
+    {
+      "factId": "SF1",
+      "kind": "document_structure",
+      "statement": "The document is a comma-delimited text file with a single header line.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:1",
+          "start": 0,
+          "end": 25,
+          "quote": "id,group,baseline,outcome",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 0,
+          "utf16End": 25
+        }
+      ]
+    },
+    {
+      "factId": "SF2",
+      "kind": "column_declaration",
+      "statement": "The header declares exactly four fields, in this order: id, group, baseline, outcome.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:1",
+          "start": 0,
+          "end": 25,
+          "quote": "id,group,baseline,outcome",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 0,
+          "utf16End": 25
+        }
+      ],
+      "analystNote": "Field count and order are read from the header text; what the fields mean is stated nowhere in the document."
+    },
+    {
+      "factId": "SF3",
+      "kind": "record_content",
+      "statement": "Six data lines follow the header, so the document delivers six rows.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:2",
+          "start": 26,
+          "end": 35,
+          "quote": "a,A,10,12",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 26,
+          "utf16End": 35
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:7",
+          "start": 74,
+          "end": 81,
+          "quote": "e,B,13,",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 74,
+          "utf16End": 81
+        }
+      ],
+      "analystNote": "Six is a count of delivered lines; whether they are six observations is not stated."
+    },
+    {
+      "factId": "SF4",
+      "kind": "record_content",
+      "statement": "The row \"b,A,12,15\" appears twice, byte-identical.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:3",
+          "start": 36,
+          "end": 45,
+          "quote": "b,A,12,15",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 36,
+          "utf16End": 45
+        }
+      ],
+      "evidenceOccurrencesInText": 2
+    },
+    {
+      "factId": "SF5",
+      "kind": "missing_value_syntax",
+      "statement": "Two rows carry an empty field: \"d,B,,14\" has no baseline value and \"e,B,13,\" has no outcome value.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:6",
+          "start": 66,
+          "end": 73,
+          "quote": "d,B,,14",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 66,
+          "utf16End": 73
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:7",
+          "start": 74,
+          "end": 81,
+          "quote": "e,B,13,",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 74,
+          "utf16End": 81
+        }
+      ],
+      "analystNote": "The empty field is the document's own syntax for an absent value; the document states no missing-value codebook."
+    },
+    {
+      "factId": "SF6",
+      "kind": "value_vocabulary",
+      "statement": "The group field takes exactly the two values \"A\" and \"B\", three rows each.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:2",
+          "start": 26,
+          "end": 35,
+          "quote": "a,A,10,12",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 26,
+          "utf16End": 35
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:5",
+          "start": 56,
+          "end": 65,
+          "quote": "c,B,11,11",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 56,
+          "utf16End": 65
+        }
+      ]
+    },
+    {
+      "factId": "SF7",
+      "kind": "declared_type_hint",
+      "statement": "The field names are the only type information in the document: baseline and outcome read as measurement fields, id and group as labels.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:1",
+          "start": 0,
+          "end": 25,
+          "quote": "id,group,baseline,outcome",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 0,
+          "utf16End": 25
+        }
+      ],
+      "strength": "weak; derived from names only"
+    },
+    {
+      "factId": "SF8",
+      "kind": "document_extent",
+      "statement": "The document's entire content is the header line and the six data lines: it contains no dictating line, no units, no dates, no method statement and no allocation statement.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:1",
+          "start": 0,
+          "end": 25,
+          "quote": "id,group,baseline,outcome",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 0,
+          "utf16End": 25
+        }
+      ],
+      "analystNote": "A bounded statement about this file's bytes, all 82 of which were inspected."
+    }
+  ],
+  "analystDerivedAndInferredFacts": [
+    {
+      "factId": "AD1",
+      "kind": "row_and_column_count",
+      "statement": "The file has 6 data rows and 4 columns.",
+      "derivedFrom": [
+        "SF1",
+        "SF2",
+        "SF3"
+      ],
+      "method": "csv.reader over the frozen bytes, header split off",
+      "value": {
+        "rows": 6,
+        "columns": 4
+      },
+      "label": "analyst_derived"
+    },
+    {
+      "factId": "AD2",
+      "kind": "observation_count",
+      "statement": "The 6 delivered rows correspond to 5 distinct id values and 3 distinct complete (baseline, outcome) observations.",
+      "derivedFrom": [
+        "SF4",
+        "SF5"
+      ],
+      "method": "set arithmetic under the declared exact-match de-duplication rule",
+      "value": {
+        "distinctIds": 5,
+        "completePairRows": 4,
+        "distinctCompletePairs": 3
+      },
+      "label": "analyst_derived"
+    },
+    {
+      "factId": "AD3",
+      "kind": "missingness",
+      "statement": "One baseline cell and one outcome cell are empty, and no row is empty in both.",
+      "derivedFrom": [
+        "SF5"
+      ],
+      "method": "blank test per cell",
+      "value": {
+        "baselineBlank": 1,
+        "outcomeBlank": 1,
+        "rowsBlankInBoth": 0
+      },
+      "label": "analyst_derived"
+    },
+    {
+      "factId": "AD4",
+      "kind": "duplicate_status",
+      "statement": "The repeated row makes the observation count lower than the row count: one delivered row in six is a repeat.",
+      "derivedFrom": [
+        "SF4"
+      ],
+      "method": "exact-tuple tally",
+      "value": {
+        "repeatRows": 1,
+        "shareOfDeliveredRows": 16.7
+      },
+      "label": "analyst_derived"
+    },
+    {
+      "factId": "AD5",
+      "kind": "interpretation",
+      "statement": "The column names suggest id is a record identifier, group a two-level grouping, and baseline and outcome measurements of the same quantity before and after some unspecified point.",
+      "derivedFrom": [
+        "SF2",
+        "SF7"
+      ],
+      "method": "reading of field names against convention",
+      "value": null,
+      "label": "analyst_inferred",
+      "confidence": "low",
+      "note": "Convention only. The document states none of it and no dictionary was supplied."
+    }
+  ],
+  "slots": {
+    "purpose": {
+      "state": "unknown",
+      "reason": "The document states no purpose. It carries no title, caption or accompanying note; that it is a synthetic teaching table is the researcher's statement, not a statement in the document."
+    },
+    "key information": {
+      "state": "known",
+      "value": "Four fields (id, group, baseline, outcome) and six data rows. Group takes the values A and B, three rows each. The row b,A,12,15 is delivered twice. One baseline value and one outcome value are absent, on different rows. Baseline and outcome are integer-valued on an unstated scale.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:1",
+          "start": 0,
+          "end": 25,
+          "quote": "id,group,baseline,outcome",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 0,
+          "utf16End": 25
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:3",
+          "start": 36,
+          "end": 45,
+          "quote": "b,A,12,15",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 36,
+          "utf16End": 45
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:6",
+          "start": 66,
+          "end": 73,
+          "quote": "d,B,,14",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 66,
+          "utf16End": 73
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:7",
+          "start": 74,
+          "end": 81,
+          "quote": "e,B,13,",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 74,
+          "utf16End": 81
+        }
+      ]
+    },
+    "limitations": {
+      "state": "known",
+      "value": "The document states no units, no measurement timing, no group definitions and no data dictionary, and carries no within-id visit or date field; a repeated row therefore cannot be told apart from a repeated measurement.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:1",
+          "start": 0,
+          "end": 25,
+          "quote": "id,group,baseline,outcome",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 0,
+          "utf16End": 25
+        }
+      ],
+      "note": "This is what the document's own content limits it to; it is not a critique imported from outside."
+    }
+  },
+  "claims": [
+    {
+      "id": "C1",
+      "statement": "The document declares the fields id, group, baseline, outcome and delivers six data rows containing two group values.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:1",
+          "start": 0,
+          "end": 25,
+          "quote": "id,group,baseline,outcome",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 0,
+          "utf16End": 25
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:2",
+          "start": 26,
+          "end": 35,
+          "quote": "a,A,10,12",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 26,
+          "utf16End": 35
+        }
+      ],
+      "class": "source_stated"
+    },
+    {
+      "id": "C2",
+      "statement": "One observation, labelled \"b\" in group A with baseline 12 and outcome 15, is delivered twice as byte-identical rows.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:3",
+          "start": 36,
+          "end": 45,
+          "quote": "b,A,12,15",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 36,
+          "utf16End": 45
+        }
+      ],
+      "class": "source_stated"
+    },
+    {
+      "id": "C3",
+      "statement": "Two rows carry an empty field: \"d,B,,14\" lacks a baseline and \"e,B,13,\" lacks an outcome.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:6",
+          "start": 66,
+          "end": 73,
+          "quote": "d,B,,14",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 66,
+          "utf16End": 73
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:7",
+          "start": 74,
+          "end": 81,
+          "quote": "e,B,13,",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 74,
+          "utf16End": 81
+        }
+      ],
+      "class": "source_stated"
+    },
+    {
+      "id": "C4",
+      "statement": "Consequently the delivered row count (6), the complete-pair row count (4) and the count of distinct complete-pair observations (3) are three different numbers, and any summary must name which one it uses.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:3",
+          "start": 36,
+          "end": 45,
+          "quote": "b,A,12,15",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 36,
+          "utf16End": 45
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:6",
+          "start": 66,
+          "end": 73,
+          "quote": "d,B,,14",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 66,
+          "utf16End": 73
+        },
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:7",
+          "start": 74,
+          "end": 81,
+          "quote": "e,B,13,",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 74,
+          "utf16End": 81
+        }
+      ],
+      "class": "analyst_derived"
+    },
+    {
+      "id": "C5",
+      "statement": "The document records no allocation mechanism, so it cannot be read as describing a randomized comparison and no design label may be attached to it.",
+      "evidence": [
+        {
+          "sourceId": "input.csv",
+          "generation": "g1",
+          "unitId": "line:1",
+          "start": 0,
+          "end": 25,
+          "quote": "id,group,baseline,outcome",
+          "startInclusiveEndExclusive": true,
+          "offsetUnit": "characters",
+          "utf16Start": 0,
+          "utf16End": 25
+        }
+      ],
+      "class": "analyst_derived",
+      "note": "Derived from the document's own extent, fully inspected, rather than from any external source."
+    }
+  ],
+  "contents": [
+    "A single comma-delimited header line naming four fields: id, group, baseline, outcome.",
+    "Six data rows: two group values, integer values on an unstated scale, and two empty cells.",
+    "One row delivered twice, byte-identical."
+  ],
+  "limitations": [
+    "The table states no units, scale or measurement timing for baseline and outcome.",
+    "It defines neither the group labels A and B nor any allocation mechanism.",
+    "It carries no within-id visit, sequence or date field, so a repeated row cannot be told apart from a repeated measurement.",
+    "It is synthetic teaching content, not a research record, and supports no substantive claim."
+  ],
+  "omissionAudit": {
+    "status": "not_run",
+    "reason": "This bounded test supplied no frozen source input with an auditSample of units to check. An omission rate cannot be measured without a sampled unit list, and reporting 0 here would claim a clean audit that was never performed.",
+    "omissionRate": null
+  },
+  "limitationsOfThisExtraction": [
+    "The document is 82 bytes and was inspected in full, so the size limits of the source contract do not bind here.",
+    "No omission audit was run because no audit sample was provided.",
+    "The docType 'table' and the slot set {purpose, key information, limitations} are the analyst's typing of this source; the source declares neither.",
+    "No literature was consulted, so nothing in this extraction is corroborated externally."
+  ]
+}

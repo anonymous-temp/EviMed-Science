@@ -1,0 +1,340 @@
+{
+  "schema": "vcr-bounded/analysis/1",
+  "artifactId": "analysis",
+  "title": "保存的确定性设计期计算结果的绑定与读取（有界方法核验）",
+  "scope": {
+    "kind": "bounded_method_verification",
+    "establishes": [
+      "把每一个被展示的数绑到它所在的确定性结果文件、作业标识与字节哈希",
+      "用数值字段相等性核验，取代任何重新计算",
+      "照实记录敏感性诊断与这份结果所在的 tier"
+    ],
+    "does_not_establish": [
+      "完整虚拟临床研究引擎程序的有效性",
+      "任何临床结论或临床接受度"
+    ],
+    "patientData": "none",
+    "platformStudyOrResultRegistered": false
+  },
+  "researchTier": {
+    "tier": "design_support",
+    "tierReading": "设计期解析计算：给定效应、标准差、检验水准与把握度，算出所需例数。",
+    "isPatientSimulation": false,
+    "isTrialEmulation": false,
+    "isComparativeEffectiveness": false,
+    "producesPatientRows": false,
+    "countsAreAllNull": true,
+    "countsReading": "四个计数字段在这个作业里全为空值：它没有读入任何患者记录，也没有生成任何记录。空值不等于 0，不得读成「零例患者」。",
+    "whatThisResultCanBeUsedFor": ["设计期的例数规划", "与另外的设计方案做比较时的算术基线"],
+    "whatThisResultCannotBeUsedFor": ["给药建议", "疗效判断", "监管申报", "任何临床决策"],
+    "preservedFromPriorTask": "本次任务声明该结果是此前的受管确定性设计期计算的结果，按原样读取；本文件不重新计算，也不重新登记。"
+  },
+  "binding": {
+    "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+    "bytes": 2254,
+    "sha256": "1d2a1b0fc032aa305ce36c607c0814aa6d3916b2ef161a9ea2190f799fc57aae",
+    "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+    "method": "design.analytic",
+    "methodVersion": "1.1.0",
+    "protocolVersion": 1,
+    "scenarioHash": "0905744ace33586eea9787d74ee9008ecde98ed08b65be3cf3061b8d6074fc43",
+    "outputHash": "052983aeabb41f8a9ef73c0995e5e58192b953df98577b4f26abc3b792c9cff7",
+    "engineVersion": "1.0.0",
+    "status": "succeeded",
+    "conclusion": "estimable",
+    "notEstimableRule": null,
+    "seed": 1,
+    "replicates": null,
+    "replicatesReading": "解析计算不做重复抽样，因此重复次数为空值、也没有蒙特卡洛标准误。",
+    "manifestEnvironment": {
+      "rVersion": "R 4.3.3",
+      "platform": "x86_64-pc-linux-gnu",
+      "cores": 1,
+      "rngKind": "L'Ecuyer-CMRG",
+      "cpuSeconds": 1.01,
+      "startedAt": "2026-10-10T03:40:19.992Z",
+      "finishedAt": "2026-10-10T03:40:21.022Z"
+    },
+    "inputHashes": [
+      { "id": "asm_replay@1", "kind": "assumption", "hash": "4781a8c7830f05039eb5906ca1348a0e23ce93bb98aa7d494b7d166975d630f3" }
+    ],
+    "registrationClaim": "none: 本文件不声称该项计算已在任何研究或平台上登记为结果。",
+    "identityDistinction": {
+      "executionJobId": "147deaff-72e6-4711-acb4-1e80315fd9f0",
+      "engineJobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+      "note": "执行记录本身的编号与结果里引擎作业的编号是两个不同的标识，两者都照实记录，不互相替代。"
+    }
+  },
+  "frozenEngineOutput": {
+    "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+    "protocolVersion": 1,
+    "status": "succeeded",
+    "method": "design.analytic",
+    "methodVersion": "1.1.0",
+    "scenarioHash": "0905744ace33586eea9787d74ee9008ecde98ed08b65be3cf3061b8d6074fc43",
+    "seed": 1,
+    "replicates": null,
+    "conclusion": "estimable",
+    "notEstimableRule": null,
+    "counts": {
+      "realPatients": null,
+      "events": null,
+      "effectiveSampleSize": null,
+      "generatedRecords": null
+    },
+    "measures": [
+      { "name": "required_total", "value": 181, "simulated": false, "source": "calculated" },
+      { "name": "required_per_arm", "value": 91, "simulated": false, "source": "calculated" }
+    ],
+    "diagnostics": {
+      "powerCurve": {
+        "xLabel": "真实效应（均值差）",
+        "yLabel": "功效",
+        "series": [
+          {
+            "key": "analytic",
+            "label": "解析功效",
+            "source": "calculated",
+            "ours": false,
+            "pooled": false,
+            "dashed": false,
+            "points": [
+              { "x": 0, "y": 0.050000000000000294 },
+              { "x": 0.5, "y": 0.05900032878295558 },
+              { "x": 1, "y": 0.08651344604157851 },
+              { "x": 1.5000000000000002, "y": 0.13364915988439463 },
+              { "x": 2, "y": 0.20101136167414202 },
+              { "x": 2.5, "y": 0.28739207232690256 },
+              { "x": 3.0000000000000004, "y": 0.3888722506773379 },
+              { "x": 3.5000000000000004, "y": 0.498821442873138 },
+              { "x": 4, "y": 0.6089254072214562 },
+              { "x": 4.5, "y": 0.7109097324618647 },
+              { "x": 5, "y": 0.7983056214460588 },
+              { "x": 5.5, "y": 0.8676022339487028 },
+              { "x": 6.000000000000001, "y": 0.9184426037992502 },
+              { "x": 6.5, "y": 0.9529558005867017 },
+              { "x": 7.000000000000001, "y": 0.9746349740973345 },
+              { "x": 7.5, "y": 0.9872352924970907 },
+              { "x": 8, "y": 0.9940117289079171 }
+            ]
+          }
+        ]
+      },
+      "sensitivity": {
+        "measure": "所需总样本量",
+        "base": { "value": 181 },
+        "rows": [
+          { "label": "效应", "range": "4–6", "low": 126, "high": 283 },
+          { "label": "标准差", "range": "9.6–14.4", "low": 116, "high": 261 }
+        ]
+      }
+    },
+    "tables": [],
+    "manifest": {
+      "engineVersion": "1.0.0",
+      "rVersion": "R 4.3.3",
+      "packageLockHash": "56edc6432ad43b12fcef2e44938bdb111ae8889b2532b298aac2ebbb3317c692",
+      "startedAt": "2026-10-10T03:40:19.992Z",
+      "finishedAt": "2026-10-10T03:40:21.022Z",
+      "cpuSeconds": 1.01,
+      "rngKind": "L'Ecuyer-CMRG",
+      "cores": 1,
+      "platform": "x86_64-pc-linux-gnu",
+      "inputHashes": [
+        { "id": "asm_replay@1", "kind": "assumption", "hash": "4781a8c7830f05039eb5906ca1348a0e23ce93bb98aa7d494b7d166975d630f3" }
+      ],
+      "outputHash": "052983aeabb41f8a9ef73c0995e5e58192b953df98577b4f26abc3b792c9cff7",
+      "signature": "fa0db5f43750a591200a0a556e4d20f7910365420c968981c61705f529a7473e"
+    }
+  },
+  "numericResultFields": [
+    {
+      "name": "required_total",
+      "value": 181,
+      "jsonPointer": "/measures/0/value",
+      "pathInThisFile": "/frozenEngineOutput/measures/0/value",
+      "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+      "methodVersion": "1.1.0",
+      "unit": "participants",
+      "kind": "primary",
+      "useRule": "照读，不重新计算，不四舍五入，不做单位换算"
+    },
+    {
+      "name": "required_per_arm",
+      "value": 91,
+      "jsonPointer": "/measures/1/value",
+      "pathInThisFile": "/frozenEngineOutput/measures/1/value",
+      "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+      "methodVersion": "1.1.0",
+      "unit": "participants per arm",
+      "kind": "primary",
+      "useRule": "照读，不重新计算，不四舍五入，不做单位换算"
+    },
+    {
+      "name": "sensitivity_effect_low",
+      "value": 126,
+      "jsonPointer": "/diagnostics/sensitivity/rows/0/low",
+      "pathInThisFile": "/frozenEngineOutput/diagnostics/sensitivity/rows/0/low",
+      "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+      "methodVersion": "1.1.0",
+      "unit": "participants",
+      "kind": "diagnostic",
+      "useRule": "照读；不自行枚举敏感性网格里的其他取值"
+    },
+    {
+      "name": "sensitivity_effect_high",
+      "value": 283,
+      "jsonPointer": "/diagnostics/sensitivity/rows/0/high",
+      "pathInThisFile": "/frozenEngineOutput/diagnostics/sensitivity/rows/0/high",
+      "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+      "methodVersion": "1.1.0",
+      "unit": "participants",
+      "kind": "diagnostic",
+      "useRule": "照读"
+    },
+    {
+      "name": "sensitivity_sd_low",
+      "value": 116,
+      "jsonPointer": "/diagnostics/sensitivity/rows/1/low",
+      "pathInThisFile": "/frozenEngineOutput/diagnostics/sensitivity/rows/1/low",
+      "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+      "methodVersion": "1.1.0",
+      "unit": "participants",
+      "kind": "diagnostic",
+      "useRule": "照读"
+    },
+    {
+      "name": "sensitivity_sd_high",
+      "value": 261,
+      "jsonPointer": "/diagnostics/sensitivity/rows/1/high",
+      "pathInThisFile": "/frozenEngineOutput/diagnostics/sensitivity/rows/1/high",
+      "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+      "methodVersion": "1.1.0",
+      "unit": "participants",
+      "kind": "diagnostic",
+      "useRule": "照读"
+    }
+  ],
+  "sensitivityDiagnostics": {
+    "base": {
+      "measure": "所需总样本量",
+      "value": 181,
+      "jsonPointer": "/diagnostics/sensitivity/base/value",
+      "note": "与本结果的主指标同值，照读。"
+    },
+    "varyingDimensions": [
+      {
+        "label": "效应",
+        "statedRange": "4–6",
+        "low": 126,
+        "high": 283,
+        "jsonPointer": "/diagnostics/sensitivity/rows/0",
+        "reading": "效应在 4 到 6 之间变动时，所需总例数在 126 到 283 之间。"
+      },
+      {
+        "label": "标准差",
+        "statedRange": "9.6–14.4",
+        "low": 116,
+        "high": 261,
+        "jsonPointer": "/diagnostics/sensitivity/rows/1",
+        "reading": "标准差在其约正负两成之间变动时，所需总例数在 116 到 261 之间。"
+      }
+    ],
+    "whatTheseRowsAre": "结果文件里已经算好并存下来的敏感性诊断，本文件按原值读取。",
+    "whatTheseRowsAreNot": [
+      "不是本方法新做的计算",
+      "不是置信区间、可信区间或预测区间；这里没有区间，只有已算好的边界值",
+      "不是对未枚举网格点的插值"
+    ],
+    "intervalKindsPresentInTheResult": "none: 该结果不含任何区间，也不含蒙特卡洛标准误。"
+  },
+  "powerCurve": {
+    "xLabel": "真实效应（均值差）",
+    "yLabel": "功效",
+    "points": 17,
+    "jsonPointer": "/diagnostics/powerCurve/series/0/points",
+    "reading": "效应的功效曲线，横轴是真实效应（均值差），纵轴是功效。",
+    "atTheRegisteredEffect": {
+      "x": 5,
+      "y": 0.7983056214460588,
+      "jsonPointer": "/diagnostics/powerCurve/series/0/points/10",
+      "reading": "在效应取该输入值时，解析功效见本节点保存的原值；此处不另写一个取整后的功效数。",
+      "floatingPointNote": "原值按原样读取；浮点尾数不做清理，也不四舍五入成 0.80。"
+    },
+    "source": "calculated"
+  },
+  "regressionToInputs": [
+    {
+      "inputField": "effect",
+      "value": 5,
+      "originArtifactId": "evidence-parameters",
+      "originAnchorField": "effect",
+      "originQuote": "Mean difference5points",
+      "chain": "证据摘录 E 的均值差分句 → 本方法把它作为效应输入 → 设计期计算的效应输入 → 得出所需例数",
+      "note": "这个数出自证据摘录，不是本方法设定的。"
+    },
+    {
+      "inputField": "sd",
+      "value": 12,
+      "originArtifactId": "evidence-parameters",
+      "originAnchorField": "sd",
+      "originQuote": "standard deviation12points",
+      "chain": "证据摘录 E 的标准差句 → 本方法把它作为标准差输入 → 设计期计算的标准差输入",
+      "note": "这个数出自证据摘录，不是本方法设定的。"
+    },
+    {
+      "inputField": "alpha",
+      "value": 0.05,
+      "originArtifactId": "evidence-parameters",
+      "originAnchorField": null,
+      "originQuote": null,
+      "chain": "本次登记的分析设定",
+      "note": "该数不出自证据摘录 E；摘录里没有提到检验水准。"
+    },
+    {
+      "inputField": "power",
+      "value": 0.8,
+      "originArtifactId": "evidence-parameters",
+      "originAnchorField": null,
+      "originQuote": null,
+      "chain": "本次登记的分析设定",
+      "note": "该数不出自证据摘录 E；摘录里没有提到把握度。"
+    },
+    {
+      "inputField": "sided",
+      "value": 2,
+      "originArtifactId": "evidence-parameters",
+      "originAnchorField": null,
+      "originQuote": null,
+      "chain": "本次登记的分析设定",
+      "note": "双侧检验的设定，同样不出自摘录。"
+    }
+  ],
+  "inputSideEvidenceGap": {
+    "gap": "效应输入的计量单位",
+    "state": "unknown",
+    "detail": "证据摘录只写 points，没有给出量纲。所需例数对量纲不敏感（效应与标准差同量纲时按比值进入计算），但这个未知会限制结果与其他单位参数的可比性。",
+    "handling": "保留为未知，不补单位。"
+  },
+  "verificationOfThisArtifact": {
+    "method": "数值字段相等性核验：把本文件保存的结果块与本文件所绑定的结果文件解析后按字段逐个比较。",
+    "comparedFields": ["jobId", "method", "methodVersion", "scenarioHash", "conclusion", "notEstimableRule", "measures", "counts", "diagnostics.sensitivity", "diagnostics.powerCurve.series[0].points", "manifest.outputHash"],
+    "recomputationPerformed": false,
+    "reportPath": "/workspace/skill-closure/vcr-bounded/verification-report.json"
+  },
+  "limitations": [
+    "结果来自设计期解析计算，不是患者模拟：四个计数字段全为空值，没有患者行，没有随机分组。",
+    "解析计算不做重复抽样，因此没有蒙特卡洛标准误；该结果里也没有任何区间。",
+    "敏感性诊断的取值是结果里已算好并存下来的，本方法没有枚举网格、也没有插值。",
+    "效应输入的量纲未知；摘录没有给出 points 对应的量表。",
+    "证据摘录的组间适用性未知：5 是两组间对比量还是单组相对于基准的变化量不确定，因此这两个数只能作为设计期输入使用。",
+    "证据摘录没有给出人群来源地区，本方法与该结果都不构成对中国人群的独立临床验证。"
+  ],
+  "provenance": {
+    "sources": [
+      { "id": "real-engine-result", "path": "/workspace/skill-closure/vcr-bounded/real-engine-result.json", "kind": "preserved deterministic engine result", "patientData": false },
+      { "id": "E", "kind": "single evidence excerpt supplied in the task brief", "patientData": false }
+    ],
+    "boundary": "本文件是结果绑定与读取的记录，不是新的分析；它不注册任何研究或结果，也不重新计算任何数。"
+  }
+}

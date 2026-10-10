@@ -1,0 +1,245 @@
+{
+  "schema": "vcr-bounded/protocol/1",
+  "artifactId": "protocol",
+  "title": "系统性糖皮质激素当前暴露的排除条件编码（有界方法核验）",
+  "scope": {
+    "kind": "bounded_method_verification",
+    "establishes": [
+      "把「排除当前系统性糖皮质激素暴露」翻译成引擎认识的结构化要求",
+      "把时间语义（历史暴露 vs 当前暴露）写成显式规则",
+      "把「判不了」写成显式状态策略，而不是隐式并入不符合"
+    ],
+    "does_not_establish": [
+      "完整虚拟临床研究引擎程序的有效性",
+      "任何临床可用性或临床验证",
+      "任何真实的入排判定结果"
+    ],
+    "patientData": "none",
+    "platformStudyOrResultRegistered": false
+  },
+  "studyDefinition": {
+    "population": {
+      "requirement": { "op": "compare", "variable": "age", "comparator": "gte", "value": 18, "unit": "years" },
+      "text": "成人，年龄不小于 18 岁。",
+      "criteria": [
+        {
+          "id": "crit-inclusion-adult",
+          "kind": "inclusion",
+          "criterionType": "demographic",
+          "requirement": { "op": "compare", "variable": "age", "comparator": "gte", "value": 18, "unit": "years" },
+          "sourceText": null,
+          "sourceLocator": { "origin": "task-specified study definition" },
+          "evidenceNeeded": ["出生日期或年龄记录"],
+          "applicability": null
+        }
+      ]
+    },
+    "exclusion": {
+      "id": "crit-exclusion-current-glucocorticoid",
+      "kind": "exclusion",
+      "criterionType": "concomitant_medication",
+      "requirement": {
+        "op": "compare",
+        "variable": "systemic_glucocorticoid_exposure_state",
+        "comparator": "ne",
+        "value": "current"
+      },
+      "sourceText": "exclude CURRENT systemic glucocorticoid exposure",
+      "sourceLocator": { "origin": "task-specified study definition" },
+      "evidenceNeeded": [
+        "用药史",
+        "计划给药或用药记录",
+        "本次评估日的用药清单"
+      ],
+      "applicability": null,
+      "readingRules": {
+        "satisfiedMeans": "受试者不被本条排除（当前没有在用的全身性糖皮质激素暴露）",
+        "notSatisfiedMeans": "受试者被本条排除（当前在用全身性糖皮质激素）",
+        "unknownIsNotNotSatisfied": "证据不足以确定当前暴露状态时为「未知」，不得写成「不符合」"
+      }
+    },
+    "frequencyStandard": "预设判定时点，或最后一次有用药记录的时间点（以较高频者为准）",
+    "historicalExposureIsNotExcluded": "判据是「当前是否在用」，不是「既往是否用过」。既往暴露且已停用不触发本条排除。"
+  },
+  "controlledVocabulary": [
+    {
+      "variable": "systemic_glucocorticoid_exposure_state",
+      "usageAnchor": "state of the systemic glucocorticoid exposure at the assessment time, for the single concept 'current systemic glucocorticoid exposure'",
+      "type": "categorical",
+      "values": [
+        {
+          "code": "current",
+          "labelZh": "当前在使用",
+          "means": "在判定时点仍在使用的全身性糖皮质激素暴露，包括昨日开始且仍在继续的用药",
+          "effectUnderExclusionRequirement": "not_satisfied（被本条排除）"
+        },
+        {
+          "code": "not_current_interval",
+          "labelZh": "既往使用、已停用（区间内）",
+          "means": "曾使用、已停用，停药发生在历史区间内；历史区间的锚点是原文给出的停药时间，不是推断值",
+          "effectUnderExclusionRequirement": "satisfied（不被本条排除）"
+        },
+        {
+          "code": "not_current_never",
+          "labelZh": "从未使用",
+          "means": "原始记录明确声明一生中没有使用过（需要显式声明，缺史不等于此值）",
+          "effectUnderExclusionRequirement": "satisfied（不被本条排除）"
+        },
+        {
+          "code": "unknown",
+          "labelZh": "无法确定",
+          "means": "用药史缺失、记录不完整或记录互相矛盾，无法确定判定时点的暴露状态",
+          "effectUnderExclusionRequirement": "unknown（不满足，也不排除）"
+        }
+      ],
+      "singleNameRule": "同一概念在整份方案里只有一个变量名；匹配写入的患者事实必须使用同名变量。"
+    }
+  ],
+  "temporalSemantics": {
+    "unitOfMeasurement": "days",
+    "historicalWindow": {
+      "days": 180,
+      "derivation": "6 months × 30 days per month",
+      "isVerbatimFromSource": false,
+      "note": "原文写的是 6 months；天数换算是本方法层面的单位换算，不改变 6 个月的临床含义。"
+    },
+    "windows": {
+      "evaluatorWindow": "自评估日回溯 180 天的区间",
+      "currentAssessmentPoint": "评估日（asOf）",
+      "anchorDate": "无外部锚点时为评估日；原文给出停药时间时，历史区间的锚点照用原文给出的时间"
+    },
+    "elapsedComputation": {
+      "op": "elapsed_since",
+      "variable": "systemic_glucocorticoid_exposure_end",
+      "days": 180,
+      "comparator": "gte",
+      "appliesTo": ["not_current_interval"],
+      "rationale": "历史的负向暴露只有在停用时间早于窗口起点时才算「当前未暴露」；不足窗口的停用属于窗口内的近期暴露，需要单独规则处理。"
+    },
+    "ruleOrder": [
+      "1. 先按记录判断判定时点的用药是否仍在继续（继续 → current；已停用 → 进入 2）",
+      "2. 已停用者用 elapsed_since 比较停用时间与窗口：达到窗口 → not_current_interval；未达到窗口 → 需要单独规则，不得默认算作「当前未暴露」",
+      "3. 记录缺失 → unknown"
+    ],
+    "forbiddenInference": [
+      "不得把「有既往用药记录」推成「当前在用」",
+      "不得把「已停用」推成「从未使用」",
+      "不得从「记录里没写」推出任何暴露状态",
+      "不得为缺失的时间点补一个日期"
+    ]
+  },
+  "unknownPolicy": {
+    "principle": "判不了不等于不符合。缺失的历史既不是阴性也不是阳性。",
+    "closure": "fail_closed_for_inclusion",
+    "rules": [
+      {
+        "id": "up-1",
+        "condition": "排除条件适用，且判定时点的暴露状态无法确定",
+        "state": "unknown",
+        "mustNot": "不得写成 satisfied（阴性）或 not_satisfied（阳性）",
+        "consequence": "只要有一条适用的排除条件为「未知」，该受试者就不能是「符合」"
+      },
+      {
+        "id": "up-2",
+        "condition": "病历缺少用药史，或记录只覆盖部分时间",
+        "state": "unknown",
+        "mustNot": "不得把缺失记成「从未使用」",
+        "consequence": "需要这条事实的条件回到「未知」"
+      },
+      {
+        "id": "up-3",
+        "condition": "记录明确声明一生中没有使用过",
+        "state": "not_current_never",
+        "mustNot": "不得由缺史推得此值"
+      },
+      {
+        "id": "up-4",
+        "condition": "同一概念在记录里互相矛盾",
+        "state": "unknown",
+        "mustNot": "不得挑选与排除结论一致的一条"
+      },
+      {
+        "id": "up-5",
+        "condition": "停药时间缺失、无法计算 elapsed_since",
+        "state": "unknown",
+        "mustNot": "不得默认按「已超出窗口」处理"
+      }
+    ],
+    "reasonsVocabulary": [
+      { "reason": "historical_negative_exposure", "factStatement": "用药已停用且停用时间锚点在历史区间内", "stateUnderExclusion": "satisfied" },
+      { "reason": "current_positive_exposure", "factStatement": "用药在判定时点仍在继续", "stateUnderExclusion": "not_satisfied" },
+      { "reason": "insufficient_history", "factStatement": "用药史缺失，没有可用的暴露信息", "stateUnderExclusion": "unknown" }
+    ]
+  },
+  "derivationToNativeGrammar": [
+    {
+      "state": "current",
+      "requirementJudgement": "not_satisfied",
+      "nativeForm": { "op": "compare", "variable": "systemic_glucocorticoid_exposure_state", "comparator": "eq", "value": "current" }
+    },
+    {
+      "state": "not_current_interval",
+      "requirementJudgement": "satisfied",
+      "nativeForm": { "op": "elapsed_since", "variable": "systemic_glucocorticoid_exposure_end", "days": 180, "comparator": "gte" }
+    },
+    {
+      "state": "not_current_never",
+      "requirementJudgement": "satisfied",
+      "nativeForm": { "op": "compare", "variable": "systemic_glucocorticoid_exposure_state", "comparator": "eq", "value": "not_current_never" }
+    },
+    {
+      "state": "unknown",
+      "requirementJudgement": "unknown",
+      "nativeForm": null,
+      "note": "「未知」没有对应的肯定式要求，它是评估器在事实缺失时给出的状态。"
+    }
+  ],
+  "criteria": [
+    {
+      "id": "crit-inclusion-adult",
+      "kind": "inclusion",
+      "criterionType": "demographic",
+      "requirement": { "op": "compare", "variable": "age", "comparator": "gte", "value": 18, "unit": "years" },
+      "sourceText": null,
+      "sourceLocator": { "origin": "task-specified study definition" },
+      "evidenceNeeded": ["出生日期或年龄记录"],
+      "applicability": null
+    },
+    {
+      "id": "crit-exclusion-current-glucocorticoid",
+      "kind": "exclusion",
+      "criterionType": "concomitant_medication",
+      "requirement": {
+        "op": "compare",
+        "variable": "systemic_glucocorticoid_exposure_state",
+        "comparator": "ne",
+        "value": "current"
+      },
+      "sourceText": "exclude CURRENT systemic glucocorticoid exposure",
+      "sourceLocator": { "origin": "task-specified study definition" },
+      "evidenceNeeded": ["用药史", "计划给药或用药记录", "本次评估日的用药清单"],
+      "applicability": null
+    }
+  ],
+  "criteriaAnnotations": [
+    {
+      "criterionId": "crit-exclusion-current-glucocorticoid",
+      "contextAnnotation": {
+        "readingOfTheCriterion": "本条排除的是判定时点仍在使用的全身性糖皮质激素暴露。",
+        "notExcluded": "既往使用、已停用（停用时间在历史区间内）。",
+        "excluded": "判定时点仍在使用的暴露，包括前一天开始且仍在继续的用药。",
+        "unknown": "用药史缺失或不足，无法确定判定时点的暴露状态。",
+        "sourceText": "exclude CURRENT systemic glucocorticoid exposure"
+      }
+    }
+  ],
+  "provenance": {
+    "sources": [
+      { "id": "task-definition", "kind": "task brief", "patientData": false },
+      { "id": "synthetic-C1/C2/C3", "kind": "synthetic clinical source excerpts", "patientData": false },
+      { "id": "evidence-excerpt-E", "kind": "single evidence excerpt", "patientData": false }
+    ],
+    "noPopulationCounts": "本文件不含任何入排人数、比例或候选名单。",
+    "boundary": "本文件是方法层面的编码，不是任何真实研究的方案，也不构成临床判断。"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/research-sessions",
+    "projectId": "model-gene-bound"
+  },
+  "response": [
+    {
+      "sessionId": "session-60b0e595-b840-4cac-afae-cab2ffa92744",
+      "mode": "specialist",
+      "agentId": "gene-expression-analysis",
+      "agentVersion": "1.0.1",
+      "runtimeAgent": "evimed-gene-expression-analysis",
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T04:58:21.738Z",
+      "updatedAt": "2026-10-10T04:58:21.738Z"
+    }
+  ]
+}

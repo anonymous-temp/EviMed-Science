@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "finishedAt": "2026-10-10T04:59:58.269Z",
+  "sourcePlannedPackageCount": 94,
+  "boundedTaskPackageCount": 94,
+  "unknownBoundedTaskPackageIds": [],
+  "qualificationStates": {
+    "bounded-hosted-task-matched": 44,
+    "bounded-historical-task-matched": 50
+  },
+  "currentImageExecution": "unknown",
+  "fullPackageExecution": "unknown",
+  "productionAcceptance": "not-certified",
+  "skillsOnlyIndependentVerification": {
+    "passed": true,
+    "command": "python3 evals/capability-audit/verify_release_audit.py --skills-only --report-dir /tmp/evimed-release-closure-20261010/skills-audit-current-94 --evidence-dir evals/acceptance/local-release-closure-20261010/skills-current",
+    "reportPrivatePath": "/tmp/evimed-release-closure-20261010/skills-audit-current-94/skill-audit-v5.json",
+    "reportSha256": "f2ad3e35ece0f539eeca9ee516daccaf2d554bc0dd4277a38efa2b5e707b0457"
+  },
+  "campaignDocuments": [
+    {
+      "file": "skill-execution-v1.json",
+      "sha256": "d2eafca44a6221de3edebe7e58305a680de60b3ae2478bfe671bf52eb72a2da9"
+    },
+    {
+      "file": "platform-skill-execution-v1.json",
+      "sha256": "c7728a9d45d46baeecbbeb3d453080e968efbb37a182d0e6e2547f7579168fe3"
+    },
+    {
+      "file": "hosted-skill-execution-v1.json",
+      "sha256": "288943c96c183b9c5ac3f9d2ca29d14c4cb36be8818dd8524b4f955d385961ef"
+    }
+  ],
+  "limitations": [
+    "38 curated and 12 platform records prove their bounded methods; 44 hosted records prove scoped outputs with exact skill body injection.",
+    "No full-package, complete image, external partner, independent Chinese clinical label, publication-readiness or production acceptance is inferred.",
+    "Historical failed attempts and 41/43 stage snapshots remain in local-integration-20261010/skills-native."
+  ],
+  "concurrentScopeRegression": {
+    "passed": true,
+    "evidence": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/verification.json",
+    "scope": "two actual simultaneous sessions in one owned project"
+  },
+  "coldChosenLineActivationRegression": {
+    "passed": true,
+    "evidence": "evals/acceptance/local-integration-20261010/skills-native/gene-activation-control/first-request-header-tools.json",
+    "scope": "first actual native model request exposes both gene tools; no repeated source acquisition"
+  }
+}

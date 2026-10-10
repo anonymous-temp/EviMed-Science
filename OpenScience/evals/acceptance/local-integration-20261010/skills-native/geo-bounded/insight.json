@@ -1,0 +1,359 @@
+{
+  "schemaVersion": 1,
+  "artifact": "geo-insight",
+  "mode": "bounded-research-test",
+  "minimal": true,
+  "syntheticObservations": true,
+  "teachingProject": true,
+  "runDate": "2026-10-10",
+  "product": {
+    "brandName": "TeachingDrugA",
+    "genericName": null,
+    "aliases": [],
+    "misspellings": [],
+    "genericAliases": [],
+    "approvalNo": null,
+    "rx": null,
+    "jurisdiction": "jurisdictionX",
+    "holder": null,
+    "singleSource": null,
+    "identityStatus": "unknown"
+  },
+  "competitors": [],
+  "identityChecks": [
+    {
+      "check": "说明书索引（中英文）",
+      "tool": "drug_label_search",
+      "query": "TeachingDrugA",
+      "result": "0 条记录；中文说明书索引未命中，且本部署未配置私有证据接口，仅回落到公开源。",
+      "interpretation": "取不到说明书，不等于不存在说明书；产品身份无法由此确认。",
+      "checkedAt": "2026-10-10"
+    },
+    {
+      "check": "公开标签库（美国）",
+      "tool": "biomedical_source_search(openfda)",
+      "query": "TeachingDrugA",
+      "result": "0 条记录。",
+      "interpretation": "空结果只说明该词未命中，不构成否定证据。",
+      "checkedAt": "2026-10-10"
+    },
+    {
+      "check": "文献库",
+      "tool": "biomedical_source_search(pubmed)",
+      "query": "TeachingDrugA",
+      "result": "0 条记录。",
+      "interpretation": "无题录可支撑任何关于该产品的研究设计、证据等级或效应量的陈述。",
+      "checkedAt": "2026-10-10"
+    },
+    {
+      "check": "试验注册库",
+      "tool": "clinical_trial_search",
+      "query": "TeachingDrugA",
+      "result": "0 条注册试验（no_match）。",
+      "interpretation": "不能写成“没有试验”，只能写本次检索未命中。",
+      "checkedAt": "2026-10-10"
+    },
+    {
+      "check": "开放网页",
+      "tool": "web_search",
+      "query": "\"TeachingDrugA\" drug",
+      "result": "0 条结果，且一个检索引擎未响应。",
+      "interpretation": "引擎未响应与零结果都不能当作“该话题无人讨论”。",
+      "checkedAt": "2026-10-10"
+    },
+    {
+      "check": "本项目已留存来源库全文检索",
+      "tool": "本地检索 .evimed-sources/",
+      "query": "TeachingDrugA",
+      "result": "0 处命中；留存来源均为与本项目无关的其它药品与疾病资料。",
+      "interpretation": "本项目没有任何可引用的留存来源，主张库只能为空。",
+      "checkedAt": "2026-10-10"
+    }
+  ],
+  "identityFindings": [
+    "本次运行取不到该产品的任何公开身份信息：说明书索引、公开标签库、文献库、试验注册库、开放网页均为 0 条，已留存来源库中 0 处命中。",
+    "因此 brandName 之外的身份字段一律为 null，通用名、批准文号、持证人与处方/非处方属性均未确认。",
+    "私有方法与平台项目读写工具在本部署不可用，本轮不做任何平台记录写入。"
+  ],
+  "claimLibrary": {
+    "minimal": true,
+    "claims": [],
+    "candidateClaims": [
+      {
+        "candidateKey": "CAND-01",
+        "statement": "所提供材料未确立该药儿童用药的安全性。",
+        "sourceKind": null,
+        "artifactPath": null,
+        "inLibrary": false,
+        "reason": "这是“材料空白”的陈述，不是来源支持的临床主张；没有可逐字引用的来源，因此不进入主张库，也不能生成证据卡。"
+      },
+      {
+        "candidateKey": "CAND-02",
+        "statement": "儿童用药安全需要可核验的说明书或研究证据支持。",
+        "sourceKind": null,
+        "artifactPath": null,
+        "inLibrary": false,
+        "reason": "同上：这是方法学陈述，不是产品主张。"
+      }
+    ],
+    "cards": []
+  },
+  "observations": [
+    {
+      "id": "OBS-01",
+      "synthetic": true,
+      "source": "consumerA",
+      "question": "is this drug safe for children?",
+      "answer": "Safety for children is established",
+      "signal": "observed",
+      "class": "讲错",
+      "why": "在没有任何可核验说明书或文献支持的情况下，把儿童用药安全表述为已确立，属于安全性相关的事实性断言。"
+    },
+    {
+      "id": "OBS-02",
+      "synthetic": true,
+      "source": "consumerB",
+      "question": "is this drug safe for children?",
+      "answer": "I have no source",
+      "signal": "observed",
+      "class": "信源弱",
+      "why": "同一问题下未给出任何来源；没有说错，但也没有可核验依据，不能算作答完整。"
+    },
+    {
+      "id": "OBS-03",
+      "synthetic": true,
+      "source": "（未测量）",
+      "question": "what is its indication?",
+      "answer": null,
+      "signal": "unmeasured",
+      "class": null,
+      "why": "query2 在本项目内没有任何可用答案，保持未测；不得记为 0% 或“答错”。"
+    }
+  ],
+  "careNodes": [
+    {
+      "stage": "用药前评估",
+      "node": "家长向 AI 询问儿童用药安全",
+      "risk": "未确立的安全性被表述为已确立，家长可能据此自行决定儿童用药。",
+      "redFlag": "儿童出现呼吸困难、意识改变、面唇发绀等急性表现时立即就医；该条件与任何药物是否起效无关。",
+      "action": "任何一条儿童安全性的表述在取得可核验说明书前不得当作依据；个体用药决定须由诊治医生或药师判断。"
+    }
+  ],
+  "journey": [
+    {
+      "stage": "识别与选药",
+      "emotion": [
+        "不确定",
+        "想先弄清这药是干什么的"
+      ],
+      "thinking": [
+        "适应证不清楚，就谈不上合不合适"
+      ],
+      "questions": [
+        "这个药的适应证是什么？",
+        "这个药的通用名和批准文号是什么？"
+      ],
+      "infoSources": [
+        "AI 问答",
+        "搜索引擎"
+      ]
+    },
+    {
+      "stage": "用药前评估",
+      "emotion": [
+        "担心",
+        "想确认安全性"
+      ],
+      "thinking": [
+        "孩子能不能用，有没有明确说法"
+      ],
+      "questions": [
+        "这个药对儿童安全吗？"
+      ],
+      "infoSources": [
+        "AI 问答",
+        "医生",
+        "药师"
+      ]
+    }
+  ],
+  "questionMap": {
+    "minimal": true,
+    "syntheticObservations": true,
+    "groups": [
+      {
+        "groupKey": "G1",
+        "pool": "P1",
+        "name": "儿童用药安全",
+        "typicalQuestion": "这个药对儿童安全吗？",
+        "journeyStage": "用药前评估",
+        "audience": "caregiver",
+        "bridge": "当前没有可核验说明书，儿童用药的安全边界无法从本项目持有的材料中读出。",
+        "weight": 0.4,
+        "isControl": false,
+        "signal": "partial",
+        "questions": [
+          {
+            "text": "is this drug safe for children?",
+            "kind": "real",
+            "synthetic": true,
+            "platform": null,
+            "sourceUrl": null,
+            "collectedAt": null,
+            "measured": true,
+            "observedAnswers": [
+              "Safety for children is established",
+              "I have no source"
+            ],
+            "note": "两条合成观测，作为问题地图的输入；不是平台实测基线。"
+          },
+          {
+            "text": "这个药对儿童安全吗？",
+            "kind": "typical",
+            "synthetic": false,
+            "platform": null,
+            "sourceUrl": null,
+            "collectedAt": null,
+            "measured": false
+          }
+        ]
+      },
+      {
+        "groupKey": "G2",
+        "pool": "P2",
+        "name": "适应证与适用人群",
+        "typicalQuestion": "这个药的适应证是什么？",
+        "journeyStage": "识别与选药",
+        "audience": "patient",
+        "bridge": "适应证是本项目全部后续判断的前提；该问题目前没有任何测量结果。",
+        "weight": 0.3,
+        "isControl": false,
+        "signal": "no_signal",
+        "questions": [
+          {
+            "text": "what is its indication?",
+            "kind": "typical",
+            "synthetic": false,
+            "platform": null,
+            "sourceUrl": null,
+            "collectedAt": null,
+            "measured": false,
+            "note": "query2：未测。测量前不得给出任何“知晓度”“错误率”之类数字。"
+          }
+        ]
+      },
+      {
+        "groupKey": "C1",
+        "pool": "P4",
+        "name": "对照问题：药品基本身份",
+        "typicalQuestion": "这个药的通用名和批准文号是什么？",
+        "journeyStage": "识别与选药",
+        "audience": "patient",
+        "bridge": "身份问题不随任何投放变化；用于观测引擎自身的答案漂移。",
+        "weight": 0.1,
+        "isControl": true,
+        "signal": "no_signal",
+        "questions": [
+          {
+            "text": "这个药的通用名和批准文号是什么？",
+            "kind": "typical",
+            "synthetic": false,
+            "platform": null,
+            "sourceUrl": null,
+            "collectedAt": null,
+            "measured": false
+          }
+        ]
+      },
+      {
+        "groupKey": "C2",
+        "pool": "P4",
+        "name": "对照问题：安全性表述复现",
+        "typicalQuestion": "这个药对儿童安全吗？（重复问法）",
+        "journeyStage": "用药前评估",
+        "audience": "caregiver",
+        "bridge": "同一安全性问法的重复测量，用于判断错误是否稳定复现，以及净效应计算中的自然漂移。",
+        "weight": 0.1,
+        "isControl": true,
+        "signal": "no_signal",
+        "questions": [
+          {
+            "text": "这个药对孩子安全吗？",
+            "kind": "typical",
+            "synthetic": false,
+            "platform": null,
+            "sourceUrl": null,
+            "collectedAt": null,
+            "measured": false
+          }
+        ]
+      }
+    ],
+    "assumptions": [
+      {
+        "field": "minimal",
+        "value": true,
+        "basis": "client_said",
+        "reason": "任务给定：教材项目 TeachingDrugA、辖区 jurisdictionX，无现行说明书证据、主张库为空、无药品价值卡、私有方法包不可用，因此按单步最小模式构建。",
+        "howToChange": "取得可核验的产品身份与说明书后，按完整流程重建身份、主张库与问题地图。"
+      },
+      {
+        "field": "evidenceScope",
+        "value": "仅使用本次运行实际取到的工具结果与任务给定的合成观测；其余一律记为未取到或未测。",
+        "basis": "client_said",
+        "reason": "不得虚构引文、平台记录与市场测量。",
+        "howToChange": "取到说明书、指南或文献后补入，并逐条记录来源与取回时间。"
+      },
+      {
+        "field": "observationsAreSynthetic",
+        "value": true,
+        "basis": "client_said",
+        "reason": "任务明确：consumerA / consumerB 两条问答记录是合成观测，不是真实市场测量，不得当作实测结果引用。",
+        "howToChange": "在平台上真实测量后，用实测记录替换合成观测；错误计数随实测重算。"
+      }
+    ]
+  },
+  "unmeasured": [
+    {
+      "id": "Q-02",
+      "text": "what is its indication?",
+      "groupKey": "G2",
+      "status": "unmeasured",
+      "note": "保持未测；本产物任何位置都不得为该问题给出比率或结论。"
+    }
+  ],
+  "supportedClaimIds": [],
+  "doesNotDo": [
+    "不创建平台文章记录，不创建投放订单。",
+    "不声称任何测量结果：本轮只有任务给定的合成观测。",
+    "不补写未取到的说明书、指南或文献内容。"
+  ],
+  "limitations": [
+    "私有方法与平台项目工具不可用，主张库无法由平台证据卡生成。",
+    "全部非合成结论仅到“本次检索未命中”这一层，不构成阴性证据。",
+    "问题地图按实际决策与可用证据取最小规模，未做人群分层与真实问法采集。"
+  ],
+  "assumptions": [
+    {
+      "field": "minimal",
+      "value": true,
+      "basis": "client_said",
+      "reason": "任务给定：教材项目 TeachingDrugA、辖区 jurisdictionX，无现行说明书证据、主张库为空、无药品价值卡、私有方法包不可用，因此按单步最小模式构建。",
+      "howToChange": "取得可核验的产品身份与说明书后，按完整流程重建身份、主张库与问题地图。"
+    },
+    {
+      "field": "evidenceScope",
+      "value": "仅使用本次运行实际取到的工具结果与任务给定的合成观测；其余一律记为未取到或未测。",
+      "basis": "client_said",
+      "reason": "不得虚构引文、平台记录与市场测量。",
+      "howToChange": "取到说明书、指南或文献后补入，并逐条记录来源与取回时间。"
+    },
+    {
+      "field": "observationsAreSynthetic",
+      "value": true,
+      "basis": "client_said",
+      "reason": "任务明确：consumerA / consumerB 两条问答记录是合成观测，不是真实市场测量，不得当作实测结果引用。",
+      "howToChange": "在平台上真实测量后，用实测记录替换合成观测；错误计数随实测重算。"
+    }
+  ]
+}

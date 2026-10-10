@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "artifact": "geo-strategy",
+  "mode": "bounded-research-test",
+  "minimal": true,
+  "syntheticObservations": true,
+  "runDate": "2026-10-10",
+  "commercialPlacement": false,
+  "mediaOrders": 0,
+  "baselineAvailable": false,
+  "measuredScope": {
+    "questionClusters": 4,
+    "clustersWithObservedAnswers": 1,
+    "observedRecords": 2,
+    "synthetic": true,
+    "unmeasuredRecords": 1,
+    "note": "两条合成观测、一条未测；这不是平台实测基线，样本量不足以计算任何比率。"
+  },
+  "sources": [],
+  "sourceTableState": {
+    "candidatesChecked": 0,
+    "reason": "本轮不进入投放层，因此不评估候选站点；任何站点在被逐条件核验通过前都不得进入投放。",
+    "threeConditions": [
+      "站点持有可核验的备案主体",
+      "被新闻源收录",
+      "属于医疗垂直"
+    ],
+    "verdicts": "全部未核验（未测），不是不合格。"
+  },
+  "gaps": [
+    {
+      "class": "讲错",
+      "groupKey": "G1",
+      "observationId": "OBS-01",
+      "text": "在无可核验来源的情况下，把该药儿童用药安全表述为“Safety for children is established”。",
+      "consequence": "安全性表述错误，家长可能据以自行给儿童用药。",
+      "weight": 0.4,
+      "priority": 1,
+      "treatment": "先收集并核验说明书类来源；核验通过后按纠错材料流程处理，再由平台重新测量确认是否仍被讲错。",
+      "synthetic": true
+    },
+    {
+      "class": "信源弱",
+      "groupKey": "G1",
+      "observationId": "OBS-02",
+      "text": "同一问题下回答“I have no source”，未给出任何可核验依据。",
+      "consequence": "家长得不到可用结论，可能转向不可靠的替代来源。",
+      "weight": 0.4,
+      "priority": 2,
+      "treatment": "先补齐来源层：可核验说明书证据；在此之前的任何稿件都必须是显式不确定稿。",
+      "synthetic": true
+    },
+    {
+      "class": "缺证据",
+      "groupKey": "G2",
+      "observationId": "OBS-03",
+      "text": "适应证问题（query2）未测，本项目内没有任何答案可用。",
+      "consequence": "证据缺口而非答案缺口；在未测之前不能判断问题严重程度，也不能据此排序投放。",
+      "weight": 0.3,
+      "priority": 3,
+      "treatment": "先测量，再判断；测量前不为该问题写比率、不改写为“未被提及”。",
+      "synthetic": true
+    }
+  ],
+  "expectations": [
+    {
+      "engineClass": "检索型（会引用网络来源）",
+      "measured": false,
+      "retrieval": {
+        "value": null,
+        "numerator": null,
+        "denominator": null,
+        "dataType": "not_measured",
+        "note": "本部署无任何引擎实测数据，不填数字。"
+      },
+      "promise": "取得并公开可核验的说明书类来源后，本周期可以承诺的是：可被检索到的答案有正确来源可引。",
+      "layers": [
+        "anchor"
+      ],
+      "leverage": "来源层可用性。"
+    },
+    {
+      "engineClass": "知识型（主要依赖训练语料）",
+      "measured": false,
+      "retrieval": {
+        "value": null,
+        "numerator": null,
+        "denominator": null,
+        "dataType": "not_measured"
+      },
+      "promise": "本周期不承诺提及率或排名；只能承诺在来源到位后，关于错误的纠正性材料可持续供给。",
+      "layers": [
+        "coverage"
+      ],
+      "leverage": "训练周期，非本周期可控。"
+    }
+  ],
+  "battlefield": {
+    "groups": [
+      "G1"
+    ],
+    "reason": "G1 同时是安全性后果最重、且已观测到错误表述的问题簇；G2 未测，暂不列入。",
+    "secondary": [
+      "G2"
+    ]
+  },
+  "layout": {
+    "layers": [
+      "anchor"
+    ],
+    "byEngine": [],
+    "constraints": [
+      "本轮不进入覆盖层与自有层，不选择站点。",
+      "任何投放动作的前置条件：可核验来源到位、纠错核验完成、基线测量完成。"
+    ]
+  },
+  "sequence": [
+    {
+      "phase": "S1",
+      "name": "证据收集与核验",
+      "actions": [
+        "按辖区 jurisdictionX 取得该产品的现行说明书或同等的官方产品信息。",
+        "为儿童用药安全这一临床问题找可核验来源，并逐条记录来源、取回时间与逐字引用位置。"
+      ],
+      "exitCriteria": "在该临床问题上至少有一条可逐字引用的来源，或明确记为未取到。",
+      "commercialActions": false
+    },
+    {
+      "phase": "S2",
+      "name": "纠错核验",
+      "actions": [
+        "把观测到的“已确立”表述与来源逐字比对：只有来源对同一人群、同一终点给出不同表述时，才能称其为错误。",
+        "核验通过后按纠错材料流程准备材料；核验不通过则记为无法据此纠正。"
+      ],
+      "exitCriteria": "每条被纠正的表述都有来源依据与处置状态。",
+      "commercialActions": false
+    },
+    {
+      "phase": "S3",
+      "name": "基线测量",
+      "actions": [
+        "对锁定的问题集做一次基线测量；query2 必须被测量后才允许用于任何判断。",
+        "记录每个问题簇的答案与来源引用，写清分子分母。"
+      ],
+      "exitCriteria": "问题集有可用基线；未测问题仍标未测。",
+      "commercialActions": false
+    },
+    {
+      "phase": "S4",
+      "name": "商业化投放（本轮不执行）",
+      "actions": [
+        "仅在 S1–S3 完成且存在可核验来源后，才评估站点与投放档位。"
+      ],
+      "exitCriteria": "前置阶段全部完成。",
+      "commercialActions": true,
+      "blocked": true,
+      "blockedReason": "本轮为研究模式，且前置阶段未完成。"
+    }
+  ],
+  "tiers": [
+    {
+      "tier": 1,
+      "name": "仅来源与准确性（本轮适用）",
+      "targets": [
+        {
+          "metricId": "M-06",
+          "pool": "all",
+          "baseline": null,
+          "target": 0.98,
+          "dataType": "forecast",
+          "note": "事实准确性为硬线，不随档位变化；本周期基线尚不存在。"
+        }
+      ],
+      "placements": 0,
+      "budgetCny": 0
+    },
+    {
+      "tier": 2,
+      "name": "提及与份额（本轮不适用）",
+      "targets": [],
+      "placements": 0,
+      "budgetCny": 0,
+      "notApplicableReason": "无可核验来源与无基线时，提及与份额目标不可校准。"
+    },
+    {
+      "tier": 3,
+      "name": "阵地与规模（本轮不适用）",
+      "targets": [],
+      "placements": 0,
+      "budgetCny": 0,
+      "notApplicableReason": "未进入投放层。"
+    }
+  ],
+  "chosenTier": 1,
+  "chosenTierReason": "研究模式下只做来源层与准确性硬线，商业投放整轮不执行。",
+  "hardLines": {
+    "factualAccuracyFloor": 0.98,
+    "tracedMisstatements": 0
+  },
+  "notForecast": [
+    "不给出触达、转化、引用量或排名的任何预测。",
+    "不给出投放数量与预算建议。"
+  ],
+  "assumptions": [
+    {
+      "field": "minimal",
+      "value": true,
+      "basis": "client_said",
+      "reason": "任务给定：教材项目 TeachingDrugA、辖区 jurisdictionX，无现行说明书证据、主张库为空、无药品价值卡、私有方法包不可用，因此按单步最小模式构建。",
+      "howToChange": "取得可核验的产品身份与说明书后，按完整流程重建身份、主张库与问题地图。"
+    },
+    {
+      "field": "evidenceScope",
+      "value": "仅使用本次运行实际取到的工具结果与任务给定的合成观测；其余一律记为未取到或未测。",
+      "basis": "client_said",
+      "reason": "不得虚构引文、平台记录与市场测量。",
+      "howToChange": "取到说明书、指南或文献后补入，并逐条记录来源与取回时间。"
+    },
+    {
+      "field": "observationsAreSynthetic",
+      "value": true,
+      "basis": "client_said",
+      "reason": "任务明确：consumerA / consumerB 两条问答记录是合成观测，不是真实市场测量，不得当作实测结果引用。",
+      "howToChange": "在平台上真实测量后，用实测记录替换合成观测；错误计数随实测重算。"
+    },
+    {
+      "field": "phaseOrder",
+      "value": "证据收集与纠错核验先于一切商业投放动作。",
+      "basis": "client_said",
+      "reason": "本轮为研究模式，且被纠正的表述必须先在可核验来源上确认，才可能被撤下或改写。",
+      "howToChange": "取得且核验说明书证据、基线测量完成后，才讨论投放层与阵地。"
+    },
+    {
+      "field": "mediaOrders",
+      "value": 0,
+      "basis": "client_said",
+      "reason": "研究模式；本轮不做任何投放、付费或排期动作，也不生成投放计划。",
+      "howToChange": "由用户在预算页决定；且必须先完成本产物给出的前置阶段。"
+    },
+    {
+      "field": "placementDecisionAuthority",
+      "value": "未指定",
+      "basis": "default",
+      "reason": "阵地与投放的执行主体在本轮不存在，因此不代其决策。",
+      "howToChange": "由项目方指定执行主体后再评估候选站点。"
+    }
+  ]
+}

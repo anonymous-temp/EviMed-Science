@@ -1,0 +1,1657 @@
+{
+  "schemaVersion": 1,
+  "targetedCount": 44,
+  "packages": [
+    {
+      "packageId": "capability-skills/adr-analysis",
+      "qualification": {
+        "packageId": "capability-skills/adr-analysis",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "drug-reasoning",
+          "currentBodySha256": "3099b323691a6cde6ae6cd57e1015e874af78a8d8254fea35999cbb99b63de63",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/drug-reasoning",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_bb1456a8f835dc994ae95c28f4d5838a",
+          "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "3099b323691a6cde6ae6cd57e1015e874af78a8d8254fea35999cbb99b63de63",
+          "runId": "run_bb1456a8f835dc994ae95c28f4d5838a",
+          "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/drug-reasoning/transcript.json",
+            "bytes": 701146,
+            "sha256": "d3dc95060d4c5e9d6dff09e139d51aefdf235eb7655d998cdd7745dc3cb8485b"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/autopilot-episode",
+      "qualification": {
+        "packageId": "capability-skills/autopilot-episode",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "corrections",
+          "currentBodySha256": "92686ae9838c7e740d7b9490ea2f3b4b79f3a47e5ed7831ae7a9ee7e9f50b73a",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/corrections",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7345f6288b41d485c66506e6eb2e4df3",
+          "sessionId": "session-3f703f9e-8e3c-4972-a002-835906b2f10f",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "group": "method-learning",
+          "currentBodySha256": "92686ae9838c7e740d7b9490ea2f3b4b79f3a47e5ed7831ae7a9ee7e9f50b73a",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/method-learning",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_56f7cf7629f2d98b4cca687cfb1f9040",
+          "sessionId": "session-9a277cd8-a26d-405a-915b-ae3ee6e0f661",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "92686ae9838c7e740d7b9490ea2f3b4b79f3a47e5ed7831ae7a9ee7e9f50b73a",
+          "runId": "run_7345f6288b41d485c66506e6eb2e4df3",
+          "sessionId": "session-3f703f9e-8e3c-4972-a002-835906b2f10f",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/corrections/transcript.json",
+            "bytes": 574936,
+            "sha256": "c66f0494d4d1d69a89039270780d06d35a4904cf0de0b119abb9b6f221fe02a4"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/bibliometric-analysis",
+      "qualification": {
+        "packageId": "capability-skills/bibliometric-analysis",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "managed-results",
+          "currentBodySha256": "175e264714299e598f904bd3385b7613ed76f40b93567dbc566c500637da2f9f",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/managed-results",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "175e264714299e598f904bd3385b7613ed76f40b93567dbc566c500637da2f9f",
+          "runId": "run_e3b19217d61fdba12633231c0dd63b11",
+          "sessionId": "session-f08c4d9a-5194-4f8d-8075-3192c39f34f2",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/managed-results/transcript.json",
+            "bytes": 1442815,
+            "sha256": "84cc5c2dd325314024adb4c5dc4ca92370334cea82b8bdc0846a8c6d26426efd"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/biomedical-database-search",
+      "qualification": {
+        "packageId": "capability-skills/biomedical-database-search",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "research",
+          "currentBodySha256": "2d8378d772721322b6c52cb5d6edf9b82f9ee023e6a34840d80f64a15498dbb2",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/research",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7df11212e58148e34149dae5717788cc",
+          "sessionId": "session-850d4a17-838c-4169-bba8-dc48763d99fb",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "group": "research-corrected",
+          "currentBodySha256": "2d8378d772721322b6c52cb5d6edf9b82f9ee023e6a34840d80f64a15498dbb2",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/research-corrected",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "2d8378d772721322b6c52cb5d6edf9b82f9ee023e6a34840d80f64a15498dbb2",
+          "runId": "run_ca566f450f33d197fbd3e3c379a854f1",
+          "sessionId": "session-2eea7d1d-32a8-4fed-a4dc-52ab62937edb",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/research-corrected/transcript.json",
+            "bytes": 805515,
+            "sha256": "ee886a91d1f395548da6e84d802911fccf755664da9d3e9b64f8ca7ab6228931"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/citation-integrity",
+      "qualification": {
+        "packageId": "capability-skills/citation-integrity",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "data-methods",
+          "currentBodySha256": "1406bb14eecf3c3536363403cd6140c34793c2991e183c55bbd1baf8fc904898",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/data-methods",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_71203f79f114123edffde3391220e6a7",
+          "sessionId": "session-9ae4611e-3a3c-47d3-bc0b-54ceb05019c2",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "1406bb14eecf3c3536363403cd6140c34793c2991e183c55bbd1baf8fc904898",
+          "runId": "run_71203f79f114123edffde3391220e6a7",
+          "sessionId": "session-9ae4611e-3a3c-47d3-bc0b-54ceb05019c2",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/data-methods/transcript.json",
+            "bytes": 538418,
+            "sha256": "ed46c0ee95778ab00983380dfca47f46ac1882054a8ff5e30883a3c6ac8ec07f"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/clinical-evidence-synthesis",
+      "qualification": {
+        "packageId": "capability-skills/clinical-evidence-synthesis",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "research",
+          "currentBodySha256": "0eba06f6f24dfe3fa4064de9d626799c92c6db0fd65b98e50f8b29e3761ab1d9",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/research",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7df11212e58148e34149dae5717788cc",
+          "sessionId": "session-850d4a17-838c-4169-bba8-dc48763d99fb",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "group": "research-corrected",
+          "currentBodySha256": "0eba06f6f24dfe3fa4064de9d626799c92c6db0fd65b98e50f8b29e3761ab1d9",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/research-corrected",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "0eba06f6f24dfe3fa4064de9d626799c92c6db0fd65b98e50f8b29e3761ab1d9",
+          "runId": "run_ca566f450f33d197fbd3e3c379a854f1",
+          "sessionId": "session-2eea7d1d-32a8-4fed-a4dc-52ab62937edb",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/research-corrected/transcript.json",
+            "bytes": 805515,
+            "sha256": "ee886a91d1f395548da6e84d802911fccf755664da9d3e9b64f8ca7ab6228931"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/comprehensive-drug-evaluation",
+      "qualification": {
+        "packageId": "capability-skills/comprehensive-drug-evaluation",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "corrections",
+          "currentBodySha256": "25b3f5b7fe0975fda726c9fa418ca20848e37ab311747b8badc97f97afe1dd82",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/corrections",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7345f6288b41d485c66506e6eb2e4df3",
+          "sessionId": "session-3f703f9e-8e3c-4972-a002-835906b2f10f",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "group": "drug-reasoning",
+          "currentBodySha256": "25b3f5b7fe0975fda726c9fa418ca20848e37ab311747b8badc97f97afe1dd82",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/drug-reasoning",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_bb1456a8f835dc994ae95c28f4d5838a",
+          "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "25b3f5b7fe0975fda726c9fa418ca20848e37ab311747b8badc97f97afe1dd82",
+          "runId": "run_7345f6288b41d485c66506e6eb2e4df3",
+          "sessionId": "session-3f703f9e-8e3c-4972-a002-835906b2f10f",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/corrections/transcript.json",
+            "bytes": 574936,
+            "sha256": "c66f0494d4d1d69a89039270780d06d35a4904cf0de0b119abb9b6f221fe02a4"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/dataset-research-scoping",
+      "qualification": {
+        "packageId": "capability-skills/dataset-research-scoping",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "data-methods",
+          "currentBodySha256": "1bcc1b4ec968619b3df328397cab5dad993b98c6bb69035fe096f7e1c5c99cb9",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/data-methods",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_71203f79f114123edffde3391220e6a7",
+          "sessionId": "session-9ae4611e-3a3c-47d3-bc0b-54ceb05019c2",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "1bcc1b4ec968619b3df328397cab5dad993b98c6bb69035fe096f7e1c5c99cb9",
+          "runId": "run_71203f79f114123edffde3391220e6a7",
+          "sessionId": "session-9ae4611e-3a3c-47d3-bc0b-54ceb05019c2",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/data-methods/transcript.json",
+            "bytes": 538418,
+            "sha256": "ed46c0ee95778ab00983380dfca47f46ac1882054a8ff5e30883a3c6ac8ec07f"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/deep-research",
+      "qualification": {
+        "packageId": "capability-skills/deep-research",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "research",
+          "currentBodySha256": "ac467b017823872d4ba6d8f3495a0d3c7346f0491c05f43756f57c54619fa8af",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/research",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7df11212e58148e34149dae5717788cc",
+          "sessionId": "session-850d4a17-838c-4169-bba8-dc48763d99fb",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "group": "research-corrected",
+          "currentBodySha256": "ac467b017823872d4ba6d8f3495a0d3c7346f0491c05f43756f57c54619fa8af",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/research-corrected",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "ac467b017823872d4ba6d8f3495a0d3c7346f0491c05f43756f57c54619fa8af",
+          "runId": "run_ca566f450f33d197fbd3e3c379a854f1",
+          "sessionId": "session-2eea7d1d-32a8-4fed-a4dc-52ab62937edb",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/research-corrected/transcript.json",
+            "bytes": 805515,
+            "sha256": "ee886a91d1f395548da6e84d802911fccf755664da9d3e9b64f8ca7ab6228931"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/drug-selection",
+      "qualification": {
+        "packageId": "capability-skills/drug-selection",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "drug-reasoning",
+          "currentBodySha256": "cca7d48bbb16b32272a9ef1535fbe9e272e1e09c3aae72dac4101d01b11ed6f7",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/drug-reasoning",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_bb1456a8f835dc994ae95c28f4d5838a",
+          "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "cca7d48bbb16b32272a9ef1535fbe9e272e1e09c3aae72dac4101d01b11ed6f7",
+          "runId": "run_bb1456a8f835dc994ae95c28f4d5838a",
+          "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/drug-reasoning/transcript.json",
+            "bytes": 701146,
+            "sha256": "d3dc95060d4c5e9d6dff09e139d51aefdf235eb7655d998cdd7745dc3cb8485b"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/evidence-appraisal",
+      "qualification": {
+        "packageId": "capability-skills/evidence-appraisal",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "appraisal",
+          "currentBodySha256": "91cc8175583219fd5c5777d4cb0f0ca0287af1662d9c8b6fc398627ff11c34b1",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/appraisal",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7a04e4ef3b16bbd24d9cc5e1ad4f366a",
+          "sessionId": "session-4a13db29-256c-4243-a429-4d7612952b54",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "91cc8175583219fd5c5777d4cb0f0ca0287af1662d9c8b6fc398627ff11c34b1",
+          "runId": "run_7a04e4ef3b16bbd24d9cc5e1ad4f366a",
+          "sessionId": "session-4a13db29-256c-4243-a429-4d7612952b54",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/appraisal/transcript.json",
+            "bytes": 348499,
+            "sha256": "ba3ec291ee25ca9309946a47d4d96e0747791301d357a7984dcef7abc33bd5c0"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/evolution-scout",
+      "qualification": {
+        "packageId": "capability-skills/evolution-scout",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "method-learning",
+          "currentBodySha256": "94d750577055b19180d802a8a2e685cd235c21418a46ed112d44fe334e1ee19c",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/method-learning",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_56f7cf7629f2d98b4cca687cfb1f9040",
+          "sessionId": "session-9a277cd8-a26d-405a-915b-ae3ee6e0f661",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "94d750577055b19180d802a8a2e685cd235c21418a46ed112d44fe334e1ee19c",
+          "runId": "run_56f7cf7629f2d98b4cca687cfb1f9040",
+          "sessionId": "session-9a277cd8-a26d-405a-915b-ae3ee6e0f661",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/method-learning/transcript.json",
+            "bytes": 786349,
+            "sha256": "96511845cf350262209bb67eaea196a09516508b74da066accd5fe91d0eb4a0c"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/gene-expression-analysis",
+      "qualification": {
+        "packageId": "capability-skills/gene-expression-analysis",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "gene-expression",
+          "currentBodySha256": "6c5c1978dcaeb1c8acd62c222226864f0fc46d82fa9d2de0f6993835b91e041d",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/gene-expression",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_cf9659f8a6a9a90b0e322ff277b100fd",
+          "sessionId": "session-3c84f6aa-c5f1-4984-b53e-110c436d3f48",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "actual-named-tool-dispatch-engine-unavailable-numpy",
+          "runId": "run_9f5837a9c83a58664acf5f888caa169b",
+          "evidencePath": "evals/acceptance/local-integration-20261010/skills-native/prior-failures/gene-corrected"
+        },
+        {
+          "group": "gene-bound",
+          "state": "bounded-hosted-task-matched",
+          "projectId": "model-gene-bound",
+          "runId": "run_211b71d49a2cef0581052dc7a4fb396f",
+          "sessionId": "session-60b0e595-b840-4cac-afae-cab2ffa92744",
+          "nativeSeriesCalls": 1,
+          "independentVerification": "gene-bound/actual-capture-verification.json",
+          "firstRequestHeader": {
+            "receipt": "gene-bound/first-request-header-tools.json",
+            "seq": 14,
+            "seriesExposed": true,
+            "differentialExposed": true
+          }
+        }
+      ]
+    },
+    {
+      "packageId": "capability-skills/geo-content",
+      "qualification": {
+        "packageId": "capability-skills/geo-content",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "geo-bounded",
+          "currentBodySha256": "c4c3e6c93623ae8a35be00086328c6dcd8b588a0b8163ca4087a9bc87ee0e62a",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/geo-bounded",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_f79ba5cc878d67675c71ec23377b9b8d",
+          "sessionId": "session-71f7d9f4-d385-471f-9aa0-7d8c5f69dedb",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "c4c3e6c93623ae8a35be00086328c6dcd8b588a0b8163ca4087a9bc87ee0e62a",
+          "runId": "run_f79ba5cc878d67675c71ec23377b9b8d",
+          "sessionId": "session-71f7d9f4-d385-471f-9aa0-7d8c5f69dedb",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/geo-bounded/transcript.json",
+            "bytes": 336631,
+            "sha256": "b12042d7013160991fadc44c5146659172aa4496b6b4cbfb3bed7c234f760192"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/geo-drug-value",
+      "qualification": {
+        "packageId": "capability-skills/geo-drug-value",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "drug-reasoning",
+          "currentBodySha256": "e57bc6de324bb28512c446f4ede5d7f92da01ce1e3be3901fcb60a5d9905f8fc",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/drug-reasoning",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_bb1456a8f835dc994ae95c28f4d5838a",
+          "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "e57bc6de324bb28512c446f4ede5d7f92da01ce1e3be3901fcb60a5d9905f8fc",
+          "runId": "run_bb1456a8f835dc994ae95c28f4d5838a",
+          "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/drug-reasoning/transcript.json",
+            "bytes": 701146,
+            "sha256": "d3dc95060d4c5e9d6dff09e139d51aefdf235eb7655d998cdd7745dc3cb8485b"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/geo-insight",
+      "qualification": {
+        "packageId": "capability-skills/geo-insight",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "geo-bounded",
+          "currentBodySha256": "389c6577ef5e8bdf8054a99e327532eebda47afb1a9ff71b9bfa0a706e903e7f",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/geo-bounded",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_f79ba5cc878d67675c71ec23377b9b8d",
+          "sessionId": "session-71f7d9f4-d385-471f-9aa0-7d8c5f69dedb",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "389c6577ef5e8bdf8054a99e327532eebda47afb1a9ff71b9bfa0a706e903e7f",
+          "runId": "run_f79ba5cc878d67675c71ec23377b9b8d",
+          "sessionId": "session-71f7d9f4-d385-471f-9aa0-7d8c5f69dedb",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/geo-bounded/transcript.json",
+            "bytes": 336631,
+            "sha256": "b12042d7013160991fadc44c5146659172aa4496b6b4cbfb3bed7c234f760192"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/geo-proposal",
+      "qualification": {
+        "packageId": "capability-skills/geo-proposal",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "geo-bounded",
+          "currentBodySha256": "29a1a8f4b5224f240fe120e6f25e5e5294acc1191cbf575aeb06e392a0be520d",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/geo-bounded",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_f79ba5cc878d67675c71ec23377b9b8d",
+          "sessionId": "session-71f7d9f4-d385-471f-9aa0-7d8c5f69dedb",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "29a1a8f4b5224f240fe120e6f25e5e5294acc1191cbf575aeb06e392a0be520d",
+          "runId": "run_f79ba5cc878d67675c71ec23377b9b8d",
+          "sessionId": "session-71f7d9f4-d385-471f-9aa0-7d8c5f69dedb",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/geo-bounded/transcript.json",
+            "bytes": 336631,
+            "sha256": "b12042d7013160991fadc44c5146659172aa4496b6b4cbfb3bed7c234f760192"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/geo-strategy",
+      "qualification": {
+        "packageId": "capability-skills/geo-strategy",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "geo-bounded",
+          "currentBodySha256": "7c87bfa0d3d7454700628b91455ff9017fd45559dba6cd36798dbc1795e6ec55",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/geo-bounded",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_f79ba5cc878d67675c71ec23377b9b8d",
+          "sessionId": "session-71f7d9f4-d385-471f-9aa0-7d8c5f69dedb",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "7c87bfa0d3d7454700628b91455ff9017fd45559dba6cd36798dbc1795e6ec55",
+          "runId": "run_f79ba5cc878d67675c71ec23377b9b8d",
+          "sessionId": "session-71f7d9f4-d385-471f-9aa0-7d8c5f69dedb",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/geo-bounded/transcript.json",
+            "bytes": 336631,
+            "sha256": "b12042d7013160991fadc44c5146659172aa4496b6b4cbfb3bed7c234f760192"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/manuscript-humanize",
+      "qualification": {
+        "packageId": "capability-skills/manuscript-humanize",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "corrections",
+          "currentBodySha256": "ff7f5bacc689c65f5c903ae9913e8e3b807cfea3585b0724737bb9176c31ad40",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/corrections",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7345f6288b41d485c66506e6eb2e4df3",
+          "sessionId": "session-3f703f9e-8e3c-4972-a002-835906b2f10f",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "ff7f5bacc689c65f5c903ae9913e8e3b807cfea3585b0724737bb9176c31ad40",
+          "runId": "run_7345f6288b41d485c66506e6eb2e4df3",
+          "sessionId": "session-3f703f9e-8e3c-4972-a002-835906b2f10f",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/corrections/transcript.json",
+            "bytes": 574936,
+            "sha256": "c66f0494d4d1d69a89039270780d06d35a4904cf0de0b119abb9b6f221fe02a4"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/manuscript-support",
+      "qualification": {
+        "packageId": "capability-skills/manuscript-support",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "appraisal",
+          "currentBodySha256": "5e881eb1c0fa40c56094bc338a30e94fd26cfb097e1a4ec8140c06f84d0cc4e5",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/appraisal",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7a04e4ef3b16bbd24d9cc5e1ad4f366a",
+          "sessionId": "session-4a13db29-256c-4243-a429-4d7612952b54",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "5e881eb1c0fa40c56094bc338a30e94fd26cfb097e1a4ec8140c06f84d0cc4e5",
+          "runId": "run_7a04e4ef3b16bbd24d9cc5e1ad4f366a",
+          "sessionId": "session-4a13db29-256c-4243-a429-4d7612952b54",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/appraisal/transcript.json",
+            "bytes": 348499,
+            "sha256": "ba3ec291ee25ca9309946a47d4d96e0747791301d357a7984dcef7abc33bd5c0"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/mendelian-randomization",
+      "qualification": {
+        "packageId": "capability-skills/mendelian-randomization",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "managed-results",
+          "currentBodySha256": "a3737479235333427e5b725936989d5f985c5ef92092650a64937a50c509a689",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/managed-results",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "a3737479235333427e5b725936989d5f985c5ef92092650a64937a50c509a689",
+          "runId": "run_e3b19217d61fdba12633231c0dd63b11",
+          "sessionId": "session-f08c4d9a-5194-4f8d-8075-3192c39f34f2",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/managed-results/transcript.json",
+            "bytes": 1442815,
+            "sha256": "84cc5c2dd325314024adb4c5dc4ca92370334cea82b8bdc0846a8c6d26426efd"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/meta-analysis",
+      "qualification": {
+        "packageId": "capability-skills/meta-analysis",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "managed-results",
+          "currentBodySha256": "195ea10db8cdea749317799040d3c891c959a3e0fbdbb9f5e9148d5fa0041e06",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/managed-results",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "195ea10db8cdea749317799040d3c891c959a3e0fbdbb9f5e9148d5fa0041e06",
+          "runId": "run_e3b19217d61fdba12633231c0dd63b11",
+          "sessionId": "session-f08c4d9a-5194-4f8d-8075-3192c39f34f2",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/managed-results/transcript.json",
+            "bytes": 1442815,
+            "sha256": "84cc5c2dd325314024adb4c5dc4ca92370334cea82b8bdc0846a8c6d26426efd"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/method-distillation",
+      "qualification": {
+        "packageId": "capability-skills/method-distillation",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "method-learning",
+          "currentBodySha256": "8508a3cda30e5ea3679dff5373453fe6f7aaa7988c670363df4d1e5cfa227f2a",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/method-learning",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_56f7cf7629f2d98b4cca687cfb1f9040",
+          "sessionId": "session-9a277cd8-a26d-405a-915b-ae3ee6e0f661",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "8508a3cda30e5ea3679dff5373453fe6f7aaa7988c670363df4d1e5cfa227f2a",
+          "runId": "run_56f7cf7629f2d98b4cca687cfb1f9040",
+          "sessionId": "session-9a277cd8-a26d-405a-915b-ae3ee6e0f661",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/method-learning/transcript.json",
+            "bytes": 786349,
+            "sha256": "96511845cf350262209bb67eaea196a09516508b74da066accd5fe91d0eb4a0c"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/method-relations",
+      "qualification": {
+        "packageId": "capability-skills/method-relations",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "method-learning",
+          "currentBodySha256": "1c041fa0e246b7a6f935451c8a6d29cde07aeddfb8b9880dd5cab25ae5d00175",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/method-learning",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_56f7cf7629f2d98b4cca687cfb1f9040",
+          "sessionId": "session-9a277cd8-a26d-405a-915b-ae3ee6e0f661",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "1c041fa0e246b7a6f935451c8a6d29cde07aeddfb8b9880dd5cab25ae5d00175",
+          "runId": "run_56f7cf7629f2d98b4cca687cfb1f9040",
+          "sessionId": "session-9a277cd8-a26d-405a-915b-ae3ee6e0f661",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/method-learning/transcript.json",
+            "bytes": 786349,
+            "sha256": "96511845cf350262209bb67eaea196a09516508b74da066accd5fe91d0eb4a0c"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/off-label-analysis",
+      "qualification": {
+        "packageId": "capability-skills/off-label-analysis",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "drug-reasoning",
+          "currentBodySha256": "b27ef13044b5147d01feb5321a16f074dc67cb2618e0c9f3c303290882a7a7c4",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/drug-reasoning",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_bb1456a8f835dc994ae95c28f4d5838a",
+          "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "b27ef13044b5147d01feb5321a16f074dc67cb2618e0c9f3c303290882a7a7c4",
+          "runId": "run_bb1456a8f835dc994ae95c28f4d5838a",
+          "sessionId": "session-9c4a0761-7cb7-4fbe-86c7-78ce24365ede",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/drug-reasoning/transcript.json",
+            "bytes": 701146,
+            "sha256": "d3dc95060d4c5e9d6dff09e139d51aefdf235eb7655d998cdd7745dc3cb8485b"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/peer-review",
+      "qualification": {
+        "packageId": "capability-skills/peer-review",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "managed-results",
+          "currentBodySha256": "5b9ed4a24f95b677e086910498e93c3537f4ad0b21bbb278dfd8de379152d9f0",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/managed-results",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "5b9ed4a24f95b677e086910498e93c3537f4ad0b21bbb278dfd8de379152d9f0",
+          "runId": "run_e3b19217d61fdba12633231c0dd63b11",
+          "sessionId": "session-f08c4d9a-5194-4f8d-8075-3192c39f34f2",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/managed-results/transcript.json",
+            "bytes": 1442815,
+            "sha256": "84cc5c2dd325314024adb4c5dc4ca92370334cea82b8bdc0846a8c6d26426efd"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/reporting-guidelines",
+      "qualification": {
+        "packageId": "capability-skills/reporting-guidelines",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "appraisal",
+          "currentBodySha256": "5c4581a72fb76b517ec5742248d2c7fd770f9e039790460750f9470d80fa2a3d",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/appraisal",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7a04e4ef3b16bbd24d9cc5e1ad4f366a",
+          "sessionId": "session-4a13db29-256c-4243-a429-4d7612952b54",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "group": "corrections",
+          "currentBodySha256": "5c4581a72fb76b517ec5742248d2c7fd770f9e039790460750f9470d80fa2a3d",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/corrections",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7345f6288b41d485c66506e6eb2e4df3",
+          "sessionId": "session-3f703f9e-8e3c-4972-a002-835906b2f10f",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "5c4581a72fb76b517ec5742248d2c7fd770f9e039790460750f9470d80fa2a3d",
+          "runId": "run_7345f6288b41d485c66506e6eb2e4df3",
+          "sessionId": "session-3f703f9e-8e3c-4972-a002-835906b2f10f",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/corrections/transcript.json",
+            "bytes": 574936,
+            "sha256": "c66f0494d4d1d69a89039270780d06d35a4904cf0de0b119abb9b6f221fe02a4"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/research-grant-development",
+      "qualification": {
+        "packageId": "capability-skills/research-grant-development",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "grant-tool",
+          "currentBodySha256": "0f844f55aab95b29c39eb32fabde1d05247dac0aae74b4607b54bfe6253b5823",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/grant-tool",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "0f844f55aab95b29c39eb32fabde1d05247dac0aae74b4607b54bfe6253b5823",
+          "runId": "run_d3b6dd30914b131e2e15f17f229c6300",
+          "sessionId": "session-fe482b46-c2fe-48dd-8a43-0ee6514dbd31",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/grant-tool/transcript.json",
+            "bytes": 441401,
+            "sha256": "37bdbcd6dbe012874a9db1674a660b996cbfbb97b0f053b45bd30bbafca10c7a"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/research-topic-selection",
+      "qualification": {
+        "packageId": "capability-skills/research-topic-selection",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "managed-results",
+          "currentBodySha256": "f06d3714025a5e5b5672cf0da8a9743c90c77ba58af0d1f96323b61ea8a50cdb",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/managed-results",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "f06d3714025a5e5b5672cf0da8a9743c90c77ba58af0d1f96323b61ea8a50cdb",
+          "runId": "run_e3b19217d61fdba12633231c0dd63b11",
+          "sessionId": "session-f08c4d9a-5194-4f8d-8075-3192c39f34f2",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/managed-results/transcript.json",
+            "bytes": 1442815,
+            "sha256": "84cc5c2dd325314024adb4c5dc4ca92370334cea82b8bdc0846a8c6d26426efd"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/source-understanding",
+      "qualification": {
+        "packageId": "capability-skills/source-understanding",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "data-methods",
+          "currentBodySha256": "3bc6b2eef6ca163d8e6e78cf466580f13c1926518a51b3c9e06e5d95e258ca54",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/data-methods",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_71203f79f114123edffde3391220e6a7",
+          "sessionId": "session-9ae4611e-3a3c-47d3-bc0b-54ceb05019c2",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "3bc6b2eef6ca163d8e6e78cf466580f13c1926518a51b3c9e06e5d95e258ca54",
+          "runId": "run_71203f79f114123edffde3391220e6a7",
+          "sessionId": "session-9ae4611e-3a3c-47d3-bc0b-54ceb05019c2",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/data-methods/transcript.json",
+            "bytes": 538418,
+            "sha256": "ed46c0ee95778ab00983380dfca47f46ac1882054a8ff5e30883a3c6ac8ec07f"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/statistical-analysis",
+      "qualification": {
+        "packageId": "capability-skills/statistical-analysis",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "data-methods",
+          "currentBodySha256": "00c6ca925c588403e3b0a13331978aa6cf3286e74eaef44ba2120a4ff98df54c",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/data-methods",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_71203f79f114123edffde3391220e6a7",
+          "sessionId": "session-9ae4611e-3a3c-47d3-bc0b-54ceb05019c2",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "00c6ca925c588403e3b0a13331978aa6cf3286e74eaef44ba2120a4ff98df54c",
+          "runId": "run_71203f79f114123edffde3391220e6a7",
+          "sessionId": "session-9ae4611e-3a3c-47d3-bc0b-54ceb05019c2",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/data-methods/transcript.json",
+            "bytes": 538418,
+            "sha256": "ed46c0ee95778ab00983380dfca47f46ac1882054a8ff5e30883a3c6ac8ec07f"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/tool-builder",
+      "qualification": {
+        "packageId": "capability-skills/tool-builder",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "grant-tool",
+          "currentBodySha256": "c7d511fa6cb21e951c9482b2261e2559be6119f07095d769c89e200b3d868a41",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/grant-tool",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "c7d511fa6cb21e951c9482b2261e2559be6119f07095d769c89e200b3d868a41",
+          "runId": "run_d3b6dd30914b131e2e15f17f229c6300",
+          "sessionId": "session-fe482b46-c2fe-48dd-8a43-0ee6514dbd31",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/grant-tool/transcript.json",
+            "bytes": 441401,
+            "sha256": "37bdbcd6dbe012874a9db1674a660b996cbfbb97b0f053b45bd30bbafca10c7a"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/vcr-analysis",
+      "qualification": {
+        "packageId": "capability-skills/vcr-analysis",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "vcr-bounded",
+          "currentBodySha256": "9322117ae5390a921b98beb16b41d157ac1bad95ec42279f1735972af2f6e202",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/vcr-bounded",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "9322117ae5390a921b98beb16b41d157ac1bad95ec42279f1735972af2f6e202",
+          "runId": "run_ae5666609f77646d25eeb02a03a6cbdb",
+          "sessionId": "session-29e81075-8ef3-48ff-b7be-dc33ce8f25a5",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/vcr-bounded/transcript.json",
+            "bytes": 548321,
+            "sha256": "4a3e9da95c0e9787ac66ec0a0e4c4211969d0a113a8d11c32bc658063f03fe09"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/vcr-evidence",
+      "qualification": {
+        "packageId": "capability-skills/vcr-evidence",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "vcr-bounded",
+          "currentBodySha256": "cb00329ba003d9439ef42d251f7557ee95ec0484d43c6bee8c16a0366f130082",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/vcr-bounded",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "cb00329ba003d9439ef42d251f7557ee95ec0484d43c6bee8c16a0366f130082",
+          "runId": "run_ae5666609f77646d25eeb02a03a6cbdb",
+          "sessionId": "session-29e81075-8ef3-48ff-b7be-dc33ce8f25a5",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/vcr-bounded/transcript.json",
+            "bytes": 548321,
+            "sha256": "4a3e9da95c0e9787ac66ec0a0e4c4211969d0a113a8d11c32bc658063f03fe09"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/vcr-matching",
+      "qualification": {
+        "packageId": "capability-skills/vcr-matching",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "vcr-bounded",
+          "currentBodySha256": "cf4976b3f82f1f746c881d5b198079d80f46f9fb976728345001bae20c238e1f",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/vcr-bounded",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "group": "vcr-isolated",
+          "manifestSha256": "cf4976b3f82f1f746c881d5b198079d80f46f9fb976728345001bae20c238e1f",
+          "runId": "run_039916bccf507b355f598d078f09b5e7",
+          "sessionId": "session-f6f172b6-dbc3-462f-97ff-54e915c4d613",
+          "projectId": "model-vcr-final",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/vcr-isolated/transcript.json",
+            "bytes": 455935,
+            "sha256": "c47e5768bc03d8fc08681d0ba5e1a708332a46b264de637cc9964d207722effa"
+          },
+          "actualMatcherReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/vcr-isolated/actual-matcher.json"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/vcr-package",
+      "qualification": {
+        "packageId": "capability-skills/vcr-package",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "vcr-bounded",
+          "currentBodySha256": "360c21effccb5477d7bb5b2a5a1c7343018cbaf4d9efcb8e8183fdaf73a79203",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/vcr-bounded",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "360c21effccb5477d7bb5b2a5a1c7343018cbaf4d9efcb8e8183fdaf73a79203",
+          "runId": "run_ae5666609f77646d25eeb02a03a6cbdb",
+          "sessionId": "session-29e81075-8ef3-48ff-b7be-dc33ce8f25a5",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/vcr-bounded/transcript.json",
+            "bytes": 548321,
+            "sha256": "4a3e9da95c0e9787ac66ec0a0e4c4211969d0a113a8d11c32bc658063f03fe09"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "capability-skills/vcr-protocol",
+      "qualification": {
+        "packageId": "capability-skills/vcr-protocol",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "vcr-bounded",
+          "currentBodySha256": "375f9aaa0ef33c32497135a47db1a3d509c5f555f2bfd737581cdc28facee2df",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/vcr-bounded",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "observed-current-washout-fixed-but-exclusion-polarity-and-fact-schema-failed",
+          "runId": "run_c9dab8554850388adb36bf816f912cd4",
+          "evidencePath": "evals/acceptance/local-integration-20261010/skills-native/prior-failures/vcr-protocol-corrected"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "group": "vcr-isolated",
+          "manifestSha256": "081e1137e5654ed949c30982997e300788198b5fba05ac843b75b1ee3d1639b6",
+          "runId": "run_039916bccf507b355f598d078f09b5e7",
+          "sessionId": "session-f6f172b6-dbc3-462f-97ff-54e915c4d613",
+          "projectId": "model-vcr-final",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/vcr-isolated/transcript.json",
+            "bytes": 455935,
+            "sha256": "c47e5768bc03d8fc08681d0ba5e1a708332a46b264de637cc9964d207722effa"
+          },
+          "actualMatcherReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/vcr-isolated/actual-matcher.json"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "community/deep-structural-analysis",
+      "qualification": {
+        "packageId": "community/deep-structural-analysis",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "community",
+          "currentBodySha256": "565fb67ed1e5e8749c7ceed0076518b259ac00282e42fcc220e66206ded295d5",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/community",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_072efebc92cd96ef48606d43c544564c",
+          "sessionId": "session-5fc40140-f883-4f22-aeaf-3bdc857d002b",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "565fb67ed1e5e8749c7ceed0076518b259ac00282e42fcc220e66206ded295d5",
+          "runId": "run_072efebc92cd96ef48606d43c544564c",
+          "sessionId": "session-5fc40140-f883-4f22-aeaf-3bdc857d002b",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/community/transcript.json",
+            "bytes": 696175,
+            "sha256": "b5d831f67d1627381415abadccbf54c32bacb8d00a8bdecbaf0a5b830bce6a97"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "community/dsh-ppt",
+      "qualification": {
+        "packageId": "community/dsh-ppt",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "community",
+          "currentBodySha256": "de144aa8737a6edf933bf5bc5e9f4701ab424ac783a926fa71048d5164c87d4b",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/community",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_072efebc92cd96ef48606d43c544564c",
+          "sessionId": "session-5fc40140-f883-4f22-aeaf-3bdc857d002b",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "de144aa8737a6edf933bf5bc5e9f4701ab424ac783a926fa71048d5164c87d4b",
+          "runId": "run_072efebc92cd96ef48606d43c544564c",
+          "sessionId": "session-5fc40140-f883-4f22-aeaf-3bdc857d002b",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/community/transcript.json",
+            "bytes": 696175,
+            "sha256": "b5d831f67d1627381415abadccbf54c32bacb8d00a8bdecbaf0a5b830bce6a97"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "core/deep-research",
+      "qualification": {
+        "packageId": "core/deep-research",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "research",
+          "currentBodySha256": "ac467b017823872d4ba6d8f3495a0d3c7346f0491c05f43756f57c54619fa8af",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/research",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_7df11212e58148e34149dae5717788cc",
+          "sessionId": "session-850d4a17-838c-4169-bba8-dc48763d99fb",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "group": "research-corrected",
+          "currentBodySha256": "ac467b017823872d4ba6d8f3495a0d3c7346f0491c05f43756f57c54619fa8af",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/research-corrected",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "ac467b017823872d4ba6d8f3495a0d3c7346f0491c05f43756f57c54619fa8af",
+          "runId": "run_ca566f450f33d197fbd3e3c379a854f1",
+          "sessionId": "session-2eea7d1d-32a8-4fed-a4dc-52ab62937edb",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/research-corrected/transcript.json",
+            "bytes": 805515,
+            "sha256": "ee886a91d1f395548da6e84d802911fccf755664da9d3e9b64f8ca7ab6228931"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "core/humanizer",
+      "qualification": {
+        "packageId": "core/humanizer",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "humanizers",
+          "currentBodySha256": "70938f3cce25970e1ded5fdd194b755c03f1e4e4fa76820958ce78f86b677b1a",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/humanizers",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_e6eb2bee8176affd1ae99932f5322788",
+          "sessionId": "session-05580a41-7ee0-48aa-a96a-b81ac9a8e4c4",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "70938f3cce25970e1ded5fdd194b755c03f1e4e4fa76820958ce78f86b677b1a",
+          "runId": "run_e6eb2bee8176affd1ae99932f5322788",
+          "sessionId": "session-05580a41-7ee0-48aa-a96a-b81ac9a8e4c4",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/humanizers/transcript.json",
+            "bytes": 514480,
+            "sha256": "73689e16749cd79c0e749621bfcc4653f159c81a06f1380260d3f0bfe169fdfc"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "core/humanizer-zh",
+      "qualification": {
+        "packageId": "core/humanizer-zh",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "humanizers",
+          "currentBodySha256": "e0edbdbc9008644263d5573fb59beac95794e188fd99c35012bfd79e9ae4beeb",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/humanizers",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_e6eb2bee8176affd1ae99932f5322788",
+          "sessionId": "session-05580a41-7ee0-48aa-a96a-b81ac9a8e4c4",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "e0edbdbc9008644263d5573fb59beac95794e188fd99c35012bfd79e9ae4beeb",
+          "runId": "run_e6eb2bee8176affd1ae99932f5322788",
+          "sessionId": "session-05580a41-7ee0-48aa-a96a-b81ac9a8e4c4",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/humanizers/transcript.json",
+            "bytes": 514480,
+            "sha256": "73689e16749cd79c0e749621bfcc4653f159c81a06f1380260d3f0bfe169fdfc"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "core/manuscript-humanize",
+      "qualification": {
+        "packageId": "core/manuscript-humanize",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "humanizers",
+          "currentBodySha256": "14bcdb31a71c4a0b8005fd70f89ab59c88bd57fb85fa78e1c0011ba178a15f1f",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/humanizers",
+          "state": "bounded-hosted-task-matched",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_e6eb2bee8176affd1ae99932f5322788",
+          "sessionId": "session-05580a41-7ee0-48aa-a96a-b81ac9a8e4c4",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "14bcdb31a71c4a0b8005fd70f89ab59c88bd57fb85fa78e1c0011ba178a15f1f",
+          "runId": "run_e6eb2bee8176affd1ae99932f5322788",
+          "sessionId": "session-05580a41-7ee0-48aa-a96a-b81ac9a8e4c4",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/humanizers/transcript.json",
+            "bytes": 514480,
+            "sha256": "73689e16749cd79c0e749621bfcc4653f159c81a06f1380260d3f0bfe169fdfc"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    },
+    {
+      "packageId": "evimed/open-domain-answer",
+      "qualification": {
+        "packageId": "evimed/open-domain-answer",
+        "dispatch": "control-plane-injected",
+        "state": "bounded-hosted-task-matched",
+        "currentImageExecution": "unknown",
+        "fullPackageExecution": "unknown"
+      },
+      "observations": [
+        {
+          "group": "answer-corrected",
+          "currentBodySha256": "00700db6701e5139696d9e0dcfabf5ce9b76d2bdacfad72bf2947a739a6594df",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/answer-corrected",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_5e10cb2678df8b89d630d0042bc041a1",
+          "sessionId": "session-1ba76b22-6f98-4c7a-9058-b2a30acd98af",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "group": "community",
+          "currentBodySha256": "00700db6701e5139696d9e0dcfabf5ce9b76d2bdacfad72bf2947a739a6594df",
+          "taskEvidencePrivatePath": "/tmp/evimed-release-closure-20261010/skills/community",
+          "state": "actual-task-dispatched-pending-check",
+          "currentImageExecution": "unknown",
+          "fullPackageExecution": "unknown",
+          "runId": "run_072efebc92cd96ef48606d43c544564c",
+          "sessionId": "session-5fc40140-f883-4f22-aeaf-3bdc857d002b",
+          "observedRunStatus": "succeeded"
+        },
+        {
+          "state": "independently-validated-bounded-hosted-task",
+          "manifestSha256": "00700db6701e5139696d9e0dcfabf5ce9b76d2bdacfad72bf2947a739a6594df",
+          "runId": "run_5e10cb2678df8b89d630d0042bc041a1",
+          "sessionId": "session-1ba76b22-6f98-4c7a-9058-b2a30acd98af",
+          "transcriptReceipt": {
+            "path": "evals/acceptance/local-integration-20261010/skills-native/answer-corrected/transcript.json",
+            "bytes": 86296,
+            "sha256": "224607eda011a864eacae6011231df40ee30facba060af3888e3784909938be8"
+          },
+          "finishedAt": "2026-10-10T04:27:05.077Z"
+        }
+      ],
+      "currentReceiptPath": "evals/acceptance/local-integration-20261010/skills-native/hosted-skill-execution-v1.json"
+    }
+  ],
+  "finishedAt": "2026-10-10T04:59:58.269Z",
+  "qualifiedCount": 44,
+  "concurrentScopeRegression": {
+    "passed": true,
+    "evidence": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/verification.json",
+    "scope": "Two actual simultaneous sessions in one owned project; bounded regression only."
+  },
+  "coldChosenLineActivationRegression": {
+    "passed": true,
+    "evidence": "evals/acceptance/local-integration-20261010/skills-native/gene-activation-control/first-request-header-tools.json"
+  }
+}

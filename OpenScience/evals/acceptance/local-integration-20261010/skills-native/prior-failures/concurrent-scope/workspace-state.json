@@ -1,0 +1,35 @@
+{
+  "formatVersion": 1,
+  "runId": "run_15799a841021445b2c08984f007d6b36",
+  "sessionId": "session-2dcc7cd9-84a3-41ad-9375-321037c978f7",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "updatedAt": "2026-10-10T04:47:20.267Z",
+  "plan": {
+    "revision": 0,
+    "items": []
+  },
+  "budget": {
+    "steps": 28,
+    "tokens": 101275,
+    "children": 0,
+    "limits": {
+      "maxSteps": 0,
+      "maxTokens": 0,
+      "maxChildren": 30
+    }
+  },
+  "evidence": {
+    "total": 0,
+    "byStatus": {}
+  },
+  "gateRuns": [],
+  "subagents": [],
+  "injectedSkills": [
+    "open-domain-answer",
+    "gene-expression-analysis"
+  ],
+  "mountedMethods": [],
+  "qualityNotices": [],
+  "degraded": []
+}

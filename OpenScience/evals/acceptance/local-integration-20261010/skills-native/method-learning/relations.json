@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "action": "decide",
+  "jobId": "local-method-learning-relations-001",
+  "scope": "bounded-local-verification",
+  "inputFile": "inputs.txt",
+  "inputKind": "frozen-local-teaching-input",
+  "relationVocabulary": [
+    "shared_part",
+    "subset",
+    "merge",
+    "abstract_pattern",
+    "conflicts_with",
+    "supersedes"
+  ],
+  "assignments": [
+    {
+      "ASSIGNMENT": "A1",
+      "SKILLS": ["M2", "M1"],
+      "RELATION_TYPE": "conflicts_with",
+      "REASON": "Both methods prescribe what to do with observations whose outcome is missing and what the denominator then is, and they prescribe opposite actions in that same situation. M1: 'Record unknown outcomes separately from zero and keep denominators explicit.' M2: 'Drop missing outcomes and silently keep the original denominator.' M1 keeps the unrecorded observation in view as an explicit unknown and states the denominator; M2 removes it from the summary and keeps a denominator that no longer describes the observations actually summarized, without saying so. The conflict is not resolved here and neither method is ranked: the disagreement is recorded for the researcher to decide."
+    },
+    {
+      "ASSIGNMENT": "A2",
+      "SKILLS": ["M3", "M1"],
+      "RELATION_TYPE": null,
+      "RELATION_TYPE_STATUS": "not_classifiable_in_vocabulary",
+      "OBSERVED_RELATION": "complementary",
+      "REASON": "M3: 'Detect duplicate observations before summarizing.' M1: 'Record unknown outcomes separately from zero and keep denominators explicit.' Read in full, they act on different things: M1 concerns how an unrecorded outcome value is carried and what the denominator is, M3 concerns whether the same observation entered the summary more than once, and neither repeats or implies the other. The relation a reader would observe is complementary, but the allowed vocabulary has no term for it, and it is not one of the six: it is not shared_part, because the two do not perform one concrete shared operation the same way; not subset, because each has content the other lacks; not merge and not supersedes, because the trigger, inputs, workflow and output differ; not conflicts_with, because in the situation M3 addresses M1 prescribes nothing M3 contradicts; and abstract_pattern requires three or more peers. FORCING A TERM IS REFUSED: shared_part would cost both methods their content by asserting a shared concrete operation that is not there. The relation is therefore left unclassified, which is a real answer, and M1 and M3 are untouched."
+    }
+  ],
+  "notices": [
+    {
+      "assignment": "A1",
+      "kind": "conflict",
+      "message": "M1 and M2 prescribe opposite handling of the same situation (unrecorded outcome values and the denominator). No revision was emitted: conflicts_with builds nothing, both methods stay exactly as they are, and the choice between them is left to the researcher. Reader-facing consequence to weigh: M2's 'silently' keeps the original denominator while dropping observations, so a reader of a summary produced under M2 cannot see from the denominator how many observations the summary rests on."
+    },
+    {
+      "assignment": "A2",
+      "kind": "vocabulary_gap",
+      "message": "The observed M3/M1 relation is complementary, which the six-term vocabulary does not express. It was recorded as an explicit unclassified assignment rather than mapped onto shared_part. A future vocabulary addition, or a separate complementarity field, would be needed before this relation can be carried as a type."
+    }
+  ],
+  "revisions": [],
+  "refused": [
+    {
+      "would_have_been": "shared_part between M3 and M1",
+      "why_refused": "The requirement for shared_part is one concrete operation both methods perform the same way. Deduplication before summarizing is not performed by M1 at all, so the relation would be asserted rather than found, and building it would replace a real operation in each method with a reference to an operation neither performs."
+    }
+  ]
+}

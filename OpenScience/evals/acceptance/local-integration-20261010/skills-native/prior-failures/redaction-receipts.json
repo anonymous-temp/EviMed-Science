@@ -1,0 +1,40 @@
+{
+  "historicalOnly": true,
+  "records": [
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/prior-failures/gene-expression/transcript.json",
+      "rawPrivatePath": "/tmp/evimed-release-closure-20261010/skills/gene-expression/transcript.json",
+      "rawPrivateSha256": "1ecae6084facc3edf24a7f471924bf8044116ff69ed6fa4fe5bffe76aa3682aa",
+      "redactedCopySha256": "2708ca9e1ea305c773d226a2b7c71ec0600b017704c02a8226a3043a042fe094",
+      "redaction": "Operator contact email removed. Explicit redacted historical copy; raw private file unchanged."
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/prior-failures/gene-native/transcript.json",
+      "rawPrivatePath": "/tmp/evimed-release-closure-20261010/skills/gene-native/transcript.json",
+      "rawPrivateSha256": "b7d2ce81bf5f5ce9c112fec8429e791f1139ab302ae4197e619ba92aed4664ad",
+      "redactedCopySha256": "35a4f376ca298215604227cac4a79c336ac9f9fb093bf5ae2cfd78cb59659835",
+      "redaction": "Operator contact email removed. Explicit redacted historical copy; raw private file unchanged."
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/prior-failures/gene-isolated/transcript.json",
+      "rawPrivatePath": "/tmp/evimed-release-closure-20261010/skills/gene-isolated/transcript.json",
+      "rawPrivateSha256": "1fb52ccff96de2222bfbbf59eee686194f2fe7565b02add04d470d5cca511569",
+      "redactedCopySha256": "4d2ca42a6bec77d808fbacbc18acbc9d87bba14e4a5d33392b64fce5229c0bf9",
+      "redaction": "Operator contact email removed. Explicit redacted historical copy; raw private file unchanged."
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/prior-failures/concurrent-scope/vcr-protocol-final/transcript.json",
+      "rawPrivatePath": "/tmp/evimed-release-closure-20261010/skills/vcr-protocol-final/transcript.json",
+      "rawPrivateSha256": "4347d5eb4edfcfc06ccadba280e8bd057b8306453158c127bf684b5f3eaf33ff",
+      "redactedCopySha256": "efd725da8288f731330fdf6df02d366f9401153d840643eae71e026a8057ddfd",
+      "redaction": "Operator contact email removed. Explicit redacted historical copy; raw private file unchanged."
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/prior-failures/concurrent-scope/gene-final/transcript.json",
+      "rawPrivatePath": "/tmp/evimed-release-closure-20261010/skills/gene-final/transcript.json",
+      "rawPrivateSha256": "9619ae591ae70de37668731be5bd232e18f97145dd5da898521e55eea8f56e2e",
+      "redactedCopySha256": "84517e9aea2ae69291416720113d34366c2c5b7a303a82588bae85f641f7d78b",
+      "redaction": "Operator contact email removed. Explicit redacted historical copy; raw private file unchanged."
+    }
+  ]
+}

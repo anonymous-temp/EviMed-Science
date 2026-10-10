@@ -1,0 +1,325 @@
+{
+  "artifact": "reporting-checklist mapping",
+  "guideline": "CONSORT 2025",
+  "guidelineCitation": "Hopewell S, Chan AW, Collins GS, et al. CONSORT 2025 statement: updated guideline for reporting randomised trials. BMJ 2025;389:e081123. doi:10.1136/bmj-2024-081123",
+  "scope": "Bounded partial mapping against two invented teaching excerpts (S1, S2) supplied by the requester. Seven item numbers named in the request are mapped: 17a, 17b, 18, 20a, 20b, 22b and 3. This is not a complete CONSORT checklist, not a statement of compliance, quality or publication readiness, and not a claim about any real trial. No item outside the two excerpts is inferred and no literature search was performed.",
+  "sourceVerification": {
+    "officialItemTable": {
+      "pmcid": "PMC11995449",
+      "file": "official-consort-2025.html",
+      "sha256": "3da2b707b81a734aacad2c126cd0b5fee9822a8f91ee5b997119cadafb534d2f",
+      "tableCharacterSpan": {
+        "start": 109366,
+        "end": 123921
+      },
+      "itemsInTable": 42
+    },
+    "suppliedItemTable": {
+      "file": "consort-2025.md",
+      "sha256": "074cebbc1e3f0ef41260d58bd38316c8653603de7e755b702a8b58fb54b26323",
+      "itemsInTable": 42
+    },
+    "comparisonResult": "The supplied table reproduces the official Table 1 item numbers in the same order, 42 of 42. Item wording is byte-identical for 41 of 42 items; item 26 differs only in the bullet glyph used inside the item text (U+25CF in the official table, U+2022 in the supplied file) and is otherwise identical. Every item text quoted in this file was read from the official table and located at the character offset recorded with it.",
+    "item8InOfficialTable": {
+      "subItems": [
+        "8"
+      ],
+      "note": "Item 8 in the CONSORT 2025 table is a single item, 'Patient and public involvement'. The official table contains no items 8a, 8b or 8c, so those numbers cannot be CONSORT 2025 item numbers."
+    },
+    "teachingExcerpts": {
+      "file": "teaching-excerpts.txt",
+      "sha256": "cb691f83d9f81306f521bfa7574ea208b1b074b1a7fe52c7a21e8383c31cd0b5"
+    }
+  },
+  "correctionOfEarlierLabelling": {
+    "what": "An earlier mapping of the same domains labelled its rows 'Item 8a - Sequence generation', 'Item 8b - Allocation concealment mechanism', 'Item 8c - Blinding', 'Item 8d/8e - Attrition and analysis population' and 'Item 9 - Prespecification / protocol and registration'. It also took one of its two excerpts for the attrition row from a sentence about 8-week outcomes that is not part of the excerpt supplied for this run, so its two studies were drawn from different material.",
+    "whyItIsWrongHere": "Those numbers do not exist in the CONSORT 2025 table, which was read item by item for this mapping. A row labelled with a number the guideline does not use cannot be checked against the guideline: a reader who looks up 8a in CONSORT 2025 finds item 8, patient and public involvement, and 8b and 8c do not exist at all.",
+    "whatReplacesIt": "Sequence generation is items 17a and 17b; the allocation concealment mechanism is item 18; blinding is items 20a and 20b; losses and exclusions after randomisation are item 22b; the protocol and the statistical analysis plan are item 3.",
+    "numberingRule": "Only item numbers present in the official table are used, each quoted with the wording printed there, and both studies in this mapping are the two excerpts supplied for this run."
+  },
+  "elementStateRule": {
+    "stated": "the excerpt contains a statement that directly answers this element",
+    "partially_stated": "the excerpt answers the element for part of its scope (one role, one part of a multi-part element) and leaves the rest unstated",
+    "not_stated": "the excerpt contains no statement answering this element; a quote may still be attached as relatedStatement when the excerpt says something adjacent"
+  },
+  "items": [
+    {
+      "consortItem": "17a",
+      "officialSection": "Methods",
+      "officialTopic": "Sequence generation",
+      "officialItemText": "Who generated the random allocation sequence and the method used",
+      "officialPageCharOffset": 116962,
+      "elements": [
+        "who generated the random allocation sequence",
+        "the method used"
+      ],
+      "byStudy": {
+        "S1": {
+          "who generated the random allocation sequence": {
+            "state": "not_stated",
+            "note": "No person or body that generated the allocation sequence is named. The rule the excerpt describes executes itself on the day of entry and has no separate generator."
+          },
+          "the method used": {
+            "state": "stated",
+            "quote": "Participants were allocated alternately by day.",
+            "note": "The method stated is alternation by day of entry. Alternation is a predictable, non-random rule; what is reported here is a method of allocation, not a method of random allocation, so this item is not satisfied by randomisation."
+          }
+        },
+        "S2": {
+          "who generated the random allocation sequence": {
+            "state": "not_stated",
+            "note": "The excerpt states that the sequence was computer-generated but names no person, unit or system responsible for generating it."
+          },
+          "the method used": {
+            "state": "stated",
+            "quote": "A computer-generated sequence assigned 60 participants equally.",
+            "note": "The stated method is computer generation, with 60 participants assigned equally."
+          }
+        }
+      }
+    },
+    {
+      "consortItem": "17b",
+      "officialSection": "Methods",
+      "officialTopic": "Sequence generation",
+      "officialItemText": "Type of randomisation and details of any restriction (eg, stratification, blocking and block size)",
+      "officialPageCharOffset": 117174,
+      "elements": [
+        "type of randomisation",
+        "details of any restriction (eg, stratification, blocking and block size)"
+      ],
+      "byStudy": {
+        "S1": {
+          "type of randomisation": {
+            "state": "not_stated",
+            "relatedStatement": "Participants were allocated alternately by day.",
+            "note": "No type of randomisation is stated. The allocation rule given is alternation by day, which is not a randomisation type; it is recorded here rather than converted into one."
+          },
+          "details of any restriction (eg, stratification, blocking and block size)": {
+            "state": "not_stated",
+            "note": "No stratification, blocking or block size is stated."
+          }
+        },
+        "S2": {
+          "type of randomisation": {
+            "state": "not_stated",
+            "relatedStatement": "A computer-generated sequence assigned 60 participants equally.",
+            "note": "The excerpt names the sequence method, not a randomisation type (for example parallel-group); the type is left unstated."
+          },
+          "details of any restriction (eg, stratification, blocking and block size)": {
+            "state": "not_stated",
+            "relatedStatement": "A computer-generated sequence assigned 60 participants equally.",
+            "note": "Equal assignment of the 60 participants concerns group sizes; nothing is stated about stratification, blocking or block size."
+          }
+        }
+      }
+    },
+    {
+      "consortItem": "18",
+      "officialSection": "Methods",
+      "officialTopic": "Allocation concealment mechanism",
+      "officialItemText": "Mechanism used to implement the random allocation sequence (eg, central computer/telephone; sequentially numbered, opaque, sealed containers), describing any steps to conceal the sequence until interventions were assigned",
+      "officialPageCharOffset": 117512,
+      "elements": [
+        "mechanism used to implement the random allocation sequence",
+        "steps to conceal the sequence until interventions were assigned"
+      ],
+      "byStudy": {
+        "S1": {
+          "mechanism used to implement the random allocation sequence": {
+            "state": "not_stated",
+            "relatedStatement": "Participants were allocated alternately by day.",
+            "note": "No implementation mechanism (for example a central service, or sequentially numbered sealed containers) is stated. Alternation by day is an open, predictable rule; it is recorded as the closest statement and no concealment mechanism is inferred from it."
+          },
+          "steps to conceal the sequence until interventions were assigned": {
+            "state": "not_stated",
+            "note": "No step to conceal the sequence is stated."
+          }
+        },
+        "S2": {
+          "mechanism used to implement the random allocation sequence": {
+            "state": "not_stated",
+            "relatedStatement": "Allocation concealment was not described.",
+            "note": "The excerpt states that concealment was not described. That is a gap in the report; it is not evidence that concealment was absent, and it supplies no mechanism."
+          },
+          "steps to conceal the sequence until interventions were assigned": {
+            "state": "not_stated",
+            "note": "No step to conceal the sequence is stated; the excerpt says only that concealment was not described."
+          }
+        }
+      }
+    },
+    {
+      "consortItem": "20a",
+      "officialSection": "Methods",
+      "officialTopic": "Blinding",
+      "officialItemText": "Who was blinded after assignment to interventions (eg, participants, care providers, outcome assessors, data analysts)",
+      "officialPageCharOffset": 118307,
+      "elements": [
+        "who was blinded after assignment to interventions"
+      ],
+      "byStudy": {
+        "S1": {
+          "who was blinded after assignment to interventions": {
+            "state": "partially_stated",
+            "quote": "Outcome assessors knew allocation.",
+            "note": "One role is addressed and its status is given as knowing the allocation, so outcome assessors were not blinded. Participants, care providers and data analysts are not addressed, so who (if anyone) was blinded is not fully stated."
+          }
+        },
+        "S2": {
+          "who was blinded after assignment to interventions": {
+            "state": "partially_stated",
+            "quote": "Outcome assessors were blinded.",
+            "note": "One role is stated as blinded. Participants, care providers and data analysts are not addressed."
+          }
+        }
+      }
+    },
+    {
+      "consortItem": "20b",
+      "officialSection": "Methods",
+      "officialTopic": "Blinding",
+      "officialItemText": "If blinded, how blinding was achieved and description of the similarity of interventions",
+      "officialPageCharOffset": 118573,
+      "elements": [
+        "how blinding was achieved",
+        "description of the similarity of interventions"
+      ],
+      "byStudy": {
+        "S1": {
+          "how blinding was achieved": {
+            "state": "not_stated",
+            "relatedStatement": "Outcome assessors knew allocation.",
+            "note": "On the excerpt's own statement the assessors were not blinded, and no method of blinding is given in any case."
+          },
+          "description of the similarity of interventions": {
+            "state": "not_stated",
+            "note": "Nothing about the interventions or their similarity is stated."
+          }
+        },
+        "S2": {
+          "how blinding was achieved": {
+            "state": "not_stated",
+            "relatedStatement": "Outcome assessors were blinded.",
+            "note": "That assessors were blinded is stated; how blinding was achieved is not."
+          },
+          "description of the similarity of interventions": {
+            "state": "not_stated",
+            "note": "Nothing about the interventions or their similarity is stated."
+          }
+        }
+      }
+    },
+    {
+      "consortItem": "22b",
+      "officialSection": "Results",
+      "officialTopic": "Participant flow, including flow diagram",
+      "officialItemText": "For each group, losses and exclusions after randomisation, together with reasons",
+      "officialPageCharOffset": 120340,
+      "elements": [
+        "losses and exclusions after randomisation",
+        "reasons for the losses and exclusions",
+        "for each group"
+      ],
+      "byStudy": {
+        "S1": {
+          "losses and exclusions after randomisation": {
+            "state": "not_stated",
+            "note": "No losses, exclusions or follow-up numbers appear in the excerpt."
+          },
+          "reasons for the losses and exclusions": {
+            "state": "not_stated",
+            "note": "No losses or exclusions are stated, so no reasons can be either."
+          },
+          "for each group": {
+            "state": "not_stated",
+            "note": "The excerpt names no groups."
+          }
+        },
+        "S2": {
+          "losses and exclusions after randomisation": {
+            "state": "stated",
+            "quote": "Attrition was 12/60 without reasons.",
+            "note": "A single loss count of 12 of 60 is given for the trial as a whole. Losses and exclusions are not separated, and the excerpt does not say whether the 12 were included in any analysis."
+          },
+          "reasons for the losses and exclusions": {
+            "state": "not_stated",
+            "relatedStatement": "Attrition was 12/60 without reasons.",
+            "note": "The excerpt states that reasons were not given; no reason is supplied."
+          },
+          "for each group": {
+            "state": "not_stated",
+            "note": "The 12 are not split by group, and the excerpt does not say whether any exclusions occurred."
+          }
+        }
+      }
+    },
+    {
+      "consortItem": "3",
+      "officialSection": "Open science",
+      "officialTopic": "Protocol and statistical analysis plan",
+      "officialItemText": "Where the trial protocol and statistical analysis plan can be accessed",
+      "officialPageCharOffset": 111073,
+      "elements": [
+        "where the trial protocol can be accessed",
+        "where the statistical analysis plan can be accessed"
+      ],
+      "byStudy": {
+        "S1": {
+          "where the trial protocol can be accessed": {
+            "state": "not_stated",
+            "relatedStatement": "No prespecified protocol was provided.",
+            "note": "The excerpt states that no prespecified protocol was provided. That is a statement about prespecification, not an access location for a protocol; whether a protocol exists that can be accessed is left unstated."
+          },
+          "where the statistical analysis plan can be accessed": {
+            "state": "not_stated",
+            "note": "No statistical analysis plan and no access location for one is stated."
+          }
+        },
+        "S2": {
+          "where the trial protocol can be accessed": {
+            "state": "not_stated",
+            "note": "No protocol, registration record or access location is stated anywhere in the excerpt."
+          },
+          "where the statistical analysis plan can be accessed": {
+            "state": "not_stated",
+            "note": "No statistical analysis plan and no access location for one is stated."
+          }
+        }
+      }
+    }
+  ],
+  "counts": {
+    "itemsMapped": 7,
+    "studies": 2,
+    "studyItemPairs": 14,
+    "elementsAssessed": 28,
+    "elementStates": {
+      "stated": 3,
+      "partially_stated": 2,
+      "not_stated": 23
+    },
+    "elementStatesByStudy": {
+      "S1": {
+        "stated": 1,
+        "partially_stated": 1,
+        "not_stated": 12
+      },
+      "S2": {
+        "stated": 2,
+        "partially_stated": 1,
+        "not_stated": 11
+      }
+    },
+    "shareOfElementsNotStated": 82.1,
+    "shareOfStudyItemPairsWithNothingStated": 64.3,
+    "howCounted": "Counted over the items array of this file by one pass per element and per study-item pair: 7 items x 2 studies = 14 pairs; element states are counted individually, so an item with three elements contributes up to six states over the two studies."
+  },
+  "limits": [
+    "The two excerpts are invented teaching material. Nothing here describes a real trial, and no statement about a real trial follows from it.",
+    "A not_stated element means the excerpt does not state it. It is not evidence that the trial did not do it, and it is not scored as a defect.",
+    "Only the seven named item numbers are mapped. Every other CONSORT 2025 item is outside this check and is neither reported nor assessed.",
+    "The excerpts are short statements about trials. No protocol, results table, flow diagram or analysis was supplied, so no item requiring those can be mapped.",
+    "This mapping is not a compliance statement, a quality score or a publication-readiness judgement, and it does not substitute for the completed checklist a journal asks an author for."
+  ]
+}

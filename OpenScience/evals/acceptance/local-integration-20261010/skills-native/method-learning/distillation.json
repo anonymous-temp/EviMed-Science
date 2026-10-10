@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "scope": "bounded-local-verification",
+  "inputFile": "inputs.txt",
+  "inputKind": "frozen-local-teaching-input",
+  "runId": "local-teaching-run-001",
+  "decision": "no_change",
+  "operation": "no_change",
+  "baseDigest": "sha256:1f0f61eb9807b0ac49cab85fab936a5e94a8de8a64af565dbf89965b67dd1b6f",
+  "targetMethodId": "M1",
+  "mergedMethodIds": [],
+  "reason": "T reports one thing: the initial summary treated a missing outcome as zero, and the repair recorded the unknown separately while keeping the denominator explicit. M1 already states exactly that rule in its own words, and the confirmed output is that rule applied, not a new rule: the unknown is counted as one, not as zero, and it is counted against the same denominator of six. Proposing a second method beside M1 would duplicate the rule, which is the outcome the induction step exists to prevent. Nothing in T expands M1's scope either: the comparison of original and deduplicated counts in T is a step M3 covers separately and is not part of the rule M1 states, so there is no missing clause for M1 to absorb. The remaining statement in T is a limitation of this teaching case, not a procedure.",
+  "evidence": [
+    {
+      "id": "EV1",
+      "runId": "local-teaching-run-001",
+      "seqRange": [13, 13],
+      "source": "T",
+      "quote": "Failure: initial summary treated a missing outcome as zero.",
+      "supports": "the in-scope failure mode: an unknown outcome was folded into the count as a zero rather than kept as unknown"
+    },
+    {
+      "id": "EV2",
+      "runId": "local-teaching-run-001",
+      "seqRange": [13, 13],
+      "source": "T",
+      "quote": "Repair: record unknown separately, retain denominator, compare original and deduplicated counts.",
+      "supports": "the repaired rule; its first two clauses restate M1 verbatim in substance, its third clause is the deduplication step carried by M3"
+    },
+    {
+      "id": "EV3",
+      "runId": "local-teaching-run-001",
+      "seqRange": [14, 14],
+      "source": "M1",
+      "quote": "Record unknown outcomes separately from zero and keep denominators explicit.",
+      "supports": "M1 on file already covers the situation, so the decision is no_change rather than a near-duplicate create"
+    },
+    {
+      "id": "EV4",
+      "runId": "local-teaching-run-001",
+      "seqRange": [13, 13],
+      "source": "T",
+      "quote": "Verified output: denominator6, known outcomes5, one missing.",
+      "supports": "the confirmed output conforms to M1: known outcomes 5 and one missing sum to the retained denominator 6, so the unknown was neither merged into the known count nor treated as zero"
+    },
+    {
+      "id": "EV5",
+      "runId": "local-teaching-run-001",
+      "seqRange": [13, 13],
+      "source": "T",
+      "quote": "Remaining: external replication not performed.",
+      "supports": "the sole unresolved item; it is recorded as unresolved and supports no claim that the rule has been reproduced elsewhere"
+    }
+  ],
+  "applicability": "An evidence summary or count table in which some observations have no recorded outcome value, and the question is what the denominator is and how the unrecorded ones are carried; the count of unrecorded observations is reported beside the denominator rather than inside it or as zero.",
+  "counterexamples": [
+    "A synthesis in which every observation carries an outcome value, so the unknown bucket has nothing to record and only the denominator statement still applies.",
+    "A synthesis in which the unknown count must be reported and original and deduplicated counts compared as one deliverable; that comparison belongs to a separate deduplication-first procedure rather than to this rule.",
+    "A numeric replacement or imputation decision for the unrecorded values themselves; that is a per-question modelling choice and neither M1 nor T fixes it."
+  ],
+  "risk": {
+    "touchesSafety": false,
+    "widensTools": false
+  },
+  "testScenarios": [
+    {
+      "id": "TS1",
+      "runId": "local-teaching-run-001",
+      "seqRange": [13, 13],
+      "situation": "A summary table with six observations shows five known outcomes and one observation whose outcome was never recorded; the initial summary reports the unrecorded observation as zero, so the known count and the denominator cannot be told apart.",
+      "expected": "The unrecorded observation is reported as unknown and as one observation, distinct from a recorded zero; the denominator stays six; the summary is rejected because it presented an unknown as a value."
+    },
+    {
+      "id": "TS2",
+      "runId": "local-teaching-run-001",
+      "seqRange": [13, 13],
+      "situation": "The same table after repair: six observations in the denominator, five known outcomes, one unknown, deduplicated and original counts both stated.",
+      "expected": "The rule already on file is satisfied without a new method: unknown and zero are reported separately and the denominator is explicit; the residual item is that no replication external to this teaching case has been performed, which the rule does not resolve."
+    }
+  ],
+  "unresolved": [
+    {
+      "item": "external replication",
+      "status": "not_performed",
+      "detail": "T records that external replication was not performed. Nothing in this run performed it, and no artifact here claims it."
+    }
+  ]
+}

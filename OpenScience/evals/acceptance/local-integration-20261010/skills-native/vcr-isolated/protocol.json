@@ -1,0 +1,169 @@
+{
+  "artifactId": "protocol",
+  "artifactVersion": "1.0.0",
+  "artifactType": "vcr-criteria-encoding",
+  "asOf": "2026-10-10T00:00:00Z",
+  "scope": {
+    "purpose": "受控的本地方法学验证：把研究者的一句话定义编码成可判定的条件，并把「当前暴露 / 时间语义 / 未知证据如何处置」三件事写清楚，供独立的确定性评估器读取。",
+    "syntheticSourcesOnly": true,
+    "realPatientDataOrContact": false,
+    "platformStudyOrResultRegistered": false,
+    "qualifiedFor": [
+      "条件文法的编码（requirement）",
+      "当前暴露与历史暴露的谓词区分",
+      "未知证据的处置口径",
+      "事实与引文的原文位置核验"
+    ],
+    "notQualifiedFor": [
+      "完整 VCR 引擎方案",
+      "临床可接受性",
+      "任何人群层面的结果或计数"
+    ]
+  },
+  "studyDefinition": {
+    "statedDefinitionVerbatim": "adults >=18; exclude CURRENT systemic glucocorticoid exposure",
+    "title": "现用系统性糖皮质激素排除条件的编码与注解验证",
+    "question": "同一条「排除当前系统性糖皮质激素暴露」的定义，在事实抽取与条件编码之间能否保持一致，并让缺失证据停在未知？",
+    "endpointType": null,
+    "endpointTypeNote": "题面没有给终点，本步也不评结局；此处留空（null），不补一个占位终点。",
+    "intendedUse": "exploratory",
+    "fieldSources": {
+      "statedDefinitionVerbatim": "题面原话，逐字",
+      "title": "AI 设定：题面没有给研究名",
+      "question": "AI 设定：按题面的限定范围改写",
+      "endpointType": "AI 设定：留空"
+    }
+  },
+  "criteria": [
+    {
+      "kind": "inclusion",
+      "criterionType": "demographic",
+      "requirement": {
+        "op": "compare",
+        "variable": "age",
+        "comparator": "gte",
+        "value": 18,
+        "unit": "years"
+      },
+      "sourceText": "adults >=18",
+      "sourceLocator": {
+        "section": "researcher-stated definition (task brief)",
+        "field": "definition: inclusion"
+      },
+      "evidenceNeeded": [
+        "出生日期，或记录中已写明的年龄字段",
+        "评估时点 asOf（2026-10-10T00:00:00Z）：把出生日期换算成评估日年龄时要用到"
+      ]
+    },
+    {
+      "kind": "exclusion",
+      "criterionType": "concomitant_medication",
+      "requirement": {
+        "op": "absent",
+        "variable": "current_systemic_glucocorticoid_exposure"
+      },
+      "sourceText": "exclude CURRENT systemic glucocorticoid exposure",
+      "sourceLocator": {
+        "section": "researcher-stated definition (task brief)",
+        "field": "definition: exclusion"
+      },
+      "evidenceNeeded": [
+        "当前用药清单：药名、是否属于全身（系统性）用药、评估时点是否仍在用",
+        "最近一次给药或停用的记录及其日期",
+        "记录里没有提到时：按未知处理，不当作「没有暴露」"
+      ]
+    }
+  ],
+  "criterionEncodingDecisions": {
+    "requirementIsWhatMustBeSatisfied": "排除条件也写成「要满足的要求」：排除当前系统性糖皮质激素暴露 = 要求「当前系统性糖皮质激素暴露 = 无」。评估器不会因为 kind 是 exclusion 就把结论反过来，所以不能写成 present 再加一句散文说明。",
+    "whyAbsentInsteadOfNot": "absent X 与 not(present X) 等价，两种写法都可以；这里用 absent，读起来就是「当前暴露为无」这条要求本身。",
+    "noWindowNoElapsedSince": "这一条是「当前是否仍在用」，不是洗脱期条件。题面没有写任何最短停药间隔，因此不加 window、不写 elapsed_since。要一个间隔必须显式写出来，那时是一条新条件、新方案版本。",
+    "criterionObjectShape": "每条条件只带 kind、criterionType、requirement、sourceText、sourceLocator、evidenceNeeded 六个字段，不夹带自定义字段，便于评估器直接消费；本文件与 engine-input.json 的 criteria 数组逐字相同。"
+  },
+  "temporalSemantics": {
+    "assessmentTime": {
+      "asOf": "2026-10-10T00:00:00Z",
+      "note": "题面指定的评估时点。「当前」一律指这个时点。"
+    },
+    "predicateUnderTest": "current_systemic_glucocorticoid_exposure：评估时点上仍在进行的系统性糖皮质激素暴露。",
+    "washoutWindow": null,
+    "washoutWindowPolicy": "题面没有给最短停药间隔，因此这里没有洗脱期：不加 window，也不写 elapsed_since。「6months ago」「2days ago」「yesterday」是原文的相对说法，不是阈值。如果研究者确实要求「停用不满 N 天不能入组」或「最近 N 天内用过算当前暴露」，那必须显式写成一条独立条件（elapsed_since 配 days，或 window），并作为新的方案版本；旧版本的注解不得按新条件重判。",
+    "relativeDurationHandling": {
+      "formsObservedInSources": [
+        "6months ago",
+        "2days ago",
+        "yesterday"
+      ],
+      "conversionToAbsoluteDates": "none",
+      "reason": "相对时长没有可核对的参照日期，换算成 occurredAt 就是编造日期。相对说法逐字留在引文里，事实不写 occurredAt、不写 recordedAt。",
+      "unitsPreserved": "原文怎么写就怎么留（months / days / yesterday），不把月近似成固定的天数。"
+    },
+    "predicateSeparation": {
+      "rule": "历史暴露与当前暴露是两个不同的谓词。历史暴露的肯定事实既不满足也不违反「当前暴露为无」这条要求；它只说明曾经暴露过。",
+      "historicalVariable": "systemic_glucocorticoid_exposure_history",
+      "currentVariable": "current_systemic_glucocorticoid_exposure",
+      "otherMedicationRule": "与排除药物或其类别无关的药（本例是二甲双胍）不得挂在糖皮质激素的变量下，用自己的概念变量（current_metformin_exposure），或只作为未索引的上下文。"
+    },
+    "stopStatementRule": {
+      "rule": "文档写明已停用、且没有相反的在用说明时，作为「当前暴露」的有来源否定：变量 current_systemic_glucocorticoid_exposure，极性 negated。",
+      "quoteRetention": "停药原句逐字保留在 quote 里，不改写成「无暴露」这类概括。",
+      "boundaryCase": "「有来源的否定」是否包含「已停用」这种写法，取决于研究者的口径。若口径是只有显式写明「当前未使用」才算否定，那么 C1/C4 在这条要求上应回到未知——事实与引文不变，只改判定口径。",
+      "noThresholdFromStop": "停用陈述本身不产生洗脱期：不能因为「已经停了 6 个月」就当它满足一条带天数的条件，也不能因为「才停了 2 天」就当它不满足当前的暴露要求。"
+    },
+    "continuationOverridesStop": {
+      "rule": "写明仍在用（continues）时，是当前暴露的肯定事实：极性 affirmed。同一位受试者若同时有更早的停用说明与更晚的在用说明，以评估时点仍在用为准；本组来源内没有这种冲突。",
+      "noInference": "没有说重新开始用药，就不推定为在用；没有说停用，也不推定为已停。"
+    }
+  },
+  "unknownPolicy": {
+    "principle": "缺失的证据是未知，既不是否定，也不是排除。",
+    "rules": [
+      {
+        "id": "U1",
+        "statement": "来源没有提到某个概念时，不写这个概念的事实（保持缺失），不写 negated 去凑一个判定。"
+      },
+      {
+        "id": "U2",
+        "statement": "「用药史不可得」这类记录是对当前暴露的未知，不是对暴露的否认，也不是「未暴露」。"
+      },
+      {
+        "id": "U3",
+        "statement": "absent X 的取值：有 affirmed 的 X 事实时不满足；有来源的明确否定时满足；X 没有记录时未知。"
+      },
+      {
+        "id": "U4",
+        "statement": "未知不等于排除：一条适用的排除条件停在未知时，总体结论不能是符合。逐条状态与总体结论由确定性评估器按三值逻辑算出，不由注解代替。"
+      },
+      {
+        "id": "U5",
+        "statement": "未知不得靠推断补齐：不能从「清单上只写了别的药」推出「没有用这个药」，也不能从停用记录推出一段没有被声明的间隔。"
+      },
+      {
+        "id": "U6",
+        "statement": "本步不产生任何人群层面的计数（真实患者数、事件数、有效样本量、生成记录数一律不存在，写作 null，不写 0）。"
+      }
+    ]
+  },
+  "provenance": {
+    "protocolDocument": null,
+    "registryId": null,
+    "definitionSource": "题面里研究者给出的一句话定义，逐字写进两条条件的 sourceText。",
+    "locatorNote": "没有方案文件、没有登记号，因此 sourceLocator 用 {section, field} 指回题面本身，而不是编造页码或登记号。",
+    "aiSetFields": [
+      "title",
+      "question",
+      "criteria[].criterionType",
+      "criteria[].requirement 里的变量命名与 unit",
+      "temporalSemantics",
+      "unknownPolicy"
+    ],
+    "notIncluded": [
+      "终点",
+      "效应量",
+      "事件率",
+      "脱落率",
+      "人群计数",
+      "平台研究或结果的登记"
+    ]
+  }
+}

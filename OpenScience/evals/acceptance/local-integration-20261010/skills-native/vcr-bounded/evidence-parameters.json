@@ -1,0 +1,232 @@
+{
+  "schema": "vcr-bounded/evidence-parameters/1",
+  "artifactId": "evidence-parameters",
+  "title": "证据摘录 E 的数值锚点与适用性（有界方法核验）",
+  "scope": {
+    "kind": "bounded_method_verification",
+    "establishes": [
+      "把证据摘录里的每个数锚回它逐字出现的那一句",
+      "把来源事实与本方法层面的假设分开记录",
+      "把组间适用性标成未知，而不是替它补一个默认"
+    ],
+    "does_not_establish": [
+      "中国人群的独立临床验证",
+      "任何疗效结论或样本量建议",
+      "任何真实研究的参数取值"
+    ],
+    "patientData": "none",
+    "platformStudyOrResultRegistered": false
+  },
+  "sourceRecord": {
+    "sourceKey": "E",
+    "verbatimExcerpt": "Mean difference5points; standard deviation12points; adults only; observational cohort.",
+    "excerptRetainedVerbatim": true,
+    "kind": "single evidence excerpt",
+    "isSyntheticOrRedacted": true,
+    "designAsStated": "observational cohort",
+    "scopeAsStated": "adults only",
+    "sourceIdentity": {
+      "title": null,
+      "year": null,
+      "doi": null,
+      "pmid": null,
+      "state": "not provided in the task brief",
+      "consequence": "来源名称、年份与标识符不可得；本文件不对该摘录做任何归因，也不把它当作已发表研究引用。"
+    },
+    "redactionNote": "摘录中数字与文字之间没有空格（例如 5points、12points），这是摘录本身的写法，逐字引用时原样保留。"
+  },
+  "anchors": [
+    {
+      "field": "effect",
+      "value": 5,
+      "unitAsStatedInSource": "points",
+      "unitIsSpecified": false,
+      "quote": "Mean difference5points",
+      "locator": {
+        "sourceKey": "E",
+        "segmentIndex": 0,
+        "charStart": 0,
+        "charEnd": 22,
+        "note": "字符位置以 utf-16 code unit 计，从摘录首字符起算。"
+      },
+      "role": "目标均值差，作为解析计算的效应输入",
+      "sourceFact": true
+    },
+    {
+      "field": "sd",
+      "value": 12,
+      "unitAsStatedInSource": "points",
+      "unitIsSpecified": false,
+      "quote": "standard deviation12points",
+      "locator": {
+        "sourceKey": "E",
+        "segmentIndex": 1,
+        "charStart": 24,
+        "charEnd": 50,
+        "note": "字符位置以 utf-16 code unit 计，从摘录首字符起算。"
+      },
+      "role": "标准差，作为解析计算的标准差输入",
+      "sourceFact": true
+    },
+    {
+      "field": "populationScope",
+      "value": "adults only",
+      "unitAsStatedInSource": null,
+      "unitIsSpecified": null,
+      "quote": "adults only",
+      "locator": {
+        "sourceKey": "E",
+        "segmentIndex": 2,
+        "charStart": 52,
+        "charEnd": 63,
+        "note": "字符位置以 utf-16 code unit 计，从摘录首字符起算。"
+      },
+      "role": "适用人群的范围声明，对应研究定义中的成人（年龄不小于 18 岁）",
+      "sourceFact": true,
+      "numericBoundaryAsStated": null,
+      "note": "摘录只写 adults only，没有给出年龄阈值；18 岁来自本研究自己的定义，不是摘录里的数。"
+    },
+    {
+      "field": "studyDesign",
+      "value": "observational cohort",
+      "unitAsStatedInSource": null,
+      "unitIsSpecified": null,
+      "quote": "observational cohort",
+      "locator": {
+        "sourceKey": "E",
+        "segmentIndex": 3,
+        "charStart": 65,
+        "charEnd": 85,
+        "note": "字符位置以 utf-16 code unit 计，从摘录首字符起算。"
+      },
+      "role": "研究设计声明，用于判断这个数被移植到设计期计算时的可比性",
+      "sourceFact": true
+    }
+  ],
+  "sourceFacts": [
+    {
+      "claim": "该摘录报告了一个均值差 5",
+      "anchorField": "effect",
+      "support": "quote"
+    },
+    {
+      "claim": "该摘录报告了一个标准差 12",
+      "anchorField": "sd",
+      "support": "quote"
+    },
+    {
+      "claim": "该摘录把适用人群限于成人",
+      "anchorField": "populationScope",
+      "support": "quote"
+    },
+    {
+      "claim": "该摘录声明自身为观察性队列",
+      "anchorField": "studyDesign",
+      "support": "quote"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "asm-1",
+      "claim": "5 与 12 属于同一个连续终点、同一个计量尺度",
+      "basis": "同一摘录内相邻分句的读法",
+      "isSourceFact": false,
+      "whatWouldFalsify": "摘录或原研究说明这两个数属于不同终点或不同计量尺度"
+    },
+    {
+      "id": "asm-2",
+      "claim": "5 与 12 可以分别作为设计期解析计算的效应输入与标准差输入",
+      "basis": "本方法核验采用的设计期计算登记，效应与标准差作为该计算的输入",
+      "isSourceFact": false,
+      "whatWouldFalsify": "该计算的登记输入不是这两个数，或来源研究给出的是另一组效应与变异量度"
+    },
+    {
+      "id": "asm-3",
+      "claim": "摘录所指的成人范围与本研究的成人定义可以对接",
+      "basis": "范围声明与本研究定义方向一致（均为成人）",
+      "isSourceFact": false,
+      "whatWouldFalsify": "来源研究给出具体年龄范围且与本研究定义不一致（例如包含未成年人，或上限低于本研究人群）"
+    },
+    {
+      "id": "asm-4",
+      "claim": "检验水准 0.05（双侧）与把握度 0.8 是本次设计期计算的登记分析设定",
+      "basis": "该计算的登记输入",
+      "isSourceFact": false,
+      "note": "这两个数不出自摘录 E，摘录里没有提到它们。",
+      "whatWouldFalsify": "该计算的登记分析设定与此不同"
+    }
+  ],
+  "measurementUnits": {
+    "asStated": "points",
+    "unitVocabularyInSource": [
+      "points"
+    ],
+    "unitIsADimensionlessScoreWord": true,
+    "consequence": "摘录没有给出量纲（可能是量表分、量表分变化、或某种评分单位）。因此这个 5 不能在不同量纲之间换算，也不能与其他单位的效应直接比较；本研究也没有把它换算成别的单位。",
+    "unresolved": [
+      "points 对应哪一种量表或评分体系",
+      "该量表的分值范围",
+      "最小临床重要差值"
+    ]
+  },
+  "betweenGroupApplicability": {
+    "state": "unknown",
+    "whatIsKnown": "摘录给出均值差 5 与标准差 12，并声明为观察性队列、人群为成人。",
+    "whatIsUnknown": [
+      "5 是两组之间的对比量，还是单组相对某个基准的变化量",
+      "两个组别分别是什么，是否包含对照组",
+      "抽样与分组方式，以及需要校正的混杂",
+      "该观察性队列能否代表本研究的目标人群"
+    ],
+    "consequenceForAnyUse": "在组间适用性确定之前，这两个数只能作为设计期计算的输入，不能当作试验间效应估计，也不能据此推断治疗效应。",
+    "prohibited": [
+      "不得由「均值差」二字推出两个可模拟的组",
+      "不得为一个未知的对照组编造参数",
+      "不得把该数写成疗效结论"
+    ]
+  },
+  "regionalAndValidationStatus": {
+    "chinesePopulationIndependentClinicalValidation": "not established",
+    "statement": "本核验没有检索、也没有取得任何针对中国人群的独立临床验证材料；证据摘录 E 也未说明其人群来源地区。因此不得声称该参数经过中国人群的独立临床验证。",
+    "whatWouldBeNeeded": [
+      "标注人群来源地区的原始研究",
+      "该地区人群的参数估计与不确定性"
+    ]
+  },
+  "gaps": [
+    {
+      "gap": "来源研究的名称、年份与标识符",
+      "state": "not provided"
+    },
+    {
+      "gap": "5 与 12 的组间或组内性质",
+      "state": "unknown"
+    },
+    {
+      "gap": "样本量、事件数与置信区间",
+      "state": "not present in the excerpt"
+    },
+    {
+      "gap": "points 的量纲与量表范围",
+      "state": "not specified in the excerpt"
+    },
+    {
+      "gap": "人群来源地区",
+      "state": "not stated in the excerpt"
+    },
+    {
+      "gap": "成人之外是否还有年龄上限或其他限制",
+      "state": "not stated in the excerpt"
+    }
+  ],
+  "provenance": {
+    "sources": [
+      {
+        "id": "E",
+        "kind": "single evidence excerpt supplied in the task brief",
+        "patientData": false
+      }
+    ],
+    "boundary": "本文件是数值锚点与适用性的记录，不是证据合成，也不是疗效评价；缺的数一律写成不可得，不补值。"
+  }
+}

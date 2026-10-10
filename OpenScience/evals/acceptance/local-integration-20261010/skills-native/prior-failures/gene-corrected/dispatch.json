@@ -1,0 +1,48 @@
+{
+  "id": "run_9f5837a9c83a58664acf5f888caa169b",
+  "dispatchId": "skill_45650e25c57ab6a49afb1de4",
+  "dispatchStatus": "accepted",
+  "baselineCursor": null,
+  "kernelRequestIds": [
+    "req_f559d7bd257fc2141b7256e660356186"
+  ],
+  "personalSkillGeneration": {
+    "generationId": "a4de1a2813ecc893595150d8f6733255a809873f15a73edac46bad5d4e4b0a16",
+    "pins": []
+  },
+  "sessionId": "session-4a98d1fc-8c10-4703-b631-bdfbbe9d075c",
+  "mode": "open-domain",
+  "agentId": null,
+  "agentVersion": null,
+  "runtimeAgent": null,
+  "effectiveAgentId": "gene-expression-analysis",
+  "effectiveAgentVersion": "1.0.1",
+  "effectiveRuntimeAgent": "evimed-gene-expression-analysis",
+  "effectiveRouteReason": "choice:gene-expression-analysis",
+  "model": "deepseek/deepseek-flash",
+  "question": "Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real me…",
+  "automated": true,
+  "estimatedMinutes": {
+    "min": 5,
+    "max": 40
+  },
+  "status": "running",
+  "createdAt": "2026-10-10T04:31:13.540Z",
+  "startedAt": "2026-10-10T04:31:13.540Z",
+  "accountCreatedAt": "2026-10-10 03:24:50.22276+00",
+  "finishedAt": null,
+  "durationMs": null,
+  "errorCode": null,
+  "artifacts": [],
+  "unverifiedArtifacts": [],
+  "verification": null,
+  "qualityNotices": [],
+  "observedMessages": 0,
+  "observedToolCalls": 0,
+  "observedRunSideActivity": null,
+  "observedKernelActivity": null,
+  "lastProgressAt": null,
+  "routeReason": "按你的选择：基因表达差异分析",
+  "title": "Execute this authorized bounded local v…",
+  "titleSource": "question"
+}

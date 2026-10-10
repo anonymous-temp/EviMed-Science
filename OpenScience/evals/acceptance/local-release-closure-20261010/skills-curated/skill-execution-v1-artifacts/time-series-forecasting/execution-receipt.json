@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 356,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/time-series-forecasting/results.json",
+      "sha256": "17c7d78ffe30291f71175fe3b8709a5f2adc1802ee531a3b737a3dae47515724"
+    },
+    {
+      "bytes": 936,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/time-series-forecasting/time-series-forecasting-report.md",
+      "sha256": "7ab25e27c1f5a774f7c580fb3d8f8f9d21001347150833ce03f292c753c1bfd7"
+    }
+  ],
+  "finishedAt": "2026-10-10T03:45:16.610648Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "time-series-forecasting",
+  "startedAt": "2026-10-10T03:45:16.608963Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for time-series-forecasting and wrote 2 verified artifacts.",
+  "warnings": [
+    "Linear extrapolation is a baseline; validate stationarity, leakage, autocorrelation, seasonality, and out-of-sample error."
+  ]
+}

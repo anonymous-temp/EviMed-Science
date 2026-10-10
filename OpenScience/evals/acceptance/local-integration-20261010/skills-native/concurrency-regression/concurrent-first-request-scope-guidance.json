@@ -1,0 +1,26 @@
+[
+  {
+    "sessionId": "session-2186db96-469e-40f0-88b4-3b9171c5500d",
+    "sourceSha256": "e07f8f8ab34d5128cdbe39d91916e59014ebe2d84012dc8bc2c92fb565ebbdb8",
+    "firstRequestSeq": 14,
+    "guidanceExcerpts": [
+      {
+        "eventSeq": 12,
+        "eventType": "user/message",
+        "text": "{\"type\": \"text\", \"text\": \"当前运行作用域：本次运行 run_cfca9aaeaa4f6070bec435d455e537cf，会话 session-2186db96-469e-40f0-88b4-3b9171c5500d。本次计划在 .evimed-run/runs/run_cfca9aaeaa4f6070bec435d455e537cf/task-plan.json，本次状态在 .evimed-run/runs/run_cfca9aaeaa4f6070bec435d455e537cf/state.json；需要计划进度时用 evimed_plan action:status。项目资料和已交付成果仍共享；根目录 task-plan.json 与 .evimed-run/state.json 是旧运行历史，不代表本次任务，不得用其他会话的计划或状态"
+      }
+    ]
+  },
+  {
+    "sessionId": "session-f51e5a07-237d-4d1d-9f96-5c26e231f63e",
+    "sourceSha256": "27732cd6cba3a99e1305a583f68cd49a698754fc1d53ffd72a6d26a0da91077c",
+    "firstRequestSeq": 14,
+    "guidanceExcerpts": [
+      {
+        "eventSeq": 12,
+        "eventType": "user/message",
+        "text": "{\"type\": \"text\", \"text\": \"当前运行作用域：本次运行 run_e666ae1d408e6ff688c6a65b863f2585，会话 session-f51e5a07-237d-4d1d-9f96-5c26e231f63e。本次计划在 .evimed-run/runs/run_e666ae1d408e6ff688c6a65b863f2585/task-plan.json，本次状态在 .evimed-run/runs/run_e666ae1d408e6ff688c6a65b863f2585/state.json；需要计划进度时用 evimed_plan action:status。项目资料和已交付成果仍共享；根目录 task-plan.json 与 .evimed-run/state.json 是旧运行历史，不代表本次任务，不得用其他会话的计划或状态"
+      }
+    ]
+  }
+]

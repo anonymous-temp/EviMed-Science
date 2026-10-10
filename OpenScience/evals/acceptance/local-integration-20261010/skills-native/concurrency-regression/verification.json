@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "projectId": "model-concurrent-regression",
+  "imageId": "sha256:9fb0f51bde34cfb421f2dbfa349f714ef8306327083c56a6e6769b6f9f803d07",
+  "passed": true,
+  "checks": {
+    "bothSucceeded": true,
+    "actualRunIntervalsOverlap": true,
+    "distinctRunsSessions": true,
+    "noGlobalPlanOrStateCreated": true,
+    "firstRequestOwnScopeGuidance": true
+  },
+  "tasks": [
+    {
+      "tag": "alpha",
+      "runId": "run_cfca9aaeaa4f6070bec435d455e537cf",
+      "sessionId": "session-2186db96-469e-40f0-88b4-3b9171c5500d",
+      "startedAt": "2026-10-10T05:09:28.551Z",
+      "finishedAt": "2026-10-10T05:10:20.265Z",
+      "checks": {
+        "terminalSucceeded": true,
+        "correctArithmetic": true,
+        "ownRunAndSession": true,
+        "actualPlanWrite": true,
+        "actualPlanStatus": true,
+        "actualScopedStateRead": true,
+        "noOppositeTaskInToolInputs": true,
+        "planOwnMarkerOnly": true
+      },
+      "planItemStatuses": [
+        "accepted"
+      ],
+      "retainedFiles": [
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/state.json",
+          "bytes": 1834,
+          "sha256": "e9a48ab5c009f3316bed49f065831f031bab720ab5988fc1078c4e85eb5ec57b"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/task-plan.json",
+          "bytes": 1564,
+          "sha256": "26358dabf287d8d5310d0728d8c5351730209c9536dd22a4e26a6e13cd3f0a11"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/session-registry.json",
+          "bytes": 826,
+          "sha256": "71a43dc3eec5d73f8c0eb7fcda535402ce6967fc1f4c3e14c63b9d87893deccb"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/result.json",
+          "bytes": 1850,
+          "sha256": "facadf7aea3758fa273296d9da77909c3ea6df3c482f0c3943e9ba5688f350e8"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/projects.json",
+          "bytes": 1968,
+          "sha256": "557c143b384b90f17f78255dd06be58f131f4858585c34ed6d916d92294cef5f"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/session.json",
+          "bytes": 77,
+          "sha256": "9dbb74a57b7152c7393ff6381c3594111c2d44c6e3fb407bef474ff1b29d621c"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/prompt.txt",
+          "bytes": 947,
+          "sha256": "1f2640957d3e33c04abd4c027567e9fab6f9122d77b15817a8ba0daa59ef9d1f"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/dispatch.json",
+          "bytes": 1658,
+          "sha256": "269cc424b29885b5810cd44d4142a42a1ebe9681d785aeb0f50cb71acc7d2e5b"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/run.json",
+          "bytes": 4660,
+          "sha256": "f811356f746b4176b909b999b890ff90d675d7bc9355211f9dc985fb67c718e2"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/alpha/transcript.json",
+          "bytes": 119308,
+          "sha256": "a12f173235097e42b1d66849d2641a2058da9152cb671fbc5ce7cc35823ba98c"
+        }
+      ]
+    },
+    {
+      "tag": "beta",
+      "runId": "run_e666ae1d408e6ff688c6a65b863f2585",
+      "sessionId": "session-f51e5a07-237d-4d1d-9f96-5c26e231f63e",
+      "startedAt": "2026-10-10T05:09:28.522Z",
+      "finishedAt": "2026-10-10T05:10:18.638Z",
+      "checks": {
+        "terminalSucceeded": true,
+        "correctArithmetic": true,
+        "ownRunAndSession": true,
+        "actualPlanWrite": true,
+        "actualPlanStatus": true,
+        "actualScopedStateRead": true,
+        "noOppositeTaskInToolInputs": true,
+        "planOwnMarkerOnly": true
+      },
+      "planItemStatuses": [
+        "accepted"
+      ],
+      "retainedFiles": [
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/state.json",
+          "bytes": 1817,
+          "sha256": "4fe0ddf283fd2c0e8235f068970c5fb5d90f1cdacfae9ac1a48373a19023f7b4"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/task-plan.json",
+          "bytes": 1643,
+          "sha256": "5ce397a50a597929ffb94098cb95e09ccea883006766f0850abdefd4cc47378e"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/session-registry.json",
+          "bytes": 826,
+          "sha256": "71a43dc3eec5d73f8c0eb7fcda535402ce6967fc1f4c3e14c63b9d87893deccb"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/result.json",
+          "bytes": 816,
+          "sha256": "76940822cd9e902bdda21e4713344ccf6751ca49178595e2d209ebebbae24abe"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/projects.json",
+          "bytes": 1968,
+          "sha256": "7654a9a7f5ef0a5db71aa42bd5d7c68c79e49caa00929a8d8baa48926c6dc4a6"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/session.json",
+          "bytes": 77,
+          "sha256": "c62bb715c2acfb078b4024ae003413cc87196b3eae14a7b7d4b9e791a702eaa5"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/prompt.txt",
+          "bytes": 945,
+          "sha256": "9ec50d8ab7c344fbd81f4984fb61ab68f7405dcf03bf1f3b6e4f86f17d14d25c"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/dispatch.json",
+          "bytes": 1658,
+          "sha256": "c5d4604f891c1043bbc4aed3765ecf2672c00c111925b805d3bf9aa57ab9052b"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/run.json",
+          "bytes": 4124,
+          "sha256": "1a3a68ca048393529a57f200fa0626a8c8ff2138ca8dc8d00d885082d2108916"
+        },
+        {
+          "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/beta/transcript.json",
+          "bytes": 139564,
+          "sha256": "9f091c0eae3323e582f318d9ab562df29846d5ddcabdd044c9c2d742cb3e2148"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Bounded two-session regression, not exhaustive concurrency proof.",
+    "Plan item ledger statuses remain planned at completion; terminal tasks and scoped observations are verified, no claim plan ledger completion.",
+    "The arithmetic calculation service refused result_engine_unavailable; each task used actual local Python computation."
+  ],
+  "firstRequestObservationReceipts": [
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/concurrent-first-request-headers.json",
+      "bytes": 3455,
+      "sha256": "2ab58bb4ea5f005a6a677ada8e29b66e29e74a4ecd2de1a8367a9ac69dfdac84"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/concurrency-regression/concurrent-first-request-scope-guidance.json",
+      "bytes": 1765,
+      "sha256": "7f44e7fc282f068a9c6d851866d443ae38fd0ac73c436749ed3378113b63c425"
+    }
+  ]
+}

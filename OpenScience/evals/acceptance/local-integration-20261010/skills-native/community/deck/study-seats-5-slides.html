@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Library Study Seats: A Bounded Structural Check</title>
+<style>
+:root{
+  --bg:#070B14;
+  --panel:#0D1424;
+  --fg:#E8F1FF;
+  --muted:#7E8BA8;
+  --accent:#7C3AED;
+  --accent2:#06B6D4;
+  --font-heading:"Space Grotesk", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-body:"Space Grotesk", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font-family:var(--font-body);overflow:hidden;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+.slide{
+  position:fixed;inset:0;display:none;flex-direction:column;justify-content:center;
+  padding:clamp(34px,7vw,110px);overflow:hidden;
+}
+.slide::before{
+  content:"";position:absolute;inset:-20%;pointer-events:none;z-index:-1;
+  background:
+    radial-gradient(42% 34% at 82% 18%, rgba(124,58,237,0.22), transparent 70%),
+    radial-gradient(36% 30% at 12% 86%, rgba(6,182,212,0.16), transparent 70%),
+    radial-gradient(70% 60% at 50% 50%, rgba(13,20,36,0.55), transparent 100%);
+}
+.slide.is-active{display:flex;animation:slide-in .45s cubic-bezier(.22,.8,.36,1)}
+@keyframes slide-in{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+.kicker{
+  color:var(--accent);font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+  font-size:clamp(12px,1.3vw,18px);margin-bottom:22px;
+}
+h1,h2,.statement-title{font-family:var(--font-heading);line-height:1.06;letter-spacing:-.015em;margin:0}
+h1{font-size:clamp(44px,7.4vw,118px);max-width:20ch}
+h2{font-size:clamp(34px,5vw,82px);max-width:20ch}
+.subtitle{
+  color:var(--muted);font-size:clamp(18px,2.3vw,34px);line-height:1.5;
+  max-width:46em;margin-top:28px;
+}
+.meta{
+  color:var(--muted);font-size:clamp(12px,1.2vw,16px);margin-top:48px;
+  letter-spacing:.06em;
+}
+.bullets ul{margin:30px 0 0;padding:0;list-style:none;display:grid;gap:clamp(12px,1.6vw,24px)}
+.bullets li{
+  position:relative;padding-left:clamp(28px,2.6vw,44px);
+  font-size:clamp(20px,2.6vw,40px);line-height:1.35;max-width:24em;
+}
+.bullets li::before{
+  content:"";position:absolute;left:0;top:.58em;width:.5em;height:.5em;
+  background:var(--accent);border-radius:2px;box-shadow:.28em .28em 0 color-mix(in srgb, var(--accent2) 78%, transparent);
+}
+.section .kicker{margin-bottom:10px}
+.section .accent-line{width:min(180px,18vw);height:6px;background:var(--accent);margin:28px 0}
+.statement-title{
+  font-size:clamp(34px,5.4vw,88px);max-width:22ch;font-weight:800;
+  border-left:6px solid var(--accent);padding-left:clamp(22px,3vw,48px);
+}
+.closing{text-align:center;align-items:center}
+.closing h1,.closing .statement-title{font-size:clamp(52px,9vw,148px)}
+.closing .subtitle{color:var(--accent);font-weight:700}
+.cover h1{font-weight:900}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:30;transition:width .25s}
+#hud{
+  position:fixed;right:22px;bottom:18px;z-index:30;display:flex;gap:14px;align-items:center;
+  color:var(--muted);font-size:13px;letter-spacing:.08em;font-variant-numeric:tabular-nums;
+}
+#hud button{
+  background:color-mix(in srgb, var(--panel) 88%, transparent);color:var(--fg);
+  border:1px solid color-mix(in srgb, var(--muted) 45%, transparent);border-radius:99px;
+  padding:7px 13px;font:inherit;cursor:pointer;
+}
+#hud button:hover{border-color:var(--accent);color:var(--accent)}
+body.overview .slide{display:flex !important;position:relative;inset:auto;width:100%;height:100vh}
+body.overview{overflow:auto}
+body.overview #progress,body.overview #hud{position:fixed}
+@media (max-width:640px){
+  #hud{right:12px;bottom:10px;gap:8px;font-size:11px}
+}
+@media print{
+  html,body{height:auto;overflow:visible;background:#fff}
+  .slide{position:relative;display:block !important;height:100vh;page-break-after:always;padding:48px}
+  #progress,#hud{display:none !important}
+}
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<section class="slide slide--bullets" data-index="01"><div class="slide-inner"><div class="kicker">01 · Scenario</div><h2>100 shared study seats, first-come booking</h2><ul><li>A booking time is not the same for everyone in this case</li><li>100 shared seats, first-come reservations, no extra capacity</li><li>Booking opens at library opening; no-shows occupy some seats</li><li>One group can book at opening; the other is in compulsory class</li><li>No individual may be identified, so only seat- and period-level counting is possible</li></ul></div></section>
+<section class="slide slide--bullets" data-index="02"><div class="slide-inner"><div class="kicker">02 · Incentives</div><h2>Booking costs nothing to hold</h2><ul><li>Who decides (booking at opening), who pays (those excluded), who gains (the holder) are three different people</li><li>Holding a seat has no cost; releasing it brings the holder nothing</li><li>The gain is immediate and private; the cost is delayed and lands on someone else</li><li>Access rule quietly turns free time into the entry ticket</li><li>No one has to intend harm — this is what the rule rewards</li></ul></div></section>
+<section class="slide slide--bullets" data-index="03"><div class="slide-inner"><div class="kicker">03 · Uncertainty</div><h2>What is not actually known</h2><ul><li>No measured no-show rate exists — this case gives structural facts only</li><li>Not confirmed: the time clash causes it, or demand is simply lower for the second group</li><li>Not confirmed: no-shows are motive-driven, or cancelling is just too much friction</li><li>Both rival readings stay open; they are not equally weighted, and not yet excluded</li><li>The harmed side stops trying, so its demand disappears from the record</li></ul></div></section>
+<section class="slide slide--bullets" data-index="04"><div class="slide-inner"><div class="kicker">04 · Reversible experiment</div><h2>Two switchable changes, no new seats</h2><ul><li>Condition A: release part of the 100 seats only in the after-class window, ranking rule untouched</li><li>Condition B: after booking, one tap to confirm still needed; unconfirmed seats return to the pool</li><li>Individuals cannot be identified, so conditions alternate by week block, not by person</li><li>Measure only: seat-hours actually used per period, unused seat-hours from bookings, booking requests per period</li><li>Any change reverts within one day; stop if identities or added capacity become necessary</li></ul></div></section>
+<section class="slide slide--bullets" data-index="05"><div class="slide-inner"><div class="kicker">05 · Evaluation</div><h2>Decide in advance how the test is read</h2><ul><li>Success: more seat-hours actually used at peak, with no extra step for anyone</li><li>If both changes show little movement, the time-clash account weakens and must be redone</li><li>Results are read as evidence about competing explanations, not as a score for a group</li><li>Null results are reported, not dropped</li><li>Roll back at once if the confirmation step pushes new time cost onto the same group</li></ul></div></section>
+<div id="hud" aria-live="polite">
+  <span id="counter">Slide 1 / 5</span>
+  <span id="theme-label">Theme · Data Drift</span>
+  <button id="fullscreen" title="F">⛶</button>
+</div>
+<script>
+(() => {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const counter = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+  const fullscreenBtn = document.getElementById('fullscreen');
+  let index = 0;
+  const total = slides.length;
+  const ui = {"slide":"Slide","of":"/","theme":"Theme","help":"← → navigate · F fullscreen · G overview · P print","coverKicker":"Opening","pointKicker":"Key point","statementKicker":"Core idea","closingTitle":"Thank You","closingSubtitle":"Discussion & Q&A","generatedBy":"Generated with dsh-ppt"};
+
+  function go(next) {
+    index = (next + total) % total;
+    slides.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
+    counter.textContent = ui.slide + ' ' + (index + 1) + ' ' + ui.of + ' ' + total;
+    progress.style.width = ((index + 1) / total * 100) + '%';
+    document.title = (index + 1) + ' / ' + total + ' · ' + "Library Study Seats: A Bounded Structural Check";
+    try { history.replaceState?.(null, '', '#slide-' + (index + 1)); } catch { /* file:// 下个别浏览器可能拒绝 */ }
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
+      event.preventDefault(); go(index + 1);
+    } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+      event.preventDefault(); go(index - 1);
+    } else if (event.key === 'Home') {
+      event.preventDefault(); go(0);
+    } else if (event.key === 'End') {
+      event.preventDefault(); go(total - 1);
+    } else if (event.key.toLowerCase() === 'f') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    } else if (event.key.toLowerCase() === 'g') {
+      document.body.classList.toggle('overview');
+      go(index);
+    } else if (event.key.toLowerCase() === 'p') {
+      window.print();
+    }
+  });
+
+  let wheelLock = 0;
+  document.addEventListener('wheel', (event) => {
+    const now = Date.now();
+    if (now - wheelLock < 550 || document.body.classList.contains('overview')) return;
+    wheelLock = now;
+    if (Math.abs(event.deltaY) > 12) go(index + (event.deltaY > 0 ? 1 : -1));
+  }, { passive: true });
+
+  let touchStartY = 0;
+  document.addEventListener('touchstart', (event) => { touchStartY = event.touches[0].clientY; }, { passive: true });
+  document.addEventListener('touchend', (event) => {
+    const delta = event.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(delta) > 48) go(index + (delta < 0 ? 1 : -1));
+  }, { passive: true });
+
+  fullscreenBtn.addEventListener('click', () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  });
+
+  const start = Number.parseInt(location.hash?.replace('#slide-', ''), 10);
+  go(Number.isInteger(start) ? start - 1 : 0);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/research-sessions",
+    "projectId": "model-gene-activation-control"
+  },
+  "response": [
+    {
+      "sessionId": "session-e94daeaf-4ae9-4161-a0d0-3f8d17c1e0be",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T05:09:41.773Z",
+      "updatedAt": "2026-10-10T05:09:41.773Z"
+    }
+  ]
+}

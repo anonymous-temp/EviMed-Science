@@ -1,0 +1,115 @@
+{
+  "artifact": "geo-drug-value",
+  "artifact_status": "bounded_teaching_method_check",
+  "provenance": {
+    "material": "invented teaching material",
+    "inputs": "inputs.txt (excerpt L and excerpt E, preserved verbatim)",
+    "language": "English, matching the language of the request; quoted sentences keep their original wording",
+    "retrieval_performed": false,
+    "platform_record_written": false,
+    "note": "This file is a local teaching artifact, and nothing was written to a project: no visibility, source or measurement data exist for this scenario. Every finding below is anchored to a sentence quoted from the supplied excerpts, and nothing is taken from a source that was not supplied."
+  },
+  "scope": {
+    "medicine": "TeachingDrugA (invented)",
+    "indication": "Condition Q",
+    "population": "adults as labelled; children are asked about by the audience but are not supported by any supplied evidence",
+    "region": "Jurisdiction X",
+    "audience": "patients, caregivers and clinicians reading an automated answer about this medicine",
+    "objective": "keep what is published anchored to the evidence and its limits, and prevent unsupported statements about children",
+    "lifecycle": "teaching example only",
+    "asOf": "not applicable"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "statement": "The label limits the indication to adults with Condition Q in Jurisdiction X and records a renal caution and an unestablished pediatric safety position.",
+      "dimension": "applicability",
+      "quote": {
+        "text": "TeachingDrugA is indicated for adults with Condition Q in Jurisdiction X. Do not use in severe renal impairment. Safety in children has not been established.",
+        "sourceRef": "invented label excerpt L, preserved verbatim in inputs.txt"
+      },
+      "basis": "direct quote",
+      "certainty": "as stated in the supplied excerpt and nothing beyond it",
+      "limitations": ["the excerpt is invented teaching material and is not verifiable against a regulator"]
+    },
+    {
+      "id": "F2",
+      "statement": "The only supplied cohort is one unblinded convenience sample of 20 adults, recruited without a comparator arm; improvement was reported in 12 of them and rash in 3, and neither outcome was adjudicated.",
+      "dimension": "effectiveness and harms",
+      "quote": {
+        "text": "One unblinded convenience cohort of 20 adults reported symptom improvement in 12 participants; 3 reported rash. There was no comparator or adjudication.",
+        "sourceRef": "invented teaching evidence E, preserved verbatim in inputs.txt"
+      },
+      "basis": "direct quote",
+      "certainty": "observed counts in one small uncontrolled cohort",
+      "limitations": ["no comparator", "no adjudication", "unblinded", "convenience sample", "adults only", "no dose, duration or follow-up"]
+    },
+    {
+      "id": "F3",
+      "statement": "The supplied material does not establish that the medicine caused the rash, and it does not provide a rate at which rash occurs among treated patients.",
+      "dimension": "safety uncertainty",
+      "quote": null,
+      "sourceRef": null,
+      "basis": "synthesized from F2",
+      "certainty": "high confidence that the supplied material is silent on both points",
+      "limitations": ["derived from a single cohort sentence; it is a statement about the evidence, not about the medicine"]
+    }
+  ],
+  "contextual_value": {
+    "statement": "What can be supported is narrow and tied to context. One small unblinded adult cohort reported symptom improvement and rash; the label keeps the indication to adults, cautions in severe renal impairment, and records that pediatric safety is not established. The useful content is the boundary of what is known.",
+    "benefit_conditions_kept": ["adults only", "no comparator", "no adjudication", "renal caution retained"],
+    "comparative_benefit_claim": null,
+    "numeric_value_score": null,
+    "comparative_advantage_implied": false
+  },
+  "audience_decisions": [
+    {"decision": "whether an automated answer can speak about children", "status": "no: the supplied material does not support it"},
+    {"decision": "whether a reported rash can be presented as a rate", "status": "no: it is a within-cohort count in one uncontrolled cohort"},
+    {"decision": "whether the adult cohort result can be presented as an effect of the medicine", "status": "no: there is no comparator and no adjudication"}
+  ],
+  "content_constraints": [
+    "Keep the labelled population (adults) attached to every statement of use.",
+    "Keep the severe renal impairment caution attached to any statement of use.",
+    "State the pediatric position as the label states it: safety in children has not been established.",
+    "Describe the cohort as unblinded, of 20 adults, with no comparator and no adjudication, whenever its counts are used.",
+    "Do not place the invented cohort on the same footing as a label statement or a controlled trial."
+  ],
+  "correction_targets": [
+    {
+      "answer_pattern": "an answer that presents this medicine as a pediatric option",
+      "correction": "The label excerpt records that pediatric safety has not been established, and the only supplied cohort is 20 adults; the pediatric statement must be corrected to the label wording.",
+      "claim_link": "F1"
+    },
+    {
+      "answer_pattern": "an answer that gives a rash rate for treated patients",
+      "correction": "3 of 20 is a within-cohort count in a single unblinded convenience cohort, not a rate for treated patients and not a background-adjusted finding.",
+      "claim_link": "F2, F3"
+    },
+    {
+      "answer_pattern": "an answer that attributes the rash to the medicine",
+      "correction": "There was no comparator and no adjudication in the supplied cohort, so no attribution is supported.",
+      "claim_link": "F3"
+    },
+    {
+      "answer_pattern": "an answer that ranks this medicine against an alternative",
+      "correction": "No comparative data were supplied, so no ranking or comparative advantage is supported.",
+      "claim_link": "F2"
+    }
+  ],
+  "research_requested": [
+    {
+      "capabilityId": "adr-analysis",
+      "question": "Does a reporting-database disproportionality analysis for this medicine and rash add anything to a single uncontrolled adult cohort?",
+      "rationale": "The supplied safety information is a count in one small cohort; a reporting-database analysis would be a distinct kind of evidence with its own limitations.",
+      "findingIds": ["F2", "F3"],
+      "status": "described only; not queued and not run in this bounded step"
+    }
+  ],
+  "claims": {
+    "record_saved_to_project": false,
+    "safe_for_children_claimed": false,
+    "comparative_advantage_claimed": false,
+    "treated_patient_rate_claimed": false,
+    "causality_claimed": false
+  }
+}

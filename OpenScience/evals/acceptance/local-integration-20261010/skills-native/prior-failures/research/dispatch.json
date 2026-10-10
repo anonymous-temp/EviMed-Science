@@ -1,0 +1,84 @@
+{
+  "id": "run_7df11212e58148e34149dae5717788cc",
+  "dispatchId": "skill_78f5afbe9ca648595346f20c",
+  "dispatchStatus": "accepted",
+  "baselineCursor": null,
+  "kernelRequestIds": [
+    "req_f57672e3cc08c2a21d9acd40b475cc88"
+  ],
+  "personalSkillGeneration": {
+    "generationId": "bbd7b5a8004b7b99ead1143546066e105dd43bdb403e8ffbc6863649170e2438",
+    "pins": []
+  },
+  "sessionId": "session-850d4a17-838c-4169-bba8-dc48763d99fb",
+  "mode": "open-domain",
+  "agentId": null,
+  "agentVersion": null,
+  "runtimeAgent": null,
+  "effectiveAgentId": "open-domain-answer",
+  "effectiveAgentVersion": "1.0.0",
+  "effectiveRuntimeAgent": "evimed-open-domain-answer",
+  "effectiveRouteReason": "choice:answer",
+  "model": "deepseek/deepseek-flash",
+  "question": "Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real me…",
+  "automated": true,
+  "estimatedMinutes": {
+    "min": 1,
+    "max": 15
+  },
+  "status": "running",
+  "createdAt": "2026-10-10T03:56:01.272Z",
+  "startedAt": "2026-10-10T03:56:01.272Z",
+  "accountCreatedAt": "2026-10-10 03:24:50.22276+00",
+  "finishedAt": null,
+  "durationMs": null,
+  "errorCode": null,
+  "artifacts": [],
+  "unverifiedArtifacts": [],
+  "verification": null,
+  "qualityNotices": [],
+  "observedMessages": 5,
+  "observedToolCalls": 0,
+  "observedRunSideActivity": "0:0:0:0:0",
+  "observedKernelActivity": "f9130217ebe6a927544ab781ce6ff2656df2eae2d6cd96c6a9226ea766c3771f",
+  "lastProgressAt": "2026-10-10T03:56:06.016Z",
+  "title": "本地验证任务执行",
+  "titleSource": "auto",
+  "mountedSkills": [
+    "open-domain-answer"
+  ],
+  "progress": {
+    "deliverables": [],
+    "phaseCounts": {
+      "search": 0,
+      "screen": 0,
+      "fulltext": 0,
+      "claims": 0,
+      "write": 0,
+      "deliver": 0
+    },
+    "reachedPhases": [],
+    "currentPhase": null,
+    "sources": {
+      "searched": 0,
+      "included": 0,
+      "fullText": 0
+    },
+    "claims": {
+      "total": 0,
+      "verified": 0
+    },
+    "children": [],
+    "usage": {
+      "requests": 1,
+      "inputTokens": 0,
+      "cachedInputTokens": 0,
+      "outputTokens": 0,
+      "costCny": 0
+    },
+    "startedAt": "2026-10-10T03:56:01.272Z",
+    "updatedAt": "2026-10-10T03:56:04.281Z"
+  },
+  "lastTrustedProgressAt": "2026-10-10T03:56:06.016Z",
+  "routeReason": "按你的选择：普通问答"
+}

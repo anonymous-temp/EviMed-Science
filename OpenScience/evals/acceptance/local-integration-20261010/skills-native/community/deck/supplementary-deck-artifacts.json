@@ -1,0 +1,17 @@
+{
+  "qualification": "supplementary preserved actual builder outputs; main hosted method receipt remains strict bound build-receipt.json",
+  "artifacts": [
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/community/deck/study-seats-5-slides.pptx",
+      "bytes": 12822,
+      "sha256": "4ddf9cf0f1c81a29aba798179be38ac61026705e65c03cdbfc91e12399a7524b",
+      "workspaceRelativePath": "skill-closure/community/deck/study-seats-5-slides.pptx"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/community/deck/study-seats-5-slides.html",
+      "bytes": 10369,
+      "sha256": "ef887ae903ae402a1ae24a4e9c63888dfa6fb36049b85937c5be964303156340",
+      "workspaceRelativePath": "skill-closure/community/deck/study-seats-5-slides.html"
+    }
+  ]
+}

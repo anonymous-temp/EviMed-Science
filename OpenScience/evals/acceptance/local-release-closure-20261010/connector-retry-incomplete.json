@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-10T05:04:00.707310+00:00",
+  "priorObservedAt": "2026-10-10T04:03:09.507515Z",
+  "elapsedSeconds": 3651.199795,
+  "backoffHonoredBeforeAttempt": true,
+  "outcome": "incomplete_audit_receipt",
+  "observedConsoleStatus": "arxiv quality_fail",
+  "orchestrationError": "The selected-source runner requires prior rows for all unselected connectors; this private caller had not seeded the earlier current-source report. It failed at cbioportal after the arXiv probe and did not serialize the individual case results.",
+  "upstreamHttpStatusFromThisAttempt": "unknown; no per-case receipt retained",
+  "qualificationChanged": false,
+  "continuedRetries": false,
+  "originalFullCampaignRetained": "connectors-final/connector-probe-v3.json",
+  "repairForAnyFutureAttempt": "Seed an exact-source prior complete report before selected-source execution and retain each case immediately. Do not retry the upstream without a fresh backoff.",
+  "log": {
+    "path": "checks/arxiv-after-cooldown.log",
+    "sha256": "e1e79ac23bf30d5275631a5807f6b2825d1c95dd9d12d1b544e0cdb7a409cbfa"
+  },
+  "initialScriptSha256": "55cd2aef5bb86fe2b351f0704f19a9cab4e2fb746d2c360e2e9e9da582d8307a",
+  "privateCallerRepaired": {
+    "sha256": "63237be2658c9917ab54286444f57625dce08f174ec6967655c20eb9c5524023",
+    "validation": "Exact prior source identity and all resume rows checked offline; no new gateway/upstream call sent",
+    "nextAttemptBackoff": "At least one hour from latest attempt"
+  }
+}

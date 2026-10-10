@@ -1,0 +1,77 @@
+{
+  "formatVersion": 1,
+  "runId": "run_cfca9aaeaa4f6070bec435d455e537cf",
+  "sessionId": "session-2186db96-469e-40f0-88b4-3b9171c5500d",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "updatedAt": "2026-10-10T05:10:20.208Z",
+  "plan": {
+    "revision": 1,
+    "items": [
+      {
+        "id": "concurrency-alpha",
+        "title": "ALPHA-20261010 有界本地算术核验（[2, 5, 11] 的和与均值）",
+        "contractKind": "statistical-analysis-package",
+        "capability": "statistical-analysis",
+        "dependsOn": [],
+        "status": "accepted",
+        "attempts": 1,
+        "issues": []
+      }
+    ]
+  },
+  "budget": {
+    "steps": 20,
+    "tokens": 54676,
+    "children": 0,
+    "limits": {
+      "maxSteps": 0,
+      "maxTokens": 0,
+      "maxChildren": 30
+    }
+  },
+  "evidence": {
+    "total": 0,
+    "byStatus": {}
+  },
+  "gateRuns": [
+    {
+      "runId": "run_cfca9aaeaa4f6070bec435d455e537cf",
+      "attempt": 1,
+      "sequence": 1,
+      "deliverableId": "concurrency-alpha",
+      "contractKind": "statistical-analysis-package",
+      "issues": [],
+      "checks": [],
+      "rules": [],
+      "lines": [],
+      "severities": [],
+      "metrics": {
+        "citationCoverage": 0,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "referenceIdentityMismatches": 0,
+        "statisticalComplete": 2,
+        "statisticalPartial": 0,
+        "statisticalUnsupported": 0,
+        "statisticalExecutions": 1
+      },
+      "ok": true,
+      "at": "2026-10-10T05:10:15.350Z"
+    }
+  ],
+  "subagents": [],
+  "injectedSkills": [
+    "open-domain-answer",
+    "statistical-analysis"
+  ],
+  "mountedMethods": [],
+  "qualityNotices": [],
+  "degraded": []
+}

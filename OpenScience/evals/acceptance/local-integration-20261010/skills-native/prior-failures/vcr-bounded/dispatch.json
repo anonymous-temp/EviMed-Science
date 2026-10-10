@@ -1,0 +1,51 @@
+{
+  "id": "run_ae5666609f77646d25eeb02a03a6cbdb",
+  "dispatchId": "skill_123f1390dba9b70e4e2b0a65",
+  "dispatchStatus": "accepted",
+  "baselineCursor": null,
+  "kernelRequestIds": [
+    "req_fa560124d9e18b309cecf91ab9793160"
+  ],
+  "personalSkillGeneration": {
+    "generationId": "29eaa34020d346e3bfb22526066da2a5b0af0b1186242c9bb4dbe538429f4f54",
+    "pins": []
+  },
+  "sessionId": "session-29e81075-8ef3-48ff-b7be-dc33ce8f25a5",
+  "mode": "open-domain",
+  "agentId": null,
+  "agentVersion": null,
+  "runtimeAgent": null,
+  "effectiveAgentId": "open-domain-answer",
+  "effectiveAgentVersion": "1.0.0",
+  "effectiveRuntimeAgent": "evimed-open-domain-answer",
+  "effectiveRouteReason": "choice:answer",
+  "model": "deepseek/deepseek-flash",
+  "question": "Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real me…",
+  "automated": true,
+  "estimatedMinutes": {
+    "min": 1,
+    "max": 15
+  },
+  "status": "running",
+  "createdAt": "2026-10-10T04:10:33.741Z",
+  "startedAt": "2026-10-10T04:10:33.741Z",
+  "accountCreatedAt": "2026-10-10 03:24:50.22276+00",
+  "finishedAt": null,
+  "durationMs": null,
+  "errorCode": null,
+  "artifacts": [],
+  "unverifiedArtifacts": [],
+  "verification": null,
+  "qualityNotices": [],
+  "observedMessages": 0,
+  "observedToolCalls": 0,
+  "observedRunSideActivity": null,
+  "observedKernelActivity": null,
+  "lastProgressAt": null,
+  "mountedSkills": [
+    "open-domain-answer"
+  ],
+  "routeReason": "按你的选择：普通问答",
+  "title": "Execute this authorized bounded local v…",
+  "titleSource": "question"
+}

@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "scope": "Current local MCP registry contract and retained task/job observations",
+  "observedAt": "2026-10-10T04:32:20.806151Z",
+  "registered": 55,
+  "executionCertifiedUnderExistingAuditContract": 55,
+  "statuses": {
+    "success": 34,
+    "warning": 21
+  },
+  "sourceIdentity": {
+    "schemaVersion": 1,
+    "mcpSource": {
+      "sha256": "14c7a31682107346ed9d8bd3397bd337c925b8a8da0ea2a12b77c9b3213eecde",
+      "files": 48
+    },
+    "toolNames": {
+      "sha256": "fdc1c63b0a8abc21a6ce4861500ec63feab3e86290eedaa46edc64cafd93648e"
+    }
+  },
+  "notOffered": [
+    "patent_search"
+  ],
+  "specialistCompletedManagedJobs": 6,
+  "verifier": "verify_release_audit.verify_tools passed against current source and all retained artifact bytes",
+  "warnings": [
+    {
+      "tool": "biomedical_source_search",
+      "summary": "Retrieved 2 traceable records from pubmed.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "literature_search",
+      "summary": "Retrieved 2 traceable PubMed records of 2619 matching.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "reference_list",
+      "summary": "Retrieved 5 traceable records from europe-pmc-references.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "guideline_search",
+      "summary": "Retrieved 2 traceable EviMed guideline candidates (2 with preserved text).",
+      "releaseStatus": null
+    },
+    {
+      "tool": "pharmacy_reference_search",
+      "summary": "Retrieved 2 private pharmacy reference rows.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "drug_label_search",
+      "summary": "Retrieved 1 FDA label records.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "offlabel_evidence_packet",
+      "summary": "Compiled a traceable preliminary label-dimension assessment.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "comprehensive_drug_evaluation",
+      "summary": "Compiled a traceable domain-by-domain comprehensive drug assessment.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "drug_selection_evaluation",
+      "summary": "Compiled a traceable formulary evidence assessment with a reproducible conditional ranking.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "meta_analysis",
+      "summary": "A managed adapter completed with matching source and retained input/artifact observations.",
+      "releaseStatus": "ready_with_warnings"
+    },
+    {
+      "tool": "kb_search",
+      "summary": "This knowledge base has no documents.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "frontier_search",
+      "summary": "No item in 前沿动态 (all collected items, last 30d).",
+      "releaseStatus": null
+    },
+    {
+      "tool": "geo_read",
+      "summary": "This conversation is not in a 循证 GEO project, so there is no project to read.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "geo_write",
+      "summary": "This conversation is not in a 循证 GEO project, so there is no step to write.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "vcr_read",
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no study to read.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "vcr_write",
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no step to write.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "vcr_simulate",
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no computation to queue.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "trial_registry_record",
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no trial registry to read.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "curve_digitize",
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no figure to digitize.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "evidence_pool",
+      "summary": "There is no 虚拟临床研究 study in this conversation, so there is no computation to queue.",
+      "releaseStatus": null
+    },
+    {
+      "tool": "gene_expression_series",
+      "summary": "Preserved GEO series GSE5583 (Expression data from wild type versus HDAC knock out mouse embryonic stem cells; 6 samples, 12488 probes on GPL81) with the platform's probe annotation; identities agree.",
+      "releaseStatus": null
+    }
+  ],
+  "claimBoundary": "The ordinary-tool contract accepts warning responses. No-project, no-study and empty-corpus responses are availability/refusal evidence, not positive module workflow execution; separate scoped module evidence is required. A completed specialist job does not certify clinical validity or publication readiness.",
+  "rawDocument": {
+    "path": "tools-final/tool-probe-v3.json",
+    "bytes": 97455,
+    "sha256": "96a53030161bac6e48117dc2a2dd88a5b78e5791bb769ea973ad6692830dea3c"
+  },
+  "retainedRawEvidenceDirectory": "/tmp/evimed-release-closure-20261010/tools-final/evidence",
+  "deploymentPerformed": false
+}

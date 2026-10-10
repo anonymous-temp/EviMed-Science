@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "kind": "gene-expression-bounded-identity-verification",
+  "scopeOfThisRecord": "Step 1 of the gene-expression method only: preserve the public GEO series and verify its stated identities. No differential-expression statistic was computed; steps 2-5 of the method were not executed.",
+  "accession": "GSE2553",
+  "captureDir": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840",
+  "captureId": "76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840",
+  "series": {
+    "accession": "GSE2553",
+    "title": "NHGRI_Sarcoma_Baird",
+    "type": ["Expression profiling by array"],
+    "statusStated": "Public on Oct 11 2005",
+    "submissionDateStated": "Apr 21 2005",
+    "submissionDate": "2005-04-21",
+    "lastUpdateDateStated": "Jul 29 2013",
+    "lastUpdateDate": "2013-07-29",
+    "pubmedIds": ["16230383"],
+    "declaredSampleCount": 181,
+    "platforms": ["GPL1977"]
+  },
+  "platform": {
+    "accession": "GPL1977",
+    "title": "NHGRI 12k cDNA Custom Array",
+    "organism": "Homo sapiens",
+    "technology": "spotted DNA/cDNA",
+    "lastUpdateDate": "2013-01-17",
+    "rowCount": 12600,
+    "annotationColumns": {
+      "symbol": "Symbol",
+      "entrez": null,
+      "title": null,
+      "genbank": null,
+      "genomeBuild": null
+    },
+    "recordAvailable": true,
+    "pooling": "single platform; platforms were not pooled and a second platform matrix was not sought"
+  },
+  "matrix": {
+    "file": "GSE2553_series_matrix.txt.gz",
+    "bytes": 8480960,
+    "probes": 12600,
+    "samples": 181,
+    "tableHeaderColumns": 182,
+    "firstColumn": "ID_REF",
+    "missingCells": 7998,
+    "dataKind": "submitter-processed series matrix (processed matrix only; sample supplementary files are stated as NONE, so no raw data accompanies this capture)"
+  },
+  "sourceFileHashes": {
+    "algorithm": "sha-256",
+    "verification": "each hash recomputed from the preserved bytes with the standard system sha-256 utility and compared with the value the acquisition tool reported for the same path",
+    "perFileResult": "all 5 files matched",
+    "files": [
+      {
+        "name": "series_matrix.txt.gz",
+        "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/series_matrix.txt.gz",
+        "sha256": "bf92235648b4cd42d68459803938cd646fda791525a88e892586c12476be80a3",
+        "bytes": 8480960,
+        "reportedByTool": true,
+        "recomputedMatches": true
+      },
+      {
+        "name": "samples.tsv",
+        "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/samples.tsv",
+        "sha256": "34a52cf22660ae810ec0a900f4e7424840d6d431b5053ca93d0ab1609cded668",
+        "bytes": 28480,
+        "reportedByTool": true,
+        "recomputedMatches": true
+      },
+      {
+        "name": "probe-annotation.tsv",
+        "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/probe-annotation.tsv",
+        "sha256": "bf4cf8ca6d59bd69e6598f3dad615569330c4cc1c3c37f50f76f9cd27eebed91",
+        "bytes": 182144,
+        "reportedByTool": true,
+        "recomputedMatches": true
+      },
+      {
+        "name": "platform.soft.txt.gz",
+        "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/platform.soft.txt.gz",
+        "sha256": "bc33089ea2a44f9d78605d623ec6f5d5b34a87f94524f42ac2bb8fc307780de1",
+        "bytes": 794976,
+        "reportedByTool": true,
+        "recomputedMatches": true
+      },
+      {
+        "name": "record.json",
+        "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/record.json",
+        "sha256": "65850e91d4ab79f41ca5b5c3fd8e134453450a6c2eb8dd13e5864724cfb7c065",
+        "bytes": 75673,
+        "reportedByTool": true,
+        "recomputedMatches": true
+      }
+    ],
+    "captureManifest": {
+      "name": "capture.json",
+      "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/capture.json",
+      "sha256": "8a484958d9640a1cc26c1ca7381ff3129f395c93a70b0726491e954f90220013",
+      "bytes": 542,
+      "note": "the capture's own manifest of the five artifact hashes above"
+    }
+  },
+  "identityFields": {
+    "known": {
+      "samples": {
+        "status": "ok",
+        "toolDetail": "The table header's 181 samples are the series' declared samples.",
+        "independentCheck": "181 unique sample accessions in samples.tsv; the series matrix table header carries the same 181 accessions in the same order; the !Series_sample_id field lists the same 181 samples",
+        "sampleAccessionRange": "GSM48681-GSM48861"
+      },
+      "platform": {
+        "status": "ok",
+        "toolDetail": "All samples are on one platform, GPL1977.",
+        "independentCheck": "all 181 rows of samples.tsv state platform GPL1977; the series matrix states !Series_platform_id GPL1977"
+      },
+      "platformRecord": {
+        "status": "ok",
+        "toolDetail": "12600 of 12600 matrix probes are in the platform record's table.",
+        "independentCheck": "probe-annotation.tsv holds 12600 rows with unique probe identifiers, matching the 12600 data rows of the matrix table"
+      },
+      "organism": {
+        "status": "ok",
+        "toolDetail": "The samples' taxon (9606) matches the platform's (9606).",
+        "independentCheck": "all 181 rows of samples.tsv state organism Homo sapiens and taxId 9606"
+      },
+      "scale": {
+        "status": "ok",
+        "toolDetail": "The values look log-scale; they are used as they are.",
+        "independentCheck": "the matrix values are continuous with negative and positive values present (a linear intensity scale cannot be negative); no further transformation was applied and no differential statistic was computed from them",
+        "toolQuantiles": {
+          "min": -13.2877123,
+          "q25": -0.5267853,
+          "median": 0.1949703,
+          "q75": 0.9753373,
+          "q99": 5.367565789999964,
+          "max": 17.5124713,
+          "looksLinear": false
+        },
+        "transformationApplied": "none in this session; the values were not transformed because no computation was requested"
+      }
+    },
+    "unknown": {
+      "genomeBuild": {
+        "status": "unknown",
+        "toolDetail": "Neither the series matrix nor the platform record states a genome build; none is assumed.",
+        "independentCheck": "the genome_build column of probe-annotation.tsv is empty in all 12600 rows; no build string appears in the series matrix header",
+        "action": "recorded as unknown; no build was invented, inferred or substituted"
+      },
+      "geneAnnotationCompleteness": {
+        "status": "partially unknown",
+        "toolDetail": "The platform record was usable and carries a Symbol column; no Entrez identifier or gene title column is available.",
+        "independentCheck": "10163 of 12600 annotation rows carry a gene symbol; 8997 distinct symbols; 898 symbols are carried by more than one probe; entrez_id and gene_title are empty in every row",
+        "action": "probes without a symbol keep their probe identifier; a multi-probe gene stays as several probe rows and is not collapsed to a gene level"
+      },
+      "statedProcessing": {
+        "status": "unknown",
+        "toolDetail": "statedProcessing is an empty list for this capture.",
+        "independentCheck": "the series matrix carries no !Series_data_processing or !Sample_data_processing field, and sample supplementary files are stated as NONE",
+        "action": "the capture is submitter-processed data of unstated processing; no processing step is attributed to the submitters"
+      }
+    },
+    "mismatch": []
+  },
+  "groupDeclaration": {
+    "declared": false,
+    "reason": "no group definition was provided or confirmed by the researcher, and the samples carry no characteristics annotations to group on",
+    "samplesTsvColumns": ["accession", "title", "sourceName", "organism", "platform", "taxId", "molecule", "type", "status", "submissionDate", "lastUpdateDate"],
+    "availableCandidateField": "sourceName / the sarcoma class named in each sample title (16 classes are stated by the series)",
+    "note": "titles name 16 sarcoma classes across 181 tumors, so any two-group contrast needs an explicit, researcher-confirmed declaration before step 3"
+  },
+  "stopReason": "groups_not_confirmed",
+  "differentialStatistics": {
+    "computed": false,
+    "anyStatisticPresent": false,
+    "note": "no p-value, fold change, adjusted p-value or effect size appears anywhere in this record"
+  },
+  "toolLimitsNoted": {
+    "matrix_bytes": 67108864,
+    "annotation_bytes": 134217728,
+    "samples": 200,
+    "probes": 100000,
+    "memory": 2147483648,
+    "wall_clock_seconds": 120,
+    "againstThisInput": {
+      "matrixBytes": 8480960,
+      "annotationBytes": 182144,
+      "samples": 181,
+      "probes": 12600,
+      "withinLimits": true
+    }
+  },
+  "verificationBoundary": "This record verifies the bounded acquisition-and-identity method for one public series. It does not verify the Welch per-probe test, the Benjamini-Hochberg adjustment, the differential-expression stage, or the full capability.",
+  "retrievedAt": "2026-10-10T04:58:37.351953Z",
+  "seriesRecordUrl": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE2553",
+  "publication": {
+    "pmid": "16230383",
+    "title": "Gene expression profiling of human sarcomas: insights into sarcoma biology.",
+    "journal": "Cancer research",
+    "year": 2005,
+    "doi": "10.1158/0008-5472.CAN-05-1699",
+    "url": "https://pubmed.ncbi.nlm.nih.gov/16230383/"
+  }
+}

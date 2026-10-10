@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10",
+  "scope": "Local product relation evidence repair and formal public-evaluation workflow integration; no production deployment or new model calls in this step",
+  "sourceFiles": {
+    "apps/server/src/vcrGateway.mjs": "7c76e47418d01a36a2bbab0fb5b65ff1279b0be8b93efd76622fb293f7e5ef30",
+    "packages/domain/src/clinicalFact.mjs": "056024ee74e6c5d73160a7971214170a697cc4ce840104a1e8ab7a7c9ec47ada",
+    "apps/server/test/vcrRelationEvidence.integration.test.mjs": "cf3ee22c760352eac3803ad28b4d54c111cb494b00a6dc0a83a212efec7a9942",
+    "evals/method-quality/public_extraction.mjs": "fca9129b0b91db45d4c77f3de2498f887acf6825e7cf8661c1583c1508876c48",
+    "evals/method-quality/public_extraction.test.mjs": "c5f79959e79e25e5af6897ed152f76a86dec06fd5002c8a7c5e069a3d0f381ea",
+    "evals/method-quality/run_native_vcr.mjs": "4871073f6cf5de5f49f7cfa652c1537bbb3c09cc9060dc8bfafbe2e0c4eeb39f"
+  },
+  "productBehavior": {
+    "sameDocument": "A supported relation requires one actual quote instance covering both preserved source locators, with target quote bytes and available source/projection hashes matching the document",
+    "crossDocument": "Existing single-quote schema cannot establish dual-document support; retain the relation as unresolved",
+    "missingEvidence": "Save the legal fact, downgrade the unsupported relation to unresolved, and return an explicit Chinese warning and reason in existing results",
+    "security": "Existing study/patient reference fence remains intact",
+    "compatibility": "No schema fields, migrations, platform entities or delivery gates added; no DrugProt sentence constraint in product"
+  },
+  "productRegressions": {
+    "newRealPostgresCases": 5,
+    "newRealPostgresPassed": 5,
+    "existingOpenmedRealPostgresCases": 10,
+    "existingOpenmedRealPostgresPassed": 10,
+    "skipped": 0,
+    "gatewayUnitPassed": 44,
+    "focusedServerEslint": "passed",
+    "serverCheckJs": "passed",
+    "domainLint": "passed",
+    "cases": [
+      "Same document true dual-endpoint support",
+      "Same-name different instance stays unresolved while fact saved",
+      "Same patient cross-document single quote stays unresolved",
+      "Foreign patient target refused by existing fence",
+      "Same-document evidence spanning sentences remains supportable"
+    ]
+  },
+  "formalPublicEvaluation": {
+    "caller": "evals/method-quality/run_native_vcr.mjs --public-inputs",
+    "workflow": "extractPublicTwoPass",
+    "entityArchive": "<case>-entities.events.jsonl and <case>-frozen.json",
+    "relationArchive": "<case>-relations.events.jsonl",
+    "formalWorkflowRegressions": 11,
+    "passed": 11,
+    "noExtraDeepSeekCalls": true,
+    "priorActualModelRetestReceipt": "public-extraction-two-pass-summary.json",
+    "priorModelReceiptSourceHashesRetained": true
+  },
+  "logs": {
+    "numeric/relation-postgres-tests.log": "81bec62a6ebfa2d939fba250086d4170fdea995428a83aebd582c6069fe37fe7",
+    "numeric/relation-postgres-endpoints.log": "27eabfe39e848af54e7c0b65a924ed00b30931df4bced9a309a2ddfe9ec9072b",
+    "numeric/relation-gateway-tests.log": "4c1115a504dab3231ee8e90e8ec1fa0aa60bbe161da1646576e6a0aee0bfed2a",
+    "numeric/relation-lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "numeric/relation-checkjs.log": "4db805943530fa3c73a152700d378df223f052785eb1a1af1464d9831c7e06d5",
+    "numeric/relation-domain-lint.log": "da9d8e18b4212c45d3695b876f89e7de6312a97170a6c06c9a2e3c3e9afc532d",
+    "models/two-pass-tests-formal.log": "163525e6995d7ce9a25dab597213c0d34600ce220a5093f399fe8ec78637cb53"
+  },
+  "mcpIdentityUnchanged": {
+    "publicSources": "8356f84c020e2e03434733d738bb1350be1b072ec8cdfb46eb6f83feee2d3310",
+    "sourceCatalog": "b200d2ccdaf33dff3d249773a4dc2db78724d1928dccd0d3860087231b1e53a4"
+  },
+  "limitations": [
+    "Source binding verifies evidence placement and preserved bytes, not the clinical truth of the relation",
+    "Existing persisted historical relations are not silently rewritten; this repair applies to new writes",
+    "Cross-document supported evidence requires a future explicit dual-source contract; this schema retains it unresolved"
+  ]
+}

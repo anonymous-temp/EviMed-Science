@@ -1,0 +1,437 @@
+{
+ "tool": "meta_analysis",
+ "kind": null,
+ "task": "Interpretation of one already-admitted meta-analysis job. The job was left to run; it was not restarted at any point.",
+ "jobId": "meta-20261010033028-fb4b4f173d3e",
+ "status": "succeeded",
+ "statusSource": "No live status call was made. This session exposes no status interface for the specialist that ran this job. What is recorded below comes from the preserved job record, and it was checked against the files on disk by recomputing the SHA-256 and byte count of every declared artifact.",
+ "terminalEvidence": {
+  "returnCode": 0,
+  "workerPid": 2767056,
+  "startedAt": "2026-10-10T03:30:29.190175Z",
+  "finishedAt": "2026-10-10T04:14:56.427350Z",
+  "updatedAt": "2026-10-10T04:14:56.427334Z",
+  "elapsedSeconds": 2642,
+  "requestSha256": "048168ad467c8105567322568b7cefee347a301e5e581018c017207ee36bf4fc",
+  "declaredArtifacts": 8,
+  "artifactsMissing": 0,
+  "artifactHashMismatches": 0,
+  "releaseStatus": "ready_with_warnings",
+  "deliverable": true
+ },
+ "method": {
+  "request": {
+   "topic": "SGLT2 inhibitors versus placebo for chronic kidney disease progression",
+   "outputLanguage": "zh",
+   "auditRequest": {
+    "topic": "SGLT2 inhibitors versus placebo for chronic kidney disease progression",
+    "outputLanguage": "zh"
+   }
+  },
+  "protocol": {
+   "research_question": "What is the effect of SGLT2 inhibitors versus placebo on chronic kidney disease progression?",
+   "pico": {
+    "population": "Patients with chronic kidney disease (any stage, any cause, without age restriction), as defined by trial authors.",
+    "intervention": "SGLT2 inhibitors (any agent in the class), administered as monotherapy or add-on to standard care.",
+    "comparator": "Placebo (with or without standard care).",
+    "outcome_primary": "Progression of chronic kidney disease, as defined by trial authors. Assumption: operationalized as a time-to-event outcome because CKD progression is typically irreversible and assessed as time to a progression event.",
+    "outcomes_secondary": []
+   },
+   "study_design": "parallel_rct / multi_arm_rct",
+   "study_designs": [
+    "parallel_rct",
+    "multi_arm_rct"
+   ],
+   "inclusion_criteria": [
+    "Randomized controlled trials (parallel-group or multi-arm) comparing any SGLT2 inhibitor with placebo.",
+    "Participants with chronic kidney disease (any stage, any cause, without age restriction) as defined by trial authors.",
+    "SGLT2 inhibitor (any agent in the class) administered as monotherapy or add-on to standard care.",
+    "Comparator: placebo (with or without standard care).",
+    "Reports data on progression of chronic kidney disease; assumption: primary analysis uses time-to-event outcomes because CKD progression is typically irreversible and assessed as time to a progression event.",
+    "No language restriction.",
+    "No date restriction."
+   ],
+   "exclusion_criteria": [
+    "Non-randomized study designs (e.g., observational cohort, case-control, cross-sectional, case series).",
+    "Studies comparing SGLT2 inhibitors with active comparators or no placebo.",
+    "Studies not reporting progression of chronic kidney disease as an outcome.",
+    "Studies in populations without chronic kidney disease (implied by population criterion)."
+   ],
+   "databases": [
+    "Internal literature database",
+    "PubMed"
+   ],
+   "date_range": "No date restriction",
+   "language": "No language restriction",
+   "effect_measure": "HR",
+   "model_preference": "random",
+   "tau_estimator": "DL",
+   "subgroup_variables": [],
+   "review_family": "intervention_rct",
+   "primary_outcome_type": "time_to_event",
+   "protocol_version": "1.0",
+   "interventions": [
+    "SGLT2 inhibitors"
+   ],
+   "analysis_type": "pairwise"
+  },
+  "engineEvidence": {
+   "schemaVersion": 1,
+   "agentSourceSha256": "6f3b16fb2a8ef303d24db9945eca2008faf47c9e29ca44b886e242bc341a6354",
+   "agentSourceFiles": 216,
+   "adapterSha256": "1a61ee6021a4b73af2503f248c43b6274f774fe0a3dd3f2a8f5b7cd62d06f279",
+   "evidenceModuleSha256": "f3b711f2a509e5ecf02b66fd07ce542c429be3c99ee1c5452a2a9886a6491d8d"
+  },
+  "adapterEvidence": {
+   "sha256": "0df4785ed5c5bfdefec18be77834b510c260d1dd6273cc52def1d847652a55d9",
+   "files": 3
+  },
+  "plannedEstimator": "REML",
+  "executedMethod": {
+   "model": "random",
+   "tau_estimator": "REML",
+   "ci_method": "normal_wald",
+   "requested_method": "REML",
+   "fallback_reason": null,
+   "tau_estimation_converged": true
+  },
+  "route": "method_plugin",
+  "modelPolicy": {
+   "reasoningEffort": "high",
+   "source": "deployment-default"
+  }
+ },
+ "sourceEvidence": {
+  "search": {
+   "identifiedBySource": {
+    "internal_db": 415,
+    "pubmed": 3915,
+    "OpenAlex": 600
+   },
+   "recordsIdentified": 4930,
+   "recordsAfterDedup": 4715,
+   "duplicatesRemoved": 215,
+   "recordsNotScreened": 4001,
+   "screeningBudget": {
+    "formula": "B(T) = min(T, max(floor, ceil(fraction * T)), ceiling)",
+    "T": 1428,
+    "floor": 400,
+    "fraction": 0.5,
+    "ceiling": 1000,
+    "explicit_max": null,
+    "budget": 714,
+    "cut": 714,
+    "ranking": "query concept groups matched in title/abstract, then lexical match strength, then a study-design and identifier tiebreak, then citation count (_merged_search_relevance_score)",
+    "pubmed_reserved": 357,
+    "pubmed_reservation": "up to half the budget is kept for PubMed-origin records in ranked order"
+   },
+   "titleAbstractScreened": 714,
+   "titleAbstractExcluded": 609,
+   "distinctExclusionReasons": 289,
+   "fullTextSought": 105,
+   "fullTextNotRetrieved": 32,
+   "fullTextNotRetrievedReasons": {
+    "no text retrieved": 11,
+    "abstract only": 21
+   },
+   "fullTextAssessed": 73,
+   "fullTextExcluded": 69,
+   "studiesIncluded": 4
+  },
+  "evidenceAccounting": {
+   "schema_version": 1,
+   "source": "prisma_flow.json",
+   "counts": {
+    "records_identified": 4930,
+    "identified_by_source": {
+     "internal_db": 415,
+     "pubmed": 3915,
+     "OpenAlex": 600
+    },
+    "database_hits": {
+     "pubmed": {
+      "hits": 3915,
+      "retrieved": 1000,
+      "not_retrieved": 2915
+     }
+    },
+    "duplicates_removed": 215,
+    "removed_by_automation_tools": 1188,
+    "removed_for_other_reasons": 2813,
+    "removed_before_screening_reasons": {
+     "supplementary-source relevance cap": 474,
+     "relevance cap before screening": 714,
+     "not retrieved from the source (retrieval limit)": 2813
+    },
+    "screening_cap": {
+     "formula": "B(T) = min(T, max(floor, ceil(fraction * T)), ceiling)",
+     "T": 1428,
+     "floor": 400,
+     "fraction": 0.5,
+     "ceiling": 1000,
+     "explicit_max": null,
+     "budget": 714,
+     "cut": 714,
+     "ranking": "query concept groups matched in title/abstract, then lexical match strength, then a study-design and identifier tiebreak, then citation count (_merged_search_relevance_score)",
+     "pubmed_reserved": 357,
+     "pubmed_reservation": "up to half the budget is kept for PubMed-origin records in ranked order"
+    },
+    "records_screened": 714,
+    "records_excluded_at_screening": 609,
+    "reports_sought": 105,
+    "reports_not_retrieved": 32,
+    "reports_not_retrieved_reasons": {
+     "no text retrieved": 11,
+     "abstract only": 21
+    },
+    "reports_assessed": 73,
+    "reports_excluded": 69,
+    "studies_included": 4
+   },
+   "synthesis": {
+    "source": "analysis/synthesis_result.json",
+    "results_pooled": 3,
+    "studies_pooled": 3,
+    "pooled_study_ids": [
+     "32970396",
+     "35861630",
+     "36331190"
+    ],
+    "results_left_out": 1,
+    "reasons": {
+     "model_not_selected": 1
+    },
+    "results": {
+     "result:32970396:0": "model_not_selected"
+    }
+   },
+   "arithmetic": [
+    {
+     "identity": "identified - duplicates - automation - other = screened",
+     "holds": true,
+     "computed": 714,
+     "recorded": 714
+    },
+    {
+     "identity": "screened - excluded = sought",
+     "holds": true,
+     "computed": 105,
+     "recorded": 105
+    },
+    {
+     "identity": "sought - not retrieved = assessed",
+     "holds": true,
+     "computed": 73,
+     "recorded": 73
+    },
+    {
+     "identity": "assessed - excluded = included",
+     "holds": true,
+     "computed": 4,
+     "recorded": 4
+    }
+   ]
+  },
+  "synthesis": {
+   "studyIdsPooled": [
+    "32970396",
+    "35861630",
+    "36331190"
+   ],
+   "resultsPooled": 3,
+   "resultsLeftOut": 1,
+   "leftOutReasons": {
+    "model_not_selected": 1
+   },
+   "estimator": "DESIGN_AWARE_REML",
+   "executedMethod": {
+    "model": "random",
+    "tau_estimator": "REML",
+    "ci_method": "normal_wald",
+    "requested_method": "REML",
+    "fallback_reason": null,
+    "tau_estimation_converged": true
+   },
+   "nStudies": 3,
+   "nContrasts": 3,
+   "designCounts": {
+    "parallel_rct": 3
+   },
+   "primaryEstimate": 0.6271907300426901,
+   "ciLower": 0.4996946555105744,
+   "ciUpper": 0.7872171685517623,
+   "predictionInterval": [
+    0.060573768751926105,
+    6.494035618990182
+   ],
+   "heterogeneity": {
+    "tau_squared": 0.020396101125821235,
+    "i_squared": 55.05289257882614,
+    "q": 4.449674550264456,
+    "scale": "log"
+   },
+   "converged": true,
+   "sensitivityHKSJ": {
+    "executed_method": {
+     "model": "random",
+     "tau_estimator": "DL",
+     "ci_method": "modified_hksj_t",
+     "requested_method": "HKSJ",
+     "fallback_reason": null,
+     "tau_estimation_converged": null
+    },
+    "estimate": 0.6284237507033533,
+    "ci_lower": 0.38765962537793375,
+    "ci_upper": 1.018719476043093
+   }
+  },
+  "releaseDecision": {
+   "status": "ready_with_warnings",
+   "readyForSubmission": true,
+   "requiresReview": true,
+   "summary": "The generated article is delivered with advisory findings. None of them makes it unreadable, and none conceals a defect from a reader.",
+   "blockerCodes": [],
+   "warningCodes": [
+    "manuscript_validation",
+    "project_submission_quality_gate",
+    "manuscript_language",
+    "abstract_polish",
+    "publication_tone",
+    "clinical_interpretation",
+    "evidence_readiness",
+    "declarations",
+    "compiled_method_release"
+   ],
+   "failedGates": [],
+   "nextActions": [
+    "State each listed finding in plain words when handing the article over.",
+    "A finding is not a reason to run the job again; the same request reproduces it."
+   ],
+   "warningGates": [
+    {
+     "id": "manuscript_validation",
+     "status": "warn",
+     "detail": "passed=False; blocking=4; warnings=3; fixed=1; info=0; total=8. Blocking: evidence_readiness_blocker - Primary-effect row result:32970396:1 does not source-verify all arm-level event/total counts used for pooling: events_intervention=142, total_intervention=2152, events_control=243, total_control=2152.. Blocking: evidence_readiness_blocker - Primary-effect row result:36331190:0 does not source-ver"
+    },
+    {
+     "id": "project_submission_quality_gate",
+     "status": "warn",
+     "detail": "status=fail; failed=3; warnings=1; failed_checks=citation_contract, claim_map_authoring, real_llm_pdf_web_smoke."
+    },
+    {
+     "id": "manuscript_language",
+     "status": "warn",
+     "detail": "expected=zh; detected=mixed."
+    },
+    {
+     "id": "abstract_polish",
+     "status": "warn",
+     "detail": "abstract_present=False; word_count=0; present_labels=0/8; forbidden_phrases=0; failed_issues=1."
+    },
+    {
+     "id": "publication_tone",
+     "status": "warn",
+     "detail": "scanned_words=483; forbidden_phrases=1; failed_issues=1."
+    },
+    {
+     "id": "clinical_interpretation",
+     "status": "warn",
+     "detail": "covered_domains=0/7; minimum=5; result_context=False; discussion_paragraphs=0/24; process_framing=0; redundant_domains=0; missing_domains=result_context,absolute_risk_translation,endpoint_meaning,benefit_harm_safety,applicability_subgroups,implementation_followup,certainty_limitations; failed_issues=1."
+    },
+    {
+     "id": "evidence_readiness",
+     "status": "warn",
+     "detail": "Status=blocked; blockers=2; warnings=1; submission-relevant warnings=0."
+    },
+    {
+     "id": "declarations",
+     "status": "warn",
+     "detail": "Ethics, data/code availability, funding, and competing-interest statements are present."
+    },
+    {
+     "id": "compiled_method_release",
+     "status": "warn",
+     "detail": "capability=intervention_rct.complex_design; failed_checks=method_manuscript_not_fact_locked"
+    }
+   ]
+  }
+ },
+ "artifactRefs": [
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.md",
+   "bytes": 4770,
+   "sha256": "2ccc072f873122ac4ba8a79ee8a1c7dd89c2e26252a71f4ea5f0b6bd04497273"
+  },
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.pdf",
+   "bytes": 5740,
+   "sha256": "46c51c29904c2d9d35ed16fe1d3261bdfece0a941266a6ee9c2c0f0d825f352a"
+  },
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.docx",
+   "bytes": 39237,
+   "sha256": "eca40ff42a6e8b26f3cc2cda2b4a409d4dbd5e9f7682f59e924144b6f2777a1e"
+  },
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/analysis/synthesis_result.json",
+   "bytes": 4399,
+   "sha256": "82620b451b6f108a2d36fd973fc7e7f3aa04d2079c72ad9615fd5a65d648d5ac"
+  },
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/prisma_flow.json",
+   "bytes": 33996,
+   "sha256": "bc00f327fdd6f1613db9587da5f606e266646ad1b153ab9c8d809bdd42bf4f17"
+  },
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/release_decision.json",
+   "bytes": 9022,
+   "sha256": "47d87f37962b0e4db3a2a66930e381678be5fedeea39a4738f7af9a0dbaba810"
+  },
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/evidence_accounting.json",
+   "bytes": 2488,
+   "sha256": "6d93a3e7156caa693c25e913747f3d35f464984b9f0af8e3ca005fed6428661c"
+  },
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/protocol.json",
+   "bytes": 2402,
+   "sha256": "d7b4fe348f4d4c3e9dd63eca6d11f8614287e93d530e27f5a37b61b5504decc7"
+  },
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/search_query.txt",
+   "bytes": 1808,
+   "sha256": "7f3bd076b9a705159b988028a0d78f66e94a73739143700a9f5abbe703339248"
+  },
+  {
+   "path": "meta-analysis-runs/meta-20261010033028-fb4b4f173d3e/output/20261010_033033_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip",
+   "bytes": 1995568,
+   "sha256": "bbb31da6df41adeeffdb2bcd22fd940f905bac08fecddf75beb3514e8cbbb3e4"
+  }
+ ],
+ "contractDeliverable": {
+  "name": "meta-analysis-report.md",
+  "presentInWorkspace": false,
+  "note": "No file of that name exists in this workspace. What the job declared and produced is an analysis report package of its own: an article draft in markdown, PDF and DOCX, the synthesis result, the flow record, the release decision, the evidence accounting and a review-package archive."
+ },
+ "contentObservations": {
+  "inFlightNote": "This job was still running when the record was begun, and it finished while the record was being written. The observations below are read from its engine artifacts. Its last progress entry recorded the effect-size stage at 86%, which is stale metadata: no progress figure here is a completion percentage.",
+  "funnel": "4,930 records were identified across three sources: 3,915 from one bibliographic database, 600 from an open index and 415 from an internal collection. Removing 215 duplicates left 4,715. A documented relevance budget then cut screening to 714 records, automation set 1,188 aside and 2,813 were never retrieved because of the source retrieval limit. Both the search string and the budget formula are preserved.",
+  "eligibility": "Title and abstract screening covered 714 records and excluded 609 of them under 289 distinct reason strings. Of 105 reports sought, 32 could not be retrieved: 11 had no text at all and 21 existed only as abstracts. Full assessment covered 73 records and excluded 69 under 36 distinct reasons, which leaves 4 studies included.",
+  "includedVersusPooled": "4 studies were included but 3 were pooled; the fourth contributed one result row that was left out with the recorded reason that no model was selected for it. All four flow arithmetic identities were re-checked by the engine itself and hold exactly.",
+  "synthesisResult": "A random-effects design-aware model with restricted maximum likelihood was executed and converged, on one parallel-group study unit per trial and 3 contrasts. Its pooled hazard ratio is 0.6272 (95% CI 0.4997-0.7872) on the log scale, with tau-squared 0.0204, I-squared 55.05% and Q 4.45. The prediction interval runs from 0.0606 to 6.4940 and therefore crosses 1, and the Huynh-Feldt/Kenward-Roger-type sensitivity interval is wider still at 0.3877 to 1.0187.",
+  "estimateProvenance": "The primary estimator executed as planned, restricted maximum likelihood with no fallback. The plan fingerprint and the analysis-set revision are recorded, the estimates come from the platform's own pooling engine and were not computed in prose, and every input is bound to a preserved result row identifier.",
+  "releaseState": "The package is delivered with advisory findings. It is marked ready for submission and marked as requiring review, and no gate failed outright. Nine warning codes are recorded. The chief cluster sits in a manuscript-validation gate, whose blocking sub-findings are that two pooled primary-effect rows do not source-verify all of their arm-level event and total counts, that the pooled estimate was not found verbatim in the article text, that 21 assessed records rested on abstract-only text, and that one prose paragraph ran past six sentences.",
+  "readingOfTheNotVerifiedCounts": "The two source-verification findings concern the provenance of arm totals digit by digit for two of the three pooled trials. They do not overturn the pooled estimate, but they do mean those totals cannot be traced from the delivered article alone. Anyone quoting the number onward should check them against the source reports first.",
+  "releaseGatesInDetail": "Nine advisory gates are recorded, none of them a blocker. The hard-validation gate on the submitted article reports four blocking sub-findings: the two unverified primary-effect rows, a missing-sections finding and an aggregate blocking count. The submission-quality gate fails three checks, namely the citation contract, claim-map authoring and a live end-to-end smoke check. Language detection returns mixed text where one language was requested, no abstract sits in the manuscript body, one forbidden phrase survives the tone scan, clinical-interpretation coverage reaches 0 of the 7 required domains against a minimum of 5, the evidence-readiness gate is itself 'blocked' at 2 blockers and 1 warning, declarations are present, and the compiled-method release check fails because the method narrative is not fact-locked to the result rows."
+ },
+ "limitationsVisibleInOutput": [
+  "No live status query was possible in this session. Terminal state and integrity come from the preserved job record and from recomputing the file hashes locally.",
+  "Progress metadata still reads 86% at the effect-size stage, even though the job finished and wrote its package. A progress field is not a completion measure.",
+  "The contract deliverable named meta-analysis-report.md is absent. The job's own article draft and its package stand in its place.",
+  "Two of the three pooled primary-effect rows carry blocking findings that their arm-level counts are not source-verified, and the pooled estimate was not found verbatim in the article text.",
+  "21 of the assessed records were abstract-only, so full-text verification was impossible for them.",
+  "The screening funnel was budget-limited and relevance-ranked, not exhaustive. Automation removed 1,188 records and 2,813 were never retrieved, so the four included studies are what survived a documented, non-exhaustive selection.",
+  "The prediction interval spans from well below to well above 1, so the pooled point estimate should not be read as a stable per-setting effect.",
+  "One included study contributed no pooled row because no model was selected for it."
+ ]
+}

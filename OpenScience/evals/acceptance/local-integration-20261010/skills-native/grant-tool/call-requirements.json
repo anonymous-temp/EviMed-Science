@@ -1,0 +1,105 @@
+{
+  "callDocument": "call.txt",
+  "callDocumentSha256": "8c1ff74e0794ce293d2c1cab2d2a06f28d9850c08f9de5594db99115b73cb856",
+  "documentsDate": "2026-10-10",
+  "language": "zh",
+  "status": "synthetic-teaching-call",
+  "synthetic": true,
+  "syntheticLabel": "合成教学招标文件（Teaching Research Fund2026），由本轮任务虚构，仅用于内部方法核验，不是真实资助机构发布的招标文件，不得用于对外申报。",
+  "requirementCount": 10,
+  "requirementIds": [
+    "R-01",
+    "R-02",
+    "R-03",
+    "R-04",
+    "R-05",
+    "R-06",
+    "R-07",
+    "R-08",
+    "R-09",
+    "R-10"
+  ],
+  "unverifiedQuotes": [],
+  "requirements": [
+    {
+      "id": "R-01",
+      "kind": "funder",
+      "requires": "资助方与计划名称为 Teaching Research Fund2026，本文件为合成教学招标文件。",
+      "sourceQuote": "Teaching Research Fund2026",
+      "sourceLine": 1,
+      "quoteVerifiedInCall": true
+    },
+    {
+      "id": "R-02",
+      "kind": "eligibility",
+      "requires": "申请人资格限于大学研究人员（university researchers）。",
+      "sourceQuote": "Eligible applicants: university researchers.",
+      "sourceLine": 4,
+      "quoteVerifiedInCall": true
+    },
+    {
+      "id": "R-03",
+      "kind": "scope",
+      "requires": "资助范围限可复现的证据工作流（reproducible evidence workflows）。",
+      "sourceQuote": "Scope: reproducible evidence workflows.",
+      "sourceLine": 5,
+      "quoteVerifiedInCall": true
+    },
+    {
+      "id": "R-04",
+      "kind": "budget",
+      "requires": "预算上限为 5000 美元。",
+      "sourceQuote": "Maximum budgetUSD5000.",
+      "sourceLine": 6,
+      "quoteVerifiedInCall": true
+    },
+    {
+      "id": "R-05",
+      "kind": "page-limit",
+      "requires": "申请书正文不超过 4 页。",
+      "sourceQuote": "Proposal limit4pages.",
+      "sourceLine": 7,
+      "quoteVerifiedInCall": true
+    },
+    {
+      "id": "R-06",
+      "kind": "review-criterion",
+      "requires": "评审指标一：科学价值（scientific value）占 40%。",
+      "sourceQuote": "Review: scientific value40%, feasibility40%, reproducibility20%.",
+      "sourceLine": 8,
+      "quoteVerifiedInCall": true
+    },
+    {
+      "id": "R-07",
+      "kind": "review-criterion",
+      "requires": "评审指标二：可行性（feasibility）占 40%。",
+      "sourceQuote": "Review: scientific value40%, feasibility40%, reproducibility20%.",
+      "sourceLine": 8,
+      "quoteVerifiedInCall": true
+    },
+    {
+      "id": "R-08",
+      "kind": "review-criterion",
+      "requires": "评审指标三：可复现性（reproducibility）占 20%。",
+      "sourceQuote": "Review: scientific value40%, feasibility40%, reproducibility20%.",
+      "sourceLine": 8,
+      "quoteVerifiedInCall": true
+    },
+    {
+      "id": "R-09",
+      "kind": "deadline",
+      "requires": "截止日期为 2026-12-01。",
+      "sourceQuote": "Deadline2026-12-01.",
+      "sourceLine": 9,
+      "quoteVerifiedInCall": true
+    },
+    {
+      "id": "R-10",
+      "kind": "attachment",
+      "requires": "必须附一份数据管理计划（data management plan）。",
+      "sourceQuote": "Attach a data management plan.",
+      "sourceLine": 10,
+      "quoteVerifiedInCall": true
+    }
+  ]
+}

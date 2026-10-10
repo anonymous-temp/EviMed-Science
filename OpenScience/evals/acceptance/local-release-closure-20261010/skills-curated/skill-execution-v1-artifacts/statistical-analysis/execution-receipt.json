@@ -1,0 +1,29 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1420,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/statistical-analysis/results.json",
+      "sha256": "f09dc0ad61f32ea1933c9c445ee005e0431555da6747b12a59e7fa52781af67d"
+    },
+    {
+      "bytes": 1841,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/statistical-analysis/statistical-analysis-report.md",
+      "sha256": "7dc31538165e5657226159c5ebcede8f93c53c92744dcc5db8a5b210c50677aa"
+    }
+  ],
+  "finishedAt": "2026-10-10T03:45:12.109650Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "statistical-analysis",
+  "startedAt": "2026-10-10T03:45:12.104835Z",
+  "status": "success",
+  "summary": "Executed the bounded deterministic baseline for statistical-analysis and wrote 2 verified artifacts.",
+  "warnings": []
+}

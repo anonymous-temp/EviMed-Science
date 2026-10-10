@@ -1,0 +1,1388 @@
+{
+  "drugprot-9851542": {
+    "entities": [
+      {
+        "id": "e1",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 35,
+        "end": 42
+      },
+      {
+        "id": "e2",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 53,
+        "end": 73
+      },
+      {
+        "id": "e3",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 143,
+        "end": 163
+      },
+      {
+        "id": "e4",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 176,
+        "end": 189
+      },
+      {
+        "id": "e5",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 191,
+        "end": 198
+      },
+      {
+        "id": "e6",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 203,
+        "end": 215
+      },
+      {
+        "id": "e7",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 418,
+        "end": 431
+      },
+      {
+        "id": "e8",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 458,
+        "end": 465
+      },
+      {
+        "id": "e9",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 495,
+        "end": 507
+      },
+      {
+        "id": "e10",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 661,
+        "end": 675
+      },
+      {
+        "id": "e11",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 688,
+        "end": 696
+      },
+      {
+        "id": "e12",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 721,
+        "end": 735
+      },
+      {
+        "id": "e13",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 809,
+        "end": 816
+      },
+      {
+        "id": "e14",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 842,
+        "end": 861
+      },
+      {
+        "id": "e15",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 873,
+        "end": 881
+      },
+      {
+        "id": "e16",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 889,
+        "end": 912
+      },
+      {
+        "id": "e17",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 925,
+        "end": 1010
+      },
+      {
+        "id": "e18",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 999,
+        "end": 1010
+      },
+      {
+        "id": "e19",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 1047,
+        "end": 1054
+      },
+      {
+        "id": "e20",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 1131,
+        "end": 1138
+      },
+      {
+        "id": "e21",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 1247,
+        "end": 1266
+      },
+      {
+        "id": "e22",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 1278,
+        "end": 1286
+      },
+      {
+        "id": "e23",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 1313,
+        "end": 1335
+      },
+      {
+        "id": "e24",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 1347,
+        "end": 1358
+      },
+      {
+        "id": "e25",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 1385,
+        "end": 1407
+      },
+      {
+        "id": "e26",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 1419,
+        "end": 1432
+      },
+      {
+        "id": "e27",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 1462,
+        "end": 1484
+      },
+      {
+        "id": "e28",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 1496,
+        "end": 1532
+      },
+      {
+        "id": "e29",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 1582,
+        "end": 1601
+      },
+      {
+        "id": "e30",
+        "documentId": "9851542",
+        "type": "CHEMICAL",
+        "start": 1629,
+        "end": 1636
+      },
+      {
+        "id": "e31",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 1824,
+        "end": 1834
+      },
+      {
+        "id": "e32",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 1824,
+        "end": 1847
+      },
+      {
+        "id": "e33",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 1905,
+        "end": 1916
+      },
+      {
+        "id": "e34",
+        "documentId": "9851542",
+        "type": "GENE",
+        "start": 1938,
+        "end": 1958
+      }
+    ],
+    "relations": [
+      {
+        "type": "ANTAGONIST",
+        "arg1": "e15",
+        "arg2": "e14",
+        "quote": "alpha1-adrenoceptor antagonist prazosin",
+        "quoteLocator": {
+          "start": 842,
+          "end": 881,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "ANTAGONIST",
+        "arg1": "e17",
+        "arg2": "e16",
+        "quote": "vasopressin V1 receptor antagonist, [beta-mercapto-beta,beta-cyclopenta-methylenepropionyl1, O-Me-Tyr2, Arg8] vasopressin",
+        "quoteLocator": {
+          "start": 889,
+          "end": 1010,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "ANTAGONIST",
+        "arg1": "e22",
+        "arg2": "e21",
+        "quote": "non-selective muscarinic receptor antagonist atropine",
+        "quoteLocator": {
+          "start": 1233,
+          "end": 1286,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "ANTAGONIST",
+        "arg1": "e24",
+        "arg2": "e23",
+        "quote": "muscarinic M1 receptor antagonist pirenzepine",
+        "quoteLocator": {
+          "start": 1313,
+          "end": 1358,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "ANTAGONIST",
+        "arg1": "e26",
+        "arg2": "e25",
+        "quote": "muscarinic M2 receptor antagonist methoctramine",
+        "quoteLocator": {
+          "start": 1385,
+          "end": 1432,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "ANTAGONIST",
+        "arg1": "e28",
+        "arg2": "e27",
+        "quote": "muscarinic M3 receptor antagonist para-fluoro-hexahydro-sila-difenidol",
+        "quoteLocator": {
+          "start": 1462,
+          "end": 1532,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INHIBITOR",
+        "arg1": "e24",
+        "arg2": "e23",
+        "quote": "muscarinic M1 receptor antagonist pirenzepine",
+        "quoteLocator": {
+          "start": 1313,
+          "end": 1358,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INHIBITOR",
+        "arg1": "e26",
+        "arg2": "e25",
+        "quote": "muscarinic M2 receptor antagonist methoctramine",
+        "quoteLocator": {
+          "start": 1385,
+          "end": 1432,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INHIBITOR",
+        "arg1": "e28",
+        "arg2": "e27",
+        "quote": "muscarinic M3 receptor antagonist para-fluoro-hexahydro-sila-difenidol",
+        "quoteLocator": {
+          "start": 1462,
+          "end": 1532,
+          "offsetUnit": "utf16"
+        }
+      }
+    ],
+    "groundingIssues": [
+      {
+        "kind": "surface_unresolved",
+        "row": [
+          "T10",
+          "CHEMICAL",
+          "Tacrine",
+          4
+        ]
+      },
+      {
+        "kind": "surface_unresolved",
+        "row": [
+          "T32",
+          "CHEMICAL",
+          "tacrine",
+          9
+        ]
+      },
+      {
+        "kind": "surface_unresolved",
+        "row": [
+          "T36",
+          "GENE",
+          "acetylcholinesterase",
+          5
+        ]
+      },
+      {
+        "kind": "relation_quote_endpoint_mismatch",
+        "row": [
+          "INHIBITOR",
+          "e1",
+          "e2",
+          "acetylcholinesterase inhibitors",
+          1
+        ]
+      },
+      {
+        "kind": "relation_quote_endpoint_mismatch",
+        "row": [
+          "INHIBITOR",
+          "e4",
+          "e3",
+          "acetylcholinesterase inhibitors",
+          1
+        ]
+      },
+      {
+        "kind": "relation_quote_endpoint_mismatch",
+        "row": [
+          "INHIBITOR",
+          "e5",
+          "e3",
+          "acetylcholinesterase inhibitors",
+          1
+        ]
+      },
+      {
+        "kind": "relation_quote_endpoint_mismatch",
+        "row": [
+          "INHIBITOR",
+          "e6",
+          "e3",
+          "acetylcholinesterase inhibitors",
+          1
+        ]
+      },
+      {
+        "kind": "relation_quote_endpoint_mismatch",
+        "row": [
+          "INHIBITOR",
+          "e1",
+          "e10",
+          "cholinesterase inhibitors",
+          1
+        ]
+      }
+    ],
+    "transport": {
+      "entityCode": 0,
+      "relationCode": 0,
+      "latencyMs": 8067,
+      "entityPromptHash": "98e84df9fcb3191f2a9452a94b0c3aac7847bd93c04c744be101e6f981125cec",
+      "relationPromptHash": "1916974f8734972fd8fb12ddd7fd25f0b5c92e07e7a0b232fcc2a2d1a4a8c17f"
+    }
+  },
+  "drugprot-22872607": {
+    "entities": [
+      {
+        "id": "e1",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 0,
+        "end": 3
+      },
+      {
+        "id": "e2",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 0,
+        "end": 4
+      },
+      {
+        "id": "e3",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 91,
+        "end": 111
+      },
+      {
+        "id": "e4",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 113,
+        "end": 117
+      },
+      {
+        "id": "e5",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 168,
+        "end": 200
+      },
+      {
+        "id": "e6",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 202,
+        "end": 206
+      },
+      {
+        "id": "e7",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 233,
+        "end": 243
+      },
+      {
+        "id": "e8",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 249,
+        "end": 272
+      },
+      {
+        "id": "e9",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 274,
+        "end": 277
+      },
+      {
+        "id": "e10",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 354,
+        "end": 358
+      },
+      {
+        "id": "e11",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 383,
+        "end": 386
+      },
+      {
+        "id": "e12",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 404,
+        "end": 408
+      },
+      {
+        "id": "e13",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 554,
+        "end": 558
+      },
+      {
+        "id": "e14",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 612,
+        "end": 616
+      },
+      {
+        "id": "e15",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 620,
+        "end": 624
+      },
+      {
+        "id": "e16",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 717,
+        "end": 721
+      },
+      {
+        "id": "e17",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 725,
+        "end": 729
+      },
+      {
+        "id": "e18",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 834,
+        "end": 847
+      },
+      {
+        "id": "e19",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 862,
+        "end": 868
+      },
+      {
+        "id": "e20",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 875,
+        "end": 881
+      },
+      {
+        "id": "e21",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 902,
+        "end": 908
+      },
+      {
+        "id": "e22",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 913,
+        "end": 919
+      },
+      {
+        "id": "e23",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 920,
+        "end": 926
+      },
+      {
+        "id": "e24",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 942,
+        "end": 946
+      },
+      {
+        "id": "e25",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 1064,
+        "end": 1070
+      },
+      {
+        "id": "e26",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 1072,
+        "end": 1078
+      },
+      {
+        "id": "e27",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 1084,
+        "end": 1090
+      },
+      {
+        "id": "e28",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 1116,
+        "end": 1124
+      },
+      {
+        "id": "e29",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 1171,
+        "end": 1174
+      },
+      {
+        "id": "e30",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 1199,
+        "end": 1205
+      },
+      {
+        "id": "e31",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 1212,
+        "end": 1218
+      },
+      {
+        "id": "e32",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 1247,
+        "end": 1253
+      },
+      {
+        "id": "e33",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 1258,
+        "end": 1264
+      },
+      {
+        "id": "e34",
+        "documentId": "22872607",
+        "type": "GENE",
+        "start": 1265,
+        "end": 1271
+      },
+      {
+        "id": "e35",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 1330,
+        "end": 1334
+      },
+      {
+        "id": "e36",
+        "documentId": "22872607",
+        "type": "CHEMICAL",
+        "start": 1430,
+        "end": 1434
+      }
+    ],
+    "relations": [
+      {
+        "type": "SUBSTRATE",
+        "arg1": "e5",
+        "arg2": "e3",
+        "quote": "Aldo-keto reductases (AKRs) metabolize a wide range of substrates, including polycyclic aromatic hydrocarbons (PAHs)",
+        "quoteLocator": {
+          "start": 91,
+          "end": 207,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "SUBSTRATE",
+        "arg1": "e6",
+        "arg2": "e4",
+        "quote": "Aldo-keto reductases (AKRs) metabolize a wide range of substrates, including polycyclic aromatic hydrocarbons (PAHs)",
+        "quoteLocator": {
+          "start": 91,
+          "end": 207,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INDIRECT-UPREGULATOR",
+        "arg1": "e10",
+        "arg2": "e12",
+        "quote": "Exposure to PAHs, their metabolites, and ROS further increase AKRs isoform expression",
+        "quoteLocator": {
+          "start": 342,
+          "end": 427,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INDIRECT-UPREGULATOR",
+        "arg1": "e11",
+        "arg2": "e12",
+        "quote": "Exposure to PAHs, their metabolites, and ROS further increase AKRs isoform expression",
+        "quoteLocator": {
+          "start": 342,
+          "end": 427,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INDIRECT-UPREGULATOR",
+        "arg1": "e16",
+        "arg2": "e17",
+        "quote": "the effect of PAHs on AKRs expression in peripheral blood lymphocytes (PBLs)",
+        "quoteLocator": {
+          "start": 703,
+          "end": 779,
+          "offsetUnit": "utf16"
+        }
+      }
+    ],
+    "groundingIssues": [],
+    "transport": {
+      "entityCode": 0,
+      "relationCode": 0,
+      "latencyMs": 4624,
+      "entityPromptHash": "6b0b656c3500920652c3bf3cf35539e66b1c1f26e092e22885f5f62b0aea25d8",
+      "relationPromptHash": "825f3242db0a874d15ce25167b26123902ee6fb7e425d7fbc00570c3cf36ff15"
+    },
+    "formatRepairAttempts": 1
+  },
+  "drugprot-2982865": {
+    "entities": [
+      {
+        "id": "e1",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 28,
+        "end": 43
+      },
+      {
+        "id": "e2",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 142,
+        "end": 150
+      },
+      {
+        "id": "e3",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 334,
+        "end": 357
+      },
+      {
+        "id": "e4",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 362,
+        "end": 388
+      },
+      {
+        "id": "e5",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 373,
+        "end": 374
+      },
+      {
+        "id": "e6",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 390,
+        "end": 395
+      },
+      {
+        "id": "e7",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 423,
+        "end": 427
+      },
+      {
+        "id": "e8",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 433,
+        "end": 441
+      },
+      {
+        "id": "e9",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 524,
+        "end": 553
+      },
+      {
+        "id": "e10",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 555,
+        "end": 563
+      },
+      {
+        "id": "e11",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 591,
+        "end": 596
+      },
+      {
+        "id": "e12",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 658,
+        "end": 661
+      },
+      {
+        "id": "e13",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 706,
+        "end": 723
+      },
+      {
+        "id": "e14",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 833,
+        "end": 841
+      },
+      {
+        "id": "e15",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1039,
+        "end": 1045
+      },
+      {
+        "id": "e16",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 1079,
+        "end": 1087
+      },
+      {
+        "id": "e17",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 1093,
+        "end": 1114
+      },
+      {
+        "id": "e18",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 1116,
+        "end": 1118
+      },
+      {
+        "id": "e19",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1125,
+        "end": 1131
+      },
+      {
+        "id": "e20",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1202,
+        "end": 1208
+      },
+      {
+        "id": "e21",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 1323,
+        "end": 1338
+      },
+      {
+        "id": "e22",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1414,
+        "end": 1417
+      },
+      {
+        "id": "e23",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 1447,
+        "end": 1462
+      },
+      {
+        "id": "e24",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1548,
+        "end": 1557
+      },
+      {
+        "id": "e25",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1578,
+        "end": 1582
+      },
+      {
+        "id": "e26",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1587,
+        "end": 1595
+      },
+      {
+        "id": "e27",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1609,
+        "end": 1618
+      },
+      {
+        "id": "e28",
+        "documentId": "2982865",
+        "type": "GENE",
+        "start": 1645,
+        "end": 1660
+      },
+      {
+        "id": "e29",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1726,
+        "end": 1735
+      },
+      {
+        "id": "e30",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1745,
+        "end": 1749
+      },
+      {
+        "id": "e31",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1786,
+        "end": 1794
+      },
+      {
+        "id": "e32",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1891,
+        "end": 1895
+      },
+      {
+        "id": "e33",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1935,
+        "end": 1943
+      },
+      {
+        "id": "e34",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 1971,
+        "end": 1974
+      },
+      {
+        "id": "e35",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 2020,
+        "end": 2029
+      },
+      {
+        "id": "e36",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 2327,
+        "end": 2330
+      },
+      {
+        "id": "e37",
+        "documentId": "2982865",
+        "type": "CHEMICAL",
+        "start": 2348,
+        "end": 2358
+      }
+    ],
+    "relations": [],
+    "groundingIssues": [
+      {
+        "kind": "surface_unresolved",
+        "row": [
+          "T29",
+          "GENE",
+          "opiate receptor",
+          6
+        ]
+      }
+    ],
+    "transport": {
+      "entityCode": 0,
+      "relationCode": 0,
+      "latencyMs": 4423,
+      "entityPromptHash": "548567eeb627fe8a54bfd3d36abdcd32f08893979a1f314ab21aa63a713b0f3c",
+      "relationPromptHash": "9ddaca65405e5fcf4881320735548e1005565a3f18f58202ee7bffd8a4132540"
+    }
+  },
+  "drugprot-9310349": {
+    "entities": [
+      {
+        "id": "e1",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 0,
+        "end": 11
+      },
+      {
+        "id": "e2",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 26,
+        "end": 59
+      },
+      {
+        "id": "e3",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 61,
+        "end": 72
+      },
+      {
+        "id": "e4",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 74,
+        "end": 120
+      },
+      {
+        "id": "e5",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 106,
+        "end": 120
+      },
+      {
+        "id": "e6",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 348,
+        "end": 359
+      },
+      {
+        "id": "e7",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 389,
+        "end": 422
+      },
+      {
+        "id": "e8",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 424,
+        "end": 431
+      },
+      {
+        "id": "e9",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 478,
+        "end": 501
+      },
+      {
+        "id": "e10",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 533,
+        "end": 542
+      },
+      {
+        "id": "e11",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 567,
+        "end": 578
+      },
+      {
+        "id": "e12",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 611,
+        "end": 618
+      },
+      {
+        "id": "e13",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 636,
+        "end": 651
+      },
+      {
+        "id": "e14",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 661,
+        "end": 672
+      },
+      {
+        "id": "e15",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 707,
+        "end": 714
+      },
+      {
+        "id": "e16",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 734,
+        "end": 757
+      },
+      {
+        "id": "e17",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 761,
+        "end": 772
+      },
+      {
+        "id": "e18",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 777,
+        "end": 784
+      },
+      {
+        "id": "e19",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 802,
+        "end": 813
+      },
+      {
+        "id": "e20",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 855,
+        "end": 859
+      },
+      {
+        "id": "e21",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 855,
+        "end": 863
+      },
+      {
+        "id": "e22",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 943,
+        "end": 954
+      },
+      {
+        "id": "e23",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 976,
+        "end": 985
+      },
+      {
+        "id": "e24",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 997,
+        "end": 1008
+      },
+      {
+        "id": "e25",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 1066,
+        "end": 1073
+      },
+      {
+        "id": "e26",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 1107,
+        "end": 1115
+      },
+      {
+        "id": "e27",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 1168,
+        "end": 1179
+      },
+      {
+        "id": "e28",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 1214,
+        "end": 1225
+      },
+      {
+        "id": "e29",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 1395,
+        "end": 1410
+      },
+      {
+        "id": "e30",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 1414,
+        "end": 1422
+      },
+      {
+        "id": "e31",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 1467,
+        "end": 1471
+      },
+      {
+        "id": "e32",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 1498,
+        "end": 1512
+      },
+      {
+        "id": "e33",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 1689,
+        "end": 1700
+      },
+      {
+        "id": "e34",
+        "documentId": "9310349",
+        "type": "GENE",
+        "start": 1744,
+        "end": 1750
+      },
+      {
+        "id": "e35",
+        "documentId": "9310349",
+        "type": "CHEMICAL",
+        "start": 1783,
+        "end": 1794
+      }
+    ],
+    "relations": [
+      {
+        "type": "INHIBITOR",
+        "arg1": "e6",
+        "arg2": "e7",
+        "quote": "alendronate is a potent inhibitor of the protein-tyrosine-phosphatase-meg1",
+        "quoteLocator": {
+          "start": 348,
+          "end": 422,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INHIBITOR",
+        "arg1": "e6",
+        "arg2": "e8",
+        "quote": "alendronate is a potent inhibitor of the protein-tyrosine-phosphatase-meg1 (PTPmeg1)",
+        "quoteLocator": {
+          "start": 348,
+          "end": 432,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INHIBITOR",
+        "arg1": "e11",
+        "arg2": "e12",
+        "quote": "alendronate was a slow binding inhibitor of PTPmeg1",
+        "quoteLocator": {
+          "start": 567,
+          "end": 618,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INHIBITOR",
+        "arg1": "e14",
+        "arg2": "e15",
+        "quote": "alendronate was more potent and selective for PTPmeg1",
+        "quoteLocator": {
+          "start": 661,
+          "end": 714,
+          "offsetUnit": "utf16"
+        }
+      },
+      {
+        "type": "INHIBITOR",
+        "arg1": "e19",
+        "arg2": "e18",
+        "quote": "The hydrolysis of fluorescein diphosphate by PTP epsilon and PTPmeg1 was sensitive to alendronate",
+        "quoteLocator": {
+          "start": 716,
+          "end": 813,
+          "offsetUnit": "utf16"
+        }
+      }
+    ],
+    "groundingIssues": [
+      {
+        "kind": "surface_unresolved",
+        "row": [
+          "T35",
+          "CHEMICAL",
+          "alendronate",
+          10
+        ]
+      },
+      {
+        "kind": "surface_unresolved",
+        "row": [
+          "T37",
+          "CHEMICAL",
+          "alendronate",
+          11
+        ]
+      },
+      {
+        "kind": "relation_quote_endpoint_mismatch",
+        "row": [
+          "INHIBITOR",
+          "e24",
+          "e25",
+          "Alendronate inhibited PTPmeg1 with an IC50 value of 23 microM",
+          1
+        ]
+      },
+      {
+        "kind": "relation_quote_endpoint_mismatch",
+        "row": [
+          "INHIBITOR",
+          "e24",
+          "e26",
+          "Alendronate inhibited PTPmeg1 with an IC50 value of 23 microM, PTPsigma with an IC50 value of 2 microM",
+          1
+        ]
+      }
+    ],
+    "transport": {
+      "entityCode": 0,
+      "relationCode": 0,
+      "latencyMs": 5074,
+      "entityPromptHash": "39ff6e12bee13317981771614f4d8646388a63f4449f043cf8c04e50c92b80d1",
+      "relationPromptHash": "1f1ce9169edbfb653286bf2c4907586aa21537bfedcce46d5a1f38c5643cea9e"
+    }
+  }
+}

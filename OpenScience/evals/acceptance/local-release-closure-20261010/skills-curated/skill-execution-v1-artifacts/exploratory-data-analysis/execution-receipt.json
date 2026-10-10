@@ -1,0 +1,29 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1162,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/exploratory-data-analysis/results.json",
+      "sha256": "45e39be3403dea707d21b249b92c72e919e78cc02c99a443f242bd1b93b7bef6"
+    },
+    {
+      "bytes": 1588,
+      "path": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/exploratory-data-analysis/exploratory-data-analysis-report.md",
+      "sha256": "ce5a0a7976f53bb2d26a1606763ca4b7a0d3ad44d2ac94cd088edfbd4e95ef4e"
+    }
+  ],
+  "finishedAt": "2026-10-10T03:44:44.392783Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "exploratory-data-analysis",
+  "startedAt": "2026-10-10T03:44:44.388741Z",
+  "status": "success",
+  "summary": "Executed the bounded deterministic baseline for exploratory-data-analysis and wrote 2 verified artifacts.",
+  "warnings": []
+}

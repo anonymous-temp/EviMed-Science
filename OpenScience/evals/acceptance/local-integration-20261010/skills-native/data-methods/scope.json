@@ -1,0 +1,323 @@
+{
+  "schemaVersion": 1,
+  "artifact": "scope.json",
+  "skill": "dataset-research-scoping",
+  "generatedAtUtc": "2026-10-10T03:58:23Z",
+  "dataset": {
+    "file": "input.csv",
+    "sha256": "d6687cb19e9460557aa85ef5854fb6056579d7ab375e4feeaef61a84e5a5567d",
+    "bytes": 82,
+    "preservedUnchanged": true,
+    "synthetic": true,
+    "syntheticStatement": "SYNTHETIC TEACHING DATA constructed for this bounded method test. Not patient data. No real cohort, site or registry is represented."
+  },
+  "priorDataContact": {
+    "datasetSemanticsRead": "not_available",
+    "datasetSemanticsWrite": "not_available",
+    "note": "No recorded interpretation of this dataset was available to read and none could be written back: the dataset-semantics operation is not exposed in this session. The interpretation below is therefore a fresh analyst reading with its basis stated, provisional until the researcher confirms it. A later researcher confirmation must override it, never the reverse.",
+    "filesReceived": []
+  },
+  "profile": {
+    "rows": 6,
+    "columnCount": 4,
+    "columns": [
+      "id",
+      "group",
+      "baseline",
+      "outcome"
+    ],
+    "distinctIdCount": 5,
+    "groupCounts": {
+      "A": 3,
+      "B": 3
+    },
+    "perColumn": {
+      "id": {
+        "inferredType": "text",
+        "blankCsvLines": [],
+        "blankCount": 0,
+        "filledCount": 6,
+        "densityCompleteness": 1.0,
+        "distinctCount": 5
+      },
+      "group": {
+        "inferredType": "text",
+        "blankCsvLines": [],
+        "blankCount": 0,
+        "filledCount": 6,
+        "densityCompleteness": 1.0,
+        "distinctCount": 2
+      },
+      "baseline": {
+        "inferredType": "integer",
+        "blankCsvLines": [
+          6
+        ],
+        "blankCount": 1,
+        "filledCount": 5,
+        "densityCompleteness": 0.8333,
+        "distinctCount": 4
+      },
+      "outcome": {
+        "inferredType": "integer",
+        "blankCsvLines": [
+          7
+        ],
+        "blankCount": 1,
+        "filledCount": 5,
+        "densityCompleteness": 0.8333,
+        "distinctCount": 4
+      }
+    },
+    "observedValues": {
+      "id": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "group": [
+        "A",
+        "B"
+      ],
+      "baseline": [
+        "10",
+        "11",
+        "12",
+        "13"
+      ],
+      "outcome": [
+        "11",
+        "12",
+        "14",
+        "15"
+      ]
+    },
+    "mechanicalProfileArtifacts": [
+      "data-profile.py",
+      "data-profile.json",
+      "data-profile.md"
+    ],
+    "identifierMasking": "The id column is a short alphabetic label in synthetic data. It is masked in these artifacts as a run of '*' of the same length, so the reporting habit holds even when the values are harmless."
+  },
+  "dataQuality": {
+    "title": "Six rows, four ways to be wrong before any analysis",
+    "findings": [
+      {
+        "id": "DQ1",
+        "finding": "Observation 'b' is delivered as two byte-identical rows.",
+        "detail": "CSV lines 3 and 4 both read (id=b, group=A, baseline=12, outcome=15).",
+        "consequences": [
+          "Any mean, count or rate computed over delivered rows weights this observation twice.",
+          "Whether it is a duplicated delivery or two genuine measurements cannot be told from these columns."
+        ],
+        "handling": "Carried, disclosed, and analysed under both denominators.",
+        "notDone": "No row was deleted and no arbitrary rule was used to pick one."
+      },
+      {
+        "id": "DQ2",
+        "finding": "One baseline cell (1/6 rows) and one outcome cell (1/6 rows) are blank, on two different rows.",
+        "detail": "Baseline blank on CSV line [6]; outcome blank on CSV line [7].",
+        "consequences": [
+          "No row carries both gaps, so one complete-case filter yields 4 rows, not 5.",
+          "Both rows retain usable half-information: one has an outcome, one has a baseline; discarding them for every purpose would spend data."
+        ],
+        "handling": "Denominators are stated per subset; the two partially observed rows are reported, not dropped silently."
+      },
+      {
+        "id": "DQ3",
+        "finding": "No within-id key, timestamp, visit or sequence column exists.",
+        "detail": "The only identifier is 'id', and its repeated values are identical to the first occurrence.",
+        "consequences": [
+          "Repeated measurement cannot be distinguished from an exact duplicate record.",
+          "No index time can be defined, so no exposure window and no time-to-event design is available."
+        ],
+        "handling": "Recorded as a hard constraint on design, not corrected by assumption."
+      },
+      {
+        "id": "DQ4",
+        "finding": "No unit, scale, timing or direction is stated for baseline or outcome.",
+        "detail": "Both columns are integer-valued on an unknown scale, and a rise is not defined as better or worse.",
+        "consequences": [
+          "Effect direction cannot be read clinically; only the arithmetic sign is meaningful."
+        ],
+        "handling": "All statements stay at the arithmetic level."
+      }
+    ],
+    "trapChecklist": {
+      "sentinelDates": "not applicable: no date column exists",
+      "emptyJoinKeyPresent": "not applicable: no join key column exists",
+      "columnTypedDifferentlyInTwoTables": "not applicable: one table",
+      "compositeValueInOneCell": "none observed",
+      "identifierLeakage": "id masked in all artifacts"
+    }
+  },
+  "duplicateObservation": {
+    "rule": "exact match on all fields (id, group, baseline, outcome)",
+    "groups": [
+      {
+        "key": {
+          "id": "b",
+          "group": "A",
+          "baseline": "12",
+          "outcome": "15"
+        },
+        "maskedKey": {
+          "id": "*",
+          "group": "A",
+          "baseline": "12",
+          "outcome": "15"
+        },
+        "rowIndicesZeroBased": [
+          1,
+          2
+        ],
+        "csvLineNumbers": [
+          3,
+          4
+        ],
+        "occurrences": 2
+      }
+    ],
+    "denominatorImpact": {
+      "deliveredRows": 6,
+      "completePairRows": 4,
+      "uniqueCompletePairObservations": 3,
+      "rowsRemovedByDeduplication": 1,
+      "percentOfDeliveredRowsThatAreRepeats": 16.7
+    }
+  },
+  "missingness": {
+    "baseline": {
+      "blankCells": 1,
+      "blankCsvLines": [
+        6
+      ],
+      "densityCompleteness": 0.8333
+    },
+    "outcome": {
+      "blankCells": 1,
+      "blankCsvLines": [
+        7
+      ],
+      "densityCompleteness": 0.8333
+    }
+  },
+  "feasibility": {
+    "questionAsked": "Does outcome change from baseline differ between group A and group B in this table?",
+    "verdict": "not_answerable_as_an_effect_estimate; answerable only as a description",
+    "why": [
+      "3 distinct complete-pair observations (2 in A, 1 in B) cannot estimate a between-group difference with usable precision.",
+      "Group labels A and B are undocumented: nothing in the file says what they denote.",
+      "No allocation mechanism is recorded, so no randomization or exchangeability of the groups can be assumed.",
+      "No time, visit, sequence or date column exists, so no exposure window, index time or ordering can be defined.",
+      "No unit or scale is stated for baseline and outcome."
+    ],
+    "strongestDefensibleAlternatives": [
+      {
+        "design": "Descriptive within-observation change summary with denominators named",
+        "availableVariables": [
+          "id",
+          "group",
+          "baseline",
+          "outcome"
+        ],
+        "estimand": "mean (outcome - baseline) over a stated set of distinct complete-pair observations",
+        "n": 3,
+        "confoundingOrSelectionConcerns": [
+          "One row with a baseline but no outcome and one with an outcome but no baseline are excluded, which is complete-case selection and can bias any comparison."
+        ],
+        "verdict": "supported as description only"
+      },
+      {
+        "design": "Duplicate-sensitivity comparison of the two denominators",
+        "availableVariables": [
+          "id as delivered"
+        ],
+        "estimand": "the same mean computed over delivered rows versus distinct observations",
+        "n": [
+          4,
+          3
+        ],
+        "verdict": "supported; reported in stats.json as E1 versus E2"
+      },
+      {
+        "design": "Between-group test or effect estimate",
+        "verdict": "not supported at this size; would need a stated sampling or allocation mechanism and more independent observations"
+      },
+      {
+        "design": "Longitudinal or repeated-measures analysis",
+        "missingField": "a within-id visit, sequence or measurement-time column",
+        "verdict": "not supported; without it the two rows for observation b cannot be classified as repeated measures rather than one duplicated record"
+      },
+      {
+        "design": "Any clinical claim, such as a treatment effect on an outcome",
+        "missingField": "documented group meaning, an outcome definition and unit, and a defined analysis population",
+        "verdict": "not supported"
+      }
+    ],
+    "avoidedClaims": [
+      "No statement that group A or B is a treatment, control or exposure arm.",
+      "No statement that allocation was randomized, concealed or blinded.",
+      "No causal statement about any effect of group on outcome.",
+      "No p value, confidence interval or power statement.",
+      "No claim drawn from the published literature, because no retrieval was performed."
+    ]
+  },
+  "dictionaryEvidence": {
+    "dictionarySupplied": false,
+    "strength": "weak",
+    "whatExistsInsteadOfADictionary": [
+      "The four header strings themselves: id, group, baseline, outcome.",
+      "The literal values: group vocabulary {A, B}; baseline and outcome as integers on an unstated scale."
+    ],
+    "whatIsInferredAndUnverified": [
+      {
+        "field": "id",
+        "inference": "identifier of a patient or of an observation",
+        "unverifiedBecause": "no key is documented, and the same id appears on two identical rows",
+        "basis": "model_inferred"
+      },
+      {
+        "field": "group",
+        "inference": "a two-level grouping or arm indicator",
+        "unverifiedBecause": "A and B are defined nowhere in the file",
+        "basis": "model_inferred"
+      },
+      {
+        "field": "baseline",
+        "inference": "a pre-index measurement of the same quantity as outcome",
+        "unverifiedBecause": "no unit, scale, timing or instrument is stated",
+        "basis": "model_inferred"
+      },
+      {
+        "field": "outcome",
+        "inference": "a post-index measurement of the same quantity as baseline",
+        "unverifiedBecause": "no unit, scale, timing or direction is stated",
+        "basis": "model_inferred"
+      }
+    ],
+    "consequence": "Every interpretation above is a reading of column names, not a recorded fact about the data. The profile, the denominators and the duplicate finding do not depend on them; analysis choices do."
+  },
+  "evidenceMap": {
+    "status": "not_run",
+    "reason": "The task commissioned a bounded local method test with no external search. No literature and no guideline was consulted, so no claim in this package rests on a citation; an evidence map would require retrieval that was explicitly out of scope.",
+    "consequenceForInterpretation": "Nothing here states what is known in the field; it states what these six rows do and do not support."
+  },
+  "supportedNextSteps": [
+    "Confirm the observation unit with the researcher: is one row one patient-visit, or is the repeated row a delivery artifact? The answer selects denominator 4 or denominator 3.",
+    "Obtain the data dictionary for group, baseline and outcome, including units and timing, and record it as dictionary-stated rather than inferring it again.",
+    "Add a within-id visit or measurement-time field: that single field is what would make a repeated-measures or longitudinal design possible.",
+    "Fix and document the complete-case rule, and report how many rows it removes at each stage from a stated starting population.",
+    "If a between-group estimate is the goal, size the table for it and define the analysis population before collection, rather than testing this extract."
+  ],
+  "limitations": [
+    "Six synthetic rows: nothing here generalizes.",
+    "No literature or guideline retrieval was performed; the evidence map is not_run, and an empty map is not negative evidence.",
+    "No data dictionary was supplied; column meanings are inferred from names alone.",
+    "The dataset-semantics read/write operations were not available in this session, so no prior interpretation was consulted and none was recorded.",
+    "No external linkage applies: the file holds no join key, no coding system and no dates.",
+    "Group labels carry no known meaning, so no clinical framing is possible."
+  ]
+}

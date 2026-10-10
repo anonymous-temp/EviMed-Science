@@ -1,0 +1,110 @@
+{
+  "receiptVersion": 1,
+  "receiptType": "synthetic-method-verification",
+  "syntheticBanner": "SYNTHETIC METHOD VERIFICATION ONLY — the input is an authored synthetic fixture (three invented studies), not research data or clinical evidence. Nothing in this receipt may be read as a pooled effect estimate about any real intervention, population or outcome.",
+  "writtenAt": "2026-10-10T05:17:18Z",
+  "request": {
+    "capability": "research_calculate",
+    "action": "start",
+    "method": "meta.dl",
+    "inputPath": "deliverables/replay-fixture-meta.json",
+    "requestId": "runtime-replay-positive-20261010-native"
+  },
+  "input": {
+    "path": "deliverables/replay-fixture-meta.json",
+    "bytes": 228,
+    "sha256": "62a40472b1d1661c652e5b6e2014d6faed9de54846a228c0f18cb89f9121033f",
+    "fileModifiedAt": "2026-10-10T05:14:53.352043294Z",
+    "declaredContents": {
+      "effectMeasure": "MD",
+      "outcome": "Synthetic reference fixture outcome",
+      "studies": [
+        {"id": "0", "yi": 0, "vi": 0.1},
+        {"id": "1", "yi": 1, "vi": 0.1},
+        {"id": "2", "yi": 3, "vi": 0.1}
+      ]
+    },
+    "shapeCheck": "Three studies with distinct ids, yi numeric, vi > 0; effectMeasure MD and outcome present. The input satisfies the method's declared shape, so the terminal failure below is not attributable to a malformed or missing key on inspection."
+  },
+  "execution": {
+    "jobId": "replay_eb45cd3bdf9b2d3f10006d0de5f5e633ed5002f2702ea45ff4a7a0ef2a917a45",
+    "projectId": "model-concurrent-regression",
+    "methodId": "meta.dl",
+    "methodVersion": "2.0.0",
+    "methodDigest": "b2d028479ba60ab14c4a98c500c462137319755b0206436f406f53c143350fa0",
+    "methodSeeded": false,
+    "codeDigest": "3c073d052b6e15e8c11c7545c5d870c85f0752294f74c9456da2ce0c13ccf013",
+    "environmentDigest": "90b7ffc2ce29cd3746fc770aab58f5ab34af7aa22896a0723771057e2947e326",
+    "environmentComparison": {
+      "status": "same",
+      "changed": [],
+      "note": "Recorded code digest and environment digest are identical to the current ones; the failure is not reported as an environment or code-version mismatch."
+    },
+    "queuedState": "queued"
+  },
+  "terminalState": {
+    "state": "failed",
+    "isTerminal": true,
+    "errorCode": "result_replay_failed",
+    "errorDetailSupplied": false,
+    "cleanup": "confirmed",
+    "partial": false,
+    "resultVersionId": null,
+    "outputVersionId": null,
+    "artifacts": [],
+    "polling": {
+      "polls": 2,
+      "terminalStateStableAcrossPolls": true,
+      "lastPolledAt": "2026-10-10T05:17:18Z",
+      "observedVia": "research_calculate action:status with the job id returned by action:start"
+    },
+    "platformWarnings": [
+      "The selected calculation has no usable new result; prior results remain available."
+    ]
+  },
+  "resultRead": {
+    "completedResultRequired": true,
+    "completedResultAvailable": false,
+    "reason": "The job reached its terminal state as failed; no result version, output version or artifact was produced, so there was no completed result to read.",
+    "resultReadTool": {
+      "requestedTool": "research_calculation_result",
+      "availableInThisRuntime": false,
+      "verifiedBy": "The tool is absent from this session's registered tool set and is not listed among the runtime's disabled tools; the only calculation surface exposed here is research_calculate (start/status/cancel/render)."
+    }
+  },
+  "reportedResults": {
+    "status": "not supplied",
+    "reason": "The engine produced no result at its terminal state, therefore it reported no pooled estimate, standard error, confidence interval, tau-squared, Q or I-squared.",
+    "pooledEstimate": null,
+    "standardError": null,
+    "confidenceInterval": null,
+    "tau2": null,
+    "cochranQ": null,
+    "iSquared": null,
+    "effectMeasure": "MD (requested)"
+  },
+  "resultFiles": {
+    "count": 0,
+    "files": [],
+    "note": "No result file paths or hashes can be listed because no result file was produced."
+  },
+  "localFallback": {
+    "performed": false,
+    "note": "No local Python or other computation was run to derive a substitute pooled estimate; the values in the meta.dl slot are absent because the engine supplied none, not because they were computed elsewhere."
+  },
+  "scopeCompliance": {
+    "calculationRequestsStarted": 1,
+    "additionalCalculationRequests": 0,
+    "externalEvidenceRetrieved": false,
+    "patientDataUsed": false,
+    "externalPublication": false
+  },
+  "limits": [
+    "The task's precondition — a completed result — was not met: the single authorized job terminated as failed, so this receipt records a verified failure rather than a verified pooled estimate.",
+    "The engine named the failure code result_replay_failed without further detail; the cause of the replay failure is unexplained here and is not inferred. Whether it originates in the fixture, the recorded prior run, or the engine's replay path was not determined.",
+    "The fixture file's modification time (2026-10-10T05:14:53Z) is later than the surrounding workspace artifacts; that timestamp is recorded as an observation only and is not offered as the cause of the failure.",
+    "No retry and no second request were issued, as instructed, so it is unknown whether the same input would fail again.",
+    "The three studies are invented. No number in this receipt describes a real treatment effect, and none should be cited as evidence."
+  ],
+  "stopCondition": "Met as far as the runtime allowed: the single authorized calculation was started, polled to its terminal state, and that terminal state was read and recorded here. No further calculation, retrieval or computation was performed."
+}

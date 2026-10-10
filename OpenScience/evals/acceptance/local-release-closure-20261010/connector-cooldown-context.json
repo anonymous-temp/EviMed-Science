@@ -1,0 +1,10 @@
+{
+  "priorReceipt": "/tmp/evimed-release-closure-20261010/connectors-current/connector-probe-v3.json",
+  "sha256": "df9234ae179138657173fb59f8e62e3e7d0384368d12b8d3077524523313d13b",
+  "observedAt": "2026-10-10T04:03:09.507515Z",
+  "deferredSources": [
+    "arxiv"
+  ],
+  "reason": "Actual upstream HTTP 429 retained; no further request in final source campaign",
+  "countsAsSuccessfulExecution": false
+}

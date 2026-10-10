@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "artifact": "geo-proposal",
+  "mode": "bounded-research-test",
+  "proposalKind": "research-only",
+  "minimal": true,
+  "syntheticObservations": true,
+  "runDate": "2026-10-10",
+  "product": {
+    "brandName": "TeachingDrugA",
+    "jurisdiction": "jurisdictionX",
+    "identityStatus": "unknown"
+  },
+  "oneSentence": "本轮只做证据与核验相关的工作：已观测到的安全性表述错误与来源缺失可以处理，适应证问题仍未测，投放整轮不执行。",
+  "measuredSyntheticErrors": [
+    {
+      "id": "OBS-01",
+      "groupKey": "G1",
+      "question": "is this drug safe for children?",
+      "observed": "Safety for children is established",
+      "class": "讲错",
+      "status": "待核验",
+      "action": "取得可核验来源后按纠错流程处理；平台复测后关闭。",
+      "quoteKind": "verbatim observation record",
+      "synthetic": true
+    },
+    {
+      "id": "OBS-02",
+      "groupKey": "G1",
+      "question": "is this drug safe for children?",
+      "observed": "I have no source",
+      "class": "信源弱",
+      "status": "待补来源",
+      "action": "补齐来源层；在此之前稿件标为不确定稿。",
+      "quoteKind": "verbatim observation record",
+      "synthetic": true
+    }
+  ],
+  "unmeasuredQuestions": [
+    {
+      "id": "Q-02",
+      "groupKey": "G2",
+      "question": "what is its indication?",
+      "status": "unmeasured",
+      "action": "先测量；测量前不写比率、不写结论、不计入任何分母。"
+    },
+    {
+      "id": "Q-G1-zh",
+      "groupKey": "G1",
+      "question": "这个药对儿童安全吗？（中文问法）",
+      "status": "unmeasured",
+      "action": "与英文问法一并纳入基线测量后再判断。"
+    },
+    {
+      "id": "Q-C1",
+      "groupKey": "C1",
+      "question": "这个药的通用名和批准文号是什么？",
+      "status": "unmeasured",
+      "action": "对照问题，随基线一并测量。"
+    }
+  ],
+  "phases": [
+    {
+      "phase": "S1",
+      "name": "证据收集与核验",
+      "commercialActions": false,
+      "status": "待开始",
+      "outputs": [
+        "可逐字引用的来源清单或未取到声明"
+      ]
+    },
+    {
+      "phase": "S2",
+      "name": "纠错核验",
+      "commercialActions": false,
+      "status": "待开始",
+      "outputs": [
+        "逐条纠错材料与处置状态"
+      ]
+    },
+    {
+      "phase": "S3",
+      "name": "基线测量",
+      "commercialActions": false,
+      "status": "待开始",
+      "outputs": [
+        "问题集基线，含分子分母"
+      ]
+    },
+    {
+      "phase": "S4",
+      "name": "商业化投放",
+      "commercialActions": true,
+      "status": "本轮不执行",
+      "outputs": []
+    }
+  ],
+  "commercial": {
+    "mediaOrders": 0,
+    "placements": 0,
+    "budgetCny": 0,
+    "reachEstimate": null,
+    "conversionEstimate": null,
+    "citations": [],
+    "note": "本轮不产生任何投放、订单、触达或转化数据。"
+  },
+  "deliverableStatus": {
+    "draftWritten": true,
+    "draftPath": "draft.txt",
+    "draftSafetyStatus": "open",
+    "draftSafetyFinding": "本轮材料无法确立儿童用药安全；任何对儿童安全性的肯定性表述都必须先取得可核验来源并由人放行。",
+    "humanReleaseRequired": true
+  },
+  "dataState": {
+    "baselineMeasured": false,
+    "claimLibrary": "empty",
+    "drugValueCard": "absent",
+    "preservedSourcesForThisProduct": 0,
+    "identityStatus": "unknown"
+  },
+  "whatIsNotDone": [
+    "未做基线测量，未给出任何比率。",
+    "未评估任何投放站点，未下任何媒体订单。",
+    "未创建平台文章记录；本轮稿件是本地产物，不等于平台已登记文章。",
+    "未完成投放与引用的任何预测。"
+  ],
+  "assumptions": [
+    {
+      "field": "minimal",
+      "value": true,
+      "basis": "client_said",
+      "reason": "任务给定：教材项目 TeachingDrugA、辖区 jurisdictionX，无现行说明书证据、主张库为空、无药品价值卡、私有方法包不可用，因此按单步最小模式构建。",
+      "howToChange": "取得可核验的产品身份与说明书后，按完整流程重建身份、主张库与问题地图。"
+    },
+    {
+      "field": "evidenceScope",
+      "value": "仅使用本次运行实际取到的工具结果与任务给定的合成观测；其余一律记为未取到或未测。",
+      "basis": "client_said",
+      "reason": "不得虚构引文、平台记录与市场测量。",
+      "howToChange": "取到说明书、指南或文献后补入，并逐条记录来源与取回时间。"
+    },
+    {
+      "field": "observationsAreSynthetic",
+      "value": true,
+      "basis": "client_said",
+      "reason": "任务明确：consumerA / consumerB 两条问答记录是合成观测，不是真实市场测量，不得当作实测结果引用。",
+      "howToChange": "在平台上真实测量后，用实测记录替换合成观测；错误计数随实测重算。"
+    }
+  ]
+}

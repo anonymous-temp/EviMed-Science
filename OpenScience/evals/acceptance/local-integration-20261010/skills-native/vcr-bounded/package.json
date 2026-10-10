@@ -1,0 +1,645 @@
+{
+  "schema": "vcr-bounded/package/1",
+  "artifactId": "package",
+  "title": "有界方法核验产物索引：数字到精确位置的映射",
+  "scope": {
+    "kind": "bounded_method_verification",
+    "establishes": [
+      "每个被展示的数都能指回一个精确的位置：某个结果文件的某个 JSON 指针，或某条带原文锚点的摘录",
+      "尚未计算的量写成「未计算」，不写成 0，也不推断一个值",
+      "核验不过或来源不足的项单独列出"
+    ],
+    "does_not_establish": [
+      "完整虚拟临床研究引擎程序的有效性",
+      "临床接受度或临床可用性"
+    ],
+    "qualificationStatement": "本包只覆盖标注、参数化与结果绑定三类方法的核验，不覆盖完整虚拟临床研究引擎程序，也不构成临床接受。",
+    "patientData": "none",
+    "platformStudyOrResultRegistered": false
+  },
+  "artifacts": [
+    {
+      "artifactId": "protocol",
+      "path": "/workspace/skill-closure/vcr-bounded/protocol.json",
+      "role": "入排条件的结构化编码"
+    },
+    {
+      "artifactId": "matching-annotation",
+      "path": "/workspace/skill-closure/vcr-bounded/matching-annotation.json",
+      "role": "来源片段的判定上下文标注"
+    },
+    {
+      "artifactId": "evidence-parameters",
+      "path": "/workspace/skill-closure/vcr-bounded/evidence-parameters.json",
+      "role": "证据摘录的数值锚点与适用性"
+    },
+    {
+      "artifactId": "real-engine-result",
+      "path": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+      "role": "被读取的确定性结果原件（原样保留，未改写）"
+    },
+    {
+      "artifactId": "analysis",
+      "path": "/workspace/skill-closure/vcr-bounded/analysis.json",
+      "role": "结果绑定与读取"
+    },
+    {
+      "artifactId": "package",
+      "path": "/workspace/skill-closure/vcr-bounded/package.json",
+      "role": "本索引"
+    },
+    {
+      "artifactId": "verification-report",
+      "path": "/workspace/skill-closure/vcr-bounded/verification-report.json",
+      "role": "核验记录"
+    },
+    {
+      "artifactId": "verification-log",
+      "path": "/workspace/skill-closure/vcr-bounded/verification-log.txt",
+      "role": "核验记录的可读文本"
+    }
+  ],
+  "traceabilityNote": "路径以本机的绝对路径记录；同一路径在本次运行的记录里也以工作区相对路径出现。",
+  "numberIndex": [
+    {
+      "name": "required_total",
+      "value": 181,
+      "unit": "participants",
+      "tier": "engine_output",
+      "provenance": {
+        "kind": "engine_result",
+        "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+        "methodVersion": "1.1.0",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/measures/0/value",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/measures/0/value"
+        }
+      },
+      "displayedAs": "所需总样本量（参与者）",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "required_per_arm",
+      "value": 91,
+      "unit": "participants per arm",
+      "tier": "engine_output",
+      "provenance": {
+        "kind": "engine_result",
+        "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+        "methodVersion": "1.1.0",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/measures/1/value",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/measures/1/value"
+        }
+      },
+      "displayedAs": "每臂所需样本量（参与者）",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "sensitivity_effect_low",
+      "value": 126,
+      "unit": "participants",
+      "tier": "engine_diagnostic",
+      "provenance": {
+        "kind": "engine_result",
+        "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+        "methodVersion": "1.1.0",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/diagnostics/sensitivity/rows/0/low",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/diagnostics/sensitivity/rows/0/low"
+        }
+      },
+      "displayedAs": "敏感性：效应在 4–6 区间时所需总例数的下端",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "sensitivity_effect_high",
+      "value": 283,
+      "unit": "participants",
+      "tier": "engine_diagnostic",
+      "provenance": {
+        "kind": "engine_result",
+        "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+        "methodVersion": "1.1.0",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/diagnostics/sensitivity/rows/0/high",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/diagnostics/sensitivity/rows/0/high"
+        }
+      },
+      "displayedAs": "敏感性：效应在 4–6 区间时所需总例数的上端",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "sensitivity_sd_low",
+      "value": 116,
+      "unit": "participants",
+      "tier": "engine_diagnostic",
+      "provenance": {
+        "kind": "engine_result",
+        "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+        "methodVersion": "1.1.0",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/diagnostics/sensitivity/rows/1/low",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/diagnostics/sensitivity/rows/1/low"
+        }
+      },
+      "displayedAs": "敏感性：标准差在 9.6–14.4 区间时所需总例数的下端",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "sensitivity_sd_high",
+      "value": 261,
+      "unit": "participants",
+      "tier": "engine_diagnostic",
+      "provenance": {
+        "kind": "engine_result",
+        "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+        "methodVersion": "1.1.0",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/diagnostics/sensitivity/rows/1/high",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/diagnostics/sensitivity/rows/1/high"
+        }
+      },
+      "displayedAs": "敏感性：标准差在 9.6–14.4 区间时所需总例数的上端",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "power_at_registered_effect",
+      "value": 0.7983056214460588,
+      "unit": "probability",
+      "tier": "engine_diagnostic",
+      "provenance": {
+        "kind": "engine_result",
+        "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+        "methodVersion": "1.1.0",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/diagnostics/powerCurve/series/0/points/10/y",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/diagnostics/powerCurve/series/0/points/10/y"
+        }
+      },
+      "displayedAs": "效应取 5 时的解析功效",
+      "readNotRecomputed": true,
+      "note": "按原值读取，不做四舍五入或清理浮点尾数。"
+    },
+    {
+      "name": "evidence_effect_anchor",
+      "value": 5,
+      "unit": "points (as stated)",
+      "tier": "source_anchor",
+      "provenance": {
+        "kind": "source_quote",
+        "sourceKey": "E",
+        "quote": "Mean difference5points",
+        "locator": {
+          "segmentIndex": 0,
+          "charStart": 0,
+          "charEnd": 22
+        },
+        "inPackageArtifact": {
+          "artifactId": "evidence-parameters",
+          "jsonPointer": "/anchors/0/value"
+        }
+      },
+      "displayedAs": "证据摘录给出的均值差锚点",
+      "readNotRecomputed": true,
+      "note": "该数与引擎输入的效应同为 5；两者是两个位置，不互相替代。"
+    },
+    {
+      "name": "evidence_sd_anchor",
+      "value": 12,
+      "unit": "points (as stated)",
+      "tier": "source_anchor",
+      "provenance": {
+        "kind": "source_quote",
+        "sourceKey": "E",
+        "quote": "standard deviation12points",
+        "locator": {
+          "segmentIndex": 1,
+          "charStart": 24,
+          "charEnd": 50
+        },
+        "inPackageArtifact": {
+          "artifactId": "evidence-parameters",
+          "jsonPointer": "/anchors/1/value"
+        }
+      },
+      "displayedAs": "证据摘录给出的标准差锚点",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "engine_input_effect",
+      "value": 5,
+      "unit": "points (unit not specified in source)",
+      "tier": "engine_input",
+      "provenance": {
+        "kind": "engine_input",
+        "artifactPath": "/workspace/result-replays/147deaff-72e6-4711-acb4-1e80315fd9f0/input.json",
+        "jsonPointer": "/scenario/truth/effect",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/regressionToInputs/0/value"
+        }
+      },
+      "displayedAs": "该项计算的效应输入",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "engine_input_sd",
+      "value": 12,
+      "unit": "points (unit not specified in source)",
+      "tier": "engine_input",
+      "provenance": {
+        "kind": "engine_input",
+        "artifactPath": "/workspace/result-replays/147deaff-72e6-4711-acb4-1e80315fd9f0/input.json",
+        "jsonPointer": "/scenario/truth/sd",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/regressionToInputs/1/value"
+        }
+      },
+      "displayedAs": "该项计算的标准差输入",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "engine_input_alpha",
+      "value": 0.05,
+      "unit": "probability",
+      "tier": "engine_input",
+      "provenance": {
+        "kind": "engine_input",
+        "artifactPath": "/workspace/result-replays/147deaff-72e6-4711-acb4-1e80315fd9f0/input.json",
+        "jsonPointer": "/scenario/analysis/alpha",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/regressionToInputs/2/value"
+        }
+      },
+      "displayedAs": "该项计算的检验水准",
+      "readNotRecomputed": true,
+      "note": "不出自证据摘录。"
+    },
+    {
+      "name": "engine_input_power",
+      "value": 0.8,
+      "unit": "probability",
+      "tier": "engine_input",
+      "provenance": {
+        "kind": "engine_input",
+        "artifactPath": "/workspace/result-replays/147deaff-72e6-4711-acb4-1e80315fd9f0/input.json",
+        "jsonPointer": "/scenario/analysis/power",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/regressionToInputs/3/value"
+        }
+      },
+      "displayedAs": "该项计算的把握度",
+      "readNotRecomputed": true,
+      "note": "不出自证据摘录。"
+    },
+    {
+      "name": "engine_input_sided",
+      "value": 2,
+      "unit": "count (1 or 2)",
+      "tier": "engine_input",
+      "provenance": {
+        "kind": "engine_input",
+        "artifactPath": "/workspace/result-replays/147deaff-72e6-4711-acb4-1e80315fd9f0/input.json",
+        "jsonPointer": "/scenario/analysis/sided",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/regressionToInputs/4/value"
+        }
+      },
+      "displayedAs": "该项计算的单双侧设定",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "adult_age_threshold",
+      "value": 18,
+      "unit": "years",
+      "tier": "study_definition",
+      "provenance": {
+        "kind": "task_definition",
+        "sourceText": "adults >=18",
+        "inPackageArtifact": {
+          "artifactId": "protocol",
+          "jsonPointer": "/studyDefinition/population/requirement/value"
+        }
+      },
+      "displayedAs": "成人定义的最低年龄",
+      "readNotRecomputed": true,
+      "note": "该阈值来自本次研究定义，不是证据摘录里的数。"
+    },
+    {
+      "name": "historical_window_days",
+      "value": 180,
+      "unit": "days",
+      "tier": "method_encoding",
+      "provenance": {
+        "kind": "unit_conversion",
+        "derivedFrom": "6 months",
+        "rule": "6 × 30 days",
+        "isSourceFact": false,
+        "inPackageArtifact": {
+          "artifactId": "protocol",
+          "jsonPointer": "/temporalSemantics/historicalWindow/days"
+        }
+      },
+      "displayedAs": "历史暴露窗口的天数写法",
+      "readNotRecomputed": true,
+      "note": "本方法层面的单位换算，不改变 6 个月的临床含义；原文写的是 6 months。"
+    },
+    {
+      "name": "protocol_version",
+      "value": 1,
+      "unit": "version",
+      "tier": "engine_result",
+      "provenance": {
+        "kind": "engine_result",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/protocolVersion",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/protocolVersion"
+        }
+      },
+      "displayedAs": "结果文件记录的方案版本",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "result_file_bytes",
+      "value": 2254,
+      "unit": "bytes",
+      "tier": "integrity",
+      "provenance": {
+        "kind": "measured_on_file",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "method": "文件字节数",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/binding/bytes"
+        }
+      },
+      "displayedAs": "结果原件的字节数",
+      "readNotRecomputed": true,
+      "note": "这是对文件本身量出来的、可复算的字节数，不是分析结果。"
+    },
+    {
+      "name": "power_curve_point_count",
+      "value": 17,
+      "unit": "points",
+      "tier": "engine_diagnostic",
+      "provenance": {
+        "kind": "measured_on_json",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/diagnostics/powerCurve/series/0/points",
+        "method": "数组长度",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/powerCurve/points"
+        }
+      },
+      "displayedAs": "功效曲线上的点数",
+      "readNotRecomputed": true,
+      "note": "这是对已保存数组量出来的长度，不是分析结果。"
+    }
+  ],
+  "declaredRanges": [
+    {
+      "name": "sensitivity_effect_range",
+      "endpoints": [
+        4,
+        6
+      ],
+      "unit": "points (same scale as the effect input)",
+      "provenance": {
+        "kind": "engine_result",
+        "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+        "methodVersion": "1.1.0",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/diagnostics/sensitivity/rows/0/range",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/diagnostics/sensitivity/rows/0/range"
+        }
+      },
+      "displayedAs": "效应敏感性所扫过的区间",
+      "readNotRecomputed": true
+    },
+    {
+      "name": "sensitivity_sd_range",
+      "endpoints": [
+        9.6,
+        14.4
+      ],
+      "unit": "points (same scale as the sd input)",
+      "provenance": {
+        "kind": "engine_result",
+        "jobId": "replay-7ac21049f2b16eec5360d0fec59b2ed021c210bdfeaabc1a9db0335102d93e07",
+        "methodVersion": "1.1.0",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/diagnostics/sensitivity/rows/1/range",
+        "inPackageArtifact": {
+          "artifactId": "analysis",
+          "jsonPointer": "/frozenEngineOutput/diagnostics/sensitivity/rows/1/range"
+        }
+      },
+      "displayedAs": "标准差敏感性所扫过的区间",
+      "readNotRecomputed": true
+    }
+  ],
+  "uncomputed": [
+    {
+      "name": "comparison_count",
+      "value": null,
+      "state": "uncomputed",
+      "unit": null,
+      "why": "本包只读取一项确定性设计期计算的结果，没有做任何两组之间的比较，也没有跨方案比较；结果文件本身不含比较计数字段（表数组为空）。",
+      "mustNotBeReadAs": "不得读成 0；0 会表示「比较过但一条也没有」，那不是这里的事实。",
+      "whoCouldComputeIt": "针对若干试验方案分别登记确定性作业之后，由结果文件给出。"
+    },
+    {
+      "name": "real_patients",
+      "value": null,
+      "state": "null_in_result",
+      "unit": null,
+      "provenance": {
+        "kind": "engine_result",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/counts/realPatients"
+      },
+      "why": "设计期解析计算不读入患者记录。",
+      "mustNotBeReadAs": "不得读成 0 例患者。"
+    },
+    {
+      "name": "events",
+      "value": null,
+      "state": "null_in_result",
+      "unit": null,
+      "provenance": {
+        "kind": "engine_result",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/counts/events"
+      },
+      "why": "连续终点的设计期计算不产生事件计数。",
+      "mustNotBeReadAs": "不得读成 0 个事件。"
+    },
+    {
+      "name": "effective_sample_size",
+      "value": null,
+      "state": "null_in_result",
+      "unit": null,
+      "provenance": {
+        "kind": "engine_result",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/counts/effectiveSampleSize"
+      },
+      "why": "没有做加权或对照匹配，因此没有有效样本量。",
+      "mustNotBeReadAs": "不得读成 0。"
+    },
+    {
+      "name": "generated_records",
+      "value": null,
+      "state": "null_in_result",
+      "unit": null,
+      "provenance": {
+        "kind": "engine_result",
+        "artifactPath": "/workspace/skill-closure/vcr-bounded/real-engine-result.json",
+        "jsonPointer": "/counts/generatedRecords"
+      },
+      "why": "本次没有生成任何合成记录。",
+      "mustNotBeReadAs": "不得读成 0 条生成记录等于「没有生成过」。"
+    },
+    {
+      "name": "monte_carlo_standard_error",
+      "value": null,
+      "state": "not_applicable",
+      "unit": null,
+      "why": "解析计算不做重复抽样，结果里的重复次数为空值，因此没有蒙特卡洛标准误。",
+      "mustNotBeReadAs": "不得补一个标准误。"
+    },
+    {
+      "name": "confidence_or_prediction_interval",
+      "value": null,
+      "state": "absent_in_result",
+      "unit": null,
+      "why": "该结果不含任何区间；敏感性列出的只是已算好的上下端值。",
+      "mustNotBeReadAs": "不得把敏感性上下端当作置信区间、可信区间或预测区间。"
+    },
+    {
+      "name": "eligibility_population_counts",
+      "value": null,
+      "state": "out_of_scope",
+      "unit": null,
+      "why": "本包的标注对象是合成来源片段，不是患者队列；入排人数、合格数与排除数一律不产出。",
+      "mustNotBeReadAs": "不得由一个片段推出任何人数。"
+    }
+  ],
+  "unverified": [
+    {
+      "item": "证据摘录 E 的来源身份（标题、年份、标识符、地区）",
+      "state": "not provided",
+      "consequence": "该摘录不作为可引用的已发表研究呈现；其中的数只能作为设计期输入使用。",
+      "closed": false
+    },
+    {
+      "item": "5 与 12 的组间适用性",
+      "state": "unknown",
+      "consequence": "在确定 5 是组间对比量之前，不得当作效应估计，也不得据此推断治疗效应。",
+      "closed": false
+    },
+    {
+      "item": "points 的量纲与量表范围",
+      "state": "not specified in the excerpt",
+      "consequence": "该数不与其他单位换算或比较。",
+      "closed": false
+    },
+    {
+      "item": "针对中国人群的独立临床验证",
+      "state": "not established",
+      "consequence": "本包与该结果都不构成中国人群的独立临床验证。",
+      "closed": false
+    },
+    {
+      "item": "「6 months」的窗口天数写法",
+      "state": "method_encoding",
+      "consequence": "180 天是本方法的单位换算，原文写的是 6 months；换算不改变临床含义。",
+      "closed": true
+    },
+    {
+      "item": "该计算是否已在任何研究或平台上登记为结果",
+      "state": "not claimed",
+      "consequence": "本包不声称任何平台登记或结果注册。",
+      "closed": true
+    },
+    {
+      "item": "结果原件的签名与外部可复算性",
+      "state": "recorded_not_independently_verified",
+      "detail": "结果文件自带一个签名值，本包按原样记录；本包没有、也无法独立验证该签名的密码学有效性，也没有在本地重跑该计算。",
+      "closed": false
+    }
+  ],
+  "methodLimits": [
+    "本包只覆盖三类方法：入排条件的标注（把条件写成结构化要求并把「判不了」显式化）、证据参数的锚定（把每个数锚回它逐字出现的那一句）、结果的绑定读数（把每个数绑到作业标识与结果字段，用相等性核验）。",
+    "本包不覆盖完整虚拟临床研究引擎程序：它不评估引擎在别的方法上的表现，也不评估引擎整体。",
+    "本包不构成临床接受：没有临床终点、没有患者、没有临床判断，也不给任何建议。",
+    "本包不产出研究或结果的平台登记。",
+    "核验的是数值字段的相等性与引文的逐字存在，不是这些数在临床或科学上是否正确。",
+    "证据摘录只有一句，无法与其他来源比较，也无法做任何合并。",
+    "标注所依据的来源是合成片段，其结论不能外推到任何真实病历。"
+  ],
+  "verificationSummary": {
+    "reportPath": "/workspace/skill-closure/vcr-bounded/verification-report.json",
+    "logPath": "/workspace/skill-closure/vcr-bounded/verification-log.txt",
+    "checksRun": [
+      "criteria_context_annotation",
+      "quote_presence",
+      "numeric_field_equality",
+      "residual_numeric_sweep"
+    ],
+    "totalChecks": 96,
+    "passed": 96,
+    "failed": 0,
+    "status": "pass",
+    "recomputationPerformed": false,
+    "note": "计数变动以核验记录为准；本次通过的检查数是核验记录里的实测值。"
+  },
+  "provenance": {
+    "sources": [
+      {
+        "id": "protocol",
+        "path": "/workspace/skill-closure/vcr-bounded/protocol.json"
+      },
+      {
+        "id": "matching-annotation",
+        "path": "/workspace/skill-closure/vcr-bounded/matching-annotation.json"
+      },
+      {
+        "id": "evidence-parameters",
+        "path": "/workspace/skill-closure/vcr-bounded/evidence-parameters.json"
+      },
+      {
+        "id": "real-engine-result",
+        "path": "/workspace/skill-closure/vcr-bounded/real-engine-result.json"
+      },
+      {
+        "id": "analysis",
+        "path": "/workspace/skill-closure/vcr-bounded/analysis.json"
+      }
+    ]
+  }
+}

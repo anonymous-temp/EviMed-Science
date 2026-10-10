@@ -1,0 +1,4 @@
+Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real method work and write requested artifacts using available tools. No external publication or patient data.
+
+TASK:
+Run a bounded local arithmetic research-workbench task identified by BETA-20261010. Create a two-step plan through actual evimed_plan for this task; calculate sum and mean of [3, 7, 13] using an actual computation tool, then inspect your current plan status through evimed_plan and read the current run state using the product-provided current-run guidance. Write deliverables/concurrency-beta/result.json with taskMarker, inputValues, sum, mean and the observed current plan/state run and session identifiers. Complete your own plan steps. This task has no external data or reports. Keep the task bounded to this computation and observations; stop after writing the result.

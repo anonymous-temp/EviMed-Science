@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "artifact": "citation-audit.json",
+  "skill": "citation-integrity",
+  "generatedAtUtc": "2026-10-10T03:58:23Z",
+  "scope": {
+    "network_lookup_performed": false,
+    "doi_resolution_attempted": false,
+    "reason": "No external publication and no network lookup were commissioned for this bounded test, so 10.1000/teaching is recorded as unresolved rather than verified. Unresolved means not checked; it is not evidence that the identifier is invalid, and it is not a verified reference.",
+    "publication_status": "teaching placeholder identifier; not verified real literature"
+  },
+  "headline": "One duplicate DOI across two entries; the second entry's quotation does not appear in the source text supplied with it, and neither DOI was resolved.",
+  "input": {
+    "entries": [
+      {
+        "id": "S1",
+        "doi": "10.1000/teaching",
+        "quote": "Participants were allocated alternately by day.",
+        "source": "Participants were allocated alternately by day."
+      },
+      {
+        "id": "S2",
+        "doi": "10.1000/teaching",
+        "quote": "Allocation was concealed.",
+        "source": "Allocation concealment was not described."
+      }
+    ],
+    "entryCount": 2
+  },
+  "ledger": [
+    {
+      "id": "S1",
+      "doi": "10.1000/teaching",
+      "doiKey": "10.1000/teaching",
+      "quote": "Participants were allocated alternately by day.",
+      "source": "Participants were allocated alternately by day.",
+      "quotePresentInSource": true,
+      "quotePresentExact": true,
+      "quoteMatchMethod": "exact substring after whitespace normalisation and case folding; paraphrase is deliberately not counted as presence",
+      "sourceCharacters": 47,
+      "supportVerdict": "directly_supports",
+      "sourceReadLevel": "full: the entire supplied source string was compared",
+      "resolution": {
+        "status": "unresolved",
+        "lookupAttempted": false,
+        "reason": "No network lookup was commissioned for this bounded test, so the DOI was not resolved to any record. Unresolved means unchecked. It is not a claim that the identifier is invalid, and it is not a verified reference."
+      },
+      "retractionOrCorrectionCheck": {
+        "status": "not_run",
+        "reason": "requires an index lookup; none was commissioned"
+      }
+    },
+    {
+      "id": "S2",
+      "doi": "10.1000/teaching",
+      "doiKey": "10.1000/teaching",
+      "quote": "Allocation was concealed.",
+      "source": "Allocation concealment was not described.",
+      "quotePresentInSource": false,
+      "quotePresentExact": false,
+      "quoteMatchMethod": "exact substring after whitespace normalisation and case folding; paraphrase is deliberately not counted as presence",
+      "sourceCharacters": 41,
+      "supportVerdict": "quote_absent_from_source",
+      "sourceReadLevel": "full: the entire supplied source string was compared",
+      "resolution": {
+        "status": "unresolved",
+        "lookupAttempted": false,
+        "reason": "No network lookup was commissioned for this bounded test, so the DOI was not resolved to any record. Unresolved means unchecked. It is not a claim that the identifier is invalid, and it is not a verified reference."
+      },
+      "retractionOrCorrectionCheck": {
+        "status": "not_run",
+        "reason": "requires an index lookup; none was commissioned"
+      }
+    }
+  ],
+  "verificationStatus": {
+    "verifiedRealLiterature": false,
+    "statement": "NOT VERIFIED REAL LITERATURE. The identifier 10.1000/teaching is a teaching placeholder and was not resolved against any index; no network lookup was commissioned. Nothing here should be cited as a publication.",
+    "whatWasActuallyInspected": [
+      "The two identifier strings and the two source strings as supplied.",
+      "Character-by-character presence of each quote in its own supplied source string."
+    ]
+  },
+  "deduplication": {
+    "rule": "lowercased, whitespace-stripped DOI string; DOI first, then PMID, then normalised title",
+    "doiKeys": {
+      "10.1000/teaching": [
+        "S1",
+        "S2"
+      ]
+    },
+    "duplicateGroups": [
+      {
+        "doiKey": "10.1000/teaching",
+        "ids": [
+          "S1",
+          "S2"
+        ],
+        "duplicateCount": 2,
+        "kind": "same DOI asserted by more than one citation entry",
+        "note": "Same DOI means the same asserted record identity. Whether the two quotes describe the same study or two different sentences about it cannot be settled without resolving the record, which was not done."
+      }
+    ],
+    "deduplicatedRecords": [
+      {
+        "groupId": "G1",
+        "doiKey": "10.1000/teaching",
+        "mergedIds": [
+          "S1",
+          "S2"
+        ],
+        "retainedQuotes": [
+          "Participants were allocated alternately by day.",
+          "Allocation was concealed."
+        ],
+        "conflictingQuotes": true,
+        "resolution": "Entries merged to one record identity, but their quotes were kept separate and both were tested, because merging records must not hide a quote that fails."
+      }
+    ],
+    "recordsBefore": 2,
+    "recordsAfter": 1,
+    "duplicateEntriesRemoved": 1
+  },
+  "quotePresence": {
+    "checked": 2,
+    "present": [
+      "S1"
+    ],
+    "absent": [
+      "S2"
+    ],
+    "absentDetail": "S2 asserts the quotation \"Allocation was concealed.\" but its supplied source reads \"Allocation concealment was not described.\". The source states that concealment was NOT described, so the asserted quotation is not merely absent from the source: it points the opposite way. This is a claim-mismatched citation and must not support any statement about allocation concealment."
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "high",
+      "kind": "claim_mismatch",
+      "citation": "S2",
+      "finding": "The asserted quotation is absent from the supplied source text.",
+      "detail": "Tested as an exact substring after whitespace normalisation and case folding: \"Allocation was concealed.\" does not occur in \"Allocation concealment was not described.\". The source's own wording negates the point the quotation asserts.",
+      "disposition": "Not to be used to support any statement about allocation concealment."
+    },
+    {
+      "id": "F2",
+      "severity": "medium",
+      "kind": "duplicate",
+      "citation": "S1, S2",
+      "finding": "Two entries assert the same DOI.",
+      "detail": "Both entries carry 10.1000/teaching, so they resolve to one record identity if that identifier is real.",
+      "disposition": "Merged to one record identity, with both quotes retained and tested separately."
+    },
+    {
+      "id": "F3",
+      "severity": "medium",
+      "kind": "unresolved_identifier",
+      "citation": "S1, S2",
+      "finding": "The DOI was not resolved: no lookup was attempted.",
+      "detail": "No external publication and no network lookup were commissioned for this bounded test, so 10.1000/teaching is recorded as unresolved rather than verified. Unresolved means not checked; it is not evidence that the identifier is invalid, and it is not a verified reference.",
+      "disposition": "Held as unverified; not reported as a resolved or valid identifier."
+    },
+    {
+      "id": "F4",
+      "severity": "low",
+      "kind": "metadata_only",
+      "citation": "S1, S2",
+      "finding": "No bibliographic record exists for these entries.",
+      "detail": "No title, author, venue, year, PMID or PMCID was supplied or retrieved; the only content inspected is the two source strings given in the task.",
+      "disposition": "Neither entry may be formatted as a reference or cited for a methods or results claim."
+    },
+    {
+      "id": "F5",
+      "severity": "low",
+      "kind": "not_run",
+      "citation": "S1, S2",
+      "finding": "Retraction, correction and version checks were not run.",
+      "detail": "Those checks require an index lookup, which was out of scope. A check that did not run is not a clean result.",
+      "disposition": "Recorded as not_run rather than as passed."
+    }
+  ],
+  "summaryCounts": {
+    "entries": 2,
+    "distinctDoiKeys": 1,
+    "duplicateEntries": 1,
+    "quotesPresent": 1,
+    "quotesAbsent": 1,
+    "unresolvedDois": 1,
+    "verifiedDois": 0,
+    "retractionChecksRun": 0
+  },
+  "limitations": [
+    "Quote presence was tested against the supplied source strings only; no record, abstract or full text was retrieved.",
+    "Same-DOI deduplication assumes DOI is the right identity key here; no lookup corroborated it.",
+    "No retraction or correction check was run, so a retracted source would not be detected by this audit.",
+    "The audit covers two fixed teaching entries and says nothing about any real reference list."
+  ]
+}

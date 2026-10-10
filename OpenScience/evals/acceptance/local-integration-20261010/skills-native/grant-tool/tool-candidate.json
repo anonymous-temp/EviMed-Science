@@ -1,0 +1,94 @@
+{
+  "id": "missingness-denominator-audit-mean-known",
+  "track": "internal-teaching-candidate",
+  "capabilityIds": [
+    "tool-builder"
+  ],
+  "toolKind": "pure-stdlib-scientific-function",
+  "publicationKind": "local-candidate",
+  "entrypoint": "scripts/mean_known.py:mean_known",
+  "status": "candidate-local-verified",
+  "synthetic": false,
+  "sourceGrounded": true,
+  "sourceGroundedLabel": "定义来源为一节公开的官方技术参考（美国国家标准与技术研究院统计工程手册 1.3.5.1 Measures of Location），本轮已真实公开读取并保存正文与校验值；除该节给出的算术平均定义外不引入任何统计方法。",
+  "function": {
+    "name": "mean_known",
+    "note": "mean_known 是本模块唯一公开可调用函数；模块最先出现的是拒绝原因表与两个私有辅助函数。",
+    "arguments": [
+      "specification"
+    ],
+    "argumentSchemaFile": "scripts/mean_known.tool.json",
+    "returns": [
+      "status",
+      "mean",
+      "sum",
+      "original",
+      "known",
+      "missing",
+      "total",
+      "method"
+    ]
+  },
+  "dataRequirements": {
+    "inputShape": "{\"observations\": [{\"value\": <finite number | null>}, ...]}",
+    "units": "unitless; the mean is returned on the same scale as the recorded values",
+    "minimumRecords": 1,
+    "minimumKnownValues": 1,
+    "missingRepresentation": "null placeholder; never interpreted as 0",
+    "nullPlaceholderDistinctFromZero": true,
+    "recordOrderPreserved": true
+  },
+  "lineage": {
+    "definitionSourceId": "web-page:d7e03014e5474531",
+    "definitionSourceTitle": "1.3.5.1. Measures of Location — NIST/SEMATECH e-Handbook of Statistical Methods",
+    "definitionSourceUrl": "https://www.itl.nist.gov/div898/handbook/eda/section3/eda351.htm",
+    "definitionSourceRetrievedAt": "2026-10-10T04:11:40.270Z",
+    "definitionSourceOfficial": true,
+    "definitionSourceVersion": "e5b9af1914971d95fc0ed185990b028896fa6f90c153bd029261af4791c31d3a",
+    "definitionSourceVersionMeaning": "本轮公开读取所保存快照的版本标识",
+    "definitionSourceSha256": "d7e03014e54745310dbf7b174e942b1180e0adf53a982a7461d7b2b234d714b1",
+    "preservedBodySha256": "f427a03c07025adaf7573291c5f6ba8b8d8d7269e55bddab7b80b7de73b70b2e",
+    "preservedBodyFile": "sources/nist-eda351-measures-of-location.md",
+    "definitionQuote": "mean - the mean is the sum of the data points divided by the number of data points.",
+    "definitionQuoteChecked": "已逐字回验：引文出现在所保存的正文快照中，并与读取返回的正文一致。",
+    "faithfulReuse": "分母取「数据点个数」，本工具将其实现为已知有限值个数（known），缺失值不计入；求和只累加可记录的有限数值。引文之外的统计量（中位数、众数、稳健位置估计）不实现。",
+    "referenceStatus": "obtained"
+  },
+  "assumptions": [
+    "一个记录的观测要么是可记录的有限数值，要么是缺失占位（空值）；本工具不接受把缺失写成 0 的输入。",
+    "布尔值与非有限数既不是已知值也不是缺失，遇到即整份输入拒绝，不做逐条跳过。",
+    "已知值数为 0 或原始记录数为 0 时分母不存在，返回拒绝而不是返回 0 或空值。",
+    "mean 为浮点返回值；已知值全为整数时仍以浮点返回，不做取整。"
+  ],
+  "numericalLimitations": [
+    "浮点累加不保证与任意高精度求和逐位一致；逐项浮点求和的次序为记录顺序。",
+    "不提供分散度、区间、检验、模型或任何推断统计，返回的只有算术平均与三个分母。",
+    "不处理加权、分组、时间序列或重复测量结构。"
+  ],
+  "dependencies": {
+    "packages": [],
+    "runtime": "python3.12 (standard library only: math)",
+    "network": "none",
+    "subprocess": "none",
+    "install": "none"
+  },
+  "tests": {
+    "file": "tests/test_mean_known.py",
+    "cases": 11,
+    "casesPassed": 11,
+    "issuesFound": [],
+    "runner": "sources/run_candidate_tests.py"
+  },
+  "staticChecks": {
+    "forbiddenFindings": 0,
+    "filesScanned": 2,
+    "checker": "sources/check_candidate_static.py"
+  },
+  "filePaths": {
+    "SKILL.md": "candidateSKILL.md",
+    "scripts/mean_known.py": "scripts/mean_known.py",
+    "scripts/mean_known.tool.json": "scripts/mean_known.tool.json",
+    "tests/test_mean_known.py": "tests/test_mean_known.py"
+  },
+  "scopeStatement": "本地候选工具，尚未发布、未进入任何生产环境；本文件描述的是一个教学核验用的最小实现，不是临床或统计推断工具。"
+}

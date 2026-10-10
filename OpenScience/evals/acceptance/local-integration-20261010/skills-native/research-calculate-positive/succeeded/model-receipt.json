@@ -1,0 +1,296 @@
+{
+  "receiptVersion": 1,
+  "receiptType": "synthetic-method-verification",
+  "status": "completed-and-recorded",
+  "syntheticBanner": "SYNTHETIC METHOD VERIFICATION ONLY — the input is an authored synthetic fixture (three invented studies with yi [0,1,3] and vi [0.1,0.1,0.1]), not research data and not clinical evidence. Every number below is a property of the deterministic engine's own reported output on that fixture. It must not be read as a pooled effect estimate for any real intervention, population or outcome, and it is not a statement about any real evidence.",
+  "writtenAt": "2026-10-10T05:19:37.694543Z",
+  "request": {
+    "capability": "research_calculate",
+    "action": "start",
+    "method": "meta.dl",
+    "inputPath": "deliverables/replay-fixture-meta.json",
+    "requestId": "runtime-replay-positive-20261010-native-v2",
+    "requestsIssuedThisRun": 1,
+    "localFallbackUsed": false,
+    "note": "Exactly one calculation request was issued for this verification. No local Python/R re-implementation of the meta-analysis was run, no second request was issued, and no external evidence was retrieved."
+  },
+  "input": {
+    "path": "deliverables/replay-fixture-meta.json",
+    "bytes": 228,
+    "sha256": "62a40472b1d1661c652e5b6e2014d6faed9de54846a228c0f18cb89f9121033f",
+    "fileModifiedAt": "2026-10-10T05:14:53.352043Z",
+    "declaredContents": {
+      "effectMeasure": "MD",
+      "outcome": "Synthetic reference fixture outcome",
+      "studies": [
+        {
+          "id": "0",
+          "yi": 0,
+          "vi": 0.1
+        },
+        {
+          "id": "1",
+          "yi": 1,
+          "vi": 0.1
+        },
+        {
+          "id": "2",
+          "yi": 3,
+          "vi": 0.1
+        }
+      ]
+    },
+    "engineRecordedInputDigest": "62a40472b1d1661c652e5b6e2014d6faed9de54846a228c0f18cb89f9121033f",
+    "inputDigestMatchesComputedSha256": true,
+    "engineRecipeInputPath": "result-replays/c71a2544-a4e8-45da-a9a7-cb0cf3f7d64e/input.json",
+    "engineInputSnapshotSha256": "62a40472b1d1661c652e5b6e2014d6faed9de54846a228c0f18cb89f9121033f",
+    "engineInputSnapshotIdenticalToWorkspaceFixture": true
+  },
+  "execution": {
+    "jobId": "replay_6846bde31f97fd0c4bae2941edb4259719d4662892ae971d35e9d7268340d6d3",
+    "jobIdSource": "the id returned by research_calculate action:start in this run",
+    "projectId": "model-concurrent-regression",
+    "method": "meta.dl",
+    "methodVersion": "2.0.0",
+    "methodDigest": "b2d028479ba60ab14c4a98c500c462137319755b0206436f406f53c143350fa0",
+    "methodSeeded": false,
+    "seed": null,
+    "codeDigest": "3c073d052b6e15e8c11c7545c5d870c85f0752294f74c9456da2ce0c13ccf013",
+    "environmentDigest": "90b7ffc2ce29cd3746fc770aab58f5ab34af7aa22896a0723771057e2947e326",
+    "recipeDigest": "1840f0aa0ef6eca3d098d5376851220e73d661fc50a65a04eee30d1a1751625c",
+    "outputDigest": "5c79beac82da8272dc2a535a4e3e2b05384b594d5f8197d8f3f9361700ec806e",
+    "environment": {
+      "implementation": "CPython",
+      "python": "3.12.3",
+      "platform": "linux",
+      "machine": "x86_64",
+      "packages": {
+        "numpy": "2.0.2",
+        "pydantic": "2.12.5",
+        "scipy": "1.13.1"
+      }
+    },
+    "environmentComparison": {
+      "status": "same",
+      "changed": []
+    },
+    "queuedStateOnStart": "queued",
+    "polling": {
+      "observedVia": "research_calculate action:status, polling the job id returned by action:start",
+      "polls": 2,
+      "statesObserved": [
+        "queued",
+        "running",
+        "succeeded"
+      ],
+      "terminalStateStableAcrossPolls": true,
+      "note": "The terminal state was reached and read once; no further polling of this job is meaningful."
+    }
+  },
+  "terminalState": {
+    "state": "succeeded",
+    "isTerminal": true,
+    "partial": false,
+    "error": null,
+    "cleanup": "confirmed",
+    "resultVersionId": "rv_3a790cfbbf09fb09f62ef159a1331a300d0b9147d3f6b7a6b7f77196721be500",
+    "outputVersionId": "rv_3a790cfbbf09fb09f62ef159a1331a300d0b9147d3f6b7a6b7f77196721be500",
+    "outputDigestReportedByEngine": "5c79beac82da8272dc2a535a4e3e2b05384b594d5f8197d8f3f9361700ec806e",
+    "outputDigestEqualsArtifactFileSha256": false,
+    "outputDigestComparison": "The engine's declared outputDigest (5c79beac…) is not the sha256 of the artifact file it returned (4ba336bc…). The digest returned with the terminal status and the artifact's bytes on disk do agree, and the input digest does equal the fixture's sha256, so the run is pinned to the right input and the right artifact bytes. What exactly the declared outputDigest is computed over was not determined in this verification and is recorded as unexplained rather than given an invented explanation.",
+    "artifactCount": 1
+  },
+  "resultArtifacts": [
+    {
+      "path": "result-replays/c71a2544-a4e8-45da-a9a7-cb0cf3f7d64e/output/result.json",
+      "bytes": 7566,
+      "sha256": "4ba336bcd5e7da61ba33216a5d7eeca5a7a8a4048d725196578fedb58361a8cb",
+      "fileModifiedAt": "2026-10-10T05:18:47.263967Z",
+      "role": "the engine's result artifact, the only entry in the terminal status artifact list",
+      "sha256AsReturnedByStatus": "4ba336bcd5e7da61ba33216a5d7eeca5a7a8a4048d725196578fedb58361a8cb",
+      "sha256MatchesStatusReport": true,
+      "bytesMatchesStatusReport": true
+    }
+  ],
+  "nativeRead": {
+    "tool": "native read tool (not a shell/streaming reader, not a sub-session)",
+    "how": "The engine artifact is a single-line 7566-byte JSON document; it was re-serialised indented and byte-identical in content to the path below, which the native read tool then read in full (363 lines).",
+    "contentEquivalentPath": "deliverables/research-calculate-positive-v2/native-read-of-result.json",
+    "sha256": "86ee9f0f8859ce02413591b4b8f4be446aa6650adcf6c19d8d900261cd8ad18a",
+    "bytes": 10315,
+    "fileModifiedAt": "2026-10-10T05:19:37.693339Z",
+    "note": "The byte counts differ between the two paths (7566 raw vs the re-serialised copy) because indentation was added; the JSON content is the same document. The status-reported sha256 matches the raw artifact's sha256 (see resultArtifacts and terminalState), which is what pins the engine output to the bytes.",
+    "derivedCopyStatus": "This indented copy is a derived convenience copy of the engine artifact, kept so the result can be read natively; the engine's own artifact above is the authoritative object and its hash is the one recorded as the result hash."
+  },
+  "reportedResults": {
+    "estimand": {
+      "effectMeasure": "MD",
+      "outcomeName": "Synthetic reference fixture outcome",
+      "model": "random",
+      "requestedMethod": "DL",
+      "tauEstimator": "DL",
+      "ciMethod": "normal_wald",
+      "k": 3
+    },
+    "pooledEffect": 1.3333333333333335,
+    "pooledEffectOnLogScale": 1.3333333333333335,
+    "standardError": {
+      "valueReportedByEngine": null,
+      "supplied": false,
+      "whatTheEngineDidSupply": {
+        "perStudySe": [
+          0.31622776601683794,
+          0.31622776601683794,
+          0.31622776601683794
+        ],
+        "ciLower": -0.39519242724540904,
+        "ciUpper": 3.061859093912076,
+        "ciMethod": "normal_wald"
+      },
+      "note": "The engine reported no pooled standard error for this run. The CI bounds are symmetric about the pooled estimate (each margin 1.7285257605787425), so a Wald SE is implied by the engine's own interval, but it was not reported and is deliberately not substituted here."
+    },
+    "confidenceInterval": {
+      "level": "as reported with the estimate; the engine labels the interval method normal_wald",
+      "lower": -0.39519242724540904,
+      "upper": 3.061859093912076
+    },
+    "heterogeneity": {
+      "tauSquared": 2.2333333333333334,
+      "qStatistic": 46.66666666666667,
+      "qPValue": 7.352958061453824e-11,
+      "iSquaredPercent": 95.71428571428572,
+      "hSquared": 23.333333333333336,
+      "tauEstimationConverged": null
+    },
+    "predictionInterval": [
+      -20.715176345685055,
+      23.38184301235172
+    ],
+    "pValue": 0.1305700181157362,
+    "studyLevel": [
+      {
+        "se": 0.31622776601683794,
+        "study_id": "0",
+        "study_label": "0",
+        "subgroup": null,
+        "vi": 0.1,
+        "weight": 33.333333333333336,
+        "yi": 0.0
+      },
+      {
+        "se": 0.31622776601683794,
+        "study_id": "1",
+        "study_label": "1",
+        "subgroup": null,
+        "vi": 0.1,
+        "weight": 33.333333333333336,
+        "yi": 1.0
+      },
+      {
+        "se": 0.31622776601683794,
+        "study_id": "2",
+        "study_label": "2",
+        "subgroup": null,
+        "vi": 0.1,
+        "weight": 33.333333333333336,
+        "yi": 3.0
+      }
+    ],
+    "engineDiagnostics": [
+      {
+        "code": "few_studies",
+        "detail": {
+          "studies": 3
+        },
+        "severity": "notice"
+      },
+      {
+        "code": "heterogeneity_considerable",
+        "detail": {
+          "iSquaredPercent": 95.71428571428572
+        },
+        "severity": "warning"
+      },
+      {
+        "code": "small_study_tests_not_run",
+        "severity": "notice"
+      }
+    ],
+    "executedMethodRecord": {
+      "ci_method": "normal_wald",
+      "fallback_reason": null,
+      "model": "random",
+      "requested_method": "DL",
+      "tau_estimation_converged": null,
+      "tau_estimator": "DL"
+    }
+  },
+  "consistencyChecksOnEngineOutput": [
+    {
+      "check": "CI bounds symmetric about the pooled estimate",
+      "observed": "lower margin = upper margin = 1.7285257605787425",
+      "result": "consistent"
+    },
+    {
+      "check": "q_statistic equals the sum of squared deviations for the fixture",
+      "observed": "46.66666666666667",
+      "result": "consistent with k=3 and yi [0,1,3] under equal variances"
+    },
+    {
+      "check": "i_squared relationship to q_statistic",
+      "observed": "(Q-(k-1))/Q = 95.71428571428572 == reported i_squared",
+      "result": "consistent"
+    },
+    {
+      "check": "h_squared relationship to q_statistic",
+      "observed": "Q/(k-1) = 23.333333333333336 == reported h_squared",
+      "result": "consistent"
+    },
+    {
+      "check": "study weights sum",
+      "observed": "100.0 over three equal study weights (33.333333333333336 each)",
+      "result": "consistent with equal vi"
+    }
+  ],
+  "limits": [
+    "This is a method verification on an authored fixture: k=3 invented studies with identical variances. It says nothing about the engine's behaviour on real data, on unequal variances, or on larger syntheses.",
+    "The fixture is small by construction, so the engine's own diagnostics flag few studies (notice), considerable heterogeneity (warning) and that small-study tests were not run (notice); these are properties of the fixture, not findings about any literature.",
+    "The engine did not report a pooled standard error; none is inferred or back-filled in this receipt.",
+    "The engine artifact is a snapshot of this one run and was read once at its terminal state; later reruns of the same request id are outside the scope of this verification.",
+    "The engine's declared outputDigest could not be tied to the artifact file's sha256, and no explanation for the difference was established here; the artifact bytes are pinned instead by the sha256 the terminal status returned alongside it.",
+    "No external evidence was retrieved for this verification and none is cited; there is no clinical claim here to verify against literature."
+  ],
+  "stoppingCondition": "Met: the requested single bounded calculation reached a terminal state, the actual terminal status was read, and the actual completed result artifact was read with the native read tool and recorded here. Verification stops at this point, as instructed.",
+  "packageFiles": [
+    {
+      "path": "receipt.json",
+      "role": "this receipt (its own hash is recorded in the delivery ledger once the file is frozen)",
+      "bytes": null,
+      "sha256": null
+    },
+    {
+      "path": "statistical-report.md",
+      "role": "the human-readable verification report",
+      "bytes": 5535,
+      "sha256": "10849e6ae25c8637bc5e9c6bfb4cd962262dfee5d5e552ea41a4abff2ad4d331"
+    },
+    {
+      "path": "analysis-results.json",
+      "role": "structured restatement of the engine-reported numbers, synthetic only",
+      "bytes": 2177,
+      "sha256": "682516df01eb0b04b577b0a98703f314d2b0d8f6274d227d70669b14bcff5aab"
+    },
+    {
+      "path": "analysis-run.json",
+      "role": "execution record: one request, the actual job id, polling, terminal state, artifact hashes",
+      "bytes": 2220,
+      "sha256": "cf004ab98eaba72b9a02d20a4a64daac8ca1c1c33542675ab4295082c53560aa"
+    },
+    {
+      "path": "native-read-of-result.json",
+      "role": "indented copy of the engine artifact, the file the native read tool read in full",
+      "bytes": 10315,
+      "sha256": "86ee9f0f8859ce02413591b4b8f4be446aa6650adcf6c19d8d900261cd8ad18a"
+    }
+  ]
+}

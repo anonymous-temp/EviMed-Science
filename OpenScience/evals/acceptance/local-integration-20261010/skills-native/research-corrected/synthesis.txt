@@ -1,0 +1,167 @@
+BOUNDED SYNTHESIS - trial methodology
+Question: what methodological limitation prevents treating alternate-day allocation as concealed randomization?
+
+Scope statement (read this first)
+  This is a bounded methods verification, not a systematic review and not clinical
+  or treatment guidance. Two searches (two calls, budget spent) returned 25 of 47
+  and 25 of 1231 matching records respectively; none of the returned records was a
+  methodological source. One source was read in full within budget and is the only
+  source used below; a second source read was refused by the source and is marked
+  UNAVAILABLE. Each statement below is labelled DIRECT (quoted, verbatim, with its
+  line in the preserved full text), SYNTHESIZED (my combination of two or more
+  direct statements from that source), or DERIVED (my inference, which the source
+  does not state). No number in this document is an effect estimate; none is
+  available for this question from what was retrieved.
+
+SOURCE
+  S1. Empirical evidence of bias in treatment effect estimates in controlled trials
+      with different interventions and outcomes: meta-epidemiological study. BMJ,
+      2008. doi:10.1136/bmj.39465.451748.ad
+      Full text preserved and read (open-access published PDF, parsed). Preserved
+      byte hashes are recorded alongside the search record. It is a 2008 study and
+      is used here for its definitions and its own re-analysis, not as current
+      guidance. Line numbers below refer to the preserved parsed text.
+
+1. The answer
+   Alternate-day allocation is not concealed randomization, because there is no
+   unpredictable assignment for the concealment to protect. Allocation concealment
+   is defined as an operational property of the enrolment step - it secures strict
+   implementation of a schedule of random assignments by preventing foreknowledge
+   of forthcoming allocations among the people recruiting participants (S1, DIRECT).
+   An alternate-day rule is arithmetic: given the pattern and one assignment, the
+   next assignment is fixed by the calendar rather than by chance. Foreknowledge is
+   therefore present by construction, which is the one condition the definition
+   forbids (SYNTHESIZED). The point is not that the concealment mechanism was
+   implemented badly; it is that there is nothing in the assignment for a mechanism
+   to conceal.
+
+2. What the source states directly
+   2.1 The definition (S1, line 72, DIRECT):
+       "Allocation concealment: procedures that secure strict implementation of the schedule of random assignments by preventing foreknowledge of forthcoming allocations by study participants or by those recruiting them to the trial"
+       The definition has two parts. There must be a schedule of random
+       assignments, and the people enrolling must not be able to foreknow an
+       assignment. Concealment is about foreknowledge at enrolment, not about the
+       physical opacity of a container.
+
+   2.2 The failure mode (S1, line 76, DIRECT):
+       "· Failureto concealallocation may leadto biased selectionof participants into intervention groups"
+       The named consequence is selection of participants into groups.
+
+   2.3 The classification - the load-bearing statement (S1, line 80, DIRECT):
+       "Examples of procedures usually considered inadequate include using an open random allocationschedule; assignment envelopeswithout appropriatesafeguards(forexample, unsealed or non-opaque or not sequentially numbered); and alternation or rotation"
+       Two things follow. First, alternation is classified as inadequate without
+       reference to any envelope, seal or numbering, so it is the method itself that
+       is inadequate and no handling procedure can move it. Second, alternation is
+       paired with rotation: both are order- or calendar-driven sequences, which is
+       the class to which alternate-day allocation belongs.
+
+   2.4 When the bias bites (S1, line 48, DIRECT):
+       "bias associated with inade-quate allocation concealment may be greater when patients’ prognosis can readily be assessed at the time of recruitment to trials, leading to the possibility of selection bias"
+       The route is recruiter knowledge at the moment of recruitment - exactly the
+       knowledge that a legible schedule supplies.
+
+   2.5 Concealment is upstream of blinding (S1, line 205, DIRECT):
+       "It can be argued that, unless allocation is adequately concealed, it is impossible for a trial to be adequately blinded."
+       A trial can look rigorously blinded downstream and still have lost the
+       protection at enrolment.
+
+   2.6 A second, independent-in-kind observation inside the same source (S1,
+       line 94, DIRECT):
+       "Definitions of adequate allocation concealment and blinding were similar in all three studies. Allocation concealment was assessed as adequate, unclear, or inadequate in two studies4 7 and as adequate or inadequate in the other.6"
+       The three pooled meta-epidemiological studies agreed on what concealment
+       means and reported it as its own domain, separate from blinding. Note the
+       grading caveat: two of them admitted an "unclear" category, which is why the
+       same method can be filed as unclear in one dataset and inadequate in another.
+       That is a property of the grading tool, not of the allocation rule.
+
+3. How the limitation works (SYNTHESIZED from 2.1, 2.2, 2.4)
+   Combining the definition with the failure mode gives the mechanism. Concealment
+   protects the enrolment decision by removing the recruiter's ability to anticipate
+   the arm. A legible schedule restores that ability, and the recruiter can act on
+   it - by deferring an eligible participant, by enrolling out of stated order, or
+   by steering. That yields groups that differ systematically, which is selection
+   bias rather than chance imbalance. Under alternation the ability is not merely
+   present but trivial: it requires no breach of any seal, only knowing the rule and
+   one assignment.
+
+4. Why the limitation is structural rather than procedural (DERIVED; not stated by
+   the source in these words)
+   The step from S1's word "alternation" to the question's "alternate-day
+   allocation" is an inference of category membership, and it is the only place in
+   this document where I move beyond the source's own wording. The source names
+   alternation and rotation; it never says "alternate day". The inference is
+   supported by the pairing with rotation and by the fact that alternation is
+   classified on its own, next to but distinct from the mechanically porous options
+   (unsealed, non-opaque, unnumbered envelopes) - the porous options are failures of
+   implementation, whereas alternation is listed as a procedure. The logical
+   consequence is that opacity, sealing, sequential numbering, a third-party holder
+   or a sealed-envelope ceremony cannot repair it, because all of those devices
+   presuppose a sequence worth hiding.
+   Confidence: moderate-to-high that alternate-day allocation belongs to the class
+   the source classifies as inadequate; high that the class itself is classified as
+   inadequate; no confidence attached to any magnitude.
+
+5. What is uncertain, contested, or unknown
+   5.1 Magnitude is not available and the source says so itself (S1, line 266,
+       DIRECT):
+       "Exceptwhentheoutcomewas allcause mortality, the sizeof biasvaried between meta-analyses. Therefore, in situations when bias is likely the size of such bias is unpredictable"
+       So the direction of concern can be stated and the size cannot.
+   5.2 The association is outcome-dependent (S1, line 234, DIRECT):
+       "Therewas little evidence of bias in trials assessing all cause mortality or other objectively assessed outcomes. In contrast, inadequate allocation concealment and lack of blinding were associated with over-optimistic estimates of inter-vention effects for subjectively assessed outcomes."
+       Read this as a limit on detection, not as a licence: the sequence is legible
+       to the recruiter whatever the outcome. The defect is unconditional; only the
+       detectable bias is outcome-dependent.
+   5.3 The literature is not unanimous, and the source says so (S1, line 48 and its
+       discussion, DIRECT): several studies found that inadequately concealed trials
+       exaggerate effects, and the source itself notes that others "failed to
+       confirm these associations". Empirical uncertainty about the size of the
+       penalty does not touch the definitional point in section 2.
+   5.4 Never stated by any source inspected: that alternate-day allocation
+       specifically is non-concealed. The source classifies the general procedure
+       "alternation or rotation". The narrowing to a daily calendar rule is mine
+       (section 4).
+   5.5 No empirical estimate, baseline-imbalance figure, or percentage attributable
+       to alternate-day allocation was retrieved. Not "none exists" - not retrieved
+       within this run's budget.
+
+6. Scope, failures and gaps (what this run did not do)
+   6.1 Two search calls were spent, both mandated queries were run, and both
+       returned off-topic clinical records: query 1 returned 25 of 47 matches and
+       query 2 returned 25 of 1231 matches, with no methodological record among
+       them. That is a retrieval outcome, not a finding about the literature; the
+       zero yield is not evidence of absence.
+   6.2 Two source-read calls were spent. One succeeded and is used. One was refused
+       by the source because the record is held without an open licence, and the
+       refusal is non-retryable. It is recorded as UNAVAILABLE.
+   6.3 Consequence for the requested two-source comparison: it could not be met with
+       two independent sources. What is provided instead is two distinct
+       observations reconciled inside the one source available (2.3 and 2.6), and
+       the missing second source is marked unavailable rather than filled with a
+       weaker substitute.
+   6.4 The preserved text is a machine parse of a PDF and inter-word spaces are
+       missing in places. Quotations above reproduce the preserved characters
+       exactly, including those artefacts, so that they remain verifiable against
+       the recorded hash. They should not be re-typeset as clean prose when quoted
+       onward.
+   6.5 Single source, dated 2008, and a meta-epidemiological study rather than
+       methodological guidance. What would close the gaps: a guidance document that
+       names non-random allocation methods explicitly, read in full; and a
+       meta-epidemiological analysis that separates alternation-type schedules from
+       genuinely concealed allocation and compares effect estimates and baseline
+       imbalance between those classes.
+
+7. Correction relative to the earlier attempt on the same question
+   The earlier pass concluded that no available source names an alternation-type
+   schedule and left the proposition with moderate confidence based on a mechanism
+   argument (an envelope system that was locally foreseeable). The corrected
+   position is stronger and differently grounded: the source read in this run
+   classifies "alternation or rotation" among procedures "usually considered
+   inadequate" for allocation concealment, in a sentence that separates it from
+   envelope-handling failures. The earlier caveat about magnitude stands unchanged -
+   the source states the size of such bias is unpredictable. The gap that remains is
+   narrower than before and is stated precisely: what is missing is a source using
+   the terms "alternate-day" or "calendar-based allocation" themselves, not a source
+   classifying alternation in general.
+
+This document contains no clinical or treatment recommendation of any kind, and no
+statement about any individual patient or medicine.

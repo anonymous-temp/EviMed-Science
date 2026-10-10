@@ -1,0 +1,251 @@
+{
+ "tool": "bibliometric_analysis",
+ "task": "Interpretation of one already-admitted bibliometric job. No new job was started and none was restarted.",
+ "jobId": "bibliometric-20261010033028-fd3433d170d6",
+ "kind": "bibliometric-analysis",
+ "status": "succeeded",
+ "statusSource": "No live status call was made, because this session exposes no status interface for the specialist that ran this job. The state recorded below comes from the preserved job record, checked against the files on disk: every declared artifact was re-hashed and re-counted.",
+ "terminalEvidence": {
+  "returnCode": 0,
+  "workerPid": 2767051,
+  "startedAt": "2026-10-10T03:30:28.976148Z",
+  "finishedAt": "2026-10-10T03:33:03.182307Z",
+  "updatedAt": "2026-10-10T03:33:03.182294Z",
+  "elapsedSeconds": 150,
+  "requestSha256": "a9302736bb9b286058979c4f2d62e58e545edae9e45f5835e52f3822b80a9600",
+  "declaredArtifacts": 50,
+  "artifactsMissing": 0,
+  "artifactHashMismatches": 0
+ },
+ "method": {
+  "request": {
+   "topic": "GLP-1 receptor agonists in cardiovascular outcomes",
+   "maxRecords": 200,
+   "outputLanguage": "zh"
+  },
+  "engineEvidence": {
+   "schemaVersion": 1,
+   "agentSourceSha256": "17e9f0e1d88b4c35bc29ce941c4241cbb92913ba84b30c794f5759848f357ad5",
+   "agentSourceFiles": 63,
+   "adapterSha256": "4524dda49181b6c03e702460877aee4ae0e33080ace83c90f9d32b365024c870",
+   "evidenceModuleSha256": "5ad729f96b9ede918d05276c129112088455af7be60b9b57a3b592ad4d03d1fd",
+   "model": "deepseek-flash",
+   "thinking": true,
+   "reasoningEffort": "high"
+  },
+  "adapterEvidence": {
+   "sha256": "8825dd6432a945d946227b03dbf26aa2a841c821e3a92e88be0def68edec825b",
+   "files": 17
+  },
+  "supportingModules": {
+   "searchStrategy": {
+    "status": "ok"
+   },
+   "citationSource": {
+    "status": "degraded",
+    "reason": "citations observed for 193/198 articles; openalex: api_key_missing; semantic_scholar: rate_limited"
+   },
+   "report": {
+    "status": "ok"
+   }
+  },
+  "degraded": true
+ },
+ "sourceEvidence": {
+  "retrieval": {
+   "database": "MEDLINE via PubMed E-utilities",
+   "formalQuery": "(\"GLP-1 receptor agonists\"[Title/Abstract]) AND (\"cardiovascular outcomes\"[Title/Abstract])",
+   "conceptBlocks": [
+    {
+     "label": "GLP-1 receptor agonists",
+     "meshDescriptor": null,
+     "meshLookupFailed": true,
+     "freeTerms": [
+      "GLP-1 receptor agonists"
+     ]
+    },
+    {
+     "label": "cardiovascular outcomes",
+     "meshDescriptor": null,
+     "meshLookupFailed": false,
+     "freeTerms": [
+      "cardiovascular outcomes"
+     ]
+    }
+   ],
+   "totalFound": 352,
+   "maxRecords": 200,
+   "retrieved": 200,
+   "truncated": true,
+   "totalFetched": 198,
+   "afterDedup": 198,
+   "searchedAt": "2026-10-10T03:30:38+00:00"
+  },
+  "citationCoverage": {
+   "total": 198,
+   "observed": 193,
+   "missing": 5,
+   "by_source": {
+    "icite": 193
+   },
+   "sources_unavailable": {
+    "openalex": "api_key_missing",
+    "semantic_scholar": "rate_limited"
+   },
+   "reference_relations": 181
+  },
+  "sourcesNotUsed": [
+   {
+    "source": "openalex",
+    "label": "OpenAlex",
+    "status": "not_configured"
+   },
+   {
+    "source": "semantic_scholar",
+    "label": "Semantic Scholar",
+    "status": "unreachable"
+   }
+  ]
+ },
+ "artifactRefs": [
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/report.md",
+   "bytes": 107738,
+   "sha256": "ebad9e7b5aecd55f1151d6d505a646eb96935a614680f3c46099161e9ae020de"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/result.json",
+   "bytes": 1177,
+   "sha256": "d16486ac6bd486e9c6c2da2e18c0c817578f255cc6bb431cb8d5b06b05a243d4"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/data/search_metadata.json",
+   "bytes": 1608,
+   "sha256": "8fc3e8db22062765ca79c51dc8fd9d0d0a1b6d0e37ab9413e572da07284b9080"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/data/citation_coverage.json",
+   "bytes": 228,
+   "sha256": "9b8009c8f6cf262707ec1cff2ac1827d7f137900a8f292b36523cacf46714660"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/data/cleaned_records.csv",
+   "bytes": 137953,
+   "sha256": "c979947485c3a1912d2800a3091009e3e036b1a3a057b130085769c886cb9273"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/tables/year_trend.csv",
+   "bytes": 36,
+   "sha256": "c7257ec82454cd938f91f90dcdf83ebb4d2f15115256c9f9e73a4038503dd6a7"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/tables/year_trend_coverage.json",
+   "bytes": 202,
+   "sha256": "82647d8e185c9ad601e3ee845fa61ec6ca42119a5d2a972dd3cc0ad91793b25e"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/tables/burst_terms.csv",
+   "bytes": 437,
+   "sha256": "374ce1749f979d648e3eac9c046c7236bff4dcb0a2e09f79fb212ea3c9c32f63"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/tables/frontier_topics.csv",
+   "bytes": 2449,
+   "sha256": "15f2c237a2a67e7ccfe75681c7824a67907ba9f76ae24de21f9f1872449686fd"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/tables/cluster_summary.csv",
+   "bytes": 383,
+   "sha256": "01b5e5292d30dff0fd89e894465ed892b67f365538c614c6169192c641cc0a11"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/tables/pub_type_distribution.csv",
+   "bytes": 349,
+   "sha256": "f026cbc2ea7a6c704743b3694dbbc4518030469b275b01a08549d0897f6510a7"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/tables/top_countries.csv",
+   "bytes": 227,
+   "sha256": "f9c8c8d53a5ecf938b93a959931fae0b4ab0341caa7eb879c71adc40b35a8c1a"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/tables/top_journals.csv",
+   "bytes": 755,
+   "sha256": "b2e9de77f76e981e66d892f3cfd3de9fe20bc34e050b32b24d11ee30cb2b189c"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/vosviewer/keyword_network.txt",
+   "bytes": 6008,
+   "sha256": "63467c5e27e1a6edb42edcfdc8160821730dbecd0c4d19c01019bda30a0ff3dc"
+  },
+  {
+   "path": "bibliometric-analysis-runs/bibliometric-20261010033028-fd3433d170d6/output/vosviewer/keyword_map.txt",
+   "bytes": 2544,
+   "sha256": "d57016db18e9de12fd673fa7657b67ba4f90d1453d7e02067a4ef7c9baecf3dd"
+  }
+ ],
+ "contractDeliverable": {
+  "name": "bibliometric-analysis-report.md",
+  "presentInWorkspace": false,
+  "note": "The declared contract deliverable was not written into this workspace. What exists is the engine's own report.md, its tables, its figures and its network exports, and every observation below is drawn from those files."
+ },
+ "contentObservations": [
+  {
+   "observation": "Corpus size and ceiling",
+   "detail": "The search matched 352 records. A cap of 200 was applied to the relevance-ordered result set and 198 records reached the analysis after deduplication. Every table and every count in the job output describes those 198 records.",
+   "source": "search_metadata.json (total_found, max_records, retrieved, truncated, after_dedup)"
+  },
+  {
+   "observation": "Time composition of the analysed set",
+   "detail": "The 198 records carry only journal years 2024 (15), 2025 (60) and 2026 (123). The date filter was left unrestricted and the ordering is relevance, which makes the retrieved slice a recency-weighted sample from an unrestricted search. It is not a census of this topic's literature.",
+   "source": "year_trend.csv, year_trend_coverage.json"
+  },
+  {
+   "observation": "Search-concept degradation",
+   "detail": "The MeSH mapping for the GLP-1 receptor agonist concept failed, so free text restricted to title/abstract was used in its place. The second concept returned no matching descriptor at all. What was executed is a two-block AND on title/abstract.",
+   "source": "search_metadata.json search_strategy.concepts"
+  },
+  {
+   "observation": "Citation layer is single-provider",
+   "detail": "Citation values came from one provider and cover 193 of the 198 articles, with 181 reference relations extracted and 5 articles left with no observed citations. Two further citation sources were unavailable at run time, one unconfigured and one rate-limited, so nothing in the citation analysis draws on a second provider.",
+   "source": "citation_coverage.json, sourcesNotUsed"
+  },
+  {
+   "observation": "Retrieved keyword network, reported as retrieved",
+   "detail": "The strongest co-occurrence pair is Cardiovascular Diseases with Glucagon-Like Peptide-1 Receptor Agonists (weight 63). Next come Diabetes Mellitus Type 2 with the same drug node (61) and the drug node with Hypoglycemic Agents (57). The three largest nodes carry 94, 80 and 76 occurrences.",
+   "source": "keyword_cooccurrence.csv, top_keywords.csv"
+  },
+  {
+   "observation": "Cluster structure",
+   "detail": "Four thematic clusters were detected. Each spans 2024-2026 and each is labelled stable in trend, with recent-activity counts of 429, 65, 367 and 204.",
+   "source": "cluster_summary.csv"
+  },
+  {
+   "observation": "Burst and frontier scores are recency artifacts in this corpus",
+   "detail": "The largest burst term is Glucagon-Like Peptide 1 (strength 10.0, 2024-2025). Every frontier topic carries a growth rate of 1.0, but only three recent year-bins exist in this sample, so the uniform 100% growth the engine reports for all twenty frontier topics follows from that composition. It cannot be read as a field-level trend.",
+   "source": "burst_terms.csv, frontier_topics.csv"
+  },
+  {
+   "observation": "Document-type mix",
+   "detail": "The 198 records include 192 typed as journal articles, of which 93 are reviews, 32 systematic reviews, 22 meta-analyses and 2 randomised controlled trials; 1 record is a preprint and 1 an erratum.",
+   "source": "pub_type_distribution.csv"
+  },
+  {
+   "observation": "Concentration",
+   "detail": "One country contributes 72 of 198 records and one journal contributes 20; 108 journals and 33 countries are represented in total.",
+   "source": "top_countries.csv, top_journals.csv, report.md abstract"
+  },
+  {
+   "observation": "Interpretation boundary",
+   "detail": "The corpus is a relevance-ordered slice of 200 records drawn from 352 matches and dated 2024-2026. Nothing here about growth, bursts, maturity or collaboration transfers to the field at large. Inside the slice the dominant structure is a drug-centred keyword core, the drug node joined to cardiovascular disease, type 2 diabetes and hypoglycaemic-agent nodes, set in a document mix weighted towards reviews."
+  }
+ ],
+ "limitationsVisibleInOutput": [
+  "No live status query was possible in this session. Terminal state and integrity come from the preserved job record and from recomputing the file hashes locally.",
+  "The contract deliverable bibliometric-analysis-report.md is absent from the workspace. Only the engine's report.md and its tables are there.",
+  "Two of three citation sources were unavailable at run time, so the citation analysis rests on a single provider covering 193 of the 198 articles.",
+  "The corpus is truncated and relevance-ordered, so the growth, burst and frontier figures describe the slice and not the literature.",
+  "MeSH mapping failed for one of the two search concepts, which leaves recall for that concept dependent on the exact free-text phrase.",
+  "The topic's earlier history is absent from the sample, so no maturity or evolution claim can be made."
+ ]
+}

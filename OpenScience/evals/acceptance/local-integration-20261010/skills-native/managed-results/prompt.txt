@@ -1,0 +1,937 @@
+Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real method work and write requested artifacts using available tools. No external publication or patient data.
+
+<current-skill index="0">
+---
+name: bibliometric-analysis
+description: Run EviMed's managed bibliometric specialist for traceable publication trends, networks, topic evolution, and research-frontier analysis.
+metadata:
+  evimed-agent: bibliometric-analysis
+---
+
+# Bibliometric analysis
+
+Use this skill for research-landscape questions based on publication metadata.
+It does not estimate clinical efficacy, treatment effects, or evidence certainty.
+
+## Execute
+
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
+1. Clarify the scientific topic and optional year range. Prefer controlled
+   biomedical concepts over a long natural-language conclusion.
+2. Call `mcp__evimed__bibliometric_analysis` with `action=capabilities`, then start the
+   managed job and poll its job id with `waitSeconds=45` until terminal.
+   The job alone can take most of this capability's 20–120 minutes. Keep polling
+   while `updatedAt` advances (every 30 s); treat the job as failed only on a
+   terminal failure or when `updatedAt` has not moved for 10 minutes, and record
+   the state you observed either way.
+3. Preserve the exact query, retrieval date, database, record count, cleaning
+   rules, and network construction settings. Report failed optional modules as
+   failed; do not silently describe missing charts or networks as completed.
+4. Interpret citation, co-authorship, keyword co-occurrence, burst, and frontier
+   measures as bibliometric signals. Do not convert them into study quality or
+   clinical importance.
+
+## Deliverables
+
+Write `bibliometric-analysis-report.md` with scope, search strategy, corpus,
+methods, trends, networks, topic evolution, frontiers, limits, and links to the
+managed figures and tables. This engine rounds its measures where it computes
+them, and its own `report.md` renders them to the display convention every
+engine report shares (other estimates to three significant figures, p values to
+two or three decimals and `<0.001`, percentages to two significant figures,
+counts with thousands separators): write numbers as rendered there, and any
+other number to the same convention, never with more digits. Write
+`bibliometric-analysis-run.json` with the
+terminal job state, corpus count, query, and exact returned artifacts.
+
+## Method priors
+
+The statistics are the engine's; the reading of them is yours, and two shipped
+skills carry the method priors for it — load them before you write the results:
+`statistical-analysis` (the estimand, assumptions and their diagnostics, effect
+sizes with intervals, multiplicity, missing data, sensitivity analyses) and
+`stats-integrity` (report the estimate and its uncertainty as the software
+produced it; no causal reading the design does not support). The independent
+review checks the report against the reporting checklist for this design and
+traces every stated result to the job's own output files, so a number typed from
+memory comes back as a finding. Write each result from the display value the
+engine record gives; rounding is checked, not forbidden.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.
+
+</current-skill>
+<current-skill index="1">
+---
+name: mendelian-randomization
+description: Run EviMed's managed Mendelian-randomization specialist and preserve its GWAS, statistical, sensitivity-analysis, and STROBE-MR boundaries.
+metadata:
+  evimed-agent: mendelian-randomization
+---
+
+# Mendelian randomization
+
+Use this skill to assess a causal exposure-outcome relationship using genetic
+instruments. It is not a generic association analysis. Require an explicit
+exposure and outcome, and distinguish forward from bidirectional analysis.
+
+## Execute the managed analysis
+
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
+1. Call `mcp__evimed__mendelian_randomization` with `action=capabilities`. Report missing R, model or Python runtime explicitly. Missing OpenGWAS credentials blocks OpenGWAS data, text-based GWAS selection and online LD clumping; it does not block open GWAS Catalog studies (below) or two supplied local files with declared preclumped instruments.
+2. Start the job with the normalized exposure, outcome, language, direction and the explicit source objects below when using uploaded files.
+   Record the job id and poll it with `waitSeconds=45` until terminal.
+   The job alone can take most of this capability's 30–180 minutes. Keep polling while `updatedAt` advances (every 30 s); treat the job as failed only on a terminal failure or when `updatedAt` has not moved for 10 minutes, and record the state you observed either way.
+3. Do not invent SNPs, instrument counts, F statistics, effect estimates,
+   heterogeneity, pleiotropy, Steiger direction, or sensitivity results. Those
+   values must come from the deterministic MR engines and their files.
+4. Treat zero instruments, weak instruments, unresolved sample overlap,
+   harmonization failure, and missing sensitivity checks as limits on the
+   affected calculations; preserve available source rows and completed results. Statistical significance does not by itself establish a valid
+   causal interpretation.
+
+## Open GWAS Catalog sources (no OpenGWAS token)
+
+When OpenGWAS is blocked, or the requested study is on the NHGRI-EBI GWAS
+Catalog, give both sides as catalogue studies:
+`{"type": "gwas_catalog", "accession": "GCST..."}`. Find the study from its
+paper (`mcp__evimed__literature_search`), then pass that PubMed id as
+`{"type": "gwas_catalog", "pubmedId": "..."}` or an accession a tool result
+showed you; a paper with several studies is refused with the list to choose
+from. Never write an accession or PubMed id you have not seen in a tool result.
+One direction per job: for the reverse direction start a second forward job
+with the roles swapped.
+
+The engine reads the catalogue's harmonised files itself: exposure variants at
+p < 5e-8, clumped by PLINK against an LD reference when the deployment has one,
+otherwise one variant per 10,000 kb window (a distance-based approximation;
+no LD was measured and independence is not established), and the outcome's rows for the same variants;
+a variant missing from the outcome is dropped, never proxied. Report both
+accessions and PubMed ids, and the ancestry and sample size as the catalogue
+states them (`mendelian-randomization-open-sources.json`; `sampleMetadata` has
+the sample size and case-control design as numbers, and `sampleSize` says which
+rows took the study total because the file has no per-variant n), the selection method
+and counts (`instrument-selection.json`), and the variants unavailable in the
+outcome. On every path, `harmonisation.json` in the analysis data gives the
+instruments retained, dropped as palindromic-ambiguous and missing from the
+outcome: report those numbers, not your own count. The catalogue cannot tell whether two studies share participants:
+name the cohorts the papers report and never claim independent samples.
+Keep `inputs/open-*.csv` and the replay package: they are the rows analysed.
+
+## Uploaded local GWAS inputs
+
+Uploaded source objects require the configured isolated hosted MR adapter. If it
+is absent, stop with the reported dependency error; do not switch to same-container
+execution or silently replace the supplied data with a remote text search. The
+legacy text-only fallback and the independent `run_mr_local` library remain separate.
+
+Use the workspace-relative paths returned by upload, such as `data/bmi.csv`.
+Inspect the actual headers and ask for any unresolved exposure/outcome roles or
+column meanings. Never infer that instruments were clumped from a small row
+count, a filename, or statistical significance.
+
+For a local source, pass `type: "local_file"`, `path`, `columnMapping`, and a
+JSON boolean `instrumentsPreclumped`. The mapping must explicitly name all seven
+keys: `snp`, `beta`, `se`, `effect_allele`, `other_allele`, `eaf`, and `pval`, each
+pointing to a distinct original header. Optional `samplesize` maps a per-variant
+sample-size column without replacing those values by catalogue totals. Optional `sampleSize` and `population`
+are provider declarations, not independently verified repository metadata.
+`instrumentsPreclumped: true` requires `clumpingProvenance` identifying the source
+and instrument-selection method. Do not invent this statement or change a false
+flag merely to make a failed request pass.
+
+Whenever a local source is used, specify both `exposureSource` and
+`outcomeSource`. For forward analysis without an OpenGWAS credential, use
+GWAS Catalog sources, or both must be local and the exposure instruments must be
+declared preclumped with their provenance. For bidirectional analysis, each side becomes an exposure and must
+independently satisfy that condition. The input manifest retains
+`provided_local_data`, `supplied_not_independently_verified`, and
+`ld_rechecked: false`; supplied selection is not an LD verification performed by
+this run.
+
+A mixed request may give the remote side as
+`{"type": "opengwas", "gwasId": "<explicit source identifier>"}` only with the
+existing configured OpenGWAS credential. A missing credential is a blocker, not
+permission to claim an authenticated result. Omit both source objects for legacy
+remote text selection; explicit remote-only source pairs are not supported here.
+
+Only ordinary UTF-8 CSV/TSV files are accepted, up to 128 MiB and 2,000,000 rows
+per file. Missing/duplicate headers or SNPs, nonfinite values, invalid SE,
+frequency or p-value, unsafe paths, or changes after admission fail visibly.
+The accepted request and file bindings are held in protected project metadata,
+outside the customer workspace mount. Workspace notes or `.jobs` files cannot
+replace that accepted queue record. Status is read from the same protected queue.
+
+The worker preserves original uploads and stages standard columns under fixed
+filenames in its isolated execution directory. Its in-memory provenance reaches
+the fixed runner through an anonymous pipe; a workspace-editable manifest is
+never the authority. Published input copies and the manifest remain relative,
+reproducible artifacts; never rename, overwrite or replace those bound copies.
+
+## Deliverables
+
+Write `mendelian-randomization-report.md` with the question, instrument sources,
+harmonization, primary and sensitivity estimates, diagnostics, interpretation,
+limitations, and STROBE-MR-aligned discussion. Write
+`mendelian-randomization-run.json` with the terminal job state and exact returned
+artifacts. Every number must match the managed analysis output. For local inputs, also preserve `mendelian-randomization-inputs.json` and the returned standard input CSV artifacts. The manifest binds original relative paths, byte counts, SHA-256 digests, actual mappings and supplied clumping provenance; retain it without adding repository IDs, years, or absolute host paths.
+
+Numbers in prose and tables are the engine's display strings. Each record that
+carries a statistic has a `display` beside its raw values, rendered to one
+convention: ratios (OR, ROR, PRR, EBGM) and their intervals to two decimals, p
+values to two or three decimals and `<0.001`, with genetic studies writing
+smaller p values as 3.5×10⁻¹¹, other estimates to three significant figures,
+percentages to two, counts with thousands separators. Write those strings as
+they are; the raw values are for machines and replay. A number the engine does
+not display is written to the same convention, never with more digits.
+In `mendelian-randomization-run.json` each result has `display` (instruments
+and F statistics, Steiger, MR-PRESSO, Radial MR, contamination mixture), and
+each entry of `mr_results`, `heterogeneity` and `pleiotropy` has its own.
+
+Scientific scale and denominators. Each source can carry optional `effectScale`
+with `unit`, `transformation` and source-linked `evidence`; these are declarations,
+not proof of repository confirmation. Results preserve `exposure_scale` and
+`outcome_scale` with unknown, declared, repository-reported or conflicting status.
+Use only the documented unit and transformation. Unknown units mean per source
+exposure unit, never automatically per SD from the phenotype name, F statistic or
+coefficient. A documented SD applies to that exact transformed or original trait;
+retain beta, OR and CI unchanged. Preserve a declaration/repository conflict as a
+limitation rather than choosing a convenient unit.
+
+Keep catalogue sample totals distinct from `variant_sample_sizes` and the
+`originalVariantSampleSizes` recorded before any existing catalogue-N fill.
+Neither denominator establishes exact ancestry shares in the analyzed variants.
+`sample_overlap` records unknown or possible overlap from the prefix heuristic;
+this does not measure overlapping participants, independence, or the direction
+or magnitude of bias. Discuss directional mechanisms only conditionally with
+explicit assumptions and actual overlap evidence. F>10 is a diagnostic heuristic,
+not proof of instrument validity; skipped Egger/PRESSO remains skipped.
+
+A failed managed job may return top-level `artifacts` with `partial-research.json`,
+`partial-research.md` and bounded scientific CSV projections. Keep the original
+failed state and error code. Inspect only the returned public artifact paths;
+private diagnostics, runner logs and model responses are not deliverables. Use
+available primary numbers when explicitly marked available. With 0–2 candidate
+or retained variants, preserve observed source/selection/harmonized rows and
+state that unsupported downstream estimates were not computed. Candidate rows
+before clumping are not independently verified instruments. Missing modules are
+not negative findings, and an incomplete job is not a successful full analysis.
+
+Direction and outliers. `display.steiger.status` is `computed`,
+`not_computable` or `failed`; when the test was not computed, say that
+direction was not tested and why, from its `reason`. The test approximates each
+variant's r² from its p-value and sample size and treats both traits as
+quantitative; for a case-control outcome (`case_control_study` in the outcome
+metadata) say that this is the observed-scale approximation. `display.mr_presso`
+gives the global test, the variants the outlier test removed, the
+outlier-corrected estimate and the distortion test: report the corrected
+estimate beside the IVW estimate, or its `reason` when there is none. An
+`outlier_resolution` above 0.05 means the simulation could not resolve the
+outlier threshold for this many variants: say the outlier set is unstable.
+
+For paired local inputs with a declared-preclumped exposure, preserve the
+returned `analysis-data/<pair>/replay/` package in full: its complete manifest,
+exact input CSVs, options and seed, observed R/package versions, `run.R` and
+`analysis.R`. The original run uses that same entry and seed. In a clean copy,
+`Rscript --vanilla run.R` replays the local statistical analysis into `results/`
+with installed dependencies, without a model, JWT or network. Preserve the
+supplied clumping declaration; this does not independently verify LD selection.
+Remote and mixed-source runs do not deliver this replay package. Do not claim
+reproducible code delivery unless the complete package is in returned artifacts,
+or claim that the script regenerates the model-written manuscript.
+
+## Method priors
+
+The statistics are the engine's; the reading of them is yours, and two shipped
+skills carry the method priors for it — load them before you write the results:
+`statistical-analysis` (the estimand, assumptions and their diagnostics, effect
+sizes with intervals, multiplicity, missing data, sensitivity analyses) and
+`stats-integrity` (report the estimate and its uncertainty as the software
+produced it; no causal reading the design does not support). The independent
+review checks the report against the reporting checklist for this design and
+traces every stated result to the job's own output files, so a number typed from
+memory comes back as a finding. Write each result from the display value the
+engine record gives; rounding is checked, not forbidden.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.
+
+</current-skill>
+<current-skill index="2">
+---
+name: meta-analysis
+description: Run EviMed's automated systematic-review and meta-analysis pipeline and preserve its evidence, calculation, and release-gate contracts.
+metadata:
+  evimed-agent: meta-analysis
+---
+
+# Automated meta-analysis
+
+Use this skill for a systematic review, quantitative evidence synthesis, pairwise
+or network meta-analysis, diagnostic-accuracy synthesis, prevalence or incidence
+synthesis, dose-response analysis, prognosis, prediction-model performance, or
+IPD meta-analysis. The managed MetaAgent combines LLM-assisted evidence work with
+deterministic statistical engines. Do not replace its calculated values with a
+language-model estimate.
+
+Unless the user requests another language, pass Simplified Chinese as the job
+language and write the EviMed navigation deliverables in Simplified Chinese.
+Preserve study titles, identifiers, and statistical notation.
+
+## Scope the question
+
+Make the research question concrete enough to identify population, intervention
+or exposure, comparator, outcomes, and eligible study designs. State reasonable
+assumptions when they do not materially alter eligibility. If the requested
+method is unsupported, preserve MetaAgent's fail-closed result instead of
+silently switching to an easier analysis.
+
+Uploaded full texts may be supplied through a workspace-relative PDF directory.
+IPD input must be a workspace-relative JSON file. Never use a path outside the
+current workspace and never describe an abstract or bibliographic record as
+full text.
+
+## Execute
+
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
+1. Call `mcp__evimed__meta_analysis` with `action=capabilities`. If it is unavailable,
+   stop and report the exact deployment precondition.
+2. Call it with `action=start`, the complete topic, language, and only the
+   applicable optional inputs. Record the returned job id immediately.
+   A start with exactly the same request returns the job already running or
+   finished for it, and resumes a failed one from its last completed step; if
+   you lose the job id, repeat the identical request rather than a reworded one.
+   A finished job, whatever its release status, is returned and never run again.
+   While a job runs, a different request is refused with the running job's id.
+3. Poll with `action=status`, that job id, and `waitSeconds=45`. A queued or
+   running response is not a completed review. Do not manufacture interim study counts,
+   effects, GRADE ratings, figures, or conclusions.
+   The job alone can take most of this capability's 30–180 minutes. Keep polling
+   while `updatedAt` advances (every 30 s); treat the job as failed only on a
+   terminal failure or when `updatedAt` has not moved for 10 minutes, and record
+   the state you observed either way.
+4. At the terminal response, record the exact `releaseStatus`, artifact paths,
+   warnings, blockers, and next actions in `meta-analysis-run.json`. The
+   terminal response is the answer to this request. A job that wrote its
+   manuscript (`deliverable` true) is delivered whatever its `releaseStatus`:
+   `ready` passed every release check; `ready_with_warnings` carries advisory
+   findings (style, completeness, bookkeeping) a reader can see; `blocked` means
+   a check that protects the reader failed - a pooled number whose study inputs
+   were not verified, a pooled result the manuscript does not state as computed,
+   a citation number with no reference - so the manuscript is presented as
+   unverified, with those findings. Never start the job again, reworded or not,
+   to clear a finding or reach a better status: it repeats the retrieval and
+   extraction and reproduces the result. The job no longer stops for a request
+   it can plan only approximately or for too few studies to pool: it records
+   the deviation, or writes the narrative evidence-gap report, and delivers. A
+   job that still stops before writing a manuscript says why; report that as
+   the finding and do not restate the request to get past it. A failed job names
+   the steps it completed and the files it wrote; report them as partial work,
+   resume once as its next action says, and never present them as a review.
+   The job decides some things without asking, and its `modules` name each:
+   studies excluded at full text (unusable text, unresolved design), results
+   left out of pooling with the reason their verification gave (the verifier
+   judged the comparison ineligible, the source contradicts itself, a number
+   was not found, the verifier gave no usable answer), unregistered trials
+   counted by their own publication, a protocol that differs from the question
+   (which outcome was analysed as primary, which as secondary, and why), and a
+   narrative synthesis written because too few studies could be pooled. Name
+   each, with its reason in plain words, in the limitations; a left-out result
+   was not pooled.
+
+MetaAgent may legitimately conclude that quantitative synthesis is impossible
+or that direct evidence is absent. Report that result as an evidence gap, not as
+evidence of no effect. Keep source-acquired facts, extracted values, deterministic
+calculations, LLM interpretations, and unresolved review items distinguishable.
+
+## Deliverables
+
+Write `meta-analysis-report.md` as a concise navigation and interpretation layer:
+question, protocol scope, search and eligibility summary, synthesis method,
+primary results, certainty, limitations, and, in plain words, whether the
+engine's own manuscript is ready for release and why not - each finding of
+`package/release_decision.json` (its failed and warning gates, with their
+details and locations) said as what it means for the reader. Every numerical
+claim must match the generated artifacts and every evidence claim must remain
+traceable. Every count and total - records, exclusions, studies, participants -
+is copied from the engine's records (the project's `prisma_flow.json` and
+`package/evidence_accounting.json`, which also states whether the counts add
+up), never added up in the report. Release and blocker codes, job ids,
+file paths and field names are bookkeeping for `meta-analysis-run.json` and
+`revision-notes.md`, not for the reader; nor does the report carry author,
+funding or conflict-of-interest declarations - the run is not an author.
+
+Preserve evidence statuses when compressing the accounting into prose: rows
+with unconfirmed quotes are not verified results, while a verified row omitted
+to avoid duplication is a different case. Raw database retrieval counts and
+post-deduplication flow counts use different denominators; state each scope
+separately unless a recorded mapping establishes their overlap. Keep usable
+analyses while describing these limits, without inventing an adjudication step.
+
+Write `meta-analysis-run.json` with the job id, terminal job status, release
+status, project path, returned artifacts, warnings or blockers, and the retrieval
+time. Do not claim completion until both files exist and the managed job is
+terminal. This is research evidence synthesis, not an individual treatment
+recommendation.
+
+## Method priors
+
+The statistics are the engine's; the reading of them is yours, and two shipped
+skills carry the method priors for it — load them before you write the results:
+`statistical-analysis` (the estimand, assumptions and their diagnostics, effect
+sizes with intervals, multiplicity, missing data, sensitivity analyses) and
+`stats-integrity` (report the estimate and its uncertainty as the software
+produced it; no causal reading the design does not support). The independent
+review checks the report against the reporting checklist for this design and
+traces every stated result to the job's own output files. Write each result from
+the engine's display value; rounding is checked, not forbidden.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.
+
+</current-skill>
+<current-skill index="3">
+---
+name: peer-review
+description: Run EviMed's managed multi-rubric peer-review specialist for methodology, statistics, reporting, integrity, and actionable revision findings.
+metadata:
+  evimed-agent: peer-review
+---
+
+# Peer review
+
+Use this skill only for a manuscript file available in the current workspace.
+The review is decision support for authors and editors, not a journal decision.
+
+## Execute
+
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
+1. Confirm the workspace-relative manuscript and its likely article type. Call
+   `mcp__evimed__peer_review` with `action=capabilities`, then start without `waitSeconds` and retain the returned `jobId`. Poll with
+   `action=status`, that exact `jobId`, and `waitSeconds=45` until terminal. The job alone can take most of this
+   capability's 20–120 minutes. Keep polling while `updatedAt` advances (every
+   30 s); treat the job as failed only on a terminal failure or when `updatedAt`
+   has not moved for 10 minutes, and record the state you observed either way.
+2. Preserve the selected reporting rubrics and every evidence location. Separate
+   confirmed defects from uncertain findings caused by parsing or retrieval
+   limits. Never claim that a missing item is absent when the relevant section,
+   table, supplement, or image was not successfully parsed.
+   Use maintained spreadsheet readers: `xlrd` (or pandas with `engine="xlrd"`)
+   for legacy `.xls`, and `openpyxl` for `.xlsx`. Inventory every sheet's name,
+   dimensions, representative populated cells and cell types before judging a
+   table's completeness. Zero and False are present values, not missing cells.
+   Do not replace a missing reader with an ad hoc binary
+   parser: incomplete string or Boolean decoding can look like empty data.
+   If extraction cannot be verified, describe that limitation and retain the
+   parts of the review supported by readable material.
+   Before claiming that a control or comparator is absent, inspect the relevant
+   panel and legend; do not infer its absence from a partial text extraction.
+   Match cited studies by their actual reference entry and identifiers rather
+   than merging distinct papers that use a similar method. Unverified absence
+   remains a question, not a confirmed major defect.
+3. Keep methodological, statistical, reporting, integrity, and narrative issues
+   distinct. Consolidate duplicates and calibrate severity to the effect on
+   validity, reproducibility, or interpretation.
+4. If the pipeline fails, report a failed job. Do not turn an exception into a
+   synthetic completed review or a default recommendation.
+
+## Deliverables
+
+Write `peer-review-report.md` with scope, parsing coverage, rubrics, strengths,
+fatal and major issues, minor issues, statistical findings, evidence locations,
+and actionable revisions. Write `peer-review-run.json` with terminal status,
+rubrics, recommendation, confidence, and exact returned artifacts.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.
+
+</current-skill>
+<current-skill index="4">
+---
+name: research-topic-selection
+description: Run EviMed's evidence-grounded research-topic specialist to identify gaps, contradictions, feasible questions, and a prioritized research agenda.
+metadata:
+  evimed-agent: research-topic-selection
+---
+
+# Research topic selection
+
+Use this skill when a user has a broad biomedical direction and needs concrete,
+testable research questions. Topic novelty must be supported by the retrieved
+evidence set; absence from a small search is not proof of novelty.
+
+Use `dataset-research-scoping` instead when the user already has a file. That
+entry point starts from the data and decides what it can carry; this one starts
+from a direction and never touches data.
+
+## The specialist job is an input, not the report
+
+`mcp__evimed__research_topic_selection` runs the topic agent. Its retrieval starts
+with the internal evidence service and also queries PubMed for public identifiers
+and metadata. Inspect the returned source records and diagnostics: availability,
+coverage and failures are response-dependent. The specialist result is a first
+map for the wider novelty and feasibility assessment below.
+
+The job gives you a first map. The evidence expansion below is what turns it
+into a judgment, and where the two disagree, say so — a candidate the job ranked
+highly that the wider search shows was answered in 2024 is a finding.
+
+## Execute
+
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
+1. Preserve the user's disease, population, intervention or exposure, outcomes,
+   available data, methods, and feasibility constraints. State only assumptions
+   that do not materially change the direction.
+2. Call `mcp__evimed__research_topic_selection` with `action=capabilities`, start the
+   job, record the job id, and poll with `waitSeconds=45` until terminal.
+   The job alone can take most of this capability's 20–90 minutes. Keep polling
+   while `updatedAt` advances (every 30 s); treat the job as failed only on a
+   terminal failure or when `updatedAt` has not moved for 10 minutes, and record
+   the state you observed either way.
+   Keep `researchDirection` as the original retrieval direction. Pass supplied
+   context separately as `availableData` (string, at most 4000 characters),
+   `population` and `studySetting` (strings, at most 1000 characters each), and
+   `resourceConstraints` (at most 20 nonempty strings, at most 200 characters
+   each). Omit unspecified fields; do not stringify arrays/objects, silently
+   shorten a brief, or place infrastructure settings into these fields. A data
+   description is not permission or confirmation of data access.
+3. Run the evidence expansion below **while the job runs** — it is long, and the
+   two do not depend on each other.
+4. Keep the evidence landscape, contradictions, candidate gaps, proposed study
+   designs, feasibility, risks, and prioritization rationale distinct. A topic
+   is not high priority merely because it sounds novel.
+5. Do not fabricate search counts, citations, data availability, sample sizes,
+   effect assumptions, or publication probability.
+6. Use `mcp__evimed__pharmacy_reference_search` only when configured private
+   terminology or rule coverage materially informs feasibility, phenotype or
+   exposure definition, or data-readiness questions. Private rows are
+   institution-specific discovery context, not proof of novelty, prevalence,
+   clinical validity, or current guidance; verify material assumptions against
+   current authoritative sources.
+
+## Evidence expansion
+
+Use the configured MCP tools for evidence expansion. Consult
+`mcp__evimed__data_source_catalog` and each response for supported operations,
+limits, source provenance and availability. The channels below serve different
+questions; use those relevant to the candidate rather than a fixed channel quota.
+
+| Channel | Tool call | What only this one gives you |
+|---|---|---|
+| PubMed | `mcp__evimed__literature_search`, or `mcp__evimed__biomedical_source_search` with `sourceId: pubmed` | MeSH-indexed subject search; publication types |
+| Europe PMC | `sourceId: europe-pmc` | **Full-text** search — a method or a limitation stated only in a Discussion section |
+| OpenAlex | `sourceId: openalex` | Citation counts, concepts, publication year: how large a topic is and how fast it is moving |
+| Semantic Scholar | `sourceId: semantic-scholar` | References and citing works — who built on a paper, and who did not. Rate-limited without a key; retry with backoff |
+| Crossref | `sourceId: crossref` | Very recent DOIs, ahead of MEDLINE indexing |
+| Preprints | `mcp__evimed__biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
+| Full text | `mcp__evimed__open_access_full_text` | The actual Methods and Limitations paragraphs |
+| Ongoing studies | `mcp__evimed__clinical_trial_search` | Registered questions, recruitment state and planned outcomes; a registration is not a completed finding |
+| Guidelines | `mcp__evimed__guideline_search`, `mcp__evimed__web_read` | What practice already recommends, and on what evidence grade |
+| Drug and gene facts | `sourceId: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` | Label text, adverse-event counts, pharmacogenomic annotation |
+| Trend analysis | `mcp__evimed__bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
+| Open web | `mcp__evimed__web_search` | Everything the indexes do not carry — funding calls, conference programmes, society pages, registries, a method a group describes only on its own site |
+
+Do not infer a permanent outage from an old host probe. Inspect current tool
+responses; use bounded retries for transient errors and record unavailable
+channels as limitations. An unavailable source is not an empty literature.
+
+Check the material actually returned. A title alone cannot support study design,
+evidence level, outcomes or effect size. Abstracts support only what they state;
+retrieve full text for Methods or Limitations on which the proposed design rests.
+Respect limits advertised by the current tool schema rather than assuming a
+universal maximum.
+
+Open-web results are discovery leads. Follow material claims to the primary
+record and preserve its identifier and URL when available. Official registry,
+funder or society pages can document their own records; an unreviewed summary
+cannot substitute for the underlying study. Engine coverage varies by response
+and language. Record which searches answered and which failed, including both
+Chinese and English queries when relevant to the user's population or setting.
+
+Search every candidate direction four ways. A missing axis is what makes an
+agenda thin:
+
+1. **Subject** — the direction as the user framed it.
+2. **Method** — how a question of this shape is answered: the design, the
+   estimator, the reporting guideline. A design without a precedent is a risk
+   the user has to be told about.
+3. **Comparator** — the published numbers a result would be placed against.
+4. **Absence** — what a recent review or a preprint says is still open. This is
+   where an unoccupied question actually shows up; nothing else finds it.
+
+## The novelty ledger
+
+Every candidate question gets: **what already answers it, at what n, in which
+population, published where and when — and what precisely is left.** Three
+outcomes, all legitimate, each stated out loud:
+
+- **No direct answer identified in this search** — state the bounded search
+  scope, unresolved coverage gaps and closest neighbours. Do not assert that the
+  question is unoccupied across the whole field.
+- **Occupied, but not in this population, setting, or era** — name the closest
+  work and the exact axis of difference. Most real papers live here.
+- **Answered** — drop it and say so. A direction removed because the field has
+  settled it is a finding, not a failure.
+
+"Clinically important" is not a novelty statement. The field agreeing that a
+topic matters is the reason it may already be answered.
+
+Check the closest completed work and relevant ongoing or registered studies.
+State which endpoints and settings they already cover before proposing a new
+question. Separate a proposed hypothesis or method from an established finding;
+a registry entry or protocol establishes a planned study, not an observed effect.
+If the relevant registry is unavailable, record the unresolved overlap check.
+
+## Proportional evidence coverage
+
+Evidence count is a coverage diagnostic, not proof of novelty or a universal
+completion threshold. Match search breadth and full-text depth to the claim and
+candidate. A rare topic may have few records; a mature topic may require broader
+comparison to show that its proposed question has not already been answered.
+Record source availability, search scope, closest prior work and unresolved
+gaps. Retrieve methods evidence for designs you recommend. Do not pad citations
+to meet a count, invent scores or sample sizes, or promote sparse retrieval into
+a claim of novelty. Explain feasibility against the supplied resources; mark
+missing information and incompatible conditions explicitly.
+
+## Deliverables
+
+Write `research-topic-report.md` with search scope, field map, evidence gaps,
+candidate questions, design and data needs, feasibility, risks, prioritization,
+and a recommended next step. Each candidate question carries a labelled
+`新颖性：` / `Novelty:` line.
+
+Write `evidence-map.md`, one row per work:
+
+```
+| Work | Identifier | URL | Channel | Axis | Used for | Full text |
+|---|---|---|---|---|---|---|
+| Tveit 2020, national TDM audit | PMID 31000417 | https://pubmed.ncbi.nlm.nih.gov/31000417/ | pubmed | comparator | population C/D percentiles for Q1 | yes |
+```
+
+`Used for` is the column that keeps this honest: a row that cannot say which
+sentence depends on it should not be in the table.
+
+Every number the report states has one of three origins, and the sentence it is
+in says which. A published figure carries the `[n]` of the work it comes from in
+the same sentence. A figure from the specialist job is copied as the display
+string beside it in the job's own output files (`display` in
+`evidence-stats.json`, and beside the M2 keyword centralities) — never
+re-derived by hand; rounding is checked, not forbidden. A design choice or
+projection (a window, a sample size, an event-count
+estimate) is stated as the proposal's own, with its inputs. The independent
+review traces every uncited result to the job's outputs, and each one it cannot
+find is a finding you answer.
+
+Write `research-topic-run.json` with the terminal job state and exact returned
+artifacts. `research-portfolio.json` and `evidence-records.json` are required:
+preserve the specialist job's actual files and IDs. If the managed job fails,
+build fallback records only from identifiers returned by evidence tools, record
+the failed job in the run receipt, and never recreate IDs from report prose.
+A fallback uses the job's own shapes, field for field: `evidence-records.json`
+is a top-level JSON array of records, each with a string `id`; each entry of
+`research-portfolio.json` → `candidates` carries `candidateId`, `title`, one
+`sourceOpportunityId` (a string, not a list), `supportLevel` (`direct`,
+`indirect` or `speculative`), `sourceEvidenceIds` (the record ids it rests on,
+at least one), `sourceEvidencePmids` (may be empty) and `gaps` (strings).
+Keep each candidate linked to its source
+opportunity and evidence IDs, with the supplied researcher context, hypothesis,
+study design/estimand, data requirements, falsification, feasibility and novelty
+basis. Null fields and `gaps` mean information was not supplied; they are not
+permission to invent it. Reconcile the companion with any candidate removed or
+reframed after evidence expansion, keeping the original lineage and documenting
+the reason.
+
+An evidence record used by a candidate must carry the publication status
+returned by the current bibliographic lookup: `publicationStatus` is
+`active`, `corrected`, `retracted`, or `unknown`, with
+`statusCheckedAt` and `statusSource`. A retracted or unchecked record may be
+discussed as excluded context, but cannot support a recommended candidate.
+
+## Before claiming completion
+
+Run this capability's preflight to verify required paths and mapped citations,
+and inspect proportional coverage diagnostics. Review novelty and feasibility
+as evidence-based judgments; numeric counts cannot establish them.
+
+```bash
+python3 "scripts/preflight.py" --workspace .
+```
+
+It is this capability's tooling, not a second delivery gate: fix what it reports
+as an issue and assess its advisory warnings. Then submit the package.
+
+Submission runs the delivery gate and the independent scientific reviewer in one
+call and answers with both. Repair each finding that applies, and answer every
+finding marked 需回应 in the next submission's `responses`: `fixed`, or
+`declined` with a one-sentence reason. A submission that changes no file and
+only answers is fine. The review reads only `responses`; an answer written in
+`revision-notes.md` reaches nobody, and an unanswered finding is shown to the
+reader as ignored. The files stay editable for the rest of this conversation
+turn — what freezes them is the turn ending — so a finding that arrives with an
+acceptance can still be repaired. To hear the reviewer mid-draft instead, call
+it yourself:
+
+```
+evimed_review_run{deliverableId: "<your deliverable id>"}
+```
+
+```
+evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
+```
+
+The submission answers with the delivery verdict in place. A first submission
+that comes back with issues is the normal case, not a failure: fix everything it
+lists as 必修 and submit again until it answers `ok`.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.
+
+</current-skill>
+TASK:
+Bounded real managed-specialist result interpretation. Already admitted actualjobs (DO NOT start replacements): bibliometric_analysis bibliometric-20261010033028-fd3433d170d6; mendelian_randomization mr-20261010033028-8ebf5b45e76c; peer_review review-20261010033028-fe9e486d646a; meta_analysis meta-20261010033028-fb4b4f173d3e; research_topic_selection topic-20261010040140-8c052bbf36b9. Use actual native MCP tool action=status for each once, then inspect preserved report/results under their actualworkspace jobdirs when succeeded. For each write skill-closure/managed-results/<tool>.json including actualjobId/status/method/source evidence/artifact hash refs plus a content-specific observation from the realoutput and visible limitations. MR report public BMI/chd forwardclumpedfixture: distinguish assumptions about pleiotropy/instrumentstrength; bibliometric actual retrievedcorpus and network interpretation notforecast; peerreview supplied publishedLinde2005 actual review/checklistapplicability; Meta actual synthesis eventualresult not LLM statistical calculation; topic currentretrievaldiagnostics sourcegrounded opportunity uncertainty. Read at most2 relevantactualreportfiles percompletedjob; if stillrunning write running/no completionassertion, no fake terminal. Use actualtools/saveoutputs and verify report/jobId/filehashbonds. Numericresults may onlybe copiedfrom actualengine artifacts, not model arithmetic. This certifies bounded reading/interpreting returnedmanagedoutputs under exactcurrentfullskillbodies, not five brand-new end-to-end skillworkflow executions or clinical validation. The separate genuine jobs supply managedengine execution evidence.

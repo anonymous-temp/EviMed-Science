@@ -1,0 +1,375 @@
+{
+  "method": "Raw generated input without ingestion-assigned IDs; retained failed harness attempt, not used for qualification. ClinicalFactView treats undefined IDs as correction identity; the qualified local replay assigns stable audit-only identities without changing clinical facts or criteria.",
+  "results": [
+    {
+      "source": "C1",
+      "assessment": {
+        "studyId": null,
+        "clinicalHistory": {
+          "superseded": [
+            null
+          ],
+          "conflicts": []
+        },
+        "provenance": {
+          "vocabularyVersion": "evimed-internal-sex-1",
+          "inputFactIds": [],
+          "inputLanguageIds": [],
+          "inputFactHashes": {},
+          "inputCriterionHashes": {},
+          "inputLanguageHashes": {},
+          "inputReferencesComplete": false
+        },
+        "protocolVersionId": null,
+        "subjectKey": "C1",
+        "direction": "trial_to_patient",
+        "asOf": "2026-10-10T00:00:00.000Z",
+        "summary": "insufficient_evidence",
+        "counts": {
+          "satisfied": 0,
+          "not_satisfied": 0,
+          "unknown": 2,
+          "pending_recheck": 0,
+          "notApplicable": 0,
+          "total": 2
+        },
+        "judgments": [
+          {
+            "criterionId": "",
+            "kind": "inclusion",
+            "criterionType": "demographic",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "age",
+                "reason": "not_measured"
+              }
+            ]
+          },
+          {
+            "criterionId": "",
+            "kind": "exclusion",
+            "criterionType": "concomitant_medication",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "current_systemic_glucocorticoid_exposure",
+                "reason": "not_recorded"
+              }
+            ]
+          }
+        ],
+        "priority": null,
+        "evidenceGaps": [
+          {
+            "variable": "age",
+            "reason": "not_measured",
+            "criterionIds": [
+              ""
+            ]
+          },
+          {
+            "variable": "current_systemic_glucocorticoid_exposure",
+            "reason": "not_recorded",
+            "criterionIds": [
+              ""
+            ]
+          }
+        ],
+        "blockingExclusionUnknowns": [
+          ""
+        ],
+        "voidedFacts": [],
+        "factsWithheldAsFuture": 0,
+        "modelDecidedCount": 0
+      }
+    },
+    {
+      "source": "C2",
+      "assessment": {
+        "studyId": null,
+        "clinicalHistory": {
+          "superseded": [
+            null
+          ],
+          "conflicts": []
+        },
+        "provenance": {
+          "vocabularyVersion": "evimed-internal-sex-1",
+          "inputFactIds": [],
+          "inputLanguageIds": [],
+          "inputFactHashes": {},
+          "inputCriterionHashes": {},
+          "inputLanguageHashes": {},
+          "inputReferencesComplete": false
+        },
+        "protocolVersionId": null,
+        "subjectKey": "C2",
+        "direction": "trial_to_patient",
+        "asOf": "2026-10-10T00:00:00.000Z",
+        "summary": "insufficient_evidence",
+        "counts": {
+          "satisfied": 0,
+          "not_satisfied": 0,
+          "unknown": 2,
+          "pending_recheck": 0,
+          "notApplicable": 0,
+          "total": 2
+        },
+        "judgments": [
+          {
+            "criterionId": "",
+            "kind": "inclusion",
+            "criterionType": "demographic",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "age",
+                "reason": "not_measured"
+              }
+            ]
+          },
+          {
+            "criterionId": "",
+            "kind": "exclusion",
+            "criterionType": "concomitant_medication",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "current_systemic_glucocorticoid_exposure",
+                "reason": "not_recorded"
+              }
+            ]
+          }
+        ],
+        "priority": null,
+        "evidenceGaps": [
+          {
+            "variable": "age",
+            "reason": "not_measured",
+            "criterionIds": [
+              ""
+            ]
+          },
+          {
+            "variable": "current_systemic_glucocorticoid_exposure",
+            "reason": "not_recorded",
+            "criterionIds": [
+              ""
+            ]
+          }
+        ],
+        "blockingExclusionUnknowns": [
+          ""
+        ],
+        "voidedFacts": [],
+        "factsWithheldAsFuture": 0,
+        "modelDecidedCount": 0
+      }
+    },
+    {
+      "source": "C3",
+      "assessment": {
+        "studyId": null,
+        "clinicalHistory": {
+          "superseded": [],
+          "conflicts": []
+        },
+        "provenance": {
+          "vocabularyVersion": "evimed-internal-sex-1",
+          "inputFactIds": [],
+          "inputLanguageIds": [],
+          "inputFactHashes": {},
+          "inputCriterionHashes": {},
+          "inputLanguageHashes": {},
+          "inputReferencesComplete": true
+        },
+        "protocolVersionId": null,
+        "subjectKey": "C3",
+        "direction": "trial_to_patient",
+        "asOf": "2026-10-10T00:00:00.000Z",
+        "summary": "insufficient_evidence",
+        "counts": {
+          "satisfied": 0,
+          "not_satisfied": 0,
+          "unknown": 2,
+          "pending_recheck": 0,
+          "notApplicable": 0,
+          "total": 2
+        },
+        "judgments": [
+          {
+            "criterionId": "",
+            "kind": "inclusion",
+            "criterionType": "demographic",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "age",
+                "reason": "not_measured"
+              }
+            ]
+          },
+          {
+            "criterionId": "",
+            "kind": "exclusion",
+            "criterionType": "concomitant_medication",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "current_systemic_glucocorticoid_exposure",
+                "reason": "not_recorded"
+              }
+            ]
+          }
+        ],
+        "priority": null,
+        "evidenceGaps": [
+          {
+            "variable": "age",
+            "reason": "not_measured",
+            "criterionIds": [
+              ""
+            ]
+          },
+          {
+            "variable": "current_systemic_glucocorticoid_exposure",
+            "reason": "not_recorded",
+            "criterionIds": [
+              ""
+            ]
+          }
+        ],
+        "blockingExclusionUnknowns": [
+          ""
+        ],
+        "voidedFacts": [],
+        "factsWithheldAsFuture": 0,
+        "modelDecidedCount": 0
+      }
+    },
+    {
+      "source": "C4",
+      "assessment": {
+        "studyId": null,
+        "clinicalHistory": {
+          "superseded": [
+            null
+          ],
+          "conflicts": []
+        },
+        "provenance": {
+          "vocabularyVersion": "evimed-internal-sex-1",
+          "inputFactIds": [],
+          "inputLanguageIds": [],
+          "inputFactHashes": {},
+          "inputCriterionHashes": {},
+          "inputLanguageHashes": {},
+          "inputReferencesComplete": false
+        },
+        "protocolVersionId": null,
+        "subjectKey": "C4",
+        "direction": "trial_to_patient",
+        "asOf": "2026-10-10T00:00:00.000Z",
+        "summary": "insufficient_evidence",
+        "counts": {
+          "satisfied": 0,
+          "not_satisfied": 0,
+          "unknown": 2,
+          "pending_recheck": 0,
+          "notApplicable": 0,
+          "total": 2
+        },
+        "judgments": [
+          {
+            "criterionId": "",
+            "kind": "inclusion",
+            "criterionType": "demographic",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "age",
+                "reason": "not_measured"
+              }
+            ]
+          },
+          {
+            "criterionId": "",
+            "kind": "exclusion",
+            "criterionType": "concomitant_medication",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "current_systemic_glucocorticoid_exposure",
+                "reason": "not_recorded"
+              }
+            ]
+          }
+        ],
+        "priority": null,
+        "evidenceGaps": [
+          {
+            "variable": "age",
+            "reason": "not_measured",
+            "criterionIds": [
+              ""
+            ]
+          },
+          {
+            "variable": "current_systemic_glucocorticoid_exposure",
+            "reason": "not_recorded",
+            "criterionIds": [
+              ""
+            ]
+          }
+        ],
+        "blockingExclusionUnknowns": [
+          ""
+        ],
+        "voidedFacts": [],
+        "factsWithheldAsFuture": 0,
+        "modelDecidedCount": 0
+      }
+    }
+  ]
+}

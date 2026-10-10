@@ -1,0 +1,77 @@
+{
+  "formatVersion": 1,
+  "runId": "run_e666ae1d408e6ff688c6a65b863f2585",
+  "sessionId": "session-f51e5a07-237d-4d1d-9f96-5c26e231f63e",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "updatedAt": "2026-10-10T05:10:20.208Z",
+  "plan": {
+    "revision": 1,
+    "items": [
+      {
+        "id": "concurrency-beta",
+        "title": "本地算术核验结果（任务标记 BETA-20261010）",
+        "contractKind": "statistical-analysis-package",
+        "capability": "statistical-analysis",
+        "dependsOn": [],
+        "status": "accepted",
+        "attempts": 1,
+        "issues": []
+      }
+    ]
+  },
+  "budget": {
+    "steps": 22,
+    "tokens": 54559,
+    "children": 0,
+    "limits": {
+      "maxSteps": 0,
+      "maxTokens": 0,
+      "maxChildren": 30
+    }
+  },
+  "evidence": {
+    "total": 0,
+    "byStatus": {}
+  },
+  "gateRuns": [
+    {
+      "runId": "run_e666ae1d408e6ff688c6a65b863f2585",
+      "attempt": 1,
+      "sequence": 1,
+      "deliverableId": "concurrency-beta",
+      "contractKind": "statistical-analysis-package",
+      "issues": [],
+      "checks": [],
+      "rules": [],
+      "lines": [],
+      "severities": [],
+      "metrics": {
+        "citationCoverage": 0,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "referenceIdentityMismatches": 0,
+        "statisticalComplete": 0,
+        "statisticalPartial": 2,
+        "statisticalUnsupported": 0,
+        "statisticalExecutions": 1
+      },
+      "ok": true,
+      "at": "2026-10-10T05:10:14.708Z"
+    }
+  ],
+  "subagents": [],
+  "injectedSkills": [
+    "open-domain-answer",
+    "statistical-analysis"
+  ],
+  "mountedMethods": [],
+  "qualityNotices": [],
+  "degraded": []
+}

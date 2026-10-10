@@ -1,0 +1,413 @@
+{
+  "artifact": "structural-analysis",
+  "method": "deep-structural-analysis",
+  "title": "Library Study Seats: A Bounded Structural Check of First-Come Booking and No-Shows",
+  "depthTier": "Standard",
+  "depthRationale": "A bounded teaching case that spans three levels (institution, rule, individual) and carries a clear asymmetry of interest, so the complexity domain is Complicated. The assignment itself asks for a structural analysis, which is an explicit request for the framework, so the tier is not downgraded. Lenses 6, tools 3 — within the Standard quota of 5-7 and 2-3.",
+  "language": "en",
+
+  "triggerGuard": {
+    "verdict": "triggered",
+    "reason": "More than two groups with diverging interests, a standing contradiction between the written rule (first-come reservation) and actual use (seats booked and not occupied), and an explicit request for structural analysis.",
+    "traumaThreshold": "Not met. This is a resource-allocation question; it involves no identifiable individual's traumatic experience and no victim-perpetrator naming.",
+    "complexityDomain": "Complicated"
+  },
+
+  "phase1_decomposition": {
+    "surfaceQuestion": "Why does the class-bound group usually lose access, and how can the rule be made fairer without adding seats or identifying individuals.",
+    "structuralQuestion": "When a fixed-capacity public resource is allocated by 'first come, first served' with no identity information, which costs are transferred to whom, and what predictable behaviour does that produce.",
+    "microSituation": "For an individual student, what decides access is not how much they need a seat but whether they happen to be free to press the booking button at one particular moment — and that is set by their timetable, not by their effort.",
+    "temporalQuestion": "Short term: the distribution of booking chances within one term. Mid term: the habit of expectation students form, and who stops assuming the library is for them. Long term: whether the library acquires a reputation as open to some timetables and not others."
+  },
+
+  "phase2_factualContext": {
+    "searchPerformed": false,
+    "reason": "The case is bounded and self-contained, and no retrieval was used in this run. No external facts are imported.",
+    "frozenGivenFacts": [
+      "Total shared study seats = 100 (given by the case; a stated setting value, not a measurement)",
+      "Allocation rule = first come, first served with reservation",
+      "No-shows occur (given as a phenomenon; no frequency is given)",
+      "Group A can book at library opening",
+      "Group B has a compulsory class at that time and normally loses access",
+      "No additional capacity is available; the analysis may not solve the problem by adding seats",
+      "No individual may be identified; no per-person differentiation or tracking is permitted"
+    ],
+    "missingData": [
+      "The measured no-show rate (not given; this analysis must not invent one)",
+      "The size of each group and the within-day distribution of demand",
+      "Whether any cancellation mechanism or waiting list already exists",
+      "Whether seat use has ever been measured at all"
+    ],
+    "caveat": "The mechanism-level statements below are framework-anchored theoretical inferences, not empirically verified findings."
+  },
+
+  "phase15_stance": {
+    "userStance": "None supplied. This is an unattended bulk run, so stance elicitation degrades to a viewpoint audit.",
+    "auditDefaults": "The analyst's default stance is to read the pattern as a systemic allocation problem produced by rule design, not as a behavioural or character difference between student groups. That default is itself an untested prior and is treated as a target, not a starting point.",
+    "candidateStances": {
+      "markedAs": "Simulated viewpoints — organizing tools, not findings, and not information sources.",
+      "list": [
+        "Group A: punctuality and following through are deserved rewards",
+        "Group B: the class timetable is an unchosen external constraint and should not count as a competitive disadvantage",
+        "Library management: the objective is total seat utilization and ordering, not group fairness",
+        "Students who wait: their time is being consumed by seats others hold and do not cancel",
+        "Teaching and timetabling staff: compulsory class hours have externalized their cost onto the seat rule"
+      ]
+    },
+    "irreconcilable": "Group A's 'keeping the commitment deserves the reward' and Group B's 'the timetable was not chosen' are both true and neither yields. That is value incommensurability and is not adjudicated here."
+  },
+
+  "attackLoop": {
+    "targetExposedBeforeAnalysis": {
+      "defaultStance": "The access asymmetry, not anyone's motive, is what produces this outcome.",
+      "keyConclusions": [
+        "What is scarce is discretionary time; the seat is only its unit of account",
+        "Holding a booking is free and releasing it pays the holder nothing, so cost lands on others",
+        "The problem will not self-correct, because the excluded side stops trying and disappears from the record",
+        "The lever is the time width of the booking action and the cost of holding, not the seat count"
+      ]
+    },
+    "userAttackRequested": "The user is asked to attack these four directly at delivery. This analysis does not simulate the opposing attack for the user: a simulated attack shares the analyst's blind spots, so it would confirm rather than test the conclusion.",
+    "revisionTraces": "No real external attack was received in this run. The rival explanations retained below are the concrete form of that limitation."
+  },
+
+  "incentives": {
+    "question": "Under the current rule, would a rational person make the same choice?",
+    "actorLevel": [
+      {
+        "actor": "Students who can book on time",
+        "decision": "Reserve at opening",
+        "benefit": "Certainty of a seat; the cost of reserving is near zero",
+        "costBearer": "If they do not turn up, the cost falls on other students",
+        "timeAlignment": "The gain settles at the moment of booking; the cost falls later and lands on someone else. That mismatch systematically favours holding too much.",
+        "confidence": "medium"
+      },
+      {
+        "actor": "A booked student who cannot come",
+        "decision": "Whether to cancel actively",
+        "benefit": "The benefit of cancelling (someone else gets the seat) flows outward; the cost of cancelling (steps, risk of losing today's chance to rebook) is internalized",
+        "costBearer": "Consequences externalized onto students kept out",
+        "timeAlignment": "The gain from cancelling is public and delayed; the cost is private and immediate",
+        "confidence": "medium"
+      },
+      {
+        "actor": "Library management",
+        "decision": "Keep or adjust the booking rule",
+        "benefit": "Under the status quo, total bookings look full; changing the rule means absorbing complaints and operational risk",
+        "costBearer": "The cost of unfair allocation is invisible in management's own metrics",
+        "timeAlignment": "Management's cost window (reform risk) is near; its benefit window (fairness) is far",
+        "confidence": "low"
+      },
+      {
+        "actor": "Students with a compulsory class",
+        "decision": "Whether to contest or route around it",
+        "benefit": "The expected payoff of protest is low (no identifiable person, no addressee for a complaint), and the workaround is costly",
+        "costBearer": "Themselves",
+        "timeAlignment": "Not applicable",
+        "confidence": "medium"
+      }
+    ],
+    "emergentNotConspiratorial": "Nobody has to intend a bad incentive. Externalized cost plus immediate private gain is the ordinary output of this rule. Attributing it to someone's intent is the wrong place to dig.",
+    "keyInference": "'First come, first served' without cancellation cost, waiting list or identity information is equivalent in practice to 'whoever is free at opening keeps getting the seat'. The rule looks like a neutral timestamp ordering; it functions as a filter on discretionary time."
+  },
+
+  "accessAsymmetry": {
+    "definition": "The asymmetry is not in outcomes (who misses a seat occasionally) but in the rule: the same ticket costs the two groups different amounts of discretionary time.",
+    "whoBenefits": "The party that benefits from the current rule is whoever's day is unscheduled at opening. This is stated rather than left symmetric: presenting the two sides as equally positioned would flatten the analysis toward the status quo, which is the outcome the present rule already delivers.",
+    "layers": [
+      {
+        "type": "Structural crack",
+        "content": "Booking eligibility equals the freedom to press the button at opening. Group B's freedom is institutionally occupied by compulsory class hours, and the timetable and the seat rule are administered by two unconnected lines, so the cost lands in the gap between them.",
+        "interventionLevel": "Paradigm (redefining what a reservation is)",
+        "confidence": "high"
+      },
+      {
+        "type": "Systemic crack",
+        "content": "'Booked and not used' recurs as a pattern rather than as isolated mistakes: as long as holding costs nothing and cancelling pays the holder nothing, the pattern reproduces itself.",
+        "interventionLevel": "Rules (adding a cost to holding, or a condition on keeping)",
+        "confidence": "medium"
+      },
+      {
+        "type": "Incidental crack",
+        "content": "Individual days when class overran or something came up.",
+        "interventionLevel": "Parameters",
+        "confidence": "low"
+      }
+    ],
+    "macroMicroGap": "The gap between the written rule (first come, first served, identical for everyone) and the actual result (the same people reliably get seats) is what explains how the system keeps producing an unfair result while appearing fair. The gap is not an implementation failure; formal neutrality is concealing a substantive difference in starting positions.",
+    "claimVsAction": "If management states that 'the rule is the same for every student', that statement is formally true and insufficient to support 'access is equal'. This distinction is stated at medium confidence, grounded in the given rule text and the given phenomenon, with no measured data.",
+    "silentSignalVsDataGap": "Group B's falling booking attempts would be a silent signal about the institution; the absence of any per-group rate is a data gap. The two are not interchangeable and are kept apart here."
+  },
+
+  "causalAssumptions": [
+    {
+      "id": "CA1",
+      "assumption": "Seats fill soon after opening, largely through Group A.",
+      "status": "Given by the case as the mechanism behind 'Group B normally loses access'. Accepted here as a stated setting, not as a measured causal result.",
+      "confidence": "medium",
+      "howToTest": "Compare the source distribution of bookings at opening against the after-class period, at period level only, without identifying individuals."
+    },
+    {
+      "id": "CA2",
+      "assumption": "Group B loses seats because of the booking-time conflict, not because its demand for seats is lower or its members prefer other study places.",
+      "status": "Unverified. This is the most fragile causal assumption in the analysis.",
+      "confidence": "low",
+      "confidenceRationale": "No measurement exists; single source (the case narrative); and it has not yet been separated from the competing explanation in H-R1.",
+      "howToTest": "Change the booking window while holding capacity fixed and observe whether Group B's booking participation rises. If the window no longer conflicts and participation stays low, CA2 weakens and the demand explanation gains support."
+    },
+    {
+      "id": "CA3",
+      "assumption": "'A booking is held free of charge until closing' is the rule feature that externalizes the cost.",
+      "status": "Theoretical inference from incentive-structure mapping, not empirically verified.",
+      "confidence": "low",
+      "howToTest": "Introduce a one-step, low-friction 'still needed' confirmation and observe whether unused booked seat-hours change; if they do not, this rule feature is not the main driver."
+    },
+    {
+      "id": "CA4",
+      "assumption": "No extra capacity is a hard constraint rather than a soft one that could be worked around by extending opening hours.",
+      "status": "Accepted as stated by the case.",
+      "confidence": "high",
+      "howToTest": "The case already excludes extra capacity. If that constraint were relaxed, the core conclusion here would need to be redone."
+    }
+  ],
+
+  "rivalExplanation": {
+    "primary": {
+      "id": "H-PRIMARY",
+      "claim": "Rule-shape asymmetry: first come first served, combined with free holding and no waiting list, converts discretionary time into a covert eligibility requirement.",
+      "weight": "higher",
+      "evidentialBasis": "Consistent with the three facts the case supplies (fixed capacity, first-come rule, A/B timetable difference) and requires no assumption about anyone's motive."
+    },
+    "rivals": [
+      {
+        "id": "H-R1",
+        "claim": "Demand and preference: Group B's demand for seats is genuinely lower, or its members rely more on other places, no-shows are homogeneous across groups, and there is no systematic asymmetry.",
+        "weight": "not excluded; carried with reduced weight",
+        "cannotBeExcludedBecause": "The case provides no per-group participation or demand data of any kind.",
+        "discriminatingTest": "After the booking window no longer conflicts, measure Group B's participation again; if it stays low, H-R1 becomes the primary account."
+      },
+      {
+        "id": "H-R2",
+        "claim": "Friction: no-shows are driven mainly by cancellation friction (too many steps, hard to find, unsure whether rebooking is possible) and by invisible capacity information, with no group dimension.",
+        "weight": "not excluded; carried with reduced weight",
+        "cannotBeExcludedBecause": "The case does not say whether a cancellation mechanism exists or how costly it is.",
+        "discriminatingTest": "Cut confirmation and cancellation down to one step and observe whether no-shows change materially; if not, H-R2 weakens."
+      },
+      {
+        "id": "H-R3",
+        "claim": "Diurnal pattern: seat demand peaks after class anyway, and most seats are taken by people arriving then, so early booking by Group A is only a minor contributor.",
+        "weight": "not excluded; carried with reduced weight",
+        "cannotBeExcludedBecause": "No within-day distribution of bookings or arrivals is available.",
+        "discriminatingTest": "Compare the distribution of booking timestamps against the distribution of arrivals, at period level, not per person."
+      }
+    ],
+    "discipline": "Presented ranked by evidential weight, not side by side as equals. The three unexcluded rivals remain in the confidence discussion and are not treated as excluded merely because no evidence currently supports them."
+  },
+
+  "lenses": [
+    {
+      "name": "Epistemology",
+      "coreInsight": "'First come, first served' passes as fair because 'being free at the same moment' is silently treated as a starting position everyone holds. The moment that assumption is written down, the rule's neutrality is gone.",
+      "keyFramework": "Assumption of identical starting points (that everyone commands the same discretionary time)",
+      "limitation": "Cannot size the asymmetry.",
+      "tension": "Consistent with the economics lens; no substantive conflict."
+    },
+    {
+      "name": "Systems",
+      "coreInsight": "No-shows are not a deviation but a stable output: certainty of holding plus zero cost of not releasing forms a positive feedback loop. Demand that is locked out never reports back into the system, because the locked-out have no trace to leave.",
+      "keyFramework": "Feedback loop with the negative-feedback channel missing",
+      "limitation": "Loop strength cannot be measured; only its direction can be stated.",
+      "tension": "No conflict with institutional analysis; it supplies the half of the answer about why the problem never corrects itself."
+    },
+    {
+      "name": "Institutional analysis",
+      "coreInsight": "The rule is written by the library, its cost is borne by students in class, and the decision-maker is not the cost-bearer — the classic shape of a misaligned rule that persists. The two administrative lines (timetabling and booking) have no interface at all, and the cost falls exactly in that seam.",
+      "keyFramework": "Written rule versus actual result (formal compliance concealing substantive consequence)",
+      "limitation": "Cannot establish whether management has the will or the budget to reform.",
+      "tension": "Consistent with the political-science lens: nobody benefits outright, and nobody holds authority to end it."
+    },
+    {
+      "name": "Temporality",
+      "coreInsight": "What is scarce here is not seats but free time. The seat merely converts a difference in time allocation into a countable form: whoever's hours are institutionally claimed is permanently disadvantaged under this rule, irrespective of effort.",
+      "keyFramework": "Time compression (the end whose discretionary time is compressed systematically loses)",
+      "limitation": "The hours claimed by the timetable are not quantified.",
+      "tension": "Complementary to the economics lens: one says the incentive is misaligned, the other says its carrier is time."
+    },
+    {
+      "name": "Psychology",
+      "coreInsight": "Having booked produces a sense of quasi-ownership, so holders will not release a seat even when they will not use it — loss aversion rather than malice. Repeatedly failing to book produces learned withdrawal: students stop trying, and their demand then vanishes from the counts entirely. That is silenced evidence, not absence of need.",
+      "keyFramework": "Loss aversion plus learned helplessness (silenced evidence)",
+      "limitation": "A mechanism hypothesis with no scale or observation behind it.",
+      "tension": "Mutually reinforcing with the systems lens: demand disappearing is why the system never faces pressure to correct itself."
+    },
+    {
+      "name": "Game completeness",
+      "coreInsight": "Only students and the booking system are at the table, but the variables that decide the outcome are held by two parties who are not: timetabling (which sets the class hours) and library management (which sets the rule and bears the reform risk). Teaching staff are absent from the table yet in practice fix which hours are unavailable to Group B. A two-party game is in fact a game of four or more, and the absentees hold the levers.",
+      "keyFramework": "Absent stakeholders and external variable-holders (off-table but outcome-deciding)",
+      "limitation": "No party's actual position is known; this is structural inference.",
+      "tension": "Consistent with institutional analysis but makes explicit the question of who can change the rule."
+    }
+  ],
+  "lensDiscipline": {
+    "comfortZoneEscapes": "Economics and institutional analysis are the comfortable register for an allocation question; two lenses sit outside it — temporality (foundational register) and game completeness (structural register).",
+    "historyLens": "Not selected: the case is a constructed teaching situation with no historical lineage to draw precedents from. Recorded explicitly as an exemption rather than passed over in silence.",
+    "eachLensBoundToFact": "Every lens insight is tied to a fact supplied by the case (100 seats, first-come rule, A/B timetable difference, no extra capacity, no individual identification)."
+  },
+
+  "tools": [
+    {
+      "name": "Incentive-structure mapping",
+      "applied": "For each party, ask who decides, who pays and who gains, then check whether the gain window and the cost window line up in time.",
+      "finding": "Decision-makers and cost-bearers are systematically separated, and gains are immediate while costs are delayed and externalized. This explains why a misaligned rule is emergent rather than designed by anyone."
+    },
+    {
+      "name": "Asymmetry detection with crack-level labelling",
+      "applied": "Look for the crack between written rule and actual result, and label it paradigm, rules or parameters.",
+      "finding": "The main crack is at paradigm level — how the booking action itself is defined — so the highest available lever sits there rather than in tuning times at parameter level."
+    },
+    {
+      "name": "Path dependency",
+      "applied": "Ask where the switching cost actually is instead of asserting that the original choice was wrong.",
+      "finding": "The switching cost sits with management's reform risk and operational change, not with technology: for students it is close to zero. And a caution: first come first served has partly persisted because it is genuinely simple and explicable, which is not the same as being locked in."
+    }
+  ],
+  "tools_excluded": [
+    {
+      "name": "Multi-layer signal decoding (MLSD)",
+      "excludedBecause": "The three admission questions fail: no sender with reputation at stake, no screening layer, no interest game between sender and receiver. Applied anyway, it would read management's silence as an encoded signal — finding signal in noise. Recorded rather than quietly dropped so the reader can see it was considered."
+    }
+  ],
+
+  "synthesis": {
+    "conclusion": "Treating 'first come, first served' as a neutral rule is in fact setting 'discretionary time at opening' as a covert eligibility requirement. Inside the constraints of fixed capacity and no individual identification, the variable worth changing is not the number of seats but the time width of the booking action and the cost of holding a booking.",
+    "crossValidated": [
+      {
+        "finding": "The scarce resource is discretionary time; the seat is only how it is counted.",
+        "supportedBy": ["Epistemology", "Temporality", "Incentives"],
+        "independence": "All three rest on the same set of case facts, so their factual basis overlaps and independence is limited."
+      },
+      {
+        "finding": "The misalignment is emergent and requires no malice from anyone.",
+        "supportedBy": ["Incentives", "Institutional analysis"],
+        "independence": "Factual basis overlaps; independence is limited."
+      },
+      {
+        "finding": "The problem will not self-correct, because the harmed side's demand becomes invisible or disappears.",
+        "supportedBy": ["Systems", "Psychology"],
+        "independence": "The two reach this by different routes — a structurally missing feedback channel versus individuals withdrawing — so independence is comparatively better."
+      }
+    ],
+    "divergences": "The lenses broadly agree here; there is no substantive conflict. The one divergence is about emphasis: institutional analysis puts management's inaction down to its risk structure, while psychology puts the persistence of the unfairness down to students' silent withdrawal. They point to different first moves (change the rule versus first make demand visible) but both point into the same reversible experiment. That choice is handed to the decision-maker rather than settled here.",
+    "confidence": {
+      "overall": "medium",
+      "criteria": "High = several sources with different standpoints agree and the fact basis is not a single given statement. Medium = a single given source combined with framework inference, with no independent corroboration. Low = inference that is also indistinguishable from a named rival explanation.",
+      "rationale": "Every conclusion rests on setting values supplied by the case rather than measurement, and at least three competing explanations remain unexcluded. Directional mechanism claims are theoretical inferences, not empirically verified.",
+      "perClaim": [
+        {"claim": "The rule converts discretionary time into an eligibility requirement", "level": "medium", "basis": "Single given source plus framework inference; zero independent sources with a differing standpoint"},
+        {"claim": "No-shows are driven by externalized cost", "level": "low", "basis": "Inference, and not yet separated from the friction explanation (H-R2)"},
+        {"claim": "Group B loses seats because of a timetable conflict", "level": "low", "basis": "Not yet separated from the demand-preference explanation (H-R1)"}
+      ],
+      "dataSensitive": "Any conclusion about why Group B's participation is low, or about what causes no-shows, could shift materially once per-group period-level counts exist.",
+      "revisionTrace": "No real external attack was received. The adversarial-testing capacity of this analysis is therefore limited, and the unexcluded rivals above are the concrete form of that limit."
+    },
+    "blindSpots": [
+      "Every lens is blind to differentiation inside Group B: treating it as homogeneous may hide the fact that some of its members do get seats.",
+      "There is no measurement anywhere. Every number here comes from a stated setting, so the analysis supports no quantitative claim at all.",
+      "Single standpoint: all 'stances' are simulated. No real stance (student or library) was supplied, so the viewpoint-difference work is not a finding.",
+      "Limited consensus independence: multiple lenses converge on the same set of case facts, which does not amount to independent verification.",
+      "Framework self-reference: this analysis is itself an activity of trading discretionary reasoning time for a conclusion, and its chosen framing already presumes the matter is an allocation problem.",
+      "The counterfactual baseline is unobserved: what the same students do at other hours, or how many seats would be used under a different rule, is not available anywhere in this case."
+    ],
+    "layeredImpact": {
+      "shortTerm": {
+        "system": "Seats are still taken each day and the allocation repeats.",
+        "institution": "Management's metric (booking rate) looks normal, so pressure to reform stays low.",
+        "individual": "Students in Group B look elsewhere that day or give up studying there for now."
+      },
+      "midTerm": {
+        "system": "Bookable and unbookable hours harden into two different daily routines.",
+        "institution": "Complaints stay scattered and unattributable, and the rule stays as it is.",
+        "individual": "Group B stops trying, so its demand disappears from the record as silenced evidence."
+      },
+      "longTerm": {
+        "system": "The effective user population settles toward the time-flexible end, and 'shared' quietly narrows in scope.",
+        "institution": "The rule is treated as a time-tested convention and its switching cost rises with each year.",
+        "individual": "'The library is not for people like me' becomes a stable default expectation, and may spill over into attitudes toward other public resources."
+      }
+    },
+    "leveragePoint": {
+      "meadowsLevel": "Rules — changing the time width of the booking action and the conditions for holding a booking",
+      "whyNotParameterLevel": "Adjusting opening times or reminder wording sits at parameter level and does not touch the eligibility structure of who can press the button when.",
+      "highestAvailable": "The paradigm level (redefining a valid booking as presence rather than possession) is where the deep fix sits, but moving it requires library management and timetabling to act together, which exceeds the case's constraints of no identification and no extra capacity. This analysis therefore proposes only the reversible rules-level intervention."
+    },
+    "readerTakeaway": "Every 'first come, first served' rule silently assumes that all participants are equally able to act at the same moment. Where that assumption fails for some participants, the rule's neutrality is formal only — and nobody has to do anything wrong for that to be true."
+  },
+
+  "reversibleExperiment": {
+    "name": "Two-factor reversible test of booking window and hold confirmation",
+    "reversibility": "Both changes are configuration settings (window length, whether same-day confirmation is required). Any step reverts to the original rule within one day, leaving no data or identity trace behind.",
+    "constraints": [
+      "Total capacity stays at 100 seats; nothing is added",
+      "No personal identity data is collected; only seat-level and period-level counts",
+      "The first-come ordering logic itself is not changed — only the time window of the booking action and the conditions for holding a seat"
+    ],
+    "design": {
+      "unit": "Weekly time blocks, not individuals",
+      "coexistenceBaseline": "C0 (no change) runs as an explicit condition rather than as something assumed. Without it, a before-versus-after difference could not be separated from term-time drift, exam weeks or the novelty of a pilot.",
+      "conditions": [
+        "C0 (baseline, no change): booking opens at a single moment, no confirmation required",
+        "C1 (window): part of the 100 seats is released only in the after-class period; the rest at opening, with ordering unchanged",
+        "C2 (confirmation): a one-step 'still needed' confirmation after booking; unconfirmed seats return automatically to the public pool"
+      ],
+      "comparison": "C0, C1 and C2 alternate by week, each observed over several weeks, to average out within-week rhythms",
+      "randomization": "Because individuals cannot be identified, allocation can only be randomized at week-block level, never per person. That limit confines any conclusion to period-level association and makes it untraceable to an individual."
+    },
+    "measuredOutputs": [
+      "Median hours a seat is actually occupied, per period (seat-level, anonymous)",
+      "Booked but unused seat-hours, per period (seat-level counts)",
+      "Total booking requests and their period distribution (no person-level breakdown)"
+    ],
+    "explicitlyNotClaimed": [
+      "No effect size, improvement margin or significance is presupposed",
+      "It is not claimed that C1 or C2 will work",
+      "It is not claimed that any individual or group membership can be identified"
+    ],
+    "whatWouldFalsifyTheAnalysis": [
+      "If the period distribution of bookings barely moves under C1, the 'timetable conflict is the main cause' assumption weakens.",
+      "If unused booked seat-hours barely move under C2, the 'externalized cost is the main cause' assumption weakens.",
+      "If both move very little, the rival explanations (H-R1 demand-preference, H-R2 friction, H-R3 diurnal peak) should be promoted to primary and the core attribution here must be redone."
+    ],
+    "stoppingRules": [
+      "Stop immediately if continuing would require collecting identifiable personal data.",
+      "Stop if a difference could only be observed by adding capacity; that exceeds the case constraints, and the stop should be recorded rather than argued away.",
+      "Roll back immediately if any condition creates obvious inconvenience or a new unfairness — for example if the confirmation step pushes a fresh time cost onto the same students."
+    ]
+  },
+
+  "evaluation": {
+    "successDefinition": "With total capacity unchanged, the share of seat-hours actually used during peak demand rises, and no party has to perform additional steps.",
+    "howToRead": "Read the result as evidence that discriminates among the three competing explanations, not as a report card on any group of students.",
+    "whatEvaluationCannotShow": "It cannot show subjective improvement in perceived fairness, nor any effect on academic outcomes; both would need measurement this design does not include.",
+    "reportingDiscipline": "Report the result whichever way it goes, including a null result, and do not stop measuring because the result was null."
+  },
+
+  "analysisBoundaries": [
+    "No advice of any kind about a specific individual's health, studies or behaviour.",
+    "No claim to have measured any quantity; every number comes from the case as stated.",
+    "Seat comfort, lighting and noise are outside scope, though they may affect use.",
+    "The value-level disagreement between Group A and Group B is incommensurable and is not adjudicated.",
+    "This is a nonclinical scenario: nothing here is medical or clinical advice."
+  ],
+
+  "positionality": {
+    "statement": "This was written from a position of unbounded attention and no timetable — the very position the analysis treats as an unearned advantage.",
+    "contaminationSource": "The analyst's own working condition resembles Group A's condition (unscheduled, able to act at any hour, no compulsory competing block). That biases toward framing the opening-hour rule as the defect and away from framing the class timetable as the thing that should move.",
+    "counterweight": "The retained rivals (lower demand, cancellation friction, diurnal peak) are the specific correctives: each would survive even if the structural framing turned out to be an artefact of that position.",
+    "notDischargedBy": "Neither the framework nor any source can remove this. It is recorded, not resolved."
+  },
+
+  "blindSpotDeclarations": [
+    "This analysis was produced without a real adversarial attack from the user; its capacity to find its own errors is correspondingly limited.",
+    "Six lenses agreeing does not constitute independent verification: they share one factual basis."
+  ]
+}

@@ -1,0 +1,508 @@
+{
+  "schemaVersion": 1,
+  "artifact": "stats.json",
+  "skill": "statistical-analysis",
+  "generatedAtUtc": "2026-10-10T03:58:23Z",
+  "input": {
+    "file": "input.csv",
+    "sha256": "d6687cb19e9460557aa85ef5854fb6056579d7ab375e4feeaef61a84e5a5567d",
+    "bytes": 82,
+    "synthetic": true,
+    "syntheticStatement": "SYNTHETIC TEACHING DATA. This table was constructed for a method test. It is not patient data, it is not a real study, and no result here describes any population."
+  },
+  "structure": {
+    "rows": 6,
+    "columns": [
+      "id",
+      "group",
+      "baseline",
+      "outcome"
+    ],
+    "distinctIds": 5,
+    "perColumn": {
+      "id": {
+        "inferredType": "text",
+        "blankCsvLines": [],
+        "blankCount": 0,
+        "filledCount": 6,
+        "densityCompleteness": 1.0,
+        "distinctCount": 5
+      },
+      "group": {
+        "inferredType": "text",
+        "blankCsvLines": [],
+        "blankCount": 0,
+        "filledCount": 6,
+        "densityCompleteness": 1.0,
+        "distinctCount": 2
+      },
+      "baseline": {
+        "inferredType": "integer",
+        "blankCsvLines": [
+          6
+        ],
+        "blankCount": 1,
+        "filledCount": 5,
+        "densityCompleteness": 0.8333,
+        "distinctCount": 4
+      },
+      "outcome": {
+        "inferredType": "integer",
+        "blankCsvLines": [
+          7
+        ],
+        "blankCount": 1,
+        "filledCount": 5,
+        "densityCompleteness": 0.8333,
+        "distinctCount": 4
+      }
+    },
+    "observedVocabularies": {
+      "group": [
+        "A",
+        "B"
+      ],
+      "baseline": [
+        "10",
+        "11",
+        "12",
+        "13"
+      ],
+      "outcome": [
+        "11",
+        "12",
+        "14",
+        "15"
+      ]
+    },
+    "columnTypesInferredFromValuesOnly": {
+      "id": "text",
+      "group": "text",
+      "baseline": "integer",
+      "outcome": "integer"
+    }
+  },
+  "denominators": {
+    "originalRowDenominator": 6,
+    "completePairRowDenominator": 4,
+    "uniqueCompletePairObservationDenominator": 3,
+    "explanation": "Of 6 delivered rows, 4 carry both baseline and outcome (line 6 'e' has no outcome, line 5 'd' has no baseline); those 4 rows are 3 distinct observations because observation b is delivered twice. A mean or rate quoted without naming its denominator is not interpretable."
+  },
+  "missingness": {
+    "baseline": {
+      "blankCells": 1,
+      "blankCsvLines": [
+        6
+      ],
+      "densityCompleteness": 0.8333
+    },
+    "outcome": {
+      "blankCells": 1,
+      "blankCsvLines": [
+        7
+      ],
+      "densityCompleteness": 0.8333
+    }
+  },
+  "duplicateObservations": {
+    "rule": "exact match on all fields (id, group, baseline, outcome)",
+    "withinIdVisitKeyAvailable": false,
+    "exactDuplicateGroups": [
+      {
+        "key": {
+          "id": "b",
+          "group": "A",
+          "baseline": "12",
+          "outcome": "15"
+        },
+        "maskedKey": {
+          "id": "*",
+          "group": "A",
+          "baseline": "12",
+          "outcome": "15"
+        },
+        "rowIndicesZeroBased": [
+          1,
+          2
+        ],
+        "csvLineNumbers": [
+          3,
+          4
+        ],
+        "occurrences": 2
+      }
+    ],
+    "idsAppearingMoreThanOnce": [
+      {
+        "id": "b",
+        "masked": "*",
+        "occurrences": 2,
+        "csvLineNumbers": [
+          3,
+          4
+        ]
+      }
+    ],
+    "handling": "Retained in the delivered file, not silently dropped. Both denominators are reported and the repeat is disclosed. Choosing between the two rows is impossible because they are identical, and whether they are two measurements or one repeated record is undecidable from the columns present."
+  },
+  "analysis": {
+    "changeDefinition": "outcome - baseline on the delivered numeric scale (no unit is stated in the file)",
+    "rowLevelCompletePairs": [
+      {
+        "rowIndexZeroBased": 0,
+        "csvLineNumber": 2,
+        "id": "a",
+        "maskedId": "*",
+        "group": "A",
+        "baseline": 10.0,
+        "outcome": 12.0,
+        "change": 2.0
+      },
+      {
+        "rowIndexZeroBased": 1,
+        "csvLineNumber": 3,
+        "id": "b",
+        "maskedId": "*",
+        "group": "A",
+        "baseline": 12.0,
+        "outcome": 15.0,
+        "change": 3.0
+      },
+      {
+        "rowIndexZeroBased": 2,
+        "csvLineNumber": 4,
+        "id": "b",
+        "maskedId": "*",
+        "group": "A",
+        "baseline": 12.0,
+        "outcome": 15.0,
+        "change": 3.0
+      },
+      {
+        "rowIndexZeroBased": 3,
+        "csvLineNumber": 5,
+        "id": "c",
+        "maskedId": "*",
+        "group": "B",
+        "baseline": 11.0,
+        "outcome": 11.0,
+        "change": 0.0
+      }
+    ],
+    "uniqueObservationLevel": [
+      {
+        "rowIndexZeroBased": 0,
+        "csvLineNumber": 2,
+        "id": "a",
+        "maskedId": "*",
+        "group": "A",
+        "baseline": 10.0,
+        "outcome": 12.0,
+        "change": 2.0,
+        "collapsedFromCsvLines": [
+          2
+        ]
+      },
+      {
+        "rowIndexZeroBased": 1,
+        "csvLineNumber": 3,
+        "id": "b",
+        "maskedId": "*",
+        "group": "A",
+        "baseline": 12.0,
+        "outcome": 15.0,
+        "change": 3.0,
+        "collapsedFromCsvLines": [
+          3,
+          4
+        ]
+      },
+      {
+        "rowIndexZeroBased": 3,
+        "csvLineNumber": 5,
+        "id": "c",
+        "maskedId": "*",
+        "group": "B",
+        "baseline": 11.0,
+        "outcome": 11.0,
+        "change": 0.0,
+        "collapsedFromCsvLines": [
+          5
+        ]
+      }
+    ],
+    "changesByGroupUniqueObservationLevel": {
+      "A": {
+        "uniqueObservations": 2,
+        "changeValues": [
+          2.0,
+          3.0
+        ],
+        "positive": 2,
+        "zero": 0,
+        "negative": 0,
+        "meanChange": 2.5,
+        "sdChange": 0.7071067811865476
+      },
+      "B": {
+        "uniqueObservations": 1,
+        "changeValues": [
+          0.0
+        ],
+        "positive": 0,
+        "zero": 1,
+        "negative": 0,
+        "meanChange": 0.0,
+        "sdChange": null
+      }
+    },
+    "overall": {
+      "meanChangeOriginalRow": 2.0,
+      "sdChangeOriginalRow": 1.4142135623730951,
+      "meanChangeUniqueObservation": 1.6666666666666667,
+      "sdChangeUniqueObservation": 1.5275252316519468,
+      "medianChangeUniqueObservation": 2.0
+    },
+    "dispersionDiagnostics": {
+      "sdNotUsableForInferenceBecauseNIsTwoAndOne": true,
+      "note": "A standard deviation over two values and over one value carries no useful precision and is printed only as the arithmetic result."
+    },
+    "notComputed": [
+      {
+        "item": "between-group test",
+        "status": "unsupported",
+        "reason": "3 distinct complete-pair observations; no p value is reported."
+      },
+      {
+        "item": "confidence interval",
+        "status": "unsupported",
+        "reason": "no estimand over a defined sampling population; this table is not a probability sample."
+      },
+      {
+        "item": "regression or covariate adjustment",
+        "status": "unsupported",
+        "reason": "two grouping levels, no covariates, and an id that is not independent of group here."
+      },
+      {
+        "item": "power",
+        "status": "not_computed",
+        "reason": "observed power is not evidence and is not substituted for uncertainty."
+      }
+    ]
+  },
+  "estimand": {
+    "twoDistinctEstimands": true,
+    "E1_originalRow": {
+      "statement": "Mean within-row change (outcome - baseline) over every delivered row that carries both values; each delivered row counts once as a data point.",
+      "n": 4,
+      "meanChange": 2.0,
+      "sdChange": 1.4142135623730951,
+      "perGroupMeanChange": {
+        "A": 2.6666666666666665,
+        "B": 0.0
+      },
+      "validWhen": "each delivered row is a distinct observation, which this table does not establish."
+    },
+    "E2_deduplicatedUniqueObservation": {
+      "statement": "Mean within-observation change over rows that are distinct under the declared de-duplication rule; the repeated observation contributes once.",
+      "n": 3,
+      "meanChange": 1.6666666666666667,
+      "sdChange": 1.5275252316519468,
+      "perGroupMeanChange": {
+        "A": 2.5,
+        "B": 0.0
+      },
+      "validWhen": "the repeated key is one observation delivered twice rather than two within-id measurements; separating those needs a within-id visit or time field that this table does not contain, so E2 is preferred only under a stated assumption."
+    },
+    "whyTheyDiffer": "Observation b (CSV lines 3 and 4) carries change 2.0 twice, so E1 gives it double weight. E1 n=4 and E2 n=3 follow from the two denominators, not from any disagreement about the data."
+  },
+  "hypothesisTesting": {
+    "performed": false,
+    "alphaDeclared": 0.05,
+    "reason": "No hypothesis test is reported. Six delivered rows, five distinct ids and three distinct complete-pair observations cannot support a between-group test, and a p value computed on a convenience teaching sample of this size would invite a spurious inference. The group table below is descriptive and carries no p value.",
+    "directionTableIfItWereTested": {
+      "rows": [
+        "A",
+        "B"
+      ],
+      "columns": [
+        "change > 0",
+        "change <= 0"
+      ],
+      "counts": [
+        [
+          2,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "fisherExactTwoSidedP": 0.333333,
+      "fisherExactOneSidedP_changeMoreOftenPositiveInA": 0.333333,
+      "reportedAsEvidence": false,
+      "note": "Computed and shown only so the arithmetic is inspectable. Every cell is 0, 1 or 2, the groups hold 2 and 1 observations, and no design or clinical claim follows from it."
+    },
+    "groupDirectionIsDeterministic": {
+      "allUniqueAChangesPositive": true,
+      "noUniqueBChangePositive": true,
+      "note": "With three complete-pair observations this pattern is a property of the six numbers, not a finding about any population."
+    }
+  },
+  "causalClaim": {
+    "claimMade": false,
+    "statement": "Only a description of these six rows is made. Group labels A and B carry no stated meaning, no allocation mechanism is recorded in the data, and no randomization, allocation concealment or causal effect is asserted."
+  },
+  "assertions": [
+    {
+      "id": "A01",
+      "claim": "delivered data rows == 6",
+      "observed": 6,
+      "passed": true
+    },
+    {
+      "id": "A02",
+      "claim": "column names == ['id','group','baseline','outcome']",
+      "observed": [
+        "id",
+        "group",
+        "baseline",
+        "outcome"
+      ],
+      "passed": true
+    },
+    {
+      "id": "A03",
+      "claim": "blank cells: baseline 1, outcome 1",
+      "observed": {
+        "baseline": 1,
+        "outcome": 1,
+        "lines": {
+          "baseline": [
+            6
+          ],
+          "outcome": [
+            7
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "id": "A04",
+      "claim": "exactly one exact-duplicate group, with 2 occurrences",
+      "observed": [
+        {
+          "key": {
+            "id": "b",
+            "group": "A",
+            "baseline": "12",
+            "outcome": "15"
+          },
+          "maskedKey": {
+            "id": "*",
+            "group": "A",
+            "baseline": "12",
+            "outcome": "15"
+          },
+          "rowIndicesZeroBased": [
+            1,
+            2
+          ],
+          "csvLineNumbers": [
+            3,
+            4
+          ],
+          "occurrences": 2
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "A05",
+      "claim": "one id appears on 2 rows with an identical field tuple",
+      "observed": [
+        {
+          "id": "b",
+          "masked": "*",
+          "occurrences": 2,
+          "csvLineNumbers": [
+            3,
+            4
+          ]
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "A06",
+      "claim": "denominators: original rows 6, complete-pair rows 4",
+      "observed": {
+        "originalRows": 6,
+        "completePairRows": 4
+      },
+      "passed": true
+    },
+    {
+      "id": "A07",
+      "claim": "distinct complete-pair observations == 3",
+      "observed": 3,
+      "passed": true
+    },
+    {
+      "id": "A08",
+      "claim": "unique-observation change counts: A 2 positive / 0 other; B 0 positive / 1 other",
+      "observed": {
+        "A": {
+          "uniqueObservations": 2,
+          "changeValues": [
+            2.0,
+            3.0
+          ],
+          "positive": 2,
+          "zero": 0,
+          "negative": 0,
+          "meanChange": 2.5,
+          "sdChange": 0.7071067811865476
+        },
+        "B": {
+          "uniqueObservations": 1,
+          "changeValues": [
+            0.0
+          ],
+          "positive": 0,
+          "zero": 1,
+          "negative": 0,
+          "meanChange": 0.0,
+          "sdChange": null
+        }
+      },
+      "passed": true
+    },
+    {
+      "id": "A09",
+      "claim": "no p value is reported as evidence",
+      "observed": false,
+      "passed": true
+    },
+    {
+      "id": "A10",
+      "claim": "the two estimands are named distinctly and carry different n",
+      "observed": {
+        "E1": 4,
+        "E2": 3
+      },
+      "passed": true
+    }
+  ],
+  "assertionsAllPassed": true,
+  "limitations": [
+    "SYNTHETIC teaching data, not patient data; no clinical or population inference.",
+    "No literature was used, so no claim here rests on a citation.",
+    "Group labels A and B are undocumented and no dictionary was supplied.",
+    "No within-id visit, sequence or time field exists, so repeated measurement cannot be separated from a duplicated record.",
+    "Measurement units, scales and outcome coding are unstated.",
+    "No p value or confidence interval is reported, by design."
+  ]
+}

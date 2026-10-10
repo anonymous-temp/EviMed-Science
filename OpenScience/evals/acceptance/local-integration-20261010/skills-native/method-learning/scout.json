@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "cardId": "card-denominator-integrity-001",
+  "scope": "bounded-local-verification",
+  "form": "extend",
+  "track": "M",
+  "goal": "Turn the observed denominator failure — an evidence summary that counted a missing outcome as zero — into one executable check that reports unrecorded outcome observations separately from recorded zeros, keeps the denominator it actually summarized, and states both the original and the deduplicated counts, so that a summary can no longer be read as if every observation carried a value.",
+  "capabilityIds": ["research-topic-selection", "method-distillation", "method-relations"],
+  "toolKind": "calculation",
+  "publicationKind": "isolated-tool",
+  "methodTuple": {
+    "method": "Denominator-integrity audit of an aggregated outcome table: classify each observation as recorded value, recorded zero or unrecorded; count the unrecorded ones into an explicit unknown bucket instead of a value; carry the denominator of the observation set actually summarized; recompute the counts after duplicate observations are removed; and report the original and deduplicated counts side by side.",
+    "software": "none on file: the procedure exists as prose rules in a local teaching set (record unknown separately and keep denominators explicit; detect duplicates before summarizing) and has no executable implementation in this workspace",
+    "data": "One frozen local teaching table with six observations, five recorded outcomes and one unrecorded outcome, recorded only as the statement 'denominator6, known outcomes5, one missing'; the table itself was not supplied to this run and is not fabricated here",
+    "codeArchive": "none supplied; no repository, package or script was provided with the teaching input",
+    "reportedExamples": "one reported example, local and non-published: denominator 6, known outcomes 5, one missing. No published numerical example was retrieved."
+  },
+  "sourcePapers": [],
+  "developmentCases": [
+    {
+      "caseId": "DC1",
+      "anchor": "inputs.txt [E1] / distillation.json evidence EV1",
+      "situation": "Counting failure: an unrecorded outcome value entered the summary as a zero, so the summary states a value where none was observed.",
+      "expectedBehaviour": "Classify the observation as unrecorded and report it as an unknown count, never as zero, before any aggregate is written.",
+      "status": "observed-in-local-teaching-input"
+    },
+    {
+      "caseId": "DC2",
+      "anchor": "inputs.txt [E1] / distillation.json evidence EV4",
+      "situation": "Boundary case on the repaired output: six observations, five known outcomes, one unrecorded; known plus unrecorded must equal the denominator.",
+      "expectedBehaviour": "Report denominator 6, known 5, unknown 1, and fail the check when known plus unknown does not equal the denominator or when unknown is reported as 0.",
+      "status": "observed-in-local-teaching-input"
+    },
+    {
+      "caseId": "DC3",
+      "anchor": "inputs.txt [E1] / relations.json assignment A1",
+      "situation": "Competing rule: dropping the unrecorded observation while keeping the original denominator, so the denominator no longer describes the summarized set.",
+      "expectedBehaviour": "Flag the summary because the drop is not stated and the denominator and the summarized set disagree; the audit reports the discrepancy rather than choosing a rule.",
+      "status": "observed-in-local-teaching-input"
+    }
+  ],
+  "dataRequirements": {
+    "inputs": "A table of aggregated outcome observations with, at minimum, a row identifier, an outcome value field that can be unrecorded, and the denominator the summary will carry; a record of which observations are duplicates of one another.",
+    "fieldsRequired": ["row identifier", "outcome value (recorded / recorded zero / unrecorded)", "summary denominator", "duplicate group key"],
+    "publicOrPaperContained": "unknown: the teaching input is local and no public dataset or paper-contained input was retrieved in this run",
+    "reachable": true,
+    "reachableScope": "only the workspace-local teaching artifacts; no external data access was authorized in this run"
+  },
+  "feasibility": {
+    "implementationMissing": true,
+    "implementationMissingJustification": "The supplied inventory for this run contains three prose rules and one teaching record. No script, engine, repository or package performs the classification (recorded / recorded zero / unrecorded), the denominator reconciliation, or the original-versus-deduplicated comparison; the workspace holds only the verification script of this bounded test, which checks artifacts rather than outcome tables.",
+    "newToolLoopEligible": false,
+    "newToolLoopGaps": [
+      "At least two independent published numerical examples are required for the first new-tool loop; this run has one local, non-published example.",
+      "No paper, repository or public dataset was retrieved, so neither executable reference code nor paper-contained inputs can be demonstrated.",
+      "External replication of the rule is recorded as not performed and remains unresolved."
+    ],
+    "smallestViableScope": "A bounded check over a supplied outcome table that returns unknown count, denominator, recorded-zero count, duplicate count, and both the original and deduplicated totals, with an explicit failure when unknown is reported as zero or when the counts do not reconcile."
+  },
+  "rankingFeatures": {
+    "literatureQuery": "missing outcome denominator conflation and deduplication audit in evidence synthesis",
+    "literatureCount24m": null,
+    "literatureCountNote": "not retrieved: external literature access was not performed in this run, so the 24-month frequency is unknown rather than zero. An empty search here is not evidence that the method is absent from the literature.",
+    "closedFailureCount": 1,
+    "closedFailureSource": "the denominator failure recorded in the local teaching input [E1]",
+    "waitingAgendaCount": 1,
+    "waitingAgendaIds": ["audit denominators"],
+    "hasExecutableReferenceCode": false,
+    "hasReachableData": true,
+    "hasReachableDataNote": "local workspace teaching artifacts only",
+    "publishedNumericExamples": 0,
+    "publishedNumericExamplesRequired": 2,
+    "searchPerformed": false
+  },
+  "estimatedBudget": {
+    "boundedLocalRun": {"steps": 1, "note": "one inspection of the frozen local table; no retrieval, no external access"},
+    "literatureHalf": {"status": "prerequisite_not_performed", "note": "cannot be estimated from this run: no search was performed, so the number of queries or records is unknown"}
+  },
+  "waitingAgendaIds": ["audit denominators"],
+  "waitingAgendaNote": "Bounded to actual supplied identifiers. This card names no others, and no headline, score or verdict is asserted.",
+  "scoutProvenance": {
+    "search": "not performed (external access was not authorized in this run)",
+    "platformSummaries": "none used as evidence; the card rests on the frozen local teaching texts only",
+    "sources": ["inputs.txt", "distillation.json", "relations.json"]
+  },
+  "unknowns": [
+    "Whether the method is already implemented outside this workspace: the implementation inventory supplied to this run lists only the three prose rules and the teaching record.",
+    "How frequently the method appears in the literature: no search was run.",
+    "Whether the rule replicates outside the teaching case: external replication is recorded as not performed and is unresolved.",
+    "The properties of the outcome table itself: only the counts denominator6, known outcomes5, one missing were supplied."
+  ],
+  "externalReplication": {
+    "status": "unresolved",
+    "detail": "Not performed and not attempted in this run; nothing external was accessed. This card therefore proposes a candidate for later evaluation and claims no reproduction.",
+    "whatWouldChangeIt": "Re-running the audit on outcome tables from at least two independent sources, with the per-table unknown counts and denominators reported, would resolve it. The published-example floor of two is met by nothing in this run."
+  }
+}

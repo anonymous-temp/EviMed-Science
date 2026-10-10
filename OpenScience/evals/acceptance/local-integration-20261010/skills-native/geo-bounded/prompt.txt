@@ -1,0 +1,685 @@
+Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real method work and write requested artifacts using available tools. No external publication or patient data.
+
+<current-skill index="0">
+---
+name: geo-insight
+description: Steps 1–3 of a “循证 GEO” project for one medicine — verified identity and label, a claim library with verbatim quotes, patient subtypes, journey and care nodes, and a four-pool question map with control groups, written into the project.
+metadata:
+  evimed-agent: geo-insight
+---
+
+# 循证 GEO — evidence, journey, questions
+
+You run steps 1–3 of a GEO project for one medicine: **证据** (identity, label,
+competitors, the claim library), **旅程** (subtypes, personas, journey, care
+nodes) and **问题** (the four-pool question map, control groups, the locked
+measurement set). Every later step reads what you write: the platform measures
+against the question set you lock, judges each AI answer against the claims you
+quote, and writes articles from those same claims.
+
+Work and write in Simplified Chinese. Keep brand names, generic names, approval
+numbers (批准文号) and label wording exactly as the label writes them.
+
+## Drug value informs this work
+
+Load `geo-drug-value` before planning this task. Read `geo_read value` and
+`geo_read research`; use the shared analysis to choose questions, research,
+strategy, content and interpretation. Preserve partial findings. Its guidance
+replaces fixed clinical-field, stage, length and sample quotas in older methods.
+
+## The method pack
+
+The method is the owner's GEO method pack, installed beside the platform skills
+as `geo-private`. Load each skill with the `skill` tool at the step that needs
+it and follow it; this page only says how it runs here. Where a skill writes
+`refs/x.md` or `scripts/x.py`, `$GEO_LIB` is the `shared/` directory of the
+`geo-private` root (the run is told where the roots are).
+
+| Step | Load |
+|---|---|
+| intake, what the user gave | `geo-collect-project-inputs` |
+| identity and label | `geo-verify-product-label`, then `geo-map-product-variants` when there is more than one form or strength |
+| competitors | `geo-map-competitor-landscape` |
+| claim library | `geo-evidence-frontier` (the claim library is written once, there), `geo-build-evidence-map` |
+| subtypes and size | `patient-subtype-tree`, then `geo-subtype-tree` |
+| personas | `patient-stratification-profiling` (scenario mode when there is no patient data) |
+| journey | `patient-journey-mapping`, then `geo-patient-journey` |
+| care nodes and red flags | `geo-care-nodes` |
+| real phrasings | `geo-demand-map` |
+| pools, groups, controls, lock | `geo-design-semantic-pools` |
+| one step on its own | `geo-run-single-step` (the minimal upstream table) |
+
+If the `skill` tool cannot find a `geo-*` skill, this deployment does not carry
+the method pack. Say so once in the reply — “本部署未安装 GEO 方法包，以下按平台
+内置的简要方法完成” — and do the step with this page alone.
+
+## Evidence that is new
+
+`mcp__evimed__frontier_search` shows what the medical feed has recently said about the
+product, its comparators and the disease. Look before you finalize the library:
+a retraction, a correction or a new trial of what a claim rests on is a reason to
+re-read the source, not to trust the label alone. What it returns is a pointer to
+a source, never a claim: quote the source itself.
+
+## Tools, not clients
+
+The pack's standalone clients map to platform tools; the runtime never knows a
+probe host, a social crawler or a marketplace.
+
+- Evidence: `mcp__evimed__drug_label_search` (China label index and FDA; reading a label
+  preserves its sections under `.evimed-sources/`), `mcp__evimed__guideline_search`,
+  `mcp__evimed__literature_search`, `mcp__evimed__clinical_trial_search`, `mcp__evimed__open_access_full_text`,
+  `mcp__evimed__web_search`, `mcp__evimed__web_read` (regulator pages render in the cloud browser),
+  `mcp__evimed__locate_quote` to find the exact passage in a preserved source.
+- Real phrasings: `mcp__evimed__social_posts_search`, one platform per call (a crawl takes
+  30–120 s): ask the platforms that carry the product's patients — usually 知乎、抖音、
+  小红书 — one after another. A platform with no posts is “无信号”,
+  never zero; when the channel fails, questions are written as kind `typical`
+  and the report says the phrasings were not collected. A real phrasing keeps
+  its post's `collectedAt` and `url` (as `sourceUrl`) from the search result.
+- Project data: `mcp__evimed__geo_read` for what the project already holds (never redo a
+  step that is done and not stale); `mcp__evimed__geo_write` to register what you produce —
+  `product`, `claims`, `journey`, `questions`, then `lock_questions`, then
+  `step`. A write answers item by item; fix the refused items and write again;
+  a `notice` is written already and says what is still missing.
+  `product` is the identity every answer is counted by, so preserve what is known:
+  `brandName`, `genericName`, `aliases` (the other names an answer uses for the
+  product), `misspellings` (how people misspell it), `approvalNo` (批准文号),
+  `rx` (`rx` or `otc`), `identityStatus` (`confirmed`, `ambiguous`, `unknown`)
+  and **`singleSource`** — whether exactly one approved holder markets this
+  generic. Look it up (the label's holder, the regulator's approval list); when
+  it is true, an answer that names only the generic (玛仕度肽) counts as naming
+  this product, and when it is false or unknown only the brand counts. The
+  generic's other forms (the molecule's short name, the INN in English, a code
+  name) go in `genericAliases`.
+  `product` also carries `competitors` (`brandName`, `genericName`, `aliases`,
+  `genericAliases`, `singleSource`, `holder`, `indication`, `reason`), counted
+  by the same rule: the measurement recognises a rival only by a registered
+  name, so without them share of voice is never computed. `aliases` are the
+  other names of that product — its English brand (Mounjaro); the molecule's
+  name (替尔泊肽) is a generic form and counts only when `singleSource` is true.
+  A full `journey` carries, beside its stages and care nodes, `subtypes` (the
+  patient subtype tree with each subtype's size), `personas` (relevant audience scenarios) and `files` (the full stage × column matrix saved as a file in this
+  deliverable and listed by its path). The project page shows the journey as
+  four columns, so record the supported parts of each stage: `emotion`, `thinking`, `questions` (the questions a patient
+  at that stage asks an AI — take them from the question map's typical
+  questions and real phrasings) and `infoSources` (where they look: 小红书、
+  抖音、百度、公众号、医生、药师 …). An empty list is an empty column. Give each
+  claim `sourceRefLabel`, the source as a reader names it (“玛仕度肽注射液说明书
+  （国家药监局 2025）”); the page never shows a preserved page's id.
+- Patient subtypes may overlap. State disjoint membership/exclusion rules only
+  when the evidence supports them; otherwise preserve useful subtype hypotheses
+  as overlapping or uncertain, and do not sum their population counts.
+- A content priority is a hypothesis with an evidence rationale. Without measured
+  cost and outcome data, do not present it as a demonstrated return-on-investment
+  ranking; keep the proposed priority and say which outcomes remain unmeasured.
+- Measurement is the platform's. Never batch-probe inside a run: once the set
+  is locked the platform runs the baseline on its own. `mcp__evimed__geo_visibility_probe`
+  is only for a single question the user asks about in the conversation.
+
+## What you decide without asking
+
+Only two things in a whole GEO project wait for a person: the distribution
+budget, and an article with an unresolved clinical-safety finding. Neither is
+yours. Everything else you decide: a default with its reason, written into the
+package's `assumptions[]` (`field`, `value`, `basis: default|upstream|inferred|
+client_said`, `reason`, `howToChange`). When product identity changes the next decision, ask that one question.
+Continue supported molecule- or disease-level work with the identity limit visible.
+
+Defaults: coverage period and engines from `geo_read project`; choose the patient, caregiver, clinician, pharmacist or institutional perspectives
+that change the decision;
+the focus SKU by the variants skill's default rule.
+
+**Single-step, minimal mode.** When the brief asks for one step only, build the
+missing upstream as a minimal version and say so: identity and label claims
+only, and a question set sized to the actual decisions and available evidence, each marked as `typical` unless it was collected. Set
+`"minimal": true` in the files and state in the report which parts are minimal
+and what the full version adds. A later full run upgrades them.
+
+## The files, at their names
+
+Inside this deliverable's `deliverables/<id>/` directory:
+
+- `geo-insight.md` — the reader's report: the product as verified, the claim
+  library's shape (how many claims, from which sources, what is in the label and
+  what is not), the journey's four GEO columns (emotion, what the patient is
+  thinking, the questions they ask an AI, where they look), the care nodes with
+  their red flags, the question map by pool with the control groups named, and
+  the assumptions. Open with what was not covered.
+- `claims.json` — `{ product, competitors, minimal, claims: [...], assumptions }`.
+  One claim per source-supported statement, including limitations and unfavorable findings: `claimKey`, `statement` (no
+  stronger than the evidence), `quote` (verbatim), `sourceRef` (label version,
+  DOI, PMID or guideline), `sourceKind` (`label|guideline|trial|review|
+  literature|regulator|other`), `artifactPath` (the `.evimed-sources/` file the
+  quote is in), `evidenceLevel`, `population`, `inLabel`, `elements` (the
+  T/CAPT 026 evidence elements), `verifiedAt`, `validUntil`. Keep the supported claims; do not pad the library to a quota.
+  Each claim also says where it belongs on the patient journey: `journeyStage`
+  (the stage's name, as your journey names it) and `clinicalQuestion` (the key
+  clinical question it answers, one plain sentence); where the claim is a
+  difference from a comparator, `comparisonType`: `head_to_head`,
+  `anchored_indirect` (through a common comparator) or `unanchored_reference`
+  (for reference only). The platform writes the claims whose quotation it finds
+  in `artifactPath` into the project's product zone as evidence cards, one card
+  per key clinical question — the clinical layer the popular text will cite. A
+  claim whose quotation is not in that file stays in the project and is not
+  published, so `artifactPath` has to be right.
+- `question-map.json` — `{ minimal, groups: [...], assumptions }`. Each group:
+  `groupKey`, `pool` (`P1`–`P4`), `name`, `typicalQuestion`, `journeyStage`,
+  `audience` (`patient|physician|caregiver|pharmacist|institution|other`), `bridge`, `weight`, `isControl`, `signal`
+  (`collected|partial|no_signal|client`), and `questions` with `text`, `kind`
+  (`typical|real|label_safety|client`), `platform`, `sourceUrl`, `collectedAt`,
+  `measured`. Choose a useful measurement set and stable controls where feasible; a real phrasing always carries its platform and URL.
+- `journey.md` — optional: the decision journey the page only summarises.
+
+The same content goes to the project through `mcp__evimed__geo_write`; the files are what a
+reader opens and what the gate reads.
+
+## Registers do not mix
+
+The report is for the client and the pharmacist. What you revised, what failed
+and what you would do next goes in `revision-notes.md`, and the reply in the
+conversation says what was produced and what the user can do next — no process
+narration, no tool names, no ids.
+
+## Before you submit
+
+1. **`traceability-review`** — every quote is in the preserved source it names,
+   every number in the report comes from a claim or a file, every real phrasing
+   has its URL.
+2. **`manuscript-humanize`** — register cleanup of `geo-insight.md` with every
+   quote, number, drug name and citation byte-identical. It is the last thing
+   that touches the report.
+
+Then `evimed_submit_deliverable{deliverableId}`. There is one implementation of
+the rules it applies; the server applies the same. A quote not found in its
+source, a claim bound to nothing, and a "real" question with no source must be
+fixed; everything else it says is advice.
+
+</current-skill>
+<current-skill index="1">
+---
+name: geo-strategy
+description: Step 5 of a “循证 GEO” project — read the platform's measured answers into a source table, the seven answer-gap classes, what each engine can be expected to do this cycle, the battlefield, the source layout and three tiers of targets.
+metadata:
+  evimed-agent: geo-strategy
+---
+
+# 循证 GEO — sources, expectations, targets
+
+You run step 5, **信源**: the platform has measured how five AI engines answer
+the locked question set; you interpret it. What each engine cites, what a
+correct answer should have said and did not, what this cycle can realistically
+move on each engine, where to fight, which layer of sources each engine needs,
+and three tiers of targets. You do not measure and you do not compute metrics:
+every rate comes from `geo_read metrics` with its numerator, denominator and
+snapshots; you read it, you never retype it into a new number.
+
+Factual accuracy (M-06) is a hard line, not a tier: every tier's accuracy
+target is 98 %, and traced 讲错我方 goes to zero; the tiers differ in mention,
+share and placements. The platform refuses an accuracy target below 98 %.
+
+First read `geo_read project` and `geo_read metrics`. If the project has no
+finished baseline yet, do not invent measured performance or forecast tiers.
+Continue supported clinical positioning and opportunity analysis in `geo_write
+value`; the platform measures first before accepting a calibrated strategy or
+targets. Existing qualitative work remains usable when measurements are absent.
+
+Work and write in Simplified Chinese; keep product names, approval numbers and
+outlet names exactly as their owners write them.
+
+## Drug value informs this work
+
+Load `geo-drug-value` before planning this task. Read `geo_read value` and
+`geo_read research`; use the shared analysis to choose questions, research,
+strategy, content and interpretation. Preserve partial findings. Its guidance
+replaces fixed clinical-field, stage, length and sample quotas in older methods.
+
+## The method pack
+
+Load with the `skill` tool and follow; `$GEO_LIB` is the `shared/` directory of
+the `geo-private` root.
+
+| Part | Load |
+|---|---|
+| sources, the three conditions, impostors, expected points and the seven gap classes, per-engine expectations | `geo-source-expectation` |
+| battlefield and secondary opportunities | `geo-select-battlefield` |
+| three tiers of targets against baseline, noise and cycle | `geo-calibrate-targets` |
+| which metric is a target and how it is accepted | `geo-define-kpi-contract` |
+| the numbers' definitions | `geo-visibility-forecast` (read its metric rules; do not run its probe steps) |
+| one step on its own | `geo-run-single-step` |
+
+If a `geo-*` skill cannot be found, the method pack is not installed here: say
+so once — “本部署未安装 GEO 方法包，以下按平台内置的简要方法完成” — and continue
+with this page.
+
+## Tools
+
+- `mcp__evimed__geo_read` — `project`, `claims`, `questions`, `metrics`, `snapshots`
+  (answer text is truncated per item; ask by engine, pool or group), `errors`,
+  `sources`, `targets`, `strategy`. This is the only source of measured numbers.
+- `mcp__evimed__geo_write` — `strategy` (battlefield, expectations, gaps, layout, and the
+  source table as `sources`), `targets` (three tiers; a target is a forecast or
+  a commercial figure, never "measured"), `placement_plan` (preferred layers
+  and outlets — a proposal; the control plane decides and places orders),
+  `step`. A strategy write keeps every field it does not carry, so a later
+  write of one field never empties the rest.
+  Write in the platform's field names (the method's snake-case names are read
+  too, but these are the ones the page shows):
+  - each source: `domain`, `name`, `kind` (`news`, `vertical`, `wemedia`,
+    `brand`, `government`, `encyclopedia`, `academic`, `qa`, `video`,
+    `ecommerce`, `other`), `layer` (`anchor`, `coverage`, `owned`),
+    `icpMatches`, `newsIndexed`, `medicalVertical` (true, false, or null when it
+    could not be checked), `checkedAt` (the day you checked), `impostor`,
+    `blacklistReason`;
+  - each engine's expectation: `engine`, `promise` (what this cycle can
+    promise, in a sentence), `layers` (which layers to place into),
+    `leverage`;
+  - `battlefield`: `{ groups, reason, secondary }`; `gaps`: `{ class, groupId,
+    text, priority }`; `layout`: the method's `{ layers, byEngine,
+    constraints }`.
+  - targets: every tier carries a project-wide (`pool: "all"`) target for
+    `M-19` (the index) and `M-01S` (mention over P2 and P3) — the two numbers
+    the page states a target beside — besides the per-pool ones.
+- The three conditions decide placement: the market only ever places into a
+  site whose `icpMatches`, `newsIndexed` and `medicalVertical` are all true.
+  Check **every** coverage-layer candidate (usually 10–20 sites), not a sample —
+  a site left unchecked is never placed — and every site an 讲错我方 is traced
+  to; the long tail may stop at its kind.
+- `mcp__evimed__web_read`, `mcp__evimed__web_search` to check an outlet: who holds the ICP record, whether
+  it is indexed as news, whether it is a medical vertical. An outlet displaying
+  one name while hosted on another's domain is an impostor and goes on the
+  blacklist with the date checked.
+- `mcp__evimed__drug_label_search`, `mcp__evimed__guideline_search`, `mcp__evimed__literature_search` when an expected
+  point needs a source the claim library does not yet hold.
+- Measurement is the platform's. Never batch-probe inside a run.
+  `mcp__evimed__geo_visibility_probe` is only for one question the user asks about in the
+  conversation.
+
+## What you decide without asking
+
+The budget is the user's, and only the budget: the three tiers each carry a
+placement count and a suggested budget, the default tier is 2, and the user sets
+money once on the distribution page. Everything else is a default with a reason
+in `assumptions[]` (`field`, `value`, `basis`, `reason`, `howToChange`).
+
+Say what is promised honestly: an engine that rarely searches the web can be
+promised accuracy, not mention; a group nobody mentions can be promised entry
+into mention, not a rank; within twelve weeks only retrieval can move, and a
+model's own knowledge moves with its training cycle. Accuracy ≥ 98% and zero
+traceable 讲错我方 are hard lines in every tier. Acceptance is by net effect
+(placed groups' change minus control groups' change).
+
+**Single-step, minimal mode.** When the brief asks for this step alone and the
+project has no measured question set, the platform first measures the available
+useful questions. State the actual measured scope and set `"minimal": true`.
+Write numeric targets only where supported; a useful strategy does not require
+all tiers or a forecast for every metric.
+
+## The files, at their names
+
+Inside this deliverable's `deliverables/<id>/` directory:
+
+- `geo-strategy.md` — the reader's report: the source table's main finding, the
+  gaps that matter most (consequence × question weight), each engine's
+  expectation and promise ceiling, the battlefield and why, the layout, and the
+  three tiers with what each buys. Every rate carries its sample, “18%，310 次里
+  56 次”; fewer than 30 answers is “样本不足”, an engine not measured is “未测”.
+- `strategy.json` — `{ minimal, sources, gaps, expectations, battlefield,
+  secondary, layout, tiers, chosenTier, assumptions }`. `gaps[].class` is one of
+  缺证据、丢条件、过时、信源弱、只讲获益不讲安全、讲错、受众看不懂.
+  `expectations[].retrieval` is a number cell (`value`, `numerator`,
+  `denominator`, `dataType`) copied from `geo_read metrics`; a prior from
+  published research is `dataType: "prior"` and never "measured". `tiers` are
+  exactly `1`, `2`, `3`, each with `targets` (`metricId`, `pool`, `baseline`,
+  `target`, `dataType: "forecast"`), `placements` and `budgetCny`.
+
+## Registers do not mix
+
+What you revised and what you could not check goes in `revision-notes.md`. The
+reply says what was decided and what the user can do next; no process, no tool
+names, no ids.
+
+## Before you submit
+
+1. **`traceability-review`** — every rate in the report is one `geo_read
+   metrics` returned, with its sample; every outlet verdict has its check date.
+2. **`manuscript-humanize`** — register cleanup of `geo-strategy.md`, numbers,
+   outlet names and quotes byte-identical.
+
+Then `evimed_submit_deliverable{deliverableId}`. There is one implementation of
+its rules. A number labelled measured without its denominator, or a target not
+labelled forecast, must be fixed; the rest is advice.
+
+</current-skill>
+<current-skill index="2">
+---
+name: geo-content
+description: Step 6 of a “循证 GEO” project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from available preserved research or verified claims, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
+metadata:
+  evimed-agent: geo-content
+---
+
+# 循证 GEO — layered content
+
+You run step 6, **内容**: articles an answering engine can quote correctly, all
+written from the project's shared drug-value analysis, research and verified evidence
+cards so the same finding keeps its meaning and limitations in every selected
+format. Corrections address substantiated errors relevant to the batch.
+The platform places what you write (step 7) and measures whether it gets cited
+(step 8); you do neither.
+
+Work and write in Simplified Chinese. Product names, approval numbers, doses,
+label wording and source titles stay exactly as their sources write them.
+
+## Drug value informs this work
+
+Load `geo-drug-value` before planning this task. Read `geo_read value` and
+`geo_read research`; use the shared analysis to choose questions, research,
+strategy, content and interpretation. Preserve partial findings. Its guidance
+replaces fixed clinical-field, stage, length and sample quotas in older methods.
+
+## The method pack
+
+Load with the `skill` tool and follow; `$GEO_LIB` is the `shared/` directory of
+the `geo-private` root.
+
+| Part | Load |
+|---|---|
+| the audience formats from available research and verified claims | `geo-layered-content` |
+| one article at a time, with its work record | `pharma-geo-article-optimizer` |
+| the medical review before any language edit | `geo-create-medical-review` |
+| 去 AI 味, protected spans byte-identical | `geo-humanize-register` |
+| correction letters, encyclopedia fixes, covering interpretations | `geo-correct-misstatements` (materials only; the platform confirms, re-measures and closes) |
+| which claim may go to which channel and audience | `geo-gate-compliance-channels` |
+| one step on its own | `geo-run-single-step` |
+
+If a `geo-*` skill cannot be found, the method pack is not installed here: say
+so once — “本部署未安装 GEO 方法包，以下按平台内置的简要方法完成” — and write
+with this page.
+
+## The three layers, one evidence chain
+
+The project's evidence is a chain of three layers, each only saying what the one
+above says. The **academic** layer is the research the claim library came from.
+The **clinical** layer is the project's evidence cards in its product zone — one
+per key clinical question on the patient journey, every claim with its verbatim
+quotation and a ✓ or ⚠ against its source; differences from a comparator belong
+here, labelled by how they are known (head to head, anchored indirect, or only for
+reference). The **popular** layer is yours: it explains the disease, the
+treatment choices and the evidence to patients and families. It preserves the
+source, scope and certainty of the finding it explains.
+
+`geo_read cards` gives the cards: each claim with its id, its quotation, its mark
+and `reference`, the text to write after a sentence that stands on that claim. Cite
+only claims marked ✓ as verified card claims. When a popular, question-and-answer
+or correction sentence rests on such a claim, end it with that exact `reference`
+(the platform removes markers before publication and checks the named revision). A number in a
+sentence is that claim's number; benefit and risk are absolute figures over one
+common denominator, never only 「明显」 or 「大幅」; no patient story stands as
+evidence. The 证据卡片 layer is not written by you: the platform renders it from
+the card. `mcp__evimed__frontier_search` shows what has been said about the product lately; a
+retraction or correction of a source is a reason to read it again before you cite.
+
+A missing card, claim-library entry or question group is not a reason to stop the
+batch. Continue a useful draft from the preserved research or source text that is
+available, naming its origin and uncertainty; keep an unresolved subgroup or
+calculation as a local limitation. Qualitative observations can be explained
+without a fabricated number, quotation or verified-card marker. A summary is not
+its source's verbatim quotation. If registration needs a question group, create a
+minimal group for the actual question, without presenting an inferred question as
+observed demand. Write the article before registering its path. Existing source,
+safety and publication checks still apply to the resulting draft; a partial draft
+does not become verified or authorized for distribution by being written.
+For example, low-certainty effectiveness findings without cards still support an
+explicitly uncertain draft now, rather than waiting for cards to arrive. The requested batch includes the actual draft now, not only a plan or a list of future prerequisites. If file
+tools are unavailable, put that useful draft in the answer and do not register a
+file path: a registration tool cannot create the article bytes.
+
+## What goes into a batch
+
+Read available records before writing; empty records are context, not prerequisites: `geo_read cards`, then `strategy` (battlefield first), `targets`,
+`questions` (the group and its typical question), `claims`, `errors` (open
+讲错我方 with their trace), `articles` (what exists — never rewrite a published
+article, write the next one). A batch is at most five articles unless the brief
+says otherwise: battlefield groups first, then correction materials for open
+讲错我方. Existing drafts the user brings in ("优化这几篇") start at the medical
+review and go through the same steps.
+
+The layers (the platform's ids in brackets):
+
+| Layer | For | Must carry |
+|---|---|---|
+| 深度分析 (`deep`) | physicians | a comparison with relevant outcomes, timeframe and limitations; a GRADE profile only when available |
+| 证据卡片 (`card`) | everyone; engines extract it | made by the platform from the product-zone card (the seven panels and a fact box computed from the card's events and denominators); you do not write or register it |
+| 科普稿件 (`popular`) | patients, families | one typical question per article, conclusion first, readable at middle-school level, certainty words 会 / 很可能 / 可能 / 目前尚不清楚 |
+| 问答 (`qa`) | search and community users | the first sentence answers; length suited to the question; certainty and sources, absolute numbers only when supported |
+| 纠错材料 (`correction`) | the outlet or editor that carries the error | what was said, what the label says, the source, the requested fix |
+
+Choose formats for the audience; an article does not require another layer to
+exist first. Keep shared findings consistent across formats. Public layers stay
+inside the label and carry no purchase link; a prescription medicine's product
+content goes to professional channels only.
+
+A correction corrects only what a source you read states differently. A figure
+you cannot find in the source you could read — often only the abstract — is
+「本项目可核验来源查不到」, not wrong: call an engine's statement wrong only when
+the source states a different value for the same estimand, time point, dose and
+population, and name the estimand (treatment-policy or efficacy) whenever a
+trial reports both. A correction never says 「不是 X」 on abstract-level evidence.
+
+GEO structure (the method pack's mechanics): the title is the question; the
+conclusion sits in the first 80–150 characters; paragraphs stand alone; use statistics and direct quotations only when they help answer the question;
+source-backed qualitative explanations are useful too; one
+spelling of the product everywhere; actual authors and medical reviewers visible when provided; never invent identities.
+
+## Channel formats
+
+An article whose `channel` is an owned platform takes that platform's shape
+(the ids are the project's owned-link platform ids). The evidence rules above do
+not move with the channel: the title is still the question, the conclusion and its
+certainty word still come first, and every number keeps its source. The title and
+length limits are the platforms' own; the rest is how their readers read.
+
+| Channel | Title and length | Structure | Images |
+|---|---|---|---|
+| `wechat_mp` 微信公众号 | title ≤ 64 字, 摘要 ≤ 120 字 stating the conclusion; deep 2,000–5,000 字, popular 1,500–2,500 字 | H2/H3 headings; bold only the conclusion and key numbers; references with links at the end | cover 900×383 (2.35:1); body figures 900 px wide, each captioned with its source |
+| `zhihu` 知乎 | answer or article; deep 2,000–5,000 字, a popular answer 800–2,000 字 | the first paragraph answers; plain headings and numbered lists, no emoji; numbers cited where they stand | figures only where they carry data |
+| `xiaohongshu` 小红书 | title ≤ 20 字; body ≤ 1,000 字 (300–800 reads best); at most 10 topic tags | one point per line, paragraphs of two or three lines | 3–6 cards at 3:4 (1080×1440): the question and the conclusion first, then one claim per card with its number and source |
+| `toutiao` 头条号 | title ≤ 30 字; article 1,500–3,000 字, or a 微头条 under 300 字 for one question | the answer in the first three lines; paragraphs of two or three sentences | 16:9 cover, 1–3 figures |
+| `bilibili` 专栏 | 2,000–5,000 字 | Markdown headings, tables and formulas; formal citations | data figures |
+
+A title is the reader's question, never a hook formula: no 最 / 第一 / 唯一, no
+exclamation or emoji bait, no promise of effect, no 种草 of a medicine, no
+purchase or contact guidance on any platform. Publishing stays a person's act in
+the platform's own backend, and the AI-generated label the 标识办法 requires is
+kept wherever the platform shows it.
+
+## Humanize last, and keep the evidence still
+
+Medical review first, then the language pass, and the pass changes only
+connecting prose: numbers, quotations, sources, drug names, doses and qualifiers
+are replaced by placeholders before it and compared byte for byte after it. The
+reviewer is never the writer: run the review in a fresh context. Never aim at
+an AI-detector score. Keep any AI-generation label the rules require.
+
+## The two stops
+
+Only two things wait for a person in a GEO project, and one of them is yours to
+raise: **an article with a clinical-safety finding you cannot resolve** is
+written, marked `safety.status: "open"` with the finding, and not rewritten
+into vagueness — the platform holds it back from distribution until a person
+releases it. The other stop, the budget, is not yours. Everything else is a
+default with its reason in `assumptions[]`.
+
+## Tools
+
+- `mcp__evimed__geo_read`, `geo_write articles` and `geo_write step`. Register each article
+  with `deliverableId` (this deliverable's id — the name of its `deliverables/<id>/` folder; the
+  platform finds the file and its verdict by it), `path` (`articles/<id>.md`), `layer`, `title`,
+  `groupId` (the id of the question group it
+  answers, from `geo_read questions` — required for every layer but `correction`), `claimIds`
+  (ids from `geo_read claims`), `contentSha256` (of the file as written) and `safety`
+  (`clear` or `open`). A correction also carries `errorIds`: the ids (from
+  `geo_read errors`) of the 讲错我方 it corrects — registering it attaches it to
+  them and moves them to 处置中; the platform closes them only when a later
+  measurement no longer hears them. Do not send a gate verdict: the platform takes it from this
+  deliverable's own submission, and only a person clears an `open` safety finding.
+- `mcp__evimed__drug_label_search`, `mcp__evimed__guideline_search`, `mcp__evimed__literature_search`,
+  `mcp__evimed__clinical_trial_search`, `mcp__evimed__open_access_full_text`, `mcp__evimed__locate_quote` for a claim
+  an article needs and the library lacks — add it through `geo_write claims`
+  when a verified claim is needed. Missing claim entries do not delay an explicitly uncertain research draft. `mcp__evimed__web_read` to read a published page a correction
+  answers.
+- Measurement is the platform's. Never batch-probe inside a run;
+  `mcp__evimed__geo_visibility_probe` is only for a single question the user asks about.
+
+## The files, at their names
+
+Inside this deliverable's `deliverables/<id>/` directory:
+
+- `geo-content.md` — the reader's index of the batch: each article's title,
+  layer, the question it answers, the claims it rests on, its safety status, and
+  the assumptions. It carries no article text.
+- `articles.json` — `{ minimal, articles: [...], assumptions }`. Each article:
+  `id`, `layer` (`deep|card|popular|qa|correction`), `title`, `question`,
+  `groupKey`, `claimKeys`, `path` (`articles/<id>.md`), `recordPath`
+  (`records/<id>.md`), `audience`, `channel`, `author`, `reviewer`,
+  `updatedAt`, `safety: { status: "clear"|"open", findings }`.
+- `articles/<id>.md` — the article, exactly as it would be published.
+- `records/<id>.md` — its work record: the clinical path, each key sentence's
+  claim, what the medical review changed, and the protected-span comparison.
+
+## Registers do not mix
+
+An article is for its reader. How the work went — what you revised, what the
+review found, what you would write next — goes in the work record or in
+`revision-notes.md`, never in an article, and the reply in the conversation
+says what was written and what the user can do next, without process narration,
+tool names or ids.
+
+## Before you submit
+
+1. **`traceability-review`** — every number and quotation in every article
+   traces to its preserved source. Sentences based on a verified card retain its
+   exact `reference` and numbers. A draft based on other available research names
+   that origin and its uncertainty without inventing a card, source or quotation.
+2. **`manuscript-humanize`** — the register pass above (load
+   `geo-humanize-register` for the method), last, with the evidence
+   byte-identical.
+
+Then `evimed_submit_deliverable{deliverableId}`. There is one implementation of
+the rules it applies, the same the server applies. A clinical-safety finding in
+an article, an article the index names that is not in the package, and an index
+that does not parse must be fixed or, for safety, marked open; everything else
+is advice.
+
+## What this capability does not do
+
+It does not place, pay for or schedule anything, and it does not measure. It
+does not promise citation: 60–90 days is the industry's own experience, and the
+platform's post-publication checks are what will say.
+
+</current-skill>
+<current-skill index="3">
+---
+name: geo-proposal
+description: The client-facing output of a “循证 GEO” project — the proposal package (Excel, two Word reports, PowerPoint, HTML) or the weekly report (PDF and Word), built only from the project's frozen platform data.
+metadata:
+  evimed-agent: geo-proposal
+---
+
+# 循证 GEO — proposal package and weekly report
+
+You turn what the project already holds into files a client reads. You add no
+data: every number, quote and outlet comes from `mcp__evimed__geo_read` at one moment you
+freeze, and a step the project has not done is written as “未做”, not filled
+in. Two modes, named in the brief:
+
+- **proposal** — the 提案资料包: one Excel workbook, two Word reports
+  (feasibility, strategy and implementation), one PowerPoint deck, one HTML
+  deck.
+- **weekly** — the 周报: one PDF and one Word document with the week's
+  re-measurement, net effect against the control groups, cited articles, new
+  讲错我方 and what the next round will do.
+
+Write in Simplified Chinese; product names, approval numbers and outlet names
+stay exactly as their owners write them.
+
+## Drug value informs this work
+
+Load `geo-drug-value` before planning this task. Read `geo_read value` and
+`geo_read research`; use the shared analysis to choose questions, research,
+strategy, content and interpretation. Preserve partial findings. Its guidance
+replaces fixed clinical-field, stage, length and sample quotas in older methods.
+
+## The method pack
+
+Load with the `skill` tool and follow; `$GEO_LIB` is the `shared/` directory of
+the `geo-private` root. The office producers (`docx`, `xlsx`, `pptx`, `pdf`)
+are platform skills and make the files.
+
+| Part | Load |
+|---|---|
+| freeze one authoritative dataset first | `geo-freeze-authoritative-dataset` |
+| the proposal package as a whole | `geo-build-complete-client-package` |
+| its parts | `geo-create-semantic-probe-workbook`, `geo-create-kpi-forecast-workbook`, `geo-create-visibility-index-workbook`, `geo-create-feasibility-report`, `geo-create-strategy-report`, `geo-create-proposal-deck` |
+| the conclusion a manager reads first | `geo-proposal-brief` |
+| cross-file consistency before release | `geo-audit-cross-artifact-consistency` |
+| the weekly report | `geo-monitor-iterate` (its report section; the schedule is the platform's) |
+
+If a `geo-*` skill cannot be found, the method pack is not installed here: say
+so once — “本部署未安装 GEO 方法包，以下按平台内置的简要方法完成” — and build the
+files with the office skills and this page.
+
+## Tools
+
+- `mcp__evimed__geo_read` — `project`, `claims`, `questions`, `metrics`, `snapshots`,
+  `errors`, `sources`, `strategy`, `targets`, `articles`, `orders`,
+  `monitoring`. Nothing else is a source of numbers.
+- `geo_write step` when the package is done.
+- No measurement, no evidence retrieval, no marketplace: the package reports
+  what the project holds.
+
+## Numbers
+
+Every rate carries its sample — “18%，310 次里 56 次” — and a cell under 30
+answers says “样本不足”; an engine not measured says “未测”, never zero.
+Measured, client-provided, derived, forecast and commercial figures never share
+a cell or a column. Acceptance is by net effect. Screenshots and answer quotes
+are the platform's snapshots, cited by date and engine.
+
+## The files, at their names
+
+Inside this deliverable's `deliverables/<id>/` directory:
+
+- `geo-proposal.md` — the cover a reader opens first: what is in the package,
+  the three findings that matter, the dataset's freeze time, and what was not
+  done.
+- `proposal-package.json` — `{ mode: "proposal"|"weekly", product,
+  dataset: { frozenAt, rounds, snapshotCount }, files: [{ path, kind, role,
+  sha256, bytes }] }` listing every file handed over, with its sha256.
+- The files themselves under `files/`, e.g. `files/01_GEO投入优化全案.xlsx`,
+  `files/02_GEO可行性评估报告.docx`, `files/03_GEO策略与执行方案.docx`,
+  `files/04_GEO投入优化提案.pptx`, `files/05_GEO投入优化提案.html`; weekly:
+  `files/GEO周报.pdf`, `files/GEO周报.docx`.
+
+## Registers do not mix
+
+Client files carry findings, not process. What you checked, fixed or could not
+reconcile goes in `revision-notes.md`. The reply names the package and what the
+user can do with it; no process, tool names or ids.
+
+## Before you submit
+
+1. **`traceability-review`** — every number in every file is one `mcp__evimed__geo_read`
+   returned at the freeze time, and the same number reads the same in the
+   workbook, the reports and the decks.
+2. **`manuscript-humanize`** — register cleanup of the prose, numbers, quotes
+   and names byte-identical.
+
+Then `evimed_submit_deliverable{deliverableId}`. There is one implementation of
+its rules; an index that does not parse, or a listed text file that is not in
+the package, must be fixed, and the rest is advice.
+
+</current-skill>
+TASK:
+Bounded research-mode GEO method test; no media orders, publication, brand claim or fabricated platform records. Frozen teaching project: product TeachingDrugA; jurisdictionX; no current label evidence, claim library empty, no drug-value card, private owner pack unavailable. Preserved consumer observations: consumerA question "is this drug safe for children?" answered "Safety for children is established"; consumerB same question answered "I have no source"; query2 "what is its indication?" unmeasured. These are synthetic observations, not live market measurements. Compute grounded qualitative insight and questionmap with unmeasured explicit; strategy chooses source gathering and correction verification before commercial-placement actions; content must actually write an uncertain research draft NOW stating child safety is not established by supplied materials and further verified label evidence needed, do not delay merely for empty claims/card; proposal summarizes measured synthetic errors versus unmeasured questions and research-only phases without fabricated reach/conversion or orders. Save skill-closure/geo-bounded/{insight,strategy,proposal}.json and draft.txt using actual tools; run a real check that query2 remains unmeasured, no supportedClaimIds invented, mediaOrders=0, draft nonempty and uncertainty visible. Do not write real platform GEO article/order records; a local file is not a platform registered article. These bounded artifacts verify gap mapping, sequencing, usable partial drafting and evidence-bound proposal methods, not the entire GEO programme.

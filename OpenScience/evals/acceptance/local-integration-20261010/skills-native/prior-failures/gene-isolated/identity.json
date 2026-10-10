@@ -1,0 +1,232 @@
+{
+  "schemaVersion": "gene-isolated-identity/1",
+  "artifactKind": "bounded acquisition and identity verification record (no statistic)",
+  "scope": {
+    "what_this_records": "acquiring one public NCBI GEO series and checking what the returned bytes say about its identity",
+    "what_this_does_not_verify": "the Welch t-test and Benjamini-Hochberg computation, and therefore the capability as a whole. No statistic was computed or is reported here.",
+    "resource": "public NCBI Gene Expression Omnibus (GEO); unrelated to the platform's pharma GEO module, whose tools were not used and are not involved",
+    "bounded": "one series, one platform, one acquisition pass per file; platforms are not pooled"
+  },
+  "accession": "GSE2553",
+  "accession_of_platform": "GPL1977",
+  "captureDir": "/workspace/skill-closure/gene-isolated",
+  "series": {
+    "title": "NHGRI_Sarcoma_Baird",
+    "type": "Expression profiling by array",
+    "overall_design": "Common reference, multiclass gene profiling",
+    "status_line": "Public on Oct 11 2005",
+    "submission_date": "Apr 21 2005",
+    "last_update_date": "Jul 29 2013",
+    "dates_source": "!Series_submission_date / !Series_last_update_date / !Series_status inside the series matrix itself; not the fetch date",
+    "sample_submission_dates": [
+      "Apr 21 2005"
+    ],
+    "sample_last_update_dates": [
+      "Mar 08 2006",
+      "Nov 22 2005"
+    ],
+    "pubmed_id": "16230383",
+    "publication": "Baird K, Davis S, Antonescu CR, et al. Gene expression profiling of human sarcomas: insights into sarcoma biology. Cancer Res. 2005;65(20):9226-35. doi:10.1158/0008-5472.CAN-05-1699. PMID 16230383 (the series states PMID 16230383; citation verified against the PubMed record)",
+    "bioproject": "PRJNA92161 (as stated in !Series_relation)",
+    "contributor_as_stated": "Kristin Baird, as the series record gives it (!Series_contributor); the series record lists the contact, not the full author list",
+    "contact_as_stated": "Sean Davis, Genetics Branch, National Cancer Institute"
+  },
+  "platform": {
+    "accession": "GPL1977",
+    "title": "NHGRI 12k cDNA Custom Array",
+    "technology": "spotted DNA/cDNA",
+    "organism": "Homo sapiens",
+    "taxid": "9606",
+    "status_line": "Public on Oct 11 2005",
+    "submission_date": "Apr 20 2005",
+    "last_update_date": "Jan 17 2013",
+    "states_data_row_count": 12600,
+    "dates_source": "the ^PLATFORM record inside GPL1977's SOFT file"
+  },
+  "sources": [
+    {
+      "file": "GSE2553_series_matrix.txt.gz",
+      "url": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE2nnn/GSE2553/matrix/GSE2553_series_matrix.txt.gz",
+      "role": "series matrix (processed data, the file any computation would be taken from)",
+      "bytes": 8480960,
+      "sha256": "bf92235648b4cd42d68459803938cd646fda791525a88e892586c12476be80a3",
+      "fetched_at": "2026-10-10T04:49:45.340156Z",
+      "http_last_modified": "Sun, 04 Oct 2026 20:10:32 GMT",
+      "content_type": "application/x-gzip"
+    },
+    {
+      "file": "GPL1977_family.soft.gz",
+      "url": "https://ftp.ncbi.nlm.nih.gov/geo/platforms/GPL1nnn/GPL1977/soft/GPL1977_family.soft.gz",
+      "role": "platform record, GPL1977 (its own annotation table, not the same columns as the GEO annotation file)",
+      "bytes": 105649529,
+      "sha256": "58739b9dbe8620198d065335be43af7b54660c8149938a122b3ac1fc04d76c8c",
+      "fetched_at": null,
+      "http_last_modified": "Fri, 02 Oct 2026 13:11:43 GMT",
+      "content_type": null
+    },
+    {
+      "file": "GPL1977.annot.gz",
+      "url": "https://ftp.ncbi.nlm.nih.gov/geo/platforms/GPL1nnn/GPL1977/annot/GPL1977.annot.gz",
+      "role": "platform annotation as GEO computes it for this platform",
+      "bytes": 2160619,
+      "sha256": "f70326970bde97221bad7fa45e32efa286abf2e4468ea3d9204ba8c3c3a46803",
+      "fetched_at": null,
+      "http_last_modified": null,
+      "content_type": null,
+      "note": "GEO annotation file; its columns (Gene symbol / Gene ID / Chromosome location) are GEO's own, and are not the platform table's columns (Symbol / LLID / CLONE_ID)"
+    },
+    {
+      "file": "GSE2553_family.soft.gz",
+      "url": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE2nnn/GSE2553/soft/GSE2553_family.soft.gz",
+      "role": "series record and every sample record, as SOFT",
+      "bytes": 105648827,
+      "sha256": "b20cbc29c70a2d240b5240a682266027886cba94736f84ea99155f46b1080f69",
+      "fetched_at": "2026-10-10T04:49:56.734149Z",
+      "http_last_modified": "Sun, 04 Oct 2026 20:09:56 GMT",
+      "content_type": "application/x-gzip",
+      "note": "preserved; its size is dominated by 181 per-sample tables and it is not needed for the identity checks, which were taken from the matrix, the platform record and the annotation file"
+    }
+  ],
+  "identities": {
+    "samples": {
+      "value": 181,
+      "unit": "samples (GSM accessions) in the matrix",
+      "known": true,
+      "evidence": "!Sample_geo_accession has one column per sample; the matrix table header has the same 181 GSM names; every sample is listed under ^PLATFORM in GPL1977's own record"
+    },
+    "platform": {
+      "value": "GPL1977",
+      "known": true,
+      "evidence": "!Series_platform_id and all 181 !Sample_platform_id values are GPL1977; GPL1977's record states !Platform_series_id = GSE2553; one platform, so nothing is pooled"
+    },
+    "organism": {
+      "value": "Homo sapiens",
+      "known": true,
+      "evidence": "!Series_sample_taxid 9606 and every !Sample_organism_ch1 = Homo sapiens"
+    },
+    "genome_build": {
+      "value": null,
+      "known": false,
+      "evidence": "neither the series matrix nor the GPL1977 record states a genome build or assembly. GEO platform records of this generation do not carry one, and the platform's probe table is clone/EST based. No build is assumed, and none is inferred from anything else.",
+      "consequence": "coordinates or genomic positions must not be attributed to a build; the annotation file's Chromosome location strings are reproduced from GEO and are not a build declaration"
+    },
+    "value_scale": {
+      "value": "log ratio (two-channel, common reference); not stated in words anywhere in the file",
+      "known": false,
+      "what_the_source_states": "the matrix header carries no data-processing, scan or normalisation field (!Sample_data_processing, !Sample_scan_protocol, !Sample_hyb_protocol are absent), so the scale is never declared in words",
+      "what_the_bytes_support": "!Sample_channel_count is 2 for every sample; channel 1 is total RNA from the tumour and channel 2 is 'Pooled sarcoma cell lines'; !Series_overall_design says 'Common reference, multiclass gene profiling'; the values run from -13.2877 to 17.5125 with 42.7% of cells negative and a median of 0.1950 over 2,272,602 numeric cells. Raw intensities cannot be negative and are not centred on zero, so the values are a log ratio (log2) against the common reference.",
+      "classification": "supported_by_the_source_bytes, not stated by the source; stated as a derived classification in this record",
+      "consequence": "a value here is a tumour-versus-reference log ratio for one probe on one array, not an absolute expression level; the platform's own differential tool ingests values as log2 expression, and the reference channel is constant across samples, so a two-group comparison of these ratios is a comparison of ratios of ratios"
+    },
+    "probe_count": {
+      "value": 12600,
+      "known": true,
+      "evidence": "the matrix table has 12,600 data rows, all 181 !Sample_data_row_count values are 12,600, GPL1977's own table has 12,600 rows, and its annotation file has 12,600 rows"
+    },
+    "annotation": {
+      "available": true,
+      "sources": [
+        "GPL1977's own platform table columns: Symbol, Name, LLID (Entrez Gene id), CLONE_ID, UNIGENE",
+        "the GEO annotation file GPL1977.annot.gz: Gene symbol, Gene ID, Gene title, Chromosome location, GO terms"
+      ],
+      "coverage": "10,573 of 12,600 annotation rows carry a gene symbol; 759 rows list more than one Entrez Gene id under Gene ID; 891 gene symbols appear on more than one probe row; the remaining 2,027 rows carry no gene symbol",
+      "limitation": "the annotation file is GEO's, generated Jul 8 2008 by its HTTP header, and is older than any use of it here; the two annotation layers do not have the same columns and neither is a genome-build declaration",
+      "annotation_snapshot_date": "Jul 8 2008 (HTTP Last-Modified of GPL1977.annot.gz)"
+    },
+    "missing_values_in_matrix": {
+      "value": 7998,
+      "unit": "empty/NA cells of 12,600 x 181 = 2,280,600",
+      "evidence": "counted by streaming the matrix table; no imputation was done and none is reported"
+    }
+  },
+  "unit": {
+    "is": "probe (an integer probe identifier in the matrix's ID_REF column; GPL1977.annot.gz maps each to a gene symbol and Entrez Gene id)",
+    "not": "gene",
+    "probe_rows_in_matrix": 12600,
+    "consequences": [
+      "a probe mapped to several genes stays one row and is not copied to each gene",
+      "a gene with several probes has several rows",
+      "nothing is collapsed to a gene level in this record"
+    ]
+  },
+  "group_declaration": {
+    "status": "not confirmed by the researcher",
+    "groups": [],
+    "candidate_annotation_field": "!Sample_description, e.g. 'Diagnosis: Liposarcoma'; 25 distinct diagnosis values over the 181 samples",
+    "why_no_declaration_was_made": "the two groups and the contrast are the researcher's decision; the skill declares groups before looking at any result, and no result was computed here"
+  },
+  "stop": {
+    "stopReason": "groups_not_confirmed",
+    "stopped_at_step": "after preserve-and-verify (skill step 1); steps 2-4 (declare groups, compute, render a report) were not started",
+    "differential_computed": false,
+    "statistic_fields_present": false,
+    "statement": "no Welch t-test, no Benjamini-Hochberg adjustment, no effect size, no p-value and no top table were produced in this run; this record contains no statistic"
+  },
+  "method_status": {
+    "preservation_and_identity_checks": "done by hand from the platform's public download endpoints because the platform's own series tool was not callable in this session (see acquisition_attempts)",
+    "what_is_verified": "that a series can be acquired and that what its bytes say about identity can be checked, with hashes and stated dates",
+    "what_is_not_verified": "the differential-expression computation (Welch t-test per probe, Benjamini-Hochberg, the engine's limits and its receipt)",
+    "engineering_note": "this run does not establish that the capability's own retrieval tool works end to end"
+  },
+  "acquisition_attempts": [
+    {
+      "attempt": "platform tool gene_expression_series",
+      "result": "not callable",
+      "detail": "no such tool was available to this session's toolset, so no retrieval from it was possible and none is claimed. Nothing about a capture from it is recorded here.",
+      "pretend_capture": false
+    },
+    {
+      "attempt": "platform web reader on the GEO record page, https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE2553",
+      "result": "blocked",
+      "bytes_returned": 62,
+      "page_obtained": "a reCAPTCHA browser check, not the record",
+      "artifact": ".evimed-sources/web-pages/73a8aa36f5aea371/e07dc79e46397b996b53772cb7a0e9b01f29aa6be7f1a72046140396b93a2f5e/page.md",
+      "artifact_sha256": "7178f40efc8c9aafce1af64cf57eb8fb46f37869be9af87a0a134ee42d6a4766"
+    },
+    {
+      "attempt": "platform web reader on the GEO text view (form=text)",
+      "result": "refused",
+      "error_code": "web_read_content_type_unsupported",
+      "detail": "the reader does not read the geo/text content type; nothing was preserved from it"
+    },
+    {
+      "attempt": "platform public-source gateway",
+      "result": "not usable by this run",
+      "detail": "the gateway answered HTTP 401 to an unauthenticated request; no credential is available in this session, and nothing was retrieved through it",
+      "pretend_capture": false
+    },
+    {
+      "attempt": "public NCBI download endpoints (the same files GEO serves), used for the preserved bytes above",
+      "result": "succeeded",
+      "detail": "three files fetched over HTTPS and kept byte for byte; every hash in this record was recomputed from the bytes on disk in a separate step"
+    }
+  ],
+  "independent_recheck": {
+    "checks": [
+      {
+        "name": "recompute-from-disk",
+        "script": "checks/verify_identity.py",
+        "output": "checks/verify-identity-output.json",
+        "what_it_does": "reads the bytes on disk again, recomputes each sha-256, re-detects the accessions inside the decompressed content, recounts the matrix rows and columns, and fails if any of it disagrees with this record",
+        "result": "19 checks, all in agreement; the check refuses a record that contains an effect size or a p-value"
+      },
+      {
+        "name": "hash-recomputed-from-the-source",
+        "file": "verify-sources.json",
+        "what_it_does": "re-hashed every preserved file in a separate process, without carrying over the acquisition step's own values",
+        "result": "every recorded hash reproduced"
+      },
+      {
+        "name": "live-hash-comparison",
+        "file": "hash-recheck-against-live.json",
+        "what_it_does": "re-fetched the same public URLs without keeping the bytes and compared the live sha-256 with the recorded one",
+        "result": "the series matrix and the annotation file still hash to the recorded values; the series matrix also still carries the same HTTP Last-Modified (Oct 4 2026)"
+      }
+    ]
+  },
+  "references": [
+    "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE2553 (series record; the matrix preserved here states the same accession and dates)",
+    "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL1977 (platform record)",
+    "https://pubmed.ncbi.nlm.nih.gov/16230383/ (the series' publication)"
+  ]
+}

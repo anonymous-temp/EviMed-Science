@@ -1,0 +1,297 @@
+Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real method work and write requested artifacts using available tools. No external publication or patient data.
+
+<current-skill index="0">
+---
+name: reporting-guidelines
+description: Complete the reporting checklist of the one study a deliverable reports or designs — every item of its reporting guideline, and where the deliverable reports it — as a journal asks its authors to submit. Applies when the plan declared the deliverable's study type and that type has a guideline.
+---
+
+# Reporting checklist
+
+A journal asks the authors of a trial for the completed CONSORT checklist, of a
+prediction model for TRIPOD+AI, of a systematic review for PRISMA: every item,
+and where it is reported. A deliverable carries the same thing when its plan
+declared the study type and that type has a guideline — `reporting-checklist.md`,
+in the deliverable's own directory. The delegation message (or the plan's own
+answer) names the guideline and its item table.
+
+## The item tables
+
+The guidelines' own published checklists, item numbers and wording as printed,
+one file each in `checklists/` beside this skill:
+
+| Study type | Guideline | Table |
+| --- | --- | --- |
+| rct | CONSORT 2025 | `checklists/consort-2025.md` |
+| prediction-model | TRIPOD+AI | `checklists/tripod-ai.md` |
+| systematic-review | PRISMA 2020 | `checklists/prisma-2020.md` |
+| mendelian-randomization | STROBE-MR | `checklists/strobe-mr.md` |
+
+Copy the whole table into `reporting-checklist.md`, under a first line naming
+the guideline and its citation, and fill in 报告位置 for every row. Do not
+translate, merge, renumber or drop a row: an item a reader cannot find by its
+number is one they cannot check.
+
+## Filling in 报告位置
+
+- **Reported** — the heading the item is reported under, as it reads in the
+  deliverable (资料与方法 › 随机化); where the package has several documents,
+  which one as well (研究方案 › 样本量). Precise enough to be found without
+  searching.
+- **Not reported** — 「未报告：原因」, and the reason is the useful part:
+  - one section reports only its own part — 「未报告：属于结果部分」;
+  - a protocol or a proposal reports a design, not results — 「未报告：方案阶段，结果待试验完成后报告」;
+  - the item does not apply to this study — 「未报告：不适用（单中心试验）」;
+  - the sources do not have it — 「未报告：资料未提供，需补充……」.
+
+Before assigning an item number, read the supplied checklist file for the named version. Never carry item numbers from an older version into a newer checklist. If the exact checklist cannot be read, record that limitation and use unnumbered domain labels; do not invent numbered compliance. This applies to a bounded partial mapping as well as a complete checklist.
+
+## What the checklist may not do
+
+- **Claim what the text does not say.** An item marked as reported has to be
+  there, at the heading given. The independent reviewer reads the checklist
+  against the text, and a row that points at nothing is a finding against the
+  package.
+- **Stand in for the text.** A row does not report an item. If the item belongs
+  in this deliverable, write it into the deliverable and point the row at it.
+- **Carry process.** No tool names, file paths or retrieval narrative — the same
+  rule as the report itself.
+
+Say in `delivery-summary.md`, in one line, which guideline the checklist
+follows.
+
+</current-skill>
+<current-skill index="1">
+---
+name: comprehensive-drug-evaluation
+description: Produce a traceable, domain-by-domain medicine evaluation using EviMed evidence without automatically converting study design, certainty, or scores into a recommendation.
+---
+
+# Comprehensive Drug Evaluation
+
+Use this workflow for a medicine and defined indication. It supports evidence review and institutional decision preparation; it is not a prescription, HTA ruling, reimbursement decision, or procurement authorization.
+
+Unless the user requests another language, interact and write deliverables in Simplified Chinese. Preserve official medicine names, identifiers, source titles, currencies, and units when translation would reduce traceability.
+
+## 1. Bind the question
+
+Require medicine and indication. First call `mcp__evimed__comprehensive_drug_evaluation` with `action: requirements`. Ask once for the returned missing fields in one concise group. If the user does not provide them, continue retrieval but keep the affected dimensions unscored. Capture population, comparator, jurisdiction, care setting, outcomes, time horizon, decision date, and uploaded evidence when material. If the user requests a quantitative score, set `quantitativeScoringRequested: true` and collect the exact evaluation domains, item definitions, scales, weights, directions, missing-data rules, and versioned scoring policy. Normalize the medicine with `mcp__evimed__drug_term_normalize`. State unresolved scope gaps rather than silently broadening the question.
+
+## 2. Retrieve and freeze evidence
+
+Call `mcp__evimed__comprehensive_drug_evaluation` with `action: retrieve`. Use label, guideline, trial, literature, and active biomedical-source tools only to fill a declared gap or verify a material claim. Deduplicate records with `mcp__evimed__evidence_deduplicate`.
+
+Labels come from `mcp__evimed__drug_label_search`: search by the medicine's name and jurisdiction (for China it reads the EviMed label index), then read the label you rely on with its `labelId`, which preserves the text with its approval number. `mcp__evimed__biomedical_source_search` asks one catalogued `source` at a time; `dailymed` and `openfda` hold US labels and match a drug name, not a phrase such as "FARXIGA dapagliflozin tablets label".
+
+The optional `mcp__evimed__pharmacy_reference_search` tool may supply private
+terminology, dose-risk, interaction, route, monitoring, or special-population
+context. Treat every returned row as a hypothesis or institution-specific
+decision-support reference, never as current label, guideline, pharmacopoeia,
+HTA, efficacy, or safety evidence. Verify any material rule against a current
+authoritative source and keep private rows labeled `user_provided_other`.
+
+Preserve the exact query, source identifier, URL, jurisdiction, version/date, retrieval time, and observed fields. Bibliographic metadata alone cannot establish study design, outcomes, effect size, certainty, or comparative benefit. The word "cohort" does not establish investigator-assigned treatment: call it interventional only when the preserved methods explicitly describe assignment; otherwise retain the reported cohort design and mark assignment as unknown. Read the abstract or full text required for every material conclusion. A source outage or empty retrieval is missing evidence, not evidence of no effect. Mark uploaded files as user-provided evidence.
+
+For every `sourceInventory` item passed to the compiler, declare `evidenceAccess`
+as `full_text`, `abstract`, `regulatory_record`, `registry_record`,
+`bibliographic_only`, `user_provided_full_text`, or `user_provided_other`.
+Never cite a `bibliographic_only` item in an observed domain assessment; it may
+remain in the snapshot only as a retrieval lead. A label effective, revision,
+or retrieval date is not the product's original authorization date. Describe
+an unavailable jurisdiction as unavailable and do not invent an HTTP status.
+
+Freeze the retrieval and provenance package in `evidence-snapshot.json` before assessment; the compiler input SHA-256 binds the structured assessment to the supplied inventory.
+
+Trace the field's landmark trials before you assess: call `mcp__evimed__reference_list`
+on the newest guideline and the newest systematic review you retrieved, and screen
+the trials and reviews their reference lists name (`mcp__evimed__literature_search`
+`pmids` for the abstracts). A trial known by an acronym is missed by keyword queries
+and is named in every guideline's references; a guideline Europe PMC does not index
+is read with `mcp__evimed__open_access_full_text` or `mcp__evimed__web_read` instead.
+
+## 3. Assess domains without shortcuts
+
+Assess `effectiveness`, `safety`, and `applicability` as mandatory core domains. Add `economics`, `hta`, `evidence_certainty`, `innovation`, `accessibility`, `equity`, or `other` only when supported and relevant. Each row must contain status, rationale, and `evidenceIds` that resolve to the snapshot.
+
+Evaluate the body of evidence, not the highest single study. Study design is only a starting point: do not call metadata a randomized trial, do not infer certainty from design alone, and do not map certainty directly to recommendation strength. Use `certainty: not_rated` unless a validated adapter or a user-supplied formal assessment provides a named framework, traceable full-text evidence, and explicit risk-of-bias, inconsistency, indirectness, imprecision, and publication-bias judgments. For a formal rating, send those as `certaintyOrigin`, `certaintyFramework`, `fullTextEvidenceIds`, `certaintyBasis`, and `certaintyJudgments`; a narrative impression or abstract-only review is not a formal certainty assessment.
+
+Keep effectiveness, harms, applicability, certainty, economics/HTA, equity, values, and implementation separate. Resolve contradictions rather than averaging them away. Never invent an HTA conclusion, price, budget impact, cost-effectiveness result, composite score, threshold, or weight. Preserve currency, price date, jurisdiction, perspective, time horizon, discounting, and provenance when economics exist. A publication score is reproducible only for its reported product, regimen, price date, population, setting, rubric version, and evidence cutoff; use it as an external reference case, not a universal score.
+
+Preserve subgroup denominators exactly. When a source reports a combined group
+(for example, two adjacent age strata), never assign the combined percentage to
+only one component subgroup. Reconcile the prose against the source table or
+explicit stratum counts before writing the claim.
+
+## 4. Compile deterministically
+
+Call `mcp__evimed__comprehensive_drug_evaluation` with `action: compile`, `sourceInventory`, and all domain assessments. Preserve its core-domain coverage and audit hash. If quantitative scoring was requested, also supply the exact `evaluationDomains`, `scoringRubric`, `scoringPolicyVersion`, and item-derived score fields for every domain. The compiler computes a weighted normalized score only when the declared domains are complete, all rules use the supplied version, every value is finite and in range, and any economic context is complete. Otherwise it withholds the score and lists the reasons; missing evidence is never zero. If compilation returns an error, correct the evidence rows; do not bypass the gate. A computed score never determines recommendation strength automatically.
+
+The final narrative may describe benefit-harm and decision considerations, but must label uncertainty and leave clinical, HTA, reimbursement, and procurement conclusions to qualified reviewers.
+
+## 5. Deliverables
+
+Write:
+
+- `comprehensive-evaluation-report.md`: question, methods, source coverage, domain findings, certainty basis, contradictions, applicability, economics/HTA limits, and reviewer considerations.
+- `evidence-table.csv`: one traceable row per source-domain link with observed findings and limitations.
+- `evaluation-summary.json`: the exact compiler result, domain coverage, audit hash, and human-review flag.
+- `evidence-snapshot.json`: the scope, and one entry per source you rely on: its `sourceId` as the retrieval tool returned it, `evidenceAccess`, and the fields you observed. Each submission writes `retrieved` into this file: the platform's record of every source this run's retrieval tools returned, with its identifier, title, address, tool, query and time. That key is the platform's; never type or script it. Every link in the report must be a source this run retrieved. A portal, home or search page is not a source: cite a label by its approval number and label id, and name a work you did not read as not read, without a link.
+
+Resolve every material citation. Completion means the assisted evidence and domain-assessment package is reproducible, not that an external approval workflow has finished.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.
+
+</current-skill>
+<current-skill index="2">
+---
+name: manuscript-humanize
+description: Use as the last step on a finished academic deliverable, when the prose reads as machine-written — uniform paragraph shapes, hedged attributions,列举式排比, inflated transitions. Applies the humanizer rules to the writing while holding every quotation, number, citation index, and claim marker byte-identical, so the delivery gate still passes. Never invoke it before the evidence work is complete.
+license: MIT
+---
+
+# Manuscript humanize
+
+Rewrite the prose of a finished deliverable so it reads as a person wrote it.
+The rules for what makes writing sound machine-generated live in the vendored
+`humanizer` (English) and `humanizer-zh` (Chinese) skills — load the one that
+matches the document's language and follow it. This skill adds what those
+skills cannot know: which parts of a scientific deliverable are **evidence**
+rather than prose, and therefore must survive untouched.
+
+Load `humanizer-zh` for a Chinese manuscript, `humanizer` for an English one.
+Their patterns are the substance of this pass; everything below is the boundary
+it runs inside.
+
+## What must not change
+
+A cited manuscript is not free text. These are load-bearing, and a rewrite that
+touches them turns a deliverable that passed into one the gate rejects — or
+worse, one that reads well and no longer matches its sources:
+
+1. **Quoted material.** Any text inside quotation marks that carries a citation,
+   and any string that appears in `clinical-evidence-matrix.json` as a
+   `supportQuote`, is verbatim from a source. Not one character.
+2. **Numbers.** Effect estimates, confidence intervals, sample sizes, doses,
+   thresholds, dates, percentages, p-values. Do not round, reformat, convert
+   units, or turn 0.3–0.6 mg into "about half a milligram".
+3. **Citation indices** — `[7]`, `[3][4]`, `[2-5]` — and their positions
+   relative to the sentence they support. Moving a citation to a different
+   clause changes what it is claimed to support.
+4. **Hidden claim markers** — `<!-- claim:CLM-014 -->`. They bind report prose
+   to the evidence matrix. Keep each one attached to the sentence it marked.
+5. **Derivation marks** — `〔推导〕` — and the assumptions, method, and
+   sensitivity that accompany a derived result.
+6. **Section headings**, their order, and the reference list.
+7. **Hedging that reflects evidence strength.** "可能" in front of a claim
+   supported by one low-quality trial is not weak writing; it is the finding.
+   Sharpening it into a confident sentence is fabrication, not editing. This is
+   the single most likely way to do harm here: the humanizer rules read hedges
+   as a tell, and in an evidence report many of them are the result.
+
+## What to change
+
+Sentence rhythm, paragraph openings, transitions, word choice in the analyst's
+own prose, and the shape of an argument that reads as a template rather than as
+someone working through a problem. Merge paragraphs that were split to look
+balanced. Cut the connective filler. Let paragraph lengths vary the way they do
+when a person writes about something they understand.
+
+Two register faults are specific to this platform and are worth naming, because
+the humanizer rules do not cover them:
+
+- **Acceptance-spec prose.** 「命题 A（……）成立，需……；判定为……」 is a
+  reviewer's checklist, not a paper. Rewrite as a finding with its strength:
+  「现有报告仅提供用药与症状的时间关联，缺少去激发/再激发观察与标准化因果关系
+  评定，尚不足以支持因果归因」.
+- **Commissioning vocabulary.** 题库、语义群、KPI、达标率、交付判据 belong to
+  whoever ordered the work. A paper never mentions the task that produced it.
+
+## Procedure
+
+1. Read the whole document before editing anything. A pass that rewrites
+   paragraph by paragraph produces uniform paragraphs, which is the defect.
+2. Extract the protected set first: every `supportQuote` in the matrix, every
+   number, every citation index, every claim marker. Keep it beside you.
+3. Edit **in place with the edit tool**, one passage at a time. Do not rewrite
+   the file with the write tool: a whole-file regeneration reconstructs the
+   document from what you still hold in context, and measured across this
+   project's repairs, every whole-file rewrite lost content — one shed 1,863
+   characters and the next 4,125.
+4. After each passage, re-read it against the protected set.
+5. When the pass is done, verify mechanically before declaring it finished:
+
+```bash
+python "scripts/verify_preserved.py" \
+  --before <original> --after <edited> --matrix clinical-evidence-matrix.json
+```
+
+   It compares the two files on exactly the protected set and prints what moved.
+   A non-empty report means the rewrite broke something; fix it and rerun.
+6. Then submit the deliverable again, because prose edits can still break
+   section-level rules and the verdict is what tells you so.
+
+## When not to run this
+
+- Before the evidence work is finished. Humanizing a draft that will change is
+  wasted, and it makes the later diff unreadable.
+- On the reference list, the evidence matrix, the search log, or the citation
+  ledger. Those are apparatus, not prose.
+- On a document whose hedges you cannot check against the matrix. Without the
+  matrix you cannot tell a weak sentence from a weak finding.
+
+</current-skill>
+<current-skill index="3">
+---
+name: autopilot-episode
+description: Produce a bounded, evidence-linked agenda delta when a capability runs as a proactive research episode.
+---
+
+# Proactive research episode
+
+Apply this companion only when the brief explicitly identifies a proactive research episode. Keep the capability's ordinary deliverables and gates unchanged.
+
+Also write `agenda-delta.json` with `schemaVersion: 1` and a `claims` array. Each claim carries `id`, `statement`, `type` (`direct`, `synthesized`, or `derived`), `tier: "unverified"`, non-empty `sources`, and `provenance: { "episodeId": "<the episode id>", "artifact": "<an accepted artifact path from this run>" }`. A synthesized or derived claim also carries `what_would_change` and `confidence` (`high`, `moderate`, or `low`). An episode with no defensible claim writes an empty array. Never invent a headline, grade your own claim, send messages, purchase anything, reach an unlisted source, or give individual treatment advice.
+
+</current-skill>
+TASK:
+Genuine corrective bounded verification. Preserve prior outputs elsewhere; save new outputs under skill-closure/corrections/. Reporting: actually read official-consort-2025.html (downloaded primary paper PMC11995449) and exact supplied consort-2025.md, compare official table. Save checklist.json mapping sequence17a/17b, concealment18, blinding20a/20b, losses22b, protocol3 using source quotes/item IDs. Input teaching S1 "Participants were allocated alternately by day. Outcome assessors knew allocation. No prespecified protocol was provided." S2 "A computer-generated sequence assigned 60 participants equally. Allocation concealment was not described. Outcome assessors were blinded. Attrition was 12/60 without reasons." Do not label older8a/8b/8c as2025. Comprehensive: input "One unblinded convenience cohort of20adults reported symptom improvement in12participants;3reported rash. There was no comparator or adjudication." Exposure assignment unstated. Save comprehensive.json with investigator_assignment:'unknown', reported_design:'cohort', formal_certainty:'not_rated', recommendation:null; never infer interventional design or causality. Manuscript: actually edit "It is important to note that 120 participants had a 2.4-point difference (95% CI 0.8–4.0). “association does not establish causation” [Smith2020] [[CLAIM:C1]]" into edited.txt; preserve numeric/citation/quote/marker bytes and run independent extraction verifier. Autopilot: create frozen.csv with six rows, outcome values1,0,1,blank,0,1. Budget exactly1 inspect step. Actually execute local inspection, write episode.json with denominator6,known5,missing1,zero2, completed step1, explicit no durable service write, no external access, stop budget exhausted. Use real tools with explicit full workspace-relative output paths to save artifacts and run checks. These are bounded methods, not full packages or clinical acceptance.

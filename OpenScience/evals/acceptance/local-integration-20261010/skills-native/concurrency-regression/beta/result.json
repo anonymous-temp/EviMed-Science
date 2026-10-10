@@ -1,0 +1,27 @@
+{
+  "taskMarker": "BETA-20261010",
+  "inputValues": [
+    3,
+    7,
+    13
+  ],
+  "sum": 23,
+  "mean": 7.666666666666667,
+  "observedCurrentPlan": {
+    "planId": null,
+    "planRevision": 1,
+    "deliverables": {
+      "concurrency-beta": "planned"
+    },
+    "note": "Observed from evimed_plan action=status and the current run's state file; not recalled from memory."
+  },
+  "observedCurrentRun": {
+    "runId": "run_e666ae1d408e6ff688c6a65b863f2585",
+    "sessionId": "session-f51e5a07-237d-4d1d-9f96-5c26e231f63e",
+    "stateFile": ".evimed-run/runs/run_e666ae1d408e6ff688c6a65b863f2585/state.json"
+  },
+  "observationSource": {
+    "stateFile": ".evimed-run/runs/run_e666ae1d408e6ff688c6a65b863f2585/state.json",
+    "taskPlanFile": ".evimed-run/runs/run_e666ae1d408e6ff688c6a65b863f2585/task-plan.json"
+  }
+}

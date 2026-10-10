@@ -1,0 +1,133 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/agent-runs/run_110cee32c08605f708809ab467828cad/cancel",
+    "reason": "Observed current VCR run followed shared workspace gene plan instead of VCR task; preserve and rerun sequentially."
+  },
+  "httpStatus": 200,
+  "response": {
+    "data": {
+      "run": {
+        "id": "run_110cee32c08605f708809ab467828cad",
+        "dispatchId": "skill_72bef64a1c73e386e1fc67af",
+        "dispatchStatus": "accepted",
+        "baselineCursor": "seq_262",
+        "kernelRequestIds": [
+          "req_4e9c5f337076d626293ce1e98d3adb54"
+        ],
+        "personalSkillGeneration": {
+          "generationId": "c2d91d336772aa04e345275d81e335bd020a4320079f32b70d7053d38d9e8cc1",
+          "pins": []
+        },
+        "sessionId": "session-37ba23a3-2a6b-4151-8e1f-506ac0c9426a",
+        "mode": "open-domain",
+        "agentId": null,
+        "agentVersion": null,
+        "runtimeAgent": null,
+        "effectiveAgentId": "gene-expression-analysis",
+        "effectiveAgentVersion": "1.0.1",
+        "effectiveRuntimeAgent": "evimed-gene-expression-analysis",
+        "effectiveRouteReason": "choice:gene-expression-analysis",
+        "model": "deepseek/deepseek-flash",
+        "question": "Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real me…",
+        "automated": true,
+        "estimatedMinutes": {
+          "min": 5,
+          "max": 40
+        },
+        "status": "canceled",
+        "createdAt": "2026-10-10T04:55:38.418Z",
+        "startedAt": "2026-10-10T04:55:38.418Z",
+        "accountCreatedAt": "2026-10-10 03:24:50.22276+00",
+        "finishedAt": "2026-10-10T04:57:37.651Z",
+        "durationMs": 119233,
+        "errorCode": "runtime_canceled",
+        "artifacts": [],
+        "unverifiedArtifacts": [],
+        "verification": null,
+        "qualityNotices": [],
+        "observedMessages": 49,
+        "observedToolCalls": 22,
+        "observedRunSideActivity": "1:0:20:1:0",
+        "observedKernelActivity": "002b32db5055df9b1e840d093d8e4fe2d0695ef704613ec53ee63dd8addd3b7b",
+        "lastProgressAt": "2026-10-10T04:57:24.585Z",
+        "title": "本地有界验证任务执行",
+        "titleSource": "auto",
+        "deliverables": [
+          {
+            "id": "gene-native-identity",
+            "title": "GSE2553 原生路径下的受边界约束采集与身份核验记录",
+            "capability": "gene-expression-analysis",
+            "status": "planned",
+            "attempts": 0
+          }
+        ],
+        "progress": {
+          "deliverables": [
+            {
+              "id": "gene-native-identity",
+              "title": "GSE2553 原生路径下的受边界约束采集与身份核验记录",
+              "capability": "gene-expression-analysis",
+              "status": "planned",
+              "attempts": 0
+            }
+          ],
+          "phaseCounts": {
+            "search": 0,
+            "screen": 0,
+            "fulltext": 2,
+            "claims": 0,
+            "write": 0,
+            "deliver": 0
+          },
+          "reachedPhases": [
+            "fulltext"
+          ],
+          "currentPhase": "fulltext",
+          "sources": {
+            "searched": 0,
+            "included": 1,
+            "fullText": 1
+          },
+          "claims": {
+            "total": 0,
+            "verified": 0
+          },
+          "children": [],
+          "usage": {
+            "requests": 24,
+            "inputTokens": 1502769,
+            "cachedInputTokens": 1434880,
+            "outputTokens": 18560,
+            "costCny": 0.170827
+          },
+          "startedAt": "2026-10-10T04:55:38.418Z",
+          "updatedAt": "2026-10-10T04:57:37.643Z"
+        },
+        "lastTrustedProgressAt": "2026-10-10T04:57:24.585Z",
+        "compaction": [
+          {
+            "at": "2026-10-10T04:56:05.704Z",
+            "seq": 287,
+            "replaced": 0,
+            "tokens": 0,
+            "policy": "basic"
+          },
+          {
+            "at": "2026-10-10T04:57:37.620Z",
+            "seq": 393,
+            "replaced": 0,
+            "tokens": 0,
+            "policy": "basic"
+          }
+        ],
+        "canceledBy": "user",
+        "routeReason": "按你的选择：基因表达差异分析"
+      },
+      "cancellation": {
+        "root": "canceled",
+        "children": []
+      }
+    }
+  }
+}

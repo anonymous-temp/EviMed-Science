@@ -1,0 +1,26 @@
+{
+  "plan": {
+    "comparator": "Control",
+    "constraints": [
+      "allocation concealment",
+      "intention-to-treat",
+      "missing-data sensitivity"
+    ],
+    "designChecks": [
+      "Randomization or confounding control",
+      "Independent replication unit",
+      "Sample-size justification",
+      "Protocol deviations"
+    ],
+    "exposure": "Intervention",
+    "objective": "Estimate the mean treatment effect with uncertainty",
+    "outcome": "Continuous primary outcome at 12 weeks",
+    "population": "Adults meeting the prespecified eligibility criteria",
+    "qualityGates": [
+      "Define the estimand and analysis population.",
+      "Predeclare primary outcome, time point, and multiplicity handling.",
+      "Record allocation, masking, missing-data, and sensitivity procedures.",
+      "Link every material claim to evidence or an executed result."
+    ]
+  }
+}

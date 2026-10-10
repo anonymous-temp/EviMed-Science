@@ -1,0 +1,12 @@
+{
+  "optimization": {
+    "iterations": 31,
+    "message": "Optimization terminated successfully.",
+    "objective": 4.5135493373514266e-11,
+    "success": true,
+    "x": [
+      0.999993282482023,
+      0.999986554788798
+    ]
+  }
+}

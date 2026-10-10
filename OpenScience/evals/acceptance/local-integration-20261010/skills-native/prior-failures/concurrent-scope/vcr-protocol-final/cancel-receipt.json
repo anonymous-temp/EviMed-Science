@@ -1,0 +1,110 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/agent-runs/run_15799a841021445b2c08984f007d6b36/cancel",
+    "reason": "Observed current VCR run followed shared workspace gene plan instead of VCR task; preserve and rerun sequentially."
+  },
+  "httpStatus": 200,
+  "response": {
+    "data": {
+      "run": {
+        "id": "run_15799a841021445b2c08984f007d6b36",
+        "dispatchId": "skill_d60d89a43bb7d1f364aa4866",
+        "dispatchStatus": "accepted",
+        "baselineCursor": null,
+        "kernelRequestIds": [
+          "req_d1fc9a033b1fcf89fb65fd0cd74f93f6"
+        ],
+        "personalSkillGeneration": {
+          "generationId": "1332b173483038e98ffe678a68eeadbe21bb86a52b6657c0456e1bb92138cccc",
+          "pins": []
+        },
+        "sessionId": "session-2dcc7cd9-84a3-41ad-9375-321037c978f7",
+        "mode": "open-domain",
+        "agentId": null,
+        "agentVersion": null,
+        "runtimeAgent": null,
+        "effectiveAgentId": "open-domain-answer",
+        "effectiveAgentVersion": "1.0.0",
+        "effectiveRuntimeAgent": "evimed-open-domain-answer",
+        "effectiveRouteReason": "choice:answer",
+        "model": "deepseek/deepseek-flash",
+        "question": "Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real me…",
+        "automated": true,
+        "estimatedMinutes": {
+          "min": 1,
+          "max": 15
+        },
+        "status": "canceled",
+        "createdAt": "2026-10-10T04:45:31.469Z",
+        "startedAt": "2026-10-10T04:45:31.469Z",
+        "accountCreatedAt": "2026-10-10 03:24:50.22276+00",
+        "finishedAt": "2026-10-10T04:47:14.073Z",
+        "durationMs": 102604,
+        "errorCode": "runtime_canceled",
+        "artifacts": [],
+        "unverifiedArtifacts": [],
+        "verification": null,
+        "qualityNotices": [],
+        "observedMessages": 74,
+        "observedToolCalls": 39,
+        "observedRunSideActivity": "0:0:28:0:0",
+        "observedKernelActivity": "ee2658db5a1f7206cc3948f49180d285501646be561f7d56777713a2d8f921a8",
+        "lastProgressAt": "2026-10-10T04:47:13.796Z",
+        "title": "本地验证任务执行",
+        "titleSource": "auto",
+        "mountedSkills": [
+          "open-domain-answer"
+        ],
+        "compaction": [
+          {
+            "at": "2026-10-10T04:47:13.483Z",
+            "seq": 187,
+            "replaced": 0,
+            "tokens": 0,
+            "policy": "basic"
+          }
+        ],
+        "progress": {
+          "deliverables": [],
+          "phaseCounts": {
+            "search": 0,
+            "screen": 0,
+            "fulltext": 0,
+            "claims": 0,
+            "write": 0,
+            "deliver": 0
+          },
+          "reachedPhases": [],
+          "currentPhase": null,
+          "sources": {
+            "searched": 0,
+            "included": 0,
+            "fullText": 0
+          },
+          "claims": {
+            "total": 0,
+            "verified": 0
+          },
+          "children": [],
+          "usage": {
+            "requests": 30,
+            "inputTokens": 1772454,
+            "cachedInputTokens": 1681280,
+            "outputTokens": 10273,
+            "costCny": 0.165892
+          },
+          "startedAt": "2026-10-10T04:45:31.469Z",
+          "updatedAt": "2026-10-10T04:47:14.071Z"
+        },
+        "lastTrustedProgressAt": "2026-10-10T04:47:13.796Z",
+        "canceledBy": "user",
+        "routeReason": "按你的选择：普通问答"
+      },
+      "cancellation": {
+        "root": "canceled",
+        "children": []
+      }
+    }
+  }
+}

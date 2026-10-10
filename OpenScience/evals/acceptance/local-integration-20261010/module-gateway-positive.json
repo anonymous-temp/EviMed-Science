@@ -1,0 +1,389 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T05:05:11.110183+00:00",
+  "scope": "Owned local GEO/VCR projects on actual PostgreSQL; current MCP handlers through authenticated control-plane gateways; not production tests",
+  "moduleScopes": {
+    "geo": {
+      "status": 201,
+      "body": {
+        "data": {
+          "id": "geo_cc5d46dc325c5d05d85fadddf09707cd",
+          "projectId": "local-scope-acceptance",
+          "sessionId": "geo-86c649e89174a3b6c82d8f5381d54e28",
+          "bound": true
+        }
+      }
+    },
+    "vcr": {
+      "status": 201,
+      "body": {
+        "data": {
+          "id": "std_06ba473bb2fc482ab3fc03",
+          "projectId": "local-module-gateway-acceptance",
+          "name": "Local module gateway acceptance",
+          "status": "active",
+          "requested": [
+            "definition",
+            "evidence",
+            "population",
+            "patients",
+            "comparator",
+            "trial",
+            "matching"
+          ],
+          "sessionId": "vcr-57856858bdd0790fac45dcc13897e9c0",
+          "bound": true
+        }
+      }
+    }
+  },
+  "runtimeImageId": "sha256:dac1632984e6327be3c26502108b03d6a48001ca7bccd3fde376c45c8f1a00ac",
+  "results": {
+    "geo_write": {
+      "written": true,
+      "readBack": true,
+      "identityCompleteness": "fixture identity remains incomplete; notices retained"
+    },
+    "geo_read": {
+      "actualBoundProject": true,
+      "unmeasuredMetrics": "absent, not zero"
+    },
+    "vcr_write": {
+      "definitionWritten": true,
+      "readBack": true
+    },
+    "vcr_read": {
+      "actualBoundStudy": true,
+      "actualEngineResultsRead": true
+    },
+    "trial_registry_record": {
+      "registryId": "NCT04280705",
+      "preservedRegistryRecordHash": "eb10532312dfec485a3e244f7a24780f86d025490d2665d8e0b3e197e09e5874",
+      "preservedTextSha256": "21d784a6bc2051dec1e1f6f8fab3ca02e722d9ee524d61e7e7f7bad44b4c8728",
+      "counts": [
+        {
+          "index": 0,
+          "registryId": "NCT04280705",
+          "extracted": 460,
+          "verified": 405,
+          "refused": 55
+        }
+      ]
+    },
+    "vcr_simulate": {
+      "jobId": "job_1df819b855054ae49cf89d",
+      "state": "succeeded",
+      "method": "design.analytic",
+      "scenario": "Synthetic N01b group-sequential fixture; time-to-event, alpha .05 two-sided, power .9",
+      "resultId": "res_e8ec12bcef6f40d0a741fc"
+    },
+    "evidence_pool": {
+      "jobId": "job_5f8cd797ca7748e29297dd",
+      "state": "succeeded",
+      "method": "single_study",
+      "parameter": "median_time",
+      "endpointKey": "recovery_day1_day29",
+      "source": "Actual preserved ClinicalTrials record, control recovery time; not survival or treatment recommendation",
+      "verifiedInputId": "evd_6779444ef17b43b9892bce",
+      "k": 1,
+      "predictionIntervalAvailable": false,
+      "refusalsRetained": [
+        {
+          "id": "evd_850c175e9aad48dfad3489",
+          "reasons": [
+            "arm_role_differs"
+          ]
+        },
+        {
+          "id": "evd_dd701e988e824140b1a69a",
+          "reasons": [
+            "quote_not_verified",
+            "no_value",
+            "endpoint_key_missing",
+            "arm_role_differs"
+          ]
+        },
+        {
+          "id": "evd_ff4724f11a264c6e99d930",
+          "reasons": [
+            "quote_not_verified",
+            "no_value",
+            "endpoint_key_missing"
+          ]
+        }
+      ]
+    },
+    "curve_digitize": {
+      "state": "digitized",
+      "toolStatus": "warning",
+      "receiptId": "crv_8408fe634bd29838969faa820f641969",
+      "imageSha256": "9b12ddafb8ae6ce982d15b6de58491440c42d48ee67f2fa38cefe16ae15b7495",
+      "calibration": {
+        "x": {
+          "max": 48,
+          "min": 0,
+          "unit": "months"
+        },
+        "y": {
+          "max": 1,
+          "min": 0,
+          "scale": "fraction"
+        }
+      },
+      "source": "Repository-generated synthetic KM figure and its generator truth risk tables; not a clinical published curve",
+      "warnings": [
+        "curve_start_not_one: Control is first seen at 0.194 months with survival 0.951, not 1: its start is hidden under another curve, or y.min, y.max and the scale need checking.",
+        "curve_start_not_one: Experimental is first seen at 0.194 months with survival 0.926, not 1: its start is hidden under another curve, or y.min, y.max and the scale need checking."
+      ],
+      "qualityPassed": false
+    },
+    "kb_search": {
+      "runId": "run_71ea69c932898e34e66840b5367a1e97",
+      "sessionId": "session-b0716146-332d-40cf-939f-5bd92318f63c",
+      "actualNativeToolCallId": "call_00_ET_JrwdDV1tWs0aB0urTRGf0758",
+      "status": "success",
+      "mode": "small-library",
+      "selectedSourceId": "src_9d32f1702216fceb2cff534239f06ad9",
+      "documents": 1,
+      "searchable": 1,
+      "tokens": 96,
+      "returnedFiles": 1,
+      "passageHits": 0,
+      "sourceScope": "Explicit actual research-session source-scope PUT and GET selecting this one note only",
+      "sourceProvenance": "Researcher-authored local note quoting the preserved NCT04280705 record; actual normal note intake and source-understanding, not independent clinical evidence",
+      "followup": "Actual native read of the returned indexed file; no scope bypass or web fallback"
+    },
+    "frontier_search": {
+      "liveKnowledgePluginConfigured": false,
+      "liveNewsIngestionQualified": "Qualified separately in isolated database chain; default native MCP/browser path remains unqualified",
+      "defaultRuntimeEmptyResultRetained": true,
+      "componentPositiveEvidence": {
+        "kind": "Actual PostgreSQL component integration with synthetic fixture items and fixture runtime-token validation; not genuine runtime authorization or live ingestion",
+        "testSource": "apps/server/test/frontierGateway.integration.test.mjs",
+        "testSourceSha256": "4da74cbd0fd0c5fd584d2f45cfb5379bd44bbf0bdf42d24b14255a40eb8d1c34",
+        "logPath": "/tmp/evimed-release-closure-20261010/checks/product-full-current.log",
+        "logSha256": "d36d46ee8ba8cbbec208b0acd510a1503a0baa631d3903cf5729da26b76e9895",
+        "passingTest": "without a question the tool lists the reader\u2019s newest picks of the window, as leads"
+      },
+      "supplementaryLiveChain": {
+        "receipt": "evals/acceptance/local-release-closure-20261010/frontier-live-chain.json",
+        "sha256": "357662c158d5021490412c70b29caf856f0e97944d45b3f90204fccfc9594dcf",
+        "status": "qualified-local-live-nonempty-chain",
+        "scope": "Actual isolated local plugin protected fetch \u2192 authenticated plugin HTTP seq stream \u2192 production FrontierIngest/Pipeline/Editor/UsageLedger \u2192 actual FrontierService keyword search. This does not qualify the current browser UI or native MCP frontier_search path.",
+        "databases": [
+          "evimed_test_kp_live20261010",
+          "evimed_test_frontier_live20261010"
+        ],
+        "currentBrowserAndNativeMcpQualified": false
+      }
+    }
+  },
+  "executionIntegrity": [
+    {
+      "jobId": "job_1df819b855054ae49cf89d",
+      "method": "design.analytic",
+      "methodVersion": "1.1.0",
+      "scenarioHash": "ab07c932eb4056996de44d3201cc3205b6d0f4935a082d56386c82357b91c290",
+      "outputHash": "593557d1ba19baf046dcb7405e47f814eb6c333e9faf0e3067fe735f6511a669",
+      "signed": true,
+      "stageVerified": true,
+      "cpuSeconds": 1.224,
+      "environment": {
+        "cores": 1,
+        "rngKind": "L'Ecuyer-CMRG",
+        "platform": "x86_64-pc-linux-gnu",
+        "rVersion": "R 4.3.3",
+        "signature": "9999acf6a01700c9d4ade83a717fb7ea9685b70768508a8017c39fdfbd13df24",
+        "startedAt": "2026-10-10T04:45:13.322Z",
+        "cpuSeconds": 1.224,
+        "finishedAt": "2026-10-10T04:45:15.227Z",
+        "outputHash": "593557d1ba19baf046dcb7405e47f814eb6c333e9faf0e3067fe735f6511a669",
+        "inputHashes": [],
+        "engineVersion": "1.0.0",
+        "packageLockHash": "56edc6432ad43b12fcef2e44938bdb111ae8889b2532b298aac2ebbb3317c692"
+      }
+    },
+    {
+      "jobId": "job_5f8cd797ca7748e29297dd",
+      "method": "evidence.pool",
+      "methodVersion": "1.0.0",
+      "scenarioHash": "136059ac578f125df275f985798be52592774ec882d78a3af1ce95f2b4c4b78e",
+      "outputHash": "1038cc480d0785bd5a3d580e1234cc89bdda6554b423074309f05ca1b42ee6b8",
+      "signed": true,
+      "stageVerified": true,
+      "cpuSeconds": 0.954,
+      "environment": {
+        "cores": 1,
+        "rngKind": "L'Ecuyer-CMRG",
+        "platform": "x86_64-pc-linux-gnu",
+        "rVersion": "R 4.3.3",
+        "signature": "40b8950f85017101610f78397e9413908307eb75c8177debd7e629536ab9c27b",
+        "startedAt": "2026-10-10T04:45:22.890Z",
+        "cpuSeconds": 0.954,
+        "finishedAt": "2026-10-10T04:45:24.910Z",
+        "outputHash": "1038cc480d0785bd5a3d580e1234cc89bdda6554b423074309f05ca1b42ee6b8",
+        "inputHashes": [
+          {
+            "id": "evd_6779444ef17b43b9892bce",
+            "hash": null,
+            "kind": "evidence"
+          }
+        ],
+        "engineVersion": "1.0.0",
+        "packageLockHash": "56edc6432ad43b12fcef2e44938bdb111ae8889b2532b298aac2ebbb3317c692"
+      }
+    }
+  ],
+  "nativeMcpStdioProof": {
+    "imageContainerExecution": true,
+    "tools": [
+      "geo_read",
+      "vcr_read",
+      "vcr_simulate",
+      "evidence_pool"
+    ],
+    "actualJsonRpcFrames": true,
+    "genuineRuntimeIssuedTokenFile": true,
+    "providerKeyInRuntime": false
+  },
+  "control": "Owned study paused through actual API after bounded execution; local VCR worker poll5000ms; default project and other services retained",
+  "limitations": [
+    "Original default-scope no-project/no-study warnings remain in formal audit evidence.",
+    "All eight handlers exercised positive bound scope; two engine jobs succeeded with signed and hash-verified results. Curve digitization persisted actual output with start-anchor quality warnings, not full scientific qualification.",
+    "Initial incorrect token-file selection and missing precedent attempts retained in private logs; they are not counted as successful execution.",
+    "Read/write handler collection ran current host MCP source; additional four read/status calls ran actual JSON-RPC MCP process inside the pinned candidate image.",
+    "No clinical claim is inferred from synthetic design or synthetic curve fixtures."
+  ],
+  "privateEvidence": [
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/geo-read.json",
+      "sha256": "b1af56711dbf733c1bdf4bb7cf4aacbc2e33a672dedd32e2fef4bbec70d6d21f",
+      "bytes": 4999
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/geo-write.json",
+      "sha256": "d5276a50c2d2bfdaea32106a9cbd84e6effdd802b4e7c3eef43732906dfaf873",
+      "bytes": 1852
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/kb-intake.json",
+      "sha256": "baf56f12705a5a303d079f2348ab04be11102f5cccdd8f60c71ffc578dfbcb27",
+      "bytes": 2754
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/kb-native-dispatch.json",
+      "sha256": "eb1b89a96d4f9d5779efef0d6066260ee2ead78ce6a0652b06721c544aec6607",
+      "bytes": 2462
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/kb-native-run.json",
+      "sha256": "2912fe5d02b752717f9839693abe0659382911289cf8d7b188b9613bf49f1d72",
+      "bytes": 2998
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/kb-native-transcript.json",
+      "sha256": "078f4b87bb4fbbd74ecf82d90ed122ba2280ebdaf5a72dcef010eb1c23ba0b60",
+      "bytes": 47577
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/kb-source-read.json",
+      "sha256": "66a4f496eac181cd881330bca506405c309d7d0ab2d39fc318f129e74bc6d04a",
+      "bytes": 6213
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/postgres-owned-proof.json",
+      "sha256": "90d27a3437c45482231b759775eb51f9067c5ad5361ebc60a6f9a91f7c6d12b6",
+      "bytes": 484017
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/registry.json",
+      "sha256": "824f30770b41256e07479825257935d0a0f6bd1859a958f5f507910bd3f99f89",
+      "bytes": 1301210
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/rpc-geo.requests.jsonl",
+      "sha256": "901a1d486359b53bb5038673fad8df198333fdd227ef31ccd2d87007753857ce",
+      "bytes": 118
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/rpc-geo.responses.jsonl",
+      "sha256": "2014ebcece7d5c9c0848a9236dbcb7c08cf1fabcbb28cdfdd2b470b3a6e7c448",
+      "bytes": 5389
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/rpc-vcr.requests.jsonl",
+      "sha256": "fb7888e0d5d51be868d7b0088e98c7e8bd9cfaab865c80a78ee50732cb1aac44",
+      "bytes": 443
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/rpc-vcr.responses.jsonl",
+      "sha256": "58d1c8ca9e25bb9699e70359904381415745397f54443d61a8de47adade01ff2",
+      "bytes": 35581
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/study-paused.json",
+      "sha256": "454d5fd8df683ecf8980012a63c80982ec5950cbb1b0085c95269940ee7eaa8b",
+      "bytes": 1767
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-curve.json",
+      "sha256": "8477e098563fe1928732c89c8977fac5ad5b7059904c53ad23005a0210ae3203",
+      "bytes": 6913
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-evidence-final.json",
+      "sha256": "b0e766ae78a29a5998ae9ee2585711b6352b4a85a4bc15be38387e552c77fed0",
+      "bytes": 18360
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-evidence-item.json",
+      "sha256": "4f5b6f313dda3e6e8071b65b35904c03899d61a9bb93602588ccbf80df9e2441",
+      "bytes": 4588
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-evidence-pool.json",
+      "sha256": "83db714045b1379ce6fe8588ba3f9add87d0c7062cd97631d611ab679ac7d86a",
+      "bytes": 2602
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-evidence-read.json",
+      "sha256": "69d6628cd08c041dd674af54fc20c16c495afde1012dcd6f288c8044b5cf86d5",
+      "bytes": 15907
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-jobs.json",
+      "sha256": "3b4763933e5528688903710fc5e7097396c28f3fd0064986e930e713c4ae5453",
+      "bytes": 5530
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-precedent.json",
+      "sha256": "8cc28b17458a370a2603180079493c947749740dc867b8fb25b2aa1a7dca6498",
+      "bytes": 1673
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-read-definition.json",
+      "sha256": "3d189cf6bc7782d813eb7bef2fcac1d638a7a6c5277d57d6e50678caa5f98f30",
+      "bytes": 1658
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-results.json",
+      "sha256": "d8fc877d752db13f49728286c6c1c08854a7bfc88882d3e5890687fe39b4720b",
+      "bytes": 10246
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-simulate.json",
+      "sha256": "9815f56643c03936fb02dfca1291bc7c4ceeb2aa9a903793ece480c8fcb1f975",
+      "bytes": 2799
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-write-definition.json",
+      "sha256": "7ae35eba2c43261e84f4bb69f7b41078268c60b9b9ce069ceefb4fb4ba92a532",
+      "bytes": 1579
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/modules/vcr-write-trial.json",
+      "sha256": "2dc6307e22488a028377374e3343d952ff7d87eff212f7cdd82cdcb1a064c817",
+      "bytes": 2389
+    }
+  ]
+}

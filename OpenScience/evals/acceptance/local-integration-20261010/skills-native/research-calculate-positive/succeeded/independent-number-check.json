@@ -1,0 +1,62 @@
+{
+  "passed": true,
+  "basis": "Independent Python standard-library arithmetic and normal quantile; no specialist engine imports or substituted model result. Q chi-square df2 survival = exp(-Q/2).",
+  "resultFileSha256": "4ba336bcd5e7da61ba33216a5d7eeca5a7a8a4048d725196578fedb58361a8cb",
+  "standardError": 0.881917103688197,
+  "checks": {
+    "pooled_effect": {
+      "expected": 1.3333333333333335,
+      "observed": 1.3333333333333335,
+      "absoluteError": 0.0,
+      "passed": true
+    },
+    "tau_squared": {
+      "expected": 2.2333333333333334,
+      "observed": 2.2333333333333334,
+      "absoluteError": 0.0,
+      "passed": true
+    },
+    "q_statistic": {
+      "expected": 46.66666666666667,
+      "observed": 46.66666666666667,
+      "absoluteError": 0.0,
+      "passed": true
+    },
+    "i_squared": {
+      "expected": 95.71428571428572,
+      "observed": 95.71428571428572,
+      "absoluteError": 0.0,
+      "passed": true
+    },
+    "h_squared": {
+      "expected": 23.333333333333336,
+      "observed": 23.333333333333336,
+      "absoluteError": 0.0,
+      "passed": true
+    },
+    "ci_lower": {
+      "expected": -0.3951924272454086,
+      "observed": -0.39519242724540904,
+      "absoluteError": 4.440892098500626e-16,
+      "passed": true
+    },
+    "ci_upper": {
+      "expected": 3.0618590939120756,
+      "observed": 3.061859093912076,
+      "absoluteError": 4.440892098500626e-16,
+      "passed": true
+    },
+    "p_value": {
+      "expected": 0.13057001811573626,
+      "observed": 0.1305700181157362,
+      "absoluteError": 5.551115123125783e-17,
+      "passed": true
+    },
+    "q_p_value": {
+      "expected": 7.352958061453811e-11,
+      "observed": 7.352958061453824e-11,
+      "absoluteError": 1.2924697071141057e-25,
+      "passed": true
+    }
+  }
+}

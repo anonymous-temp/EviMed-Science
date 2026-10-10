@@ -1,0 +1,141 @@
+{
+  "script": "build-deck.mjs (dsh-ppt CLI)",
+  "scriptPath": "/opt/evimed/skills/community/dsh-ppt/scripts/build-deck.mjs",
+  "corePath": "/opt/evimed/skills/community/dsh-ppt/scripts/deck-core.mjs",
+  "builder": "deck-core.mjs buildDeck()",
+  "theme": "data",
+  "language": "en",
+  "slideCount": 5,
+  "bytes": {
+    "html": 10369,
+    "pptx": 12822,
+    "json": 3387
+  },
+  "sha256": {
+    "html": "ef887ae903ae402a1ae24a4e9c63888dfa6fb36049b85937c5be964303156340",
+    "pptx": "4ddf9cf0f1c81a29aba798179be38ac61026705e65c03cdbfc91e12399a7524b",
+    "json": "c284f49d482b5f8012fe71bb77459f61d3c62d83fd0942e4018525c42762853f"
+  },
+  "checks": [
+    {
+      "check": "file exists: study-seats-5-slides.pptx",
+      "pass": true,
+      "detail": "12822 bytes"
+    },
+    {
+      "check": "file exists: study-seats-5-slides.html",
+      "pass": true,
+      "detail": "10369 bytes"
+    },
+    {
+      "check": "file exists: study-seats-5-slides.json",
+      "pass": true,
+      "detail": "3387 bytes"
+    },
+    {
+      "check": "PPTX PK header",
+      "pass": true,
+      "detail": "first two bytes = \"PK\""
+    },
+    {
+      "check": "zip local headers parsed + CRC verified",
+      "pass": true,
+      "detail": "21 local entries vs 21 central-directory entries"
+    },
+    {
+      "check": "no entry left unresolved by offset",
+      "pass": true,
+      "detail": "names match in order"
+    },
+    {
+      "check": "ppt/presentation.xml present",
+      "pass": true,
+      "detail": "ppt/presentation.xml | ppt/_rels/presentation.xml.rels"
+    },
+    {
+      "check": "slides in package",
+      "pass": true,
+      "detail": "ppt/slides/slide1.xml, ppt/slides/slide2.xml, ppt/slides/slide3.xml, ppt/slides/slide4.xml, ppt/slides/slide5.xml"
+    },
+    {
+      "check": "presentation.xml declares 5 slides",
+      "pass": true,
+      "detail": "sldId count = 5"
+    },
+    {
+      "check": "slide1.xml carries the cover title text",
+      "pass": true,
+      "detail": "title text found in slide XML"
+    },
+    {
+      "check": "HTML5 doctype",
+      "pass": true,
+      "detail": "<!DOCTYPE html>"
+    },
+    {
+      "check": "HTML slide sections == 5",
+      "pass": true,
+      "detail": "5 sections"
+    },
+    {
+      "check": "HTML self-contained (no external src/href)",
+      "pass": true,
+      "detail": "inline assets only"
+    },
+    {
+      "check": "manifest slideCount == 5",
+      "pass": true,
+      "detail": "{\"theme\":\"data\",\"language\":\"en\",\"slideCount\":5}"
+    },
+    {
+      "check": "manifest titles/bullets/layouts untruncated",
+      "pass": true,
+      "detail": "bullets:5 bullets:5 bullets:5 bullets:5 bullets:5"
+    },
+    {
+      "check": "kicker order scenario→evaluation",
+      "pass": true,
+      "detail": "01 · Scenario | 02 · Incentives | 03 · Uncertainty | 04 · Reversible experiment | 05 · Evaluation"
+    },
+    {
+      "check": "bullets per slide within 1-8",
+      "pass": true,
+      "detail": "5,5,5,5,5"
+    },
+    {
+      "check": "every manifest title+bullet rendered in HTML",
+      "pass": true,
+      "detail": "30 strings checked, none missing"
+    },
+    {
+      "check": "every manifest title+bullet present in PPTX slide XML",
+      "pass": true,
+      "detail": "30 strings checked, none missing"
+    },
+    {
+      "check": "key phrases present in HTML",
+      "pass": true,
+      "detail": "compulsory class=true, unconfirmed=true, reverts within one day=true, Null results=true"
+    }
+  ],
+  "generatorDefect": {
+    "found": true,
+    "items": [
+      {
+        "id": "G1",
+        "severity": "breaks third-party zip readers",
+        "what": "buildZip() writes 0 into every central-directory entry’s \"relative offset of local header\" field (deck-core.mjs: centralHeader.writeUInt32LE(0, 42)), so all 21 entries claim offset 0. Any reader that resolves entries by that offset decompresses garbage.",
+        "workaroundHere": "Entries are walked sequentially from byte 0 in local-header order and matched to the central directory by name, with CRC-32 recomputed for every entry.",
+        "userImpact": "Microsoft PowerPoint / LibreOffice generally locate parts through the OPC relationships and open this file, but zip-level utilities that trust the offset may fail. Worth reporting upstream."
+      },
+      {
+        "id": "G2",
+        "severity": "silent content loss",
+        "what": "renderHtmlSlide() ignores the bullets array for layout \"cover\" (deck-core.mjs: the cover case emits only kicker, title, subtitle, meta), while the manifest still writes those bullets. A deck whose cover carries bullets therefore loses them in the HTML while the manifest claims they are there.",
+        "workaroundHere": "All five slides use the points layout, and the verifier now asserts that every manifest title and bullet really appears in both the HTML and the PPTX slide XML."
+      }
+    ]
+  },
+  "passed": 20,
+  "failed": 0
+}

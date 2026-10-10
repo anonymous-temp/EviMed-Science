@@ -1,0 +1,507 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-10T03:53:40.835698+00:00",
+  "finishedAt": "2026-10-10T03:53:44.945803+00:00",
+  "environment": {
+    "pythonExecutable": "/usr/bin/python3",
+    "pythonVersion": "3.12.3",
+    "dependencyContract": "selected audit runtime plus package-declared dependencies"
+  },
+  "installedPackagesExamined": 12,
+  "executionCertified": 12,
+  "failed": 0,
+  "packages": [
+    {
+      "package": "office/docx",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/office/docx/scripts/create_docx.py",
+        "--input",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/docx/source.txt",
+        "--output",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/docx/report.docx"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "ooxmlMembers": true,
+        "expectedContent": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "369407fb27f06279d689c321c0607e5e605f163c17b0cca510761c134c6791c0",
+      "entrypoint": "runtime/skills/office/docx/scripts/create_docx.py",
+      "entrypointSha256": "41c84714d99790a78a2842500e6240ab2a72028a2cc078026e94602e22692eb6",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/docx/source.txt",
+          "bytes": 39,
+          "sha256": "a7bceb9136b16898228b9a8c7f8360d8068b79eca003217a2f5a34d534410824"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/docx/report.docx",
+          "bytes": 9786,
+          "sha256": "7d9c659364d6323b27d9fb18aa20c848eb3d1cc758bb3313df4c546d1935d212"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "office/pdf",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/office/pdf/scripts/create_pdf.py",
+        "--input",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pdf/source.txt",
+        "--output",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pdf/report.pdf"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "pdfHeader": true,
+        "pdfTrailer": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "be4da15e5e508af58edea59a68275d7268cd206213b5e5377c1b3b5b8aed1f09",
+      "entrypoint": "runtime/skills/office/pdf/scripts/create_pdf.py",
+      "entrypointSha256": "fd6a219afbbdd0e012c12ae4ef7b29f0db04c14c7a19eaaef72894381ba72499",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pdf/source.txt",
+          "bytes": 39,
+          "sha256": "a7bceb9136b16898228b9a8c7f8360d8068b79eca003217a2f5a34d534410824"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pdf/report.pdf",
+          "bytes": 7473,
+          "sha256": "41d03284b1753e262f0b3f2947cecf51e299fdea43f297e1b3a29674a8d73ead"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "office/pptx",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/office/pptx/scripts/create_pptx.py",
+        "--title",
+        "EviMed evidence",
+        "--body-file",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pptx/source.txt",
+        "--output",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pptx/report.pptx"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "ooxmlMembers": true,
+        "expectedContent": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "7a78045eae98209bdb041dbc787520ca85f2c8754aa7539f3dbf441938719851",
+      "entrypoint": "runtime/skills/office/pptx/scripts/create_pptx.py",
+      "entrypointSha256": "2025a5217bf12f21a8c8e193d5c7c7b9782f43d71f7e3d819b33e8af36ed5683",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pptx/source.txt",
+          "bytes": 39,
+          "sha256": "a7bceb9136b16898228b9a8c7f8360d8068b79eca003217a2f5a34d534410824"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pptx/report.pptx",
+          "bytes": 4446,
+          "sha256": "791ee84dd4947c2c221211475ceea951bd61a098870e7786ed3752c43e748a38"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "office/xlsx",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/office/xlsx/scripts/create_xlsx.py",
+        "--input",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/xlsx/results.csv",
+        "--output",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/xlsx/report.xlsx",
+        "--sheet",
+        "Evidence"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "ooxmlMembers": true,
+        "expectedContent": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "8ccc3ce981ae904a415585fd3c50e47a13e82c1b3cb2922035b4a03150f6274a",
+      "entrypoint": "runtime/skills/office/xlsx/scripts/create_xlsx.py",
+      "entrypointSha256": "6035b7d828d9efe7c5cd8eee9b473705db449fe2256841a88d98ea7de417107c",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/xlsx/results.csv",
+          "bytes": 32,
+          "sha256": "40e70e4e6587c62cc2efad296c778a2aa302ffd0d3fd2e7b60aad79b0072fb7f"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/xlsx/report.xlsx",
+          "bytes": 1592,
+          "sha256": "9f4e515e91af02027b707dd893ce47a0465ae39deada959e2fba66f6ea2f54a6"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/domain-check",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/core/domain-check/domain_check.py",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/domain-check/analysis.py"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "reviewContract": true,
+        "expectedFindingClass": true
+      },
+      "stdout": "```review\n{\"findings\": [{\"level\": \"error\", \"check\": \"domain\", \"tag\": \"physics · units\", \"title\": \"Dimensional mismatch: add/subtract of time and length\", \"evidence\": \"/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/domain-check/analysis.py:3  value = time_seconds + distance_meters\\n  left is a time quantity, right is a length quantity — the result has no consistent unit.\"}], \"note\": \"Domain-correctness gate — flags known dangerous patterns per discipline (units, CRS, coordinates). It checks for specific error classes only; absence of findings is not a guarantee the science is correct.\"}\n```\n",
+      "stderr": "",
+      "manifestSha256": "3bbb58b5265f8b4bfe4405b44339a73658c556d2f34c4d830c1749a91ab2acd4",
+      "entrypoint": "runtime/skills/core/domain-check/domain_check.py",
+      "entrypointSha256": "ab06ad5e4dd0bdf61058b81a5bf3c3058306d44320b4e45ea28af25bfc5ecb3e",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/domain-check/analysis.py",
+          "bytes": 76,
+          "sha256": "8e7d49966daf688b9f410e44187b372d7ee56d11ea9a8f06e33cdb00406359e3"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/domain-check/review.json",
+          "bytes": 767,
+          "sha256": "862ced6cfe859beb492fa4de54542efbde82f1a4bd5d71bd4430910ce8ba9a39"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/stats-integrity",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/core/stats-integrity/stats_integrity_check.py",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/stats-integrity/analysis.py"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "reviewContract": true,
+        "expectedFindingClass": true
+      },
+      "stdout": "```review\n{\"findings\": [{\"level\": \"warn\", \"check\": \"integrity\", \"tag\": \"stats · seed\", \"title\": \"Randomised analysis with no fixed seed\", \"evidence\": \"/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/stats-integrity/analysis.py:2  values = np.random.normal(size=10)\\n  this uses randomness but sets no seed (np.random.seed / random_state= / set.seed) — the estimates won't reproduce run to run. Fix a seed so the result is reproducible.\"}], \"note\": \"Analysis-integrity gate — flags over-interpretation, unregistered analyses, and missing seeds. It checks these specific risks only; absence of findings does not certify the analysis is sound or the conclusions valid.\"}\n```\n",
+      "stderr": "",
+      "manifestSha256": "3cd0497a89187cfbf4a9a10d5c291bb4a99c75bed4f7e6e5841b8d51322cd03e",
+      "entrypoint": "runtime/skills/core/stats-integrity/stats_integrity_check.py",
+      "entrypointSha256": "42537c57b945f75b30e1393381c5d1f30ce4d126fc85b905dd417d24021f75a7",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/stats-integrity/analysis.py",
+          "bytes": 54,
+          "sha256": "fe7d12ea7d2edaa0512c6a656036dcc819449d20faeed5cf502de74a78b01745"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/stats-integrity/review.json",
+          "bytes": 841,
+          "sha256": "dfd7967b4954180ffd57ba110fcad402fe5093b35d65b5c26af472f0ac329a30"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/large-file",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/core/large-file/large_file_probe.py",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/large-file/data.csv",
+        "--sample",
+        "1"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "validJsonPointer": true,
+        "boundedSample": true,
+        "correctSchema": true
+      },
+      "stdout": "{\"path\": \"/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/large-file/data.csv\", \"size\": \"32 B\", \"size_bytes\": 32, \"format\": \"table\", \"delimiter\": \",\", \"columns\": [{\"name\": \"drug\", \"dtype\": \"str\"}, {\"name\": \"count\", \"dtype\": \"int\"}], \"n_columns\": 2, \"approx_rows\": 2, \"sample_head\": [[\"aspirin\", \"3\"]], \"sample_tail\": [[\"warfarin\", \"2\"]], \"note\": \"Memory pointer — file introspected/sampled, not loaded. Work from this schema/sample; read specific ranges deterministically, never the whole file.\"}\n",
+      "stderr": "",
+      "manifestSha256": "1ad14634f716d35ac9ebce6a6532fe4670e21f80a1f49c7015564c560dbbec2b",
+      "entrypoint": "runtime/skills/core/large-file/large_file_probe.py",
+      "entrypointSha256": "806565f62a37405dec2d093be354efa107f65ed7f5306cc3a919d5b76870a8b3",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/large-file/data.csv",
+          "bytes": 32,
+          "sha256": "40e70e4e6587c62cc2efad296c778a2aa302ffd0d3fd2e7b60aad79b0072fb7f"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/large-file/pointer.json",
+          "bytes": 751,
+          "sha256": "2b0c02b09711c1f170da58cf9c8102e9df283077f78290213d70b7b5bc38893d"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/remote-compute",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/core/remote-compute/record_run.py",
+        "--surface",
+        "ssh",
+        "--command",
+        "python compute.py",
+        "--status",
+        "ok",
+        "--host",
+        "audit-fixture",
+        "--hardware",
+        "CPU audit fixture",
+        "--wall-ms",
+        "10",
+        "--code",
+        "compute.py",
+        "--output",
+        "results/result.json",
+        "--session-id",
+        "audit-session",
+        "--env-file",
+        "results/env.txt"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "provenanceCreated": true,
+        "singleTerminalReceipt": true,
+        "artifactHashesPresent": true
+      },
+      "stdout": "",
+      "stderr": "Recorded ssh run run_505b7ce4a77f7fb0 (ok) → .openscience/remote-runs.jsonl\n",
+      "manifestSha256": "6b212af3aa12534a0bc261fd1d8cca0045523828072c48496cae1bf90b82bea1",
+      "entrypoint": "runtime/skills/core/remote-compute/record_run.py",
+      "entrypointSha256": "1a3909a89646bf37e1ffdf4fa4c777590a306fb31014ba4ddf704fe7dedf2664",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/remote-compute/compute.py",
+          "bytes": 26,
+          "sha256": "93562c9a6a7361bd7e2a6d6d64fa93deacc508ff5397c9c218f6fffe9e21b4dd"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/remote-compute/results/result.json",
+          "bytes": 29,
+          "sha256": "6d53679ec3e4bb57911c21e8abd249265713f3fdbb21f387ad29b34c9866e84c"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/remote-compute/.openscience/remote-runs.jsonl",
+          "bytes": 515,
+          "sha256": "b7cd2cd010fd0c5b66912444eaf088bbf1cac40c028797c74c1aa0f7b13d28ca"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/remote-compute/results/env.txt",
+          "bytes": 69,
+          "sha256": "48f66f4fc857b8ad292caa325444fabef1251e9b676e8ff96965f02f7078b3b7"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/modal-run",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/core/modal-run/record_run.py",
+        "--surface",
+        "modal",
+        "--command",
+        "python compute.py",
+        "--status",
+        "ok",
+        "--host",
+        "audit-fixture",
+        "--hardware",
+        "CPU audit fixture",
+        "--wall-ms",
+        "10",
+        "--code",
+        "compute.py",
+        "--output",
+        "results/result.json",
+        "--session-id",
+        "audit-session"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "provenanceCreated": true,
+        "singleTerminalReceipt": true,
+        "artifactHashesPresent": true
+      },
+      "stdout": "",
+      "stderr": "Recorded modal run run_db3933490c7247c2 (ok) → .openscience/remote-runs.jsonl\n",
+      "manifestSha256": "3fe2b6fa871c38a8369f082d7db68ab7726231b54a97631cf2768a13b4003075",
+      "entrypoint": "runtime/skills/core/modal-run/record_run.py",
+      "entrypointSha256": "1a3909a89646bf37e1ffdf4fa4c777590a306fb31014ba4ddf704fe7dedf2664",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/modal-run/compute.py",
+          "bytes": 26,
+          "sha256": "93562c9a6a7361bd7e2a6d6d64fa93deacc508ff5397c9c218f6fffe9e21b4dd"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/modal-run/results/result.json",
+          "bytes": 29,
+          "sha256": "6d53679ec3e4bb57911c21e8abd249265713f3fdbb21f387ad29b34c9866e84c"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/modal-run/.openscience/remote-runs.jsonl",
+          "bytes": 388,
+          "sha256": "267854719455cffb43c370f714687dd639e51400592e5ba61edb4b2ee931472b"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/hpc-slurm",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/core/hpc-slurm/render_job.py",
+        "--job-name",
+        "evimed-audit",
+        "--command",
+        "python analysis.py",
+        "--output",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/hpc-slurm/analysis.sbatch",
+        "--time",
+        "00:10:00",
+        "--cpus-per-task",
+        "2",
+        "--module",
+        "python/3.11"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "batchArtifactCreated": true,
+        "strictShell": true,
+        "boundedRequestedResources": true,
+        "noCredentialHandling": true
+      },
+      "stdout": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/hpc-slurm/analysis.sbatch\n",
+      "stderr": "",
+      "manifestSha256": "c549534ab55c9084a920a98fdb75f8664e75185fb2f3721b7b5c48207e8d7b85",
+      "entrypoint": "runtime/skills/core/hpc-slurm/render_job.py",
+      "entrypointSha256": "65228dbe4f5b580c1dde6296de3dfd5b631b411db640df510127eb81fefb23c0",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/hpc-slurm/analysis.sbatch",
+          "bytes": 238,
+          "sha256": "5d98c2b08af334115a20b222498af424771e330a86edd9a2aa6fb4595805e457"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/publication-figures",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/core/publication-figures/render_csv_figure.py",
+        "--input",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/publication-figures/observations.csv",
+        "--output",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/publication-figures/observed-response.png",
+        "--x-label",
+        "Time (days)",
+        "--y-label",
+        "Response (%)",
+        "--title",
+        "Observed response"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "pngArtifactCreated": true,
+        "pngSignature": true,
+        "boundedInputRetained": true
+      },
+      "stdout": "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/publication-figures/observed-response.png\n",
+      "stderr": " of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\nfindfont: Generic family 'sans-serif' not found because none of the following families were found: Inter, Helvetica Neue, Arial, sans-serif\n",
+      "manifestSha256": "8a4b9c214dcfaf30af5369ba76259d6897191f13f382d249b8593ef1b460b2cb",
+      "entrypoint": "runtime/skills/core/publication-figures/render_csv_figure.py",
+      "entrypointSha256": "8c7781d8e6d8ff0b031eefd4ef0dd15e537d5272b37344104e8f4ded12b3647b",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/publication-figures/observations.csv",
+          "bytes": 29,
+          "sha256": "442e7fe1a5096b83184d219927c0eeb77f877e0db608f015416ddd5c056444de"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/publication-figures/observed-response.png",
+          "bytes": 55951,
+          "sha256": "5a9214e523b765abd9de0648a28f51abf73c65291be4d06b217a928c623942f4"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/traceability-review",
+      "operation": "task",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/evimed-integration-20261010/OpenScience/runtime/skills/core/traceability-review/pdf_extract.py",
+        "/tmp/evimed-integration-20261010/OpenScience/evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pdf/report.pdf"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "pdfActuallyParsed": true,
+        "textActuallyExtracted": true,
+        "claimContractPresent": true
+      },
+      "stdout": "{\"backend\": \"pypdf\", \"pages\": 1, \"chars\": 40, \"citations\": {\"dois\": [], \"arxiv\": [], \"pmids\": []}, \"claims\": [], \"text\": \"EviM ed evidence report Traceable result\"}\n",
+      "stderr": "",
+      "manifestSha256": "931cbaded705fc2f7b7d5e1e70fc086bdd9bc2459661062c9dbd77598d15b489",
+      "entrypoint": "runtime/skills/core/traceability-review/pdf_extract.py",
+      "entrypointSha256": "4b4107464ce0bc0966399dc3241d44b5fe4f5bba0ba57010150ccceba74f182d",
+      "artifacts": [
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/pdf/report.pdf",
+          "bytes": 7473,
+          "sha256": "41d03284b1753e262f0b3f2947cecf51e299fdea43f297e1b3a29674a8d73ead"
+        },
+        {
+          "path": "evals/acceptance/local-release-closure-20261010/skills-platform-v4/platform-skill-execution-v1-artifacts/20261010T035340Z-9cd6d31b/traceability-review/extracted.json",
+          "bytes": 195,
+          "sha256": "be9bcb7e8c1ebd487e5f95548b074a490e2af08cc8f1e46b7693c89017c2a9d8"
+        }
+      ],
+      "artifactErrors": []
+    }
+  ],
+  "claimBoundary": "This certifies one bounded deterministic task per listed first-party package. Remote-compute and modal-run exercise local provenance recording only, not remote execution. It does not certify every input shape, external remote availability, or feature-complete Office fidelity."
+}

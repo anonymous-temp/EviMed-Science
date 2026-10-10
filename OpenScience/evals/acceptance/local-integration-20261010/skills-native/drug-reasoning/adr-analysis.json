@@ -1,0 +1,95 @@
+{
+  "artifact": "adr-analysis",
+  "artifact_status": "bounded_teaching_method_check",
+  "provenance": {
+    "material": "invented teaching material",
+    "inputs": "inputs.txt (excerpt L and excerpt E, preserved verbatim)",
+    "language": "English, matching the language of the request; the two excerpts are quoted in their original wording",
+    "retrieval_performed": false,
+    "spontaneous_reporting_database_used": false,
+    "disproportionality_metrics_computed": false,
+    "note": "The counts below come from one invented teaching sentence. No case records, reporting-database query, statistical engine or literature search was involved, and no managed analysis was started, so nothing here is a drug-safety finding."
+  },
+  "scope": {
+    "drug": "TeachingDrugA (invented)",
+    "event_of_interest": "rash",
+    "data_source": "one unblinded convenience cohort of 20 adults (teaching evidence E)",
+    "population_in_source": "adults",
+    "population_in_proposed_use_elsewhere": "children, addressed separately in off-label-analysis.json and not by this cohort",
+    "denominator_available": true,
+    "background_rate_available": false
+  },
+  "observed_counts": {
+    "rash_numerator": 3,
+    "rash_denominator": 20,
+    "rash_proportion_raw": 0.15,
+    "rash_proportion_within_cohort_display": "15.0%",
+    "improvement_numerator": 12,
+    "improvement_denominator": 20,
+    "improvement_proportion_raw": 0.6,
+    "improvement_proportion_within_cohort_display": "60.0%",
+    "denominator_definition": "the 20 participants enrolled in the single teaching cohort. Whatever it is divided by, it stays that cohort: not a treated population, not person-time, and not a count of cases from a reporting database.",
+    "basis": "verbatim teaching evidence E; both proportions recomputed from the counts by check_evidence_framing.py (run recorded in checks-output.txt)"
+  },
+  "causal_attribution": {
+    "status": "unknown",
+    "can_be_attributed_to_TeachingDrugA": false,
+    "reasons": [
+      "There is no comparator arm or reported background occurrence of rash, so the proportion observed cannot be separated from what would have occurred without the medicine.",
+      "There was no adjudication: the report does not say how rash was defined, who assessed it, or whether that assessment was blinded.",
+      "The cohort is described as unblinded, so ascertainment of both improvement and rash is open to detection bias.",
+      "Exposure information is absent: no dose, route, duration, time from exposure to event, or dechallenge and rechallenge is reported.",
+      "Concomitant medicines, comorbidities and any history of rash are not reported, so alternative explanations cannot be excluded.",
+      "Sampling was by convenience, with no consecutive or random selection described."
+    ],
+    "what_would_be_required": [
+      "a comparator group or a reported background rate in a comparable population",
+      "an explicit event definition and a documented adjudication procedure",
+      "exposure timing relative to the event, with dose, route and duration",
+      "concomitant medicines and history of similar events, with dechallenge information where available"
+    ]
+  },
+  "population_incidence": {
+    "is_population_incidence": false,
+    "estimate_produced": null,
+    "reasons": [
+      "A single convenience cohort does not define the population at risk.",
+      "There is no person-time, no exposure denominator and no complete follow-up.",
+      "Participants were selected by convenience, so the cohort is not representative of adults treated with TeachingDrugA.",
+      "15.0% describes this cohort and nothing wider. Read as a rate for treated patients, or as the frequency a clinician should expect to see, it would be wrong."
+    ],
+    "usable_statement": "In this cohort, 3 of 20 adults were reported as having rash. That is all the supplied material supports."
+  },
+  "reporting_database_context": {
+    "signal_detected": false,
+    "signal_strength": "not assessable from the supplied material",
+    "disproportionality": "not computed. Nothing was queried for this file, so the missing metric is a piece of evidence that is absent, not evidence of absence",
+    "stimulated_reporting_or_duplicate_reports": "not assessable: no reporting-database records were examined"
+  },
+  "comparative_safety": {
+    "comparison_performed": false,
+    "reason": "No second medicine and no comparator group are supplied, so no comparative safety statement is possible."
+  },
+  "seriousness_and_context": {
+    "severity_reported": false,
+    "outcome_of_event_reported": false,
+    "hospitalisation_or_sequelae_reported": false,
+    "consequence": "The event cannot be graded for seriousness from the supplied wording."
+  },
+  "limitations": [
+    "20 participants, convenience sample, unblinded, no comparator, no adjudication.",
+    "Adults only; the cohort says nothing about children.",
+    "Counts are as reported in one sentence; no case-level detail, timing or follow-up is available.",
+    "Invented teaching material: no real drug-safety conclusion can be drawn from it."
+  ],
+  "claims_not_supported": [
+    "causality between TeachingDrugA and the rash",
+    "a rash rate or expected frequency among treated patients",
+    "comparative safety against any alternative",
+    "pediatric safety"
+  ],
+  "human_review": {
+    "required": true,
+    "reason": "Any use of these counts in a real safety assessment needs a source that reports design, adjudication and comparator information."
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "passed": true,
+  "source": "independent original source bytes+actual retained native MCP transcript",
+  "nativeSeriesCalls": 1,
+  "callId": "call_00_b8CD9sXl2h8s0UOXxqoz3846",
+  "sourceHashes": [
+    {
+      "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/series_matrix.txt.gz",
+      "bytes": 8480960,
+      "sha256": "bf92235648b4cd42d68459803938cd646fda791525a88e892586c12476be80a3",
+      "matched": true
+    },
+    {
+      "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/samples.tsv",
+      "bytes": 28480,
+      "sha256": "34a52cf22660ae810ec0a900f4e7424840d6d431b5053ca93d0ab1609cded668",
+      "matched": true
+    },
+    {
+      "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/probe-annotation.tsv",
+      "bytes": 182144,
+      "sha256": "bf4cf8ca6d59bd69e6598f3dad615569330c4cc1c3c37f50f76f9cd27eebed91",
+      "matched": true
+    },
+    {
+      "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/platform.soft.txt.gz",
+      "bytes": 794976,
+      "sha256": "bc33089ea2a44f9d78605d623ec6f5d5b34a87f94524f42ac2bb8fc307780de1",
+      "matched": true
+    },
+    {
+      "path": ".evimed-sources/gene-expression/GSE2553-GPL1977/76091503ed9ff2befc90b695695749845ca0db8ee495ad092aa3f237cafb1840/record.json",
+      "bytes": 75673,
+      "sha256": "65850e91d4ab79f41ca5b5c3fd8e134453450a6c2eb8dd13e5864724cfb7c065",
+      "matched": true
+    }
+  ],
+  "matrixCounts": {
+    "samples": 181,
+    "probes": 12600,
+    "missingCells": 7998
+  },
+  "scope": "source acquisition+identity only; no differential statistics; no full-capability/current-image/clinical certification"
+}

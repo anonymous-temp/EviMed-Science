@@ -1,0 +1,197 @@
+{
+  "asOf": "2026-10-10T00:00:00Z",
+  "criteria": [
+    {
+      "kind": "inclusion",
+      "criterionType": "demographic",
+      "requirement": {
+        "op": "compare",
+        "variable": "age",
+        "comparator": "gte",
+        "value": 18,
+        "unit": "years"
+      },
+      "sourceText": "adults >=18",
+      "sourceLocator": {
+        "section": "researcher-stated definition (task brief)",
+        "field": "definition: inclusion"
+      },
+      "evidenceNeeded": [
+        "出生日期，或记录中已写明的年龄字段",
+        "评估时点 asOf（2026-10-10T00:00:00Z）：把出生日期换算成评估日年龄时要用到"
+      ]
+    },
+    {
+      "kind": "exclusion",
+      "criterionType": "concomitant_medication",
+      "requirement": {
+        "op": "absent",
+        "variable": "current_systemic_glucocorticoid_exposure"
+      },
+      "sourceText": "exclude CURRENT systemic glucocorticoid exposure",
+      "sourceLocator": {
+        "section": "researcher-stated definition (task brief)",
+        "field": "definition: exclusion"
+      },
+      "evidenceNeeded": [
+        "当前用药清单：药名、是否属于全身（系统性）用药、评估时点是否仍在用",
+        "最近一次给药或停用的记录及其日期",
+        "记录里没有提到时：按未知处理，不当作「没有暴露」"
+      ]
+    }
+  ],
+  "subjects": [
+    {
+      "subjectKey": "C1",
+      "facts": [
+        {
+          "subjectKey": "C1",
+          "variable": "systemic_glucocorticoid_exposure_history",
+          "polarity": "affirmed",
+          "surface": "Prednisone",
+          "documentId": "C1",
+          "quote": "Prednisone was discontinued6months ago.",
+          "start": 0,
+          "end": 39,
+          "extractedBy": "model",
+          "source": {
+            "documentId": "C1",
+            "quote": "Prednisone was discontinued6months ago.",
+            "start": 0,
+            "end": 39
+          }
+        },
+        {
+          "subjectKey": "C1",
+          "variable": "current_systemic_glucocorticoid_exposure",
+          "polarity": "negated",
+          "surface": "discontinued6months ago",
+          "documentId": "C1",
+          "quote": "Prednisone was discontinued6months ago.",
+          "start": 0,
+          "end": 39,
+          "extractedBy": "model",
+          "source": {
+            "documentId": "C1",
+            "quote": "Prednisone was discontinued6months ago.",
+            "start": 0,
+            "end": 39
+          }
+        },
+        {
+          "subjectKey": "C1",
+          "variable": "current_metformin_exposure",
+          "polarity": "affirmed",
+          "surface": "Metformin500mg daily",
+          "documentId": "C1",
+          "quote": "Metformin500mg daily is current.",
+          "start": 40,
+          "end": 72,
+          "extractedBy": "model",
+          "source": {
+            "documentId": "C1",
+            "quote": "Metformin500mg daily is current.",
+            "start": 40,
+            "end": 72
+          }
+        }
+      ]
+    },
+    {
+      "subjectKey": "C2",
+      "facts": [
+        {
+          "subjectKey": "C2",
+          "variable": "current_systemic_glucocorticoid_exposure",
+          "polarity": "affirmed",
+          "surface": "started yesterday and continues",
+          "documentId": "C2",
+          "quote": "Prednisone10mg daily was started yesterday and continues.",
+          "start": 0,
+          "end": 57,
+          "extractedBy": "model",
+          "source": {
+            "documentId": "C2",
+            "quote": "Prednisone10mg daily was started yesterday and continues.",
+            "start": 0,
+            "end": 57
+          }
+        }
+      ]
+    },
+    {
+      "subjectKey": "C3",
+      "facts": []
+    },
+    {
+      "subjectKey": "C4",
+      "facts": [
+        {
+          "subjectKey": "C4",
+          "variable": "systemic_glucocorticoid_exposure_history",
+          "polarity": "affirmed",
+          "surface": "Prednisone",
+          "documentId": "C4",
+          "quote": "Prednisone was discontinued2days ago.",
+          "start": 0,
+          "end": 37,
+          "extractedBy": "model",
+          "source": {
+            "documentId": "C4",
+            "quote": "Prednisone was discontinued2days ago.",
+            "start": 0,
+            "end": 37
+          }
+        },
+        {
+          "subjectKey": "C4",
+          "variable": "current_systemic_glucocorticoid_exposure",
+          "polarity": "negated",
+          "surface": "discontinued2days ago",
+          "documentId": "C4",
+          "quote": "Prednisone was discontinued2days ago.",
+          "start": 0,
+          "end": 37,
+          "extractedBy": "model",
+          "source": {
+            "documentId": "C4",
+            "quote": "Prednisone was discontinued2days ago.",
+            "start": 0,
+            "end": 37
+          }
+        },
+        {
+          "subjectKey": "C4",
+          "variable": "current_metformin_exposure",
+          "polarity": "affirmed",
+          "surface": "Metformin500mg daily",
+          "documentId": "C4",
+          "quote": "Metformin500mg daily is current.",
+          "start": 38,
+          "end": 70,
+          "extractedBy": "model",
+          "source": {
+            "documentId": "C4",
+            "quote": "Metformin500mg daily is current.",
+            "start": 38,
+            "end": 70
+          }
+        }
+      ]
+    }
+  ],
+  "documents": {
+    "C1": {
+      "text": "Prednisone was discontinued6months ago. Metformin500mg daily is current."
+    },
+    "C2": {
+      "text": "Prednisone10mg daily was started yesterday and continues."
+    },
+    "C3": {
+      "text": "Medication history was not available."
+    },
+    "C4": {
+      "text": "Prednisone was discontinued2days ago. Metformin500mg daily is current."
+    }
+  }
+}

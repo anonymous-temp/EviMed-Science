@@ -1,0 +1,155 @@
+{
+  "artifact": "search.json",
+  "deliverable_folder": "skill-closure/research-corrected/",
+  "task": "Bounded local verification of search / source-inspection / synthesis methods. Not medical guidance, not a systematic review, not an exhaustive search.",
+  "question": "what methodological limitation prevents treating alternate-day allocation as concealed randomization?",
+  "search_date_utc": "2026-10-10",
+  "budget": {
+    "search_calls_allowed": 2,
+    "search_calls_used": 2,
+    "source_reads_allowed": 2,
+    "source_reads_used": 2,
+    "acquisition_closed": true,
+    "counting_rule": "one tool invocation = one unit, regardless of how many documents it returned; failed and refused attempts count as spent; no retry after the limit",
+    "what_was_spent": [
+      "query 1 - knowledge-index search, 25 records returned",
+      "query 2 - knowledge-index search, 25 records returned",
+      "source read 1 - SUCCESS, full text preserved (BMJ 2008 meta-epidemiological study)",
+      "source read 2 - REFUSED by the source, no text delivered (see limitations.failed_and_refused_acquisitions)"
+    ]
+  },
+  "queries": [
+    {
+      "query_index": 1,
+      "tool": "knowledge-index literature search (PubMed records surfaced through the platform adapter)",
+      "tool_arguments": {
+        "query": "alternate day allocation concealment randomization",
+        "limit": 25,
+        "databases": ["pubmed"]
+      },
+      "query_string_verbatim": "alternate day allocation concealment randomization",
+      "source_class": "bibliographic literature index (PubMed metadata)",
+      "reproducible": true,
+      "result_count_returned": 25,
+      "records_matching": 47,
+      "identifier_scheme": "each record carried a platform record id plus a PubMed identifier and URL; the PubMed number is the identifier used below",
+      "result_identifiers_returned_by_the_index": [
+        "PMID 38237621", "PMID 31322731", "PMID 32297973", "PMID 40746175",
+        "PMID 37442152", "PMID 39171624", "PMID 25842375", "PMID 35385875",
+        "PMID 32782586", "PMID 36331487", "PMID 39743202", "PMID 39931844",
+        "PMID 34523118", "PMID 31769422", "PMID 27624966", "PMID 39042209",
+        "PMID 41016299", "PMID 32359070", "PMID 34008223", "PMID 26830940",
+        "PMID 27351542", "PMID 37010911"
+      ],
+      "identifier_list_note": "The displayed result page was truncated in the middle, so the identifiers above are the ones actually shown to me and they are fewer than the 25 the index reported returning. The index's own count (25 of 47) is preserved above; no identifier is asserted for a record I did not see.",
+      "screening_decision": "no record advanced: none of the returned titles is a methodological source on allocation concealment, alternation or randomization-schedule predictability; every one is a clinical trial or a clinical review of an unrelated intervention. Nothing from this query is used as evidence.",
+      "on_target_records": 0
+    },
+    {
+      "query_index": 2,
+      "tool": "knowledge-index literature search (PubMed records surfaced through the platform adapter)",
+      "tool_arguments": {
+        "query": "allocation concealment systematic review risk bias",
+        "limit": 25,
+        "databases": ["pubmed"]
+      },
+      "query_string_verbatim": "allocation concealment systematic review risk bias",
+      "source_class": "bibliographic literature index (PubMed metadata)",
+      "reproducible": true,
+      "result_count_returned": 25,
+      "records_matching": 1231,
+      "identifier_scheme": "same as query 1",
+      "result_identifiers_returned_by_the_index": [
+        "PMID 26405113", "PMID 28963884", "PMID 28927393", "PMID 40421598",
+        "PMID 34875106", "PMID 34523118", "PMID 31629333", "PMID 41500513",
+        "PMID 24026850", "PMID 30488508", "PMID 30507664", "PMID 35385875",
+        "PMID 27707720", "PMID 37988907", "PMID 30009340", "PMID 33741836",
+        "PMID 34100580", "PMID 28954232", "PMID 31734106", "PMID 33175411"
+      ],
+      "identifier_list_note": "same truncation caveat as query 1; the index reported 25 of 1231 matching records.",
+      "screening_decision": "no record advanced; the returned set is again clinical systematic reviews and trials across unrelated topics (exercise, depression, dentistry, prosthodontics). None addresses allocation-concealment methodology. Nothing from this query is used as evidence.",
+      "on_target_records": 0
+    }
+  ],
+  "dedup": {
+    "performed": true,
+    "level": "identifier level only (PubMed identifier), within and across the two queries",
+    "shared_identifiers_across_queries": ["PMID 34523118", "PMID 35385875"],
+    "method": "the identifier lists actually displayed in this run were compared pairwise; duplicates were removed from the union",
+    "union_of_displayed_identifiers_after_dedup": 40,
+    "not_performed": [
+      "cross-database dedup (DOI, normalised title): a second source class was never reached within budget",
+      "title-level dedup over the full 25-per-query sets, because the displayed result pages were truncated",
+      "no full-text screening or study-design classification was attempted: metadata-only records do not establish design or findings, and none was on topic in any case"
+    ]
+  },
+  "sources_preserved": [
+    {
+      "source_id": "10.1136/bmj.39465.451748.ad",
+      "title": "Empirical evidence of bias in treatment effect estimates in controlled trials with different interventions and outcomes: meta-epidemiological study.",
+      "publication": "BMJ, 2008 (Schulz-type meta-epidemiological analysis of 102 meta-analyses / 804 trials)",
+      "canonical_url": "https://doi.org/10.1136/bmj.39465.451748.ad",
+      "source_class": "open-access published version, retrieved as PDF and parsed to text",
+      "access_level": "full text read",
+      "retrieval_route": "publisher XML was not served (not open access); the open-access PDF was read instead and parsed",
+      "preserved_sha256": {
+        "fulltext.md": "f421b0166e0a2c629d7bd12dbd9abdc8fcdf99952846b0f387ee04b9dbdcbbbc",
+        "fulltext.pdf": "ea4229b8357589053586bba158a7e8b957b9967f03cdcebdac9888a385717271"
+      },
+      "markdown_characters": 46543,
+      "used_for": "the only source available for inspection in this run; every quotation in these artifacts comes from it"
+    },
+    {
+      "source_id": "PMC3424273",
+      "title": "not retrieved (access refused) - see limitations.failed_and_refused_acquisitions",
+      "access_level": "unavailable",
+      "used_for": "nothing; recorded so the gap is visible and no second-source claim is made"
+    }
+  ],
+  "source_observations_available": {
+    "observations_inside_the_one_preserved_source": 2,
+    "observation_1": "the source's methods box, which lists 'alternation or rotation' among procedures 'usually considered inadequate' for allocation concealment (line 80 of the preserved text)",
+    "observation_2": "the source's own consolidated summary of definitions and the authors' restricted re-analysis, which treat adequate concealment as a precondition for blinding (lines 94 and 205)",
+    "independent_second_source": "unavailable in this run",
+    "consequence": "the two-source comparison the task asks for could not be met with two independent sources. What is offered instead is two distinct observations reconciled inside one source, and the missing second source is marked unavailable rather than substituted."
+  },
+  "limitations": {
+    "failed_and_refused_acquisitions": [
+      {
+        "attempt": "source read 2",
+        "target": "PMC3424273",
+        "outcome": "source_access_denied",
+        "verbatim_message": "Europe PMC serves the full-text XML only for open-access articles; PMC3424273 is in PMC without an open license.",
+        "retryable": false,
+        "handling": "recorded as an access failure and as a scope limit. It is NOT evidence that this literature does not exist."
+      },
+      {
+        "attempt": "source read 1, western route",
+        "target": "the publisher XML of the preserved article",
+        "outcome": "source_access_denied then recovered",
+        "verbatim_message": "Europe PMC serves the full-text XML only for open-access articles; PMC2267990 is in PMC without an open license.",
+        "handling": "the same article was obtained as its open-access PDF, so this route failure did not cost evidence; it is recorded because the tool contract counts the attempt"
+      }
+    ],
+    "search_relevance_failure": {
+      "what_happened": "both mandated queries were run, but the index returned clinical trials and clinical systematic reviews of unrelated interventions rather than methodological records on allocation concealment",
+      "counts": "query 1: 25 of 47 matches returned, 0 on topic; query 2: 25 of 1231 matches returned, 0 on topic",
+      "likely_cause": "the returned set is consistent with loose keyword matching over common words ('randomization', 'systematic review', 'risk', 'bias') rather than a phrase or field-weighted search",
+      "handling": "the failure of relevance is reported, not repaired: no third query was run because the search budget was spent and the protocol forbids extending a bounded task",
+      "what_it_does_not_mean": "that no methodological literature exists on alternate-day allocation. Zero on-topic records from a broad unfiltered query is a retrieval result, not a finding about the literature."
+    },
+    "scope_limits": [
+      "two queries, one source class: no guideline source, no trial registry, no second bibliographic database was reached",
+      "one source inspected: no independent second source, therefore no between-source comparison",
+      "the source is a 2008 meta-epidemiological study; it predates the current risk-of-bias tooling generations and is cited here for its definitions and its own re-analysis, not as current guidance",
+      "no record was screened beyond title and metadata, so no record is quoted or classified",
+      "the artifact set verifies method discipline (verbatim preservation, recorded identifiers, honest gaps). It is not an exhaustive systematic search and must not be read as one"
+    ],
+    "quoting_condition": "the preserved text is a machine parse of a PDF: inter-word spaces are missing in places (for example 'drug containers of identical appearance' appears inside a run such as 'assignmentschedule'). Quotations reproduce the preserved characters exactly, including those spacing artifacts, so that they can be re-verified against the preserved hash; they should not be re-typeset as clean prose when quoted onward."
+  },
+  "verification": {
+    "local_checker": "verify_artifacts.py (in this folder)",
+    "checks": "source byte hash; every quoted span present verbatim in the preserved text and its line recorded; query strings and counts as returned; budget accounting; refusal recorded; no treatment advice in synthesis",
+    "network": "none; runs against the preserved files"
+  }
+}

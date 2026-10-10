@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-10T05:08:19.192214+00:00",
+  "scope": "local current-source concurrent session isolation; no production deployment or new model evaluation",
+  "priorFailureEvidence": "evals/acceptance/local-integration-20261010/skills-native/prior-failures/concurrent-scope",
+  "diagnosis": {
+    "observed": "The VCR session explicitly read the shared workspace state and later followed the gene task. Original prompts and both canceled run transcripts are retained.",
+    "engineeringCauses": [
+      "evimed_plan wrote one shared task-plan.json",
+      "native projections overwrote one shared state.json",
+      "compaction and delegated guidance referenced shared task paths",
+      "brief/context fallback automatically admitted unidentified global material"
+    ],
+    "distinction": "The observed bash read was model initiated; the source also exposed and instructed shared running-state paths. This receipt does not claim that every wrong model action was automatic injection."
+  },
+  "behavior": [
+    "Per-run plan and state paths use domain-validated IDs. Root and child guidance and compaction reference the current run.",
+    "Native control-plane readers prefer per-session state and validate witnessed session/run/plan identity; a foreign present session file cannot fall back to global.",
+    "All prompt context/index/memory and brief writes are session-scoped; index contains the actual sessionId.",
+    "Legacy global materials are automatically reused only with verifiable matching identity. Explicit foreign session identity is rejected even when run IDs match. Unidentified old files remain explicitly readable historical artifacts.",
+    "Project sources, shared research materials and prior deliverables are retained. No concurrency prohibition, schema migration, manual approval or whole-package gate introduced.",
+    "Ordinary dispatch legacy projections must carry the actual platform run.id; missing run IDs are unattributed. Test fixtures were explicitly bound to start/dispatch returned IDs rather than weakening this requirement."
+  ],
+  "regressions": [
+    "Real plugin plan calls overlap on a two-writer barrier in the same workspace; plan/state/brief/context remain distinct.",
+    "Both session context dispatches execute concurrently and preserve their own context/memory/index.",
+    "Same-session follow-up/repair restores revision and task state.",
+    "Child delegation and compaction inherit the active parent run, excluding a newer historical row.",
+    "Missing own materials, unidentified global legacy and explicitly foreign global identity are not injected.",
+    "Identity-bound legacy state/material remains compatible; foreign session and stale native run are rejected."
+  ],
+  "verification": {
+    "socketFull": {
+      "passed": 249,
+      "failed": 0,
+      "status": "final current-source replay includes separately owned activation amendment"
+    },
+    "domainFull": {
+      "passed": 1024,
+      "failed": 0
+    },
+    "serverRelatedFull": {
+      "passed": 282,
+      "failed": 0
+    },
+    "combinedAndScope": {
+      "passed": 37,
+      "failed": 0
+    },
+    "liveNativeConcurrency": {
+      "status": "passed",
+      "record": "../local-integration-20261010/skills-native/concurrency-regression/verification.json",
+      "scope": "Actual overlapping native runs in one project; own plans, state, first-request guidance and results. Original failed research_calculate attempt is separate from isolation acceptance."
+    },
+    "checks": [
+      "domain ESLint passed",
+      "socket ESLint and checkJs passed",
+      "server ESLint and checkJs passed",
+      "git diff --check passed"
+    ],
+    "finalOrdinaryLegacyIdentityAmendment": {
+      "passed": 171,
+      "failed": 0,
+      "skipped": 0,
+      "command": "node --test apps/server/test/agentRuns.test.mjs apps/server/test/runProjectionScope.test.mjs",
+      "log": "/tmp/evimed-release-closure-20261010/numeric/scope-agent-final-corrected.log",
+      "priorUnidentifiedSyntheticFixtureFailuresRetained": "/tmp/evimed-release-closure-20261010/numeric/scope-agent-final.log"
+    }
+  },
+  "sourceHashes": {
+    "packages/domain/src/workspaceLayout.mjs": "9a77886e7929b7741ee1aed916725d4dbc0d00063644e6c20d9b00b4fdcf78e2",
+    "packages/domain/index.mjs": "7ae17ac671f895548ce7fec5256c495d67c5121bdac52b97884e30502d1494ea",
+    "packages/socket/plugins/run-policy.mjs": "bea06409973cd38a77adf0de5b0163b3bd6bd5ccc16e7118a63dd1c729abc831",
+    "packages/socket/src/runPolicy.mjs": "05278a75bbe72961d9147c51ffbe87d67731a87adc1f89bc4e809d7b6b35adc9",
+    "packages/socket/plugins/evidence-store.mjs": "6884f4b501754162a2c6b5ed99c7cb0b6ed6beaa84f7329b320b16e49163f8bd",
+    "packages/socket/plugins/compaction.mjs": "126fab8b2c4c2154c643d25d7d72b7cb5e7167717c0a579860f6f7276098150d",
+    "apps/server/src/agentRuns.mjs": "c8b7f1f826477fdc727a33d8506e73fcfbafe97e6921a910635382169548fccd",
+    "apps/server/src/runtimeManager.mjs": "641dbe7ae15351439bd68f79ccd318def67841ad57266dbae7a4ee4b4b12c7e4",
+    "packages/socket/test/combinedPlan.test.mjs": "8187949b82ec868121462a2193187df277d0024a8296e4d5b4f5d3ee3f22bbca",
+    "packages/socket/test/consistency.test.mjs": "4718b1b26f3a599bc65523757e209175ff26ca7ecc1d606e6fd10af17718e2d7",
+    "packages/socket/test/sessionScope.test.mjs": "22b71ebfa2d532b15a77a822128957f90c81188ae4ecdd3b56c26f5a1555c107",
+    "apps/server/test/agentRuns.test.mjs": "f47299bc285549a1d39ba30855884f1b8e44223e3e1c1d797bcf5e7d1f448067",
+    "apps/server/test/runtimeManager.test.mjs": "df47b45f2689a8a3ec6db370c659182296aa836d2990fa038f64f721113966e8",
+    "apps/server/test/runProjectionScope.test.mjs": "07e1899d0ffc4ea84a8808480171f90bd11e0cacaafbab27a4b6c0f7afb381e5"
+  },
+  "mcpUnchanged": true
+}

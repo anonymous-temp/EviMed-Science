@@ -1,0 +1,310 @@
+{
+  "core/humanizer": {
+    "packageId": "core/humanizer",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "core/humanizer-zh": {
+    "packageId": "core/humanizer-zh",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "core/manuscript-humanize": {
+    "packageId": "core/manuscript-humanize",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/evidence-appraisal": {
+    "packageId": "capability-skills/evidence-appraisal",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/manuscript-support": {
+    "packageId": "capability-skills/manuscript-support",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/dataset-research-scoping": {
+    "packageId": "capability-skills/dataset-research-scoping",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/statistical-analysis": {
+    "packageId": "capability-skills/statistical-analysis",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/source-understanding": {
+    "packageId": "capability-skills/source-understanding",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/citation-integrity": {
+    "packageId": "capability-skills/citation-integrity",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/method-distillation": {
+    "packageId": "capability-skills/method-distillation",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/method-relations": {
+    "packageId": "capability-skills/method-relations",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/evolution-scout": {
+    "packageId": "capability-skills/evolution-scout",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "community/deep-structural-analysis": {
+    "packageId": "community/deep-structural-analysis",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/adr-analysis": {
+    "packageId": "capability-skills/adr-analysis",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/drug-selection": {
+    "packageId": "capability-skills/drug-selection",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/off-label-analysis": {
+    "packageId": "capability-skills/off-label-analysis",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/geo-drug-value": {
+    "packageId": "capability-skills/geo-drug-value",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "community/dsh-ppt": {
+    "packageId": "community/dsh-ppt",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/reporting-guidelines": {
+    "packageId": "capability-skills/reporting-guidelines",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/comprehensive-drug-evaluation": {
+    "packageId": "capability-skills/comprehensive-drug-evaluation",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/manuscript-humanize": {
+    "packageId": "capability-skills/manuscript-humanize",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/autopilot-episode": {
+    "packageId": "capability-skills/autopilot-episode",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "core/deep-research": {
+    "packageId": "core/deep-research",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/deep-research": {
+    "packageId": "capability-skills/deep-research",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/biomedical-database-search": {
+    "packageId": "capability-skills/biomedical-database-search",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/clinical-evidence-synthesis": {
+    "packageId": "capability-skills/clinical-evidence-synthesis",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/geo-insight": {
+    "packageId": "capability-skills/geo-insight",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/geo-strategy": {
+    "packageId": "capability-skills/geo-strategy",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/geo-content": {
+    "packageId": "capability-skills/geo-content",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/geo-proposal": {
+    "packageId": "capability-skills/geo-proposal",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/vcr-evidence": {
+    "packageId": "capability-skills/vcr-evidence",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/vcr-analysis": {
+    "packageId": "capability-skills/vcr-analysis",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/vcr-package": {
+    "packageId": "capability-skills/vcr-package",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/research-grant-development": {
+    "packageId": "capability-skills/research-grant-development",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/tool-builder": {
+    "packageId": "capability-skills/tool-builder",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/bibliometric-analysis": {
+    "packageId": "capability-skills/bibliometric-analysis",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/mendelian-randomization": {
+    "packageId": "capability-skills/mendelian-randomization",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/meta-analysis": {
+    "packageId": "capability-skills/meta-analysis",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/peer-review": {
+    "packageId": "capability-skills/peer-review",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/research-topic-selection": {
+    "packageId": "capability-skills/research-topic-selection",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "evimed/open-domain-answer": {
+    "packageId": "evimed/open-domain-answer",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/vcr-protocol": {
+    "packageId": "capability-skills/vcr-protocol",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/vcr-matching": {
+    "packageId": "capability-skills/vcr-matching",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  },
+  "capability-skills/gene-expression-analysis": {
+    "packageId": "capability-skills/gene-expression-analysis",
+    "dispatch": "control-plane-injected",
+    "state": "bounded-hosted-task-matched",
+    "currentImageExecution": "unknown",
+    "fullPackageExecution": "unknown"
+  }
+}

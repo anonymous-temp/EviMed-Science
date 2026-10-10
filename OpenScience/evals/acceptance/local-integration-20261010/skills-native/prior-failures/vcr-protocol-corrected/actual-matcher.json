@@ -1,0 +1,496 @@
+{
+  "source": "actual current apps/server/src/vcrMatching.mjs; generated criteria and facts unchanged",
+  "results": [
+    {
+      "sourceKey": "C1",
+      "actual": {
+        "studyId": null,
+        "clinicalHistory": {
+          "superseded": [],
+          "conflicts": []
+        },
+        "provenance": {
+          "vocabularyVersion": "evimed-internal-sex-1",
+          "inputFactIds": [],
+          "inputLanguageIds": [],
+          "inputFactHashes": {},
+          "inputCriterionHashes": {
+            "crit-inclusion-adult": "b3213fa58e4d807366914834d3fae1d3a058f0990ce0db4ba01d424edcd33102",
+            "crit-exclusion-current-glucocorticoid": "f75589d38604989f89d72ec1b3485d01429b8038b75a7e117d36ef2407072206"
+          },
+          "inputLanguageHashes": {},
+          "inputReferencesComplete": false
+        },
+        "protocolVersionId": null,
+        "subjectKey": "C1",
+        "direction": "trial_to_patient",
+        "asOf": "2026-10-10T00:00:00.000Z",
+        "summary": "insufficient_evidence",
+        "counts": {
+          "satisfied": 0,
+          "not_satisfied": 0,
+          "unknown": 2,
+          "pending_recheck": 0,
+          "notApplicable": 0,
+          "total": 2
+        },
+        "judgments": [
+          {
+            "criterionId": "crit-inclusion-adult",
+            "kind": "inclusion",
+            "criterionType": "demographic",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "age",
+                "reason": "not_measured"
+              }
+            ]
+          },
+          {
+            "criterionId": "crit-exclusion-current-glucocorticoid",
+            "kind": "exclusion",
+            "criterionType": "concomitant_medication",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "systemic_glucocorticoid",
+                "reason": "not_recorded"
+              }
+            ]
+          }
+        ],
+        "priority": null,
+        "evidenceGaps": [
+          {
+            "variable": "age",
+            "reason": "not_measured",
+            "criterionIds": [
+              "crit-inclusion-adult"
+            ]
+          },
+          {
+            "variable": "systemic_glucocorticoid",
+            "reason": "not_recorded",
+            "criterionIds": [
+              "crit-exclusion-current-glucocorticoid"
+            ]
+          }
+        ],
+        "blockingExclusionUnknowns": [
+          "crit-exclusion-current-glucocorticoid"
+        ],
+        "voidedFacts": [
+          {
+            "factId": "",
+            "variable": "systemic_glucocorticoid",
+            "reason": "locator_missing"
+          },
+          {
+            "factId": "",
+            "variable": "age",
+            "reason": "polarity_not_assertive"
+          }
+        ],
+        "factsWithheldAsFuture": 0,
+        "modelDecidedCount": 0
+      },
+      "directRequirement": {
+        "state": "satisfied",
+        "evidence": [
+          {
+            "factId": "",
+            "variable": "systemic_glucocorticoid",
+            "quote": "systemic_glucocorticoid = ",
+            "quoteKind": "snapshot_cell",
+            "locator": {
+              "snapshotId": "",
+              "field": "systemic_glucocorticoid"
+            },
+            "occurredAt": null,
+            "visibleAt": null,
+            "polarity": "affirmed"
+          }
+        ],
+        "missing": [],
+        "recheckAt": null
+      }
+    },
+    {
+      "sourceKey": "C2",
+      "actual": {
+        "studyId": null,
+        "clinicalHistory": {
+          "superseded": [],
+          "conflicts": []
+        },
+        "provenance": {
+          "vocabularyVersion": "evimed-internal-sex-1",
+          "inputFactIds": [],
+          "inputLanguageIds": [],
+          "inputFactHashes": {},
+          "inputCriterionHashes": {
+            "crit-inclusion-adult": "b3213fa58e4d807366914834d3fae1d3a058f0990ce0db4ba01d424edcd33102",
+            "crit-exclusion-current-glucocorticoid": "f75589d38604989f89d72ec1b3485d01429b8038b75a7e117d36ef2407072206"
+          },
+          "inputLanguageHashes": {},
+          "inputReferencesComplete": false
+        },
+        "protocolVersionId": null,
+        "subjectKey": "C2",
+        "direction": "trial_to_patient",
+        "asOf": "2026-10-10T00:00:00.000Z",
+        "summary": "insufficient_evidence",
+        "counts": {
+          "satisfied": 0,
+          "not_satisfied": 0,
+          "unknown": 2,
+          "pending_recheck": 0,
+          "notApplicable": 0,
+          "total": 2
+        },
+        "judgments": [
+          {
+            "criterionId": "crit-inclusion-adult",
+            "kind": "inclusion",
+            "criterionType": "demographic",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "age",
+                "reason": "not_measured"
+              }
+            ]
+          },
+          {
+            "criterionId": "crit-exclusion-current-glucocorticoid",
+            "kind": "exclusion",
+            "criterionType": "concomitant_medication",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "systemic_glucocorticoid",
+                "reason": "not_recorded"
+              }
+            ]
+          }
+        ],
+        "priority": null,
+        "evidenceGaps": [
+          {
+            "variable": "age",
+            "reason": "not_measured",
+            "criterionIds": [
+              "crit-inclusion-adult"
+            ]
+          },
+          {
+            "variable": "systemic_glucocorticoid",
+            "reason": "not_recorded",
+            "criterionIds": [
+              "crit-exclusion-current-glucocorticoid"
+            ]
+          }
+        ],
+        "blockingExclusionUnknowns": [
+          "crit-exclusion-current-glucocorticoid"
+        ],
+        "voidedFacts": [
+          {
+            "factId": "",
+            "variable": "systemic_glucocorticoid",
+            "reason": "locator_missing"
+          },
+          {
+            "factId": "",
+            "variable": "age",
+            "reason": "polarity_not_assertive"
+          }
+        ],
+        "factsWithheldAsFuture": 0,
+        "modelDecidedCount": 0
+      },
+      "directRequirement": {
+        "state": "satisfied",
+        "evidence": [
+          {
+            "factId": "",
+            "variable": "systemic_glucocorticoid",
+            "quote": "systemic_glucocorticoid = ",
+            "quoteKind": "snapshot_cell",
+            "locator": {
+              "snapshotId": "",
+              "field": "systemic_glucocorticoid"
+            },
+            "occurredAt": null,
+            "visibleAt": null,
+            "polarity": "affirmed"
+          }
+        ],
+        "missing": [],
+        "recheckAt": null
+      }
+    },
+    {
+      "sourceKey": "C3",
+      "actual": {
+        "studyId": null,
+        "clinicalHistory": {
+          "superseded": [],
+          "conflicts": []
+        },
+        "provenance": {
+          "vocabularyVersion": "evimed-internal-sex-1",
+          "inputFactIds": [],
+          "inputLanguageIds": [],
+          "inputFactHashes": {},
+          "inputCriterionHashes": {
+            "crit-inclusion-adult": "b3213fa58e4d807366914834d3fae1d3a058f0990ce0db4ba01d424edcd33102",
+            "crit-exclusion-current-glucocorticoid": "f75589d38604989f89d72ec1b3485d01429b8038b75a7e117d36ef2407072206"
+          },
+          "inputLanguageHashes": {},
+          "inputReferencesComplete": false
+        },
+        "protocolVersionId": null,
+        "subjectKey": "C3",
+        "direction": "trial_to_patient",
+        "asOf": "2026-10-10T00:00:00.000Z",
+        "summary": "insufficient_evidence",
+        "counts": {
+          "satisfied": 0,
+          "not_satisfied": 0,
+          "unknown": 2,
+          "pending_recheck": 0,
+          "notApplicable": 0,
+          "total": 2
+        },
+        "judgments": [
+          {
+            "criterionId": "crit-inclusion-adult",
+            "kind": "inclusion",
+            "criterionType": "demographic",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "age",
+                "reason": "not_measured"
+              }
+            ]
+          },
+          {
+            "criterionId": "crit-exclusion-current-glucocorticoid",
+            "kind": "exclusion",
+            "criterionType": "concomitant_medication",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "systemic_glucocorticoid",
+                "reason": "not_recorded"
+              }
+            ]
+          }
+        ],
+        "priority": null,
+        "evidenceGaps": [
+          {
+            "variable": "age",
+            "reason": "not_measured",
+            "criterionIds": [
+              "crit-inclusion-adult"
+            ]
+          },
+          {
+            "variable": "systemic_glucocorticoid",
+            "reason": "not_recorded",
+            "criterionIds": [
+              "crit-exclusion-current-glucocorticoid"
+            ]
+          }
+        ],
+        "blockingExclusionUnknowns": [
+          "crit-exclusion-current-glucocorticoid"
+        ],
+        "voidedFacts": [
+          {
+            "factId": "",
+            "variable": "systemic_glucocorticoid",
+            "reason": "polarity_not_assertive"
+          },
+          {
+            "factId": "",
+            "variable": "age",
+            "reason": "polarity_not_assertive"
+          }
+        ],
+        "factsWithheldAsFuture": 0,
+        "modelDecidedCount": 0
+      },
+      "directRequirement": {
+        "state": "unknown",
+        "evidence": [],
+        "missing": [
+          {
+            "variable": "systemic_glucocorticoid",
+            "reason": "not_recorded"
+          }
+        ],
+        "recheckAt": null
+      }
+    },
+    {
+      "sourceKey": "C4",
+      "actual": {
+        "studyId": null,
+        "clinicalHistory": {
+          "superseded": [],
+          "conflicts": []
+        },
+        "provenance": {
+          "vocabularyVersion": "evimed-internal-sex-1",
+          "inputFactIds": [],
+          "inputLanguageIds": [],
+          "inputFactHashes": {},
+          "inputCriterionHashes": {
+            "crit-inclusion-adult": "b3213fa58e4d807366914834d3fae1d3a058f0990ce0db4ba01d424edcd33102",
+            "crit-exclusion-current-glucocorticoid": "f75589d38604989f89d72ec1b3485d01429b8038b75a7e117d36ef2407072206"
+          },
+          "inputLanguageHashes": {},
+          "inputReferencesComplete": false
+        },
+        "protocolVersionId": null,
+        "subjectKey": "C4",
+        "direction": "trial_to_patient",
+        "asOf": "2026-10-10T00:00:00.000Z",
+        "summary": "insufficient_evidence",
+        "counts": {
+          "satisfied": 0,
+          "not_satisfied": 0,
+          "unknown": 2,
+          "pending_recheck": 0,
+          "notApplicable": 0,
+          "total": 2
+        },
+        "judgments": [
+          {
+            "criterionId": "crit-inclusion-adult",
+            "kind": "inclusion",
+            "criterionType": "demographic",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "age",
+                "reason": "not_measured"
+              }
+            ]
+          },
+          {
+            "criterionId": "crit-exclusion-current-glucocorticoid",
+            "kind": "exclusion",
+            "criterionType": "concomitant_medication",
+            "state": "unknown",
+            "applicable": true,
+            "applicabilityState": "satisfied",
+            "decidedBy": "code",
+            "evidence": [],
+            "recheckAt": null,
+            "missing": [
+              {
+                "variable": "systemic_glucocorticoid",
+                "reason": "not_recorded"
+              }
+            ]
+          }
+        ],
+        "priority": null,
+        "evidenceGaps": [
+          {
+            "variable": "age",
+            "reason": "not_measured",
+            "criterionIds": [
+              "crit-inclusion-adult"
+            ]
+          },
+          {
+            "variable": "systemic_glucocorticoid",
+            "reason": "not_recorded",
+            "criterionIds": [
+              "crit-exclusion-current-glucocorticoid"
+            ]
+          }
+        ],
+        "blockingExclusionUnknowns": [
+          "crit-exclusion-current-glucocorticoid"
+        ],
+        "voidedFacts": [
+          {
+            "factId": "",
+            "variable": "systemic_glucocorticoid",
+            "reason": "locator_missing"
+          },
+          {
+            "factId": "",
+            "variable": "age",
+            "reason": "polarity_not_assertive"
+          }
+        ],
+        "factsWithheldAsFuture": 0,
+        "modelDecidedCount": 0
+      },
+      "directRequirement": {
+        "state": "satisfied",
+        "evidence": [
+          {
+            "factId": "",
+            "variable": "systemic_glucocorticoid",
+            "quote": "systemic_glucocorticoid = ",
+            "quoteKind": "snapshot_cell",
+            "locator": {
+              "snapshotId": "",
+              "field": "systemic_glucocorticoid"
+            },
+            "occurredAt": null,
+            "visibleAt": null,
+            "polarity": "affirmed"
+          }
+        ],
+        "missing": [],
+        "recheckAt": null
+      }
+    }
+  ]
+}

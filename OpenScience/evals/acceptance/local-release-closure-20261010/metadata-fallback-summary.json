@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-10T04:31:50.374129+00:00",
+  "completedAt": "2026-10-10T04:31:54.489119+00:00",
+  "scope": "Actual local control-plane production gateway handler; no production deployment or production tests",
+  "sourceSha256": "8356f84c020e2e03434733d738bb1350be1b072ec8cdfb46eb6f83feee2d3310",
+  "allFourQueriesPassed": true,
+  "results": [
+    {
+      "source": "who-gho",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "maternal mortality",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from who-gho.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "MDG_0000000026",
+            "MDG_0000000032",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000026",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000032"
+          ],
+          "elapsedMs": 897,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "life expectancy",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from who-gho.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "WHOSIS_000002",
+            "WHOSIS_000015",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000002",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000015"
+          ],
+          "elapsedMs": 871,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1768
+    },
+    {
+      "source": "wikipathways",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "insulin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from wikipathways.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "WP1313",
+            "WP17",
+            "https://www.wikipathways.org/instance/WP1313",
+            "https://www.wikipathways.org/instance/WP17"
+          ],
+          "elapsedMs": 1784,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "apoptosis",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from wikipathways.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "WP1018",
+            "WP1082",
+            "https://www.wikipathways.org/instance/WP1018",
+            "https://www.wikipathways.org/instance/WP1082"
+          ],
+          "elapsedMs": 563,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2347
+    }
+  ],
+  "resolution": [
+    {
+      "arguments": {
+        "source": "who-gho",
+        "query": "maternal mortality",
+        "limit": 2
+      },
+      "resolution": {
+        "mode": "complete-official-metadata-index",
+        "url": "https://ghoapi.azureedge.net/api/Indicator",
+        "recordsInspected": 3099,
+        "completeIndex": true,
+        "queryMode": "indicator-name-substring"
+      },
+      "status": "warning"
+    },
+    {
+      "arguments": {
+        "source": "who-gho",
+        "query": "life expectancy",
+        "limit": 2
+      },
+      "resolution": {
+        "mode": "complete-official-metadata-index",
+        "url": "https://ghoapi.azureedge.net/api/Indicator",
+        "recordsInspected": 3099,
+        "completeIndex": true,
+        "queryMode": "indicator-name-substring"
+      },
+      "status": "warning"
+    },
+    {
+      "arguments": {
+        "source": "wikipathways",
+        "query": "insulin",
+        "limit": 2
+      },
+      "resolution": {
+        "mode": "complete-official-metadata-index",
+        "url": "https://www.wikipathways.org/json/getPathwayInfo.json",
+        "recordsInspected": 2218,
+        "completeIndex": true,
+        "queryMode": "pathway-title-substring"
+      },
+      "status": "warning"
+    },
+    {
+      "arguments": {
+        "source": "wikipathways",
+        "query": "apoptosis",
+        "limit": 2
+      },
+      "resolution": {
+        "mode": "complete-official-metadata-index",
+        "url": "https://www.wikipathways.org/json/getPathwayInfo.json",
+        "recordsInspected": 2218,
+        "completeIndex": true,
+        "queryMode": "pathway-title-substring"
+      },
+      "status": "warning"
+    }
+  ],
+  "officialDocumentation": [
+    "https://www.who.int/data/gho/info/gho-odata-api",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC10767877/"
+  ],
+  "originalFailureReportsPreserved": [
+    "/tmp/evimed-release-closure-20261010/connectors/connector-probe-v3.json",
+    "/tmp/evimed-release-closure-20261010/connectors-current/connector-probe-v3.json"
+  ],
+  "boundaries": [
+    "WHO fallback exposes indicator metadata, not observations",
+    "WikiPathways fallback exposes pathway metadata, not gene membership or molecular interaction evidence",
+    "Only explicit recoverable transport/HTTP5xx failures trigger fallback; authorization and rate limits never bypassed",
+    "Complete index required: valid shape, no nextLink/truncation, declared counts consistent, existing 4MiB cap unchanged"
+  ],
+  "regressions": {
+    "mcpPublicSource": 92,
+    "mcpServer": 60,
+    "gateway": 36,
+    "lint": "passed",
+    "serverCheckJs": "passed"
+  },
+  "fullPublicConnectorGate": "Not certified by this two-source probe; arXiv 429 remains unresolved",
+  "receiptSha256": "b735dc539b06f4ec1b6070d443aeaa12041b991b33101c58a7ee9346057483c7"
+}

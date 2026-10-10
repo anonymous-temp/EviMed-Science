@@ -1,0 +1,1623 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "7dfd529e68a25587f216d1caa12da66356f3182f",
+  "rVersion": "4.3.3",
+  "packageLockHash": "56edc6432ad43b12fcef2e44938bdb111ae8889b2532b298aac2ebbb3317c692",
+  "methods": {
+    "profile.snapshot": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": "profile_dataset.py",
+      "modelTier": null
+    },
+    "cohort.build": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [],
+      "modelTier": null
+    },
+    "population.scenario": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": "simstudy semantics",
+      "modelTier": "scenario"
+    },
+    "population.literature": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [],
+      "modelTier": "literature"
+    },
+    "population.synthpop": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": "synthpop",
+      "modelTier": "data"
+    },
+    "population.quality": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [],
+      "modelTier": "data"
+    },
+    "patients.continuous": {
+      "version": "1.0.0",
+      "endpoints": "continuous",
+      "crossChecks": [],
+      "modelTier": "scenario"
+    },
+    "patients.binary": {
+      "version": "1.0.0",
+      "endpoints": "binary",
+      "crossChecks": [],
+      "modelTier": "scenario"
+    },
+    "patients.time_to_event": {
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "crossChecks": "simsurv",
+      "modelTier": "scenario"
+    },
+    "evidence.pool": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": ["metafor", "meta engine"],
+      "modelTier": "literature"
+    },
+    "evidence.reconstruct_km": {
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "crossChecks": "IPDfromKM",
+      "modelTier": "literature"
+    },
+    "comparator.entropy_balance": {
+      "version": "1.0.0",
+      "endpoints": ["continuous", "binary", "time_to_event"],
+      "crossChecks": ["WeightIt", "cobalt"],
+      "modelTier": "data"
+    },
+    "comparator.propensity_weight": {
+      "version": "1.0.0",
+      "endpoints": ["continuous", "binary", "time_to_event"],
+      "crossChecks": "WeightIt",
+      "modelTier": "data"
+    },
+    "comparator.rmst": {
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "crossChecks": "survRM2",
+      "modelTier": "data"
+    },
+    "comparator.maic": {
+      "version": "1.0.0",
+      "endpoints": ["continuous", "binary", "time_to_event"],
+      "crossChecks": "NICE DSU TSD 18",
+      "modelTier": "data"
+    },
+    "comparator.evalue": {
+      "version": "1.0.0",
+      "endpoints": ["binary", "time_to_event"],
+      "crossChecks": "EValue",
+      "modelTier": "scenario"
+    },
+    "comparator.map_prior": {
+      "version": "1.0.0",
+      "endpoints": ["binary", "continuous"],
+      "crossChecks": "RBesT",
+      "modelTier": "literature"
+    },
+    "design.analytic": {
+      "version": "1.1.0",
+      "endpoints": ["continuous", "binary", "time_to_event"],
+      "crossChecks": ["rpact", "gsDesign", "stats::binom.test", "Simon 1989"],
+      "modelTier": "scenario",
+      "legacyVersion": "1.0.0",
+      "legacyDesigns": ["two_arm_fixed", "group_sequential", "simon_two_stage"]
+    },
+    "design.simulate": {
+      "version": "1.2.0",
+      "endpoints": ["continuous", "binary", "time_to_event"],
+      "crossChecks": ["design.analytic", "independent beta-binomial variance", "exact non-central t power of the one-sample test", "independent normal approximation of the one-sample log-rank score"],
+      "modelTier": "scenario",
+      "legacyVersion": "1.0.0",
+      "legacyDesigns": ["two_arm_fixed", "group_sequential"],
+      "legacyReleases": [
+        {
+          "version": "1.1.0",
+          "support": {
+            "two_arm_fixed": ["continuous", "binary", "time_to_event"],
+            "group_sequential": "time_to_event",
+            "single_arm": "binary",
+            "single_arm_external": "binary",
+            "simon_two_stage": "binary"
+          }
+        }
+      ]
+    },
+    "design.grid": {
+      "version": "1.2.0",
+      "endpoints": ["continuous", "binary", "time_to_event"],
+      "crossChecks": [],
+      "modelTier": "scenario",
+      "legacyVersion": "1.0.0",
+      "legacyDesigns": ["two_arm_fixed", "group_sequential"],
+      "legacyReleases": [
+        {
+          "version": "1.1.0",
+          "support": {
+            "two_arm_fixed": ["continuous", "binary", "time_to_event"],
+            "group_sequential": "time_to_event",
+            "single_arm": "binary",
+            "single_arm_external": "binary",
+            "simon_two_stage": "binary"
+          }
+        }
+      ]
+    },
+    "design.assurance": {
+      "version": "1.1.0",
+      "endpoints": ["continuous", "binary", "time_to_event"],
+      "crossChecks": ["O'Hagan 2005", "independent Monte Carlo of the sequential design under the design prior"],
+      "modelTier": "scenario",
+      "legacyVersion": "1.0.0",
+      "legacyDesigns": "two_arm_fixed"
+    },
+    "design.procova": {
+      "version": "1.0.0",
+      "endpoints": "continuous",
+      "crossChecks": "EMA 2022 qualification opinion",
+      "modelTier": "scenario"
+    },
+    "accrual.poisson_gamma": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": "Anisimov & Fedorov 2007",
+      "modelTier": "scenario"
+    },
+    "matching.evaluate": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": "Kleene truth table",
+      "modelTier": null
+    },
+    "comparator.weighted_cox": {
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "crossChecks": ["survival::coxph on WeightIt weights", "independent score test for non-proportional hazards"],
+      "modelTier": "data"
+    },
+    "comparator.maic_time_to_event": {
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "crossChecks": ["maicplus 0.1.2 vignette (Apache-2.0)", "NICE DSU TSD 18", "simulated target-population hazard ratio"],
+      "modelTier": "data"
+    },
+    "comparator.aipw": {
+      "version": "1.0.0",
+      "endpoints": ["continuous", "binary"],
+      "crossChecks": ["closed-form AIPW (Bang & Robins 2005) on WeightIt weights", "simulation with a known ATT: double robustness"],
+      "modelTier": "data"
+    },
+    "comparator.covariate_sets": {
+      "version": "1.0.0",
+      "endpoints": ["continuous", "binary", "time_to_event"],
+      "crossChecks": ["comparator.entropy_balance", "comparator.propensity_weight", "comparator.aipw"],
+      "modelTier": "data"
+    },
+    "comparator.negative_control": {
+      "version": "1.0.0",
+      "endpoints": ["binary", "time_to_event"],
+      "crossChecks": ["EmpiricalCalibration 3.1.4 (sccs example)", "Lipsitch 2010", "Schuemie 2014"],
+      "modelTier": "data"
+    },
+    "comparator.tipping_point": {
+      "version": "1.0.0",
+      "endpoints": ["binary", "time_to_event"],
+      "crossChecks": ["stats::fisher.test and stats::binom.test", "closed-form worst case (censoring as event)", "Jackson et al. 2014"],
+      "modelTier": "data"
+    },
+    "comparator.prognostic_adjustment": {
+      "version": "1.0.0",
+      "endpoints": ["binary", "time_to_event"],
+      "crossChecks": ["FDA 2023 covariate-adjustment guidance, Table 1", "M-estimation sandwich by numerical Jacobians", "survival::coxph and survfit(newdata)"],
+      "modelTier": "data"
+    },
+    "patients.longitudinal": {
+      "version": "1.0.0",
+      "endpoints": "continuous",
+      "crossChecks": ["nlme::lme on the output table", "closed-form model-implied mean and variance"],
+      "modelTier": "scenario"
+    }
+  },
+  "cases": [
+    {
+      "id": "C2-01",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "same seed -> same table sha256 (787a38de12b5); other seed -> different (673ca9e9ad85); scenario hash unchanged by seed (2c805eaea31c); methodVersion 1.0.0",
+      "seconds": 1.15311717987061
+    },
+    {
+      "id": "C2-02",
+      "ac": "AC-11",
+      "pass": true,
+      "detail": "N=20000: age mean 61.8918 vs 61.9209 [0.42 MCSE]; age sd 9.8211 vs 9.8874 [1.35 MCSE]; male 0.5476 vs 0.5500 [0.68 MCSE]; egfr mean 74.8434 vs 75.0888 [1.76 MCSE]; cor(age,egfr) -0.4923 vs -0.5000 [1.45 MCSE]; cor(age,male) 0.0850 vs 0.0795 [0.78 MCSE] (all within 4 MCSE: TRUE)",
+      "seconds": 0.160537958145142
+    },
+    {
+      "id": "C2-03",
+      "ac": "AC-03",
+      "pass": true,
+      "detail": "5 declared constraints; 3293 rows broke one before enforcement (adult=0 age_upper=0 egfr_floor=0 no_male_high_marker=3249 no_young_low_egfr=44), 3991 redrawn in 4 rounds, 0 violations in 20000 records afterwards (independent count on the CSV: 0); 0.8355 of rows equal the unconstrained population's (= 1 - share of its rows that break a rule, 0.8355); an impossible rule -> failed (constraint_unsatisfiable)",
+      "seconds": 0.518087148666382
+    },
+    {
+      "id": "C2-04",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "identity: replication 1.000, MIA AUC 1.000, NN-in-train 1.000 (red); ideal: MIA AUC 0.503, NN-in-train 0.470, replication 0.000 (green); column-shuffled: worst pairwise |d| 0.975 (red)",
+      "seconds": 0.523299932479858
+    },
+    {
+      "id": "C2-05",
+      "ac": "AC-09",
+      "pass": true,
+      "detail": "2400 generated records from 240 training observations x 10 copies, and the table on disk has 2400 rows in 10 copies; realPatients stays 0; inference labelled exploratory; rare level 'rare' merged before synthesis: TRUE; 10 per-copy quality rows; holdoutShare 0 -> succeeded with the disclosure axis withheld (no_holdout_reserved); m=3 -> failed (scenario_value_invalid); allowed uses design/feasibility/testing/training/shared_preview",
+      "seconds": 3.02227187156677
+    },
+    {
+      "id": "C2-06",
+      "ac": "AC-20",
+      "pass": true,
+      "detail": "report has 9 band verdicts, all numeric leaves finite (0 non-finite), provenance seed=606 version=1.0.0, S_pMSE band source 'synthpop_authors', advisory=TRUE",
+      "seconds": 0.0784275531768799
+    },
+    {
+      "id": "C2-07",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "4/5 planted outliers reproduced exactly (distance 0) by a memorizing generator; overall replication rate 0.987 vs holdout 0.000; MIA AUC 0.818",
+      "seconds": 0.147353410720825
+    },
+    {
+      "id": "C2-09",
+      "ac": "AC-33",
+      "pass": true,
+      "detail": "all four -> digital_twin; missing updates_with_new_data -> baseline_conditioned_prediction; missing validation_record -> baseline_conditioned_prediction; none -> baseline_conditioned_prediction; domain twinLabel agrees: TRUE",
+      "seconds": 0.053194522857666
+    },
+    {
+      "id": "C2-10",
+      "ac": "AC-33",
+      "pass": true,
+      "detail": "ODE vs closed form max|d| 2.18e-10; Omega on: between-subject sd 6.5107, uncertainty interval width 11.4121; Omega off: between-subject sd 0.0000, width 11.4121 (unchanged: TRUE); valid spec: 0 issues; conflated -> [uncertainty_and_variability_conflated]; missing residual -> [mechanistic_field_missing]; unknown engine -> [mechanistic_engine_unknown]",
+      "seconds": 0.0781369209289551
+    },
+    {
+      "id": "C2-10b",
+      "ac": ["AC-33", "AC-11"],
+      "pass": true,
+      "detail": "60 outer draws of 2000 people: between-draw sd of the means 2.037 (declared parameter sd 2 -> expected 2.012; pure sampling error would be 0.224); within-draw sd 10.007 (declared 10); the stored parameter table's sd 1.957; several draws with no uncertainty declared -> scenario_value_invalid",
+      "seconds": 0.698020219802856
+    },
+    {
+      "id": "C2-12",
+      "ac": "AC-23",
+      "pass": true,
+      "detail": "correct model: in-the-large -0.0512 (0.81 SE), slope 1.0094, ICI 0.6559, coverage 0.9553 in [0.9461, 0.9632] (nominal .95 inside: TRUE), CRPS 2.2240; +10% biased: in-the-large -4.0522 (64.1 SE), slope 0.9177, coverage 0.8305 (nominal inside: FALSE), CRPS 3.3576",
+      "seconds": 0.0335662364959717
+    },
+    {
+      "id": "C2-13",
+      "ac": "AC-15",
+      "pass": true,
+      "detail": "all features: 2 leaked (biopsy_grade,post_hoc_label); filtering on occurred_at still leaks 1 (biopsy_grade -- happened 2026-04-20, visible 2026-07-15); filtering on visible_at leaks 0",
+      "seconds": 0.0147883892059326
+    },
+    {
+      "id": "C2-14",
+      "ac": "AC-33",
+      "pass": true,
+      "detail": "complete card: 0 issues; missing contextOfUse -> [contextOfUse]; missing validationDataHash -> [validationDataHash]; modelRisk='extreme' -> [modelRisk]; evidence says twin but label says otherwise -> [label]",
+      "seconds": 0.0106821060180664
+    },
+    {
+      "id": "C2-15",
+      "ac": ["AC-04", "AC-20"],
+      "pass": true,
+      "detail": "identity generator: exact replication 1.000, membership AUC 1.000; ideal generator: replication 0.000, AUC 0.518; two criteria as rules: joint pass rate real 0.230 vs synthetic 0.240 (relative difference 0.043); realPatients 0, generated 300",
+      "seconds": 0.233088731765747
+    },
+    {
+      "id": "C2-16",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "ideal generator, 400 train / 100 holdout, 16 datasets: nearest-neighbour share 0.502 corrected (band: green <= .55) vs 0.798 uncorrected (red); a memorising generator: share 0.628 (red), full-size exact replication 1.000, membership AUC 1.000",
+      "seconds": 2.89337301254272
+    },
+    {
+      "id": "C2-18",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "TSTR ratio (AUC on the holdout, synthetic-trained / real-trained): ideal 1.000, shuffled outcome 0.610 (band red); declared glm coefficient CI overlap ideal 0.344 (by hand 0.344) vs shuffled 0.000; rare combinations missing from synthetic: 0.000 for the ideal, 0.167 when a real cell is removed; an analysis column that is not an identifier -> scenario_value_invalid",
+      "seconds": 0.741775751113892
+    },
+    {
+      "id": "E01",
+      "ac": ["AC-30", "AC-28"],
+      "pass": true,
+      "detail": "mean completion closed form 12.82051 vs simulated 12.80375 (+-0.01604) = 1.05 MCSE; P(by 10/12/15) 0.08741/0.39168/0.83925 vs 0.08915/0.39090/0.84035 = 0.87/0.23/0.42 MCSE",
+      "seconds": 11.5743107795715
+    },
+    {
+      "id": "E02",
+      "ac": "AC-37",
+      "pass": true,
+      "detail": "80% prediction interval covers 0.7633 of 300 back-tested trials (+-0.0245, 1.49 MCSE from 0.80); 0.107 below, 0.130 above",
+      "seconds": 23.2635924816132
+    },
+    {
+      "id": "E03",
+      "ac": ["AC-19", "AC-38"],
+      "pass": true,
+      "detail": "cancel at 750/4000: status canceled, 750 replicates kept with measures (4 reported), checkpoint on disk TRUE; resumed result bit-identical to uninterrupted: TRUE; spent budget -> status failed, overCpuBudget TRUE",
+      "seconds": 4.53911876678467
+    },
+    {
+      "id": "E04",
+      "ac": ["AC-08", "AC-09"],
+      "pass": true,
+      "detail": "valid counts accepted; ESS 90 on 50 real patients -> ess_above_real (also with 0 generated records: ess_above_real); realPatients -1 -> count_invalid; NULL accepted as 'not knowable'; keys realPatients/events/effectiveSampleSize/generatedRecords/priorEffectiveSampleSize/reconstructedPseudoPatients match the domain",
+      "seconds": 0.0161731243133545
+    },
+    {
+      "id": "E05",
+      "ac": ["AC-04", "AC-28"],
+      "pass": true,
+      "detail": "health ok=TRUE, 32 methods, lock 56edc6432ad4; 40/40 handler results succeed, validate, echo the job, carry a source on every measure and a recomputable output hash",
+      "seconds": 52.484893321991
+    },
+    {
+      "id": "E06",
+      "ac": ["AC-26", "AC-04"],
+      "pass": true,
+      "detail": "frozen hash accepted (status succeeded); one byte changed -> status failed (input_hash_mismatch); patient-level job with no table -> patient_input_required; synthetic table as external control -> input_source_not_individual",
+      "seconds": 2.22151756286621
+    },
+    {
+      "id": "E07",
+      "ac": "AC-29",
+      "pass": true,
+      "detail": "continuous analytic 0.8101 vs simulated 0.8050 (|d| 0.0051 = -0.92 MCSE, 5000 reps); binary analytic 0.8666 vs simulated 0.8662 (|d| 0.0004 = -0.09 MCSE, 5000 reps); time_to_event analytic 0.9497 vs simulated 0.9482 (|d| 0.0015 = -0.48 MCSE, 5000 reps)",
+      "seconds": 13.1572616100311
+    },
+    {
+      "id": "E07b",
+      "ac": ["AC-29", "AC-10"],
+      "pass": true,
+      "detail": "continuous (JSON class integer): analytic check present TRUE, nominal 0.0250, -0.83 MCSE from the simulation; time_to_event (JSON class integer): analytic check present TRUE, nominal 0.0250, 0.49 MCSE from the simulation",
+      "seconds": 26.66197514534
+    },
+    {
+      "id": "E08",
+      "ac": ["AC-10", "AC-29", "AC-30"],
+      "pass": true,
+      "detail": "H0: boundaries 3.7103/2.5114/1.9930, simulated type-I 0.02495 (+-0.00110) = 0.05 MCSE from spent 0.0250, expected analyses 2.9945 vs 2.9938 from the exit probabilities; H1 (HR .55): events at stop 191.9 vs 318.7 in the fixed design, sample size at stop 496.0 of 500 (+-0.15), analyses 1.800 of 3; two-sided vs harm (HR 1.5): power 0.982",
+      "seconds": 140.974799394608
+    },
+    {
+      "id": "E09",
+      "ac": ["AC-02", "AC-09"],
+      "pass": true,
+      "detail": "population 600 rows, the age rule binding (min age 55.0, 149 rows redrawn in 4 rounds, none left in violation), male 0.605 (want .58); the patients read that table (same rows: TRUE, 400/200 arms); estimated from their output: hazard ratio 0.522 (1.44 SE from the stated 0.60), control median 3.77 (95% CI 2.87-4.47, stated 4.1); trial simulated under 0.522 / 3.77: power 0.9618 +- 0.0027 vs analytic 0.9631 (-0.50 MCSE; 0.8362 under the stated numbers); real patients 0 / 0 / 0, generated 600 / 600 / 900000",
+      "seconds": 5.02086567878723
+    },
+    {
+      "id": "E10a",
+      "ac": ["AC-04", "AC-26"],
+      "pass": true,
+      "detail": "2215 broken jobs over 40 methods: 2012 refused by name, 176 still valid (an optional field emptied); uncaught errors 0, handler_error 0, protocol-invalid results 0, refusals without a code+field 0, R internals in a message 0",
+      "seconds": 283.973497152328
+    },
+    {
+      "id": "E10b",
+      "ac": ["AC-28", "AC-04"],
+      "pass": true,
+      "detail": "cores with a 2-core ceiling: request none/1/64/2 -> 2/1/2/2 (machine 4); no ceiling: none/3/'x'/0 -> 1/3/1/1; replicate ceiling 600: 1000 requested -> replicates_invalid, 300 requested -> 600 run (floor 5000), conclusion limited, power identical on 1 and 2 cores (0.5317); CPU budget 0.9 x 3 s -> stopped after 12000 of 150000 replicates in 2.8 s (cpu 2.75 s) with cpu_budget_exhausted and a partial power; context: job limit 1 s -> go on before, cpu_budget after 1.05 s of work, go on once ended; environment limit 1 s over job limit 3600 s -> cpu_budget, roomy environment -> go on; cancel request -> design.simulate=canceled, comparator.entropy_balance=canceled, accrual.poisson_gamma=canceled, population.synthpop=canceled",
+      "seconds": 5.3381359577179
+    },
+    {
+      "id": "E10c",
+      "ac": ["AC-31", "AC-11"],
+      "pass": true,
+      "detail": "binary 0.45 -> 0.55: 1975 subjects become cases (0.0988 of 20000, expected 0.10), 0 stop being cases; continuous 0.2 -> 0.7: outcomes differ by delta x arm to 1e-14; time to event HR 0.7 -> 0.5: entry times and all 500 control rows identical, treated times differ; dropout on: entry identical, 165 subjects observed earlier, none later",
+      "seconds": 2.03330898284912
+    },
+    {
+      "id": "E10d",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "96 literal codes in 30 R files: 76 in the protocol registry (82 codes), 20 in the engine's own list (20 entries); in neither: none; own entries never raised: none; in both lists: none",
+      "seconds": 0.192332744598389
+    },
+    {
+      "id": "N00a",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "R/domain-snapshot.json equals the live @evimed/domain exports",
+      "seconds": 0.0436434745788574
+    },
+    {
+      "id": "N00b",
+      "ac": ["AC-04", "AC-30"],
+      "pass": true,
+      "detail": "32/32 domain methods implemented, 0 issues",
+      "seconds": 0.000115633010864258
+    },
+    {
+      "id": "N00c",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "17/17 parsed documents canonicalize and hash like JS; 9/9 native R values as JSON.stringify writes them",
+      "seconds": 0.0590581893920898
+    },
+    {
+      "id": "N00d",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "5 patterns + location over 41 probe strings: identical verdicts",
+      "seconds": 0.0862109661102295
+    },
+    {
+      "id": "N00e",
+      "ac": ["AC-28", "AC-04"],
+      "pass": true,
+      "detail": "domain and engine agree on 7 targets (24375/1900/1600) and 9 floors (20000/24375/47500/20145)",
+      "seconds": 0.0961172580718994
+    },
+    {
+      "id": "N00f",
+      "ac": ["AC-04", "AC-13"],
+      "pass": true,
+      "detail": "299 jobs (57 valid, 242 invalid): 0 verdicts differ from the domain's, 0 valid jobs refused, 0 expected issues missing",
+      "seconds": 0.866871118545532
+    },
+    {
+      "id": "N00g",
+      "ac": ["AC-04", "AC-28"],
+      "pass": true,
+      "detail": "49 results: 0 verdicts differ from the domain's, 0 valid results refused, 0 expected issues missing",
+      "seconds": 0.135196447372437
+    },
+    {
+      "id": "N00h",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "scenario hash agrees read from a file (R 37cf783bfccd, domain 37cf783bfccd)",
+      "seconds": 0.0452785491943359
+    },
+    {
+      "id": "N00i",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "output hash of an in-memory result agrees with the domain's from its file (3a6ecd8c639c vs 3a6ecd8c639c); 8/8 fixture results agree",
+      "seconds": 0.406102895736694
+    },
+    {
+      "id": "N00j",
+      "ac": ["AC-04", "AC-13"],
+      "pass": true,
+      "detail": "54 valid and 45 invalid rules: 0 disagree with the fixture",
+      "seconds": 0.502833127975464
+    },
+    {
+      "id": "N00k",
+      "ac": "AC-28",
+      "pass": true,
+      "detail": "29/29 scenarios classified as the domain does (29/29 by the handlers' name); thresholds (essFloor 10, supportCeiling 0.1, conflictBound 0.01) come from the snapshot",
+      "seconds": 0.0870134830474854
+    },
+    {
+      "id": "N00l",
+      "ac": ["AC-04", "AC-31"],
+      "pass": true,
+      "detail": "status succeeded; domain verdict clean; scenario hash agrees; output hash agrees",
+      "seconds": 1.37143015861511
+    },
+    {
+      "id": "N01",
+      "ac": ["AC-30", "AC-04"],
+      "pass": true,
+      "detail": "3.7103/2.5114/1.9930 (ours 3.7103029/2.5114275/1.9930475); max|dz| vs rpact+gsDesign 4.67e-07 (tol 1e-4)",
+      "seconds": 6.2663106918335
+    },
+    {
+      "id": "N01b",
+      "ac": ["AC-30", "AC-10"],
+      "pass": true,
+      "detail": "two-sided 0.05 boundaries 2.96259/1.96860 = one-sided 0.025 (2.96259/1.96860); one-sided 0.05 differs by 0.425; vs rpact |d| 5.7e-09; 4-look Pocock vs gsDesign |d| 3.1e-07; max events / fixed events 1.0030 vs rpact inflation factor 1.0037",
+      "seconds": 32.0534188747406
+    },
+    {
+      "id": "N02",
+      "ac": ["AC-11", "AC-29", "AC-30"],
+      "pass": true,
+      "detail": "Schoenfeld 330.3779 -> 331 events (want 331); simulated power 0.9056 vs analytic 0.9004 at 330.9 events, 1.25 MCSE (mcse 0.0041)",
+      "seconds": 9.17054295539856
+    },
+    {
+      "id": "N03",
+      "ac": ["AC-10", "AC-28", "AC-29"],
+      "pass": true,
+      "detail": "continuous 0.0261(+-0.0011) binary 0.0227(+-0.0011) time_to_event 0.0253(+-0.0011)",
+      "seconds": 47.3685147762299
+    },
+    {
+      "id": "N04",
+      "ac": ["AC-11", "AC-28"],
+      "pass": true,
+      "detail": "one-sided alpha .025: coverage 0.9504 (+-0.0031, band 0.935-0.965), bias 0.00124 = 0.76 MCSE; two-sided alpha .05: coverage 0.9502 (+-0.0031), bias -0.00356 = 2.17 MCSE",
+      "seconds": 4.03414487838745
+    },
+    {
+      "id": "N04b",
+      "ac": ["AC-29", "AC-30"],
+      "pass": true,
+      "detail": "continuous two-sided analytic 0.6385 vs simulated 0.6440 (0.81 MCSE); binary two-sided analytic 0.7069 vs simulated 0.7020 (-0.76 MCSE); time_to_event two-sided analytic 0.9079 vs simulated 0.9078 (-0.03 MCSE)",
+      "seconds": 11.3242197036743
+    },
+    {
+      "id": "N04c",
+      "ac": ["AC-29", "AC-30"],
+      "pass": true,
+      "detail": "HR 0.534 120/60: analytic 0.9625, engine sim 0.9580 (-1.60 MCSE), independent sim 0.9610 (engines differ by -0.76 SE); HR 0.500 60/60: analytic 0.9069, engine sim 0.9088 (0.47 MCSE), independent sim 0.9080 (engines differ by 0.14 SE); HR 0.400 40/40: analytic 0.9296, engine sim 0.9288 (-0.23 MCSE), independent sim 0.9256 (engines differ by 0.62 SE)",
+      "seconds": 27.1868011951447
+    },
+    {
+      "id": "N05",
+      "ac": "AC-28",
+      "pass": true,
+      "detail": "alpha0.025@0.001 -> 24375 (want 24375); coverage0.95@0.005 -> 1900 (want 1900); sd0.2@0.005 -> 1600 (want 1600); null floor -> 24375",
+      "seconds": 0.00394749641418457
+    },
+    {
+      "id": "N06",
+      "ac": ["AC-04", "AC-31"],
+      "pass": true,
+      "detail": "1core==4core TRUE, ==8core TRUE, ==resumed TRUE (partial kept 1000/2000, status canceled); power 0.477",
+      "seconds": 12.0384790897369
+    },
+    {
+      "id": "N06b",
+      "ac": ["AC-30", "AC-29"],
+      "pass": true,
+      "detail": "no dropout: events 330.3779 (rpact 330.3779), N 494.7549 (rpact 494.7549); 10%/yr: N 538.2978 (rpact 538.2978; control-arm-only would give 490.9); simulated events with 30%/yr dropout 277.76 (+-0.17) vs analytic 277.69",
+      "seconds": 10.7611238956451
+    },
+    {
+      "id": "N06c",
+      "ac": "AC-30",
+      "pass": true,
+      "detail": "p0 .10 / p1 .30: optimal 1/10/5/29 (EN0 15.01) minimax 1/15/5/25 -- Simon: 1/10, 5/29, EN0 15.0; brute force optimal 1/10/5/29 minimax 1/15/5/25; p0 .20 / p1 .40: optimal 3/13/12/43 (EN0 20.58) minimax 4/18/10/33 -- Simon: 3/13, 12/43, 20.6 and 4/18, 10/33",
+      "seconds": 18.9223084449768
+    },
+    {
+      "id": "N06d",
+      "ac": ["AC-28", "AC-31", "AC-04"],
+      "pass": true,
+      "detail": "long table TRUETRUETRUETRUETRUETRUETRUETRUE, 20 rows, statuses succeeded, every measure simulated with a finite MCSE, 4 distinct parameter sets, checkpoint files left: FALSE; cell (2,2) equals the design.simulate job at seed 31676 bit for bit: TRUE; null cell type-I 0.0261 (+-0.0011); CPU limit 1 s -> status failed",
+      "seconds": 22.8174500465393
+    },
+    {
+      "id": "N04d",
+      "ac": ["AC-29", "AC-30"],
+      "pass": true,
+      "detail": "log-rank, simulation 1.1 points below the reference at MCSE 0.0004: within 3 MCSE FALSE, within tolerance TRUE (tolerance 0.0162, bias 0.015: three Monte-Carlo standard errors plus the documented bias of a first-order approximation); 3.0 points below: within tolerance FALSE; means, same gap: bias 0, within tolerance FALSE",
+      "seconds": 0.0290412902832031
+    },
+    {
+      "id": "N07",
+      "ac": ["AC-08", "AC-30"],
+      "pass": true,
+      "detail": "ATT 1273.261814 (WeightIt 1273.261825, rel 8.69e-09); max|SMD| ours 1.02e-15 vs cobalt 6.51e-09 (d 6.51e-09); ESS 98.45783; weights rel-diff 1.15e-07 [WeightIt's own residual, see report]",
+      "seconds": 0.211962223052979
+    },
+    {
+      "id": "N08",
+      "ac": ["AC-08", "AC-11", "AC-29"],
+      "pass": true,
+      "detail": "true ATT 0.50; bias -0.00123 = 0.60 MCSE (mcse 0.00206, 3000 replicates); coverage of the engine's bootstrap interval 0.9400 (+-0.0084, nominal 0.95; B=200, 800 replicates)",
+      "seconds": 80.5184824466705
+    },
+    {
+      "id": "N09",
+      "ac": ["AC-07", "AC-08"],
+      "pass": true,
+      "detail": "status=not_estimable rule=entropy_balance_infeasible conclusion=not_estimable measures=0 (trial x1 mean 1.501, control x1 range [0.002, 0.999]); no effect value emitted, no 0 written",
+      "seconds": 0.0735311508178711
+    },
+    {
+      "id": "N09b",
+      "ac": ["AC-07", "AC-08"],
+      "pass": true,
+      "detail": "NA covariate -> missing_covariate; entropy balance with ATE -> scenario_value_invalid; synthetic table -> input_source_not_individual; propensity ATO -> succeeded, conclusion limited, limited by estimand_changed_from_att",
+      "seconds": 3.55034875869751
+    },
+    {
+      "id": "N09c",
+      "ac": ["AC-08", "AC-30", "AC-07"],
+      "pass": true,
+      "detail": "entropy balancing ATT 1273.2618 vs WeightIt 1273.2618 (rel 8.7e-09), ESS 98.4578 vs 98.4578, bootstrap draws 2000 (job asked for 20), interval [-392.3, 2732.7], ESS floor 10; propensity on LaLonde: not_estimable/standardized_difference_above_floor, worst weighted SMD 0.1188 vs cobalt 0.1188; propensity ATT on balanced data 0.58374 vs WeightIt glm 0.58374 (rel 0.0e+00)",
+      "seconds": 7.80739259719849
+    },
+    {
+      "id": "N10",
+      "ac": ["AC-12", "AC-30"],
+      "pass": true,
+      "detail": "analytic 12.984255 (want 12.984); empirical 13.019442 (+-0.038401, 0.92 SE away, n=50000 uncensored); vs survRM2 on censored n=2000 |d|=7.11e-15 (se |d|=1.67e-16)",
+      "seconds": 57.0590026378632
+    },
+    {
+      "id": "N11",
+      "ac": ["AC-12", "AC-07"],
+      "pass": true,
+      "detail": "tau=24 refused as tau_beyond_followup; largest usable tau 18.0000 (arm follow-ups 18.0000 / 30.0000) and that tau is accepted; measures=0; tau 18 runs",
+      "seconds": 0.0660793781280518
+    },
+    {
+      "id": "N11b",
+      "ac": ["AC-12", "AC-08", "AC-30"],
+      "pass": true,
+      "detail": "RMST difference 0.767789696 vs survRM2 0.767789696, interval [-0.241447, 1.777027] vs [-0.241447, 1.777027]; reading CNSR as the event indicator would give 0.000; realPatients 400, events 305; weightColumn refused: scenario_value_invalid",
+      "seconds": 0.068131685256958
+    },
+    {
+      "id": "N12",
+      "ac": "AC-30",
+      "pass": true,
+      "detail": "9 scale/rarity/limit combinations agree with the EValue package (max|d| 0.0e+00); RR 3.9 -> 7.2630 (book 7.26), limit 1.8 -> 3.0000 (book 3.0); RR <= 0 and a far-side limit refused (4/4 failed without a number)",
+      "seconds": 0.332068204879761
+    },
+    {
+      "id": "N13",
+      "ac": "AC-12",
+      "pass": true,
+      "detail": "true logHR 0; misaligned logHR -1.0577 (z -29.16, biased as expected); aligned logHR -0.0193 (se 0.0398, 0.49 SE from 0)",
+      "seconds": 1.16170454025269
+    },
+    {
+      "id": "N13b",
+      "ac": ["AC-08", "AC-12", "AC-11"],
+      "pass": true,
+      "detail": "true ATT RMST difference 2.5292; weighted 2.3593, bootstrap SE 0.2443 (0.70 SE away), interval [1.8771, 2.8349] covers: TRUE; the unweighted difference 0.3939 [-0.0546, 0.8424] is confounded and misses; survival difference at tau 0.1803; 2000 bootstrap draws; events 2299",
+      "seconds": 54.4171874523163
+    },
+    {
+      "id": "N14",
+      "ac": ["AC-08", "AC-30"],
+      "pass": true,
+      "detail": "weight ratio 2.249999999888 (want 2.25, d 1.12e-10); ESS 257.142857143 (want 257.142857143, d 2.84e-13); achieved mean 0.600000000000001",
+      "seconds": 0.0131351947784424
+    },
+    {
+      "id": "N15",
+      "ac": "AC-30",
+      "pass": true,
+      "detail": "4 moments matched to 1.13e-13; weights vs independent BFGS rel 7.65e-08 (tol 1e-6); ESS 296.0589 vs 296.0589 (n=500, 59.2% retained)",
+      "seconds": 0.0310416221618652
+    },
+    {
+      "id": "N16",
+      "ac": ["AC-03", "AC-27", "AC-30"],
+      "pass": true,
+      "detail": "QC pass both arms; median 13.58->13.50 and 15.80->16.00 (worst rel 0.013, tol 0.05); logHR -0.2178->-0.2226 (|d| 0.0048, tol 0.05); pseudo-patients 300+300",
+      "seconds": 0.0725166797637939
+    },
+    {
+      "id": "N17",
+      "ac": ["AC-03", "AC-09", "AC-27"],
+      "pass": true,
+      "detail": "passing QC: realPatients=0 reconstructedPseudoPatients=250 source=reconstructed; failing QC: status=not_estimable rule=reconstruction_failed_qc measures=0",
+      "seconds": 0.23741340637207
+    },
+    {
+      "id": "N17b",
+      "ac": ["AC-03", "AC-27"],
+      "pass": true,
+      "detail": "two arms: reconstructed log HR -0.5015 vs Cox on the original rows -0.4988 (|d| 0.0026, tol 0.05) passes; a reported log HR 0.5 off -> not_estimable/reconstruction_failed_qc; one arm + reported HR -> failed (scenario_value_invalid); median not reached -> status succeeded, median measure absent TRUE; no risk table -> failed (scenario_field_missing); no provenance -> failed (scenario_field_missing)",
+      "seconds": 1.06051278114319
+    },
+    {
+      "id": "N17c",
+      "ac": "AC-30",
+      "pass": true,
+      "detail": "log HR -0.2784800005 vs coxph(breslow) -0.2784800005 (|d| 1.2e-15)",
+      "seconds": 0.0175113677978516
+    },
+    {
+      "id": "N14b",
+      "ac": ["AC-08", "AC-30"],
+      "pass": true,
+      "detail": "ESS 257.142857143 (closed form 257.142857143); realPatients 300; unanchored conclusion limited; anchored conclusion estimable; time-to-event MAIC -> endpoint_not_supported; an unanchored job that also states the anchored key -> scenario_field_unknown",
+      "seconds": 2.95104885101318
+    },
+    {
+      "id": "N15b",
+      "ac": ["AC-08", "AC-11"],
+      "pass": true,
+      "detail": "empirical SD of the estimate 0.0778; bootstrap SE 0.0792 (ratio 1.019, band 0.85-1.15); fixed-weight SE 0.1907 (ratio 2.452, would fail); 95% interval coverage with the bootstrap SE 0.950 (120 replicates)",
+      "seconds": 5.84289240837097
+    },
+    {
+      "id": "N18",
+      "ac": "AC-30",
+      "pass": true,
+      "detail": "Beta a+b |d|=1.71e-13; normal sigma^2/s^2 44.444444 |d|=7.11e-15; mixture posterior weights 0.731343881/0.237059331/0.031596788 |d|=1.58e-14; mixture moment ESS |d|=1.42e-14 (tol 1e-10)",
+      "seconds": 1.50270867347717
+    },
+    {
+      "id": "N19",
+      "ac": "AC-30",
+      "pass": true,
+      "detail": "ceiling p=0.3: tau=0.3 -> 52.910053 (C1: <=52.9), tau=0.5 -> 19.047619 (C1: <=19.0); ESS by k 20:29.26 200:69.58 2000:54.04 20000:55.75 (tau-hat 0.3721/0.2607/0.2959/0.2900), each <= its own ceiling TRUE; k x100 changes ESS by x0.80",
+      "seconds": 0.852272510528564
+    },
+    {
+      "id": "N19b",
+      "ac": ["AC-07", "AC-30"],
+      "pass": true,
+      "detail": "continuous assurance 0.717999 (integral 0.717999), two-sided 0.720967 (0.720967), power at the prior mean 0.8508; time to event 0.677092 (0.677092, lognormal identical: TRUE), missing events -> scenario_field_missing; binary N(0.05, 0.1^2) on the risk difference: 0.3474 vs the z-test's Monte-Carlo 0.3477 (+-0.0008); one-sided power of a WORSE treatment (0.2 vs 0.3) 0.00001; confidence-basis prior refused TRUE, allowed with override TRUE, lognormal on a binary endpoint refused TRUE",
+      "seconds": 0.41568922996521
+    },
+    {
+      "id": "N20",
+      "ac": ["AC-10", "AC-28"],
+      "pass": true,
+      "detail": "no borrowing: type-I = alpha at every drift (worst 0.45 MCSE); pure MAP prior vs its closed form over drift 0/0.15/0.3, null and alternative: worst 1.34 MCSE (20000 replicates each, MCSE 0.0011); type-I by drift 0.0158/0.0312/0.0583 (alpha 0.025) and at drift 0.3 by w_R 0/0.2/0.5: 0.0583/0.0528/0.0445; w_R = 1 with a flat vague component is the plain design (worst 0.45 MCSE); power gain at zero drift +0.108",
+      "seconds": 1.79535913467407
+    },
+    {
+      "id": "N21",
+      "ac": ["AC-04", "AC-30"],
+      "pass": true,
+      "detail": "RBesT 1.12.0 reproduces its pinned baseline (max drift 3.40e-11): moment ESS 68.137492/3.246884, ELIR 96.157660/68.873947, oc2S null 0.0148055; our closed forms match to 3.80e-13 (weights) and 2.57e-11 (ESS)",
+      "seconds": 0.287240743637085
+    },
+    {
+      "id": "N21b",
+      "ac": ["AC-30", "AC-07"],
+      "pass": true,
+      "detail": "MAP mean -1.725779 vs joint grid -1.725781, sd 0.2175 vs 0.2170; ELIR ESS of the MAP 145.3534 vs RBesT 145.3533, moment ESS 84.56 (two named measures); control 25% vs history 14%: not_estimable/map_prior_conflict, MAP-only tail 2.79e-03 vs robust tail 0.161 (bound 0.01); OC table 12 rows with MCSE; k=1, 3 components and no unit variance refused: 3/3",
+      "seconds": 10.7508492469788
+    },
+    {
+      "id": "N22",
+      "ac": ["AC-11", "AC-29", "AC-10"],
+      "pass": true,
+      "detail": "closed form rho .3/.5/.7 -> 0.9100/0.7500/0.5100 (want .91/.75/.51); empirical variance ratio 0.75444 vs 0.75 = 0.59 MCSE (mcse 0.00750, cor(adj,unadj) 0.8677, 10000 reps); ANCOVA type-I 0.02410 vs 0.025 = 0.59 MCSE",
+      "seconds": 10.3848631381989
+    },
+    {
+      "id": "N22b",
+      "ac": ["AC-11", "AC-10"],
+      "pass": true,
+      "detail": "rho .6, lambda .9, gamma 1.2: prognostic N 404 (closed form 403.601), unadjusted 467 (466.997), undiscounted 299; rho 0 with gamma 1.2 -> 570 > unadjusted 467; lambda-only 331, gamma-only 365, both 404 (all distinct); two-sided unadjusted 552; binary endpoint refused: endpoint_not_supported",
+      "seconds": 0.274770021438599
+    },
+    {
+      "id": "N23a",
+      "ac": ["AC-04", "AC-26"],
+      "pass": true,
+      "detail": "54 fixture rules, 318 row verdicts evaluated cell by cell and 54 rules evaluated column-wise: 0/54 row-level mismatches, 0 column-wise mismatches; every valid rule passes the engine's validator: TRUE",
+      "seconds": 0.493419408798218
+    },
+    {
+      "id": "N23b",
+      "ac": ["AC-04", "AC-26"],
+      "pass": true,
+      "detail": "45 invalid fixture rules: 0 refused differently from the domain; row-rule limits equal the domain's: TRUE",
+      "seconds": 0.10877537727356
+    },
+    {
+      "id": "N23c",
+      "ac": "AC-26",
+      "pass": true,
+      "detail": "30 R files and 9141 lines of code scanned for eval/evalq/str2lang/str2expression/parse(text=)/expression(): 0 hits; the service: 0",
+      "seconds": 0.0678324699401855
+    },
+    {
+      "id": "N23d",
+      "ac": ["AC-26", "AC-04"],
+      "pass": true,
+      "detail": "cohort expression -> rule_expression_forbidden; expression deep in a design scenario -> rule_expression_forbidden; constraint expression -> rule_expression_forbidden; direct engine call -> rule_expression_forbidden; misspelt column -> rule_column_unknown (scenario.rules[0].rule.column); unknown op -> rule_op_unknown; marker file written by the payload: FALSE; file content in any result: FALSE",
+      "seconds": 0.124438762664795
+    },
+    {
+      "id": "N24a",
+      "ac": ["AC-26", "AC-04"],
+      "pass": true,
+      "detail": "good=read absolute=input_location_invalid dotdot=input_location_invalid dotdot_out=input_location_invalid file_symlink_out=input_location_invalid dir_symlink_out=input_location_invalid file_symlink_in=input_location_invalid directory=input_location_invalid missing=input_location_invalid no_hash=input_hash_missing wrong_hash=input_hash_mismatch format=input_format_unsupported parse=input_parse_failed binary=input_parse_failed too_large=input_too_large no_root=input_location_invalid; refusal message for a malformed file repeats none of it: TRUE",
+      "seconds": 0.037388801574707
+    },
+    {
+      "id": "N24b",
+      "ac": ["AC-26", "AC-08"],
+      "pass": true,
+      "detail": "a planted symlink to another tenant's file -> failed (input_location_invalid); a file that does not parse -> input_parse_failed; content of either file in any result: FALSE",
+      "seconds": 0.0502152442932129
+    },
+    {
+      "id": "N24c",
+      "ac": ["AC-26", "AC-12"],
+      "pass": true,
+      "detail": "two parameters, none named -> input_shape_invalid; OS RMST difference 0.432746 vs survRM2 (ok TRUE), PFS 0.397494 (ok TRUE); no CNSR column -> input_shape_invalid; a person with no event row -> input_shape_invalid; CNSR = 2 -> input_shape_invalid",
+      "seconds": 0.181545257568359
+    },
+    {
+      "id": "N25a",
+      "ac": ["AC-26", "AC-09"],
+      "pass": true,
+      "detail": "site (A 60, B 37, C 3) -> A=60/(other)=40; hiv (98/2) -> (other)=100; grade (45/30/22/3) -> g1=45/g2=30/(other)=25; a missing count of 4 is not shown (suppressed: missing,p05,p95) and neither is a 5th/95th percentile of 96 values; no suppressedCount in the result; 400 rows publish p05/p95: TRUE; a 6-row table publishes no row count: TRUE; absorbing rule unit checks: TRUE",
+      "seconds": 0.219965219497681
+    },
+    {
+      "id": "N25b",
+      "ac": ["AC-02", "AC-09", "AC-26"],
+      "pass": true,
+      "detail": "waterfall kept/excluded/indeterminate 342/43/15 then 226/-/35 equals the independent count (cohort 261; strict 226, lenient 273); impact of 'adult' alone 43, only by it 32; member list 261 rows with index and exit dates; empty rule list -> scenario_value_invalid; downstream rules kept 194 of 385 and moved the estimate 0.4092 -> 0.3510; rules hash equal to the cohort's: TRUE",
+      "seconds": 5.69031286239624
+    },
+    {
+      "id": "N24d",
+      "ac": "AC-26",
+      "pass": true,
+      "detail": "the same 80-row table as CSV and as Parquet: both profile (succeeded/succeeded), 3 columns each, 80 real patients; a non-Parquet file under a matching hash -> input_parse_failed, no file content in the result: TRUE",
+      "seconds": 1.93898320198059
+    },
+    {
+      "id": "N26",
+      "ac": ["AC-04", "AC-30"],
+      "pass": true,
+      "detail": "32 scenario schemas for 32 methods; 65 of 65 keys the handlers read found in the domain's schemas",
+      "seconds": 0.0107336044311523
+    },
+    {
+      "id": "N27a",
+      "ac": ["AC-30", "AC-28", "AC-37"],
+      "pass": true,
+      "detail": "20 sites x Gamma(2, 4), 200 patients: median 20.13, p10-p90 [16.20, 25.30] (plan 20.13, [16.20, 25.30]), mean 20.51 (plan 20.51), interval kind prediction; P(by month 20) 0.4846 = F(4x40/200; 400, 80); N*alpha = 0.8: mean not estimable with the note 'The mean completion time is un', quantile kept (median 396.13)",
+      "seconds": 0.132337808609009
+    },
+    {
+      "id": "N27b",
+      "ac": ["AC-30", "AC-28"],
+      "pass": true,
+      "detail": "different posteriors, all open at 0: median 29.769 +- 0.081 is -0.90 MCSE from the independent gamma construction (p10/p90 off by 0.036/0.322); site 2 opening at month 6: median 67.916 is -0.31 MCSE from the Poisson/gamma construction (p10/p90 off by 0.168/0.183); the job's own 777 replicates -> result.replicates 777, MCSE 1.298 (vs 0.315 at 20,000); 50 of 60 already enrolled -> remaining 10, median 13.70",
+      "seconds": 5.28768992424011
+    },
+    {
+      "id": "N27c",
+      "ac": ["AC-30", "AC-28"],
+      "pass": true,
+      "detail": "with a Beta(30,70) screen-failure loss: median last patient in 80.594 +- 0.322 vs 80.275 from the independent construction (0.70 MCSE); target of 72 events: median 66.233 [48.06, 106.40] +- 0.198 vs 66.464 independently (-0.49 MCSE), later than the last patient in (56.379); an event target without an event hazard -> scenario_field_missing",
+      "seconds": 9.87349152565002
+    },
+    {
+      "id": "N27d",
+      "ac": ["AC-30", "AC-04"],
+      "pass": true,
+      "detail": "k=7 vs metafor: dl |d| 8.3e-17, reml |d| 2.4e-14, hksj |d| 5.6e-17, fixed_effect |d| 8.3e-17; prediction interval [-0.503336, -0.053206] vs the HTS formula [-0.503336, -0.053206]; one study under REML -> applied 'single_study' (estimate = the study's); two studies -> no prediction interval; se = 0 -> scenario_value_invalid",
+      "seconds": 0.444039583206177
+    },
+    {
+      "id": "N28a",
+      "ac": ["AC-11", "AC-20"],
+      "pass": true,
+      "detail": "20000 draws from a table with no bounds on two rows: worst moment 2.40 MCSE (alt_sd); sbp lower bound 100.0 respected; assumed correlation 0.3 -> sensitivity: independent/sign_flipped shifts the Spearman correlation by 0.26; kind literature, column sources age=aggregate, correlation=assumed",
+      "seconds": 0.206649541854858
+    },
+    {
+      "id": "N28b",
+      "ac": ["AC-31", "AC-11"],
+      "pass": true,
+      "detail": "binary rate 0.45 -> 0.55: 3934 subjects flip up (0.0984 of 40000, expected 0.10), 0 flip down; continuous: outcomes differ by exactly delta x arm; time to event: dropout on changes no entry time, 157 of 1000 subjects observed earlier, control arm bit-for-bit identical across hazard ratios 0.7 and 0.5: TRUE; entry time by arm (5,000 each): mean 5.930 vs 6.038 months (z -1.55, KS p 0.058)",
+      "seconds": 0.07958984375
+    },
+    {
+      "id": "N28c",
+      "ac": ["AC-11", "AC-09", "AC-02"],
+      "pass": true,
+      "detail": "stored population of 6000: continuous effect 0.533 (want 0.5) and covariate 0.822 (want 0.8); odds ratio 2 -> treated rate 0.4593 (want 0.4615); risk difference 0.15 -> 0.4473 (want 0.45); hazard ratio 0.625 (want 0.6) and covariate log-hazard 0.531 (want 0.5); worst 1.92 SE; ids unique and stable; no twin label claimed; a binary scenario with no effect -> scenario_field_missing",
+      "seconds": 1.22843742370605
+    },
+    {
+      "id": "N29",
+      "ac": ["AC-13", "AC-15", "AC-09"],
+      "pass": true,
+      "detail": "11/11 verdicts as the truth table says (ok ok ok ok ok ok ok ok ok ok ok); the non-applicable exclusion's effective state is 'not_satisfied' and the counts are total 3 / unknown 1 / not satisfied 0",
+      "seconds": 0.266936540603638
+    },
+    {
+      "id": "N30",
+      "ac": ["AC-26", "AC-04"],
+      "pass": true,
+      "detail": "header written as code executed: FALSE; propensity pMSE 8.397e-33, TSTR ran, STC 0.02418, ANCOVA -0.184",
+      "seconds": 0.0773842334747314
+    },
+    {
+      "id": "N31a",
+      "ac": ["AC-29", "AC-30"],
+      "pass": true,
+      "detail": "12 exact rejection rules including p0=0/1: maximum binom.test/enumeration difference 1.22e-15; n40/p0=.2 success starts at 13 responses",
+      "seconds": 0.0690493583679199
+    },
+    {
+      "id": "N31b",
+      "ac": ["AC-09", "AC-10", "AC-11", "AC-28", "AC-29"],
+      "pass": true,
+      "detail": "p=0.1 rejection 0.0461/PET 0.7353/EN 15.028 (independent 0.0471/0.7361/15.014); p=0.3 rejection 0.8084/PET 0.1432/EN 26.279 (independent 0.8051/0.1493/26.163)",
+      "seconds": 3.64606666564941
+    },
+    {
+      "id": "N31c",
+      "ac": ["AC-07", "AC-09", "AC-10", "AC-11"],
+      "pass": true,
+      "detail": "null 0.0237 (+-0.0011), bias -0.00013 (+-0.00020), coverage 0.9486; represented variance 9.99e-06->9.99e-08; no-overlap not_estimable; drift bias -0.1079; synthetic only",
+      "seconds": 24.6603133678436
+    },
+    {
+      "id": "N31d",
+      "ac": ["AC-04", "AC-31", "AC-38"],
+      "pass": true,
+      "detail": "1/8 cores and resume: 5000 rows identical; canceled checkpoint retained 1000",
+      "seconds": 4.45707631111145
+    },
+    {
+      "id": "N31e",
+      "ac": ["AC-09", "AC-29", "AC-30"],
+      "pass": true,
+      "detail": "historical mean -0.30024 vs -.3; independent beta-binomial variance 0.004239 vs 0.004158 (+-0.000042); exact p0=0,p1=1 power 1.0, synthetic records 200000",
+      "seconds": 7.48085856437683
+    },
+    {
+      "id": "N31f",
+      "ac": ["AC-04", "AC-10", "AC-29"],
+      "pass": true,
+      "detail": "single-arm projected grid status succeeded, 4 cells/4 table rows; cell4 power 0.9578 equals isolated 0.9578",
+      "seconds": 9.08996677398682
+    },
+    {
+      "id": "N31g",
+      "ac": ["AC-04", "AC-31", "AC-38"],
+      "pass": true,
+      "detail": "simon_two_stage 5000 rows, 1/8/resume identical; single_arm_external 5000 rows, 1/8/resume identical",
+      "seconds": 14.3580348491669
+    },
+    {
+      "id": "N32a",
+      "ac": ["AC-04", "AC-08"],
+      "pass": true,
+      "detail": "weakest of observed+extracted = extracted, of calculated+observed+extracted = calculated, of imputed+observed+calculated = imputed, an empty set = the fallback; a synthetic source beside observed stays synthetic; age/male/site -> imputed/observed/imputed (an unnamed column has its table's source); an estimate on imputed columns says imputed, on any other calculated",
+      "seconds": 0.0534248352050781
+    },
+    {
+      "id": "N32b",
+      "ac": ["AC-04", "AC-08", "AC-27"],
+      "pass": true,
+      "detail": "table labelled imputed (age imputed, the rest observed): cohort on male -> observed, on age -> imputed; profile rows -> imputed; weighting on male -> estimate calculated, used observed (arm+male+y); on age+male -> estimate imputed, ESS imputed; the same weighting with no per-column sources -> imputed (basis table); the estimate is unchanged by the label: TRUE",
+      "seconds": 12.234335899353
+    },
+    {
+      "id": "N32c",
+      "ac": ["AC-04", "AC-27"],
+      "pass": true,
+      "detail": "time-to-event weighting: subject table observed, event table extracted (AVAL extracted, CNSR observed) -> weakest used extracted from 4 columns, estimate calculated, the curves are drawn as extracted; RMST on a reconstructed table -> reconstructed, curves reconstructed, estimate calculated (unchanged)",
+      "seconds": 5.26718974113464
+    },
+    {
+      "id": "N32d",
+      "ac": "AC-04",
+      "pass": true,
+      "detail": "8/8 refusals as the domain words them (); a bad source word through a whole run -> status failed, code input_column_source_invalid, 0 measures",
+      "seconds": 0.0395231246948242
+    },
+    {
+      "id": "N33a",
+      "ac": ["AC-08", "AC-12", "AC-30"],
+      "pass": true,
+      "detail": "entropy-balance ATT: HR 0.62392572 vs coxph on WeightIt weights 0.62392572 (rel 1.9e-10), robust se 0.13009189 vs 0.13009189; logistic ATT weights: HR 0.60855209 vs 0.60855209, robust se 0.10437229 vs 0.10437229; the weighting job's RMST difference, both arm RMSTs, survival difference, ESS and balance are identical in 6/6 (value and bootstrap interval)",
+      "seconds": 22.0488750934601
+    },
+    {
+      "id": "N33b",
+      "ac": ["AC-12", "AC-30"],
+      "pass": true,
+      "detail": "cox.zph chi-square vs the tt() score test: efron/km 36.42762 vs 36.42762, efron/identity 36.79588 vs 36.79588, breslow/km 35.76777 vs 35.76777, breslow/identity 36.20581 vs 36.20581; vs the hand-written Breslow score test 35.76777/36.20581 (relative differences all below 1e-6); crossing hazards: p = 1.6e-09, rejected -> conclusion limited with the RMST difference beside the hazard ratio; proportional hazards: p = 0.519, not rejected, conclusion estimable",
+      "seconds": 24.329505443573
+    },
+    {
+      "id": "N33c",
+      "ac": ["AC-07", "AC-08", "AC-12"],
+      "pass": true,
+      "detail": "no event in the trial arm -> not_estimable/too_few_events, 0 measures; trial mean 10 SD outside the controls -> entropy_balance_infeasible; tau 500 beyond follow-up -> HR 0.631 kept, conclusion limited, companion tau_beyond_followup; 5 malformed tables refused under the weighting job's codes (5/5); 6 trial events -> conclusion limited (few_events); NA covariate -> missing_covariate; entropy balancing with ATE -> scenario_value_invalid; propensity ATE -> succeeded/limited; synthetic table -> input_source_not_individual",
+      "seconds": 10.5604600906372
+    },
+    {
+      "id": "N33d",
+      "ac": ["AC-08", "AC-11", "AC-28", "AC-31"],
+      "pass": true,
+      "detail": "true HR 0.60 over 400 datasets of 500: mean log HR +0.0044 off (0.66 MCSE, mcse 0.0068); the robust 95% interval covers the truth in 0.955 (+-0.010); mean robust SE / empirical SD 0.965; bootstrap SE 0.1601 has MCSE 0.0026 (1.6% of it) from 2000 draws, interval MCSE 0.0041/0.0051; robust/bootstrap SE 1.032; one core and two give the same numbers: TRUE",
+      "seconds": 11.4129903316498
+    },
+    {
+      "id": "N33e",
+      "ac": ["AC-12", "AC-30"],
+      "pass": true,
+      "detail": "weighted HR 0.2834780 (vignette 0.2834780), CI [0.2074664, 0.3873387] (0.2074664, 0.3873387), robust se 0.1593 (0.1593); Breslow gives the same 0.2834780; the bootstrap loop's fast fit agrees to 1.8e-15; weights rescaled to n give 0.2806144 (0.2806)",
+      "seconds": 0.138966798782349
+    },
+    {
+      "id": "N34a",
+      "ac": ["AC-08", "AC-12", "AC-30"],
+      "pass": true,
+      "detail": "adjusted HR 0.2834780 (vignette 0.2834780), robust CI [0.2074664, 0.3873387] (0.2074664, 0.3873387), robust se 0.1593 (0.1593); unadjusted HR 0.3748981 (0.3748981) [0.3039010, 0.4624815] (0.3039010, 0.4624815); ESS 166.6626 (166.6626), sum of weights 199.4265 (199.4265); bootstrap HR interval [0.2056, 0.3796], bootstrap se 0.1588 (mcse 0.0026); counts real 500 / reconstructed 300 / ESS 166.7; conclusion limited",
+      "seconds": 5.48262763023376
+    },
+    {
+      "id": "N34b",
+      "ac": ["AC-08", "AC-12", "AC-30"],
+      "pass": true,
+      "detail": "AC 0.2216588 (0.2216588), adjusted AC 0.1527378 [0.1117698, 0.2087222] (0.1527378 [0.1117698, 0.2087222]), BC 0.5718004 (0.5718004), AB 0.3876507 [0.3039348, 0.4944253] (0.3876507 [0.3039348, 0.4944253]), adjusted AB 0.2671173 [0.1869658, 0.3816295] (0.2671173 [0.1869658, 0.3816295]); ESS 333.3253 (333.3253); from the published BC alone: adjusted AB 0.2671173 [0.1869658, 0.3816295] with no reconstructed rows; bootstrap se 0.1825 / 0.1794",
+      "seconds": 15.1855120658875
+    },
+    {
+      "id": "N34c",
+      "ac": ["AC-08", "AC-11", "AC-30"],
+      "pass": true,
+      "detail": "oracle log HR of the comparator population -0.4614 (HR 0.6304; the conditional ratio is 0.6, log -0.5108); adjusted: mean log HR +0.0069 off (1.17 MCSE, mcse 0.0059), the robust 95% interval covers it in 0.973 (+-0.009; the sandwich ignores the weights' estimation), mean ESS 247 of 400; unadjusted: +0.3209 off (63 MCSE), covers in 0.033",
+      "seconds": 3.86775040626526
+    },
+    {
+      "id": "N34d",
+      "ac": ["AC-07", "AC-08", "AC-09", "AC-27"],
+      "pass": true,
+      "detail": "comparator rows labelled observed -> input_source_not_reconstructed; study rows labelled reconstructed -> input_source_not_individual; a target of 100 for age -> entropy_balance_infeasible; a target at the edge of the range (ESS 2.0) -> effective_sample_size_below_floor; a comparator with no event -> too_few_events with its 5 reconstructed patients counted apart; comparator.maic for a time-to-event endpoint -> endpoint_not_supported (names this method); a table without time/status -> input_shape_invalid",
+      "seconds": 0.483402013778687
+    },
+    {
+      "id": "N34e",
+      "ac": ["AC-28", "AC-31"],
+      "pass": true,
+      "detail": "2000 bootstrap draws, failure share 0.000; bootstrap se 0.1588 (mcse 0.0026, 1.6% of it), interval endpoints' mcse 0.0013/0.0036; robust se 0.1593, ratio robust/bootstrap 1.003; one core and two give the same interval and standard error: TRUE",
+      "seconds": 10.4908282756805
+    },
+    {
+      "id": "N35a",
+      "ac": ["AC-08", "AC-30"],
+      "pass": true,
+      "detail": "binary: effect 0.2202892177 vs by hand 0.2202892177, adjusted control mean 0.5463774490 vs 0.5463774490, influence-function se 0.0399595735 vs 0.0399595735, control odds weights vs WeightIt max diff 2.8e-15; continuous: effect 0.7134663680 vs 0.7134663680, se 0.0932643333 vs 0.0932643333; the outcome-model-only and weighting-only estimates 0.215851 / 0.218332 beside the augmented 0.220289; risk ratio 1.403181 = 1.403181",
+      "seconds": 18.7832593917847
+    },
+    {
+      "id": "N35b",
+      "ac": ["AC-08", "AC-11", "AC-30"],
+      "pass": true,
+      "detail": "true ATT 0.16036 (Gauss-Hermite); bias / sd over 800 datasets of 150 + 600: both right -0.0004 / 0.0379 (-0.01 sd), outcome model wrong -0.0007 (-0.02 sd), propensity model wrong -0.0004 (-0.01 sd), both wrong +0.0845 (2.10 sd, the model-free negative control); influence-function coverage with both right 0.946 (se / sd 1.009)",
+      "seconds": 7.94167137145996
+    },
+    {
+      "id": "N35c",
+      "ac": ["AC-08", "AC-11", "AC-28", "AC-31"],
+      "pass": true,
+      "detail": "influence-function se 0.0400 vs bootstrap se 0.0405 (ratio 0.986; bootstrap mcse 0.00066 = 1.6% of it, 2000 draws, interval mcse 0.0037/0.0034); influence interval [0.1420, 0.2986], bootstrap interval [0.1441, 0.3014]; one core and two give the same numbers: TRUE; continuous, true effect 0.7, bias both right +0.0009, outcome model alone right +0.0001, propensity model alone right +0.0023 (mcse 0.0058/0.0064/0.0057)",
+      "seconds": 21.6862192153931
+    },
+    {
+      "id": "N35d",
+      "ac": ["AC-07", "AC-08", "AC-09"],
+      "pass": true,
+      "detail": "trial shifted 6 SD off the controls -> outside_common_support; a duplicated covariate -> nuisance_model_not_estimable; 3 controls for a 4-coefficient outcome model -> nuisance_model_not_estimable; outcome 2 -> input_shape_invalid; missing outcome -> input_shape_invalid; all-zero control outcomes -> succeeded, conclusion limited, flagged outcome_model_separation+nuisance_model_not_converged with the estimate kept; adjusted control risk -6.44e-14 (not positive) -> effect 0.5500 kept, risk and odds ratios not written",
+      "seconds": 20.4078645706177
+    },
+    {
+      "id": "N36a",
+      "ac": ["AC-07", "AC-08", "AC-11", "AC-30"],
+      "pass": true,
+      "detail": "true effect 0.5; per-set estimate / WeightIt ebal reference: both confounders 0.5287876 / 0.5287876, x2 omitted 0.9420414 / 0.9420414, plus noise 0.5279677 / 0.5279677; range [0.5280, 0.9420] over 3 of 4 sets; the unreachable covariate set -> entropy_balance_infeasible, in the table (4 rows) and not dropped; sets 1 and 2 are the entropy-balance job's own numbers and intervals bit for bit: TRUE/TRUE; conclusion limited, limited by covariate_set_without_estimate",
+      "seconds": 8.62849307060242
+    },
+    {
+      "id": "N36b",
+      "ac": ["AC-08", "AC-30"],
+      "pass": true,
+      "detail": "propensity weights: set 1 0.286704, the analysis alone 0.286704 (identical: TRUE); doubly robust: 0.098869 vs 0.098869 (TRUE); time-to-event RMST difference: 1.075518 vs 1.075518 (TRUE, unit months); ranges 0.2289 / 0.0612 / 0.0385 wide",
+      "seconds": 60.4171335697174
+    },
+    {
+      "id": "N36c",
+      "ac": ["AC-07", "AC-08", "AC-09"],
+      "pass": true,
+      "detail": "primary set unreachable -> succeeded/limited, sets not_estimable/succeeded/succeeded, the primary said not estimable; every set unreachable -> not_estimable/entropy_balance_infeasible with no number; a set naming a missing column second -> succeeded, that set failed (input_shape_invalid); first -> succeeded with the primary said refused (input_shape_invalid); every set naming one -> failed (input_shape_invalid); repeated set names -> scenario_value_invalid; doubly robust for time-to-event -> endpoint_not_supported; doubly robust for the ATE -> scenario_value_invalid; cancel -> canceled with no measures",
+      "seconds": 14.2610573768616
+    },
+    {
+      "id": "N37a",
+      "ac": ["AC-07", "AC-30"],
+      "pass": true,
+      "detail": "45 negative controls: null mean 0.79212 (package 0.7922, metafor ML 0.79212), SD 0.28342 (0.2834, 0.28342), calibrated p 0.839018 (0.8389142), uncalibrated p 2.8e-23; 33 of 45 flagged (hand count 33); no calibrated interval offered",
+      "seconds": 0.436198949813843
+    },
+    {
+      "id": "N37b",
+      "ac": ["AC-07", "AC-30"],
+      "pass": true,
+      "detail": "domain floor 30; 29 controls: succeeded/limited, calibration 'set_too_small', measures negative_controls_analysed,negative_controls_signalling_bias,primary_log_effect,uncalibrated_p_value; 30 controls: calibration 'fitted', calibrated p 0.7689",
+      "seconds": 0.468956708908081
+    },
+    {
+      "id": "N37c",
+      "ac": ["AC-08", "AC-30", "AC-07"],
+      "pass": true,
+      "detail": "LaLonde, 3 pre-treatment indicators: log RR -0.56565/-0.27916/0.08450 vs WeightIt -0.56565/-0.27916/0.08450 (max |d| 8.7e-09), ESS 98.4578 vs 98.4578, 2000 bootstrap draws (job asked for 20), 2 of 3 flagged; 3 < 30 controls: set_too_small",
+      "seconds": 6.88702487945557
+    },
+    {
+      "id": "N37d",
+      "ac": ["AC-07", "AC-08", "AC-30"],
+      "pass": true,
+      "detail": "known bias b = 0.2902 (closed form); null mean 0.3177 (se 0.0155, 1.8 se off), null SD 0.0000; effect of interest 0.2541: p 5.1e-03 uncalibrated -> 0.484 calibrated; bootstrap SE 0.0865 vs sampling SD 0.0889 over 150 datasets (ratio 0.973); mean of the single-control estimates 0.2852",
+      "seconds": 14.5164897441864
+    },
+    {
+      "id": "N37e",
+      "ac": ["AC-07", "AC-09", "AC-28"],
+      "pass": true,
+      "detail": "verdicts signals_bias,uninformative,consistent_with_null (with an effect of interest) / signals_bias,consistent_with_null,consistent_with_null (without); a control with no event in an arm: no_event_in_an_arm, reported 2 of 3, limited; none estimable -> not_estimable/negative_controls_not_estimable with 0 measures; 6 refusals by name ok; same seed same result TRUE, another seed differs TRUE",
+      "seconds": 19.5539333820343
+    },
+    {
+      "id": "N38a",
+      "ac": ["AC-07", "AC-30"],
+      "pass": true,
+      "detail": "hand table p = 37/924, 7/924, 112/924, 28/924 (max |d| 2.2e-16), tipping distance 1 at (0, 1), share 0.25; complete cases p 0.02381 = 6/252; grids vs fisher.test / prop.test / binom.test max |d| 7.8e-16; brute-force nearest tipping point agrees (against: TRUE, in favour: TRUE); table input = counts input TRUE",
+      "seconds": 1.4547975063324
+    },
+    {
+      "id": "N38b",
+      "ac": ["AC-07", "AC-30"],
+      "pass": true,
+      "detail": "Cox kernel vs coxph(breslow) on 5 data sets (3 untied, 2 tied): max |d beta| 1.2e-09, max |d variance| 7.6e-12; an arm without events -> NULL TRUE; baseline H(H^-1(x)) round trip 5.8e-15, equals basehaz at the event times to 3.6e-10",
+      "seconds": 0.119078636169434
+    },
+    {
+      "id": "N38c",
+      "ac": ["AC-07", "AC-28", "AC-30"],
+      "pass": true,
+      "detail": "nobody to impute: every delta = primary (max |d| 0.0e+00), coxph -0.292093 vs -0.292093, no tipping delta, limited; delta = 1 with 367 imputed: -0.33874 vs primary -0.33951 (mcse 0.00110, 0.70 mcse, 1.2% of se); delta -> infinity vs coxph on the changed data: treatment only 0.235883/0.235883, in favour -0.692476/-0.692476, opposite directions 0.644586/0.644586",
+      "seconds": 3.39079833030701
+    },
+    {
+      "id": "N38d",
+      "ac": ["AC-07", "AC-28", "AC-30"],
+      "pass": true,
+      "detail": "tipping delta 7.122 (mcse 0.091) between grid 5 and 7.5, interpolation recomputed 7.122; log HR rises -0.9640 -> 0.0336 over the grid, worst case 0.0637; over 8 seeds the tipping delta is 7.141 with sd 0.082 against reported mcse 0.087 (ratio 0.94); same seed same table TRUE",
+      "seconds": 17.5175898075104
+    },
+    {
+      "id": "N38e",
+      "ac": ["AC-07", "AC-09", "AC-28"],
+      "pass": true,
+      "detail": "39 imputations -> failed/replicates_invalid; an arm without events -> not_estimable/primary_analysis_not_estimable with 0 measures; no table / bad arm refused by name TRUE; binary: impossible counts and a grid over 40000 cells refused by name TRUE; cancel -> canceled with 0 measures; 1 and 2 cores give the same table TRUE",
+      "seconds": 2.42060232162476
+    },
+    {
+      "id": "N39a",
+      "ac": ["AC-11", "AC-29", "AC-30"],
+      "pass": true,
+      "detail": "FDA Table 1: conditional OR 8.000000 (8.0), marginal OR 4.8158 (4.8; from the rounded rates 4.805), standardised risks 0.52500 / 0.18667 (52.5% / 18.7%), RD 0.33833 (0.33833), RR 2.8125 (2.8125); the score buys a variance ratio of 0.778; regulatory field 'none_beyond_continuous'",
+      "seconds": 9.26663780212402
+    },
+    {
+      "id": "N39b",
+      "ac": ["AC-11", "AC-29", "AC-30"],
+      "pass": true,
+      "detail": "influence-function SE vs M-estimation (numerical Jacobians): RD 0.02958/0.02958, log RR 0.08289/0.08289, log OR 0.13097/0.13097 (max rel 4.7e-12); conditional log OR 0.17741 vs sandwich::sandwich 0.17741; sandwich/bootstrap SE ratio 1.018 (RD) 1.016 (log OR) over 2000 refits",
+      "seconds": 6.14151525497437
+    },
+    {
+      "id": "N39c",
+      "ac": ["AC-11", "AC-29", "AC-31"],
+      "pass": true,
+      "detail": "truth RD 0.1575 / log RR 0.3960 / log OR 0.6615; bias in Monte-Carlo errors 0.17 / 0.95 / 0.65; mean SE over sampling SD 1.001 / 1.011 / 1.005; coverage 0.957 / 0.953 / 0.950; variance ratio adjusted/unadjusted: simulation 0.667, one job 0.764",
+      "seconds": 5.37922143936157
+    },
+    {
+      "id": "N39d",
+      "ac": ["AC-11", "AC-29", "AC-12"],
+      "pass": true,
+      "detail": "Cox kernel vs coxph over 4 data sets (1-3 covariates, 2 tied): max |d| 1.2e-10; standardised RMST 10.259440 / 8.839933 vs survfit(newdata) averaged 10.259440 / 8.839933, difference 1.419507; survival difference at tau 0.083540 vs 0.083540; conditional HR 0.71347, robust interval from coxph",
+      "seconds": 11.5295643806458
+    },
+    {
+      "id": "N39e",
+      "ac": ["AC-11", "AC-29", "AC-31"],
+      "pass": true,
+      "detail": "true marginal RMST difference 1.8511; mean of 200 trials: adjusted 1.7734 (-1.70 Monte-Carlo errors), unadjusted 1.8129 (-0.64); sampling SD of the adjusted estimate 0.6469 vs the jobs' bootstrap SE 0.6241 (ratio 0.965); variance ratio simulation 0.585, jobs 0.653",
+      "seconds": 54.6740651130676
+    },
+    {
+      "id": "N39f",
+      "ac": ["AC-07", "AC-09", "AC-28"],
+      "pass": true,
+      "detail": "constant score / one-valued outcome / separation -> primary_analysis_not_estimable/primary_analysis_not_estimable/primary_analysis_not_estimable; refusals by name: missing score TRUE, continuous outcome ok, absent column ok, bad arm ok; tau beyond follow-up -> tau_beyond_followup, an arm without events -> primary_analysis_not_estimable; continuous endpoint refused TRUE; cancel -> canceled; same seed same result TRUE; the regulatory field on all of them TRUE",
+      "seconds": 6.37606954574585
+    },
+    {
+      "id": "N40a",
+      "ac": ["AC-04", "AC-30"],
+      "pass": true,
+      "detail": "52 robustness jobs (10 valid, 42 invalid, methods comparator.negative_control+comparator.tipping_point+comparator.prognostic_adjustment): 0 verdicts differ from the domain's, 0 valid jobs refused, 0 expected issues missing",
+      "seconds": 0.317070007324219
+    },
+    {
+      "id": "N40b",
+      "ac": ["AC-04", "AC-26"],
+      "pass": true,
+      "detail": "234 broken robustness jobs: 212 refused by name, 22 came back succeeded, 0 defects",
+      "seconds": 51.3858866691589
+    },
+    {
+      "id": "N41a",
+      "ac": ["AC-02", "AC-26", "AC-30"],
+      "pass": true,
+      "detail": "600 rows, 6 columns: age / visits / ldh mean, sd, p05, p25, median, p75, p95 recomputed from their definitions agree to 1.4e-15 (relative); distinct and missing counts equal (ldh: 40 missing = 40); site and stage cells equal table() and none is withheld; rows 600, realPatients 600",
+      "seconds": 0.244585275650024
+    },
+    {
+      "id": "N41b",
+      "ac": ["AC-09", "AC-11", "AC-30"],
+      "pass": true,
+      "detail": "2,000 training rows, 5 copies (10000 synthetic rows): pooled means 60.33 / 24.90 vs training 60.30 / 24.91, sd ratio 1.030 / 1.001, sex 0.447 vs 0.435, correlations worst |d| 0.020 (age~bmi 0.156 vs 0.152, sex~bmi 0.286 vs 0.306), outcome coefficients age 0.0316 vs 0.0374, sex 0.483 vs 0.465; all 12 checks pass TRUE; a column-shuffled copy (marginals kept) fails them (sex~bmi -0.021 vs 0.306): TRUE",
+      "seconds": 2.79980564117432
+    },
+    {
+      "id": "N42",
+      "ac": ["AC-02", "AC-09"],
+      "pass": true,
+      "detail": "A keeps 417, B keeps 324 (both 324, only A 93, only B 0) equal to the independent count; SMD age 0.3210 (independent 0.3210), male 0.0177 (0.0177), eGFR 0.2276 (0.2276); text column named as not numeric TRUE; swap flips signs TRUE; no `compare` -> no comparison TRUE; bad column / bad rule refused TRUE; one-observation covariate named TRUE",
+      "seconds": 0.60118556022644
+    },
+    {
+      "id": "N43",
+      "ac": ["AC-10", "AC-29"],
+      "pass": true,
+      "detail": "6 null scenarios, each refused as design_effect_null on its own field with the type I error pointed at design.simulate and no measure: yes/yes/yes/yes/yes/yes; near-null controls (HR 0.99, effect 0.01, 0.301 against 0.3) compute finite numbers: yes/yes/yes/yes; exact single-arm at the null rate computes type I error 0.0432 equal to its power: TRUE; Simon equal rates refused on the alternative rate and a search with no design within maxN refused on maxN: TRUE; every one of the 6 supported design-endpoint pairs is covered: TRUE",
+      "seconds": 0.668219804763794
+    },
+    {
+      "id": "N44",
+      "ac": ["AC-10", "AC-28", "AC-29"],
+      "pass": true,
+      "detail": "incident_tte type I error 0.0523 (+-0.0016) at alpha 0.050; incident_binary type I error 0.0247 (+-0.0011) at alpha 0.025; continuous type I error 0.0260 (+-0.0011) at alpha 0.025",
+      "seconds": 106.493340015411
+    },
+    {
+      "id": "N45a",
+      "ac": ["AC-02", "AC-09", "AC-11"],
+      "pass": true,
+      "detail": "4 variables of 1500 rows: every summary of age and bmi equals the recomputation from the CSV (worst gap 0), both histograms and every level count equal the independent tabulation (TRUE/TRUE), the label, family, parameters, bounds and rule are echoed (TRUE), 157 missing bmi counted apart; the domain's contract says valid",
+      "seconds": 0.443698167800903
+    },
+    {
+      "id": "N45b",
+      "ac": ["AC-11", "AC-20"],
+      "pass": true,
+      "detail": "literature table of 4 rows: levels in the stated order low/mid/high (1023/582/395 of 2000), age lower bound 30 respected (min 32.6), the lognormal row declared as such with generated mean 39.8 against 40; the domain's contract says valid",
+      "seconds": 0.315568208694458
+    },
+    {
+      "id": "N45c",
+      "ac": ["AC-17", "AC-26", "AC-27"],
+      "pass": true,
+      "detail": "crafted 100/60/7: hidden B+C, the lone 100 shown; all-small column small_cells; a three-person top bin hidden with a neighbour (2 bins hidden); extremes withheld at 60 rows (min/max/histogram); 4 missing hidden; the unsuppressed table shows the 7; synthpop job: 5 levels of grp, 3 shown, none below 10, declared null; the domain's contract says valid",
+      "seconds": 1.66275858879089
+    },
+    {
+      "id": "N45d",
+      "ac": ["AC-04", "AC-31"],
+      "pass": true,
+      "detail": "4 parameter draws of 300 profiled as the 1200-row table; 1 and 8 cores give the same profile; a constant column has sd 0 and one occupied bin of 40 with strictly increasing breaks; a declared level nobody drew is listed with n 0; an all-missing column has no summary and says 20 missing; the domain's contract says valid",
+      "seconds": 0.309550523757935
+    },
+    {
+      "id": "N46a",
+      "ac": ["AC-02", "AC-09", "AC-11"],
+      "pass": true,
+      "detail": "10171 rows of 2,400 patients: mixed-model fit inside its 99.9% intervals for the intercept 49.78, slope -0.386, effect on the slope -0.277, first-visit arm gap -0.049, SDs 5.93/0.343, correlation -0.25, residual 2.52 (all inside); sample against the closed-form mean and SD at 10 arm-visits: worst 2.44 Monte-Carlo errors; the result's expected block equals the formula",
+      "seconds": 0.985188722610474
+    },
+    {
+      "id": "N46b",
+      "ac": ["AC-31", "AC-11"],
+      "pass": true,
+      "detail": "effect -0.5 -> 0: 1697 rows, every treated value moves by exactly 0.5 t and no control value moves (TRUE), the same visits are observed; dropout 0.15 -> 0.4: 235 of 400 patients lose visits, every still-observed value is unchanged (TRUE), observed visits stay a run from the first (TRUE); residual SD doubled: first-visit values correlate 0.962 with the originals; 50+50 vs 100+100 patients: the first 50 treated patients are bit-identical (TRUE)",
+      "seconds": 0.509246826171875
+    },
+    {
+      "id": "N46c",
+      "ac": ["AC-09", "AC-02"],
+      "pass": true,
+      "detail": "12% leaving before each follow-up visit: still in at visits 2/4/6 = 0.879/0.682/0.518 against 0.880/0.681/0.528 (worst 2.49 binomial errors, both arms), everyone present at the first visit (TRUE), observed visits are a run from the first (TRUE); synthetic at tier scenario on every row, 0 real patients, 26668 records; no dropout keeps all 600 rows",
+      "seconds": 0.485273838043213
+    },
+    {
+      "id": "N46d",
+      "ac": ["AC-11", "AC-26"],
+      "pass": true,
+      "detail": "population of 4000 members: covariate effect 0.818 (want 0.8), effect on the slope -0.304 (want -0.3), control slope 0.504 (want 0.5) (worst 2.74 SE); arms 2000/2000; control mean at t = 0 is 4.98 for the stated intercept 5 although the covariate averages 10; arm sizes that do not add up -> scenario_value_invalid; a covariate effect with no population -> scenario_value_invalid; a population column named like a column of the table -> scenario_value_invalid",
+      "seconds": 0.328890800476074
+    },
+    {
+      "id": "N46e",
+      "ac": ["AC-09", "AC-20"],
+      "pass": true,
+      "detail": "arm trajectories equal the table's per-visit means and 95% bands (worst gap 5e-14 over 10 arm-visits); 12 individual lines per arm, the first is that patient's own rows (TRUE); the three examples are the patients at the 10th/50th/90th percentile of the latent slope (TRUE) with true slopes -1.25 < -0.68 < -0.14; the same person under the other arm differs by exactly 0.6 t at every visit and starts at the same value (TRUE); the stretch after leaving is marked unobserved (TRUE); headline: 到最后一个时间点，试验组与对照组的平均值相差 -4.53",
+      "seconds": 0.232799530029297
+    },
+    {
+      "id": "N46f",
+      "ac": ["AC-04", "AC-30"],
+      "pass": true,
+      "detail": "1 and 8 cores: the table is byte-identical (TRUE) and so is the output hash (TRUE); a null effect is a legal scenario; refused by name: an unlisted key (failed scenario_field_unknown), visits out of order (failed scenario_value_invalid), one visit (failed scenario_value_invalid)",
+      "seconds": 0.315889120101929
+    },
+    {
+      "id": "N47a",
+      "ac": ["AC-29", "AC-30"],
+      "pass": true,
+      "detail": "3-look O'Brien-Fleming and 4-look Pocock at hazard ratios 0.55/0.7/0.9/1.15: every stage's rejection probability agrees with rpact::getPowerSurvival to 4.6e-09, the one-pass recursion equals vcr_group_sequential_power on the 4001-node grid to 0.0e+00, and the 801-node grid the assurance uses to 5.9e-11",
+      "seconds": 17.514662027359
+    },
+    {
+      "id": "N47b",
+      "ac": ["AC-29", "AC-30", "AC-10"],
+      "pass": true,
+      "detail": "assurance 0.647383 (rpact integrated over the prior 0.647383); power at the prior mean 0.731605 (rpact 0.731605); by look 0.0927/0.3354/0.2193 (sum 0.647383); simulated 0.6489 +-0.0015 over 100,000 draws from the prior, 0.98 errors from the quadrature; the boundaries are design.analytic's to 1e-8 (3.357/2.445/2.001)",
+      "seconds": 10.884551525116
+    },
+    {
+      "id": "N47c",
+      "ac": ["AC-29", "AC-31"],
+      "pass": true,
+      "detail": "fixed 0.6515 > group-sequential 0.6474 at the same 300 events; a stronger prior (-0.6) 0.9750 with 0.478 of it at the first look against 0.093; Pocock puts 0.327 of the assurance at look 1 against O'Brien-Fleming's 0.093; two-sided alpha 0.05 on a prior reaching harm 0.4404 against one-sided 0.025 0.3451; a point prior gives the power at its mean (0.731605 vs 0.731605); two runs are the same bytes; kind spelt two_arm_fixed = the fixed design (TRUE); the job equals the function (TRUE)",
+      "seconds": 14.8007960319519
+    },
+    {
+      "id": "N47d",
+      "ac": ["AC-04", "AC-30"],
+      "pass": true,
+      "detail": "version 1.1.0; a group-sequential assurance for a continuous endpoint -> design_not_supported; no looks -> scenario_field_missing; looks out of order -> scenario_value_invalid; a group-sequential job labelled 1.0.0 -> method_version_mismatch@methodVersion; a fixed-design job labelled 1.0.0 -> valid",
+      "seconds": 0.230979204177856
+    },
+    {
+      "id": "N48a",
+      "ac": ["AC-10", "AC-11", "AC-28", "AC-29"],
+      "pass": true,
+      "detail": "40,000 replicates each, simulated against the independent exact value within three Monte-Carlo errors: t greater 0.7312 vs 0.7290 (+-0.0022); t less 0.7320 vs 0.7290 (+-0.0022); t two-sided 0.7302 vs 0.7290 (+-0.0022); z known sd 12 0.7502 vs 0.7502 (+-0.0022); z told sd 9 0.8764 vs 0.8780 (+-0.0016); t null 0.0244 vs 0.0250 (+-0.0008); z null told 9 0.0712 vs 0.0708 (+-0.0013); no bias in the effect, coverage at the stated level for the t analyses, the result's own analytic check agrees, no real patients",
+      "seconds": 185.031120538712
+    },
+    {
+      "id": "N48b",
+      "ac": ["AC-09", "AC-29", "AC-30"],
+      "pass": true,
+      "detail": "10 patients, 6 events, against exponential / Weibull / piecewise benchmarks: expected events 5.8960 / 3.9238 / 4.9840 computed by hand; the statistic, the log O/E effect, its standard error, the p-value, the interval and the decision for three alternatives agree to 0.0e+00; a sample with no event has no effect estimate and still rejects (TRUE)",
+      "seconds": 0.459079265594482
+    },
+    {
+      "id": "N48c",
+      "ac": ["AC-10", "AC-29", "AC-28"],
+      "pass": true,
+      "detail": "HR .5 n60 0.9578 vs independent 0.9579 (z -0.02), analytic 0.9496; HR .65 n60 0.6541 vs independent 0.6534 (z 0.17), analytic 0.6436; HR .8 n100 0.3656 vs independent 0.3709 (z -1.34), analytic 0.3732; null n60 0.0195 vs independent 0.0191 (z 0.39), analytic 0.0250; Weibull HR .6 n80 0.8870 vs independent 0.8873 (z -0.13), analytic 0.8742; type I error 0.0175 with about 25 expected events and 0.0233 with about 354 (nominal 0.025); the approximation's largest gap to the simulation 0.0128 against its documented 0.020",
+      "seconds": 312.832045793533
+    },
+    {
+      "id": "N48d",
+      "ac": ["AC-04", "AC-31", "AC-38"],
+      "pass": true,
+      "detail": "continuous 5000 rows, 1/8/resume identical, canceled run kept 500; time_to_event 5000 rows, 1/8/resume identical, canceled run kept 500; a 2 x 2 grid over n and the effect: cell four power 0.8868 equals the isolated job at its seed 0.8868",
+      "seconds": 30.1357636451721
+    },
+    {
+      "id": "N48e",
+      "ac": ["AC-04", "AC-30", "AC-26"],
+      "pass": true,
+      "detail": "11 of 11 malformed single-arm scenarios refused by name (z without sd: scenario_field_missing; binary analysis on a mean: scenario_value_invalid; t on a binary endpoint: scenario_field_unknown+scenario_field_missing+scenario_value_invalid; baseline correlation: scenario_field_unknown; response rate on a mean: scenario_field_unknown; no effect: scenario_field_missing; two benchmarks: scenario_value_invalid; sided vs alternative: scenario_value_invalid; external control on a mean: scenario_field_missing+scenario_value_invalid+design_not_supported; Simon on survival: scenario_field_missing+scenario_value_invalid+design_not_supported; one patient: scenario_value_invalid); version 1.2.0: a continuous or survival job labelled 1.1.0 is refused, the binary single-arm job at 1.1.0 and a two-arm job at 1.0.0 stay valid",
+      "seconds": 1.53687310218811
+    },
+    {
+      "id": "N49a",
+      "ac": ["AC-04", "AC-30"],
+      "pass": true,
+      "detail": "50 extension jobs (16 valid, 34 invalid, methods patients.longitudinal+design.assurance+design.simulate+design.grid): 0 verdicts differ from the domain's, 0 valid jobs refused, 0 expected issues missing",
+      "seconds": 0.183789253234863
+    },
+    {
+      "id": "N49b",
+      "ac": ["AC-04", "AC-26"],
+      "pass": true,
+      "detail": "378 broken extension jobs: 337 refused by name, 41 came back succeeded, 0 defects",
+      "seconds": 71.8538997173309
+    },
+    {
+      "id": "N49c",
+      "ac": ["AC-04", "AC-30"],
+      "pass": true,
+      "detail": "9 domain examples across 5 methods, every one a valid job that the engine runs to a result: patients.longitudinal (ok), design.assurance (ok), design.assurance (ok), design.simulate (ok), design.simulate (ok), design.simulate (ok), design.simulate (ok), population.scenario (ok), population.literature (ok)",
+      "seconds": 19.8355007171631
+    },
+    {
+      "id": "N49d",
+      "ac": ["AC-26", "AC-30"],
+      "pass": true,
+      "detail": "12 new files / functions, 728 lines scanned: every caller key is read with [[ ]]",
+      "seconds": 0.0352210998535156
+    },
+    {
+      "id": "S01a",
+      "ac": ["AC-28", "AC-11"],
+      "pass": true,
+      "detail": "2459 event times thinned to 200 points (first 0/1, last 34.8037/0.1321 = the estimate at 34.804); cut at tau=12 ends at S=0.496333 (KM 0.496333); numbers at risk 3000 -> 6000 at time 0; doubled weights leave the curve unchanged",
+      "seconds": 0.363835334777832
+    },
+    {
+      "id": "S01b",
+      "ac": ["AC-09", "AC-11"],
+      "pass": true,
+      "detail": "time-to-event set: two synthetic curves (200 / 200 points), medians 7.88 vs 5.82 (stated 6 vs 8.57), sensitivity base 2.571 = 6/0.7 - 6 with the control median at 80-120% giving 2.06..3.09; binary set: 43.3% vs 30.0% (stated 45 vs 30), no trajectories",
+      "seconds": 0.110580921173096
+    },
+    {
+      "id": "S01c",
+      "ac": ["AC-29", "AC-28"],
+      "pass": true,
+      "detail": "binary design n=434: curve 0.025 at the null (alpha .025), 0.9002 at the design (closed form 0.9002, target .9), sample size 434 at the effect off by a fifth either way in [305, 669]; time-to-event curve 0.0250 at HR 1 and 0.9001 at HR 0.7; simulated point 0.7596 +- 0.0060 at 0.45, band 95% Monte-Carlo",
+      "seconds": 2.28215742111206
+    },
+    {
+      "id": "S01d",
+      "ac": ["AC-27", "AC-08", "AC-07"],
+      "pass": true,
+      "detail": "RMST(18) on 400 pseudo-patients 2.9588 = the direct computation 2.9588; curves reconstructed+reconstructed; counts real 0 / pseudo-patients 400; the same table labelled aggregate -> input_source_not_individual; weighted comparison draws treated(observed), control(observed), control_weighted(calculated)",
+      "seconds": 9.67627644538879
+    },
+    {
+      "id": "S01e",
+      "ac": ["AC-04", "AC-29"],
+      "pass": true,
+      "detail": "reconstruction: published_1(extracted, 120 points), reconstructed_1(reconstructed, 85 points); grid of 4 cells each carrying its measures: type I error 0.0288 / 0.0248 under the null, power 0.882 with 200 per arm and 0.587 with 100 per arm",
+      "seconds": 32.0182108879089
+    },
+    {
+      "id": "Z99",
+      "ac": ["AC-04", "AC-30"],
+      "pass": true,
+      "detail": "32/32 declared methods went through vcr_run_job in this run, 32/32 in a case that asserts numbers",
+      "seconds": 0.0208034515380859
+    }
+  ],
+  "methodsByCase": {
+    "C2-01": "population.scenario",
+    "C2-02": "population.scenario",
+    "C2-03": "population.scenario",
+    "C2-05": "population.synthpop",
+    "C2-10b": "population.scenario",
+    "C2-15": "population.quality",
+    "E05": ["profile.snapshot", "cohort.build", "population.scenario", "population.literature", "population.synthpop", "population.quality", "patients.continuous", "patients.binary", "patients.time_to_event", "evidence.pool", "evidence.reconstruct_km", "comparator.entropy_balance", "comparator.propensity_weight", "comparator.rmst", "comparator.maic", "comparator.weighted_cox", "comparator.maic_time_to_event", "comparator.aipw", "comparator.covariate_sets", "comparator.evalue", "comparator.map_prior", "design.analytic", "design.simulate", "design.grid", "design.assurance", "design.procova", "accrual.poisson_gamma", "matching.evaluate", "comparator.negative_control", "comparator.tipping_point", "comparator.prognostic_adjustment", "patients.longitudinal"],
+    "E06": "comparator.entropy_balance",
+    "E07": "design.simulate",
+    "E07b": "design.simulate",
+    "E08": "design.simulate",
+    "E09": ["population.scenario", "patients.time_to_event", "design.simulate"],
+    "E10a": ["cohort.build", "population.scenario", "population.literature", "population.synthpop", "population.quality", "patients.continuous", "patients.binary", "patients.time_to_event", "evidence.pool", "evidence.reconstruct_km", "comparator.entropy_balance", "comparator.propensity_weight", "comparator.rmst", "comparator.maic", "comparator.weighted_cox", "comparator.maic_time_to_event", "comparator.aipw", "comparator.covariate_sets", "comparator.evalue", "comparator.map_prior", "design.analytic", "design.simulate", "design.grid", "design.assurance", "design.procova", "accrual.poisson_gamma", "matching.evaluate", "comparator.negative_control", "comparator.tipping_point", "comparator.prognostic_adjustment", "patients.longitudinal", "nope.nope"],
+    "E10b": ["design.simulate", "comparator.entropy_balance", "accrual.poisson_gamma", "population.synthpop"],
+    "E10c": ["patients.binary", "patients.continuous", "patients.time_to_event"],
+    "N01b": "design.analytic",
+    "N06b": "design.analytic",
+    "N06c": "design.analytic",
+    "N06d": ["design.grid", "design.simulate"],
+    "N09": "comparator.entropy_balance",
+    "N09b": ["comparator.propensity_weight", "comparator.entropy_balance"],
+    "N09c": ["comparator.entropy_balance", "comparator.propensity_weight"],
+    "N11": "comparator.rmst",
+    "N11b": "comparator.rmst",
+    "N12": "comparator.evalue",
+    "N13b": "comparator.entropy_balance",
+    "N17": "evidence.reconstruct_km",
+    "N17b": "evidence.reconstruct_km",
+    "N14b": "comparator.maic",
+    "N19b": "design.assurance",
+    "N21b": "comparator.map_prior",
+    "N22b": "design.procova",
+    "N23d": ["cohort.build", "design.simulate", "population.scenario"],
+    "N24b": "profile.snapshot",
+    "N24c": "comparator.rmst",
+    "N25a": "profile.snapshot",
+    "N25b": ["cohort.build", "comparator.propensity_weight"],
+    "N24d": "profile.snapshot",
+    "N27a": "accrual.poisson_gamma",
+    "N27b": "accrual.poisson_gamma",
+    "N27c": "accrual.poisson_gamma",
+    "N27d": "evidence.pool",
+    "N28a": "population.literature",
+    "N28c": ["patients.continuous", "patients.binary", "patients.time_to_event"],
+    "N29": "matching.evaluate",
+    "N31b": "design.simulate",
+    "N31c": "design.simulate",
+    "N31e": ["design.simulate", "design.analytic"],
+    "N31f": ["design.grid", "design.simulate"],
+    "N32b": ["cohort.build", "profile.snapshot", "comparator.entropy_balance"],
+    "N32c": ["comparator.entropy_balance", "comparator.rmst"],
+    "N32d": "profile.snapshot",
+    "N33a": ["comparator.weighted_cox", "comparator.entropy_balance"],
+    "N33b": "comparator.weighted_cox",
+    "N33c": ["comparator.weighted_cox", "comparator.entropy_balance"],
+    "N33d": "comparator.weighted_cox",
+    "N34a": "comparator.maic_time_to_event",
+    "N34b": "comparator.maic_time_to_event",
+    "N34d": ["comparator.maic_time_to_event", "comparator.maic"],
+    "N34e": "comparator.maic_time_to_event",
+    "N35a": "comparator.aipw",
+    "N35c": "comparator.aipw",
+    "N35d": "comparator.aipw",
+    "N36a": ["comparator.covariate_sets", "comparator.entropy_balance"],
+    "N36b": ["comparator.covariate_sets", "comparator.propensity_weight", "comparator.aipw", "comparator.entropy_balance"],
+    "N36c": "comparator.covariate_sets",
+    "N37a": "comparator.negative_control",
+    "N37b": "comparator.negative_control",
+    "N37c": "comparator.negative_control",
+    "N37d": "comparator.negative_control",
+    "N37e": "comparator.negative_control",
+    "N38a": "comparator.tipping_point",
+    "N38c": "comparator.tipping_point",
+    "N38d": "comparator.tipping_point",
+    "N38e": "comparator.tipping_point",
+    "N39a": "comparator.prognostic_adjustment",
+    "N39b": "comparator.prognostic_adjustment",
+    "N39c": "comparator.prognostic_adjustment",
+    "N39d": "comparator.prognostic_adjustment",
+    "N39e": "comparator.prognostic_adjustment",
+    "N39f": "comparator.prognostic_adjustment",
+    "N40b": ["comparator.negative_control", "comparator.tipping_point", "comparator.prognostic_adjustment"],
+    "N41a": "profile.snapshot",
+    "N41b": "population.synthpop",
+    "N42": "cohort.build",
+    "N43": "design.analytic",
+    "N44": "design.simulate",
+    "N45a": "population.scenario",
+    "N45b": "population.literature",
+    "N45c": "population.synthpop",
+    "N45d": "population.scenario",
+    "N46a": "patients.longitudinal",
+    "N46b": "patients.longitudinal",
+    "N46c": "patients.longitudinal",
+    "N46d": "patients.longitudinal",
+    "N46e": "patients.longitudinal",
+    "N46f": "patients.longitudinal",
+    "N47b": "design.assurance",
+    "N47c": "design.assurance",
+    "N47d": "design.assurance",
+    "N48a": "design.simulate",
+    "N48c": "design.simulate",
+    "N48d": ["design.grid", "design.simulate"],
+    "N48e": "design.simulate",
+    "N49b": ["patients.longitudinal", "design.assurance", "design.simulate", "design.grid"],
+    "N49c": ["patients.longitudinal", "design.assurance", "design.simulate", "population.scenario", "population.literature"],
+    "S01b": ["patients.time_to_event", "patients.binary"],
+    "S01c": ["design.analytic", "design.simulate"],
+    "S01d": ["comparator.rmst", "comparator.entropy_balance"],
+    "S01e": ["evidence.reconstruct_km", "design.grid"]
+  },
+  "testOnly": "",
+  "skippedCaseIds": [],
+  "complete": true
+}

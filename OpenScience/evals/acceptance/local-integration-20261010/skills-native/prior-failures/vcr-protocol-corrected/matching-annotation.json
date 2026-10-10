@@ -1,0 +1,473 @@
+{
+  "schema": "vcr-protocol-corrected/matching-annotation/1",
+  "artifactId": "matching-annotation",
+  "version": "0.1.0",
+  "title": "合成来源片段 C1–C4 的逐条证据标注与前状态（有界方法核验）",
+  "scope": {
+    "kind": "bounded_method_verification",
+    "establishes": [
+      "为每个合成来源片段找到排除条件所需的事实，并保留逐字原文与出处区间",
+      "在进入确定性评估之前，把「判不了」写成显式状态",
+      "记录时间语义（当前 / 历史 / 未知）而不新增阈值"
+    ],
+    "does_not_establish": [
+      "任何入排判定结果或人群规模",
+      "任何临床准确性、匹配准确率或需筛人数",
+      "对任何真实个体的结论"
+    ],
+    "patientData": "none",
+    "syntheticOnly": true,
+    "containsPopulationCounts": false,
+    "containsPatientLists": false,
+    "platformStudyOrResultRegistered": false,
+    "engineInvoked": false
+  },
+  "annotationPolicy": {
+    "whatIsAnnotated": "事实与出处，不是最终入排结论。前状态按 protocol.json 的要求与 unknownPolicy 给出，属于规则层面的读法。",
+    "excludedOnPurpose": "不记录任何人数、比例、合格数、排除数或候选名单；四个片段是合成来源，不是患者队列。",
+    "polarityRule": "只有原文确有的用药才写成 affirmed；已停用写成 negated 并标注为历史暴露，不写成「从未使用」；缺失的历史既不是阳性也不是阴性。",
+    "missingIsNotDenial": "缺少用药史时结论是 unknown，不是「没有暴露」；写成「从未使用」需要原文的否认原句。",
+    "recencyRule": "原文给出的停用时点照原样记录（含单位），不换算、不推断；定义没有阈值就不在标注里造一个。",
+    "spanUnit": "utf16_code_units，区间为该引文在来源摘录内的位置。"
+  },
+  "annotations": [
+    {
+      "sourceKey": "C1",
+      "sourceKind": "synthetic_clinical_excerpt",
+      "excerpt": "Prednisone was discontinued6months ago. Metformin500mg daily is current.",
+      "excerptSpan": {
+        "unit": "utf16_code_units",
+        "start": 0,
+        "end": 72
+      },
+      "excerptRetainedVerbatim": true,
+      "evaluatedUnder": {
+        "definitionId": "task-stated-study-definition",
+        "criteria": [
+          "crit-inclusion-adult",
+          "crit-exclusion-current-glucocorticoid"
+        ]
+      },
+      "facts": [
+        {
+          "variable": "systemic_glucocorticoid",
+          "medicationName": "Prednisone",
+          "polarity": "negated",
+          "medicationState": "historical",
+          "absenceScope": "interval",
+          "quote": "Prednisone was discontinued6months ago.",
+          "sourceId": "C1",
+          "span": {
+            "unit": "utf16_code_units",
+            "start": 0,
+            "end": 39
+          },
+          "clinical": {
+            "schema": 1,
+            "assertion": "affirmed",
+            "experiencer": "patient"
+          },
+          "context": {
+            "exposureStatusAtAssessment": "historical",
+            "authorizationForCurrentPeriod": "none stated",
+            "continuationStatementPresent": false,
+            "statedStop": "discontinued6months ago",
+            "statedStopUnit": "months",
+            "evidenceGap": null
+          }
+        },
+        {
+          "variable": "age",
+          "polarity": "unknown",
+          "value": null,
+          "unit": null,
+          "reason": "该合成来源片段未给出年龄信息，题面定义的人群条件在本片段上无法判断。",
+          "quote": null,
+          "sourceId": "C1",
+          "span": null
+        }
+      ],
+      "otherMedicationsMentioned": [
+        {
+          "medicationName": "Metformin",
+          "quote": "Metformin500mg daily is current.",
+          "sourceId": "C1",
+          "span": {
+            "unit": "utf16_code_units",
+            "start": 40,
+            "end": 72
+          },
+          "reasonNotAnnotatedAsAFact": "二甲双胍不是全身性糖皮质激素，不承载本条排除条件的变量；把它写成该变量的事实会把上下文药误算成条件，因此只作为上下文保留原文。"
+        }
+      ],
+      "criterionEvaluation": [
+        {
+          "criterionId": "crit-exclusion-current-glucocorticoid",
+          "requirement": {
+            "op": "present",
+            "variable": "systemic_glucocorticoid"
+          },
+          "state": "satisfied",
+          "reason": "historical_negative_exposure",
+          "decidedBy": "deterministic_rule_over_annotated_facts",
+          "reading": "判定日的暴露状态为历史（原文写明已停用）；本条要求的是当前暴露，要求未命中，故为「满足」（不被本条排除）。",
+          "decisiveQuote": "Prednisone was discontinued6months ago.",
+          "unknownPolicyApplied": null
+        },
+        {
+          "criterionId": "crit-inclusion-adult",
+          "requirement": {
+            "op": "compare",
+            "variable": "age",
+            "comparator": "gte",
+            "value": 18,
+            "unit": "years"
+          },
+          "state": "unknown",
+          "reason": "insufficient_history",
+          "decidedBy": "deterministic_rule_over_annotated_facts",
+          "reading": "本片段没有年龄信息，人群条件无法判断。",
+          "decisiveQuote": null,
+          "unknownPolicyApplied": "up-1"
+        }
+      ],
+      "recencyNote": null
+    },
+    {
+      "sourceKey": "C2",
+      "sourceKind": "synthetic_clinical_excerpt",
+      "excerpt": "Prednisone10mg daily was started yesterday and continues.",
+      "excerptSpan": {
+        "unit": "utf16_code_units",
+        "start": 0,
+        "end": 57
+      },
+      "excerptRetainedVerbatim": true,
+      "evaluatedUnder": {
+        "definitionId": "task-stated-study-definition",
+        "criteria": [
+          "crit-inclusion-adult",
+          "crit-exclusion-current-glucocorticoid"
+        ]
+      },
+      "facts": [
+        {
+          "variable": "systemic_glucocorticoid",
+          "medicationName": "Prednisone",
+          "polarity": "affirmed",
+          "medicationState": "current",
+          "absenceScope": "current",
+          "quote": "Prednisone10mg daily was started yesterday and continues.",
+          "sourceId": "C2",
+          "span": {
+            "unit": "utf16_code_units",
+            "start": 0,
+            "end": 57
+          },
+          "clinical": {
+            "schema": 1,
+            "assertion": "affirmed",
+            "experiencer": "patient"
+          },
+          "context": {
+            "exposureStatusAtAssessment": "current",
+            "continuationStatementPresent": true,
+            "statedStart": "yesterday",
+            "statedStartUnit": "days",
+            "statedDose": {
+              "value": 10,
+              "unit": "mg",
+              "frequency": "daily",
+              "verbatim": "10mg daily"
+            },
+            "evidenceGap": null
+          }
+        },
+        {
+          "variable": "age",
+          "polarity": "unknown",
+          "value": null,
+          "unit": null,
+          "reason": "该合成来源片段未给出年龄信息，题面定义的人群条件在本片段上无法判断。",
+          "quote": null,
+          "sourceId": "C2",
+          "span": null
+        }
+      ],
+      "otherMedicationsMentioned": [],
+      "criterionEvaluation": [
+        {
+          "criterionId": "crit-exclusion-current-glucocorticoid",
+          "requirement": {
+            "op": "present",
+            "variable": "systemic_glucocorticoid"
+          },
+          "state": "not_satisfied",
+          "reason": "current_positive_exposure",
+          "decidedBy": "deterministic_rule_over_annotated_facts",
+          "reading": "原文写明用药「continues」，判定日的暴露为当前暴露，本条要求命中，故为「不满足」（被本条排除）。开始时间只在昨日不改变「当前」这一状态，定义也没有给出任何时长阈值。",
+          "decisiveQuote": "and continues",
+          "unknownPolicyApplied": null
+        },
+        {
+          "criterionId": "crit-inclusion-adult",
+          "requirement": {
+            "op": "compare",
+            "variable": "age",
+            "comparator": "gte",
+            "value": 18,
+            "unit": "years"
+          },
+          "state": "unknown",
+          "reason": "insufficient_history",
+          "decidedBy": "deterministic_rule_over_annotated_facts",
+          "reading": "本片段没有年龄信息，人群条件无法判断。",
+          "decisiveQuote": null,
+          "unknownPolicyApplied": "up-1"
+        }
+      ],
+      "recencyNote": null
+    },
+    {
+      "sourceKey": "C3",
+      "sourceKind": "synthetic_clinical_excerpt",
+      "excerpt": "Medication history was not available.",
+      "excerptSpan": {
+        "unit": "utf16_code_units",
+        "start": 0,
+        "end": 37
+      },
+      "excerptRetainedVerbatim": true,
+      "evaluatedUnder": {
+        "definitionId": "task-stated-study-definition",
+        "criteria": [
+          "crit-inclusion-adult",
+          "crit-exclusion-current-glucocorticoid"
+        ]
+      },
+      "facts": [
+        {
+          "variable": "systemic_glucocorticoid",
+          "medicationName": null,
+          "polarity": "unknown",
+          "medicationState": "unknown",
+          "absenceScope": "unknown",
+          "quote": "Medication history was not available.",
+          "sourceId": "C3",
+          "span": {
+            "unit": "utf16_code_units",
+            "start": 0,
+            "end": 37
+          },
+          "clinical": {
+            "schema": 1,
+            "assertion": "unknown",
+            "experiencer": "patient"
+          },
+          "context": {
+            "exposureStatusAtAssessment": "unknown",
+            "historyCompleteness": "missing",
+            "denialStatementPresent": false,
+            "evidenceGap": "用药史不可得：无法确定判定日是否存在当前暴露，也无法确定是否有过暴露。"
+          }
+        },
+        {
+          "variable": "age",
+          "polarity": "unknown",
+          "value": null,
+          "unit": null,
+          "reason": "该合成来源片段未给出年龄信息，题面定义的人群条件在本片段上无法判断。",
+          "quote": null,
+          "sourceId": "C3",
+          "span": null
+        }
+      ],
+      "otherMedicationsMentioned": [],
+      "criterionEvaluation": [
+        {
+          "criterionId": "crit-exclusion-current-glucocorticoid",
+          "requirement": {
+            "op": "present",
+            "variable": "systemic_glucocorticoid"
+          },
+          "state": "unknown",
+          "reason": "insufficient_history",
+          "decidedBy": "deterministic_rule_over_annotated_facts",
+          "reading": "用药史不可得，既没有当前暴露的记录，也没有「未曾使用」的否认原句；结论是证据不足，不是阴性。",
+          "decisiveQuote": "Medication history was not available.",
+          "unknownPolicyApplied": "up-1"
+        },
+        {
+          "criterionId": "crit-inclusion-adult",
+          "requirement": {
+            "op": "compare",
+            "variable": "age",
+            "comparator": "gte",
+            "value": 18,
+            "unit": "years"
+          },
+          "state": "unknown",
+          "reason": "insufficient_history",
+          "decidedBy": "deterministic_rule_over_annotated_facts",
+          "reading": "本片段没有年龄信息，人群条件无法判断。",
+          "decisiveQuote": null,
+          "unknownPolicyApplied": "up-1"
+        }
+      ],
+      "recencyNote": null
+    },
+    {
+      "sourceKey": "C4",
+      "sourceKind": "synthetic_clinical_excerpt",
+      "excerpt": "Prednisone was discontinued2days ago. Metformin500mg daily is current.",
+      "excerptSpan": {
+        "unit": "utf16_code_units",
+        "start": 0,
+        "end": 70
+      },
+      "excerptRetainedVerbatim": true,
+      "assessedIndependently": true,
+      "evaluatedUnder": {
+        "definitionId": "task-stated-study-definition",
+        "criteria": [
+          "crit-inclusion-adult",
+          "crit-exclusion-current-glucocorticoid"
+        ]
+      },
+      "facts": [
+        {
+          "variable": "systemic_glucocorticoid",
+          "medicationName": "Prednisone",
+          "polarity": "negated",
+          "medicationState": "historical",
+          "absenceScope": "interval",
+          "quote": "Prednisone was discontinued2days ago.",
+          "sourceId": "C4",
+          "span": {
+            "unit": "utf16_code_units",
+            "start": 0,
+            "end": 37
+          },
+          "clinical": {
+            "schema": 1,
+            "assertion": "affirmed",
+            "experiencer": "patient"
+          },
+          "context": {
+            "exposureStatusAtAssessment": "historical",
+            "authorizationForCurrentPeriod": "none stated",
+            "continuationStatementPresent": false,
+            "statedStop": "discontinued2days ago",
+            "statedStopUnit": "days",
+            "evidenceGap": null
+          }
+        },
+        {
+          "variable": "age",
+          "polarity": "unknown",
+          "value": null,
+          "unit": null,
+          "reason": "该合成来源片段未给出年龄信息，题面定义的人群条件在本片段上无法判断。",
+          "quote": null,
+          "sourceId": "C4",
+          "span": null
+        }
+      ],
+      "otherMedicationsMentioned": [
+        {
+          "medicationName": "Metformin",
+          "quote": "Metformin500mg daily is current.",
+          "sourceId": "C4",
+          "span": {
+            "unit": "utf16_code_units",
+            "start": 38,
+            "end": 70
+          },
+          "reasonNotAnnotatedAsAFact": "二甲双胍不是全身性糖皮质激素，不承载本条排除条件的变量；把它写成该变量的事实会把上下文药误算成条件，因此只作为上下文保留原文。"
+        }
+      ],
+      "criterionEvaluation": [
+        {
+          "criterionId": "crit-exclusion-current-glucocorticoid",
+          "requirement": {
+            "op": "present",
+            "variable": "systemic_glucocorticoid"
+          },
+          "state": "satisfied",
+          "reason": "historical_negative_exposure",
+          "decidedBy": "deterministic_rule_over_annotated_facts",
+          "reading": "与 C1 同一口径：判定日的暴露状态为历史（原文写明已停用），本条要求未命中，故为「满足」。停用距今只有 2 天这一近期事实照原文记录，但定义没有给出任何时长阈值，因此不据此改判，也不为它设洗脱期。",
+          "decisiveQuote": "Prednisone was discontinued2days ago.",
+          "unknownPolicyApplied": null
+        },
+        {
+          "criterionId": "crit-inclusion-adult",
+          "requirement": {
+            "op": "compare",
+            "variable": "age",
+            "comparator": "gte",
+            "value": 18,
+            "unit": "years"
+          },
+          "state": "unknown",
+          "reason": "insufficient_history",
+          "decidedBy": "deterministic_rule_over_annotated_facts",
+          "reading": "本片段没有年龄信息，人群条件无法判断。",
+          "decisiveQuote": null,
+          "unknownPolicyApplied": "up-1"
+        }
+      ],
+      "recencyNote": "2 days 是原文给出的近期停用时点，照原文记录（单位 days），不换算、不外推。定义未给出任何时长阈值，本标注不为「近期停用」新增条件、也不改变本条判定，也不为它设定洗脱期；若研究者希望近期停用另有处理，需要在定义的层面补上阈值，并作为新的方案版本写入。"
+    }
+  ],
+  "ruleLevelConsequences": {
+    "note": "以下是对规则后果的陈述，不是针对任何真实受试者的判定结果；本文件不含任何人数。",
+    "items": [
+      {
+        "sourceKey": "C1",
+        "statement": "适用排除条件为「满足」，不因本条排除该来源。"
+      },
+      {
+        "sourceKey": "C2",
+        "statement": "适用排除条件为「不满足」，该来源不能通过本条。"
+      },
+      {
+        "sourceKey": "C3",
+        "statement": "适用排除条件为「未知」；存在一条适用的排除条件为「未知」时，该来源不能判为「符合」。"
+      },
+      {
+        "sourceKey": "C4",
+        "statement": "适用排除条件为「满足」，不因本条排除该来源；与 C1 同一口径。"
+      }
+    ]
+  },
+  "provenance": {
+    "sources": [
+      {
+        "id": "C1",
+        "kind": "synthetic clinical source excerpt supplied in the task brief",
+        "verbatim": "Prednisone was discontinued6months ago. Metformin500mg daily is current.",
+        "patientData": false
+      },
+      {
+        "id": "C2",
+        "kind": "synthetic clinical source excerpt supplied in the task brief",
+        "verbatim": "Prednisone10mg daily was started yesterday and continues.",
+        "patientData": false
+      },
+      {
+        "id": "C3",
+        "kind": "synthetic clinical source excerpt supplied in the task brief",
+        "verbatim": "Medication history was not available.",
+        "patientData": false
+      },
+      {
+        "id": "C4",
+        "kind": "synthetic clinical source excerpt supplied in the task brief",
+        "verbatim": "Prednisone was discontinued2days ago. Metformin500mg daily is current.",
+        "patientData": false
+      }
+    ],
+    "boundary": "合成来源片段只作为方法核验的输入，不代表任何真实病历，也不含可识别的个人资料。"
+  }
+}

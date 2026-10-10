@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "kind": "gene-expression-identity-verification",
+  "generatedAtUtc": "2026-10-10T04:34Z",
+  "resource": "public NCBI Gene Expression Omnibus (GEO series GSE..., platform GPL..., sample GSM...)",
+  "resourceNote": "This is the public NCBI GEO resource. It is not the platform's pharma GEO module, and none of that module's tools or data are used here.",
+  "scope": "Bounded acquisition and identity verification of one public GEO series: preserve the series if the platform's series tool can, and read back the identities it returns. No differential expression is computed.",
+  "notInScope": [
+    "Welch two-sample t-test per probe, Benjamini-Hochberg adjustment, or any other statistic",
+    "Validation of the differential computation path or of the capability as a whole",
+    "Any biological, pathway, mechanism or clinical interpretation of the series"
+  ],
+
+  "seriesAccessionRequested": "GSE2553",
+  "accessionVerification": {
+    "attempted": true,
+    "verified": false,
+    "reason": "The single preservation call returned a refusal and no capture was produced, so the accession could not be verified against a preserved series matrix."
+  },
+
+  "acquisitionCall": {
+    "tool": "gene_expression_series",
+    "arguments": { "accession": "GSE2553" },
+    "attemptedAtUtc": "2026-10-10T04:32Z",
+    "attemptedAtPrecision": "minute (in-session wall clock; the call returned before 2026-10-10T04:32:52Z)",
+    "callAttempts": 1,
+    "callBudget": 1,
+    "retried": false,
+    "retryReason": "The returned error states retryable: false, and the task allowed one acquisition call.",
+    "result": "error",
+    "returned": {
+      "status": "error",
+      "summary": "numpy is not available in this runtime, so no statistic can be computed.",
+      "next_actions": [
+        "Say that the calculation engine is unavailable in this runtime; do not estimate the statistics yourself."
+      ],
+      "error": {
+        "code": "gene_expression_engine_unavailable",
+        "message": "numpy is not available in this runtime, so no statistic can be computed.",
+        "retryable": false,
+        "stopReason": "This computation was refused; nothing was computed from the input."
+      }
+    },
+    "interpretationLimit": "The refusal names the calculation engine and says nothing was computed from the input. It is the tool's own answer to this retrieval call; it states nothing about GSE2553 itself, and it is not evidence that the series does or does not exist."
+  },
+
+  "capture": {
+    "captureDir": null,
+    "captureExists": false,
+    "sourceFileHashes": {
+      "series_matrix.txt.gz": null,
+      "samples.tsv": null,
+      "probe-annotation.tsv": null,
+      "platform.soft.txt.gz": null,
+      "record.json": null,
+      "capture.json": null
+    },
+    "bytesPreserved": 0,
+    "note": "No capture directory and no preserved file exist for this accession. No hash is reported because no bytes were preserved; a hash is never computed for bytes that are not held."
+  },
+
+  "identityFields": {
+    "accession": { "value": "GSE2553", "status": "requested_not_verified", "source": "the request under test" },
+    "seriesTitle": { "value": null, "status": "unknown", "source": "not returned" },
+    "samples": { "value": null, "status": "unknown", "source": "not returned" },
+    "sampleCount": { "value": null, "status": "unknown", "source": "not returned" },
+    "platform": { "value": null, "status": "unknown", "source": "not returned" },
+    "organism": { "value": null, "status": "unknown", "source": "not returned" },
+    "genomeBuild": { "value": null, "status": "unknown", "source": "not returned", "note": "No genome build is assumed. The platform states a build only rarely, and nothing was stated here." },
+    "valueScale": { "value": null, "status": "unknown", "source": "not returned" },
+    "transformationApplied": { "value": null, "status": "unknown", "source": "not returned" },
+    "submissionDate": { "value": null, "status": "unknown", "source": "not returned" },
+    "lastUpdateDate": { "value": null, "status": "unknown", "source": "not returned" },
+    "publicStatusDate": { "value": null, "status": "unknown", "source": "not returned" },
+    "probeCount": { "value": null, "status": "unknown", "source": "not returned" },
+    "platformRecordAvailable": { "value": null, "status": "unknown", "source": "not returned" }
+  },
+  "annotationLimitations": {
+    "probeAnnotationAvailable": null,
+    "status": "unknown",
+    "note": "Whether the platform record could be used, and therefore whether the probes would carry gene annotation, was never reached: no capture exists, so no probe annotation and no probe identifiers can be reported."
+  },
+
+  "stopReason": "groups_not_confirmed",
+  "stopReasonsDetailed": [
+    "series_preservation_refused: gene_expression_engine_unavailable (the acquisition call returned an error; nothing was preserved)",
+    "groups_not_confirmed: the researcher has not confirmed two groups for a differential comparison, so no computation was requested"
+  ],
+  "differentialStatistic": null,
+  "differentialRun": false,
+  "differentialToolCalled": false,
+  "renderRun": false,
+  "reportRendered": false,
+  "fabricatedArtifacts": false,
+
+  "independentChecks": [
+    {
+      "id": "IC1",
+      "name": "local capture scan",
+      "what": "Enumerated every preserved GEO series capture present on this machine and searched the filesystem for any path naming GSE2553.",
+      "result": "One capture exists, and it belongs to a different series: GSE5583 on GPL81, at .evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21/ with 5 preserved files plus its capture manifest. No path containing GSE2553 was found anywhere.",
+      "supports": "captureExists = false, and sourceFileHashes = null, for GSE2553."
+    },
+    {
+      "id": "IC2",
+      "name": "source-hash recomputation of the unrelated capture",
+      "what": "Recomputed the SHA-256 of each file in the only capture on disk and compared it with the hash recorded in that capture's own manifest.",
+      "result": "5 of 5 source files reproduce their recorded hash, so those bytes are intact and were not relabelled: series_matrix.txt.gz bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220; samples.tsv 13ec3fda654351782c4bbcc3c61a903af6a4af1e7b922a462ed13861ee168cb7; probe-annotation.tsv 86ffc98df3743d45b72d2b2668b4bfab04c9c27dcea087c27179fda6118862d5; platform.soft.txt.gz bfc84dd0a988fbc7dde4af79b1b01a96e1d0aa0364c26d6202d2435702b787ce; record.json a3f287976140298adefbc445843045f52624f7d8075c866b1349ef93b2fcf083.",
+      "supports": "That this record's null hashes are not a relabelling of another series' bytes: the bytes of that other series are accounted for at their own accession and platform."
+    },
+    {
+      "id": "IC3",
+      "name": "external accession lookup (metadata only)",
+      "what": "Looked up the accession through the platform's audited NCBI GEO metadata connector, purely to see whether an independent route confirms the accession. This is a metadata route, not a preservation route: it returns titles and descriptions, no matrix and no bytes.",
+      "result": "The lookup returned GEO DataSet and Sample records numbered near the requested accession, including GDS2553 'NHGRI_Sarcoma_Baird' (a curated human sarcoma cDNA-microarray data set). A GDS accession and a GSE series accession are different accession spaces, and a curated data set is not the series requested.",
+      "conclusion": "Inconclusive for this accession. It neither confirms nor denies the existence or content of GSE2553, it provided no bytes and no hash, and it was therefore not used to fill any identity field above.",
+      "retrievedAtUtc": "2026-10-10T04:33:40Z"
+    },
+    {
+      "id": "IC4",
+      "name": "claim audit against the earlier local record",
+      "what": "Checked whether any identity claim in this record rests on something other than a returned tool record.",
+      "result": "None does. In particular, an identity claim that a previous local record carried from an unverified external reference (a tumour type and an array platform attributed to GSE2553) is not reproduced here and is not carried into any field: no returned record supports it.",
+      "supports": "Every identity field above is either the requested accession or unknown."
+    }
+  ],
+
+  "failures": [
+    {
+      "step": "preserve the series",
+      "status": "not done",
+      "why": "The preservation call returned gene_expression_engine_unavailable: the runtime reports that numpy is absent, so the tool refused the operation and preserved nothing. The step was not retried (the answer states it is not retryable) and was not worked around.",
+      "consequence": "No matrix, no sample table, no platform record and no capture manifest exist for GSE2553; every identity check the preservation step would have reported remains unknown."
+    },
+    {
+      "step": "declare the groups from the annotations",
+      "status": "not done",
+      "why": "There is no samples.tsv to read, and the researcher has not confirmed two groups.",
+      "consequence": "No group declaration, and therefore no computation."
+    },
+    {
+      "step": "compute the differential expression",
+      "status": "not done",
+      "why": "No capture and no confirmed groups. The differential tool was not called.",
+      "consequence": "No statistic exists, so none is reported anywhere in this record."
+    }
+  ],
+
+  "deviationsRejected": [
+    "Did not fetch the series by hand over the network and store it as if the platform tool had preserved it: that would produce an unpreserved copy with no tool-issued identity checks.",
+    "Did not copy, relabel or re-hash the existing GSE5583 capture as if it were GSE2553.",
+    "Did not fill any identity field, sample count, probe count or date from memory, from an external metadata route, or from another accession.",
+    "Did not assume a genome build, and did not run anything to make the missing engine appear."
+  ],
+
+  "conclusion": "One real preservation call was made for GSE2553 and it was refused, so this run verifies only the bounded part of the method that was exercised: the call itself, the truthful handling of its refusal, and the independent checks that no capture, hash or identity field was invented. It does not verify any differential computation and does not establish anything about the series' content."
+}

@@ -1,0 +1,119 @@
+{
+  "artifact": "evidence-appraisal",
+  "note": "SYNTHETIC / TEACHING MATERIAL. Bounded local method check. S1 and S2 are fabricated excerpts supplied by the requester with example.org identifiers; no real trial, patient or publication is described. No literature search was performed and no source was added, removed or substituted. Not a certified GRADE assessment and not a certified run of any appraisal instrument.",
+  "synthetic": true,
+  "question": {
+    "text": "In an adult population, what do the supplied two excerpts support about improvement at 8-week follow-up?",
+    "population": "adults (no age range, setting or eligibility details supplied)",
+    "timepoint": "8 weeks",
+    "outcome": "improvement (measure and threshold not defined in either excerpt)"
+  },
+  "studies": [
+    {
+      "id": "S1",
+      "synthetic": true,
+      "label": "Fabricated teaching excerpt 1",
+      "identifier": {
+        "type": "url",
+        "value": "https://example.org/teaching-study-1"
+      },
+      "sourceExcerpt": "Participants were allocated alternately by day. Outcome assessors knew allocation. At 8 weeks, 24/40 versus 20/40 participants improved. No prespecified protocol was provided.",
+      "design": "non-randomized-interventional",
+      "designNote": "Allocation was by alternation on days of entry. Alternate-day allocation is a systematic, predictable assignment rule and is not randomization, so no randomized design and no randomized-trial property is claimed for S1.",
+      "instrument": null,
+      "instrumentNote": "No appraisal instrument was applied to this excerpt; the ratings below are the platform's own structured judgement and are not a Rob 2, ROBINS-I or GRADE certification.",
+      "domains": {
+        "riskOfBias": {
+          "rating": "serious",
+          "reason": "Two steps named in the excerpt itself. Allocation: participants were assigned by alternation ('allocated alternately by day'), a predictable rule with no concealed sequence, so selection bias cannot be excluded. Detection: outcome assessors were not blinded ('Outcome assessors knew allocation'), so the 24/40 versus 20/40 improvement count could be influenced by knowledge of allocation. Reporting: no prespecified protocol was available, so selective outcome reporting could not be checked."
+        },
+        "indirectness": {
+          "rating": "serious",
+          "reason": "The question is about an adult population at 8 weeks and the excerpt gives no population at all, so population applicability cannot be established. The outcome is recorded only as participants who 'improved'; no definition, instrument, or minimal important difference is given, so the distance between the recorded outcome and a clinically meaningful improvement is undefined. The 8-week time point does match the question."
+        },
+        "imprecision": {
+          "rating": "unclear",
+          "reason": "The excerpt reports counts only, '24/40 versus 20/40 participants improved', with no confidence interval, variance or test, so the precision of the between-group difference cannot be judged from what was supplied."
+        }
+      },
+      "appraised": true
+    },
+    {
+      "id": "S2",
+      "synthetic": true,
+      "label": "Fabricated teaching excerpt 2",
+      "identifier": {
+        "type": "url",
+        "value": "https://example.org/teaching-study-2"
+      },
+      "sourceExcerpt": "A computer-generated sequence assigned 60 participants equally. Allocation concealment was not described. Outcome assessors were blinded. At 8 weeks the mean difference was 1.2 points (95% CI -0.5 to 2.9). Attrition was 12/60 without reasons.",
+      "design": "randomized-controlled-trial",
+      "designNote": "Assignment used a computer-generated sequence, which is an unpredictable allocation mechanism; the design is taken from this method and not from what the excerpt calls it.",
+      "instrument": null,
+      "instrumentNote": "No appraisal instrument was applied to this excerpt; the ratings below are the platform's own structured judgement and are not a Rob 2, ROBINS-I or GRADE certification.",
+      "domains": {
+        "riskOfBias": {
+          "rating": "serious",
+          "reason": "Two steps. Attrition: 12/60 participants did not complete and the excerpt gives no reasons ('Attrition was 12/60 without reasons'), so differential or informative dropout cannot be excluded. Reporting: allocation concealment was not described and no analysis population is stated, so whether allocation was concealed and how the 12 non-completers were handled cannot be checked."
+        },
+        "indirectness": {
+          "rating": "serious",
+          "reason": "The excerpt gives no population information, so the distance from an adult population cannot be assessed, and the outcome is a 1.2-point mean difference on an unnamed scale ('points') with no minimal important difference, so its clinical relevance is undefined. The 8-week time point does match the question."
+        },
+        "imprecision": {
+          "rating": "serious",
+          "reason": "The reported interval is 95% CI -0.5 to 2.9 on an unnamed scale. It crosses no difference and extends from a small worsening to a difference several times the point estimate, so it spans both a worthwhile and a non-worthwhile effect and does not support a decision."
+        }
+      },
+      "appraised": true
+    }
+  ],
+  "bodies": [
+    {
+      "outcomeId": "O1",
+      "outcome": "Improvement at 8-week follow-up",
+      "studyIds": [
+        "S1",
+        "S2"
+      ],
+      "startingCertainty": "high",
+      "startingCertaintyReason": "The body contains an interventional randomized trial (S2); starting certainty follows the design of the body, and the shortfall of the set is taken as a named downgrade below rather than as a lower starting rung.",
+      "downgrades": [
+        {
+          "domain": "riskOfBias",
+          "steps": 2,
+          "reason": "S1: alternating allocation and unblinded outcome assessors, with no prespecified protocol. S2: 12/60 participants lost without reasons, allocation concealment not described. Both studies carry serious risk-of-bias findings in the domains each was rated on, and neither reports a protocol or registration to check against."
+        },
+        {
+          "domain": "indirectness",
+          "steps": 1,
+          "reason": "Neither excerpt states the population, so the body does not establish applicability to an adult population, and neither defines the improvement measure or a minimal important difference for the outcome being asked about."
+        },
+        {
+          "domain": "inconsistency",
+          "steps": 1,
+          "reason": "The two studies do not point the same way and their effect measures are not commensurable: S1 reports counts ('24/40 versus 20/40 participants improved') on a dichotomous improvement outcome without an interval, and S2 reports a mean difference of 1.2 points (95% CI -0.5 to 2.9) whose interval includes no difference. With two studies, an unexplained divergence in direction and in outcome scale cannot be resolved."
+        },
+        {
+          "domain": "imprecision",
+          "steps": 2,
+          "reason": "S2's interval (95% CI -0.5 to 2.9) crosses no difference and spans a small worsening to a large benefit on an undefined scale, and S1 reports no interval at all. Neither study supplies an estimate precise enough to act on."
+        },
+        {
+          "domain": "publicationBias",
+          "steps": 0,
+          "reason": "Considered and not acted on. S1 states that no prespecified protocol was provided and neither excerpt reports registration, so reporting completeness could not be checked; with a set of two, funnel-plot or small-study analysis is not interpretable and no step was taken for it."
+        }
+      ],
+      "upgrades": [],
+      "certainty": "very-low",
+      "certaintyArithmetic": "high (4) - riskOfBias 2 - indirectness 1 - inconsistency 1 - imprecision 2 + 0 = below the floor of 1, so very-low",
+      "whatWouldChange": "A protocol or registration record for either study; an analysis population statement accounting for the 12 non-completers in S2; an interval for S1's improvement comparison; the population definition, age range and recruitment setting for both studies; and the definition of the improvement outcome with its minimal important difference. A further study reporting the same 8-week outcome in an adult population on a common scale would allow the direction of the two excerpts to be compared rather than merely noted as divergent.",
+      "id": "O1",
+      "studies": [
+        "S1",
+        "S2"
+      ]
+    }
+  ]
+}

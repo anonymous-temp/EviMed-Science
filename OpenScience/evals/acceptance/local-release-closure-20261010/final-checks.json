@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-10T05:29:23.240524+00:00",
+  "scope": "Observed zero exit statuses from completed local processes; no deployment. Logs are preserved in the private archive.",
+  "productCommit": "3f43524d2dac41646bbca00d0e4a528e7860c358",
+  "checks": [
+    {
+      "name": "server-final-frozen",
+      "exitCode": 0,
+      "evidence": "checks/server-final-frozen.log",
+      "bytes": 1051577,
+      "sha256": "f70269f95135d12c799267875a960a38c9511adba2d359d0802d61c1070a39ff"
+    },
+    {
+      "name": "lint-final-frozen",
+      "exitCode": 0,
+      "evidence": "checks/lint-final-frozen.log",
+      "bytes": 3084,
+      "sha256": "a0e4fb0be5bc639d8d4f82e335dd1295a14d41ecd167f6d2446ec2f642897e68"
+    },
+    {
+      "name": "types-final-frozen",
+      "exitCode": 0,
+      "evidence": "checks/types-final-frozen.log",
+      "bytes": 2770,
+      "sha256": "d98793eb116e13e9e95d1674bbf82a04fde44e4bb4b02f7c843c546ff294f9a6"
+    },
+    {
+      "name": "build-final-frozen",
+      "exitCode": 0,
+      "evidence": "checks/build-final-frozen.log",
+      "bytes": 22995,
+      "sha256": "56334ad3501c09403828477ab5617c4711ed9a0092784496de5fbceb720a8887"
+    },
+    {
+      "name": "metadata-final-frozen",
+      "exitCode": 0,
+      "evidence": "checks/metadata-final-frozen.log",
+      "bytes": 12007,
+      "sha256": "95df61b4f2fd0ac118a1ed9f0e67c48f4673a9b3312d44d8b3905dfdaf1f6d87"
+    },
+    {
+      "name": "source-secrets-final-frozen",
+      "exitCode": 0,
+      "evidence": "checks/source-secrets-final-frozen.log",
+      "bytes": 203,
+      "sha256": "973e3ca604f5107a7183786d70a1de8f3dd0a45ab9abcb0d2e006c6257b91cca"
+    },
+    {
+      "name": "run-tool-verdict-final",
+      "exitCode": 0,
+      "evidence": "checks/run-tool-verdict-final.log",
+      "bytes": 2572,
+      "sha256": "1c2b0b88e10ecf7d19fa58eae0a2773389073f585121694781063e784e4661c7"
+    },
+    {
+      "name": "tool-verifier-final-frozen",
+      "exitCode": 0,
+      "evidence": "checks/tool-verifier-final-frozen.log",
+      "bytes": 77,
+      "sha256": "eabab42213316d0a823ae7ded745ea0a4280112d7513c55edc6c81d89f3b6c43"
+    },
+    {
+      "name": "skill-verifier-final-frozen",
+      "exitCode": 0,
+      "evidence": "checks/skill-verifier-final-frozen.log",
+      "bytes": 73,
+      "sha256": "082489cc0e4ddf25182c857b71902f2cadf9b6576d23a2757a0ef2c930e01684"
+    }
+  ],
+  "additionalCurrentPackageTests": "concurrent-scope-repair.json",
+  "publicExtractionTests": "public-extraction-sentence-guard-correction.json",
+  "remoteCi": {
+    "runId": 38026914820,
+    "statusAtRecording": "in_progress",
+    "priorFailures": "regression-summary.json#remoteCiPriorFailures"
+  },
+  "localRuntimeState": "Stopped and moved outside the source checkout to private 0700 runtime/private-state before source-secrets audit.",
+  "independentReadOnlyReview": {
+    "recordedAt": "2026-10-10T05:30:56.702984+00:00",
+    "agent": "model_closure",
+    "model": "gpt-6.1-sol",
+    "blockingContradictionsFound": false,
+    "verified": [
+      "Hosted bounded skill coverage 44/44",
+      "Concurrent/replay retained-file hashes and replay receipt hash",
+      "Historical failed replay and prior-failure records preserved",
+      "94 bounded skills not relabeled full-package/current-image execution",
+      "Clinical limitations, default-off enhancement and no deployment remain explicit"
+    ],
+    "scope": "Independent read-only evidence review after archive; no model calls or product changes."
+  },
+  "stagedEvidenceReview": {
+    "stagedFiles": 575,
+    "bytesScanned": 19936691,
+    "knownCredentialLiteralMatches": 0,
+    "credentialPrefixMatches": 0,
+    "literalJwtMatches": 0,
+    "productAndMetadataWhitespaceCheck": "passed",
+    "rawArtifactWhitespace": {
+      "OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/matplotlib/figure.svg": 749,
+      "OpenScience/evals/acceptance/local-release-closure-20261010/skills-curated/skill-execution-v1-artifacts/statistical-power/power-curve.csv": 24
+    },
+    "rawArtifactPolicy": "Original generator whitespace and CRLF retained because raw evidence hashes are independently verified; no product file is exempted."
+  },
+  "finalMetadataValidation": {
+    "recordedAt": "2026-10-10T05:32:15.010747+00:00",
+    "acceptanceLedger": {
+      "tests": 34,
+      "pass": 34,
+      "fail": 0,
+      "exitCode": 0
+    },
+    "pinInventory": {
+      "classifiedOccurrences": 596,
+      "unclassified": 0,
+      "exitCode": 0
+    },
+    "sourceCredentialAudit": {
+      "exitCode": 0,
+      "findings": 0
+    },
+    "scope": "Final staged acceptance evidence and metadata; no product source changes after the frozen test/build pass."
+  }
+}

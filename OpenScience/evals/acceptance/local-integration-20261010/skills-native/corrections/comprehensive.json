@@ -1,0 +1,134 @@
+{
+  "artifact": "bounded read of one supplied description",
+  "scope": "Local method check on one invented teaching sentence supplied by the requester. It is not a medicine evaluation, not an evidence review and not a statement about any real cohort. No retrieval was performed, no source exists behind the sentence, and nothing here may be read as clinical or regulatory acceptance.",
+  "input": {
+    "file": "comprehensive-input.txt",
+    "sha256": "5afd877c636c911f3791aedac9271c42b39541884fa0a95ffc02e79afb0cc7ab",
+    "text": "One unblinded convenience cohort of 20 adults reported symptom improvement in 12 participants; 3 reported rash. There was no comparator or adjudication.",
+    "origin": "invented teaching material supplied with the request"
+  },
+  "reportedDesign": {
+    "reported_design": "cohort",
+    "reported_design_basis": "The sentence calls itself a convenience cohort. That is the design label it reports; nothing beyond the sentence corroborates it.",
+    "investigator_assignment": "unknown",
+    "why_assignment_is_unknown": "The sentence does not state how exposure or treatment was assigned, by whom, or on what basis, and it names no intervention. The word cohort does not establish investigator-assigned treatment, and convenience sampling states how participants were found rather than how treatment was assigned. Assignment therefore stays unknown and the design is not restated as interventional.",
+    "interventional_design_inferred": false,
+    "blinding": {
+      "reported": "unblinded",
+      "detail": "The sentence states the cohort was unblinded and names no role that was blinded."
+    },
+    "sampling": {
+      "reported": "convenience",
+      "detail": "Convenience sampling is stated. Selection for the sample is neither described nor controlled."
+    },
+    "comparator": {
+      "present": false,
+      "detail": "The sentence states there was no comparator."
+    },
+    "outcome_adjudication": {
+      "present": false,
+      "detail": "The sentence states there was no adjudication."
+    },
+    "setting": "not stated",
+    "eligibility_criteria": "not stated",
+    "exposure_or_intervention": "not stated",
+    "follow_up": "not stated"
+  },
+  "observedCounts": {
+    "denominator": 20,
+    "unit": "adults in the reported cohort",
+    "symptom_improvement": {
+      "n": 12,
+      "percent": 60.0
+    },
+    "rash": {
+      "n": 3,
+      "percent": 15.0
+    },
+    "how_read": "Read exactly as the sentence states them: counts out of the reported total. Symptom improvement has no stated definition, instrument, time point or assessor; rash has no stated definition, severity, timing or relation to any exposure.",
+    "notes": [
+      "A count of improvement in an uncontrolled, unblinded convenience cohort of this size is not an effect estimate: with no comparator there is no contrast to estimate.",
+      "No percentage in this file may be read as a rate over a defined population, a background rate, or a risk difference.",
+      "The two counts are not adjudicated and not independently verified, and no participant-level data exist."
+    ]
+  },
+  "domains": [
+    {
+      "domain": "effectiveness",
+      "status": "not_assessable",
+      "certainty": "not_rated",
+      "rationale": "The sentence reports that 12 of 20 participants improved. With no comparator, no stated outcome definition and no adjudication, no effect can be estimated and no conclusion about benefit follows.",
+      "evidenceIds": [
+        "comprehensive-input.txt"
+      ]
+    },
+    {
+      "domain": "safety",
+      "status": "not_assessable",
+      "certainty": "not_rated",
+      "rationale": "The sentence reports that 3 of 20 participants had rash. A single uncontrolled count of one event term, with no definition, timing, severity or follow-up completeness, cannot support a harm rate, a comparison with a background rate, or an attribution.",
+      "evidenceIds": [
+        "comprehensive-input.txt"
+      ]
+    },
+    {
+      "domain": "applicability",
+      "status": "not_assessable",
+      "certainty": "not_rated",
+      "rationale": "Nothing about setting, eligibility, exposure, follow-up or case mix is stated, so there is no basis for judging to whom any of it would apply.",
+      "evidenceIds": [
+        "comprehensive-input.txt"
+      ]
+    },
+    {
+      "domain": "evidence_certainty",
+      "status": "not_rated",
+      "certainty": "not_rated",
+      "rationale": "No named certainty framework was applied, no traceable full text exists, and the risk of bias, inconsistency, indirectness, imprecision and publication-bias judgements a formal rating requires were not made. A narrative impression is not a certainty assessment.",
+      "evidenceIds": []
+    },
+    {
+      "domain": "economics_and_hta",
+      "status": "not_assessable",
+      "certainty": "not_rated",
+      "rationale": "No price, jurisdiction, perspective, time horizon or cost data is present, and none was invented to fill the gap.",
+      "evidenceIds": []
+    }
+  ],
+  "formal_certainty": "not_rated",
+  "formal_certainty_reason": "Certainty requires a named framework plus explicit domain judgements on traceable full-text evidence. The input is one sentence with no source behind it, so nothing is rated and no rating is implied by design alone.",
+  "quantitativeScoring": {
+    "requested": false,
+    "score": null,
+    "reason": "No quantitative score was requested and no evaluation domains, item definitions, scales, weights, missing-data rules or scoring policy version were supplied, so no score is computed or shown. Missing evidence is not scored as zero."
+  },
+  "recommendation": null,
+  "recommendation_reason": "No recommendation is made. The input supports no benefit-harm judgement, and a recommendation would have to be invented rather than derived from it.",
+  "causality": {
+    "causal_claim_made": false,
+    "detail": "The sentence describes co-occurrence of an exposure context and outcomes at most; it states no comparator in time or between groups and no adjudication. Nothing here supports a causal statement, and none is made."
+  },
+  "claims_not_made": {
+    "interventional_design": false,
+    "superiority_or_benefit_established": false,
+    "harm_attributable_to_an_exposure": false,
+    "causality_established": false,
+    "generalizable_to_a_population": false,
+    "children_or_other_subgroups_addressable": false
+  },
+  "unresolved_gaps": [
+    "how exposure or treatment was assigned, if at all",
+    "outcome definitions, instruments, time points and assessors",
+    "rash definition, timing, severity and management",
+    "follow-up completeness and how the 20 were selected",
+    "setting, eligibility and case mix",
+    "any comparator or background rate",
+    "any source document, identifier or date",
+    "any second source of any kind, so nothing here is corroborated"
+  ],
+  "limits": [
+    "The count of 20 participants, 12 improvements and 3 rashes is copied from the sentence and verified only against the sentence.",
+    "Because assignment is unstated, this read stays at the design the sentence reports and does not restate it as interventional, and it makes no causal claim.",
+    "Nothing in this file is a clinical, formulary, reimbursement or procurement conclusion; those stay with qualified reviewers."
+  ]
+}

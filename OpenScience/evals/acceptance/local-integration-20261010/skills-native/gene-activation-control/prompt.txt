@@ -1,0 +1,4 @@
+Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real method work and write requested artifacts using available tools. No external publication or patient data.
+
+TASK:
+Bounded native gene-expression capability activation check. Use evimed_plan to plan a single source-identity assessment step for GSE2553. No researcher-confirmed groups are available. Do not acquire any series or external source and do not compute differential expression. Write deliverables/gene-activation-control/assessment.json stating accession GSE2553, groupsNotConfirmed true and sourceNotAcquired true, then complete the plan. Stop after this small identity and scope assessment.

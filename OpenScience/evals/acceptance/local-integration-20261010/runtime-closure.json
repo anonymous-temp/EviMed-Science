@@ -1,0 +1,279 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T05:08:55.376799+00:00",
+  "scope": "Local candidate only; no production deployment or production functional tests",
+  "runtime": {
+    "kernelPin": "@deepseek-ai/dsh@0.1.7-rc.2",
+    "image": "evimed-local-release-runtime:20261010-isolation-corrected",
+    "actualDocker": true,
+    "database": "evimed_test_release_runtime_20261010",
+    "provider": "official DeepSeek through control-plane model gateway",
+    "providerKeysInRuntime": false,
+    "localSandboxEnforcement": "partial (host Landlock probe rejected full mode); actual Docker workspace fence remains",
+    "imageBoundary": "Minimal native test image; not production full image qualification",
+    "currentLeaf": {
+      "imageId": "sha256:9fb0f51bde34cfb421f2dbfa349f714ef8306327083c56a6e6769b6f9f803d07",
+      "tag": "evimed-local-release-runtime:20261010-isolation-corrected",
+      "sourceFilesVerified": 476,
+      "sourceHashMismatches": 0,
+      "coverage": "Current MCP/skills/domain including root exports and complete socket/src+plugins",
+      "dependencies": {
+        "numpy": "2.2.6",
+        "scipy": "1.15.3",
+        "Pillow": "10.4.0"
+      },
+      "boundary": "Minimal owned local native image, not complete production image dependency qualification",
+      "failedDeltaPreserved": {
+        "imageId": "sha256:927634c3ac8b0ba830adf230d459e47352aa04153c33dc611e5ae707934d66ac",
+        "reason": "Domain root index export omission caused plugin import failures before any new task dispatch"
+      },
+      "actualBrowserRestorePassed": true,
+      "locallyStoppedAfterValidation": true
+    },
+    "previousLeaf": {
+      "image": "evimed-local-release-runtime:20261010-dependencies",
+      "imageId": "sha256:dac1632984e6327be3c26502108b03d6a48001ca7bccd3fde376c45c8f1a00ac",
+      "sourceFilesChecked": 445,
+      "nativePresetFilesChecked": 48,
+      "imageMismatches": [],
+      "active": true,
+      "sourceCurrentAfterLaterEdits": true,
+      "boundary": "Minimal native image only; full scientific runtime dependencies and full sandbox enforcement remain unqualified",
+      "sourceReceiptSha256": "a1e695a6997bd4a50b541fac2c51fed6932cfa88fda78abf1ea88b2342506606",
+      "publicSourcesSha256": "8356f84c020e2e03434733d738bb1350be1b072ec8cdfb46eb6f83feee2d3310",
+      "sourceCatalogSha256": "b200d2ccdaf33dff3d249773a4dc2db78724d1928dccd0d3860087231b1e53a4",
+      "declaredPythonImports": {
+        "numpy": "2.2.6",
+        "scipy": "1.15.3",
+        "Pillow": "10.4.0"
+      },
+      "vcrProtocolVersion": "1.3.2",
+      "clinicalFactSha256": "056024ee74e6c5d73160a7971214170a697cc4ce840104a1e8ab7a7c9ec47ada",
+      "inactiveAfterUpgrade": true
+    },
+    "candidateLeaf": {
+      "image": "evimed-local-release-runtime:20261010-candidate",
+      "imageId": "sha256:9c917c79487d14a01dfb668c2b773f42e83f2a9baf8563c912af325285aec542",
+      "sourceFilesChecked": 445,
+      "imageMismatches": [],
+      "active": false,
+      "boundary": "Minimal native image only; scoped full dependency qualification unknown",
+      "sourceReceiptSha256": "35ec30c90ae3855a56b3becb00e7e4b031c58408c8969c9873465b0844726cb6",
+      "publicSourcesSha256": "8356f84c020e2e03434733d738bb1350be1b072ec8cdfb46eb6f83feee2d3310",
+      "sourceCatalogSha256": "b200d2ccdaf33dff3d249773a4dc2db78724d1928dccd0d3860087231b1e53a4",
+      "nativePresetFilesChecked": 48,
+      "sourceCurrentAfterLaterEdits": false,
+      "laterDrift": [
+        "vcr-protocol 1.3.2 manifest/body/registry",
+        "clinicalFact contract clarification"
+      ],
+      "pendingDeclaredDependencies": {
+        "numpy": "2.2.6",
+        "scipy": "1.15.3",
+        "Pillow": "10.4.0"
+      }
+    }
+  },
+  "results": {
+    "nativeCatalogueSnapshot": {
+      "skills": 17,
+      "actualPinnedKernel": true
+    },
+    "nativeSkillDuplicationIntegration": {
+      "pass": 2,
+      "fail": 0,
+      "skip": 0,
+      "boundary": "Actual native snapshot and isolated Docker validator; controlled transport in integration fixtures"
+    },
+    "nativeSkillDuplicationLive": {
+      "pass": true,
+      "actualNativeReadAndControllerParse": true,
+      "cleanup": "Copied skill removed; source invocation restriction retained"
+    },
+    "pluginApplyAndRollback": {
+      "pass": true,
+      "actualEffectiveDisabledRevision": 3,
+      "actualEffectiveRollbackRevision": 4
+    },
+    "externalParser": {
+      "pdf": true,
+      "docx": true,
+      "keylessConfiguredService": true
+    },
+    "browserNativeConversation": {
+      "pass": true,
+      "expectedAnswer": "8 \u52a0 9 \u7b49\u4e8e 17\u3002"
+    },
+    "browserNativeCalculation": {
+      "pass": true,
+      "terminalCompletionObserved": true,
+      "ownedReplayId": "replay_fb5f66f3c80d2d00bf58c71956cab5f943b9b81f85e04ab33988fd086dc646dc",
+      "engine": "Actual pinned R service19059"
+    },
+    "isolatedDocumentRenderer": {
+      "pass": 1,
+      "fail": 0,
+      "skip": 0,
+      "seconds": 33.655,
+      "formats": [
+        "docx",
+        "pdf",
+        "html"
+      ],
+      "chineseTableRows": 120,
+      "allVcrExportKinds": true,
+      "playwright": "1.58.0",
+      "pypdf": "6.7.0",
+      "imageId": "sha256:4c285250c4370967c1fb2476b13d96ad67bb0283a5ec0822f02ab382e0c32735",
+      "cleanup": "Owned unused renderer layers removed after successful test; outputs and exact image ID retained; native/search runtimes kept."
+    },
+    "remainingDurableSkips": 0,
+    "boundedPlatformSkills": {
+      "pass": 12,
+      "fail": 0,
+      "currentSourceReceipts": true,
+      "evidenceDirectory": "evals/acceptance/local-release-closure-20261010/skills-platform-v5",
+      "claimBoundary": "Four office tasks and eight core executable utilities; remote/modal provenance recording only, not remote execution."
+    },
+    "currentLeafNativeHealth": {
+      "actualBrowserTerminal": true,
+      "actualTool": "mcp__evimed__data_source_catalog",
+      "query": "IUPHAR",
+      "toolStatus": "success",
+      "catalogueStatus": "ready_credentials",
+      "connectedPublic": 63,
+      "conditionalReadyCredentials": 9,
+      "runtimeArbitraryEgress": false
+    },
+    "firstRequestActivation": {
+      "cause": "Ambiguous catalogue names suppressed authoritative routed capability before model planning",
+      "fix": "Existing exact routed line then explicit session binding precede ambiguous plan/name fallback",
+      "regression": "Route A among catalogue A/B; binding A among A/B; unbound ambiguous A/B remains narrowed;3focusedtests passed",
+      "coldBoundControlHeader": "gene-bound-request-header-tools.json",
+      "chosenLineNegativeHeader": "gene-actual-request-header-tools.json",
+      "afterFixNativeConfirmation": {
+        "project": "model-gene-activation-control",
+        "sessionId": "session-e94daeaf-4ae9-4161-a0d0-3f8d17c1e0be",
+        "runId": "run_6979de34d545fe6622cbe15c6b08af69",
+        "coldChosenLineFirstRequestGenePair": true,
+        "receipt": "gene-chosen-line-after-fix-header-tools.json",
+        "noExtraRetrieval": true
+      }
+    },
+    "concurrentRunIsolation": {
+      "sameProject": "model-concurrent-regression",
+      "runs": [
+        "run_cfca9aaeaa4f6070bec435d455e537cf",
+        "run_e666ae1d408e6ff688c6a65b863f2585"
+      ],
+      "bothTerminalSucceeded": true,
+      "firstRequestGuidanceReceipt": "concurrent-first-request-scope-guidance.json",
+      "firstRequestToolReceipt": "concurrent-first-request-headers.json",
+      "methodOutputAssertions": "Model collector retains actual own-run plan/state outputs and absence of opposite task markers"
+    },
+    "pythonResultReplay": {
+      "receipt": "result-engine-positive.json",
+      "state": "succeeded",
+      "nativeToolAndArtifactRead": true,
+      "numericIndependentChecks": 9,
+      "initialEnvironmentMismatchPreserved": true
+    },
+    "shutdown": {
+      "ownedComponentsStopped": 4,
+      "runtimesStillRunning": 0,
+      "privateDataRootMoved": false,
+      "stopReceipt": "owned-stack-stop-receipt.json",
+      "excludedDependencies": [
+        "runtime/replay-deps",
+        "runtime/replay-user-base"
+      ]
+    }
+  },
+  "limitations": [
+    "Native browser HTTP403 administration fences and review/replies404 were observed; no zero-error HTTP claim.",
+    "Restart caused transient gateway ECONNRESET; admitted specialist jobs retain stateless credentials.",
+    "Scientific/R/Office broad dependencies are not asserted by minimal native runtime image; renderer separately uses real isolated dependencies."
+  ],
+  "privateEvidence": [
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/native-snapshot.json",
+      "bytes": 11584,
+      "sha256": "6fd048272332edc4db3321dde3d377173e621904475270d827abcb5d5439aeab"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/native-duplication.log",
+      "bytes": 382,
+      "sha256": "1261eef0189825137b7cfb0ca9f4e67039b4b646131822c360ba11cd248db5e1"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/native-duplicate-live.json",
+      "bytes": 6125,
+      "sha256": "4b80aa19f9c22bb065e637ced790acd64e5dcc5a39e9f69b0a2fd7f6be3f373c"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/plugin.json",
+      "bytes": 2596,
+      "sha256": "7a60f6eafa49d92fed3e4f2254e8dc024d557edbb88a06c57512c42f02fcc9fa"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/parser.json",
+      "bytes": 969,
+      "sha256": "862bacf572bcde3f93e1fee70b8b82ce454e38a922df6570343ca6f9c3ecd985"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/native-browser-conversation.json",
+      "bytes": 1075,
+      "sha256": "d9319790625b95f3fdec76f3f573cc1112060ef55319a6595779766314b10278"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/native-browser-calculation.json",
+      "bytes": 1918,
+      "sha256": "543964ce762b624b2e5d404d96c4c7eff55fc9b58bc9cea32b3277e942c785aa"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/renderer-test.log",
+      "bytes": 220,
+      "sha256": "99b9bab5a820c73c6f035dd95dab38e56ca6de819086419c8e9003d3eaab3a25"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/native-current-catalog-tool.json",
+      "bytes": 4778,
+      "sha256": "e5babf1b1aa81704515160283d441c31bdae24e031b5f40087092d368e9772f9"
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/isolation-corrected-source-receipts.json",
+      "sha256": "adae815e9eabfec07ad22f3389b767eb831cd0e187bec2710954434d8f4a9add",
+      "bytes": 131297
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/isolation-corrected-image-verification.json",
+      "sha256": "25e81ef681a1cd14f45ba64aea45acf3f7c55b08243a7263b313220995049b2e",
+      "bytes": 127
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/gene-bound-request-header-tools.json",
+      "sha256": "847fa00dd204e7f57d989973ccb548e9f79f5170b10d2d7ae0fd8ce5ab55c9e1",
+      "bytes": 1929
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/isolation-corrected-native-browser-check.json",
+      "sha256": "9662458f597b3477737bb01ebc9a2617b73b9de2d1d16f4dda285f8e6824429e",
+      "bytes": 326
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/gene-chosen-line-after-fix-header-tools.json",
+      "sha256": "20d912c754428cbea56dded4de2d7f883cdc807a4e5474cf35c31d9746dab19f",
+      "bytes": 2081
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/concurrent-first-request-scope-guidance.json",
+      "sha256": "7f44e7fc282f068a9c6d851866d443ae38fd0ac73c436749ed3378113b63c425",
+      "bytes": 1765
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/concurrent-first-request-headers.json",
+      "sha256": "2ab58bb4ea5f005a6a677ada8e29b66e29e74a4ecd2de1a8367a9ac69dfdac84",
+      "bytes": 3455
+    }
+  ]
+}

@@ -1,0 +1,161 @@
+{
+ "tool": "peer_review",
+ "kind": "peer-review",
+ "task": "Interpretation of one already-admitted managed peer-review job; no new job was started and none was restarted.",
+ "jobId": "review-20261010033028-fe9e486d646a",
+ "status": "succeeded",
+ "statusSource": "No live status call was made. This session exposes no status interface for the specialist that ran this job. What is recorded below comes from the preserved job record, and it was checked against the files on disk by recomputing the SHA-256 and byte count of every declared artifact.",
+ "terminalEvidence": {
+  "returnCode": 0,
+  "workerPid": 2767054,
+  "startedAt": "2026-10-10T03:30:28.745048Z",
+  "finishedAt": "2026-10-10T03:38:40.336369Z",
+  "completedAt": null,
+  "elapsedSeconds": 480,
+  "requestSha256": "1ddc5887be15afd3ecad1b558905880960ab54ac582e3603466b056d4ce51f33",
+  "declaredArtifacts": 4,
+  "artifactsMissing": 0,
+  "artifactHashMismatches": 0,
+  "evidenceKind": null
+ },
+ "method": {
+  "request": {
+   "manuscript": "/tmp/evimed-integration-20261010/OpenScience/.r/users/integrationlocal/projects/default/workspace/manuscripts/linde2005-primary.pdf",
+   "articleType": "systematic-review",
+   "outputLanguage": "zh"
+  },
+  "engineModules": {
+   "documentParse": {
+    "status": "ok"
+   },
+   "rubricEvaluation": {
+    "status": "ok"
+   },
+   "quoteVerification": {
+    "status": "degraded",
+    "reason": "8 of 13 quotes could not be located in the manuscript; 4 findings demoted"
+   },
+   "rubricSelection": {
+    "status": "degraded",
+    "reason": "prisma_scr: 本文研究类型为系统评价（Systematic Review）而非范围综述（Scoping Review），PRISMA-ScR 不适用; consort: 本文是对 37 项双盲 RCT 的二次系统评价/荟萃分析，而非单项 RCT 报告，CONSORT 不适用于综述本身; narrative_review_exemption: 研究类型明确为 Systematic Review，叙述性综述豁免条款不适用，系统评价类规范（检索策略、偏倚评价、异质性/发表偏倚分析等）仍适用"
+   },
+   "statisticalRecomputation": {
+    "status": "skipped",
+    "reason": "this engine does not recompute reported statistics"
+   }
+  },
+  "degraded": true,
+  "rubricsApplied": [
+   "universal_rubric",
+   "prisma_2020"
+  ],
+  "manuscriptSupplied": {
+   "identityEstablishedInWorkspace": true,
+   "workspaceCopy": {
+    "path": "manuscripts/linde2005-primary.pdf",
+    "bytes": 447391,
+    "sha256": "6e00b78f729804ac5fe4758d526e74d7c69978b1a0200d332c05dafacf08f19f"
+   },
+   "note": "The request for this job names a manuscript inside the deployment's own workspace path. A copy of the same submission sits in this workspace at the path below. That copy was hashed, but nothing beyond its name and size ties it to the file that was reviewed."
+  },
+  "supersededInstrumentProtection": null
+ },
+ "sourceEvidence": {
+  "manuscript": {
+   "charsParsed": 99561,
+   "parserFallback": "The job log records that the expected PDF marker was not installed and a text-extraction fallback was used, so the parsed character count and any quote matching rest on that fallback parse."
+  },
+  "quoteVerification": {
+   "manuscript_chars": 99561,
+   "issues_checked": 23,
+   "quotes_checked": 13,
+   "quotes_located": 5,
+   "quotes_dropped": 8,
+   "issues_demoted": 4,
+   "issues_without_quotes": 11
+  },
+  "recommendation": "major_revision",
+  "issueCounts": {
+   "fatal": 1,
+   "major": 4,
+   "minor": 18
+  }
+ },
+ "artifactRefs": [
+  {
+   "path": "peer-review-runs/review-20261010033028-fe9e486d646a/output/peer-review-report.md",
+   "bytes": 25266,
+   "sha256": "78f240eb7a711482a743ced95f0f81602273e1eca348137794964ba864a9cbfd"
+  },
+  {
+   "path": "peer-review-runs/review-20261010033028-fe9e486d646a/output/result.json",
+   "bytes": 1671,
+   "sha256": "2fef028c93b6fb5abb3848634646fd246e9fee81b292d7804f1359c1e32fdea6"
+  },
+  {
+   "path": "peer-review-runs/review-20261010033028-fe9e486d646a/output/peer-review-run.json",
+   "bytes": 297765,
+   "sha256": "f3f87967c814b7616c35e8d85bee638815bac1bbae2431b49a15253eee5821b3"
+  },
+  {
+   "path": "peer-review-runs/review-20261010033028-fe9e486d646a/output/request.json",
+   "bytes": 217,
+   "sha256": "a9373f30a58789644c8119749073424500f66fd9ebe443b91ffcd1f91079b522"
+  },
+  {
+   "path": "manuscripts/linde2005-primary.pdf",
+   "bytes": 447391,
+   "sha256": "6e00b78f729804ac5fe4758d526e74d7c69978b1a0200d332c05dafacf08f19f"
+  }
+ ],
+ "contractDeliverable": {
+  "name": "peer-review-report.md",
+  "presentInWorkspace": true,
+  "note": "Present; the run record and the structured result are present beside it."
+ },
+ "contentObservations": [
+  {
+   "observation": "Verdict and its distribution",
+   "detail": "Recommendation is major revision, with 1 issue classified fatal, 4 major and 18 minor (23 checked).",
+   "source": "result.json issues and recommendation"
+  },
+  {
+   "observation": "Governing standard chosen and defended",
+   "detail": "The rubric layer settled on a universal rubric plus the PRISMA 2020 checklist, 21 and 27 items respectively, and refused three instruments as inappropriate: the scoping-review extension, the randomised-trial reporting standard and a narrative-review exemption. Each refusal gives the same reason, that the submission is a systematic review of trials and not a single trial, a scoping review or a narrative review.",
+   "source": "result.json modules.rubricSelection.reason"
+  },
+  {
+   "observation": "Verbatim-quote layer is genuinely degraded, and the review says so",
+   "detail": "13 quotes were checked against the parsed text and 5 were located. 8 could not be found and 4 findings were demoted as a result, while a further 11 carry no quote at all. Reviewers should read those 4 items at lower confidence than the rest; the demotion is disclosed in the run record and was not quietly absorbed.",
+   "source": "result.json quoteVerification"
+  },
+  {
+   "observation": "What the review in fact critiques",
+   "detail": "The critical items target how complete and legible the submitted text is, with repeated and concatenated headings and broken section bodies, an unbalanced discussion with no implementation-limits section, and claims of 'no systematic difference' between older and newer trials that rest on subjective judgement with no reported test statistic, test method or interval.",
+   "source": "peer-review-report.md critical issues and the rubric table"
+  },
+  {
+   "observation": "Reported statistics are not re-computed by this engine",
+   "detail": "A statistical recomputation module is recorded as skipped, on the stated reason that the engine does not recompute reported statistics. Whether the manuscript's pooled result agrees numerically with its underlying data therefore falls outside what this job checked.",
+   "source": "result.json modules.statisticalRecomputation"
+  },
+  {
+   "observation": "Coverage honesty",
+   "detail": "Coverage of the rule sets was reported as partial for the parsed document, and the review treats unparsed or unreadable regions as not assessable instead of absent. The fatal item is framed as a text-integrity problem and keeps an explicit alternative open, that the defect may come from extraction rather than from the submission.",
+   "source": "peer-review-report.md fatal item"
+  },
+  {
+   "observation": "Applicability of the checklist applied, item by item",
+   "detail": "Both rule sets were scored item by item, and the tallies differ sharply. The systematic-review reporting checklist, 27 items, yields 1 pass, 3 partial, 8 uncertain and 15 fail, so its failures cluster in how the search, the risk-of-bias handling, the synthesis and the certainty were reported; rationale and objectives hold up. The universal rubric, 21 items, yields 2 pass, 11 partial, 6 uncertain and 2 fail. What it flags is mostly partial compliance instead of missing material.",
+   "source": "peer-review-report.md item-level tables, counted directly from the report's own verdict column"
+  }
+ ],
+ "limitationsVisibleInOutput": [
+  "No live status query was possible in this session. Terminal state and integrity come from the preserved job record and from recomputing the file hashes locally.",
+  "The review rests on a fallback text extraction, because the preferred PDF parser was unavailable in that run. Quote-level findings are therefore sensitive to parse quality.",
+  "8 of the 13 candidate quotes could not be located and 11 findings carry no quote. 4 findings were demoted accordingly.",
+  "The engine does not recompute reported statistics, so it can neither confirm nor refute the manuscript's pooled numbers.",
+  "Handling of the same-trial/submission relationship is limited to what the job recorded as superseded-instrument protection; no independent check of that bond was possible here.",
+  "The workspace copy of the manuscript was hashed, but nothing beyond its name and size ties it to the file that was reviewed."
+ ]
+}

@@ -1,0 +1,294 @@
+{
+ "tool": "research_topic_selection",
+ "kind": "research-topic-selection",
+ "task": "Interpretation of one already-admitted topic-selection job. No new job was started and none was restarted.",
+ "jobId": "topic-20261010040140-8c052bbf36b9",
+ "status": "succeeded",
+ "statusSource": "No live status call was made. This session exposes no status interface for the specialist that ran this job. What is recorded below comes from the preserved job record, and it was checked against the files on disk by recomputing the SHA-256 and byte count of every declared artifact.",
+ "terminalEvidence": {
+  "returnCode": 0,
+  "workerPid": 2857686,
+  "startedAt": "2026-10-10T04:01:41.406071Z",
+  "finishedAt": "2026-10-10T04:11:40.930362Z",
+  "updatedAt": "2026-10-10T04:11:40.930192Z",
+  "elapsedSeconds": 571,
+  "requestSha256": "71fd79d4bf4952a270a31831867499b55a404dbb3f9ec5ba5846e75be7d777e4",
+  "degraded": false,
+  "declaredArtifacts": 8,
+  "artifactsMissing": 0,
+  "artifactHashMismatches": 0,
+  "artifactListMatchesOutputDir": true
+ },
+ "method": {
+  "request": {
+   "researchDirection": "gut microbiome modulation in inflammatory bowel disease",
+   "outputLanguage": "zh"
+  },
+  "engineEvidence": {
+   "schemaVersion": 1,
+   "agentSourceSha256": "bc608329e9681f3d960babb280d80e22ff1072a444bf11d277b1c32a73eef1bb",
+   "agentSourceFiles": 48,
+   "adapterSha256": "4524dda49181b6c03e702460877aee4ae0e33080ace83c90f9d32b365024c870",
+   "evidenceModuleSha256": "5ad729f96b9ede918d05276c129112088455af7be60b9b57a3b592ad4d03d1fd",
+   "model": "deepseek-flash",
+   "thinking": true,
+   "reasoningEffort": "high"
+  },
+  "adapterEvidence": {
+   "sha256": "8825dd6432a945d946227b03dbf26aa2a841c821e3a92e88be0def68edec825b",
+   "files": 17
+  },
+  "supportingModules": {
+   "M1_PROBLEM_LANDSCAPE": {
+    "status": "ok"
+   },
+   "M2_RESEARCH_ECOSYSTEM": {
+    "status": "ok"
+   },
+   "M3_EVIDENCE_SYSTEM": {
+    "status": "ok"
+   },
+   "M4_SCIENTIFIC_CONTRADICTION": {
+    "status": "ok"
+   },
+   "M5_BREAKTHROUGH_OPPORTUNITY": {
+    "status": "ok"
+   },
+   "M6_RESEARCH_AGENDA": {
+    "status": "ok"
+   },
+   "evidenceRetrieval": {
+    "status": "ok"
+   }
+  },
+  "degraded": false,
+  "usage": {
+   "requests": 20,
+   "cacheHitTokens": 21888,
+   "cacheMissTokens": 42382,
+   "outputTokens": 124188,
+   "model": "deepseek-flash"
+  }
+ },
+ "sourceEvidence": {
+  "retrievalDiagnostics": {
+   "evidenceCount": 773,
+   "display": {
+    "evidence_count": "773",
+    "clinical_ratio": "26%",
+    "year_span": "5",
+    "keyword_diversity": "0.322"
+   },
+   "earliestYear": 2022,
+   "latestYear": 2027,
+   "yearSpan": 5,
+   "yearCounts": {
+    "2026": 576,
+    "2027": 2,
+    "2025": 173,
+    "2024": 11,
+    "2023": 8,
+    "2022": 3
+   },
+   "clinicalRatio": 0.258732212160414,
+   "clinicalRatioDisplay": "26%",
+   "keywordDiversity": 0.32171865803413774,
+   "designDistribution": {
+    "Clinical Study": 138,
+    "Other": 116,
+    "Animal Study": 162,
+    "Review": 292,
+    "Cohort": 22,
+    "Systematic Review": 16,
+    "RCT": 14,
+    "Meta-analysis": 3,
+    "Clinical Trial": 4,
+    "Comparative Study": 3,
+    "Protocol": 1,
+    "Cross-sectional": 1,
+    "Case Report": 1
+   },
+   "topJournals": {
+    "Frontiers in immunology": 37,
+    "International journal of biological macromolecules": 26,
+    "International journal of molecular sciences": 26,
+    "Nutrients": 22,
+    "Frontiers in microbiology": 20,
+    "International immunopharmacology": 14,
+    "Journal of agricultural and food chemistry": 14,
+    "Food research international (Ottawa, Ont.)": 13
+   },
+   "topAuthors": {
+    "Wei Liu": 4,
+    "Xin Li": 4,
+    "Hyeon-Jeong Jeon": 3,
+    "Yang Wang": 3,
+    "Abrar I Alsaadi": 3
+   }
+  },
+  "recordLevelStatus": {
+   "publicationStatusCounts": {
+    "active": 755,
+    "corrected": 2,
+    "unknown": 16
+   },
+   "statusSourceCounts": {
+    "PubMed": 757,
+    "None": 16
+   },
+   "unknownWithoutStatusSource": 16,
+   "note": "Publication status was checked against one bibliographic source for the records that carry a status source. The records marked unknown carry none, which leaves their status unchecked instead of confirmed active."
+  },
+  "researchPortfolio": {
+   "schemaVersion": "1.0.0",
+   "researchDirection": "gut microbiome modulation in inflammatory bowel disease",
+   "candidates": [
+    {
+     "candidateId": "R1",
+     "title": "以微生物共代谢途径活性为锚点的跨物种IBD功能亚型映射研究",
+     "sourceOpportunityId": "BOM1",
+     "supportLevel": "indirect",
+     "supportRationale": "引用文献为相邻方法或部分构件提供支持，尚不构成完整方案的直接验证。",
+     "sourceEvidenceIds": [
+      "pubmed_42805069",
+      "pubmed_42824149",
+      "pubmed_42795689",
+      "pubmed_42841666",
+      "pubmed_42828059",
+      "pubmed_42826781"
+     ],
+     "sourceEvidencePmids": [
+      "42805069",
+      "42824149",
+      "42795689",
+      "42841666",
+      "42828059",
+      "42826781"
+     ],
+     "gaps": [
+      "estimand"
+     ],
+     "hypothesis": "待验证：以微生物共代谢途径活性定义的跨物种共享代谢物模块，可对齐DSS小鼠与人类IBD的功能亚型，并定位AhR/胆汁酸受体依赖的宿主细胞类型。",
+     "falsification": "若未发现跨物种共享代谢物模块，或宿主细胞类型对代谢物响应不依赖AhR/胆汁酸受体，或在人类队列中代谢物功能谱聚类无法复现，则核心假说被否证。",
+     "studyDesignType": "跨物种观察性队列结合反向操控实验"
+    },
+    {
+     "candidateId": "R2",
+     "title": "待验证：基于孟德尔随机化的动物靶点至人群因果转化筛选闸门研究——以色氨酸-AhR与次级胆汁酸轴为例",
+     "sourceOpportunityId": "BOM2",
+     "supportLevel": "speculative",
+     "supportRationale": "候选方案含引用文献摘要未直接出现的关键概念，仅作为待验证假说。",
+     "sourceEvidenceIds": [
+      "pubmed_42805069",
+      "pubmed_42824149",
+      "pubmed_42795689",
+      "pubmed_42819218"
+     ],
+     "sourceEvidencePmids": [
+      "42805069",
+      "42824149",
+      "42795689",
+      "42819218"
+     ],
+     "gaps": [
+      "estimand"
+     ],
+     "hypothesis": "待验证：在人类遗传学中，色氨酸-AhR与次级胆汁酸轴相关的微生物组/代谢物特征对IBD风险存在因果效应，且其方向与对应动物实验一致；若不一致或无效，则该转化闸门假说不成立。",
+     "falsification": "若所选遗传工具变量对IBD风险的因果估计无统计学意义，或与对应动物实验方向矛盾，或多效性与异质性检验无法通过，则转化闸门假说不成立。",
+     "studyDesignType": "孟德尔随机化与方向一致性研究"
+    },
+    {
+     "candidateId": "R3",
+     "title": "药代微生物组学驱动的IBD微生物组-宿主因果通路解耦研究",
+     "sourceOpportunityId": "BOM3",
+     "supportLevel": "indirect",
+     "supportRationale": "引用文献为相邻方法或部分构件提供支持，尚不构成完整方案的直接验证。",
+     "sourceEvidenceIds": [
+      "pubmed_42819218",
+      "pubmed_42836931",
+      "pubmed_42816272",
+      "pubmed_42826781"
+     ],
+     "sourceEvidencePmids": [
+      "42819218",
+      "42836931",
+      "42816272",
+      "42826781"
+     ],
+     "gaps": [
+      "estimand"
+     ],
+     "hypothesis": "待验证：在IBD队列中，药物暴露是微生物组-IBD关联的重要中介或效应修饰变量，通过含药物-微生物交互的因果图与中介分析可将关联分解为可干预通路。",
+     "falsification": "若校正药物暴露后微生物组-IBD关联消失但中介效应不显著，或菌株特异性异质性不可复现，或解耦后通路预测力不足，则核心假说被否证。",
+     "studyDesignType": "观察性队列的因果推断与中介分析"
+    }
+   ]
+  }
+ },
+ "artifactRefs": [
+  {
+   "path": "research-topic-runs/topic-20261010040140-8c052bbf36b9/output/research-topic-report.md",
+   "bytes": 56292,
+   "sha256": "12923a600328cb46017554bc7f84071fe1780e0be794f22d1db7a36cf6dbc377"
+  },
+  {
+   "path": "research-topic-runs/topic-20261010040140-8c052bbf36b9/output/result.json",
+   "bytes": 943,
+   "sha256": "0abae7ef9461790953d8724aa0b775301985da0b96b60989eac4b27980738f2c"
+  },
+  {
+   "path": "research-topic-runs/topic-20261010040140-8c052bbf36b9/output/research-topic-run.json",
+   "bytes": 1561751,
+   "sha256": "b74b8140b69f6f628dd15676f217773c05dfafc17ab60f08bdae2dc3d8eca9a1"
+  },
+  {
+   "path": "research-topic-runs/topic-20261010040140-8c052bbf36b9/output/research-portfolio.json",
+   "bytes": 6603,
+   "sha256": "0c420407215a38a752ad3e44b58a32db6d9815fef7fb0f29fd8d1c5ae4f92d55"
+  },
+  {
+   "path": "research-topic-runs/topic-20261010040140-8c052bbf36b9/output/evidence-stats.json",
+   "bytes": 2118,
+   "sha256": "240956668cd2ce4d01a513ffb68a244770fe20e5f02bb871fb7e8c6d748a0f29"
+  },
+  {
+   "path": "research-topic-runs/topic-20261010040140-8c052bbf36b9/output/module-outputs.json",
+   "bytes": 1405683,
+   "sha256": "279d7ea774c474148ac81719afee7325299a56dadefea4f3b64fda6536e15be1"
+  },
+  {
+   "path": "research-topic-runs/topic-20261010040140-8c052bbf36b9/output/evidence-records.json",
+   "bytes": 2314435,
+   "sha256": "76766e4ae7492b4d11fc862040d34f2c0b10b9d5997b511eae4dbcf4bba95ec1"
+  },
+  {
+   "path": "research-topic-runs/topic-20261010040140-8c052bbf36b9/output/request.json",
+   "bytes": 110,
+   "sha256": "39f05c6df7b765594746341d23ec0d58c0daf48600645642bbbe9440646046d6"
+  }
+ ],
+ "contractDeliverable": {
+  "name": "research-topic-report.md",
+  "presentInWorkspace": true,
+  "note": "Present, together with the machine-readable portfolio, the evidence records and the module outputs."
+ },
+ "contentObservations": {
+  "corpusAndItsShape": "773 evidence records were retrieved and profiled. Reviews account for 292 of them and animal studies for 162, against 138 clinical studies, 22 cohorts, 16 systematic reviews, 14 randomised trials, 3 meta-analyses and 4 clinical trials. Clinical work is 26% of the corpus, so most of what supports this direction comes from non-clinical and secondary literature.",
+  "recencyConcentration": "Year counts are 2026: 576, 2025: 173, 2024: 11, 2023: 8, 2022: 3 and 2027: 2. The 2027 entries sit in the future relative to the corpus's own retrieval date and are best read as metadata artifacts. Either way the corpus is overwhelmingly recent, and no long-run trend can be established from it.",
+  "journalConcentration": "One immunology journal contributes 37 records and the next largest contributes 26. Microbiology, food-science and materials-interface titles dominate the top of the list, which is what a set mixing microbiome mechanism work with delivery and formulation work would look like.",
+  "statusChecking": "Publication status is recorded as active for 755 records, corrected for 2 and unknown for 16. A status source is recorded for 757 records and absent for the 16 unknown ones. Those 16 are unchecked instead of confirmed current, and none of the corpus is recorded as retracted.",
+  "opportunitiesAndTheirSupport": "Three candidate directions were produced, each tied to a named opportunity and to a specific list of source records: a cross-species functional-subtype mapping built on microbial co-metabolism, a Mendelian-randomisation gate for translating animal targets to populations, and a pharmacomicrobiomic decoupling of microbiome-host pathways. Support is recorded as indirect for two of the three and speculative for one, on the rationale that the cited records back adjacent methods or components and not the full proposal.",
+  "everyCandidateKeepsItsUncertainty": "Each candidate carries an explicit falsification statement, an explicit data requirement, a feasibility caveat and a gaps list. All three gaps lists hold the single entry 'estimand', so the engine derived no formal estimand for any of the three and says so instead of inventing one.",
+  "estimatedBoundary": "The report keeps the retrieved corpus, the contradiction analysis and the opportunity ranking separate in its own framing. None of the three candidates is asserted to be validated; the strongest support level used anywhere is 'indirect'."
+ },
+ "limitationsVisibleInOutput": [
+  "No live status query was possible in this session. Terminal state and integrity come from the preserved job record and from recomputing the file hashes locally.",
+  "An earlier attempt at the same research direction in this workspace failed outright, and a second one failed on a denominator-completeness framing. The delivered record interprets only the supplied successful job. Neither failure is treated here as a finding about the direction itself.",
+  "The corpus is extremely recent (576 of 773 records dated 2026), so no maturity or trend claim can be supported from it.",
+  "Only 26% of the corpus is clinical, and the directions rest on animal and review literature.",
+  "Publication status could not be checked for 16 records, which therefore remain unknown rather than confirmed.",
+  "No candidate has a derived estimand; the engine records this as a gap in every case.",
+  "Support levels are indirect or speculative throughout, which makes each candidate a hypothesis awaiting test and not a supported conclusion.",
+  "Two year entries post-date the corpus's own retrieval and are treated as metadata artifacts."
+ ]
+}

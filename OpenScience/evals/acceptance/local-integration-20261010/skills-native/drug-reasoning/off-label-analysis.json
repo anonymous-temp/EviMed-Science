@@ -1,0 +1,129 @@
+{
+  "artifact": "off-label-analysis",
+  "artifact_status": "bounded_teaching_method_check",
+  "provenance": {
+    "material": "invented teaching material",
+    "inputs": "inputs.txt (excerpt L, the proposed pediatric question, and excerpt E)",
+    "language": "English, matching the language of the request; the label excerpt is quoted in its original wording",
+    "retrieval_performed": false,
+    "note": "The label basis is the invented excerpt L and nothing else. No other jurisdiction's label was put in its place, and no label source or off-label compiler was queried for this file."
+  },
+  "proposed_use": {
+    "medicine": "TeachingDrugA (invented)",
+    "indication": "Condition Q",
+    "population": "children (pediatric)",
+    "dose": null,
+    "route": null,
+    "frequency": null,
+    "duration": null,
+    "formulation": null,
+    "jurisdiction": "Jurisdiction X",
+    "decision_date": "not applicable: bounded teaching check"
+  },
+  "label_basis": {
+    "label_id": "L",
+    "jurisdiction": "Jurisdiction X",
+    "text_verbatim": "TeachingDrugA is indicated for adults with Condition Q in Jurisdiction X. Do not use in severe renal impairment. Safety in children has not been established.",
+    "currentness": "cannot be verified: the excerpt is invented teaching material with no approval number, version date or regulator record",
+    "other_jurisdiction_labels_substituted": false
+  },
+  "label_comparison": [
+    {
+      "dimension": "population",
+      "proposed": "children (pediatric)",
+      "label": "adults",
+      "status": "mismatch",
+      "rationale": "The label puts the indication under adults and records that safety in children has not been established. A pediatric population therefore sits outside the labelled population.",
+      "evidenceIds": ["L"]
+    },
+    {
+      "dimension": "indication",
+      "proposed": "Condition Q",
+      "label": "Condition Q in adults",
+      "status": "unclear",
+      "rationale": "The label names Condition Q for adults, which ties the indication to the population, and the proposal names no different disease. Calling this dimension a match would hide the mismatch recorded in the population row, and it cannot be settled on its own.",
+      "evidenceIds": ["L"]
+    },
+    {
+      "dimension": "dose",
+      "status": "not_assessed",
+      "rationale": "Nothing in the supplied material states a dose for the proposed use, and the label excerpt states none either.",
+      "evidenceIds": ["L"]
+    },
+    {
+      "dimension": "route",
+      "status": "not_assessed",
+      "rationale": "The route is unstated for the proposed use, as it also is in the label excerpt.",
+      "evidenceIds": ["L"]
+    },
+    {
+      "dimension": "frequency",
+      "status": "not_assessed",
+      "rationale": "The proposal gives no frequency, and the label excerpt gives none.",
+      "evidenceIds": ["L"]
+    },
+    {
+      "dimension": "duration",
+      "status": "not_assessed",
+      "rationale": "Neither the proposal nor the label excerpt says how long treatment would last.",
+      "evidenceIds": ["L"]
+    },
+    {
+      "dimension": "formulation",
+      "status": "not_assessed",
+      "rationale": "The proposed use does not name a formulation, and neither does the label excerpt.",
+      "evidenceIds": ["L"]
+    }
+  ],
+  "classification": {
+    "value": "potentially_off_label",
+    "basis": "population mismatch against the Jurisdiction X label: the proposal concerns children while the label covers adults and states that safety in children has not been established",
+    "is_final_conclusion": false,
+    "meaning": "This is a preliminary label comparison, not a finding that the use is unlawful, unsupported or clinically inappropriate."
+  },
+  "label_conditions_unresolved": [
+    "The label excludes severe renal impairment. Nothing was supplied about renal function in the proposed population, so the condition stays open.",
+    "The label's pediatric statement is a limit on what the label supports; it is not a determination about what a clinician may consider."
+  ],
+  "pediatric_evidence": {
+    "children_included_in_supplied_material": false,
+    "supplied_material_population": "20 adults",
+    "label_statement": "Safety in children has not been established.",
+    "evidence_support_status": "not_found",
+    "rationale": "The only supplied cohort recruited adults, so it is indirect for the proposed population. No pediatric trial, review, guideline or case material was retrieved or supplied."
+  },
+  "evidence_support_assessments": [
+    {"type": "origin_country_label", "status": "not_assessed", "detail": "Only the Jurisdiction X excerpt was supplied; the question is asked for Jurisdiction X itself, so no separate origin-country label applies."},
+    {"type": "clinical_guideline", "status": "not_found", "detail": "No guideline was retrieved or supplied for the proposed population."},
+    {"type": "systematic_review", "status": "not_found", "detail": "No systematic review was retrieved or supplied."},
+    {"type": "randomized_trial", "status": "not_found", "detail": "No randomized trial in children was retrieved or supplied."},
+    {"type": "nonrandomized_study", "status": "unclear", "detail": "Excerpt E is one unblinded convenience cohort of 20 adults with no comparator or adjudication; it does not address children and cannot be transferred to them."},
+    {"type": "case_report_or_series", "status": "not_found", "detail": "None supplied."}
+  ],
+  "four_axes": {
+    "regulatory_label_status": "Population mismatch against the Jurisdiction X label; the proposed population is outside the labelled population. This is a label comparison only and relies on an invented excerpt.",
+    "evidence_strength": "No pediatric evidence of any kind is available in the supplied material. The single adult cohort is indirect for the proposed population and uncontrolled even there.",
+    "clinical_appropriateness": "Cannot be judged from the supplied material. Nothing was supplied on the alternatives available or the usual course of the condition, and there is no dose, no monitoring plan and no patient-level information to work from.",
+    "workflow_authorization": "Out of scope. This analysis does not authorize, approve, endorse or recommend use, and it is not a legal determination."
+  },
+  "requested_reviews": {
+    "research_use_only": true,
+    "clinician_review": "required before any clinical consideration",
+    "legal_and_regulatory_review": "required; this analysis does not determine legality, approval status or reimbursement in any jurisdiction",
+    "institutional_governance_review": "required for any off-label pathway decision"
+  },
+  "gaps": [
+    "no dose, route, frequency, duration or formulation",
+    "no pediatric evidence, direct or indirect",
+    "no renal function information",
+    "no alternatives or standard of care for the proposed population",
+    "no verifiable label record, only an invented excerpt"
+  ],
+  "claims": {
+    "prescribing_authorization_granted": false,
+    "use_approved": false,
+    "legality_determined": false,
+    "safe_for_children_claimed": false,
+    "clinical_recommendation_made": false
+  }
+}

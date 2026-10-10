@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/research-sessions",
+    "projectId": "model-vcr-final"
+  },
+  "response": [
+    {
+      "sessionId": "session-f6f172b6-dbc3-462f-97ff-54e915c4d613",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T04:48:58.841Z",
+      "updatedAt": "2026-10-10T04:48:58.841Z"
+    }
+  ]
+}

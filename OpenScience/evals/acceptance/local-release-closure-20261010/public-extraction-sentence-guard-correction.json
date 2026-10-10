@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "scope": "Evaluation-only conservative sentence-boundary correction; unchanged four development abstracts, not independent holdout or clinical qualification.",
+  "method": "Reject sentence punctuation followed by whitespace including closing quote/bracket, non-Latin sentence punctuation, ellipsis, or line break between endpoints. Ambiguous abbreviations remain unresolved. Decimal points without whitespace remain allowed. Exact dual-endpoint quote-instance binding unchanged.",
+  "productGatewayChanged": false,
+  "newModelCalls": 0,
+  "regression": {
+    "command": "node --test evals/method-quality/public_extraction.test.mjs",
+    "passed": 13,
+    "failed": 0
+  },
+  "sourceReceipts": [
+    {
+      "path": "evals/method-quality/public_extraction.mjs",
+      "bytes": 11501,
+      "sha256": "bb0fa13c6df8c3f26b4fe6bbaa490834ef561e294868dff2ee4a32f1203ca78a"
+    },
+    {
+      "path": "evals/method-quality/public_extraction.test.mjs",
+      "bytes": 7812,
+      "sha256": "80d90f488e6705faef56605ae81c843449d079ce730a8da30b504d715d57894a"
+    }
+  ],
+  "priorScoreReceipt": {
+    "path": "evals/acceptance/local-release-closure-20261010/public-extraction-two-pass-score.json",
+    "bytes": 5446,
+    "sha256": "023e17b33f2595ef54e654cd99bf2c712732f9f89e4c003f50353e90ba7844a6"
+  },
+  "replayScoreReceipt": {
+    "path": "/tmp/evimed-release-closure-20261010/models/sentence-guard-replay/score.json",
+    "bytes": 5446,
+    "sha256": "ef95099019c29332621e079b8713b973c7e2f3e97382f2feb105159cf8c22fb0"
+  },
+  "replayPredictionReceipt": {
+    "path": "/tmp/evimed-release-closure-20261010/models/sentence-guard-replay/predictions.json",
+    "bytes": 29573,
+    "sha256": "01f7e7a17c5900559a5046d25a76682b166c4b06862b44e5d3df919dfa09d15d"
+  },
+  "replayScriptReceipt": {
+    "path": "/tmp/evimed-release-closure-20261010/models/sentence-guard-replay/replay.mjs",
+    "bytes": 1975,
+    "sha256": "60aaf282892def9671885850c942eea882c41c23adc83ca484c67be6483c858a"
+  },
+  "referenceReceipt": {
+    "path": "/tmp/evimed-release-closure-20261010/models/sentence-guard-replay/reference-four.json",
+    "bytes": 29053,
+    "sha256": "f625489420129c7b554aae6c50a73e716196a562cc995489cc30d85c0e3c703c"
+  },
+  "cases": [
+    {
+      "id": "drugprot-9851542",
+      "sourceTextSha256": "d360d69bf0c1ccb053147cc593045de64f5fbcfed18e286cd4fbd990b31e706a",
+      "frozenReceipt": {
+        "privatePath": "/tmp/evimed-release-closure-20261010/models/public-two-pass/drugprot-9851542-frozen.json",
+        "sha256": "743bb459a33f2cdd033602444e828907022d06473df01acaae2f033c3a27d512"
+      },
+      "actualRelationEventsReceipt": {
+        "privatePath": "/tmp/evimed-release-closure-20261010/models/public-two-pass/drugprot-9851542-relations.events.jsonl",
+        "sha256": "892782f571f27e492bd7579a163359005a761f90b17b2969dcf9ae0592aa3dc4"
+      },
+      "actualRawRelationSha256": "4bffe108202ac9b78f415b19d7e503342ccd5072b44e358cc8d376ca4ff62ae6",
+      "beforeRelations": 9,
+      "afterRelations": 9,
+      "newRejected": []
+    },
+    {
+      "id": "drugprot-22872607",
+      "sourceTextSha256": "a7ca75072dedff9eae181ebac4e94c032b45b13856cbacbc27c834fffa589a1e",
+      "frozenReceipt": {
+        "privatePath": "/tmp/evimed-release-closure-20261010/models/public-two-pass-repair/drugprot-22872607-frozen.json",
+        "sha256": "153454c16ca87e0a83af63aa91a8a1e634cbd0c215543e7e5c34bd32895c74e0"
+      },
+      "actualRelationEventsReceipt": {
+        "privatePath": "/tmp/evimed-release-closure-20261010/models/public-two-pass-repair/drugprot-22872607-relations.events.jsonl",
+        "sha256": "8610b364d478523a40778bb4474d895a6ea894fa3429f95924841a44132a8aa7"
+      },
+      "actualRawRelationSha256": "959111cb69fe30b0f03292b00ad7d507fb83dd5f222d5bd58ae9caeb21fcab34",
+      "beforeRelations": 5,
+      "afterRelations": 5,
+      "newRejected": []
+    },
+    {
+      "id": "drugprot-2982865",
+      "sourceTextSha256": "a2089d13d83b71ef9d429f46abe05d339f5de1e054d7f3510776b7d90655a3b7",
+      "frozenReceipt": {
+        "privatePath": "/tmp/evimed-release-closure-20261010/models/public-two-pass/drugprot-2982865-frozen.json",
+        "sha256": "74f0eed484bfd06bd4acd55627cb6e1184df8ce9dd6ebfa35927b9d661a2c743"
+      },
+      "actualRelationEventsReceipt": {
+        "privatePath": "/tmp/evimed-release-closure-20261010/models/public-two-pass/drugprot-2982865-relations.events.jsonl",
+        "sha256": "76c28dc236e721525010f6c222169567884045c76b7dfa359bf9e1420dc04855"
+      },
+      "actualRawRelationSha256": "096ac3df03946e078dbe269a92a8543208cd3a306619c8121a6cf651f2586842",
+      "beforeRelations": 0,
+      "afterRelations": 0,
+      "newRejected": []
+    },
+    {
+      "id": "drugprot-9310349",
+      "sourceTextSha256": "fc3ff31aaefa4b7fd8e7088a63dbaff176e771b42cbfbfb5c232620454da723c",
+      "frozenReceipt": {
+        "privatePath": "/tmp/evimed-release-closure-20261010/models/public-two-pass/drugprot-9310349-frozen.json",
+        "sha256": "1254012b7b833e7ea93fbdb5a1b27ce591f66c85906ec2b329bc0112a5d8f1e9"
+      },
+      "actualRelationEventsReceipt": {
+        "privatePath": "/tmp/evimed-release-closure-20261010/models/public-two-pass/drugprot-9310349-relations.events.jsonl",
+        "sha256": "0f19b909dd453ed0db4a71096182c6b3bb4387a0b8e148d1933be4be3ef2ea6f"
+      },
+      "actualRawRelationSha256": "d18063b2c1d385b3285d2d3812ecf3c48a9ab995f0f074fee701bdf696369f5f",
+      "beforeRelations": 5,
+      "afterRelations": 5,
+      "newRejected": []
+    }
+  ],
+  "scorecardUnchanged": true,
+  "scorecard": [
+    {
+      "task": "ner",
+      "dataClass": "public_biomedical_abstract",
+      "cases": 4,
+      "sourceGroups": 4,
+      "missing": 0,
+      "invalid": 0,
+      "strict": {
+        "tp": 109,
+        "fp": 33,
+        "fn": 33,
+        "precision": 0.7676056338028169,
+        "recall": 0.7676056338028169,
+        "f1": 0.7676056338028169
+      },
+      "overlap": {
+        "tp": 120,
+        "fp": 22,
+        "fn": 22,
+        "precision": 0.8450704225352113,
+        "recall": 0.8450704225352113,
+        "f1": 0.8450704225352113
+      }
+    },
+    {
+      "task": "relation",
+      "dataClass": "public_biomedical_abstract",
+      "cases": 4,
+      "sourceGroups": 4,
+      "missing": 0,
+      "invalid": 0,
+      "relations": {
+        "tp": 13,
+        "fp": 6,
+        "fn": 25,
+        "precision": 0.6842105263157895,
+        "recall": 0.34210526315789475,
+        "f1": 0.45614035087719296
+      }
+    }
+  ],
+  "history": "Original model events, frozen entities, predictions and API score archives unchanged. Initial replay scoring accidentally used all ten reference cases (six missing); preserved separately as score-unfiltered-ten-reference.json. Corrected comparison explicitly uses only the same four existing prediction IDs and unchanged reference labels."
+}

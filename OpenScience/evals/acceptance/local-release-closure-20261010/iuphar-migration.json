@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "source": "iuphar-bps-guide-to-pharmacology",
+  "classificationBefore": "connected_public",
+  "classificationAfter": "ready_credentials",
+  "credentialProfile": "iuphar",
+  "missingCode": "public_source_iuphar_credential_missing",
+  "officialDocumentation": "https://www.guidetopharmacology.org/webServices.jsp",
+  "documentedAuthentication": "GTP-API-Key request header; API key required",
+  "verification": "authorized-live-probe-not-performed",
+  "currentPublicRegistryCount": 63,
+  "currentConditionalRegistryCount": 9,
+  "historicalAuditPreserved": {
+    "path": "/tmp/evimed-release-closure-20261010/connectors/connector-probe-v3.json",
+    "sha256": "bad28a4357e0416e124881f63819358eaaf86d60d3db40e49e61e1cd182b7898",
+    "summary": {
+      "registered": 64,
+      "registrySha256": "78f1457f7d89ba42c53e04ddca25d6ea5b99b185db4c2d4414bb250a6ade9288",
+      "registrySourceSha256": "0ce211c57aca6ef2d44d1ff751509b836b7fd4428ba9e5a47455208d26a6231f",
+      "qualityPass": 59,
+      "qualityFail": 5,
+      "queriesExecuted": 128,
+      "productionRoute": "controlled_connector_routes",
+      "productionRoutes": [
+        "bundled_verified_dataset",
+        "server_allowlisted_gateway"
+      ],
+      "productionGatewayUsed": true,
+      "directSourceRequests": false,
+      "runtimeArbitraryEgress": false,
+      "bundledDatasetSources": [
+        "sider"
+      ],
+      "bundledDatasets": [
+        {
+          "source": "sider",
+          "path": "runtime/mcp/evimed-research/data/sider-4.1.sqlite",
+          "bytes": 7884800,
+          "sha256": "26274902d38b0bc999503623f8e59209a613821bf27f593656ed39443994cde4",
+          "licensePath": "runtime/mcp/evimed-research/data/sider-4.1.LICENSE.json"
+        }
+      ],
+      "claimBoundary": "This certifies two distinct traceable queries and response-contract quality per connector at the recorded time. It does not certify every query shape, recall, ranking quality, or future upstream availability."
+    },
+    "sourceResult": {
+      "source": "iuphar-bps-guide-to-pharmacology",
+      "status": "quality_fail",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "error",
+          "summary": "Public source returned HTTP 400.",
+          "errorCode": "public_source_http_error",
+          "records": 0,
+          "sources": 0,
+          "identifiers": [],
+          "elapsedMs": 2285,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": false,
+            "recordsPresent": false,
+            "sourceCountPresent": false,
+            "traceableSources": false,
+            "connectorIdentity": false,
+            "requestProvenance": false,
+            "recordIdentifiers": false
+          },
+          "pass": false
+        },
+        {
+          "query": "EGFR",
+          "status": "error",
+          "summary": "Public source returned HTTP 400.",
+          "errorCode": "public_source_http_error",
+          "records": 0,
+          "sources": 0,
+          "identifiers": [],
+          "elapsedMs": 1388,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": false,
+            "recordsPresent": false,
+            "sourceCountPresent": false,
+            "traceableSources": false,
+            "connectorIdentity": false,
+            "requestProvenance": false,
+            "recordIdentifiers": false
+          },
+          "pass": false
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": false,
+        "distinctQueryResults": false,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 0,
+      "sources": 0,
+      "elapsedMs": 3673
+    }
+  },
+  "limits": [
+    "The original 64-source report is preserved; reclassification does not turn its failed IUPHAR case into a pass.",
+    "Current public connector qualification still requires both queries for every one of 63 current public sources.",
+    "The IUPHAR fixture remains for conditional diagnostics and cannot be qualified without authorized live evidence."
+  ]
+}

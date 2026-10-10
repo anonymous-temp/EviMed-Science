@@ -1,0 +1,32 @@
+{
+  "revision": 1,
+  "clarifications": [
+    "题面把本次任务限定为「有界获取与身份核验」：只取一个公开 GEO 系列并读回它返回的身份检查，不做差异表达、不做分组、不渲染报告。因此我按题面要求在任何分组未经研究者确认时停手，stopReason 记为 groups_not_confirmed。",
+    "题面指定的获取对象是 GSE2553。我按题面只发一次系列获取调用，不重试；若该次调用被拒或失败，我保留真实的失败记录，不伪造任何 capture、不复制其它系列的哈希。",
+    "本会话可调用的工具清单里没有 gene_expression_series。我仍然按题面真实调用一次，把运行时实际返回的内容（成功记录或工具未注册的错误）原样记录为失败产物，而不是用看起来合理的拒绝理由替换它。",
+    "不跨平台合并：一个矩阵只属于一个平台；本次不指定 platform 参数，若返回多平台警告则如实记录为需要研究者选择平台。",
+    "genome build 若无来源明确陈述一律记为 unknown，不做任何推断；value scale 只在返回记录里明说时才算已知。",
+    "交付物文件同时写在 deliverables/d1-gene-acquisition-identity/ 下，并按题面要求把身份核验产物落到 skill-closure/gene-final/identity.json（两处同一内容）。",
+    "本次核验只对「获取 + 身份字段读回」这一步方法有效，不对 Welch/BH 计算路径或该能力的整体有效性下结论。"
+  ],
+  "deliverables": [
+    {
+      "id": "d1-gene-acquisition-identity",
+      "contractKind": "gene-expression-analysis-package",
+      "capability": "gene-expression-analysis",
+      "title": "公开 GEO 系列 GSE2553 的有界获取与身份核验（含失败情形）",
+      "dependsOn": [],
+      "acceptance": [
+        "报告写明本次是否有真实 capture 产生：若产生则给出 accession、captureDir 与每个源文件的 sha256；若未产生则给出运行时实际返回的错误文本与错误码，并明确说明没有字节被保留、没有任何哈希可用",
+        "报告逐项列出身份字段（samples / platform / platformRecord / organism / genomeBuild / scale）在本次实际返回记录里的状态，unknown 写作 unknown 而不写成通过，且不臆造 genome build",
+        "报告写明 accession 是否被核对为与已保存系列一致，并区分「已核对」与「仅被请求」",
+        "报告写明停手原因 groups_not_confirmed：在研究者确认两组之前不做任何差异表达，并且明确本次不含任何差异表达统计量、p 值或倍数变化",
+        "报告写明本次调用的次数与预算（最多一次、未重试），并给出调用参数",
+        "报告写明该能力未计算的统计方法是什么（逐探针 Welch 两样本 t 检验 + Benjamini-Hochberg，非 limma），并说明该步本次未执行",
+        "报告列出本次实际做过的独立核验项（accession 一致性、源文件哈希重算、磁盘上是否真的存在该 capture），并给出核验输出",
+        "报告明确边界：本次结论只对获取与身份读回这一步有效，不构成对该能力整体或任何生物学结论的验证"
+      ]
+    }
+  ],
+  "reason": "题面要求产出核验文件（identity.json）与人类可读报告，因此需要一件交付物。"
+}

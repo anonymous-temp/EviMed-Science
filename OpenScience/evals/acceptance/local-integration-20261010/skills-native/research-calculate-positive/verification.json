@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "passed": true,
+  "scope": {
+    "projectId": "model-concurrent-regression",
+    "runId": "run_8ddc3c00a43d94e04b1a870ea60b6234",
+    "sessionId": "session-988bb107-61f3-4ad3-ab1e-4e0df02352e9",
+    "finishedAt": "2026-10-10T05:20:23.774Z"
+  },
+  "actualJobId": "replay_6846bde31f97fd0c4bae2941edb4259719d4662892ae971d35e9d7268340d6d3",
+  "method": "meta.dl",
+  "fixture": "Authored synthetic yi[0,1,3],vi[0.1,0.1,0.1],MD; original prepared input unchanged.",
+  "nativeStartCount": 1,
+  "nativeArtifactReadCallId": "call_00_ccTYuu9XrkpZ5f5L9hJz7975",
+  "resultArtifact": {
+    "path": "result-replays/c71a2544-a4e8-45da-a9a7-cb0cf3f7d64e/output/result.json",
+    "bytes": 7566,
+    "sha256": "4ba336bcd5e7da61ba33216a5d7eeca5a7a8a4048d725196578fedb58361a8cb"
+  },
+  "checks": {
+    "nativeTerminalSucceeded": true,
+    "returnedResultHashMatchesRetainedBytes": true,
+    "actualNativeArtifactRead": true,
+    "independentNineNumbersMatch": true,
+    "sameSyntheticInputAsPriorFailure": true
+  },
+  "numericCheck": {
+    "passed": true,
+    "basis": "Independent Python standard-library arithmetic and normal quantile; no specialist engine imports or substituted model result. Q chi-square df2 survival = exp(-Q/2).",
+    "resultFileSha256": "4ba336bcd5e7da61ba33216a5d7eeca5a7a8a4048d725196578fedb58361a8cb",
+    "standardError": 0.881917103688197,
+    "checks": {
+      "pooled_effect": {
+        "expected": 1.3333333333333335,
+        "observed": 1.3333333333333335,
+        "absoluteError": 0.0,
+        "passed": true
+      },
+      "tau_squared": {
+        "expected": 2.2333333333333334,
+        "observed": 2.2333333333333334,
+        "absoluteError": 0.0,
+        "passed": true
+      },
+      "q_statistic": {
+        "expected": 46.66666666666667,
+        "observed": 46.66666666666667,
+        "absoluteError": 0.0,
+        "passed": true
+      },
+      "i_squared": {
+        "expected": 95.71428571428572,
+        "observed": 95.71428571428572,
+        "absoluteError": 0.0,
+        "passed": true
+      },
+      "h_squared": {
+        "expected": 23.333333333333336,
+        "observed": 23.333333333333336,
+        "absoluteError": 0.0,
+        "passed": true
+      },
+      "ci_lower": {
+        "expected": -0.3951924272454086,
+        "observed": -0.39519242724540904,
+        "absoluteError": 4.440892098500626e-16,
+        "passed": true
+      },
+      "ci_upper": {
+        "expected": 3.0618590939120756,
+        "observed": 3.061859093912076,
+        "absoluteError": 4.440892098500626e-16,
+        "passed": true
+      },
+      "p_value": {
+        "expected": 0.13057001811573626,
+        "observed": 0.1305700181157362,
+        "absoluteError": 5.551115123125783e-17,
+        "passed": true
+      },
+      "q_p_value": {
+        "expected": 7.352958061453811e-11,
+        "observed": 7.352958061453824e-11,
+        "absoluteError": 1.2924697071141057e-25,
+        "passed": true
+      }
+    }
+  },
+  "retainedReceipts": [
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/session-registry.json",
+      "bytes": 1504,
+      "sha256": "aaac3c446288ad60d7a5046c12b1430430b95cc1357eb501ad1260b30d2f9cf3"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/projects.json",
+      "bytes": 1968,
+      "sha256": "335a42710741cf2a3a10943c578f2053894cfb10d4c2102b8db6b68e9a9f82e2"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/session.json",
+      "bytes": 77,
+      "sha256": "c293f9d3fe990cb79bb34d7fde3247965dd60940425e7e498ea20aad34630f7c"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/prompt.txt",
+      "bytes": 1244,
+      "sha256": "e97c7911bd653048c6b7d8c0e216de4061facc7794c4157e723a64c0a4e48a11"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/synthetic-input.json",
+      "bytes": 228,
+      "sha256": "62a40472b1d1661c652e5b6e2014d6faed9de54846a228c0f18cb89f9121033f"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/dispatch.json",
+      "bytes": 1658,
+      "sha256": "d3ddf6e4bd9b24eaa3fcfe23d5c9f47196138505c40c8101884ec734f8b5c55a"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/independent-number-check.json",
+      "bytes": 1787,
+      "sha256": "23af65319d0f3d167955ff7a72b9e2ccabc15971919d8283c1b65454ab3a524c"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/model-receipt.json",
+      "bytes": 12943,
+      "sha256": "51cb3df304f06c3023d5284515934d9f2ac3b0f31bbfa12875509904dd3ca07b"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/actual-result.json",
+      "bytes": 7566,
+      "sha256": "4ba336bcd5e7da61ba33216a5d7eeca5a7a8a4048d725196578fedb58361a8cb"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/run.json",
+      "bytes": 4845,
+      "sha256": "512c55d82f311bcced703adb86d08d732e4b33f6948e5cedbcaf65671e60fd31"
+    },
+    {
+      "path": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/succeeded/transcript.json",
+      "bytes": 226595,
+      "sha256": "d2f2dbfd96cdc0ba2bcebfca3425af347cb2fb5c6770fb9726d4d86ace672c6b"
+    }
+  ],
+  "priorFailure": "prior-failed/transcript.json",
+  "localEnvironmentCorrection": "Service2.12.5 overlay initially differed from isolated child Pydantic2.13.4; child corrected to same pinned2.12.5. No product or numeric method changes.",
+  "limitations": [
+    "Synthetic bounded method probe only, not real study inference or clinical acceptance.",
+    "Model task run succeeded does not replace actual calculation status and retained-byte checks."
+  ]
+}

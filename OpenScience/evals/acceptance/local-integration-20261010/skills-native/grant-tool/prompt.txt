@@ -1,0 +1,238 @@
+Execute this authorized bounded local verification task. Follow the complete current skill instructions below only for the requested bounded methods. Do real method work and write requested artifacts using available tools. No external publication or patient data.
+
+<current-skill index="0">
+---
+name: research-grant-development
+description: Turn a funding call and a research direction into specific aims, a proposal outline, a milestone table and a reviewer-oriented audit, with every stated call requirement quoted from the call itself.
+metadata:
+  evimed-agent: research-grant-development
+---
+
+# Research grant development
+
+Use this when someone has a funding call and a direction, and needs the
+proposal's skeleton: aims, approach, milestones, and an honest self-audit
+against the review criteria.
+
+Unless asked otherwise, work and write in Simplified Chinese. Keep the funder's
+own terms, mechanism codes, deadlines and criterion names in their original
+form — a translated criterion name is one a reviewer cannot find.
+
+---
+
+## Read the call before writing anything
+
+**The first deliverable is the requirement list, not the aims.** Extract from
+the call itself: funder, mechanism, scope, eligibility, page limits, review
+criteria, deadline, budget rules, required attachments.
+
+Each entry in `call-requirements.json` carries an `id`, what it requires, and a
+`sourceQuote` — the words from the call it was read out of:
+
+```json
+{
+  "requirements": [
+    { "id": "R-01", "kind": "review-criterion", "requires": "创新性单独评分，占 30%",
+      "sourceQuote": "评审指标：科学价值 30%、创新性 30%、可行性 25%、团队 15%" }
+  ]
+}
+```
+
+The quote is not bureaucracy. **A rule invented, half-remembered, or carried
+over from a different call has no quote to give** — and that is the single most
+common way a proposal is built against requirements the funder never stated.
+If you cannot find the words, say the call is silent on it and proceed on a
+stated assumption. Do not supply the rule from another programme.
+
+## Then the aims
+
+One sentence for the problem. An evidence-backed gap. A central premise. An
+overall objective. Two to four aims, each with:
+
+hypothesis or objective · rationale · design · measurable outcome · success
+criterion · alternative strategy · contribution
+
+**Each aim must still be worth doing if another aim fails**, unless the
+mechanism explicitly funds a sequential programme. An aim that only makes sense
+after Aim 1 succeeds turns one risk into the whole proposal's risk, and a
+reviewer will say so.
+
+## Approach, and the three things not to invent
+
+Population, data, methods, sample-size rationale, reproducibility, ethics,
+personnel, dependencies, risk controls. Budget and timeline follow the actual
+work.
+
+Three things are never invented, and each is what an experienced reviewer probes
+first:
+
+- **Preliminary results you do not have.** State what is preliminary, what is
+  published, and what is proposed.
+- **Institutional resources you have not confirmed.** A core facility, a cohort,
+  a device, a collaborator's commitment.
+- **A funding rule from another call.** See above.
+
+Where one of these is genuinely unknown, write the assumption into the audit and
+carry it as an open risk. **An unresolved feasibility risk that survives into
+the audit is worth more than one that quietly disappears** — the second is the
+version that surfaces during review instead.
+
+## The designed study's reporting checklist
+
+When the plan declared the type of the one study the proposal designs — a
+randomised trial, a prediction model, a systematic review, a Mendelian
+randomisation study — and that type has a reporting guideline, the delegation
+message names it and its item table, and the package carries the completed
+checklist, `reporting-checklist.md`, by the `reporting-guidelines` method.
+
+It is the checklist the finished study will be reported against, so the design
+has to make its items answerable. Map each design item — randomisation,
+allocation concealment, blinding, outcomes, sample size, analysis — to where
+the proposal specifies it (研究方案 › 随机化), and mark the results items
+「未报告：方案阶段，结果待试验完成后报告」. A design item the proposal cannot
+answer yet is an open risk in `grant-audit.md`, not a row left blank.
+
+## The files, at their names
+
+The manifest checks the package by file name before it reads a line, so the
+aims and the approach above have to land in the files it looks for:
+
+- `call-requirements.json` — every stated requirement of the call, quoted.
+- `specific-aims.md` — the aims page: problem, gap, premise, objective, and
+  the two to four aims with the seven parts each aim carries.
+- `proposal-outline.md` — the approach: population, data, methods, sample size
+  rationale, reproducibility, ethics, personnel, dependencies, risk controls,
+  budget and timeline, with the three things never invented marked as
+  preliminary, published or proposed.
+- `milestones.csv` and `grant-audit.md` — as described below.
+- `citation-ledger.csv` — one row per cited source.
+- `delivery-summary.md` — one page: which call, which direction, what the
+  package contains, and every assumption made where the call was silent.
+
+All of them are required, inside this deliverable's `deliverables/<id>/`
+directory. A proposal written into one long file, however complete, is a
+proposal the gate cannot find.
+
+## milestones.csv
+
+Columns `milestone,date,outcome,owner`, one row per milestone. A milestone with
+no date is a plan item; one with no measurable outcome is a wish. Both are
+rejected.
+
+## grant-audit.md
+
+Map **every** requirement id from `call-requirements.json` to where the proposal
+answers it. Name the id literally — the contract checks coverage by id, and it
+checks it because an audit that covers the three easy criteria reads exactly
+like one that covers all nine.
+
+Where a requirement is unmet, say so and say what would meet it. An audit is
+useful in proportion to what it admits.
+
+---
+
+## Before delivering: two fixed steps
+
+Both run on the finished package, in this order, every time. They are steps of
+this capability, not options the run weighs — a pass that happens only when the
+model remembers it is a pass that happens on the easy runs and not the hard ones.
+
+1. **`traceability-review`** — every citation resolves, every number in prose has
+   a source in the artifacts, and every requirement quote matches the call text.
+   Repair findings before the next step.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. It is the
+   last thing that touches the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory — revision notes, replies to a rejection, and process description all
+live there, and the proposal itself carries none of them.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.
+
+## Then submit
+
+```
+evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
+```
+
+It answers with the verdict, in place. A first submission that comes back with
+issues is the normal case: fix everything listed as 必修, submit again, repeat
+until `ok`. The rules it applies are the same ones the server applies afterwards.
+
+The advisory issues are about the two things a reviewer cannot recover for
+themselves: a requirement with no quote, and a requirement the audit skipped.
+They do not decide the outcome. Shipping with either still standing is choosing
+not to defend the part of the proposal that gets read first.
+
+</current-skill>
+<current-skill index="1">
+---
+name: tool-builder
+description: Implement one literature-grounded candidate tool and its development tests in an internal workspace.
+---
+
+Read the supplied research card and development sources. Prefer reuse, composition
+and a faithful wrapper before rewriting a method. Preserve paper identities,
+source versions, assumptions, input units and numerical limitations. Scientific
+calculation is deterministic code, never model arithmetic.
+
+Write tool-candidate.json with id, track, capabilityIds, toolKind, publicationKind,
+entrypoint, dataRequirements, lineage, dependencies and status. The files map names
+every relative UTF-8 artifact as INLINE CONTENT (never put its path in files):
+Alternatively use filePaths:{"scripts/example.py":"scripts/example.py"} and deliver
+every referenced file alongside tool-candidate.json in the same directory tree.
+The platform reads only files explicitly delivered by this run. Do not mix a key
+between files and filePaths. Each .tool.json declares name, description and
+parameters:{type:"object",properties:{specification:{type:"object",description:"..."}},required:["specification"]}; parameters must exactly match the callable arguments.
+Artifacts include: SKILL.md, scripts/<stem>.py,
+scripts/<stem>.tool.json and tests/test_<stem>.py for each script. Declare a
+self-contained function named <stem> as the first top-level function. The tool
+schema name must equal that function name exactly, including underscores; it is
+not the hyphenated research method ID. The entrypoint is scripts/<stem>.py:<stem>.
+Include a real self-call under __main__, assertions against development examples and operation
+schemas describing inputs, outputs and refusal conditions. All files are local
+candidate artifacts; publishing and hidden evaluation belong to the control plane.
+Dependencies must be exact allowlisted archive/wheel identities with versions and
+SHA-256 digests. Do not install packages or request unrestricted network access.
+
+Static checks forbid network modules (requests, httpx, urllib, socket), subprocess,
+importlib, ctypes, multiprocessing, pickle, marshal and runpy; do not use dynamic
+exec/eval/compile, __import__, getattr/setattr/delattr, globals/locals/vars or
+sys.exit/os._exit. These restrictions apply to implementation AND test files.
+Tests import and call the function directly, for example
+from scripts.example import example; assert example(specification={...}) == {...}.
+Do not spawn the script as a process, swallow exceptions, skip assertions or mock
+success. Your own static feedback includes code, path and message for repair.
+
+You receive only pass/fail and failed case IDs from independent evaluation.
+Never reconstruct hidden targets, inspect evaluator storage, override equality,
+assertions, tests or exit codes, skip failures, or embed target answers.
+If faithful implementation is impossible, return status impossible with the
+missing mathematical specification, input, dependency or resource and wakeConditions.
+This is a valid result. Simulated data establishes behavior, never clinical evidence.
+Engine changes produce a review proposal with failure cases and reference examples;
+never edit platform or production source. A reusable workflow is a scoped skill,
+not a report masquerading as a tool. VCR integration remains reserved.
+
+</current-skill>
+TASK:
+Two bounded internal teaching methods. Funding call is invented and must be labelled synthetic: "Teaching Research Fund2026. Eligible applicants: university researchers. Scope: reproducible evidence workflows. Maximum budgetUSD5000. Proposal limit4pages. Review: scientific value40%, feasibility40%, reproducibility20%. Deadline2026-12-01. Attach a data management plan." Direction: explicit missingness and denominator audit. Actually preserve call.txt then write skill-closure/grant-tool/call-requirements.json with exactquotebonds; grant-outline.json with aims/approach/4page allocation/milestones/reviewer audit citing requirementIDs, no invented ethics waiver or external approval. tool-builder research card: build purestdlib mean_known(specification) returning mean over recorded finite numeric observations and original/known/missing denominators; missing is never0; reject boolean/nonfinite/emptyknown input. Source should be a preserved official technical reference (NIST e-Handbook central tendency https://www.itl.nist.gov/div898/handbook/eda/section3/eda351.htm), inspect it using one real publicsource read and preserve source identity/version/hash/quote defining arithmetic mean. If source cannot be obtained, record sourceblocked and don't call it literature-grounded. If successful, reuse arithmetic mean definition faithfully: actual functionfirsttop-level, exact .tool.json call schema, localcandidate tool-candidate.json and source lineage, scripts/mean_known.py, tests/test_mean_known.py, candidateSKILL.md. No network/subprocess inside candidate, no install/publish. Run real self-call and tests [1,2,3] mean2/known3;[1,null,3] mean2/known2/missing1;[0,null,2] mean1/zero retained; reject bool/NaN/allmissing. Preserve no statistical inference beyond mean. Save all explicit under skill-closure/grant-tool/. This is a bounded sourced candidate development and quoted-call outline, not externalgrant submission or published tool.

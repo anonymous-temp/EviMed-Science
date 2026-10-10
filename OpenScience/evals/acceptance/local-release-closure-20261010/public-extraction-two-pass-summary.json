@@ -1,0 +1,441 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10",
+  "scope": "Engineering retest on the same previously observed four public DrugProt development abstracts; not independent holdout or Chinese clinical qualification",
+  "sourceFiles": {
+    "evals/method-quality/public_extraction.mjs": "2280c246c234fc85589655e1aac905ac543d4e449e9b2f13a1a173fda42349e9",
+    "evals/method-quality/public_extraction.test.mjs": "8b442e40c0f35a1531a9394c74de4ed2a98f40917493b925d66ba6555304ba7b"
+  },
+  "implementation": [
+    "Entity pass extracts exact mentions; deterministic source sorting freezes final IDs",
+    "Relation pass selects fixed CHEMICAL/GENE IDs and cannot redefine entities",
+    "Quotation occurrence must contain both exact endpoint spans",
+    "Separate sentences remain unresolved without verified coreference; no inferred ID repair",
+    "New two-pass output requires quotation and occurrence; historical three-field archives remain readable"
+  ],
+  "regressions": {
+    "focusedNodeTests": 9,
+    "passed": 9,
+    "nodeSyntaxCheck": "passed",
+    "eslint": "Direct evals ESLint invocation lacked a configuration; not reported as passing"
+  },
+  "historicalAndCurrentScores": [
+    {
+      "path": "/tmp/evimed-release-closure-20261010/models/public-score.json",
+      "sha256": "de56d3fa7ca10a5298b10bce0b6a08b403866fbc54af30106105fec6d33cd692",
+      "scorecard": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "strict": {
+            "tp": 60,
+            "fp": 18,
+            "fn": 82,
+            "precision": 0.7692307692307693,
+            "recall": 0.4225352112676056,
+            "f1": 0.5454545454545454
+          },
+          "overlap": {
+            "tp": 70,
+            "fp": 8,
+            "fn": 72,
+            "precision": 0.8974358974358975,
+            "recall": 0.49295774647887325,
+            "f1": 0.6363636363636364
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "relations": {
+            "tp": 7,
+            "fp": 16,
+            "fn": 31,
+            "precision": 0.30434782608695654,
+            "recall": 0.18421052631578946,
+            "f1": 0.22950819672131148
+          }
+        }
+      ]
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/models/public-baseline-score.json",
+      "sha256": "45d2f36ba1041687624534091d30a54596cc046b17173a102636f3ad322bebf7",
+      "scorecard": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "strict": {
+            "tp": 82,
+            "fp": 24,
+            "fn": 60,
+            "precision": 0.7735849056603774,
+            "recall": 0.5774647887323944,
+            "f1": 0.6612903225806451
+          },
+          "overlap": {
+            "tp": 91,
+            "fp": 15,
+            "fn": 51,
+            "precision": 0.8584905660377359,
+            "recall": 0.6408450704225352,
+            "f1": 0.7338709677419355
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "relations": {
+            "tp": 1,
+            "fp": 13,
+            "fn": 37,
+            "precision": 0.07142857142857142,
+            "recall": 0.02631578947368421,
+            "f1": 0.038461538461538464
+          }
+        }
+      ]
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/models/public-final-score.json",
+      "sha256": "4b24090487ece5e211a4ed2017b81f4f8bca725ac47f9b2d929ecb3b2175c5f7",
+      "scorecard": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "strict": {
+            "tp": 82,
+            "fp": 23,
+            "fn": 60,
+            "precision": 0.780952380952381,
+            "recall": 0.5774647887323944,
+            "f1": 0.6639676113360324
+          },
+          "overlap": {
+            "tp": 91,
+            "fp": 14,
+            "fn": 51,
+            "precision": 0.8666666666666667,
+            "recall": 0.6408450704225352,
+            "f1": 0.7368421052631579
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "relations": {
+            "tp": 5,
+            "fp": 11,
+            "fn": 33,
+            "precision": 0.3125,
+            "recall": 0.13157894736842105,
+            "f1": 0.18518518518518517
+          }
+        }
+      ]
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/models/public-two-pass-score-first.json",
+      "sha256": "1c49ccc473677c8869cc6a75b1e566d3405feda8b7e8d5cfff0a38de7faca8ff",
+      "scorecard": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 1,
+          "strict": {
+            "tp": 84,
+            "fp": 22,
+            "fn": 58,
+            "precision": 0.7924528301886793,
+            "recall": 0.5915492957746479,
+            "f1": 0.6774193548387096
+          },
+          "overlap": {
+            "tp": 90,
+            "fp": 16,
+            "fn": 52,
+            "precision": 0.8490566037735849,
+            "recall": 0.6338028169014085,
+            "f1": 0.7258064516129032
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 1,
+          "relations": {
+            "tp": 10,
+            "fp": 4,
+            "fn": 28,
+            "precision": 0.7142857142857143,
+            "recall": 0.2631578947368421,
+            "f1": 0.38461538461538464
+          }
+        }
+      ]
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/models/public-two-pass-score-final.json",
+      "sha256": "023e17b33f2595ef54e654cd99bf2c712732f9f89e4c003f50353e90ba7844a6",
+      "scorecard": [
+        {
+          "task": "ner",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "strict": {
+            "tp": 109,
+            "fp": 33,
+            "fn": 33,
+            "precision": 0.7676056338028169,
+            "recall": 0.7676056338028169,
+            "f1": 0.7676056338028169
+          },
+          "overlap": {
+            "tp": 120,
+            "fp": 22,
+            "fn": 22,
+            "precision": 0.8450704225352113,
+            "recall": 0.8450704225352113,
+            "f1": 0.8450704225352113
+          }
+        },
+        {
+          "task": "relation",
+          "dataClass": "public_biomedical_abstract",
+          "cases": 4,
+          "sourceGroups": 4,
+          "missing": 0,
+          "invalid": 0,
+          "relations": {
+            "tp": 13,
+            "fp": 6,
+            "fn": 25,
+            "precision": 0.6842105263157895,
+            "recall": 0.34210526315789475,
+            "f1": 0.45614035087719296
+          }
+        }
+      ]
+    }
+  ],
+  "observedProviderRequests": [
+    {
+      "caseId": "drugprot-9851542",
+      "httpStatus": 200,
+      "observedModel": "deepseek-flash",
+      "inputUsage": {
+        "input_tokens": 1113,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "output_tokens": 0,
+        "service_tier": "standard"
+      },
+      "finalUsage": {
+        "input_tokens": 1113,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "output_tokens": 582,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "caseId": "drugprot-9851542",
+      "httpStatus": 200,
+      "observedModel": "deepseek-flash",
+      "inputUsage": {
+        "input_tokens": 2298,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 256,
+        "output_tokens": 0,
+        "service_tier": "standard"
+      },
+      "finalUsage": {
+        "input_tokens": 2298,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 256,
+        "output_tokens": 383,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "caseId": "drugprot-22872607",
+      "httpStatus": 200,
+      "observedModel": "deepseek-flash",
+      "inputUsage": {
+        "input_tokens": 628,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 384,
+        "output_tokens": 0,
+        "service_tier": "standard"
+      },
+      "finalUsage": {
+        "input_tokens": 628,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 384,
+        "output_tokens": 5,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "caseId": "drugprot-2982865",
+      "httpStatus": 200,
+      "observedModel": "deepseek-flash",
+      "inputUsage": {
+        "input_tokens": 924,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 384,
+        "output_tokens": 0,
+        "service_tier": "standard"
+      },
+      "finalUsage": {
+        "input_tokens": 924,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 384,
+        "output_tokens": 561,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "caseId": "drugprot-2982865",
+      "httpStatus": 200,
+      "observedModel": "deepseek-flash",
+      "inputUsage": {
+        "input_tokens": 2306,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 512,
+        "output_tokens": 0,
+        "service_tier": "standard"
+      },
+      "finalUsage": {
+        "input_tokens": 2306,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 512,
+        "output_tokens": 5,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "caseId": "drugprot-9310349",
+      "httpStatus": 200,
+      "observedModel": "deepseek-flash",
+      "inputUsage": {
+        "input_tokens": 716,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 384,
+        "output_tokens": 0,
+        "service_tier": "standard"
+      },
+      "finalUsage": {
+        "input_tokens": 716,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 384,
+        "output_tokens": 573,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "caseId": "drugprot-9310349",
+      "httpStatus": 200,
+      "observedModel": "deepseek-flash",
+      "inputUsage": {
+        "input_tokens": 2040,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 512,
+        "output_tokens": 0,
+        "service_tier": "standard"
+      },
+      "finalUsage": {
+        "input_tokens": 2040,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 512,
+        "output_tokens": 261,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "caseId": "drugprot-22872607",
+      "httpStatus": 200,
+      "observedModel": "deepseek-flash",
+      "inputUsage": {
+        "input_tokens": 1058,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "output_tokens": 0,
+        "service_tier": "standard"
+      },
+      "finalUsage": {
+        "input_tokens": 1058,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "output_tokens": 503,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "caseId": "drugprot-22872607",
+      "httpStatus": 200,
+      "observedModel": "deepseek-flash",
+      "inputUsage": {
+        "input_tokens": 2192,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 256,
+        "output_tokens": 0,
+        "service_tier": "standard"
+      },
+      "finalUsage": {
+        "input_tokens": 2192,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 256,
+        "output_tokens": 194,
+        "service_tier": "standard"
+      }
+    }
+  ],
+  "formatRepair": {
+    "case": "drugprot-22872607",
+    "initialFailure": "Invalid literal placeholder {\"entities\":[...]}",
+    "additionalAttempts": 1,
+    "type": "JSON format only; no gold labels supplied",
+    "originalArchive": "/tmp/evimed-release-closure-20261010/models/public-two-pass/predictions.json"
+  },
+  "groundingReplay": "Final deterministic grounder replayed saved frozen entities and raw native relation events; no new model inference or reference label access during replay",
+  "limitations": [
+    "Final relation F1 0.45614035087719296 remains insufficient for clinical qualification",
+    "This corpus does not label clinical assertion, experiencer, temporality or eligibility",
+    "Changes were informed by this pilot; an untouched independent evaluation is still required",
+    "Product clinicalFact writer is a separate workflow; no DrugProt rules added to product code"
+  ]
+}

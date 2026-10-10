@@ -1,0 +1,148 @@
+{
+  "artifact": "drug-selection",
+  "artifact_status": "bounded_teaching_method_check",
+  "provenance": {
+    "material": "invented teaching material",
+    "inputs": "inputs.txt (alternatives A and B, and the user-supplied rubric R)",
+    "language": "English, matching the language of the request",
+    "retrieval_performed": false,
+    "note": "A, B, their costs and the rubric are exactly as supplied. No label, trial, guideline or price source was retrieved for this file, and no selection compiler was run."
+  },
+  "decision_scope": {
+    "indication": "Condition Q",
+    "candidates": [
+      {"id": "A", "supplied_facts": ["cost 100"]},
+      {"id": "B", "supplied_facts": ["cost 60", "efficacy unknown"]}
+    ],
+    "population": "not supplied",
+    "jurisdiction": "not supplied",
+    "care_setting": "not supplied",
+    "comparator_or_current_standard": "not supplied",
+    "budget_perspective": "not supplied",
+    "decision_date": "not applicable: bounded teaching check"
+  },
+  "rubric": {
+    "origin": "user_supplied",
+    "policy_version": "not supplied",
+    "domains": [
+      {"domain": "efficacy", "weight": 0.5, "scale": null, "direction": null, "normalization": null},
+      {"domain": "safety", "weight": 0.3, "scale": null, "direction": null, "normalization": null},
+      {"domain": "cost", "weight": 0.2, "scale": null, "direction": null, "normalization": null}
+    ],
+    "weight_sum": 1.0,
+    "missing_data_rule": "not supplied",
+    "rule_note": "Weights on their own are not a score. Five things are missing before any reproducible total can exist: a scale, a direction, a normalization rule, a rule for missing data, and a policy version. Supplying them here would mean inventing them, and an invented scoring rule misrepresents the rubric it claims to apply."
+  },
+  "domain_matrix": [
+    {
+      "candidate": "A",
+      "domain": "efficacy",
+      "weight": 0.5,
+      "status": "missing",
+      "observed_value": null,
+      "score": null,
+      "reason": "No efficacy data for A were supplied. The teaching cohort (excerpt E) describes the medicine under study, not candidate A, so it cannot be transferred."
+    },
+    {
+      "candidate": "B",
+      "domain": "efficacy",
+      "weight": 0.5,
+      "status": "missing",
+      "observed_value": null,
+      "score": null,
+      "reason": "Explicitly supplied as unknown for B."
+    },
+    {
+      "candidate": "A",
+      "domain": "safety",
+      "weight": 0.3,
+      "status": "missing",
+      "observed_value": null,
+      "score": null,
+      "reason": "No safety data for A were supplied."
+    },
+    {
+      "candidate": "B",
+      "domain": "safety",
+      "weight": 0.3,
+      "status": "missing",
+      "observed_value": null,
+      "score": null,
+      "reason": "No safety data for B were supplied."
+    },
+    {
+      "candidate": "A",
+      "domain": "cost",
+      "weight": 0.2,
+      "status": "observed_but_not_comparable",
+      "observed_value": 100,
+      "score": null,
+      "reason": "One figure, with no currency, price date, dosage basis, treatment duration, jurisdiction or budget perspective attached. Cost figures can be compared only when that context is explicit, so this one cannot be scored and cannot enter a total."
+    },
+    {
+      "candidate": "B",
+      "domain": "cost",
+      "weight": 0.2,
+      "status": "observed_but_not_comparable",
+      "observed_value": 60,
+      "score": null,
+      "reason": "Same gaps as for A: the figure is not comparable and cannot be scored."
+    }
+  ],
+  "score_computation": {
+    "attempted": true,
+    "computed": false,
+    "score_by_candidate": {"A": null, "B": null},
+    "weight_populated_by_candidate": {"A": 0.2, "B": 0.2},
+    "weight_scored_by_candidate": {"A": 0.0, "B": 0.0},
+    "unpopulated_weight_shared_by_candidates": 0.8,
+    "missing_values_entered_as_zero": false,
+    "weight_populated_definition": "sum of the rubric weights of the domains in which a candidate has any supplied value at all (cost only, for both candidates); computed from the rubric weights and the domain statuses by check_evidence_framing.py and recorded in checks-output.txt",
+    "weight_scored_definition": "sum of the rubric weights of the domains in which a candidate has a comparable, scored value; zero for both candidates, because the cost figures fail their comparability prerequisites and no other domain is populated",
+    "withholding_reasons": [
+      "Efficacy carries weight 0.5 and is missing for both candidates.",
+      "Safety carries weight 0.3 and is missing for both candidates.",
+      "The cost dimension is populated but fails its comparability prerequisites, so it cannot be scored either.",
+      "No scale, direction, normalization rule, missing-data rule or policy version was supplied.",
+      "A total covering 0.2 of the 1.0 declared weight is not a comparison between candidates; the remaining 0.8 carries no value at all, and none of it may be filled in with zeros."
+    ]
+  },
+  "ranking": {
+    "provided": false,
+    "reason": "Neither candidate has a comparable scored value in any declared domain, so there is no ranking to give and no preference to state. This is not a close call between two similar candidates; the comparison cannot be made at all."
+  },
+  "qualitative_comparison": {
+    "supported_statements": [
+      "B carries a lower supplied nominal figure than A (60 against 100), in units that are not named."
+    ],
+    "unsupported_statements": [
+      "that the lower nominal figure makes B the candidate of choice",
+      "that either candidate has a clinical advantage over the other",
+      "that the difference in the supplied figures is a cost-effectiveness result or a budget impact",
+      "that the two candidates are interchangeable"
+    ],
+    "what_would_change_this": [
+      "efficacy and safety data for both candidates on the supplied scale",
+      "a stated scale, direction, normalization rule, missing-data rule and policy version",
+      "complete economic context: currency, price date, dosage basis, treatment duration, jurisdiction and perspective"
+    ]
+  },
+  "sensitivity": {
+    "leave_one_domain_out": "not computable: no candidate carries a scored value in any domain, so there is nothing to remove and no ranking whose stability could be tested"
+  },
+  "limitations": [
+    "Two invented candidates with one cost figure each and no clinical data.",
+    "The rubric was supplied as weights only; the remaining rules are absent.",
+    "Nothing here was retrieved or verified against a source."
+  ],
+  "claims": {
+    "score_computed": false,
+    "ranking_provided": false,
+    "superiority_claimed": false,
+    "preference_claimed": false
+  },
+  "human_review": {
+    "required": true,
+    "reason": "The authorized pharmacy and therapeutics process remains the decision maker; this file provides a documented statement that the comparison cannot be scored as supplied."
+  }
+}

@@ -1,0 +1,118 @@
+---
+name: comprehensive-drug-evaluation
+description: Produce a traceable, domain-by-domain medicine evaluation using EviMed evidence without automatically converting study design, certainty, or scores into a recommendation.
+---
+
+# Comprehensive Drug Evaluation
+
+Use this workflow for a medicine and defined indication. It supports evidence review and institutional decision preparation; it is not a prescription, HTA ruling, reimbursement decision, or procurement authorization.
+
+Unless the user requests another language, interact and write deliverables in Simplified Chinese. Preserve official medicine names, identifiers, source titles, currencies, and units when translation would reduce traceability.
+
+## 1. Bind the question
+
+Require medicine and indication. First call `mcp__evimed__comprehensive_drug_evaluation` with `action: requirements`. Ask once for the returned missing fields in one concise group. If the user does not provide them, continue retrieval but keep the affected dimensions unscored. Capture population, comparator, jurisdiction, care setting, outcomes, time horizon, decision date, and uploaded evidence when material. If the user requests a quantitative score, set `quantitativeScoringRequested: true` and collect the exact evaluation domains, item definitions, scales, weights, directions, missing-data rules, and versioned scoring policy. Normalize the medicine with `mcp__evimed__drug_term_normalize`. State unresolved scope gaps rather than silently broadening the question.
+
+## 2. Retrieve and freeze evidence
+
+Call `mcp__evimed__comprehensive_drug_evaluation` with `action: retrieve`. Use label, guideline, trial, literature, and active biomedical-source tools only to fill a declared gap or verify a material claim. Deduplicate records with `mcp__evimed__evidence_deduplicate`.
+
+Labels come from `mcp__evimed__drug_label_search`: search by the medicine's name and jurisdiction (for China it reads the EviMed label index), then read the label you rely on with its `labelId`, which preserves the text with its approval number. `mcp__evimed__biomedical_source_search` asks one catalogued `source` at a time; `dailymed` and `openfda` hold US labels and match a drug name, not a phrase such as "FARXIGA dapagliflozin tablets label".
+
+The optional `mcp__evimed__pharmacy_reference_search` tool may supply private
+terminology, dose-risk, interaction, route, monitoring, or special-population
+context. Treat every returned row as a hypothesis or institution-specific
+decision-support reference, never as current label, guideline, pharmacopoeia,
+HTA, efficacy, or safety evidence. Verify any material rule against a current
+authoritative source and keep private rows labeled `user_provided_other`.
+
+Preserve the exact query, source identifier, URL, jurisdiction, version/date, retrieval time, and observed fields. Bibliographic metadata alone cannot establish study design, outcomes, effect size, certainty, or comparative benefit. The word "cohort" does not establish investigator-assigned treatment: call it interventional only when the preserved methods explicitly describe assignment; otherwise retain the reported cohort design and mark assignment as unknown. Read the abstract or full text required for every material conclusion. A source outage or empty retrieval is missing evidence, not evidence of no effect. Mark uploaded files as user-provided evidence.
+
+For every `sourceInventory` item passed to the compiler, declare `evidenceAccess`
+as `full_text`, `abstract`, `regulatory_record`, `registry_record`,
+`bibliographic_only`, `user_provided_full_text`, or `user_provided_other`.
+Never cite a `bibliographic_only` item in an observed domain assessment; it may
+remain in the snapshot only as a retrieval lead. A label effective, revision,
+or retrieval date is not the product's original authorization date. Describe
+an unavailable jurisdiction as unavailable and do not invent an HTTP status.
+
+Freeze the retrieval and provenance package in `evidence-snapshot.json` before assessment; the compiler input SHA-256 binds the structured assessment to the supplied inventory.
+
+Trace the field's landmark trials before you assess: call `mcp__evimed__reference_list`
+on the newest guideline and the newest systematic review you retrieved, and screen
+the trials and reviews their reference lists name (`mcp__evimed__literature_search`
+`pmids` for the abstracts). A trial known by an acronym is missed by keyword queries
+and is named in every guideline's references; a guideline Europe PMC does not index
+is read with `mcp__evimed__open_access_full_text` or `mcp__evimed__web_read` instead.
+
+## 3. Assess domains without shortcuts
+
+Assess `effectiveness`, `safety`, and `applicability` as mandatory core domains. Add `economics`, `hta`, `evidence_certainty`, `innovation`, `accessibility`, `equity`, or `other` only when supported and relevant. Each row must contain status, rationale, and `evidenceIds` that resolve to the snapshot.
+
+Evaluate the body of evidence, not the highest single study. Study design is only a starting point: do not call metadata a randomized trial, do not infer certainty from design alone, and do not map certainty directly to recommendation strength. Use `certainty: not_rated` unless a validated adapter or a user-supplied formal assessment provides a named framework, traceable full-text evidence, and explicit risk-of-bias, inconsistency, indirectness, imprecision, and publication-bias judgments. For a formal rating, send those as `certaintyOrigin`, `certaintyFramework`, `fullTextEvidenceIds`, `certaintyBasis`, and `certaintyJudgments`; a narrative impression or abstract-only review is not a formal certainty assessment.
+
+Keep effectiveness, harms, applicability, certainty, economics/HTA, equity, values, and implementation separate. Resolve contradictions rather than averaging them away. Never invent an HTA conclusion, price, budget impact, cost-effectiveness result, composite score, threshold, or weight. Preserve currency, price date, jurisdiction, perspective, time horizon, discounting, and provenance when economics exist. A publication score is reproducible only for its reported product, regimen, price date, population, setting, rubric version, and evidence cutoff; use it as an external reference case, not a universal score.
+
+Preserve subgroup denominators exactly. When a source reports a combined group
+(for example, two adjacent age strata), never assign the combined percentage to
+only one component subgroup. Reconcile the prose against the source table or
+explicit stratum counts before writing the claim.
+
+## 4. Compile deterministically
+
+Call `mcp__evimed__comprehensive_drug_evaluation` with `action: compile`, `sourceInventory`, and all domain assessments. Preserve its core-domain coverage and audit hash. If quantitative scoring was requested, also supply the exact `evaluationDomains`, `scoringRubric`, `scoringPolicyVersion`, and item-derived score fields for every domain. The compiler computes a weighted normalized score only when the declared domains are complete, all rules use the supplied version, every value is finite and in range, and any economic context is complete. Otherwise it withholds the score and lists the reasons; missing evidence is never zero. If compilation returns an error, correct the evidence rows; do not bypass the gate. A computed score never determines recommendation strength automatically.
+
+The final narrative may describe benefit-harm and decision considerations, but must label uncertainty and leave clinical, HTA, reimbursement, and procurement conclusions to qualified reviewers.
+
+## 5. Deliverables
+
+Write:
+
+- `comprehensive-evaluation-report.md`: question, methods, source coverage, domain findings, certainty basis, contradictions, applicability, economics/HTA limits, and reviewer considerations.
+- `evidence-table.csv`: one traceable row per source-domain link with observed findings and limitations.
+- `evaluation-summary.json`: the exact compiler result, domain coverage, audit hash, and human-review flag.
+- `evidence-snapshot.json`: the scope, and one entry per source you rely on: its `sourceId` as the retrieval tool returned it, `evidenceAccess`, and the fields you observed. Each submission writes `retrieved` into this file: the platform's record of every source this run's retrieval tools returned, with its identifier, title, address, tool, query and time. That key is the platform's; never type or script it. Every link in the report must be a source this run retrieved. A portal, home or search page is not a source: cite a label by its approval number and label id, and name a work you did not read as not read, without a link.
+
+Resolve every material citation. Completion means the assisted evidence and domain-assessment package is reproducible, not that an external approval workflow has finished.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.

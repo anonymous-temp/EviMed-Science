@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T04:35:31.370337Z",
+  "registered": 63,
+  "registrySha256": "b35f47f564e2cd90050ae3a9879362ffe50f07ff052f054f4ba3b303b64e78be",
+  "registrySourceSha256": "8356f84c020e2e03434733d738bb1350be1b072ec8cdfb46eb6f83feee2d3310",
+  "conditionalFixturesNotProbed": [
+    "iuphar-bps-guide-to-pharmacology"
+  ],
+  "qualityPass": 62,
+  "qualityFail": 1,
+  "queriesPlanned": 126,
+  "queriesExecuted": 124,
+  "productionRoute": "controlled_connector_routes",
+  "productionRoutes": [
+    "bundled_verified_dataset",
+    "server_allowlisted_gateway"
+  ],
+  "productionGatewayUsed": true,
+  "directSourceRequests": false,
+  "runtimeArbitraryEgress": false,
+  "bundledDatasetSources": [
+    "sider"
+  ],
+  "bundledDatasets": [
+    {
+      "source": "sider",
+      "path": "runtime/mcp/evimed-research/data/sider-4.1.sqlite",
+      "bytes": 7884800,
+      "sha256": "26274902d38b0bc999503623f8e59209a613821bf27f593656ed39443994cde4",
+      "licensePath": "runtime/mcp/evimed-research/data/sider-4.1.LICENSE.json"
+    }
+  ],
+  "claimBoundary": "This certifies two distinct traceable queries and response-contract quality per connector at the recorded time. It does not certify every query shape, recall, ranking quality, or future upstream availability.",
+  "unavailable": [
+    "arxiv"
+  ],
+  "cooldown": "arXiv returned HTTP 429 in the preserved earlier campaign. No further arXiv request was sent; both unexecuted cases remain failed and arXiv remains in the 63-source denominator.",
+  "gatewayObservation": {
+    "handler": "apps/server/src/publicSourceGateway.mjs",
+    "forwardedRequestsInInterval": 149,
+    "allRequestsAllowlistedHttpsRead": true,
+    "methods": {
+      "GET": 133,
+      "POST": 16
+    },
+    "record": "connector-gateway-observations.json"
+  },
+  "formalConnectorAuditPassed": false,
+  "rawDocument": {
+    "path": "connectors-final/connector-probe-v3.json",
+    "bytes": 136195,
+    "sha256": "3a2d06cb0bd0149ac78d3dced91b54e6bd4d3925bf7fcca08ac817ede8dc8ab4"
+  },
+  "deploymentPerformed": false,
+  "postCooldownAttempt": {
+    "record": "connector-retry-incomplete.json",
+    "outcome": "Receipt incomplete; no new upstream availability or qualification claim"
+  }
+}

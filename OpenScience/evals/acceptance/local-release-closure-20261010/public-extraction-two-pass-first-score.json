@@ -1,0 +1,218 @@
+{
+  "scorer": "evimed-clinical-metrics-1",
+  "referenceHash": "88d8dfa81c01aab5636f6d2818f2e0c4b8d8ebc96645d8ec90b6f482550295fc",
+  "predictionHash": "0fabf953348ddec5820a03d33917b6371b42b9c7349c266370bca07f54304850",
+  "cases": [
+    {
+      "id": "drugprot-9851542",
+      "sourceGroup": "9851542",
+      "dataClass": "public_biomedical_abstract",
+      "status": "predicted",
+      "task": "relation",
+      "scorer": "evimed-clinical-metrics-1",
+      "metrics": {
+        "tp": 6,
+        "fp": 3,
+        "fn": 4,
+        "precision": 0.6666666666666666,
+        "recall": 0.6,
+        "f1": 0.631578947368421
+      }
+    },
+    {
+      "id": "drugprot-9851542:ner",
+      "sourceGroup": "9851542",
+      "dataClass": "public_biomedical_abstract",
+      "status": "predicted",
+      "task": "ner",
+      "scorer": "evimed-clinical-metrics-1",
+      "metrics": {
+        "strict": {
+          "tp": 32,
+          "fp": 2,
+          "fn": 5,
+          "precision": 0.9411764705882353,
+          "recall": 0.8648648648648649,
+          "f1": 0.9014084507042254
+        },
+        "overlap": {
+          "tp": 32,
+          "fp": 2,
+          "fn": 5,
+          "precision": 0.9411764705882353,
+          "recall": 0.8648648648648649,
+          "f1": 0.9014084507042254
+        }
+      }
+    },
+    {
+      "id": "drugprot-22872607",
+      "sourceGroup": "22872607",
+      "dataClass": "public_biomedical_abstract",
+      "status": "invalid",
+      "task": "relation",
+      "scorer": "evimed-clinical-metrics-1",
+      "metrics": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 10,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "id": "drugprot-22872607:ner",
+      "sourceGroup": "22872607",
+      "dataClass": "public_biomedical_abstract",
+      "status": "invalid",
+      "task": "ner",
+      "scorer": "evimed-clinical-metrics-1",
+      "metrics": {
+        "strict": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 33,
+          "precision": null,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "overlap": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 33,
+          "precision": null,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      }
+    },
+    {
+      "id": "drugprot-2982865",
+      "sourceGroup": "2982865",
+      "dataClass": "public_biomedical_abstract",
+      "status": "predicted",
+      "task": "relation",
+      "scorer": "evimed-clinical-metrics-1",
+      "metrics": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    {
+      "id": "drugprot-2982865:ner",
+      "sourceGroup": "2982865",
+      "dataClass": "public_biomedical_abstract",
+      "status": "predicted",
+      "task": "ner",
+      "scorer": "evimed-clinical-metrics-1",
+      "metrics": {
+        "strict": {
+          "tp": 24,
+          "fp": 13,
+          "fn": 6,
+          "precision": 0.6486486486486487,
+          "recall": 0.8,
+          "f1": 0.7164179104477612
+        },
+        "overlap": {
+          "tp": 25,
+          "fp": 12,
+          "fn": 5,
+          "precision": 0.6756756756756757,
+          "recall": 0.8333333333333334,
+          "f1": 0.746268656716418
+        }
+      }
+    },
+    {
+      "id": "drugprot-9310349",
+      "sourceGroup": "9310349",
+      "dataClass": "public_biomedical_abstract",
+      "status": "predicted",
+      "task": "relation",
+      "scorer": "evimed-clinical-metrics-1",
+      "metrics": {
+        "tp": 4,
+        "fp": 1,
+        "fn": 12,
+        "precision": 0.8,
+        "recall": 0.25,
+        "f1": 0.38095238095238093
+      }
+    },
+    {
+      "id": "drugprot-9310349:ner",
+      "sourceGroup": "9310349",
+      "dataClass": "public_biomedical_abstract",
+      "status": "predicted",
+      "task": "ner",
+      "scorer": "evimed-clinical-metrics-1",
+      "metrics": {
+        "strict": {
+          "tp": 28,
+          "fp": 7,
+          "fn": 14,
+          "precision": 0.8,
+          "recall": 0.6666666666666666,
+          "f1": 0.7272727272727273
+        },
+        "overlap": {
+          "tp": 33,
+          "fp": 2,
+          "fn": 9,
+          "precision": 0.9428571428571428,
+          "recall": 0.7857142857142857,
+          "f1": 0.8571428571428571
+        }
+      }
+    }
+  ],
+  "scorecard": [
+    {
+      "task": "ner",
+      "dataClass": "public_biomedical_abstract",
+      "cases": 4,
+      "sourceGroups": 4,
+      "missing": 0,
+      "invalid": 1,
+      "strict": {
+        "tp": 84,
+        "fp": 22,
+        "fn": 58,
+        "precision": 0.7924528301886793,
+        "recall": 0.5915492957746479,
+        "f1": 0.6774193548387096
+      },
+      "overlap": {
+        "tp": 90,
+        "fp": 16,
+        "fn": 52,
+        "precision": 0.8490566037735849,
+        "recall": 0.6338028169014085,
+        "f1": 0.7258064516129032
+      }
+    },
+    {
+      "task": "relation",
+      "dataClass": "public_biomedical_abstract",
+      "cases": 4,
+      "sourceGroups": 4,
+      "missing": 0,
+      "invalid": 1,
+      "relations": {
+        "tp": 10,
+        "fp": 4,
+        "fn": 28,
+        "precision": 0.7142857142857143,
+        "recall": 0.2631578947368421,
+        "f1": 0.38461538461538464
+      }
+    }
+  ],
+  "note": "Task scores are separate; no blended clinical accuracy or clinical qualification."
+}

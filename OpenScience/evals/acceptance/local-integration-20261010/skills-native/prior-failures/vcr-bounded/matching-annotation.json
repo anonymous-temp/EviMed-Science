@@ -1,0 +1,128 @@
+{
+  "schema": "vcr-bounded/matching-annotation/1",
+  "artifactId": "matching-annotation",
+  "title": "合成来源片段的判定上下文标注（有界方法核验）",
+  "scope": {
+    "kind": "bounded_method_verification",
+    "establishes": [
+      "为每个合成来源片段给出判定所需的上下文（时间锚点、用药状态、缺失范围）",
+      "在进入确定性评估器之前，把「判不了」写成显式状态"
+    ],
+    "does_not_establish": [
+      "任何入排判定结果",
+      "任何人群规模",
+      "任何临床验证"
+    ],
+    "patientData": "none",
+    "containsPopulationCounts": false,
+    "containsPatientLists": false,
+    "platformStudyOrResultRegistered": false
+  },
+  "annotationPolicy": {
+    "whatIsAnnotated": "判定上下文，不是判定。判定由确定性评估器按 protocol.json 的要求给出。",
+    "excludedOnPurpose": "本文件不记录任何人数、比例、合格数、排除数或候选名单；三个片段是合成来源，不是患者队列。",
+    "polarityRule": "只有原始记录中确有的用药才写成正向暴露；已停用是「当前未暴露」，不是「从未使用」；缺失的历史既不是阳性也不是阴性。",
+    "missingIsNotDenial": "记录中缺少用药史时，结论是「无法确定」，不是「没有暴露」。"
+  },
+  "annotations": [
+    {
+      "sourceKey": "C1",
+      "verbatimExcerpt": "Prednisone was discontinued6months ago. Metformin500mg daily is current.",
+      "excerptRetainedVerbatim": true,
+      "clinicalContext": {
+        "clinical": { "schema": 1, "assertion": "affirmed", "experiencer": "patient" },
+        "medication": {
+          "name": "Prednisone",
+          "state": "not_current_interval",
+          "absenceScope": "interval",
+          "intervalAnchor": { "kind": "discontinuation", "statedAs": "discontinued6months ago", "anchorIsFromSourceText": true }
+        }
+      },
+      "criterionId": "crit-exclusion-current-glucocorticoid",
+      "criterionVariable": "systemic_glucocorticoid_exposure_state",
+      "reason": "historical_negative_exposure",
+      "state": "satisfied",
+      "reading": "糖皮质激素为历史暴露且已停用，停用时间锚点由原文给出（6 months ago）；历史暴露不触发「当前暴露」的排除。",
+      "temporalSemanticsApplied": {
+        "class": "historical",
+        "elapsedStatedInSource": "6 months",
+        "currentAtAssessmentTime": false
+      },
+      "explicitlyNotClaimed": [
+        "不声称该受试者从未暴露（原文没有这样说）",
+        "不声称其当前疾病状态、也不对其当前用药做任何评价"
+      ],
+      "nonIndexedInformation": "Metformin500mg daily is current 与本次排除条件无关，不作为本条判定的依据，也不对其做任何评价。"
+    },
+    {
+      "sourceKey": "C2",
+      "verbatimExcerpt": "Prednisone10mg daily was started yesterday and continues.",
+      "excerptRetainedVerbatim": true,
+      "clinicalContext": {
+        "clinical": { "schema": 1, "assertion": "affirmed", "experiencer": "patient" },
+        "medication": {
+          "name": "Prednisone",
+          "state": "current",
+          "absenceScope": "current"
+        }
+      },
+      "criterionId": "crit-exclusion-current-glucocorticoid",
+      "criterionVariable": "systemic_glucocorticoid_exposure_state",
+      "reason": "current_positive_exposure",
+      "state": "not_satisfied",
+      "reading": "用药在判定时点仍在继续（and continues），属当前暴露，触发排除条件；起始时间仅为昨日，不影响「当前」的判定。",
+      "temporalSemanticsApplied": {
+        "class": "current",
+        "startedStatedInSource": "yesterday",
+        "currentAtAssessmentTime": true
+      },
+      "explicitlyNotClaimed": [
+        "不评价该给药是否恰当、也不给出任何剂量或停药建议",
+        "不推断该暴露的持续时间、适应证或临床后果"
+      ],
+      "nonIndexedInformation": null
+    },
+    {
+      "sourceKey": "C3",
+      "verbatimExcerpt": "Medication history was not available.",
+      "excerptRetainedVerbatim": true,
+      "clinicalContext": {
+        "clinical": { "schema": 1, "assertion": "affirmed", "experiencer": "patient" },
+        "medication": {
+          "name": null,
+          "state": "unknown",
+          "absenceScope": "unknown",
+          "historyCompleteness": "missing"
+        }
+      },
+      "criterionId": "crit-exclusion-current-glucocorticoid",
+      "criterionVariable": "systemic_glucocorticoid_exposure_state",
+      "reason": "insufficient_history",
+      "state": "unknown",
+      "reading": "用药史不可得，暴露状态无法确定；这是证据不足，不是阴性。",
+      "temporalSemanticsApplied": {
+        "class": "unknown",
+        "currentAtAssessmentTime": null
+      },
+      "explicitlyNotClaimed": [
+        "不把「没有用药史」写成「没有使用糖皮质激素」",
+        "不把「未知」写成「不符合」或「满足」"
+      ],
+      "nonIndexedInformation": null
+    }
+  ],
+  "consequenceAtTheEvaluator": {
+    "C1": "该条排除条件适用且为「满足」，不因本条排除该来源。",
+    "C2": "该条排除条件适用且为「不满足」，该来源不能通过本条。",
+    "C3": "该条排除条件适用且为「未知」；只要存在一条适用的排除条件为「未知」，该来源就不能是「符合」。",
+    "note": "上面三句是规则层面的后果陈述，不是对任何真实受试者的判定结果；本文件不含任何人数。"
+  },
+  "provenance": {
+    "sources": [
+      { "id": "C1", "kind": "synthetic clinical source excerpt supplied in the task brief", "patientData": false },
+      { "id": "C2", "kind": "synthetic clinical source excerpt supplied in the task brief", "patientData": false },
+      { "id": "C3", "kind": "synthetic clinical source excerpt supplied in the task brief", "patientData": false }
+    ],
+    "boundary": "合成来源片段只作为方法核验的输入，不代表任何真实病历，也不含可识别的个人资料。"
+  }
+}

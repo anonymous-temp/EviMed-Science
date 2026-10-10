@@ -1,0 +1,53 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/research-sessions",
+    "projectId": "model-concurrent-regression"
+  },
+  "response": [
+    {
+      "sessionId": "session-988bb107-61f3-4ad3-ab1e-4e0df02352e9",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T05:18:35.464Z",
+      "updatedAt": "2026-10-10T05:18:35.464Z"
+    },
+    {
+      "sessionId": "session-e8b317aa-ac0d-408e-9b51-757be8ad7c6e",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T05:16:50.790Z",
+      "updatedAt": "2026-10-10T05:16:50.790Z"
+    },
+    {
+      "sessionId": "session-2186db96-469e-40f0-88b4-3b9171c5500d",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T05:09:28.482Z",
+      "updatedAt": "2026-10-10T05:09:28.482Z"
+    },
+    {
+      "sessionId": "session-f51e5a07-237d-4d1d-9f96-5c26e231f63e",
+      "mode": "open-domain",
+      "agentId": null,
+      "agentVersion": null,
+      "runtimeAgent": null,
+      "originReference": null,
+      "sourceScope": null,
+      "createdAt": "2026-10-10T05:09:28.453Z",
+      "updatedAt": "2026-10-10T05:09:28.453Z"
+    }
+  ]
+}

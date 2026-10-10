@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T05:21:18.478340+00:00",
+  "scope": "Owned local native conversation \u2192 actual MCP research_calculate \u2192 control-plane result gateway \u2192 fixed Python replay adapter \u2192 signed/validated artifact publication; synthetic reference fixture only",
+  "projectId": "model-concurrent-regression",
+  "runId": "run_8ddc3c00a43d94e04b1a870ea60b6234",
+  "sessionId": "session-988bb107-61f3-4ad3-ab1e-4e0df02352e9",
+  "jobId": "replay_6846bde31f97fd0c4bae2941edb4259719d4662892ae971d35e9d7268340d6d3",
+  "state": "succeeded",
+  "adapter": {
+    "source": "deploy/specialist-adapter/evimed_specialist_adapter/replay_app.py",
+    "localUrl": "http://127.0.0.1:19060",
+    "providerKeyPresent": false,
+    "versions": {
+      "fastapi": "0.115.0",
+      "uvicorn": "0.30.6",
+      "numpy": "2.0.2",
+      "scipy": "1.13.1",
+      "pandas": "2.2.3",
+      "networkx": "3.4.2",
+      "pydantic": "2.12.5"
+    }
+  },
+  "input": {
+    "path": "/tmp/evimed-integration-20261010/OpenScience/.r/users/integrationlocal/projects/model-concurrent-regression/workspace/deliverables/replay-fixture-meta.json",
+    "sha256": "62a40472b1d1661c652e5b6e2014d6faed9de54846a228c0f18cb89f9121033f",
+    "source": "OpenScience/deploy/specialist-adapter/test_deterministic_replay.py:test_meta_dl_reference_and_same_recipe_numerical_replay",
+    "sourceSha256": "aa50d8062d76d1c0b178294e064427d9c700d574a6fdfacfaf50942e4ece92d4",
+    "boundary": "Synthetic reference fixture; prior alpha input file was never written, not reconstructed or claimed original"
+  },
+  "actualOutput": {
+    "actualOutputPath": "/tmp/evimed-integration-20261010/OpenScience/.r/users/integrationlocal/projects/model-concurrent-regression/workspace/result-replays/c71a2544-a4e8-45da-a9a7-cb0cf3f7d64e/output/result.json",
+    "outputSha256": "4ba336bcd5e7da61ba33216a5d7eeca5a7a8a4048d725196578fedb58361a8cb",
+    "checks": {
+      "pooledEffect": true,
+      "tauSquared": true,
+      "normal95CiLower": true
+    },
+    "values": {
+      "ci_lower": -0.39519242724540904,
+      "ci_lower_log": -0.39519242724540904,
+      "ci_method": "normal_wald",
+      "ci_upper": 3.061859093912076,
+      "ci_upper_log": 3.061859093912076,
+      "effect_measure": "MD",
+      "fallback_reason": null,
+      "h_squared": 23.333333333333336,
+      "i_squared": 95.71428571428572,
+      "model": "random",
+      "n_studies": 3,
+      "outcome_name": "Synthetic reference fixture outcome",
+      "p_value": 0.1305700181157362,
+      "pooled_effect": 1.3333333333333335,
+      "pooled_log": 1.3333333333333335,
+      "prediction_interval": [
+        -20.715176345685055,
+        23.38184301235172
+      ],
+      "q_p_value": 7.352958061453824e-11,
+      "q_statistic": 46.66666666666667,
+      "requested_method": "DL",
+      "studies": [
+        {
+          "se": 0.31622776601683794,
+          "study_id": "0",
+          "study_label": "0",
+          "subgroup": null,
+          "vi": 0.1,
+          "weight": 33.333333333333336,
+          "yi": 0.0
+        },
+        {
+          "se": 0.31622776601683794,
+          "study_id": "1",
+          "study_label": "1",
+          "subgroup": null,
+          "vi": 0.1,
+          "weight": 33.333333333333336,
+          "yi": 1.0
+        },
+        {
+          "se": 0.31622776601683794,
+          "study_id": "2",
+          "study_label": "2",
+          "subgroup": null,
+          "vi": 0.1,
+          "weight": 33.333333333333336,
+          "yi": 3.0
+        }
+      ],
+      "subgroup_q_between": null,
+      "subgroup_q_between_p": null,
+      "tau_estimation_converged": null,
+      "tau_estimator": "DL",
+      "tau_squared": 2.2333333333333334
+    },
+    "sourceReference": "test_deterministic_replay.py:test_meta_dl_reference_and_same_recipe_numerical_replay",
+    "clinicalBoundary": "Synthetic reference fixture, not clinical interpretation"
+  },
+  "nativeArtifactReadCallId": "call_00_ccTYuu9XrkpZ5f5L9hJz7975",
+  "independentChecks": {
+    "count": 9,
+    "tolerance": 1e-12,
+    "permanentReceipt": "evals/acceptance/local-integration-20261010/skills-native/research-calculate-positive/verification.json",
+    "sha256": "eb9f10b9d7d6fc4787878211a0f341085ba570fa60575c1e2d11c34369613105"
+  },
+  "retainedFailures": [
+    {
+      "originalAlpha": "meta.dl gateway not configured; its referenced input was never written; fallback not credited"
+    },
+    {
+      "firstAdmittedJob": "replay_eb45cd3bdf9b2d3f10006d0de5f5e633ed5002f2702ea45ff4a7a0ef2a917a45",
+      "error": "replay_environment_incompatible",
+      "cleanup": "confirmed",
+      "cause": "Service pinned pydantic2.12.5 vs isolated child inherited2.13.4",
+      "fix": "Same existing isolated child site now references owned exact service-pins overlay; no product checks weakened"
+    }
+  ],
+  "privateEvidence": [
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/replay-service-versions.json",
+      "sha256": "4169583c0ede88cce2d378625cd1c7b53d66512832aec53c400d1755ac2cb211",
+      "bytes": 159
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/replay-service-health.json",
+      "sha256": "1e086746f19e05b9887288248a99797fc1c85169519b7d76f0c1375a610f4fd0",
+      "bytes": 75
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/replay-child-environment-fix.json",
+      "sha256": "2dfd434a277fce6bef56df63f11de2e5f945f4263d73b24586083f99ba84db92",
+      "bytes": 436
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/replay-fixture-provenance.json",
+      "sha256": "3452ea6e3843033fdd86ff82368f27b7be43d60a9cbc67b647e8d891026f06dd",
+      "bytes": 602
+    },
+    {
+      "path": "/tmp/evimed-release-closure-20261010/runtime/replay-actual-output-check.json",
+      "sha256": "b7075a8cd0319809d5ccd124be6bfe0a005c16dfa3349d3321eda28f27683344",
+      "bytes": 2147
+    }
+  ],
+  "limitations": [
+    "Synthetic three-study reference fixture; no clinical pooling claim.",
+    "Initial unsupported missing conversation-context host probe retained and not counted.",
+    "Original failures and local minimal-image boundary remain preserved."
+  ]
+}
