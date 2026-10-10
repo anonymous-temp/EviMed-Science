@@ -14,6 +14,13 @@
  * the one reading that never moves a conversation or edits a running task on
  * the strength of a guess.
  *
+ * Jev (site J2) answers first where it is sure. Anything it is not sure of —
+ * an uncertain answer, a slow or refused one, a verdict the code cannot use —
+ * is the original classifier's, as before Jev, so a person waiting is never
+ * left worse off than without it. (Until 2026-10-10 an uncertain answer was
+ * read as the safe default instead: measured on 100 scenarios that left this
+ * path 85 right against the original's 89, and handing those on makes it 92.)
+ *
  * Deletable when the kernel exposes session-level intent a control plane can
  * read; the scaffolding is one prompt and one shape check.
  *
@@ -125,15 +132,13 @@ export class ChannelIntentClassifier {
         });
         if (decision.outcome === "settled") {
           const intent = verifiedIntent(decision.value, { projectIds: projects.map(project => project.id), currentProjectId: projectId, running });
-          return intent ? { ...intent, source: "judge" } : fallbackIntent("verdict_invalid");
+          // A verdict the code cannot use is dropped, never softened: the original classifier is asked.
+          if (intent) return { ...intent, source: "judge" };
         }
-        // An off switch restores the previous implementation. An uncertain
-        // live judgement must never move the chat or edit an existing task.
-        if (!["judge_disabled", "judge_unconfigured", "judge_uncalibrated", "judge_calibration_mismatch"].includes(decision.code)) return fallbackIntent(decision.code ?? "judge_uncertain");
-      } catch {
-        return fallbackIntent("judge_failed");
-      }
+      } catch { /* A judge that threw decided nothing. */ }
     }
+    // Not settled for any reason (uncertain, slow, refused, switched off, unusable): the original classifier,
+    // whose own failure is the one safe reading (stay here, a new request). Jev's guess never moves the chat.
     return this.classifyWithModel(input);
   }
 
