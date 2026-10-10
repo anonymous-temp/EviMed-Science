@@ -48,9 +48,9 @@ const failing=async(error,{attempts=3,callbacks={}}={})=>{
 };
 test('a job that fails for good fails the mission opened for it',async()=>{
  const {recorded,failed}=await failing(Object.assign(new Error('refused'),{code:'provider_refused',status:422}),{attempts:1});
- assert.deepEqual(recorded,[['evolution-mission-job',{status:'failed',code:'provider_refused'}]]);assert.equal(failed[0].retry,false);
+ assert.deepEqual(recorded,[['evolution-mission-job',{jobFailed:true,code:'provider_refused'}]]);assert.equal(failed[0].retry,false);
  const exhausted=await failing(Object.assign(new Error('down'),{code:'provider_unavailable',status:503}),{attempts:3});
- assert.deepEqual(exhausted.recorded,[['evolution-mission-job',{status:'failed',code:'provider_unavailable'}]],'the last attempt is the end of it');
+ assert.deepEqual(exhausted.recorded,[['evolution-mission-job',{jobFailed:true,code:'provider_unavailable'}]],'the last attempt is the end of it');
 });
 test('a job that will be tried again leaves its mission open',async()=>{
  const {recorded,failed}=await failing(Object.assign(new Error('down'),{code:'provider_unavailable',status:503}),{attempts:1});
@@ -58,5 +58,5 @@ test('a job that will be tried again leaves its mission open',async()=>{
 });
 test('a run that outspends its own cap is not tried again, so its mission fails with it',async()=>{
  const {recorded,failed}=await failing(Object.assign(new Error('cap'),{code:'paper_gold_administrative_deferred',status:402}),{attempts:1,callbacks:{refusalCause:async()=>'run'}});
- assert.deepEqual(recorded,[['evolution-mission-job',{status:'failed',code:'evolution_run_budget_exhausted'}]]);assert.equal(failed[0].retry,false);
+ assert.deepEqual(recorded,[['evolution-mission-job',{jobFailed:true,code:'evolution_run_budget_exhausted'}]]);assert.equal(failed[0].retry,false);
 });

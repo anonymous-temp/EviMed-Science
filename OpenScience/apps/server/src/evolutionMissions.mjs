@@ -223,7 +223,9 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     // A mission opened for a job (`ensureJob` names the job) ends with it, whatever the job's kind is called: the self-research job's kind is
     // `research`, which is also the kind of an opportunity's weekly mission, and that one concludes itself (`run`, `finalizeMission`). Review D-E9.
     const forJob = typeof fresh.payload.jobId === 'string';
-    if (forJob && status === 'failed') return update(fresh, { researchCostCny: await cost(row.id), status: 'failed', reason: result?.code ?? 'job-failed', lastResult: 'failed', failedAt: service.now().toISOString() });
+    // `jobFailed` is the worker's word that the job will not be tried again; a `status: 'failed'` in a result is the job's own finding (a self-check
+    // that measured a failure) and the job succeeded. The mission opened for the job fails with it; a research mission is never ended by it.
+    if (result?.jobFailed === true) return update(fresh, { researchCostCny: await cost(row.id), lastResult: 'failed', ...(forJob ? { status: 'failed', reason: result.code ?? 'job-failed', failedAt: service.now().toISOString() } : {}) });
     return update(fresh, { researchCostCny: await cost(row.id), ...(Number.isFinite(fresh.payload.regressions)?{}:!fresh.payload.candidate&&!fresh.payload.verdictId&&!fresh.payload.publication?{regressions:0,regressionBasis:'no-activated-candidate-administrative-job',regressionObservations:[]}:{}), lastResult: status ?? 'completed',
       ...((!forJob && ['research','transfer','transfer-audit','combination','prune'].includes(fresh.payload.kind)) || ['waiting_resource','waiting_confirmation','waiting_budget','frozen','ready'].includes(status) ? {} : { completed: true, status: 'complete', completedAt: service.now().toISOString() }) });
   }

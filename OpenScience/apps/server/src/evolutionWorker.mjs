@@ -225,7 +225,7 @@ export class EvolutionWorker {
    * @param {any} mission @param {any} error */
   async failMission(mission, error) {
     if (!mission?.id) return;
-    try { await this.callbacks.recordMission?.(mission, { status: 'failed', code: String(error?.code ?? 'evolution_job_failed') }); }
+    try { await this.callbacks.recordMission?.(mission, { jobFailed: true, code: String(error?.code ?? 'evolution_job_failed') }); }
     catch { /* the job's own failure is what is reported */ }
   }
   /**
