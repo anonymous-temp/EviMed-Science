@@ -49,6 +49,10 @@ import { canonicalGeoUrl, geoValueCanonical, geoArticlePublishable, GEO_STEPS, S
 import { GEO_SCHEMA, migrateGeo } from "./geoPersistence.mjs";
 import { geoScreenshotFile } from "./geoScreenshots.mjs";
 import { randomId } from "./security.mjs";
+import { senderDisplayName } from "./capsuleShareLabel.mjs";
+
+/** What a project member is called when their display name may not be shown. */
+const GEO_MEMBER_NAME_FALLBACK = "项目成员";
 import { readGeoValue, writeGeoValue, readGeoResearch, readGeoValueCoverage, requestGeoResearch } from "./geoValueStore.mjs";
 
 /** The statement timeout every GEO transaction sets for itself. */
@@ -550,6 +554,12 @@ export class GeoStore {
     return (result.rowCount ?? 0) > 0;
   }
 
+  /** Whether the control plane has an account with this id: what a member is added by. @param {string} userId */
+  async accountExists(userId) {
+    const result = await this.query(`SELECT 1 FROM evimed_control.users WHERE id = $1`, [userId]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
   /** The names of accounts, where the control plane knows them. @param {string[]} userIds @returns {Promise<Map<string, string>>} */
   async personNames(userIds) {
     /** @type {Map<string, string>} */
@@ -557,7 +567,8 @@ export class GeoStore {
     if (!userIds.length) return names;
     try {
       const result = await this.query(`SELECT id, name FROM evimed_control.users WHERE id = ANY($1::text[])`, [userIds]);
-      for (const row of result.rows) names.set(String(row.id), String(row.name));
+      // A display name that is the login name or holds an address is never shown to the other members (review M-9's rule).
+      for (const row of result.rows) names.set(String(row.id), senderDisplayName(row.name, row.id, GEO_MEMBER_NAME_FALLBACK));
     } catch { /* a store without the control-plane schema names nobody */ }
     return names;
   }

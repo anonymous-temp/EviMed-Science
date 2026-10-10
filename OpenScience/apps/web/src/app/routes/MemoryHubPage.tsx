@@ -75,8 +75,9 @@ const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "
  * 「效果待观察」 and 「完成对照评估」 were a state no code could change (the
  * handbook loop is built without an evaluator, and none can compare a handbook
  * with and without it under the learning budget); 「推断」 sat on every row of
- * a page where nearly every row is learned. A row's origin is said once, in its
- * drawer. The header is the title, the 「记忆」 switch and one 「⋯」 (分享与导入 ·
+ * a page where nearly every row is learned, and then once in every drawer: whose
+ * words a memory is, is not said on the page at all (owner ruling of 2026-10-10).
+ * The header is the title, the 「记忆」 switch and one 「⋯」 (分享与导入 ·
  * 已忘记的内容 · 本项目不使用记忆 · 重置记忆); the page asks nothing of the
  * server to be read — making the capsule on first use moved to opening 分享与导入.
  *

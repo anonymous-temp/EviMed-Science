@@ -23,34 +23,34 @@ function configUnder(env) {
 }
 
 const KEYS = ["geoEnabled", "geoAudience", "geoPreviewUsers", "geoPollMs", "geoLeaseMs", "geoDailyBudgetCny", "geoEngines", "geoNightWindow",
-  "geoTimeZone", "geoWeeklyAskCap", "geoDiagnosisErrorLimit", "geoResearchMaxOpen", "geoProbeCallsPerMinute", "geoSocialUrl", "geoSocialTimeoutMs", "geoInclusionEngines", "geoInclusionMaxHoldHours", "geoLinkCheckEnabled", "geoQuestionBankEnabled",
+  "geoTimeZone", "geoWeeklyAskCap", "geoDiagnosisErrorLimit", "geoResearchMaxOpen", "geoValueKeepVersions", "geoValuePrunePerTick", "geoSourceWatchProjectsPerTick", "geoProbeCallsPerMinute", "geoSocialUrl", "geoSocialTimeoutMs", "geoInclusionEngines", "geoInclusionMaxHoldHours", "geoLinkCheckEnabled", "geoQuestionBankEnabled",
   "mediaMarketUrl", "mediaMarketApiKeyFile", "mediaMarketBalanceCapCny"];
 
 /** @param {Record<string, any>} config */
 const pick = (config) => Object.fromEntries(KEYS.map((key) => [key, config[key]]));
 
-test("the defaults are the build spec's: off, operators only once on, five engines, 22-07 in Shanghai, nothing wired", () => {
+test("the defaults are the build spec's: off, open to every account once on, five engines, 22-07 in Shanghai, nothing wired", () => {
   assert.deepEqual(pick(configUnder({})), {
-    geoEnabled: false, geoAudience: "operators", geoPreviewUsers: [], geoPollMs: 5_000, geoLeaseMs: 600_000, geoDailyBudgetCny: 20,
+    geoEnabled: false, geoAudience: "all", geoPreviewUsers: [], geoPollMs: 5_000, geoLeaseMs: 600_000, geoDailyBudgetCny: 20,
     geoEngines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"], geoNightWindow: "22-07", geoTimeZone: "Asia/Shanghai",
-    geoWeeklyAskCap: 1_500, geoDiagnosisErrorLimit: 300, geoResearchMaxOpen: 5, geoProbeCallsPerMinute: 12, geoSocialUrl: "", geoSocialTimeoutMs: 140_000, geoInclusionEngines: [], geoInclusionMaxHoldHours: 6, geoLinkCheckEnabled: false, geoQuestionBankEnabled: false,
+    geoWeeklyAskCap: 1_500, geoDiagnosisErrorLimit: 300, geoResearchMaxOpen: 5, geoValueKeepVersions: 20, geoValuePrunePerTick: 200, geoSourceWatchProjectsPerTick: 20, geoProbeCallsPerMinute: 12, geoSocialUrl: "", geoSocialTimeoutMs: 140_000, geoInclusionEngines: [], geoInclusionMaxHoldHours: 6, geoLinkCheckEnabled: false, geoQuestionBankEnabled: false,
     mediaMarketUrl: "", mediaMarketApiKeyFile: "", mediaMarketBalanceCapCny: null,
   });
 });
 
 test("every lever is read from the environment, and an empty value reads as unset", () => {
   const config = configUnder({
-    OPEN_SCIENCE_GEO_ENABLED: "true", OPEN_SCIENCE_GEO_AUDIENCE: "all", OPEN_SCIENCE_GEO_PREVIEW_USERS: "acceptance, qa",
+    OPEN_SCIENCE_GEO_ENABLED: "true", OPEN_SCIENCE_GEO_AUDIENCE: "operators", OPEN_SCIENCE_GEO_PREVIEW_USERS: "acceptance, qa",
     OPEN_SCIENCE_GEO_POLL_MS: "2000", OPEN_SCIENCE_GEO_LEASE_MS: "", OPEN_SCIENCE_GEO_DAILY_BUDGET_CNY: "0",
     OPEN_SCIENCE_GEO_ENGINES: "deepseek, doubao", OPEN_SCIENCE_GEO_NIGHT_WINDOW: "23-6", OPEN_SCIENCE_GEO_TIMEZONE: "UTC",
-    OPEN_SCIENCE_GEO_WEEKLY_ASK_CAP: "600", OPEN_SCIENCE_GEO_DIAGNOSIS_ERROR_LIMIT: "120", OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN: "0", OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE: "30", OPEN_SCIENCE_GEO_SOCIAL_URL: "http://social.internal:9966/", OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS: "90000",
+    OPEN_SCIENCE_GEO_WEEKLY_ASK_CAP: "600", OPEN_SCIENCE_GEO_DIAGNOSIS_ERROR_LIMIT: "120", OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN: "0", OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS: "50", OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK: "40", OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK: "7", OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE: "30", OPEN_SCIENCE_GEO_SOCIAL_URL: "http://social.internal:9966/", OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS: "90000",
     OPEN_SCIENCE_GEO_INCLUSION_ENGINES: "baidu", OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS: "24", OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED: "true", OPEN_SCIENCE_GEO_QUESTION_BANK_ENABLED: "true",
     OPEN_SCIENCE_MEDIA_MARKET_URL: "https://market.example/", OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE: "/run/secrets/media",
     OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY: "20000",
   });
   assert.deepEqual(pick(config), {
-    geoEnabled: true, geoAudience: "all", geoPreviewUsers: ["acceptance", "qa"], geoPollMs: 2_000, geoLeaseMs: 600_000, geoDailyBudgetCny: 0,
-    geoEngines: ["deepseek", "doubao"], geoNightWindow: "23-6", geoTimeZone: "UTC", geoWeeklyAskCap: 600, geoDiagnosisErrorLimit: 120, geoResearchMaxOpen: 0, geoProbeCallsPerMinute: 30, geoSocialUrl: "http://social.internal:9966",
+    geoEnabled: true, geoAudience: "operators", geoPreviewUsers: ["acceptance", "qa"], geoPollMs: 2_000, geoLeaseMs: 600_000, geoDailyBudgetCny: 0,
+    geoEngines: ["deepseek", "doubao"], geoNightWindow: "23-6", geoTimeZone: "UTC", geoWeeklyAskCap: 600, geoDiagnosisErrorLimit: 120, geoResearchMaxOpen: 0, geoValueKeepVersions: 50, geoValuePrunePerTick: 40, geoSourceWatchProjectsPerTick: 7, geoProbeCallsPerMinute: 30, geoSocialUrl: "http://social.internal:9966",
     geoSocialTimeoutMs: 90_000, geoInclusionEngines: ["baidu"], geoInclusionMaxHoldHours: 24, geoLinkCheckEnabled: true, geoQuestionBankEnabled: true,
     mediaMarketUrl: "https://market.example", mediaMarketApiKeyFile: "/run/secrets/media", mediaMarketBalanceCapCny: 20_000,
   });
@@ -86,6 +86,13 @@ test("a value outside its range stops the start by the variable's name", () => {
     ["OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN", "-1"],
     ["OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN", "101"],
     ["OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN", "2.5"],
+    ["OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS", "0"],
+    ["OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS", "1001"],
+    ["OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS", "twenty"],
+    ["OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK", "0"],
+    ["OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK", "10001"],
+    ["OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK", "0"],
+    ["OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK", "501"],
     ["OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE", "0"],
     ["OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE", "601"],
     ["OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE", "1.5"],
@@ -112,6 +119,17 @@ test("the probe gateway's window default is the config's, so the two cannot disa
 
 test("the inclusion check's age limit default is the config's, so the two cannot disagree", () => {
   assert.equal(configUnder({}).geoInclusionMaxHoldHours, GEO_INCLUSION_MAX_HOLD_HOURS);
+});
+
+test("once on, the module is open to every account unless the deployment narrows it to operators and the preview list (G9)", () => {
+  const stranger = { id: "any-account" };
+  const open = configUnder({ OPEN_SCIENCE_GEO_ENABLED: "true" });
+  assert.equal(open.geoAudience, "all");
+  assert.equal(geoAudienceAllows(open, stranger), true, "no lever set: every account sees it");
+  const narrowed = configUnder({ OPEN_SCIENCE_GEO_ENABLED: "true", OPEN_SCIENCE_GEO_AUDIENCE: "operators", OPEN_SCIENCE_GEO_PREVIEW_USERS: "qa" });
+  assert.equal(geoAudienceAllows(narrowed, stranger), false, "the lever still narrows it");
+  assert.equal(geoAudienceAllows(narrowed, { id: "qa" }), true);
+  assert.equal(geoAudienceAllows(configUnder({}), stranger), false, "off is off for everyone, whoever may see it once it is on");
 });
 
 test("the audience is the module on, and either everyone or an operator or a preview account (by id)", () => {

@@ -58,6 +58,34 @@ describe.each(dialogs)("%s", (_, name, make) => {
   });
 });
 
+describe("设置投放预算: a total of 0 is the stop (G10h)", () => {
+  const open = () => render(<BudgetDialog geoId="geo_1" initial={{ totalCny: 8000, dailyCny: 800 }} suggestedTotal={null} onSaved={() => {}} onCancel={() => {}} />);
+
+  it("saves a total of 0 with a daily cap of 0, whatever the daily field says, and says what 0 means when the total is not a number", async () => {
+    open();
+    const total = await screen.findByLabelText("总预算（灵豆）");
+    await userEvent.clear(total);
+    await userEvent.type(total, "abc");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    expect(await screen.findByText("请填总预算，单位灵豆；填 0 表示不再投放。")).toBeInTheDocument();
+    expect(client.setGeoBudget).not.toHaveBeenCalled();
+    await userEvent.clear(total);
+    await userEvent.type(total, "0");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(client.setGeoBudget).toHaveBeenCalledWith("geo_1", { totalCny: 0, dailyCny: 0 }));
+  });
+
+  it("still asks for a daily cap when the total is more than nothing, and not more than the total", async () => {
+    open();
+    const daily = await screen.findByLabelText("每天最多（灵豆）");
+    await userEvent.clear(daily);
+    await userEvent.type(daily, "0");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    expect(await screen.findByText("请填一个大于 0 的金额，单位灵豆。")).toBeInTheDocument();
+    expect(client.setGeoBudget).not.toHaveBeenCalled();
+  });
+});
+
 describe("a write in flight", () => {
   it("cannot be closed out from under the budget being saved, and then closes when it has settled", async () => {
     let settle: () => void = () => {};

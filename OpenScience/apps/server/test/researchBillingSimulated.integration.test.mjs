@@ -75,8 +75,8 @@ async function fixture(t, overrides = {}) {
     const response = await fetch(`${base}${route}`, { method, headers: { ...session.headers, "content-type": "application/json" }, body: JSON.stringify(body) });
     return { status: response.status, body: await response.json() };
   };
-  /** A research run for the account, with what its model calls really cost, finished the way the ledger finishes one. */
-  async function finishedRun(session, costs) {
+  /** A research run for the account, with what its model calls really cost, finished the way the ledger finishes one. `dispatchId` names how it was dispatched. */
+  async function finishedRun(session, costs, { dispatchId = undefined } = {}) {
     // The full account record (the sign-in's `createUser` answers the public one).
     const project = await app.store.projectFor(await app.store.userById(session.user.id), "default");
     const sessionId = `session_${randomUUID()}`;
@@ -88,7 +88,7 @@ async function fixture(t, overrides = {}) {
         purpose, actualCost, model: "fixture-model", priceVersion: "fixture-price", currency: "CNY", priced: true,
         requestFingerprint: "f".repeat(64), usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 } });
     }
-    const finish = async () => app.agentRuns.onRunFinished(project, { ...persisted, status: "completed", finishedAt: new Date().toISOString() });
+    const finish = async () => app.agentRuns.onRunFinished(project, { ...persisted, ...(dispatchId ? { dispatchId } : {}), status: "completed", finishedAt: new Date().toISOString() });
     return { runId: created.id, project, finish };
   }
   const payerOf = async (userId) => simulatedPayerId(userId, (await database.query(
@@ -224,13 +224,15 @@ test("a run's charge is taken and its hold released even when a step of its comp
   const wallet = new SimulatedWallet({ database: f.database, startCredits: START });
   const payer = await f.payerOf(owner.user.id);
   await wallet.snapshot(payer);
-  const run = await f.finishedRun(owner, [["kernel", 2.75]]);
+  // A 虚拟临床研究 run (its dispatch id says so): the completion asks the runtime manager which bounded runtime it holds, in the open and
+  // ahead of the settlement, which is where a throw outside the guarded steps can come from.
+  const run = await f.finishedRun(owner, [["kernel", 2.75]], { dispatchId: "vcr-simulated-billing" });
   assert.equal((await wallet.hold({ payer, runId: run.runId, amount: "5", ttlMs: 86_400_000 })).held, "5.00000000");
   // The first thing the completion asks the runtime manager about, ahead of the settlement, fails — once.
-  const snapshots = f.app.runtimeManager.evaluationMethodSnapshots;
-  const has = snapshots.has.bind(snapshots);
+  const manager = f.app.runtimeManager;
+  const scope = manager.boundedRuntimeScope.bind(manager);
   let asked = 0;
-  snapshots.has = (/** @type {any} */ key) => { if (asked++ === 0) throw new Error("a step before the settlement failed"); return has(key); };
+  manager.boundedRuntimeScope = (/** @type {any} */ project) => { if (asked++ === 0) throw new Error("a step before the settlement failed"); return scope(project); };
   await assert.rejects(run.finish(), /a step before the settlement failed/);
   const hold = (await f.database.query("SELECT status,release_reason FROM evimed_credits.simulated_holds WHERE run_id=$1", [run.runId])).rows[0];
   assert.deepEqual([hold.status, hold.release_reason], ["released", "settled"], "the hold does not wait out its 24 hours");

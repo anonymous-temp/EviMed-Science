@@ -132,11 +132,14 @@ test("maintenance stops the loops; close waits for the running ones; the table i
   assert.equal(worker.timer, null);
   assert.throws(() => new GeoWorker({ loops: { nonsense: async () => ({}) } }), /Unknown GEO worker loop/);
   assert.deepEqual(GEO_WORKER_LOOPS.map((loop) => loop.name), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders",
-    "poll", "verify", "reconcile", "topups", "questionBank"]);
+    "poll", "verify", "reconcile", "topups", "questionBank", "valueUpkeep"]);
   assert.deepEqual(GEO_WORKER_LOOPS.filter((loop) => loop.leased).map((loop) => loop.name), ["orchestrator", "schedules", "catalogue", "orders", "poll",
-    "verify", "reconcile", "topups", "questionBank"], "every market tick, the orchestrator's two and the question bank's pass are leased across processes");
-  // The bank's loop is optional: a deployment with it off has no function for it, and that is not a missing loop.
+    "verify", "reconcile", "topups", "questionBank", "valueUpkeep"],
+  "every market tick, the orchestrator's two, the question bank's pass and the value profiles' upkeep are leased across processes");
+  // The bank's loop is optional: a deployment with it off has no function for it, and that is not a missing loop. The upkeep's is too:
+  // it is composed with the module, and a worker built without it (a test's) has nothing missing.
   const without = new GeoWorker({ loops: { probe: async () => ({}) } });
   assert.ok(without.status().missing.includes("topups"));
   assert.ok(!without.status().missing.includes("questionBank"), "an optional loop is not reported missing");
+  assert.ok(!without.status().missing.includes("valueUpkeep"));
 });

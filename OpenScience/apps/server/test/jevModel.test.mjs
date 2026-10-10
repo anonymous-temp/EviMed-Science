@@ -66,6 +66,16 @@ function networkFailure(code) {
   return Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(code), { code }) });
 }
 
+test("a learning booking is held to the learning daily cap only when the deployment sets one: unset and zero are no cap (review L-7)", async () => {
+  // The fallback read 10 CNY when the config carried no cap, which is the cap the owner took out on 2026-10-10.
+  for (const [setting, expected] of [[undefined, 0], [0, 0], [7, 7]]) {
+    const ledger = fakeLedger();
+    const { fetchImpl } = wire(Response.json(ANSWER));
+    await callJev({ config: { ...config, ...(setting === undefined ? {} : { learningDailyLimitCny: setting }) }, usageLedger: ledger, fetchImpl, retryDelayMs: 0 }, { ...call, purpose: "learning" });
+    assert.equal(ledger.calls[0][1].moduleLimit, expected, `learningDailyLimitCny ${setting === undefined ? "unset" : setting}`);
+  }
+});
+
 test("a question goes to /systemone with the pinned model, and its answer is booked in yuan on the provider's own count", async () => {
   const ledger = fakeLedger();
   const { sent, fetchImpl } = wire(Response.json(ANSWER));

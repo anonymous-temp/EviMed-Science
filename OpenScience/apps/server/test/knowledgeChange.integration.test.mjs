@@ -36,7 +36,7 @@ before(async () => {
   await migrateProductStore(database);
   documents = new ProductDocuments(database);
   memory = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
-  learning = new LearningService({ documents, resolveBaselineDigest: async () => `sha256:${hex("c")}` });
+  learning = new LearningService({ documents });
 });
 after(async () => {
   if (!database) return;

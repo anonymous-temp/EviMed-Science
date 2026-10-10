@@ -302,6 +302,27 @@ test("a set is minimal only when the program asked for a later step and not for 
   assert.equal(geoProgramMinimal(steps(["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"])), false);
 });
 
+test("a set is a diagnosis, not the full programme, below GEO_MEASURED_RANGE's lower bound or with no control group, and the lock is never refused for it (G10i)", () => {
+  const [low, high] = GEO_MEASURED_RANGE.full;
+  /** `count` measured questions spread over ten groups, the first `controls` of them control groups. @param {number} count @param {number} controls */
+  const set = (count, controls) => Array.from({ length: 10 }, (_unused, index) => ({ pool: ["P1", "P2", "P3", "P4"][index % 4], isControl: index < controls,
+    questions: Array.from({ length: Math.floor(count / 10) + (index < count % 10 ? 1 : 0) }, () => ({ isMeasured: true, pool: null })) }));
+  assert.equal(low, 40, "the full programme's size is the table's lower bound, 40");
+  for (const [measured, controls, thin] of /** @type {Array<[number, number, boolean]>} */ ([
+    [low - 1, 3, true], [low, 3, false], [low + 1, 3, false], [high, 3, false],
+    [low, 0, true], [high, 0, true], [low - 1, 0, true], [low, 1, false],
+  ])) {
+    const check = geoLockCheck(set(measured, controls), false);
+    assert.equal(check.thin, thin, `${measured} measured, ${controls} control group(s)`);
+    assert.deepEqual(check.refusals, [], "a thin set is locked, with notices, whatever its size");
+    assert.equal(check.measured, measured);
+  }
+  // Only a set with nothing to measure is refused.
+  assert.equal(geoLockCheck(set(0, 3), false).refusals.length, 1);
+  // A minimal set (a single step asked for downstream) is judged by its own floor in the notices, and is a diagnosis all the same.
+  assert.equal(geoLockCheck(set(GEO_MEASURED_RANGE.minimal[0], 0), true).thin, true);
+});
+
 test("the lock rule is a pure function of the set", () => {
   assert.deepEqual(GEO_MEASURED_RANGE.full, [40, 120]);
   const groups = (/** @type {number} */ control, /** @type {number} */ total, /** @type {number} */ perGroup) =>

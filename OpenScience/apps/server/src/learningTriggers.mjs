@@ -51,6 +51,11 @@
  * learning to the platform is the handbook-gap scan (`evolutionLearningCoupling.mjs`), which leaves such a run out. The mark is
  * written here, once, when the run finishes.
  *
+ * A finished delivery is read for a lesson in a share of the runs only (owner decision of 2026-10-10, review L-15): a distillation per delivery cost a run
+ * each time and mostly answered `no_change`. The share is `OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE`, chosen by a hash of the run id (`runSampling.mjs`),
+ * so a run is in or out for good however often its completion is replayed; the others are skipped and counted. A correction and a repeated routine are
+ * explicit signals and are never sampled.
+ *
  * What this module still refuses is work that is not the researcher's: an
  * automated run (an evaluation cell, a probe, an audit or acceptance harness —
  * `automated`, set by the dispatch body or the `x-evimed-automated` header),
@@ -67,12 +72,20 @@
 
 import { METHOD_INDUCTION_MIN_TRAJECTORIES, isResearcherOwnedWork } from "@evimed/domain";
 import { isInternalProject } from "./internalProjects.mjs";
-import { memoryPausedFor } from "./researchMemory.mjs";
+import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
+import { endedBeforeReset, memoryPausedFor } from "./researchMemory.mjs";
+import { sampledByHash } from "./runSampling.mjs";
 import { TRANSCRIPT_RETENTION_DAYS } from "./runTranscripts.mjs";
 
 /** The answer line: a plain question answered is not an operation to learn a
  *  procedure from (principle 12). */
 const ANSWER_LINE_AGENT_ID = "open-domain-answer";
+
+/** The lessons a finished delivery queues by itself, and the only ones a share of runs chooses: a correction and a routine are explicit signals. */
+const DELIVERY_TRIGGERS = Object.freeze(["delivered", "repair_accepted"]);
+
+/** What the delivery sample is hashed with, so it is independent of the platform handbooks' probation sample over the same runs. */
+export const DELIVERY_SAMPLE_PURPOSE = "learning-distill-delivery";
 
 const DAY_MS = 86_400_000;
 
@@ -360,10 +373,14 @@ export class LearningTriggers {
    *   canReuseRuns?: ((project:any,runs:readonly any[])=>Promise<boolean[]>) | null,
    *   projects?: ((userId: string) => Promise<readonly any[]>) | null, routinePeriodDays?: number,
    *   guestInfluence?: { assess: (userId: string, run: any) => Promise<{ guest: any[], uncorroborated: string[] }>,
-   *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null }} dependencies
+   *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null,
+   *   deliveryShare?: number, onDeliverySample?: ((distilled: boolean) => void) | null }} dependencies
+   *   `deliveryShare`: the share (0 to 1) of finished deliveries that queue a lesson; 1, the default, is every one. `onDeliverySample` is told, for
+   *   each delivery that would have queued one, whether the sample took it.
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
-    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null }) {
+    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null,
+    deliveryShare = 1, onDeliverySample = null }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -376,6 +393,23 @@ export class LearningTriggers {
     this.canReuseRuns = canReuseRuns;
     this.periodMs = routinePeriodMs(routinePeriodDays);
     this.guestInfluence = guestInfluence;
+    this.deliveryShare = deliveryShare;
+    this.onDeliverySample = onDeliverySample;
+  }
+
+  /**
+   * The lessons that stand once the delivery sample has been applied: the lesson a finished delivery queues (`delivered` or `repair_accepted`) goes only
+   * for the share of runs the hash of the run id selects, and is counted either way; every other lesson is untouched.
+   * @param {any} run @param {readonly { trigger: string }[]} lessons
+   * @returns {{ lessons: readonly any[], sampledOut: string[] }}
+   */
+  #sampled(run, lessons) {
+    const delivery = lessons.filter((lesson) => DELIVERY_TRIGGERS.includes(lesson.trigger));
+    if (!delivery.length) return { lessons, sampledOut: [] };
+    const taken = sampledByHash(run.id, this.deliveryShare, DELIVERY_SAMPLE_PURPOSE);
+    try { this.onDeliverySample?.(taken); } catch { /* a counter never decides what is learned */ }
+    return taken ? { lessons, sampledOut: [] }
+      : { lessons: lessons.filter((lesson) => !DELIVERY_TRIGGERS.includes(lesson.trigger)), sampledOut: delivery.map((lesson) => lesson.trigger) };
   }
 
   /**
@@ -417,6 +451,16 @@ export class LearningTriggers {
   }
 
   /**
+   * When the account last reset its memory, or null: unreadable is not a reset, so a store that cannot say costs the loop
+   * nothing it had.
+   * @param {string} userId @returns {Promise<string | null>}
+   */
+  async #resetInstant(userId) {
+    if (typeof this.memory?.resetInstant !== "function") return null;
+    return this.memory.resetInstant(userId).catch(() => null);
+  }
+
+  /**
    * The ledgers a routine of `capabilityId` is counted over: the run's own, as
    * already read, and that of every other project of the same researcher that
    * is neither archived nor internal. Each is cut to the capability and the
@@ -426,16 +470,23 @@ export class LearningTriggers {
    * Throws when any of them cannot be read. A position counted over part of
    * the family is a wrong answer, and no routine is better than one induced
    * at the wrong run.
-   * @param {any} project @param {readonly any[]} runs @param {any} run @param {string} capabilityId
+   * `resetAt` is the account's last memory reset: a run that ended before it is no peer of a routine (review M-11), however
+   * recent its period is.
+   * @param {any} project @param {readonly any[]} runs @param {any} run @param {string} capabilityId @param {string | null} [resetAt]
    * @returns {Promise<ProjectLedger[]>}
    */
-  async ledgersFor(project, runs, run, capabilityId) {
+  async ledgersFor(project, runs, run, capabilityId, resetAt = null) {
     const period = routinePeriodOf(run, this.periodMs);
     const cut = async (/** @type {any} */ home, /** @type {readonly any[]} */ ledger) => {
       const selected = ledger.filter((item) => String(item?.effectiveAgentId ?? "") === capabilityId
         && routinePeriodOf(item, this.periodMs) === period);
       const allowed = await this.#reusable(home,selected);
-      return selected.filter((_item,index) => allowed[index]);
+      return selected.filter((item, index) => {
+        if (!allowed[index]) return false;
+        if (!endedBeforeReset(item, resetAt)) return true;
+        recordSkippedBeforeReset("routine_peer");
+        return false;
+      });
     };
     /** @type {ProjectLedger[]} */
     const ledgers = [{ project, runs: await cut(project,runs) }];
@@ -463,6 +514,12 @@ export class LearningTriggers {
     if ((await memoryPausedFor(this.memory, project.userId, project.id).catch(() => ({ learning: false }))).learning) {
       return { queued: [], skipped: "paused" };
     }
+    // A reset asked to start from nothing: a conversation that was over before it is not a lesson (review M-11).
+    const resetAt = await this.#resetInstant(project.userId);
+    if (endedBeforeReset(run, resetAt)) {
+      recordSkippedBeforeReset("lesson");
+      return { queued: [], skipped: "before_reset" };
+    }
     if (this.sessionState && run.sessionId) {
       const state = await this.sessionState(project.userId, project.id, run.sessionId).catch(() => null);
       // A conversation trying someone else's capsule leaves nothing behind:
@@ -478,7 +535,7 @@ export class LearningTriggers {
     /** @type {ProjectLedger[] | null} */
     let ledgers = null;
     if (capabilityId) {
-      ledgers = await this.ledgersFor(project, runs, run, capabilityId).catch(async (error) => {
+      ledgers = await this.ledgersFor(project, runs, run, capabilityId, resetAt).catch(async (error) => {
         await this.audit("learning.routine.family", {
           userId: project.userId, projectId: project.id, runId: run.id,
           code: typeof error?.code === "string" ? error.code : "learning_routine_family_unreadable",
@@ -488,9 +545,9 @@ export class LearningTriggers {
       });
     }
     const guestInfluence = await this.#guestInfluenced(project, run);
-    const lessons = learningTriggersFor({
+    const { lessons, sampledOut } = this.#sampled(run, learningTriggersFor({
       run, runs, project, ledgers, periodMs: this.periodMs, projection, memoryResult, internalAgent: () => internal, guestInfluence,
-    });
+    }));
     const queued = [];
     for (const lesson of lessons) {
       try {
@@ -507,7 +564,7 @@ export class LearningTriggers {
         }).catch(() => {});
       }
     }
-    return { queued, skipped: null, ...(guestInfluence ? { guestInfluence: "uncorroborated" } : {}) };
+    return { queued, skipped: null, ...(sampledOut.length ? { sampledOut } : {}), ...(guestInfluence ? { guestInfluence: "uncorroborated" } : {}) };
   }
 
   /**
@@ -524,6 +581,11 @@ export class LearningTriggers {
     const runs = await this.agentRuns.list(project).catch(() => []);
     const run = runs.find((/** @type {any} */ item) => item?.id === runId);
     if (!run) return { queued: [], skipped: "run_unavailable" };
+    // The run corrected is an old conversation when the correction comes late: one that ended before a reset is not a lesson.
+    if (endedBeforeReset(run, await this.#resetInstant(project.userId))) {
+      recordSkippedBeforeReset("lesson");
+      return { queued: [], skipped: "before_reset" };
+    }
     if (this.canReuseRun && !await this.canReuseRun(project,run)) return { queued: [], skipped: "clinical_context" };
     if (this.sessionState && run.sessionId) {
       const state = await this.sessionState(project.userId, project.id, run.sessionId).catch(() => null);

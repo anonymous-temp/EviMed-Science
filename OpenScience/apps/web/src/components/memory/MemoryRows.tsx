@@ -7,7 +7,7 @@ import { ListRow } from "@/components/ui/ListRow";
  * is one, what it is for at the end, and a chevron — because every row opens
  * the drawer, and a row that looks like it opens something must open it.
  *
- * Nothing else is on a row: no 「推断」, no hover icons, no menu. 编辑, 忘记 and
+ * Nothing else is on a row: no mark of where it came from, no hover icons, no menu. 编辑, 忘记 and
  * the rest are in the drawer the row opens, where the researcher can see what
  * they are acting on.
  */

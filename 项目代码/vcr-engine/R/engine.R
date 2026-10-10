@@ -200,6 +200,10 @@ VCR_ENGINE_OWN_ISSUE_CODES <- c(
   v
 }
 
+#' A key the scenario states and the method could not apply, with the reason: the result
+#' names it (`diagnostics.notApplied`) instead of ignoring it, and the job goes on.
+vcr_not_applied <- function(key, reason) list(key = key, field = paste0("scenario.", key), reason = reason)
+
 #' A protocol-shaped `failed` result built from nothing but the job's own
 #' identifiers. Used when the normal path itself could not run.
 vcr_minimal_failed <- function(job, hash, started, code, detail) {
@@ -689,18 +693,25 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   if (!is.null(syn$interrupted)) return(.vcr_interrupted_result(syn$interrupted, sprintf("%d of %d synthetic copies were made", length(syn$data), as.integer(m))))
   copies <- do.call(rbind, lapply(seq_along(syn$data), function(k) cbind(copy = k, syn$data[[k]])))
   analyses <- .vcr_analyses_from_scenario(sc$analyses)
+  # The table that ships holds every copy, so the hard constraints and the leakage check read all of them stacked (`copies`); the
+  # fidelity and utility axes describe the first copy and the others are scored one by one below.
   report <- vcr_quality_report(train, syn$data[[1]], holdout,
                                constraints = sc$constraints, analyses = analyses,
                                criteria = sc$criteria,
                                generator = list(family = "synthpop_cart", m = syn$m,
                                                 smoothing = syn$smoothing, seed = job$seed),
-                               tstr_outcome = sc$tstrOutcome)
+                               tstr_outcome = sc$tstrOutcome, copies = syn$data)
   by_copy <- do.call(rbind, lapply(seq_along(syn$data), function(k) {
     uni <- vcr_fidelity_univariate(train, syn$data[[k]])
     pr <- tryCatch(vcr_utility_propensity(train, syn$data[[k]]), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_))
+    viol <- vcr_constraint_violations(syn$data[[k]], sc$constraints)
+    dis <- tryCatch(vcr_disclosure_report(train, syn$data[[k]], holdout), error = function(e) list(available = FALSE))
+    got <- function(key) if (isTRUE(dis$available) && !is.na(dis[[key]])) dis[[key]] else NA_real_
     data.frame(copy = k, worstKsD = suppressWarnings(max(uni$value[uni$statistic == "ks_d"], -Inf)),
                worstTvd = suppressWarnings(max(uni$value[uni$statistic == "tvd"], -Inf)),
-               sPMSE = pr$sPMSE, propensityAuc = pr$propensityAuc)
+               sPMSE = pr$sPMSE, propensityAuc = pr$propensityAuc,
+               constraintViolations = if (nrow(viol)) sum(viol$violations) else 0,
+               replicationRatio = got("replicationRatio"), nearestNeighbourInTrainShare = got("nearestNeighbourInTrainShare"), membershipAuc = got("membershipAuc"))
   }))
   worst <- which.max(ifelse(is.finite(by_copy$sPMSE), by_copy$sPMSE, -Inf))
   list(status = "succeeded",
@@ -1278,6 +1289,24 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
   }
   subj <- .vcr_main_table(vcr_job_tables(job))
   vcr_require_individual(subj, "A MAIC", method = "comparator.maic")
+  anchored <- isTRUE(as.logical(sc$anchored))
+  # An unanchored MAIC compares the IPD trial's active arm with the aggregate trial. A table that holds both arms of the trial says so by
+  # naming its arm column: the rows of arm 1 are the active arm (the first version pooled both arms and ignored the key). A column the
+  # table cannot honour is reported, not refused, and every row is used as before.
+  not_applied <- list(); arm_selection <- NULL
+  if (!anchored && !is.null(sc$treatmentColumn)) {
+    tc <- .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn")
+    arm <- if (tc %in% names(subj)) subj[[tc]] else NULL
+    why <- if (is.null(arm)) "the column is not in the table"
+           else if (anyNA(arm) || !all(arm %in% c(0, 1))) "the column is not a complete 1/0 column"
+           else if (!any(arm == 1)) "no row is in arm 1" else NULL
+    if (is.null(why)) {
+      arm_selection <- list(column = tc, activeArm = 1L, rowsUsed = sum(arm == 1), rowsOtherArm = sum(arm == 0))
+      subj <- subj[arm == 1, , drop = FALSE]
+    } else {
+      not_applied <- c(not_applied, list(vcr_not_applied("treatmentColumn", sprintf("%s, so every row is taken as the active arm", why))))
+    }
+  }
   covs <- vcr_chr(sc$covariates)
   if (!all(covs %in% names(subj))) vcr_abort("input_shape_invalid", "scenario.covariates", "The covariates are columns of the table.")
   X <- as.matrix(subj[, covs, drop = FALSE])
@@ -1289,9 +1318,9 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
   boot <- list(replicates = vcr_bootstrap_replicates(vcr_scalar(job$replicates, NULL)), seed = job$seed, cores = vcr_cores(job$cores))
   # the data this estimate rests on: the matched covariates, the outcome and, anchored, the arm
   used <- vcr_used_sources(list(list(df = subj, columns = c(covs, .vcr_column_name(sc$outcomeColumn, "y", "scenario.outcomeColumn"),
-    if (isTRUE(as.logical(sc$anchored))) .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn")))))
+    if (anchored) .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn") else arm_selection$column))))
   est_src <- vcr_estimate_source(used$source)
-  res <- if (isTRUE(as.logical(sc$anchored))) {
+  res <- if (anchored) {
     tc <- .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn")
     if (!(tc %in% names(subj))) vcr_abort("input_shape_invalid", "scenario.treatmentColumn", "The treatment column is not in the table.")
     arm <- subj[[tc]]
@@ -1305,10 +1334,17 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
   if (is.null(res$estimate)) {
     return(list(status = "not_estimable", notEstimableRule = res$rule %||% "entropy_balance_infeasible",
                 measures = list(), counts = vcr_counts(realPatients = nrow(subj)),
-                diagnostics = list(detail = res$detail, valueSourcesUsed = vcr_value_sources_used(used))))
+                diagnostics = c(list(detail = res$detail, valueSourcesUsed = vcr_value_sources_used(used)),
+                                if (length(not_applied)) list(notApplied = not_applied))))
   }
+  # What the weights are worth, said in the result and never a refusal: the estimate stands, and the conclusion says what it rests on.
+  # No weights at all (a target outside the covariates' range) is the not-estimable return above; weights whose moments the solver did
+  # not reach, or a Kish effective sample size under the domain's floor, are reported and limit the conclusion.
+  ess_floor <- vcr_limit("essFloor", 10)
+  limited_by <- c(if (!isTRUE(res$converged)) "entropy_balance_not_converged",
+                  if (res$effectiveSampleSize < ess_floor) "effective_sample_size_below_floor")
   list(status = "succeeded",
-       conclusion = if (identical(res$conclusionCeiling, "limited")) "limited" else "estimable",
+       conclusion = if (identical(res$conclusionCeiling, "limited") || length(limited_by)) "limited" else "estimable",
        measures = list(
          vcr_measure("indirect_estimate", res$estimate, source = est_src,
                      interval = vcr_interval("confidence", res$interval[1], res$interval[2])),
@@ -1316,6 +1352,13 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = res$effectiveSampleSize),
        diagnostics = list(anchored = res$anchored, targetPopulation = res$targetPopulation,
                           valueSourcesUsed = vcr_value_sources_used(used),
+                          weights = list(effectiveSampleSize = res$effectiveSampleSize, essShare = res$effectiveSampleSize / nrow(subj),
+                                         essFloor = ess_floor, belowEssFloor = res$effectiveSampleSize < ess_floor,
+                                         converged = isTRUE(res$converged), iterations = res$iterations,
+                                         worstRelativeDiscrepancy = res$discrepancy),
+                          limitedBy = as.list(limited_by),
+                          treatmentArm = arm_selection,
+                          notApplied = if (length(not_applied)) not_applied else NULL,
                           conclusionCeiling = res$conclusionCeiling %||% NULL,
                           varianceBasis = res$varianceBasis, se = res$se,
                           bootstrapReplicates = if (!is.null(res$bootstrap)) res$bootstrap$replicates else NULL,
@@ -1436,6 +1479,8 @@ vcr_job_map_prior <- function(job, output_dir = NULL, ...) {
          vcr_measure("tau_posterior_median", map$tauPosteriorMedian, source = "aggregate")),
        counts = vcr_counts(priorEffectiveSampleSize = ess_rob),
        diagnostics = list(mixture = mix, robustMixture = robust, robustWeight = w_r,
+                          tauPrior = c(map$tauPrior, list(support = map$tauSupport, nodes = map$gridNodes, reach = map$tauMax, finitePredictiveVariance = map$finitePredictiveVariance,
+                                                          note = if (!map$finitePredictiveVariance) "With two studies the posterior of tau under a half-Cauchy prior has no finite second moment: map_sd depends on how far the quadrature reaches (reach); three studies, or a half-normal prior, make it finite." else NULL)),
                           essMapMoment = ess_map, essMapElir = elir_map, conflict = conflict, k = map$k,
                           thresholds = list(conflictBound = bound),
                           note = "Under strict type-I control, borrowing does not buy power (Kopp-Schneider 2020)."),
@@ -1499,12 +1544,22 @@ vcr_job_design_analytic <- function(job, ...) {
     }
     if (!is.null(sc$accrual)) {
       dist <- vcr_control_distribution(tr)
-      lam <- if (identical(dist$kind %||% "exponential", "exponential")) dist$rate else log(2) / vcr_dist_median(dist)
       eta <- vcr_dropout_hazard(vcr_scalar(sc$accrual$dropoutAnnual, 0))
       A <- vcr_scalar(sc$accrual$duration, 0); Fu <- vcr_scalar(sc$accrual$followup, NA_real_)
       if (is.na(Fu)) vcr_abort("scenario_field_missing", "scenario.accrual.followup", "The required-patients calculation needs the follow-up after accrual.")
-      p0 <- vcr_event_probability(lam, A, Fu, eta)
-      p1 <- vcr_event_probability(lam * hr, A, Fu, eta)
+      # The event probability is computed for the control distribution the scenario declares: the closed form for
+      # an exponential one, quadrature of the same quantity for a Weibull or a piecewise one (an exponential matched
+      # on the median asked for 22.8% too many patients at a Weibull shape of 2, E10). The result says which.
+      if (identical(dist$kind %||% "exponential", "exponential")) {
+        p0 <- vcr_event_probability(dist$rate, A, Fu, eta)
+        p1 <- vcr_event_probability(dist$rate * hr, A, Fu, eta)
+        diag$eventProbability <- list(route = "closed_form", basis = "lachin_foulkes_exponential", controlDistribution = "exponential")
+      } else {
+        p0 <- vcr_event_probability_dist(dist, 1, A, Fu, eta)
+        p1 <- vcr_event_probability_dist(dist, hr, A, Fu, eta)
+        diag$eventProbability <- list(route = "numerical_integration", basis = "survival_function_of_the_declared_distribution",
+                                      controlDistribution = as.character(dist$kind))
+      }
       # Lachin-Foulkes: the expected event probability of a randomized subject
       # averages the two arms' probabilities, weighted by allocation; the first
       # version used the control arm's alone and so overstated the events per
@@ -1657,14 +1712,22 @@ vcr_job_design_grid <- function(job, output_dir = NULL, cancel_file = NULL, prog
     issues <- c(issues, list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
       "The CPU budget ran out during the grid; the cells that finished are reported and the rest were not run.")))
   }
+  # A grid that did not run every cell, or whose cells ended failed, capped or limited, is `limited`: the cells that finished are the
+  # deliverable and say so, and the cells that did not run are counted against the ones planned.
+  planned <- length(designs) * length(truths)
+  cell_limited <- vapply(cells, function(c_) !identical(c_$status, "succeeded") || identical(c_$diagnostics$conclusion, "limited") || isTRUE(c_$diagnostics$replicatesCapped), logical(1))
   list(status = status,
+       conclusion = if (length(cells) < planned || any(cell_limited)) "limited" else "estimable",
        measures = list(vcr_measure("cells", length(cells), source = "calculated")),
        counts = vcr_counts(),
        issues = issues,
-       diagnostics = list(replicatesCompleted = done,
+       diagnostics = list(replicatesCompleted = done, cellsPlanned = planned, cellsRun = length(cells),
                           # the cells with their numbers: the page draws the heat grid from these (the full table stays a CSV)
                           cells = lapply(cells, function(c_) list(designIndex = c_$designIndex, truthIndex = c_$truthIndex, seed = c_$seed,
                                                                   scenarioHash = c_$scenarioHash, status = c_$status,
+                                                                  # a cell that stopped before it finished and holds measures says `limited`, as a stopped job does
+                                                                  conclusion = if (identical(c_$status, "succeeded")) c_$diagnostics$conclusion else if (length(c_$measures)) "limited" else NULL,
+                                                                  replicatesCapped = isTRUE(c_$diagnostics$replicatesCapped),
                                                                   refusal = if (!is.null(c_$refusal)) c_$refusal$code else NULL,
                                                                   measures = lapply(c_$measures, function(m) list(name = m$name, value = m$value, mcse = m$mcse))))),
        tables = .vcr_tables_of(list(vcr_write_table(long, "operating-characteristics", output_dir))))
@@ -1688,6 +1751,17 @@ vcr_job_assurance <- function(job, ...) {
   if (identical(as.character(sc[["design"]][["kind"]] %||% "two_arm_fixed"), "group_sequential")) {
     return(.vcr_job_assurance_group_sequential(job, prior, basis, kind, e, alpha, sided, pmean, psd))
   }
+  # On a continuous or binary endpoint the arms are sized by nTreat and nControl. A stated allocation (the share allocated to treatment)
+  # sizes the control arm when nControl is not given, and gives way to the sizes when it is: a size is the more specific statement.
+  # (On a time-to-event endpoint the design has events, not sizes, and the allocation enters the calculation itself.)
+  not_applied <- list()
+  if (!identical(e, "time_to_event") && !is.null(sc[["design"]][["allocation"]])) {
+    a <- vcr_scalar(sc[["design"]][["allocation"]], 0.5)
+    if (is.null(sc[["design"]][["nControl"]])) n0 <- ceiling(n1 * (1 - a) / a)
+    else if (abs(n1 / (n1 + n0) - a) > 0.5 / (n1 + n0) + 1e-9) {
+      not_applied <- list(vcr_not_applied("design.allocation", sprintf("nTreat and nControl state the allocation of this design (%.4g to treatment); the sizes are used", n1 / (n1 + n0))))
+    }
+  }
   # A lognormal prior on a hazard ratio is a normal prior on log(HR) with the
   # same two numbers, so for a time-to-event endpoint the two kinds agree; on
   # the other endpoints the effect is not a ratio and only `normal` applies.
@@ -1707,9 +1781,11 @@ vcr_job_assurance <- function(job, ...) {
        measures = list(vcr_measure("assurance", out$assurance, source = "calculated"),
                        vcr_measure("power_at_prior_mean", out$power, source = "calculated")),
        counts = vcr_counts(),
-       diagnostics = list(designPrior = prior, priorBasis = basis, priorKind = kind,
-                          priorMassOutsideUnitInterval = out$priorMassOutsideUnitInterval,
-                          note = "Assurance integrates power over the design prior; it is not a trial-success prediction score."))
+       diagnostics = c(list(designPrior = prior, priorBasis = basis, priorKind = kind,
+                            priorMassOutsideUnitInterval = out$priorMassOutsideUnitInterval,
+                            note = "Assurance integrates power over the design prior; it is not a trial-success prediction score."),
+                       if (!identical(e, "time_to_event")) list(arms = list(nTreat = n1, nControl = n0)),
+                       if (length(not_applied)) list(notApplied = not_applied)))
 }
 
 #' The assurance of a group-sequential design: the power of the whole sequential procedure under the design prior (the headline,
@@ -1779,31 +1855,36 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
   sites <- sc$sites
   if (!is.list(sites) || !length(sites)) vcr_abort("scenario_field_missing", "scenario.sites", "An accrual forecast lists its sites, each with its rate posterior.")
+  ids <- vapply(sites, function(s) as.character(s[["id"]] %||% ""), character(1))
   alpha <- vapply(sites, function(s) vcr_scalar(s$alpha, NA_real_), numeric(1))
   beta <- vapply(sites, function(s) vcr_scalar(s$beta, NA_real_), numeric(1))
   start <- vapply(sites, function(s) vcr_scalar(s$startTime, 0), numeric(1))
   enrolled <- vapply(sites, function(s) vcr_scalar(s$enrolled, 0), numeric(1))
+  exposure <- vapply(sites, function(s) vcr_scalar(s$exposureTime, 0), numeric(1))
   if (anyNA(alpha) || anyNA(beta) || any(alpha <= 0) || any(beta <= 0)) vcr_abort("scenario_value_invalid", "scenario.sites", "Every site has a positive rate posterior (alpha, beta).")
   if (any(enrolled < 0)) vcr_abort("scenario_value_invalid", "scenario.sites", "Enrolled counts are not negative.")
   target <- vcr_scalar(sc$target, NULL)
   if (is.null(target) || !(target >= 1) || target != round(target)) vcr_abort("scenario_value_invalid", "scenario.target", "The target is a positive whole number of patients.")
   remaining <- max(0, target - sum(enrolled))
+  everyone <- max(target, sum(enrolled))   # the patients that will have been enrolled
   sf <- sc$screenFailure
   screen <- if (is.null(sf)) NULL else list(alpha = vcr_scalar(sf$alpha, NA_real_), beta = vcr_scalar(sf$beta, NA_real_))
   if (!is.null(screen) && (anyNA(unlist(screen)) || any(unlist(screen) <= 0))) vcr_abort("scenario_value_invalid", "scenario.screenFailure", "The screen-failure prior is a Beta(alpha, beta) with positive parameters.")
   # a site that is already open contributes from now on; the process is
   # memoryless, so a negative start time is a zero
   model <- vcr_accrual_model(length(sites), alpha, beta, pmax(start, 0), screen)
+  # a site's id is its name in the scenario and in the result: what each site brought to the forecast, under that name
+  site_rows <- lapply(seq_along(sites), function(i) list(id = ids[i], meanRate = alpha[i] / beta[i], startTime = start[i],
+                                                         enrolled = enrolled[i], exposureTime = exposure[i]))
   ev_target <- vcr_scalar(sc$eventTarget, NULL); ev_h <- vcr_scalar(sc$eventHazard, NULL)
   if (!is.null(ev_target)) {
     if (is.null(ev_h) || !(ev_h > 0)) vcr_abort("scenario_field_missing", "scenario.eventHazard", "A target event count needs the per-patient event hazard (per month).")
-    # The events are counted among the patients still to enrol -- the ones this forecast draws -- so a target above their number is never
-    # reached and the run used to end with no event time at all (N27e). The validator refuses it first; this is the second line. With
-    # nothing left to enrol the early return below answers, and the event target is held to the enrolment target as it always was.
-    if (!(ev_target >= 1 && ev_target <= (if (remaining > 0) remaining else target))) {
+    # The events are counted among every patient, the ones already enrolled (their events are simulated from the sites' exposure,
+    # `.vcr_enrolled_events`) and the ones still to enrol, so the target is reachable up to their number (N27e). The validator refuses
+    # a larger one first; this is the second line.
+    if (!(ev_target >= 1 && ev_target <= everyone)) {
       vcr_abort("scenario_value_invalid", "scenario.eventTarget",
-                if (remaining > 0 && remaining < target) "The event target is between 1 and the patients still to enrol (the target less those already enrolled)."
-                else "The event target is between 1 and the enrolment target.")
+                "The event target is between 1 and the number of patients: the enrolment target, or the patients already enrolled if there are more.")
     }
   }
   reps <- as.integer(job$replicates %||% 20000L)
@@ -1811,11 +1892,13 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
   simultaneous <- length(unique(model$startTimes)) == 1L && length(unique(model$beta)) == 1L
   closed <- simultaneous && is.null(screen) && is.null(ev_target) && remaining > 0
   probs <- c(0.05, 0.1, 0.2, 0.5, 0.8, 0.9, 0.95)
-  if (remaining == 0) {
+  # Nothing left to enrol and no event target: the forecast is complete. An event target is still forecast, from the patients enrolled.
+  if (remaining == 0 && is.null(ev_target)) {
     return(list(status = "succeeded",
                 measures = list(vcr_measure("last_patient_in_months", 0, source = "calculated",
                                             note = "The enrolment target is already met.")),
-                counts = vcr_counts(), diagnostics = list(remaining = 0, quantiles = as.list(stats::setNames(rep(0, length(probs)), paste0("p", probs * 100))))))
+                counts = vcr_counts(), diagnostics = list(remaining = 0, quantiles = as.list(stats::setNames(rep(0, length(probs)), paste0("p", probs * 100))),
+                                                          sites = site_rows)))
   }
   measures <- list(); tables <- list(); diag <- list()
   if (closed) {
@@ -1829,7 +1912,8 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
                  meanNote = if (is.na(cf$mean)) "The mean completion time is undefined when the total rate shape N*alpha is 1 or less; the quantiles are unaffected." else NULL)
   } else {
     sim <- vcr_accrual_simulate(model, remaining, reps, job$seed, vcr_cores(job$cores), probs = probs, by_times = NULL,
-                                randomized_target = !is.null(screen), event_target = ev_target, event_hazard = ev_h)
+                                randomized_target = !is.null(screen), event_target = ev_target, event_hazard = ev_h,
+                                enrolled = enrolled, exposure = exposure)
     if (!is.null(sim$interrupted)) {
       return(list(status = if (identical(sim$interrupted, "canceled")) "canceled" else "failed",
                   measures = list(), counts = vcr_counts(),
@@ -1839,11 +1923,16 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
     t_end <- sim$samples[is.finite(sim$samples)]
     if (length(t_end) < 20L) vcr_abort("scenario_value_invalid", "scenario.sites", "Under these rates the enrolment target is almost never reached; no forecast is reported.")
     q <- stats::quantile(t_end, probs, names = FALSE, type = 7); names(q) <- paste0("p", probs * 100)
-    measures[[1]] <- vcr_measure("last_patient_in_months", q[["p50"]], simulated = TRUE, mcse = vcr_quantile_mcse(t_end, 0.5),
-      interval = vcr_interval("prediction", q[["p10"]], q[["p90"]], 0.8), source = "calculated")
-    grid <- if (length(by)) by else seq_len(min(120L, max(1L, ceiling(q[["p95"]]))))
-    pby <- vapply(grid, function(m) mean(t_end <= m), numeric(1))
-    tables[[1]] <- vcr_write_table(data.frame(month = grid, probability = pby, mcse = sqrt(pby * (1 - pby) / length(t_end))), "probability_by_month", output_dir)
+    if (remaining > 0) {
+      measures[[1]] <- vcr_measure("last_patient_in_months", q[["p50"]], simulated = TRUE, mcse = vcr_quantile_mcse(t_end, 0.5),
+        interval = vcr_interval("prediction", q[["p10"]], q[["p90"]], 0.8), source = "calculated")
+      grid <- if (length(by)) by else seq_len(min(120L, max(1L, ceiling(q[["p95"]]))))
+      pby <- vapply(grid, function(m) mean(t_end <= m), numeric(1))
+      tables[[1]] <- vcr_write_table(data.frame(month = grid, probability = pby, mcse = sqrt(pby * (1 - pby) / length(t_end))), "probability_by_month", output_dir)
+    } else {
+      # Everybody is enrolled: the last patient came in before now, and only the events are forecast.
+      measures[[1]] <- vcr_measure("last_patient_in_months", 0, source = "calculated", note = "The enrolment target is already met.")
+    }
     diag <- list(quantiles = as.list(q), mean = mean(t_end), meanMcse = stats::sd(t_end) / sqrt(length(t_end)), closedForm = FALSE,
                  remaining = remaining, replicatesCompleted = sim$replicates, unreachableShare = sim$unreachableShare)
     if (!is.null(ev_target)) {
@@ -1852,10 +1941,15 @@ vcr_job_accrual <- function(job, output_dir = NULL, ...) {
       measures[[2]] <- vcr_measure("target_events_months", qe[["p50"]], simulated = TRUE, mcse = vcr_quantile_mcse(ev, 0.5),
         interval = vcr_interval("prediction", qe[["p10"]], qe[["p90"]], 0.8), source = "calculated")
       diag$eventQuantiles <- as.list(qe)
+      # What the event count rests on, said plainly: the patients already enrolled are followed by the model (their events are drawn from
+      # the sites' exposure), because the engine is given no observed event count.
+      diag$eventForecast <- list(patients = everyone, alreadyEnrolled = sum(enrolled), stillToEnrol = remaining,
+                                 eventsAlreadyHappenedMean = sim$eventsAlreadyMean, eventsAlreadyHappenedBasis = "simulated_from_site_exposure",
+                                 alreadyReachedShare = mean(ev <= 0))
     }
   }
   list(status = "succeeded", measures = measures, counts = vcr_counts(),
-       diagnostics = c(diag, list(model = list(nSites = model$nSites, meanRatePerSite = model$meanRatePerSite),
+       diagnostics = c(diag, list(model = list(nSites = model$nSites, meanRatePerSite = model$meanRatePerSite), sites = site_rows,
                                   unavailable = list(screenFailureRate = is.null(screen)))),
        tables = .vcr_tables_of(tables))
 }

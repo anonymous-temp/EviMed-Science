@@ -12,7 +12,7 @@ import { VCR_ENROLLMENT_KINDS } from "@evimed/domain";
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 import {
   CTGOV_SEARCH_FIELDS, REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS,
-  armRoleOf, chictrPrecedent, confidenceLevelOfDispersion, createChictrAdapter, createTrialRegistryClient, ctgovPrecedent,
+  armRoleOf, chictrPrecedent, confidenceLevelOf, confidenceLevelOfDispersion, createChictrAdapter, createTrialRegistryClient, ctgovPrecedent,
   monthsBetween, reducedRegistryRecord, registryRecordHash, renderRegistryRecordText,
 } from "../src/trialRegistryClient.mjs";
 import { vcrChictrAdapter } from "../src/vcrComposition.mjs";
@@ -527,6 +527,19 @@ test("E-9 a confidence bound is anchored by the field it came from, and only whe
   assert.equal(confidenceLevelOfDispersion("95% Confidence Interval"), 0.95);
   assert.equal(confidenceLevelOfDispersion("90% Confidence Interval"), 0.9);
   for (const label of ["Full Range", "Inter-Quartile Range", "Standard Deviation", "", undefined]) assert.equal(confidenceLevelOfDispersion(label), null, String(label));
+
+  // D12: an analysis states its level as a percent ("95"); a stored level is a fraction, as the dispersion branch's is.
+  const analyses = record.extractions.filter((item) => item.parameter === "hazard_ratio");
+  assert.equal(analyses.length, 2);
+  assert.deepEqual(analyses.map((item) => item.detail.confidenceLevel), [0.95, 0.95], "the percent CT.gov states is stored as the fraction 0.95");
+  assert.equal(confidenceLevelOf("95"), 0.95);
+  assert.equal(confidenceLevelOf(90), 0.9);
+  assert.ok(Math.abs(confidenceLevelOf("99.9") - 0.999) < 1e-12);
+  assert.equal(confidenceLevelOf(0.95), 0.95, "a fraction is a fraction already");
+  assert.equal(confidenceLevelOf(null), null);
+  assert.equal(confidenceLevelOf(""), null);
+  assert.equal(confidenceLevelOf(150), 150, "a number that is no level is left for the reader to refuse by name");
+  assert.equal(confidenceLevelOf(0), 0);
 
   // Under an interquartile range the limits are quartiles, not a confidence interval: they stay out of the pool.
   const iqr = JSON.parse(JSON.stringify(FLAURA));

@@ -28,6 +28,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { senderDisplayName } from "./capsuleShareLabel.mjs";
 import { removeStudyDirectory } from "./vcrDataPlane.mjs";
 import { VCR_SCHEMA, migrateVcr } from "./vcrPersistence.mjs";
 
@@ -46,6 +47,7 @@ export const VCR_ID_PREFIXES = Object.freeze({
   review: "rvw", decision: "dec", contact: "reg", export: "exp",
   modelAssessment: "mia", modelPlan: "mpv",
   simulation: "sim", candidate: "pcn", signal: "sig",
+  candidateTrial: "ctr", candidateCriterion: "ctc", candidateAssessment: "cta", candidateJudgment: "ctj",
 });
 
 /**
@@ -61,6 +63,8 @@ export function vcrId(kind) {
 
 /** Table names this module may address, checked before any splice. */
 const TABLE = /^[a-z_]+$/;
+/** What a study member is called to the others when their account's display name may not be shown (the login name, an address, nothing). */
+export const VCR_MEMBER_NAME_FALLBACK = "研究成员";
 /** An account id as the control plane mints and accepts one (`security.mjs`): what `personNames` may ask for. */
 const ACCOUNT_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
@@ -122,13 +126,20 @@ export class VcrStoreBase {
    * row; what it did stays on the study), and the caller says so with
    * `personName`'s neutral label rather than with the id. Ids that are not
    * account-id shaped (a role grantee, the platform's own actor) are not asked.
+   *
+   * The name is the one that may be shown to the other members of a study
+   * (`senderDisplayName`): a local account's display name defaults to its login
+   * name and an external identity's to its e-mail address, so a name that is the
+   * login name, holds an address or is empty is replaced by a neutral word
+   * (`VCR_MEMBER_NAME_FALLBACK`). The account exists, so it is named, not
+   * absent.
    * @param {Iterable<unknown>} ids @returns {Promise<Map<string, string>>}
    */
   async personNames(ids) {
     const wanted = [...new Set([...ids].map((id) => String(id ?? "")).filter((id) => ACCOUNT_ID.test(id)))];
     if (!wanted.length) return new Map();
     const rows = await this.rows("SELECT id, name FROM evimed_control.users WHERE id = ANY($1::text[])", [wanted]);
-    return new Map(rows.filter((row) => String(row.name ?? "").trim()).map((row) => [String(row.id), String(row.name).trim()]));
+    return new Map(rows.map((row) => [String(row.id), senderDisplayName(row.name, row.id, VCR_MEMBER_NAME_FALLBACK)]));
   }
 
   /**

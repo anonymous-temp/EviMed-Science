@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, evaluationEligible, methodContribution, promotionVerdict, retirementProposal } from "@evimed/domain";
+import { METHOD_SKILL_SCHEMA, methodContribution, promotionVerdict, retirementProposal } from "@evimed/domain";
 
 import { selectLearnedMethods } from "../src/learnedMethodMount.mjs";
 import { LearningService, methodRecordFrom } from "../src/learningService.mjs";
@@ -95,7 +95,6 @@ function harness() {
   const enqueued = [];
   const learning = new LearningService({
     documents,
-    resolveBaselineDigest: async () => "sha256:" + "c".repeat(64),
     jobs: { async enqueue(userId, kind, payload, opts) { enqueued.push({ userId, kind, payload, opts }); return { id: "job_1" }; } },
     notifications: { async create(userId, input) { notices.push({ userId, ...input }); return input; } },
     now: () => new Date("2026-09-07T00:00:00.000Z"),
@@ -145,7 +144,7 @@ async function foldRun(learning, finished, methods) {
   return derived;
 }
 
-test("a distilled method takes effect at once, is measured afterwards, and one rollback undoes it", async () => {
+test("a distilled method takes effect at once, its own runs can take it away, and one rollback undoes it", async () => {
   const { learning, distillation, notices } = harness();
 
   // 1. A run that needed repair produced a proposal, and it is effective from
@@ -162,7 +161,7 @@ test("a distilled method takes effect at once, is measured afterwards, and one r
   assert.equal(document.payload.provenance.origin, "inferred");
   assert.equal(document.payload.statusChangedAt, document.payload.createdAt, "what the row reads 「新」 from");
 
-  // 2. So it mounts for real runs straight away, with no trial argument.
+  // 2. So it mounts for real runs straight away, and by no other way than being approved.
   const mounted = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" });
   assert.deepEqual(mounted.map((entry) => entry.name), ["quote-first"]);
   assert.equal(mounted[0].trial, undefined);
@@ -173,7 +172,7 @@ test("a distilled method takes effect at once, is measured afterwards, and one r
   await foldRun(learning, finishedRun("run_2", ["d1"], known[0]), known);
   document = await learning.getMethod("u1", methodId);
   assert.deepEqual(document.payload.learning.counts,
-    { eligible: 0, loaded: 3, invoked: 0, succeeded: 3, validated: 0, read: 0 });
+    { eligible: 0, loaded: 3, invoked: 0, succeeded: 3, read: 0 });
   assert.equal(promotionVerdict(methodRecordFrom(document)).status, "approved");
   // Nothing was sent to the inbox: a method the loop learned shows up in
   // 最近变化 on the memory page, which is where the researcher is already
@@ -181,31 +180,22 @@ test("a distilled method takes effect at once, is measured afterwards, and one r
   // 2026-09-20 ruling deletes.
   assert.deepEqual(notices, []);
 
-  // 4. The paired evaluation runs afterwards. A passing verdict changes
-  //    nothing about its effect — it was already in force — and is on the
-  //    record for the reader.
-  await learning.recordEvaluation("u1", methodId, {
-    report: "evals/method-quality/reports/e1.json",
-    baselineDigest: "sha256:" + "c".repeat(64),
-    candidateDigest: document.payload.contentDigest,
-    verdict: "better",
-  });
+  // 4. What can take it away is its own runs, not a comparison run afterwards (there is none any more): four
+  //    deliveries the gate refused that invoked it are read as harm by the sequential test, and the answer is immediate.
+  for (const index of [1, 2, 3, 4]) {
+    await learning.recordObservation("u1", methodId, {
+      runId: `bad_${index}`, family: `bad_${index}:d1`, outcome: "rejected", invoked: true,
+      at: `2026-09-1${index}T00:00:00.000Z`, contentDigest: document.payload.contentDigest,
+    });
+  }
   document = await learning.getMethod("u1", methodId);
-  assert.equal(document.payload.status, "approved");
-  assert.equal(promotionVerdict(methodRecordFrom(document)).status, "approved");
-
-  // 5. A verdict of `worse` on the text that is mounted is what takes it away.
-  await learning.recordEvaluation("u1", methodId, {
-    report: "evals/method-quality/reports/e2.json",
-    baselineDigest: "sha256:" + "c".repeat(64),
-    candidateDigest: document.payload.contentDigest,
-    verdict: "worse",
-  });
-  document = await learning.getMethod("u1", methodId);
+  assert.equal(document.payload.status, "approved", "it stays in force until the loop acts on what its runs showed");
   const proposal = retirementProposal(methodRecordFrom(document), { nowMs: Date.parse("2026-09-20T00:00:00.000Z") });
-  assert.equal(proposal.propose, true);
-  assert.equal(proposal.immediate, true, "a measured harm does not wait another night");
-  assert.match(proposal.reason, /worse than working without it/);
+  assert.deepEqual([proposal.propose, proposal.immediate, proposal.code], [true, true, "harm"], "a measured harm does not wait another night");
+  assert.match(proposal.reason, /rejected/);
+
+  // 5. A paired-evaluation verdict an earlier release stored on the record is not read.
+  assert.equal(promotionVerdict(methodRecordFrom(document)).status, "approved");
 
   // 6. 「回到上一版」 goes to the previous *body*. This method has held one
   //    body, however many counter and status writes it has seen, so there is
@@ -225,27 +215,6 @@ test("a distilled method takes effect at once, is measured afterwards, and one r
   assert.ok(restored.revision > stopped.revision, "history is kept, never deleted");
 });
 
-test("trajectories decide who is worth measuring, and the reason says which one is short", async () => {
-  // `evaluationEligible` is a budget, not a gate: it decides who earns the cost
-  // of a paired evaluation, and since 2026-09-20 nothing about effect hangs on
-  // it. Three deliverables inside one run are still one run.
-  const { learning, distillation } = harness();
-  const applied = await distillation.applyCandidate(
-    { userId: "u1", projectId: "p1", payload: {} }, { id: "run_0" },
-    { candidate: { operation: "create" }, skill: SKILL },
-  );
-  const mounted = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" });
-  const known = [{ id: applied.methodId, name: "quote-first", digest: mounted[0].digest }];
-
-  await foldRun(learning, finishedRun("run_1", ["d1", "d2", "d3"], known[0]), known);
-  const document = await learning.getMethod("u1", applied.methodId);
-  assert.equal(document.payload.learning.counts.succeeded, 3);
-  assert.equal(document.payload.status, "approved", "it is in use while the measurement waits");
-  const eligibility = evaluationEligible(methodRecordFrom(document));
-  assert.equal(eligibility.eligible, false);
-  assert.match(eligibility.reason, /came from 1 run/);
-});
-
 test("a rejected deliverable is evidence against, and amending the body starts the count over", async () => {
   const { learning, distillation } = harness();
   const applied = await distillation.applyCandidate(
@@ -253,15 +222,15 @@ test("a rejected deliverable is evidence against, and amending the body starts t
     { candidate: { operation: "create" }, skill: SKILL },
   );
   const methodId = applied.methodId;
-  const trial = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1", trialMethodIds: [methodId] });
-  const known = [{ id: methodId, name: "quote-first", digest: trial[0].digest }];
+  const mounted = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" });
+  const known = [{ id: methodId, name: "quote-first", digest: mounted[0].digest }];
 
   const failing = finishedRun("run_1", ["d1"], known[0]);
   failing.projection.plan.items[0] = { id: "d1", status: "submitted", attempts: 2 };
   await foldRun(learning, failing, known);
   let document = await learning.getMethod("u1", methodId);
   assert.deepEqual(document.payload.learning.counts,
-    { eligible: 0, loaded: 1, invoked: 0, succeeded: 0, validated: 0, read: 0 },
+    { eligible: 0, loaded: 1, invoked: 0, succeeded: 0, read: 0 },
     "a run the gate refused is a use and not a success");
 
   await foldRun(learning, finishedRun("run_2", ["d1", "d2"], known[0]), known);
@@ -276,7 +245,7 @@ test("a rejected deliverable is evidence against, and amending the body starts t
   });
   assert.equal(amended.payload.status, "candidate");
   assert.deepEqual(amended.payload.learning.counts,
-    { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
+    { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 });
   assert.deepEqual(amended.payload.learning.observations, []);
 
   // And an observation carrying the old mount's digest cannot resurrect them.
@@ -310,7 +279,7 @@ test("a run that reads a method and delegates nothing keeps it out of the idle p
 
   const document = await learning.getMethod("u1", applied.methodId);
   assert.deepEqual(document.payload.learning.counts,
-    { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 1 });
+    { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 1 });
   assert.deepEqual(document.payload.learning.observations, [], "no verdict, so no attribution");
   assert.equal(methodContribution(document.payload.learning), null, "and no movement in the success rate");
 
@@ -339,5 +308,5 @@ test("a method that was available and not mounted gets the denominator, not a su
   await foldRun(learning, { run: { id: "run_1" }, projection: { plan: { items: [] }, subagents: [] }, sessions: [] }, known);
   const document = await learning.getMethod("u1", applied.methodId);
   assert.deepEqual(document.payload.learning.counts,
-    { eligible: 1, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
+    { eligible: 1, loaded: 0, invoked: 0, succeeded: 0, read: 0 });
 });

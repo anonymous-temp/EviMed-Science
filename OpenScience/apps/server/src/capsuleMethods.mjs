@@ -464,7 +464,6 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * methods the byte budget could not carry.
  *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
- *   trialMethodIds?: readonly string[], frozenMethods?: {capsuleMethods: any[], learnedMethods: any[]} | null,
  *   learnedFamily?: "geo" | "research" | null, maxPromptBytes?: number,
  *   writeFile?: typeof writeFileAtomicNoFollow }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
@@ -475,7 +474,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * (`learnedMethodFamilyForRuntime`); absent, the whole library.
  *
  * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number, leftOut: number,
- *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
+ *   learned: {id: string, name: string, digest: string}[],
  *   learnedBytes: number,
  *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
  */
@@ -484,8 +483,6 @@ export async function materializeCapsuleMethods({
   project,
   directory,
   learning = null,
-  trialMethodIds = [],
-  frozenMethods = null,
   learnedFamily = undefined,
   maxPromptBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES,
   writeFile = writeFileAtomicNoFollow,
@@ -495,7 +492,7 @@ export async function materializeCapsuleMethods({
   const projectId = String(project.id);
   let leftOut = 0;
   const countLeftOut = () => { leftOut += 1; };
-  const capsuleSelection = frozenMethods ? frozenMethods.capsuleMethods : capsules
+  const capsuleSelection = capsules
     ? await selectCapsuleMethods(capsules, { userId, projectId, maxBytes: maxPromptBytes, onLeftOut: countLeftOut })
     : [];
   // The account's own entries are spent first; what received packs brought
@@ -507,7 +504,7 @@ export async function materializeCapsuleMethods({
   // zero or below, and `selectLearnedMethods` returns nothing for a
   // non-positive budget, so a project whose own entries already fill the
   // directory mounts no learned method rather than overflowing the prompt.
-  const learnedMethods = frozenMethods ? frozenMethods.learnedMethods : learning
+  const learnedMethods = learning
     ? await selectLearnedMethods(learning, {
       userId,
       projectId,
@@ -517,13 +514,10 @@ export async function materializeCapsuleMethods({
       // so that is what it costs the budget.
       cardDirectory: runtimeCapsuleMethodsDir,
       onLeftOut: countLeftOut,
-      trialMethodIds,
       ...(learnedFamily === undefined ? {} : { family: learnedFamily }),
     })
     : [];
   const learnedBytes = learnedMethods.reduce((total, method) => total + method.bytes, 0);
-  // A snapshot frozen before cards were measured has no `promptBytes`: its
-  // text is then the honest upper bound.
   const learnedPromptBytes = learnedMethods.reduce((total, method) => total + (method.promptBytes ?? method.bytes), 0);
   // Then the received packs, in what is left of the same two caps. The first
   // method of the whole directory is the one allowed past the byte budget
@@ -550,7 +544,6 @@ export async function materializeCapsuleMethods({
     id: method.id,
     name: method.name,
     digest: method.digest,
-    ...(method.trial ? { trial: true } : {}),
   }));
   // The panel shows at most 160 characters of a method; a prefix is all it keeps.
   const capsule = capsuleMethods.map((method) => ({ id: method.id, directoryName: method.directoryName, capsuleId: method.capsuleId,

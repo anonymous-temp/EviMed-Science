@@ -109,7 +109,12 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     },
   };
   const service = {
-    packages: {longitudinal: overrides.longitudinal},
+    // The patients the study holds and the trials judged for them (「给患者找试验」), as the module's seams answer.
+    packages: {
+      longitudinal: overrides.longitudinal,
+      matchStore: { async candidateSubjects() { return ["P-0192"]; } },
+      patientTrials: { counters: { searches: 0 }, async evaluate(/** @type {any} */ _study, /** @type {any} */ input) { calls.push(["patientTrials.evaluate", ...input.subjectKeys]); return { evaluated: [{}, {}], unavailable: [], notes: [] }; } },
+    },
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
     isOperator: (/** @type {any} */ user) => operators.includes(String(user?.id)),
     async listStudies() { calls.push(["list"]); return { studies: [] }; },
@@ -446,6 +451,7 @@ const REQUESTS = {
   "PATCH /studies/:id dataTier,intendedUse,status": ["PATCH", "/api/vcr/studies/std_1", { status: "paused" }],
   "DELETE /studies/:id": ["DELETE", "/api/vcr/studies/std_1", undefined],
   "POST /studies/:id/run": ["POST", "/api/vcr/studies/std_1/run", { step: "definition" }],
+  "POST /studies/:id/trial-search": ["POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }],
   "GET /studies/:id/jobs": ["GET", "/api/vcr/studies/std_1/jobs", undefined],
   "GET /studies/:id/jobs/:job": ["GET", "/api/vcr/studies/std_1/jobs/job_1", undefined],
   "POST /studies/:id/jobs": ["POST", "/api/vcr/studies/std_1/jobs", { kind: "design_simulation", scenario: {} }],
@@ -507,7 +513,7 @@ function composedHooks() {
     corrections: { exportDataset: ok, readDataset: ok, replay: ok },
     longitudinal: {view: async () => ({records:[],providers:[]}), freezeHistory:ok, importPrediction:ok, importBenchmark:ok},
     evidence: { curves: { recordSelection: async () => ({ id: "curve", origin: "human_click" }), receipts: async () => [] } },
-    orchestrator: { runStep: ok, recomputeAfterChange: ok },
+    orchestrator: { runStep: ok, recomputeAfterChange: ok, requestTrialSearch: async () => ({ sessionId: "ses_1", runId: "run_1", deferred: null }) },
     jobs: { enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
     exporter: { requestExport: ok },
     // The generated records as a file: a header and a table to stream, and the audit line (`vcrRecords.mjs` has its own tests).
@@ -574,6 +580,32 @@ test("CS-7 every route in the ability table is driven as every role, and 403 fal
     }
   }
   assert.ok(asserted >= (VCR_MEMBER_ROLES.length + 1) * Object.keys(VCR_ROUTE_ABILITIES).length, "the walk covered the whole grid");
+});
+
+test("「为该患者找试验」 asks the orchestrator for the run, judges the trials the study already holds for the patient at once, and refuses a patient the study does not hold", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const overrides = { ...composedHooks(), orchestrator: { runStep: async () => ({}), recomputeAfterChange: async () => ({}),
+    requestTrialSearch: async (/** @type {any} */ user, /** @type {any} */ study, /** @type {any} */ request) => { asked.push([user.id, study.id, request]); return { sessionId: "ses_9", runId: "run_9", deferred: null }; } } };
+  const { routes, calls, audits } = fixture({ overrides });
+  const ok = response();
+  assert.equal(await routes(request("POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }), ok), true);
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.json().data, { sessionId: "ses_9", runId: "run_9", deferred: null, evaluated: 2 }, "the run, and how many verdicts the trials already held now have for this patient");
+  assert.deepEqual(asked, [[OWNER, "std_1", { subjectKey: "P-0192" }]]);
+  assert.deepEqual(calls.filter((call) => call[0] === "patientTrials.evaluate"), [["patientTrials.evaluate", "P-0192"]]);
+  assert.ok(audits.some((line) => line[0] === "vcr.trial_search.request" && line[1] === "completed"), "the request is audited");
+
+  // A patient the study does not hold, and a key that is not one, are refused by name before anything is asked.
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-9999" }), response()), { status: 404, code: "vcr_subject_not_found" });
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "../etc" }), response()), { status: 400, code: "vcr_payload_invalid" });
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/trial-search", {}), response()), { status: 400, code: "vcr_payload_invalid" });
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192", direction: "patient_to_trial" }), response()), { status: 400 }, "the body is the key and nothing else");
+  assert.equal(asked.length, 1);
+
+  // A deployment without the orchestrator says so; a run that cannot start leaves the judgment standing.
+  const bare = fixture({ overrides: { ...composedHooks(), orchestrator: null } });
+  await assert.rejects(bare.routes(request("POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }), response()), { status: 503, code: "vcr_unavailable" });
 });
 
 test("a computation queued from the page names the object it is for: the id is checked against the study's objects and rides the job; a bad id is refused", async () => {

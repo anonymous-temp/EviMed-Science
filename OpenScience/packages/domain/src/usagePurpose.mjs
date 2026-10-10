@@ -198,8 +198,10 @@ export const LEARNING_AGENT_IDS = Object.freeze(['method-distillation', 'method-
  * and never takes one from the caller, so none of these can be produced from a
  * browser. A new platform dispatcher adds its reason here and stamps it.
  *  - `platform-evolution`: 「循证进化」's development and evaluation runs.
- *  - `platform-learning`: a paired-evaluation cell — an ordinary capability run
- *    the learning loop makes of its own to measure a method.
+ *  - `platform-learning`: a run the learning loop dispatched on its own account.
+ *    Only the paired evaluation of a method wrote it, and that was deleted on
+ *    2026-10-10; it stays so that a ledger row it wrote still books as learning
+ *    and not as a researcher's research.
  */
 export const PLATFORM_ROUTE_PURPOSES = Object.freeze(/** @type {Record<string, UsagePurpose>} */ ({
   'platform-evolution': 'evolution',
@@ -230,9 +232,3 @@ export function isEvidenceProgrammeRouteReason(reason) {
   return text.startsWith(EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX) || text === EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON
 }
 
-/**
- * What every paired-evaluation dispatch id starts with. An identifier the
- * evaluation mints for its own cells and looks them up by; it classifies
- * nothing, because the dispatch route takes a dispatch id from its caller.
- */
-export const LEARNING_EVALUATION_DISPATCH_PREFIX = 'methodeval_'

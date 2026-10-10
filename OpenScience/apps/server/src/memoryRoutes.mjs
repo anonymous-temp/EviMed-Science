@@ -1,3 +1,4 @@
+import { recordResetRemoved } from "./memoryMetrics.mjs";
 import { MEMORY_KINDS, conversationTitlesIn } from "./researchMemory.mjs";
 import {
   HttpError,
@@ -45,7 +46,7 @@ import {
  *   researchMemory: any,
  *   memorySubstrate?: any,
  *   memoryIndexWorker?: { drainWithdrawals?: () => Promise<any> } | null,
- *   resetProduct?: ((userId: string) => Promise<{ methods: number, handbooks: number, entries: number }>) | null,
+ *   resetProduct?: ((userId: string) => Promise<{ methods: number, handbooks: number, entries: number, jobs: number, feedback: number }>) | null,
  *   releasePausedRuntimes?: ((userId: string) => Promise<unknown>) | null,
  *   feedbackEvents: any,
  *   store: any,
@@ -143,9 +144,15 @@ export function createMemoryRoutes({
       // same class as project deletion). The rows go and the subtrees' withdrawal is
       // owed to the index in the same transaction (`MemoryIndexWithdrawals`); it is
       // asked for now, unawaited, and again by the index worker until it answers.
+      //
+      // The instant first, before anything is deleted: from it on, a conversation that was already over is not
+      // learned from again (`endedBeforeReset`), whatever the deletions below leave of it. Run again after a failure it
+      // is taken again, which can only move it later.
+      await researchMemory.noteReset(ctx.user.id);
       const purged = await researchMemory.purgeUserMemory(ctx.user.id);
       // A reset that fails halfway answers with the failure and is run again: both halves are idempotent.
       const removed = { ...purged, ...(resetProduct ? await resetProduct(ctx.user.id) : {}) };
+      recordResetRemoved({ jobs: removed.jobs, feedback: removed.feedback });
       if (memorySubstrate?.active && !researchMemory.withdrawals) void memorySubstrate.forgetUser(ctx.user.id).catch(() => false);
       void memoryIndexWorker?.drainWithdrawals?.();
       await audit(ctx, "memory.reset", "completed", removed);

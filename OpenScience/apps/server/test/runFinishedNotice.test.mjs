@@ -241,7 +241,6 @@ test("only a person's own research reaches the inbox; evaluations and background
   // Not even a quiet record: the 「自动运行 N 条（评测与主动科研，不计入未读）」
   // fold is gone with them (plan 2026-09-23 §5.8).
   assert.equal(runFinishedReachesInbox(run, { automated: true }), false, "an evaluation harness said so at dispatch");
-  assert.equal(runFinishedReachesInbox(run, { evaluation: true }), false, "an evaluation cell's runtime");
   assert.equal(runFinishedReachesInbox(run, { internalProject: true }), false, "a lesson or a document being read");
   assert.equal(runFinishedReachesInbox(run, { autopilotOwned: true }), false, "an autopilot episode reports through its digest");
   // And the person's own rules still apply on top.

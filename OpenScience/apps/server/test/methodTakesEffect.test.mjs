@@ -1,12 +1,12 @@
-// A method the loop distils takes effect at once, and the measurement that used
-// to let it in is what now takes it away.
+// A method the loop distils takes effect at once, and its own runs are what
+// take it away.
 //
-// The bar it replaced had never once been cleared in production:
-// `learningEvaluationCommand` defaults to empty, so the evaluate job failed
-// terminally by name (`method_evaluation_unavailable`) and
-// `evimed_product.documents` held zero effective methods while the product told
-// researchers it learned their way of working. This file is the whole rule in
-// one place — creation, mount, demotion, and what the page reads off it.
+// The bar it replaced had never once been cleared in production: the paired
+// evaluation's command defaulted to empty, so the evaluate job failed
+// terminally by name and `evimed_product.documents` held zero effective
+// methods while the product told researchers it learned their way of working.
+// The evaluation itself was deleted on 2026-10-10. This file is the whole rule
+// in one place — creation, mount, demotion, and what the page reads off it.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -130,16 +130,24 @@ test("only an unresolved conflict withholds a method, because no measurement rep
   assert.equal(fresh.payload.status, "approved", "a method with no conflict is effective at creation");
 });
 
-test("a paired evaluation that measures worse retires it at once, and says why", async () => {
+/** @param {any} learning @param {any} created @param {number} count @param {string} outcome */
+async function invokedRuns(learning, created, count, outcome) {
+  let latest = created;
+  for (let index = 1; index <= count; index += 1) {
+    latest = await learning.recordObservation(USER, created.id, {
+      runId: `${outcome}_${index}`, family: `${outcome}_${index}:d1`, outcome, invoked: true,
+      at: `2026-09-1${index}T00:00:00.000Z`, contentDigest: created.payload.contentDigest,
+    });
+  }
+  return latest;
+}
+
+test("a method whose own runs the gate keeps refusing is retired at once, and says why", async () => {
   const learning = new LearningService({ documents: documents() });
   const created = await distilled(learning);
-  const measured = await learning.recordEvaluation(USER, created.id, {
-    report: "evals/method-quality/reports/1.json", baselineDigest: `sha256:${"b".repeat(64)}`,
-    candidateDigest: created.payload.contentDigest, verdict: "worse",
-  });
+  const measured = await invokedRuns(learning, created, 4, "rejected");
   const proposal = retirementProposal(methodRecordFrom(measured), { nowMs: Date.parse("2026-09-21T00:00:00.000Z") });
-  assert.equal(proposal.propose, true);
-  assert.equal(proposal.immediate, true);
+  assert.deepEqual([proposal.propose, proposal.immediate, proposal.code], [true, true, "harm"]);
 
   const retired = await learning.retire(USER, created.id, { expectedRevision: measured.revision, reason: proposal.reason });
   assert.equal(retired.payload.status, "retired");
@@ -152,13 +160,10 @@ test("a paired evaluation that measures worse retires it at once, and says why",
   assert.equal((await selectLearnedMethods(learning, { userId: USER, projectId: PROJECT })).length, 1);
 });
 
-test("a verdict of inconclusive keeps a method, because 「we could not tell」 is not a reason to take one away", async () => {
+test("one refused run is not enough to take a method away, because 「we could not tell」 is not a reason", async () => {
   const learning = new LearningService({ documents: documents() });
   const created = await distilled(learning);
-  const measured = await learning.recordEvaluation(USER, created.id, {
-    report: "r.json", baselineDigest: `sha256:${"b".repeat(64)}`,
-    candidateDigest: created.payload.contentDigest, verdict: "inconclusive",
-  });
+  const measured = await invokedRuns(learning, created, 1, "rejected");
   assert.equal(retirementProposal(methodRecordFrom(measured), { nowMs: Date.now() }).propose, false);
   assert.equal(measured.payload.status, "approved");
 });

@@ -88,7 +88,7 @@ export class HandbookConsolidation {
     }
     const fail = (reason) => this.complete(job, candidate, { ...base, disposition: "failed", reason });
     const source = await this.resolveSourceRun(job.userId, payload.provenance?.sourceProjectId, payload.provenance?.runId);
-    if (!source || source.id !== payload.provenance?.runId || source.learningEvaluation
+    if (!source || source.id !== payload.provenance?.runId
       || usagePurposeOfRun(source) !== "kernel") return fail("handbook_source_unavailable");
     const capability = this.registry.get(source.effectiveAgentId);
     if (!capability || capability.visibility === "internal") return fail("handbook_capability_unavailable");

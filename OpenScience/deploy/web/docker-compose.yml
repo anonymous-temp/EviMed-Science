@@ -445,7 +445,6 @@ services:
       # PostgreSQL pool.
       OPEN_SCIENCE_LEARNING_POLL_MS:
       OPEN_SCIENCE_LEARNING_LEASE_MS:
-      OPEN_SCIENCE_LEARNING_TRIAL_TTL_MS:
       OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES:
       OPEN_SCIENCE_MEMORY_INDEX_POLL_MS:
       OPEN_SCIENCE_MEMORY_INDEX_LEASE_MS:
@@ -483,12 +482,18 @@ services:
       OPEN_SCIENCE_MEMORY_RERANK_MODEL:
       OPEN_SCIENCE_MEMORY_RERANK_API_BASE:
       OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS:
-      # The semantic half of the memory page's search and the recall into a run keep
+      # The semantic half of the memory page's search and the recall tool keep
       # index hits at or above this score (0–1); value-less so the code default (0.5)
       # applies when unset.
       OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE:
       OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT: ${OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT:-8}
       OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS: ${OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS:-20000}
+      # The standing profile a conversation is handed up front and the recall tool's
+      # answer size (review M6); value-less so the code defaults (24, 5, 8) apply when
+      # unset.
+      OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS:
+      OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT:
+      OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT:
       # Autopilot's levers belong to the base stack, not to an overlay. Compose
       # passes environment item by item, and these were listed only in
       # `docker-compose.ingestion.yml` — so on a deployment without that overlay
@@ -605,6 +610,8 @@ services:
       # A general lesson of an account's handbook may become a platform skill after an independent re-check (2026-10-06): the switch (off) and the candidates re-checked in a day.
       OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:
       OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY:
+      # The share (0 to 1) of eligible runs a handbook entry on probation is served to; value-less: unset is the code's 0.1.
+      OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE:
       # What the platform reads for one account that asks it to verify a card's sources, per rolling day.
       OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY:
       # The most the judging of readers' challenges may spend in a day.
@@ -626,7 +633,7 @@ services:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS:
       # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
-      # open to operators once on, no social channel, no marketplace. The
+      # open to every account once on, no social channel, no marketplace. The
       # marketplace key is the host file bound below.
       OPEN_SCIENCE_GEO_ENABLED:
       OPEN_SCIENCE_GEO_AUDIENCE:
@@ -640,6 +647,9 @@ services:
       OPEN_SCIENCE_GEO_WEEKLY_ASK_CAP:
       OPEN_SCIENCE_GEO_DIAGNOSIS_ERROR_LIMIT:
       OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN:
+      OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS:
+      OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK:
+      OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK:
       OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE:
       OPEN_SCIENCE_GEO_SOCIAL_URL:
       OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS:
@@ -666,6 +676,7 @@ services:
       OPEN_SCIENCE_VCR_ENGINE_URL: ${OPEN_SCIENCE_VCR_ENGINE_URL-}
       OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS:
       OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS:
+      OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX:
       OPEN_SCIENCE_VCR_MIN_CELL_SIZE:
       OPEN_SCIENCE_VCR_DERIVED_TABLE_MAX_BYTES:
       OPEN_SCIENCE_VCR_FORECAST_PROVIDERS_FILE: ${OPEN_SCIENCE_VCR_FORECAST_HOST_DIR:+/run/evimed/vcr-forecast/providers.json}
@@ -743,6 +754,8 @@ services:
       # config.mjs's defaults. The controller gets none of it — no runtime
       # ever talks to Jev.
       OPEN_SCIENCE_REVIEW_JEV_ENABLED:
+      # The one switch for every Jev site, the reply check's included. Value-less: unset keeps config.mjs's default, on.
+      OPEN_SCIENCE_JEV_ENABLED:
       OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS: ${OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS:-15000}
       OPEN_SCIENCE_JEV_DISABLED_SITES: ${OPEN_SCIENCE_JEV_DISABLED_SITES:-}
       OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS: ${OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS:-3000}
@@ -862,23 +875,22 @@ services:
       # clock — Beijing daytime. Value-less: unset is config.mjs's Asia/Shanghai.
       OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE:
       OPEN_SCIENCE_LEARNING_CONCURRENCY:
-      OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND:
-      # Who may put a method on trial, and who sees the operations page. Both
-      # are id allowlists that `config.mjs` reads and that no compose file
-      # passed, so both were empty in every deployment however the operator set
-      # them: the trial route answered 403 to everyone and the ops tab could not
-      # appear at all. Compose passes environment item by item — a lever that is
-      # not on the list does nothing and says nothing.
-      OPEN_SCIENCE_LEARNING_EVALUATION_USERS:
+      # Who sees the operations page: an id allowlist that `config.mjs` reads and that no compose file
+      # passed, so it was empty in every deployment however the operator set it and the ops tab could not
+      # appear at all. Compose passes environment item by item — a lever that is not on the list does
+      # nothing and says nothing.
       OPEN_SCIENCE_OPERATOR_USERS:
       # The account the smoke and the capability battery sign in as. With the operators it is the only one whose
       # acceptance-*/audit-*/eval-method-* projects are the platform's own (not charged, outside the project
       # ceiling and the runtime slots); unset, there is none. Both containers decide it from the same value.
       OPEN_SCIENCE_ACCEPTANCE_USERNAME:
+      # The loop's own spend caps, in CNY. Value-less: unset is zero, which is no cap (owner, 2026-09-21 and 2026-10-10).
       OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS:
+      # The share (0 to 1) of finished deliveries that queue a distillation; value-less: unset is the code's 0.33.
+      OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE:
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       # The remaining public-source credentials the server resolves. Without

@@ -160,7 +160,7 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // 2026-10-07 (R10): one added line — the 插件与技能 page reads the community skills' text
 // (dsh-ppt, deep-structural-analysis) from the control plane's own copy, as it does the others.
 // Same day: two comments name the modules by their new names (循证 GEO, 虚拟临床研究); no instruction changed.
-export const WEB_DOCKERFILE_SHA256 = "sha256:312fb0833c82e5bc76269f05fb58a60e44b764bc318b6b9a950cb995c072d55d";
+export const WEB_DOCKERFILE_SHA256 = "sha256:a1607f64291e434d9adbb2c7ece42935385b9b294c07d87b7f87bdf6c78b8b62";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

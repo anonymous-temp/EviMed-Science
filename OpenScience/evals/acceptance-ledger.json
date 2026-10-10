@@ -541,7 +541,7 @@
       "id": "vcr-matching",
       "visibility": "public",
       "evalHarness": "evals/vcr-matching",
-      "briefCount": 5,
+      "briefCount": 7,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,

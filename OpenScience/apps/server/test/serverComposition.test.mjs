@@ -40,6 +40,7 @@ import { createWebApiApp } from "../src/server.mjs";
 import { FrontierWorker } from "../src/frontierWorker.mjs";
 import { FRONTIER_PROJECT_ID } from "../src/internalProjects.mjs";
 import { memoryPlugin, pluginEntry, pluginSource } from "./helpers/frontierFixtures.mjs";
+import { noProfile, profileOf } from "./helpers/residentProfileDouble.mjs";
 
 /** One-line form of a statement, so a signature can be matched across the
  *  indentation the sources are written with. */
@@ -657,6 +658,12 @@ test("the reranker and the index strictness reach both recall paths", async (t) 
   assert.equal(app.capsuleService.strictIndex, true,
     "an operator who asked for strictness got the lexical fallback on the capsule path in silence");
 
+  // One relevance floor for both halves of a recall: the capsule index asked for none (every nearest neighbour however far),
+  // so the recall tool could never say that nothing reached the floor while a capsule held any entry (review M6).
+  assert.equal(app.memorySubstrate.searchMinScore, 0.5);
+  assert.equal(app.memoryIndexing.scoreThreshold, app.memorySubstrate.searchMinScore,
+    "the capsule index was composed without the research recall's relevance floor");
+
   // And the store both of them hydrate from is the one the routes write to.
   assert.equal(app.memorySubstrate.store, app.researchMemory);
 });
@@ -1173,7 +1180,7 @@ test("an episode is signed with the account's day and week and a run limit of wh
   const seed = () => { for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row); };
   seed();
   const { app } = fixture;
-  app.memorySubstrate.recall = async () => [];
+  app.residentProfiles.forDispatch = noProfile;
   /** @type {any[]} */ const reserved = [];
   /** @type {any[]} */ const prompts = [];
   app.runtimeManager.reserveBoundedRuntimeSession = async (/** @type {any} */ _project, /** @type {any} */ scope) => {
@@ -1228,7 +1235,7 @@ function executionHarness(app, { sessionId = "session-episode" } = {}) {
   /** @type {any[]} */ const reserved = [];
   /** @type {any[]} */ const prompts = [];
   /** @type {any[]} */ const dispatches = [];
-  app.memorySubstrate.recall = async () => [];
+  app.residentProfiles.forDispatch = noProfile;
   app.runtimeManager.reserveBoundedRuntimeSession = async (/** @type {any} */ _project, /** @type {any} */ scope) => {
     reserved.push(scope);
     return { id: sessionId, kernel: "dsh" };
@@ -1908,15 +1915,17 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   const base = `http://127.0.0.1:${app.server.address().port}`;
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
-  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "worker"]);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "valueUpkeep", "worker"]);
   assert.equal(typeof app.geo.articleExists, "function");
   // Every slot is filled: the worker with all twelve loops wired (measurement,
-  // orchestration, market), the orchestrator, the exporter and the market's
-  // user and operator hooks.
+  // orchestration, market) and the value profiles' upkeep, the orchestrator,
+  // the exporter and the market's user and operator hooks.
   const status = app.geo.worker.status();
   assert.deepEqual(status.missing, [], "every loop has its function");
   assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
-    "verify", "reconcile", "topups", "questionBank"], "the question bank's loop is in the table and is not wired while its lever is off");
+    "verify", "reconcile", "topups", "questionBank", "valueUpkeep"], "the question bank's loop is in the table and is not wired while its lever is off");
+  assert.equal(status.loops.valueUpkeep.wired, true, "the value profiles' upkeep is composed with the module (G10c, G10e)");
+  assert.equal(typeof app.geo.valueUpkeep.tick, "function");
   assert.equal(typeof app.geo.orchestrator.runStep, "function");
   assert.equal(typeof app.geo.exporter.export, "function");
   for (const hook of ["setBudget", "cancelOrder", "confirmTopup", "resolveUnknownOrder", "markOrderLost", "clearStop", "balance", "configured"]) {
@@ -1975,7 +1984,7 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
   /** @type {any[]} */ const dispatched = [];
   /** @type {any[]} */ const prompts = [];
   /** @type {any[]} */ const bindings = [];
-  app.memorySubstrate.recall = async () => [];
+  app.residentProfiles.forDispatch = noProfile;
   app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ sessionId, /** @type {any} */ binding) => {
     bindings.push({ sessionId, mode: binding.mode, agentId: binding.agentId });
     return binding;
@@ -2046,11 +2055,12 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
   assert.equal(reserved.length, reservedBefore); assert.equal(prompts.length, promptsBefore);
 });
 
-// The 2026-09-26 audit (M-8): a GEO run and an autopilot episode recall
-// memories at dispatch, exactly as a chat run does, and only the chat paths
-// wrote what was recalled into the run ledger. `memory.md` and the usage
-// counter proved the recall happened; the ledger — the one record a support
-// question or the 「依据」 panel reads — said nothing.
+// The 2026-09-26 audit (M-8): a GEO run and an autopilot episode are handed
+// memories at dispatch, exactly as a chat run is, and only the chat paths
+// wrote what was handed into the run ledger. `memory.md` and the usage
+// counter proved the hand-over happened; the ledger — the one record a support
+// question or the 「依据」 panel reads — said nothing. Since review M6 what a
+// dispatch hands over is the researcher's standing profile.
 test("a GEO run and an autopilot episode record what they recalled in the run ledger, as a chat run does", async (t) => {
   const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID], autopilotEnabled: true,
     modelGatewaySigningSecret: randomBytes(32).toString("hex") });
@@ -2059,7 +2069,7 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
   for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
   const recalled = [{ id: "record:pref-1", content: "结论先行，再列证据。", memoryType: "structured", kind: "preference", scope: "user",
     updatedAt: "2026-09-25T00:00:00Z" }];
-  app.memorySubstrate.recall = async () => recalled;
+  app.residentProfiles.forDispatch = profileOf(recalled);
   app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
   app.runtimeManager.reserveBoundedRuntimeSession = async () => ({ id: "session-recall", kernel: "dsh" });
   app.runtimeManager.dispatchPrompt = async () => ({ accepted: true });
@@ -2090,7 +2100,7 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
   ]);
 
   // Nothing recalled, nothing written: an empty list is not a recall.
-  app.memorySubstrate.recall = async () => [];
+  app.residentProfiles.forDispatch = noProfile;
   learned.length = 0;
   await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
     dispatchId: "geo-insight-none", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 2 步" });
@@ -2164,7 +2174,7 @@ test("a pause after proactive admission rejects an unsent turn and releases only
   const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
   const { app } = fixture;
   let prompts = 0, released = 0, activeScope = EPISODE_ID;
-  app.memorySubstrate.recall = async () => [];
+  app.residentProfiles.forDispatch = noProfile;
   app.runtimeManager.reserveBoundedRuntimeSession = async () => ({ id: "session-unsent", kernel: "dsh" });
   app.runtimeManager.boundedRuntimeScope = () => ({ runId: activeScope });
   app.runtimeManager.boundedRuntimeCleanupTarget = () => ({ runId: activeScope, generation: "generation-one" });
@@ -2201,7 +2211,7 @@ for (const lossStage of [2, 3]) test(`the next proactive owner reclaims a proven
   // research-session store for this full dispatch-ledger exercise.
   app.researchSessions.stateStore = null;
   app.runtimeManager.sessionMessages = async () => [];
-  app.memorySubstrate.recall = async () => [];
+  app.residentProfiles.forDispatch = noProfile;
   app.runtimeManager.reserveBoundedRuntimeSession = async () => {
     reservations += 1;
     target = { runId: EPISODE_ID, generation: `generation-${reservations}` };
@@ -2385,7 +2395,7 @@ test("a programme step and a channel question are asked of the allowance before 
     return balance;
   };
   let reserved = 0, runs = 0;
-  app.memorySubstrate.recall = async () => [];
+  app.residentProfiles.forDispatch = noProfile;
   app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
   app.runtimeManager.reserveBoundedRuntimeSession = async () => { reserved += 1; return { id: `session-gate-${reserved}`, kernel: "dsh" }; };
   app.runtimeManager.dispatchPrompt = async () => ({ accepted: true });

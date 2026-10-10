@@ -19,8 +19,8 @@
  * *remaining* budget rather than its own, and the caller spends one budget
  * across both.
  *
- * Same guarantees as the capsule half: only `approved` is mounted (with one
- * named exception, `trialMethodIds`, documented on the selector), the rendered
+ * Same guarantees as the capsule half: only `approved` is mounted, no other
+ * status reaches a run by any path, the rendered
  * document is exactly what `mountedMethodDigest` hashes (so the delegation
  * receipt and the control plane agree on which revision was in the room), and
  * nothing here can loosen a contract — a mounted method is text to read.
@@ -189,20 +189,13 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
  * answer depends on the host's locale data; "the same methods select the same
  * mount" has to hold across machines.
  *
- * `trialMethodIds` is the one way a method that is not approved reaches a run,
- * and it exists because without it the loop cannot close. Promotion needs
- * observed trajectories; trajectories need the method to have been mounted;
- * only approved methods are mounted. The plan resolves that circle at the
- * paired evaluation, which sets the method snapshot for the runs it measures —
- * so the component whose entire job is measurement names the candidate it is
- * measuring, and nothing else ever passes this argument. A researcher's own run
- * cannot receive an unproven method by any path.
+ * A researcher's own run cannot receive a method that is not approved by any
+ * path: there used to be one, a trial that the paired evaluation named for the
+ * runs it measured, and it was deleted with the evaluation (2026-10-10).
  *
  * `family`, when given, is the kind of work the runtime is for
  * (`learnedMethodFamilyForRuntime`): only methods of that family are mounted,
- * and `null` mounts none. A method under trial is mounted whatever its family —
- * the evaluation named it, and an arm that silently mounted nothing would
- * measure the baseline twice.
+ * and `null` mounts none.
  *
  * `maxBytes` is spent on what each method costs the prompt (`promptBytes`).
  * Given `cardDirectory` — where the runtime sees the mounted methods — that is
@@ -217,9 +210,9 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
  * out (not the count cap), so a launch can count what it could not carry.
  *
  * @param {any} learning `LearningService`
- * @param {{userId: string, projectId: string, maxCount?: number, maxBytes?: number, trialMethodIds?: readonly string[],
+ * @param {{userId: string, projectId: string, maxCount?: number, maxBytes?: number,
  *   family?: "geo" | "research" | null, cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null}} scope
- * @returns {Promise<{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, promptBytes: number, trial?: boolean}[]>}
+ * @returns {Promise<{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, promptBytes: number}[]>}
  */
 export async function selectLearnedMethods(learning, scope) {
   if (!learning) return [];
@@ -230,27 +223,10 @@ export async function selectLearnedMethods(learning, scope) {
   // has nothing to count.
   if (maxCount <= 0) return [];
   const familyFilter = scope.family === undefined ? null : scope.family;
-  if (scope.family === null && !(scope.trialMethodIds ?? []).length) return [];
+  if (scope.family === null) return [];
 
   /** @type {any[]} */
   const documents = [];
-  /** @type {Set<string>} */
-  const trials = new Set();
-  for (const methodId of scope.trialMethodIds ?? []) {
-    let document = null;
-    // A trial id that names nothing, or a retired method, is skipped rather
-    // than thrown: an evaluation of a method that has since been withdrawn
-    // should measure nothing, not fail to start.
-    try { document = await learning.getMethod(scope.userId, methodId); } catch { continue; }
-    // Anything but retired. It read `!== "candidate"` until 2026-09-20, when a
-    // distilled method started taking effect the night it is learned: the
-    // paired evaluation now measures an already-effective method, and a trial
-    // branch that only accepted candidates would have made the candidate arm
-    // mount nothing and every verdict meaningless.
-    if (!document?.payload?.status || document.payload.status === "retired") continue;
-    documents.push(document);
-    trials.add(String(document.id));
-  }
   // The whole library, not this project's: how a researcher works follows
   // them, and a method learnt in one project is theirs in the next (owner's
   // capsule vision — one capsule per person; 2026-09-21). It used to read this
@@ -270,7 +246,7 @@ export async function selectLearnedMethods(learning, scope) {
   }
 
   const cardDirectory = typeof scope.cardDirectory === "string" && scope.cardDirectory ? scope.cardDirectory : null;
-  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, promptBytes: number, approvedAt: number, trial?: boolean}[]} */
+  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, promptBytes: number, approvedAt: number}[]} */
   const candidates = [];
   for (const document of documents) {
     const payload = document?.payload ?? {};
@@ -285,7 +261,6 @@ export async function selectLearnedMethods(learning, scope) {
     const bytes = Buffer.byteLength(rendered, "utf8") + methodFileBytes(payload);
     candidates.push({
       id: String(document.id),
-      ...(trials.has(String(document.id)) ? { trial: true } : {}),
       name,
       digest: mountedMethodDigest(payload, sha256),
       directoryName,
@@ -301,21 +276,14 @@ export async function selectLearnedMethods(learning, scope) {
       approvedAt: Date.parse(String(payload.statusChangedAt ?? payload.createdAt ?? "")) || 0,
     });
   }
-  // A method under trial sorts first and is never the one truncation drops: it
-  // is the reason the evaluation run exists, and an evaluation that silently
-  // measured the baseline twice would report "no difference" forever.
-  candidates.sort((left, right) => Number(trials.has(right.id)) - Number(trials.has(left.id))
-    || right.approvedAt - left.approvedAt
+  candidates.sort((left, right) => right.approvedAt - left.approvedAt
     || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
 
-  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, promptBytes: number, trial?: boolean}[]} */
+  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, promptBytes: number}[]} */
   const selected = [];
   let spent = 0;
   for (const { approvedAt: _approvedAt, ...candidate } of candidates) {
     if (selected.length >= maxCount) break;
-    // A trial is exempt from the byte budget, not from its being spent before
-    // the learned half began: the researcher's own entries still come first.
-    if (candidate.trial && maxBytes > 0) { spent += candidate.promptBytes; selected.push(candidate); continue; }
     // Unlike the capsule half, the first candidate is not exempt from the byte
     // budget. A capsule entry the user wrote is theirs to make enormous; an
     // inferred method that alone exceeds the prompt budget is a distillation

@@ -8,6 +8,9 @@
 // went the same way, and the audit line saying who deleted it was written into
 // the deleted project's own directory. This file deletes a project through the
 // real route, on a real database, and counts what is left.
+//
+// Since review M5 (owner ruling of 2026-10-10) a method drawn only from the deleted project is stopped by the deletion: it is
+// kept, with every revision it had, and the stop is one revision more. What this file protects is that nothing is lost.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -124,16 +127,19 @@ test("deleting a project keeps its methods, their revisions and its pending lear
     assert.equal((await database.query("SELECT 1 FROM evimed_control.projects WHERE user_id=$1 AND id='paper'", [user.id])).rowCount, 0,
       "the project is gone");
 
-    // The methods, and every revision of them.
+    // The methods, and every revision of them; both were learnt only here, so the deletion stopped them.
     for (const id of [learnt.id, legacyId]) {
       const row = await documents.get(user.id, "method", id);
       assert.ok(row, `${id} outlived its project`);
       assert.equal(row.projectId, null);
       assert.equal(row.payload.provenance.sourceProjectId, "paper");
+      assert.equal(row.payload.status, "retired", `${id} was learnt only in the deleted project`);
+      assert.equal(row.payload.statusReason, "它只是从已删除的项目里学到的，已停用。");
     }
     const revisionsAfter = await database.query(`SELECT id, count(*)::integer AS n FROM evimed_product.revisions
       WHERE user_id=$1 AND kind='method' GROUP BY id ORDER BY id`, [user.id]);
-    assert.deepEqual(revisionsAfter.rows, revisionsBefore.rows, "not one revision was lost");
+    assert.deepEqual(revisionsAfter.rows, revisionsBefore.rows.map((row) => ({ id: row.id, n: row.n + 1 })),
+      "not one revision was lost, and the stop is one more");
     assert.equal((await learning.history(user.id, learnt.id)).length, 2, "and the history still lists both bodies");
 
     // The lessons, in the learning project, naming where they came from.
@@ -151,10 +157,10 @@ test("deleting a project keeps its methods, their revisions and its pending lear
     // The loop's own counts read the same rows (learningMetrics.mjs, L-G5):
     // the SQL is checked against the real schema here, not only a double.
     const summary = await learningSummary(database, user.id);
-    assert.deepEqual(summary.methods, { candidate: 1, approved: 1, retired: 0 }, "one effective, one amended and waiting to be re-admitted");
+    assert.deepEqual(summary.methods, { candidate: 0, approved: 0, retired: 2 }, "the one effective and the one amended and waiting both stopped with the project they came from");
     assert.deepEqual(summary.lessons.byTrigger, { delivered: 1 });
     const everyone = await learningLedgerCounts(database);
-    assert.ok(everyone.methods.approved + everyone.methods.candidate >= 2);
+    assert.ok(everyone.methods.retired >= 2);
     // The usage summary narrowed to the loop's own purpose, which the
     // account page subtracts from the open calls it states (L-G9).
     const usage = new UsageLedger(database);

@@ -27,3 +27,69 @@ test('engine sampling never mints receipts for unauthenticated callers and expir
 test('parallel failures count separately and open shared site circuit',async()=>{const service=createJudgeService({calibrationMode:true,config,callImpl:async()=>{await new Promise(resolve=>setTimeout(resolve,5));throw Error('unavailable');}});await Promise.all(Array.from({length:3},()=>service.judge('J3',{question:'x',capabilities:[{id:'a',title:'A'}]})));assert.equal((await service.judge('J3',{question:'x',capabilities:[{id:'a',title:'A'}]})).code,'judge_circuit_open');await service.close();});
 test('one tied pair-order result retains that pair without discarding independent pair',async()=>{let calls=0;const service=createJudgeService({calibrationMode:true,config,callImpl:async(d,c)=>{calls++;return{model:config.reviewJevModel,cost:0,answers:{p0:answer(c.questions.p0,calls===1?'related':'unrelated'),p1:answer(c.questions.p1,'unrelated')}};}});const result=await service.judge('J1',{pairs:[{id:'a',left:'A',right:'B'},{id:'b',left:'C',right:'D'}]});assert.equal(result.outcome,'settled');assert.deepEqual(result.value.pairs,[{id:'a',relation:'related'},{id:'b',relation:'unrelated'}]);await service.close();});
 test('shutdown aborts active requests and refuses further decisions',async()=>{let started;const entered=new Promise(resolve=>{started=resolve;});const service=createJudgeService({calibrationMode:true,config,callImpl:async(d,c)=>{started();await new Promise((resolve,reject)=>c.signal.addEventListener('abort',()=>reject(Error('aborted')),{once:true}));}});const request=service.judge('J4',{line:'x'});await entered;await service.close();assert.equal((await request).code,'judge_timeout');assert.equal((await service.judge('J4',{line:'x'})).code,'judge_disabled');assert.equal((await service.compareEngine({},{})).code,'judge_disabled');});
+
+test('J23, the harm check on a lesson before it can be promoted: one yes/no question about the text, harmful decoded from it, and nothing reaches the provider until the site is calibrated for that exact prompt',async()=>{
+  const text='Name the population each count refers to, and say so when the source gives none.';
+  const request=buildJudgeRequest('J23',{text,project:'an extra field is dropped'});
+  assert.deepEqual(Object.keys(request.questions),['harm']);
+  assert.deepEqual(Object.keys(request.questions.harm.criteria),['no','yes']);
+  assert.deepEqual(request.state,{text});
+  assert.throws(()=>buildJudgeRequest('J23',{}),/judge_invalid_input/,'a lesson is required');
+  const input={text};
+  assert.equal(decodeJudgeAnswers('J23',input,{harm:answer(request.questions.harm,'yes')}).value.harmful,true);
+  assert.equal(decodeJudgeAnswers('J23',input,{harm:answer(request.questions.harm,'no')}).value.harmful,false);
+  // As shipped (`deps-version.json`: uncalibrated), it falls back before any provider call.
+  let calls=0;
+  const uncalibrated=createJudgeService({config:{...config,jevSites:{J23:{calibration:'uncalibrated',threshold:.8}}},callImpl:async(d,c)=>{calls++;return callImpl(d,c);}});
+  const refused=await uncalibrated.judge('J23',input,{userId:'u',projectId:'evimed-evolution',module:'evolution'});
+  assert.deepEqual([refused.outcome,refused.code,refused.value,calls],['fallback','judge_uncalibrated',null,0]);
+  // Calibrated for exactly this prompt, it settles and says harmful; a changed prompt would stand it down.
+  const fingerprint=judgePromptFingerprint('J23',request.questions,.8,config.reviewJevModel);
+  const calibrated=createJudgeService({config:{...config,jevSites:{J23:{calibration:'calibrated',threshold:.8,promptFingerprint:fingerprint}}},callImpl});
+  const flagged=await calibrated.judge('J23',input,{userId:'u',projectId:'evimed-evolution',module:'evolution'});
+  assert.deepEqual([flagged.outcome,flagged.value],['settled',{harmful:true}],'the stub answers the last option, yes');
+  const mismatched=createJudgeService({config:{...config,jevSites:{J23:{calibration:'calibrated',threshold:.8,promptFingerprint:'0'.repeat(64)}}},callImpl});
+  assert.equal((await mismatched.judge('J23',input,{userId:'u'})).code,'judge_calibration_mismatch');
+  await Promise.all([uncalibrated.close(),calibrated.close(),mismatched.close()]);
+});
+
+test('the master switch (OPEN_SCIENCE_JEV_ENABLED) stands every registered site down before any provider call, the reply check included, and leaves the per-site list as it was',async()=>{
+  const{JUDGE_SITE_IDS}=await import('../src/judgeSites.mjs');
+  let calls=0;
+  const counting=async(...args)=>{calls++;return callImpl(...args);};
+  // Whatever the input is, a site that is off answers before it is read: the registry is walked, not a hand-picked few.
+  const off=createJudgeService({calibrationMode:true,config:{...config,jevEnabled:false},callImpl:counting});
+  for(const site of JUDGE_SITE_IDS){
+    const result=await off.judge(site,{line:'x',items:{}},{userId:'u',projectId:'p'});
+    assert.deepEqual([site,result.outcome,result.code],[site,'fallback','judge_disabled']);
+  }
+  assert.equal(calls,0,'no site reached the provider');
+  const status=off.status();
+  assert.equal(status.enabled,false,'the master switch shows in status, and so in /api/ready');
+  assert.deepEqual(Object.entries(status.sites).filter(([,site])=>site.enabled).map(([id])=>id),[],'no site reads as enabled');
+  // On (the default, with the flag absent or true) the same registry is not stood down, and the per-site list still switches one site off.
+  for(const jevEnabled of [undefined,true]){
+    const on=createJudgeService({calibrationMode:true,config:{...config,...(jevEnabled===undefined?{}:{jevEnabled}),jevDisabledSites:['J3']},callImpl:counting});
+    assert.equal(on.status().enabled,true);
+    assert.equal((await on.judge('J4',{line:'x'},{userId:'u',projectId:'p'})).outcome,'settled');
+    assert.equal((await on.judge('J3',{question:'q',capabilities:[{id:'a',title:'A'}]},{userId:'u',projectId:'p'})).code,'judge_disabled');
+    await on.close();
+  }
+  await off.close();
+});
+
+test("J3's calibration is bound to its prompt, not to the capability catalogue: a capability added, removed or reordered keeps the pin, a changed question or option text stands it down (JEV-4)",()=>{
+  const ask=ids=>buildJudgeRequest('J3',{question:'q',capabilities:ids.map(id=>({id,title:id,description:`about ${id}`}))});
+  const fingerprint=request=>judgePromptFingerprint('J3',request.questions,.8,config.reviewJevModel);
+  // The catalogue is data in the state; the questions only name its options. Twenty-five capabilities in one order or thirty in another are one prompt.
+  assert.equal(fingerprint(ask(['a','b'])),fingerprint(ask(['x','y','z','w'])));
+  assert.equal(fingerprint(ask(['a','b','c'])),fingerprint(ask(['c','a','b'])));
+  // What was measured is the wording of the question and of each option, and the threshold and model it was measured at.
+  const reworded=ask(['a','b']);reworded.questions.agentId.instructions+=' Prefer a specialist.';
+  assert.notEqual(fingerprint(reworded),fingerprint(ask(['a','b'])));
+  const none=ask(['a','b']);none.questions.agentId.criteria.none='A specialist always fits.';
+  assert.notEqual(fingerprint(none),fingerprint(ask(['a','b'])));
+  const option=ask(['a','b']);option.questions.agentId.criteria.a='The question mentions the topic of capabilities[0].';
+  assert.notEqual(fingerprint(option),fingerprint(ask(['a','b'])));
+  assert.notEqual(judgePromptFingerprint('J3',ask(['a','b']).questions,.9,config.reviewJevModel),fingerprint(ask(['a','b'])));
+});

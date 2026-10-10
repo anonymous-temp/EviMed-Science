@@ -98,6 +98,9 @@ const operatorLevers = {
   OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY: ["open-science-web"],
+  // The share of finished deliveries that queue a distillation (2026-10-10): a lever that never arrived would leave the code's third in force
+  // while the operator believes they asked for every delivery, or for none.
+  OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: ["open-science-web"],
   // The thinking budget was a literal `high` in the gateway until 2026-09-09,
   // so the lever is new and this is what makes it real.
   OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT: ["open-science-web"],
@@ -118,6 +121,11 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES: ["open-science-web"],
+  // The standing profile a conversation is handed up front and the recall tool's answer size (review M6, 2026-10-10): limits on what
+  // reaches the model, which an operator tunes and which must not fall back to the default unseen.
+  OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT: ["open-science-web"],
   // The two delegation limits that replaced `maxParallelChildren` (2026-09-18).
   // The controller builds the hosted launch plan and so is the service that
   // actually writes them into a runtime container; the web API builds it when
@@ -206,6 +214,12 @@ const operatorLevers = {
   // project holds open is a spend limit, and one that never arrived would leave the default in force while the operator
   // believes theirs applies.
   OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN: ["open-science-web"],
+  // 「循证 GEO」's value profiles (2026-10-10, G10c): how many versions of a profile a project keeps besides its milestones, and how many
+  // the upkeep deletes a tick. A lever that never arrived leaves the default in force while the operator believes theirs applies.
+  OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS: ["open-science-web"],
+  OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK: ["open-science-web"],
+  // …and how many projects a tick asks the source-change record and the frontier feed about (G10e): the watch's work per tick.
+  OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK: ["open-science-web"],
   // The probe gateway's window (2026-10-10, Q-8): a limit that never arrived would leave the default in force while the operator
   // believes theirs applies, on a channel that drives the platform's logged-in vendor accounts.
   OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE: ["open-science-web"],
@@ -284,6 +298,8 @@ const operatorLevers = {
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: ["open-science-web"],
+  // The probation share (2026-10-10): a lever that never arrived would leave the default tenth in force, or none, whatever the operator set.
+  OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY: ["open-science-web"],
   // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links
@@ -329,6 +345,9 @@ const operatorLevers = {
   OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS: ["open-science-web"],
   // The register judge's per-run line cap (J4): without it a run's whole report is one Jev request per line.
   OPEN_SCIENCE_JEV_REGISTER_MAX_LINES: ["open-science-web"],
+  // The one switch for every Jev site (2026-10-10): with it off the key stays mounted and each site takes the path it had before
+  // Jev. A lever that does not arrive leaves every site judging while the operator believes none is.
+  OPEN_SCIENCE_JEV_ENABLED: ["open-science-web"],
   // The `evimed` login mode (fusion plan 2026-09-26 §9.2): the switch is how a
   // deployment lets the EviMed shell sign its researchers in, and the
   // introspection URL is the one setting the mode cannot default. A lever that

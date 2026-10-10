@@ -13,6 +13,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { LearningService } from "../src/learningService.mjs";
+import { retiredMemosOwner } from "../src/retiredMemos.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -196,8 +197,9 @@ test("the researcher's switches pause learning and recall without deleting, and 
 
   const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
   assert.equal(reset.status, 200);
-  assert.deepEqual((await reset.json()).data, { structured: 1, methods: 0, handbooks: 0, entries: 0 });
+  assert.deepEqual((await reset.json()).data, { structured: 1, methods: 0, handbooks: 0, entries: 0, jobs: 0, feedback: 0 });
   assert.equal((await app.researchMemory.listAllRecords(user.id)).length, 0);
+  assert.ok(await app.researchMemory.resetInstant(user.id), "and the instant of the reset is the account's, for what is learned afterwards");
   const after = await read();
   assert.equal(after.learningPaused, true, "a reset is a clean slate, not a change to the switches");
   assert.equal(after.recallPaused, true);
@@ -235,12 +237,25 @@ test("a reset clears every kind the memory page shows — memories, learned meth
   };
   const mine = await seed(user.id);
   const theirs = await seed(other.id);
+  // What the platform would learn the account from again (review M-11): a lesson waiting, and what the researcher did.
+  const database = app.store.database;
+  const lessons = {};
+  for (const owner of [user.id, other.id]) {
+    lessons[owner] = (await database.query(`INSERT INTO evimed_product.jobs(id,user_id,kind,payload,idempotency_key) VALUES ($1,$2,'distill','{}'::jsonb,$3) RETURNING id`,
+      [`job_${randomUUID()}`, owner, `lesson:${randomUUID()}`])).rows[0].id;
+    await database.query(`INSERT INTO evimed_product.feedback_events(id,user_id,trigger_kind,subject_type,subject_id,detail,occurred_at)
+      VALUES ($1,$2,'memory-rejected','memory-record',$3,'{}'::jsonb,clock_timestamp())`, [`feedback:${randomUUID()}`, owner, `rec_${randomUUID()}`]);
+  }
 
   const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
   const resetBody = await reset.json();
   assert.equal(reset.status, 200, JSON.stringify(resetBody));
-  assert.deepEqual(resetBody.data, { structured: 1, methods: 1, handbooks: 1, entries: 2 },
-    "the memory, the method, the handbook and both own notes (in force and forgotten); the waiting lesson goes without being counted as one");
+  assert.deepEqual(resetBody.data, { structured: 1, methods: 1, handbooks: 1, entries: 2, jobs: 1, feedback: 1 },
+    "the memory, the method, the handbook and both own notes (in force and forgotten); the waiting lesson goes without being counted as one; and the lesson queued and the feedback recorded");
+  assert.equal((await database.query("SELECT status FROM evimed_product.jobs WHERE id=$1", [lessons[user.id]])).rows[0].status, "canceled");
+  assert.equal((await database.query("SELECT status FROM evimed_product.jobs WHERE id=$1", [lessons[other.id]])).rows[0].status, "queued", "another account's lesson stands");
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_product.feedback_events WHERE user_id=$1", [user.id])).rows[0].n, 0);
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_product.feedback_events WHERE user_id=$1", [other.id])).rows[0].n, 1);
 
   assert.deepEqual((await learning.listMethods(user.id)).items, []);
   assert.equal(await documents.get(user.id, "method", mine.method.id), null);
@@ -258,7 +273,7 @@ test("a reset clears every kind the memory page shows — memories, learned meth
   assert.equal((await learning.listMethods(other.id)).items.length, 1);
   assert.equal((await app.capsuleService.mine(other.id)).entries.length, theirs.note ? 1 : 0);
   const again = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
-  assert.deepEqual((await again.json()).data, { structured: 0, methods: 0, handbooks: 0, entries: 0 });
+  assert.deepEqual((await again.json()).data, { structured: 0, methods: 0, handbooks: 0, entries: 0, jobs: 0, feedback: 0 });
   // The fixture's own cleanup closes the pool, so the second account is removed here, while it is open.
   await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [other.id]);
 });
@@ -328,6 +343,34 @@ test("deleting a project deletes its memory and leaves personal memory alone", o
     "the project's memory went with it and the account's did not");
 });
 
+// 2026-10-10 review M-10/M-11 (owner ruling): deleting a project stops the methods learnt only there.
+test("deleting a project retires the methods learnt only in it, and a method another project's lesson also shaped stands", options, async (t) => {
+  const { app, base, headers, user } = await fixture(t);
+  const learning = new LearningService({ documents: app.capsuleService.documents });
+  const frontmatter = (name) => ({ name, description: "Align citations.", whenToUse: "When a report needs references.",
+    metadata: { role: "functional", applies_when: "A report with references.", not_when: "No citations.", derived_from: "run:run_1", evimed_schema: "method-skill/1" } });
+  const body = ["## Purpose", "Align every citation marker with one reference.", "## When to Use", "When a report needs references.", "## Inputs", "The report.",
+    "## Workflow", "1. Match markers.", "## Verification", "- Every marker has one entry.", "## Constraints", "- Do not invent entries.", "## Output", "A reference list."].join("\n");
+  for (const id of ["project-gone", "project-kept"]) {
+    assert.equal((await fetch(`${base}/api/projects`, { method: "POST", headers, body: JSON.stringify({ id, name: id }) })).status, 200);
+  }
+  const only = await learning.createCandidate(user.id, { projectId: "project-gone", frontmatter: frontmatter("only-here"), body, provenance: { origin: "inferred", runId: "run_1" } });
+  const both = await learning.createCandidate(user.id, { projectId: "project-gone", frontmatter: frontmatter("here-and-there"), body, provenance: { origin: "inferred", runId: "run_2" } });
+  await learning.amendMethod(user.id, both.id, { expectedRevision: both.revision, frontmatter: frontmatter("here-and-there"), body: `${body}\n\nA second project taught this too.`,
+    provenance: { origin: "inferred", runId: "run_3", sourceProjectId: "project-kept" } });
+  const elsewhere = await learning.createCandidate(user.id, { projectId: "project-kept", frontmatter: frontmatter("only-there"), body, provenance: { origin: "inferred", runId: "run_4" } });
+
+  const deleted = await fetch(`${base}/api/projects/project-gone`, { method: "DELETE", headers, body: JSON.stringify({ confirm: "project-gone" }) });
+  assert.equal(deleted.status, 200, await deleted.clone().text());
+
+  const documents = app.capsuleService.documents;
+  const read = async (id) => (await documents.get(user.id, "method", id)).payload;
+  assert.equal((await read(only.id)).status, "retired", "learnt only in the deleted project");
+  assert.equal((await read(only.id)).statusReason, "它只是从已删除的项目里学到的，已停用。");
+  assert.notEqual((await read(both.id)).status, "retired", "a lesson from another project also shaped it");
+  assert.notEqual((await read(elsewhere.id)).status, "retired", "learnt in a project that stands");
+});
+
 // 2026-10-10 review M-10: a conversation's own records (scope "session") carry no project, so the project's deletion
 // has to be told which conversations the project had; the route names them from the project's sessions and runs.
 // A pause turned on under a runtime that is already up: its methods were mounted at launch (2026-10-10 review L-5), so the
@@ -393,6 +436,34 @@ test("deleting an account takes every memory with it, counted for the audit", op
             (SELECT count(*)::integer FROM evimed_memory.record_usage WHERE user_id=$1) AS usage,
             (SELECT count(*)::integer FROM evimed_memory.sessions WHERE user_id=$1) AS sessions`, [user.id]);
   assert.deepEqual(rows.rows[0], { records: 0, usage: 0, sessions: 0 });
+});
+
+// 2026-10-10 review M-11: the retired usememos tables sit in `public`, reach nothing in `evimed_control`, and outlived every
+// account. Erasing an account takes its rows with it where the tables are still there.
+test("deleting an account takes its rows out of the retired usememos tables and leaves the digests an archive is re-sealed against", options, async (t) => {
+  const { app, base, headers, user } = await fixture(t);
+  const database = app.store.database;
+  const owner = retiredMemosOwner(user.id);
+  const stranger = retiredMemosOwner(`someone-else-${randomUUID()}`);
+  await database.query("CREATE TABLE IF NOT EXISTS public.memory_record (id serial PRIMARY KEY, namespace text, value text)");
+  await database.query("CREATE TABLE IF NOT EXISTS public.memo (id serial PRIMARY KEY, content text)");
+  try {
+    await database.query("INSERT INTO public.memory_record (namespace, value) VALUES ($1,'mine'),($2,'theirs')", [owner.namespace, stranger.namespace]);
+    await database.query("INSERT INTO public.memo (content) VALUES ($1),($2)", [`mine\n\n#evimed-user-${owner.tag}`, `theirs\n\n#evimed-user-${stranger.tag}`]);
+
+    const deleted = await fetch(`${base}/api/account`, {
+      method: "DELETE", headers, body: JSON.stringify({ confirm: user.id, password: "test-only-memory-password" }),
+    });
+    assert.equal(deleted.status, 200, await deleted.clone().text());
+    assert.deepEqual((await database.query("SELECT value FROM public.memory_record")).rows, [{ value: "theirs" }]);
+    assert.deepEqual((await database.query("SELECT content FROM public.memo")).rows.map((row) => row.content.startsWith("theirs")), [true]);
+    assert.deepEqual((await database.query("SELECT namespace, tag FROM evimed_memory.retired_erasures WHERE namespace=$1", [owner.namespace])).rows,
+      [{ namespace: owner.namespace, tag: owner.tag }]);
+  } finally {
+    // Inside the test: the fixture closes the pool when the test ends.
+    await database.query("DROP TABLE IF EXISTS public.memory_record, public.memo");
+    await database.query("DELETE FROM evimed_memory.retired_erasures WHERE namespace=ANY($1::text[])", [[owner.namespace, stranger.namespace]]);
+  }
 });
 
 // The index is derived and owns no record: every hit is re-read from PostgreSQL

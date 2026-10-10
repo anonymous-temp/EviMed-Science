@@ -72,10 +72,10 @@ export const EVIDENCE_PROJECT_ID = "evimed-evidence";
 export const EVIDENCE_PROJECT_NAME = "EviMed 证据中心";
 
 /**
- * The paired evaluation's cells, one short-lived project each
- * (`learningEvaluation.mjs`). Missing from this list until 2026-09-21, so
- * while an evaluation ran its 「Private method evaluation」 projects sat in the
- * researcher's project list and held their runtime slots.
+ * The paired evaluation's cells, one short-lived project each. The evaluation was deleted on
+ * 2026-10-10 and nothing makes one now; the name stays internal so that a cell an interrupted
+ * evaluation left behind (its cleanup runs in a `finally`) is not offered to the researcher as a
+ * project of theirs, as it was until 2026-09-21 while an evaluation ran.
  */
 const EVALUATION_CELL_PROJECT = /^methodeval-[a-f0-9]{24}$/;
 

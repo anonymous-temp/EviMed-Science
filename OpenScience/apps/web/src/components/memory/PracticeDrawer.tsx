@@ -28,8 +28,6 @@ interface PracticeView {
   title: string;
   /** What it is: 「做法」, or the research tool a handbook is for. */
   kind: string;
-  /** Whose it is: 从你的对话中学到, or 你定下的. */
-  origin: string;
   /** Which version the researcher is on, once known. */
   version: number | null;
   at: string | null;
@@ -64,7 +62,7 @@ function PracticeDrawerView({ view }: { view: PracticeView }) {
   const [reading, setReading] = useState<number | null>(null);
   const earlier = Array.isArray(view.versions) ? view.versions.filter((version) => !version.current) : [];
   const canGoBack = Array.isArray(view.versions) && view.versions.length > 1;
-  const meta = [view.kind, view.origin, view.version ? `第 ${view.version} 版` : "", formatDay(view.at)].filter(Boolean).join(" · ");
+  const meta = [view.kind, view.version ? `第 ${view.version} 版` : "", formatDay(view.at)].filter(Boolean).join(" · ");
 
   return (
     <Drawer title={view.title} description={meta} onClose={view.onClose}>
@@ -137,11 +135,6 @@ function useLoaded<T>(read: () => Promise<T>, key: string): Loaded<T> {
   return value;
 }
 
-/** The method's own sentence about its origin: the researcher's words, or what EviMed learned from their work. */
-function methodOrigin(method: WebMethod) {
-  return method.origin === "explicit" ? "你定下的" : "从你的对话中学到";
-}
-
 export function MethodDrawer({ method, onClose, onChanged }: { method: WebMethod; onClose: () => void; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const versions = useLoaded(async () => (await methodVersions(method)).items, `${method.id}:${method.revision}`);
@@ -180,7 +173,7 @@ export function MethodDrawer({ method, onClose, onChanged }: { method: WebMethod
 
   return (
     <PracticeDrawerView view={{
-      title, kind: "做法", origin: methodOrigin(method), version: method.version ?? 1, at: method.bodyUpdatedAt ?? method.updatedAt,
+      title, kind: "做法", version: method.version ?? 1, at: method.bodyUpdatedAt ?? method.updatedAt,
       // The steps in the researcher's language, or no 「怎么做」 at all: the body is the SKILL.md written for the model, in English.
       steps: method.steps || null, stepsLoading: false,
       whenToUse: method.scope?.applicability || method.whenToUse || "",
@@ -231,7 +224,7 @@ export function HandbookDrawer({ handbook, tool, onClose, onChanged }: { handboo
 
   return (
     <PracticeDrawerView view={{
-      title: handbook.title, kind: `用在${tool}`, origin: "从你的对话中学到", version: current?.version ?? null, at: handbook.appliedAt ?? handbook.updatedAt,
+      title: handbook.title, kind: `用在${tool}`, version: current?.version ?? null, at: handbook.appliedAt ?? handbook.updatedAt,
       steps: read ? read.steps || null : null, stepsLoading: detail === null,
       whenToUse: handbook.whenToUse || read?.whenToUse || "",
       sources: read ? read.sources : detail === "failed" ? "failed" : null, versions, busy, onGoBack: () => void goBack(), onStop: () => void stop(), onClose,

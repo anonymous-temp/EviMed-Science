@@ -238,7 +238,7 @@ async function askOnce({ config, usageLedger, fetchImpl, assertModelAccess }, ca
       dailyLimit: Number(call.limits?.daily ?? config.userDailySpendLimit) || 0,
       weeklyLimit: Number(call.limits?.weekly ?? config.userWeeklySpendLimit) || 0,
       runLimit: Number(call.limits?.run) || 0,
-      moduleLimit: call.purpose === "learning" ? Number(config.learningDailyLimitCny??10) : Number(call.limits?.moduleDaily??0),
+      moduleLimit: call.purpose === "learning" ? Number(config.learningDailyLimitCny??0) : Number(call.limits?.moduleDaily??0),
       budgetPurpose: call.purpose,
       now: at,
     });

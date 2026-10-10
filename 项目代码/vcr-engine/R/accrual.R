@@ -106,19 +106,41 @@ vcr_quantile_mcse <- function(x, p) {
   (x[hi] - x[lo]) / 2
 }
 
+#' The events of the patients a site has already enrolled, as times from now: a
+#' negative time is an event that has already happened.
+#'
+#' The engine is given, per site, how many patients it enrolled (`enrolled`) and how
+#' long it has been open (`exposure`), not when each one came in. Given k arrivals of
+#' a Poisson process of constant rate over [0, exposure], the arrival times are k
+#' independent uniform draws, whatever the rate, so each enrolled patient has been
+#' followed for U(0, exposure) and has an event time of `Exp(hazard)` from enrolment:
+#' the same model the patients still to enrol are given. The history is therefore a
+#' draw of the model, not a record; nothing here reads an observed event count.
+.vcr_enrolled_events <- function(enrolled, exposure, hazard) {
+  followed <- stats::runif(sum(enrolled)) * rep(exposure, times = enrolled)
+  stats::rexp(length(followed), hazard) - followed
+}
+
 #' Simulate accrual with staggered site activation and (optionally) screen
 #' failure. Each replicate draws site rates, then inter-arrival times. With
 #' `event_target` and `event_hazard`, each enrolled patient also draws an event
 #' time (`enrolment + Exp(hazard)`) and the replicate also reports when the
-#' `event_target`-th event happens.
+#' `event_target`-th event happens. The event count is over every patient, the
+#' ones this forecast enrols and, when `enrolled` and `exposure` (one value per
+#' site) are given, the ones the sites have already enrolled (`.vcr_enrolled_events`);
+#' an event that has already happened counts at time 0, and `eventsAlreadyMean` is
+#' how many the replicates drew. `target` may be 0: everybody is enrolled and only
+#' the events are forecast.
 vcr_accrual_simulate <- function(model, target, replicates = 20000L, seed = 1L,
                                  cores = 1L, probs = c(0.05, 0.25, 0.5, 0.75, 0.95),
                                  by_times = NULL, randomized_target = FALSE,
-                                 event_target = NULL, event_hazard = NULL, batch_size = 500L) {
+                                 event_target = NULL, event_hazard = NULL, batch_size = 500L,
+                                 enrolled = NULL, exposure = NULL) {
   bank <- vcr_stream_bank(seed)
   sf <- model$screenFailure
   events <- !is.null(event_target)
-  t_end <- numeric(0); t_ev <- numeric(0)
+  already <- events && !is.null(enrolled) && sum(enrolled) > 0
+  t_end <- numeric(0); t_ev <- numeric(0); n_past <- numeric(0)
   done <- 0L; interrupted <- NULL
   while (done < replicates) {
     reason <- vcr_interrupt()
@@ -128,14 +150,21 @@ vcr_accrual_simulate <- function(model, target, replicates = 20000L, seed = 1L,
     out <- vcr_map_streams(streams, function(i) {
       rates <- stats::rgamma(model$nSites, shape = model$alpha, rate = model$beta)
       p_sf <- if (is.null(sf)) 0 else stats::rbeta(1, sf$alpha, sf$beta)
-      r <- .vcr_accrual_time(rates, model$startTimes, target, p_sf, randomized_target, return_times = events)
-      if (!events) return(c(lpi = r, ev = NA_real_))
-      if (!is.finite(r$lpi)) return(c(lpi = Inf, ev = Inf))
+      r <- if (target > 0) .vcr_accrual_time(rates, model$startTimes, target, p_sf, randomized_target, return_times = events)
+           else list(lpi = 0, times = numeric(0))
+      if (!events) return(c(lpi = r, ev = NA_real_, past = NA_real_))
+      if (!is.finite(r$lpi)) return(c(lpi = Inf, ev = Inf, past = NA_real_))
       et <- r$times + stats::rexp(length(r$times), event_hazard)
-      c(lpi = r$lpi, ev = sort(et)[event_target])
+      past <- 0
+      if (already) {
+        before <- .vcr_enrolled_events(enrolled, exposure, event_hazard)
+        past <- sum(before <= 0)
+        et <- c(et, pmax(before, 0))
+      }
+      c(lpi = r$lpi, ev = if (length(et) >= event_target) sort(et)[event_target] else Inf, past = past)
     }, cores = cores, indices = done + seq_len(take))
     m <- do.call(rbind, lapply(out, function(o) o))
-    t_end <- c(t_end, m[, "lpi"]); t_ev <- c(t_ev, m[, "ev"])
+    t_end <- c(t_end, m[, "lpi"]); t_ev <- c(t_ev, m[, "ev"]); n_past <- c(n_past, m[, "past"])
     done <- done + take
   }
   ok <- is.finite(t_end)
@@ -146,6 +175,7 @@ vcr_accrual_simulate <- function(model, target, replicates = 20000L, seed = 1L,
     replicates = done, target = target, interrupted = interrupted,
     unreachableShare = 1 - mean(ok)
   )
+  if (events) res$eventsAlreadyMean <- if (already) mean(n_past[ok]) else 0
   if (!is.null(by_times)) {
     res$probabilityBy <- vapply(by_times, function(tt) mean(t_end[ok] <= tt), numeric(1))
     res$probabilityByMcse <- vapply(res$probabilityBy, function(p)

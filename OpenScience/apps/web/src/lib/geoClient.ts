@@ -775,7 +775,8 @@ export interface GeoValue {
   research: Array<{ id: string; question: string | null; status: string; runId: string | null }>;
   impacts: Array<{ change: Record<string, unknown>; findingIds: string[]; groupIds: string[]; articleIds: string[] }>;
   /**
-   * `assessed` is represented + partial + contradicted + notAddressed; `uncertain` and `notApplicable` are not assessed.
+   * `assessed` is represented + partial + contradicted: what the answers said about a finding. `notAddressed` (an answer that did not speak of it),
+   * `uncertain` and `notApplicable` are counted beside it and outside the headline `represented / assessed`.
    * `basisVersion`: the value-profile version the latest round was judged against (null before any judged round).
    */
   coverage: { assessed: number; represented: number; partial: number; contradicted: number; notAddressed: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null };

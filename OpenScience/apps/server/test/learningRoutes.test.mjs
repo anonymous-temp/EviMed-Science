@@ -16,13 +16,13 @@ test("a learned method's view lacks nothing, and carries what its row says about
   const view = methodView(document({
     status: "approved", statusChangedAt: "2026-09-16T08:00:00.000Z", provenance: { origin: "inferred" },
     learning: {
-      digest: "sha256:aaa", counts: { eligible: 0, loaded: 3, invoked: 0, succeeded: 3, validated: 0, read: 0 },
+      digest: "sha256:aaa", counts: { eligible: 0, loaded: 3, invoked: 0, succeeded: 3, read: 0 },
       observations: [
         { runId: "r1", family: "f1", outcome: "accepted", at: "2026-09-16T08:00:00.000Z" },
         { runId: "r2", family: "f2", outcome: "accepted", at: "2026-09-16T09:00:00.000Z" },
         { runId: "r3", family: "f3", outcome: "accepted", at: "2026-09-16T10:00:00.000Z" },
       ],
-      relations: [], evaluations: [], level: 0, lastReadAt: null,
+      relations: [], level: 0, lastReadAt: null,
     },
   }));
   assert.equal(view.status, "approved");
@@ -36,10 +36,10 @@ test("a conflict is the one thing a view still reports as missing", () => {
   const view = methodView(document({
     status: "candidate", provenance: { origin: "inferred" },
     learning: {
-      digest: "sha256:aaa", counts: { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 },
+      digest: "sha256:aaa", counts: { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 },
       observations: [],
       relations: [{ type: "conflicts_with", target: "另一条方法", evidence: "相反要求", proposedBy: "consolidate:job_1" }],
-      evaluations: [], level: 0, lastReadAt: null,
+      level: 0, lastReadAt: null,
     },
   }));
   assert.deepEqual(view.promotion.missingDetails.map((detail) => detail.code), ["conflicts"]);
@@ -160,4 +160,24 @@ test("「从哪里学到的」 lists the conversations that taught a method, new
     resolveRun: async () => { throw new Error("project store down"); },
   });
   assert.deepEqual((await get(broken, "/api/methods/m/sources")).body.data.items, [], "a source that cannot be read is a link not shown");
+});
+
+test("there is no trial route: no request puts an unapproved method in front of a run (the paired evaluation's mount went with it, 2026-10-10)", async () => {
+  // `PUT /api/methods/trial` mounted named methods, approved or not, into one project's next launches for an allowlisted
+  // evaluation account (403 for everyone else). The only caller was the paired evaluation, which is gone, so the route
+  // answers as any path the router does not know.
+  /** @type {string[]} */
+  const reads = [];
+  const routes = createLearningRoutes({
+    store: { async ensureSessionUser() { return { user: { id: "u1" } }; }, async assertCsrf() {} },
+    maxJsonBytes: 10_000,
+    service: { async getMethod(/** @type {string} */ _userId, /** @type {string} */ id) { reads.push(id); throw Object.assign(new Error("gone"), { code: "method_not_found" }); } },
+  });
+  const res = { writeHead() {}, end() {} };
+  for (const method of ["PUT", "DELETE"]) {
+    await assert.rejects(() => routes({ url: "/api/methods/trial?projectId=p1", method, headers: {} }, res), { code: "not_found" }, method);
+  }
+  // And a GET of it is the lookup of a method that happens to be named "trial", which is nothing special.
+  await assert.rejects(() => routes({ url: "/api/methods/trial", method: "GET", headers: {} }, res), { code: "method_not_found" });
+  assert.deepEqual(reads, ["trial"]);
 });

@@ -98,9 +98,10 @@ export class LearningWorker {
     this.concurrency = concurrency;
     /** @type {Set<Promise<any>>} */
     this.lanes = new Set();
-    // Paired evaluations in progress on this worker. One at a time: each holds
-    // a lane and a background runtime for hours, and two of them held both
-    // lanes and half the deployment's runtimes on 2026-09-21.
+    // Paired evaluations of a handbook in progress on this worker (the optional `evaluate` hook of
+    // `HandbookConsolidation`, which no deployment composes). One at a time: each holds a lane and a
+    // background runtime for hours, and two of them held both lanes and half the deployment's runtimes
+    // on 2026-09-21.
     this.evaluating = 0;
     // Set when the process is shutting down (`interrupt`): a job that ends now
     // ended because the platform is restarting, not because of anything in it.
@@ -198,11 +199,12 @@ export class LearningWorker {
       this.lastError = typeof error?.code === "string" ? error.code : "learning_job_failed";
       if (this.closing && !leaseLost && this.lastError !== "product_job_lease_lost") {
         // A restart is not the job's failure. Every release stops the web
-        // process, and with it an evaluation that runs for hours; counted as an
-        // attempt, three releases in one evaluation's lifetime failed it for
-        // good as `product_job_attempts_exhausted`. Handed back with the
-        // attempt refunded, it resumes after the restart and reuses the cells
-        // it had finished.
+        // process, and with it the model steps a job is waiting on; counted as
+        // an attempt, three releases in one job's lifetime failed it for good
+        // as `product_job_attempts_exhausted` (it first happened to a paired
+        // evaluation, which ran for hours). Handed back with the attempt
+        // refunded, it resumes after the restart and reuses the steps it had
+        // finished.
         this.lastError = "learning_interrupted_by_restart";
         await this.jobs.fail(job.userId, job.id, job.leaseToken,
           { code: "learning_interrupted_by_restart", message: "The platform restarted; the job resumes after it." },
@@ -241,7 +243,7 @@ export class LearningWorker {
         /** @type {any} */ (error).code = "consolidate_action_invalid";
         throw error;
       }
-      if (action === "evaluate" || (action === "optimize" && this.consolidation.handbookConsolidation?.evaluate)) {
+      if (action === "optimize" && this.consolidation.handbookConsolidation?.evaluate) {
         if (this.evaluating >= 1) {
           const error = new Error("Another paired evaluation is running; this one waits its turn.");
           /** @type {any} */ (error).code = "learning_evaluation_busy";
@@ -330,8 +332,8 @@ export class LearningWorker {
 
   /**
    * The process is going down: claim nothing more, and hand back whatever
-   * ends from here on (see `#tick`). Called before the evaluations are
-   * aborted, so the abort is read as the restart it is.
+   * ends from here on (see `#tick`). Called first on shutdown, so that a job
+   * the shutdown ends is read as the restart it is.
    */
   interrupt() {
     this.closing = true;
@@ -359,7 +361,6 @@ const TERMINAL_LEARNING_ERRORS = new Set([
   "method_invalid",
   "method_not_found",
   "method_relation_invalid",
-  "method_evaluation_unavailable",
   "product_document_too_large",
 ]);
 

@@ -286,6 +286,49 @@ describe('clinical matching controls',()=>{
     expect(screen.getByRole('option',{name:'请选择患者'})).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/受试者/);
   });
+  // 给患者找试验 starts from a person, and a person's trials do not wait on a protocol: a study with patients and no protocol version
+  // still offers the patient to start from — and only that, since the protocol's controls have nothing to work on.
+  it('offers the patient to start from when the study has no protocol version, in the direction that starts from a patient',()=>{
+    const data={protocols:[],candidateRoster:['P-001','P-002'],direction:'patient_to_trial'} as unknown as VcrMatchingTab;
+    render(<MatchingPanelControls studyId="s1" data={data} direction="patient_to_trial" canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}}/>);
+    expect(screen.getByLabelText('患者')).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'刷新结果'})).toBeVisible();
+    expect(screen.queryByLabelText('查看方案')).toBeNull();
+    expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
+    expect(screen.queryByText('比较多个方案')).toBeNull();
+  });
+  it('draws nothing for a study with no protocol version in the other direction, as before',()=>{
+    const data={protocols:[],candidateRoster:['P-001'],direction:'trial_to_patient'} as unknown as VcrMatchingTab;
+    const {container}=render(<MatchingPanelControls studyId="s1" data={data} direction="trial_to_patient" canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}}/>);
+    expect(container).toBeEmptyDOMElement();
+  });
+  it('shows the patient the page keeps, tells the page what was chosen, and says nobody when 请选择患者 is chosen again',()=>{
+    const onCandidate=vi.fn();
+    const data={protocols:[{id:'p1',version:1,title:'方案一'}],candidateRoster:['P-001','P-002'],direction:'patient_to_trial'} as unknown as VcrMatchingTab;
+    const view=render(<MatchingPanelControls studyId="s1" data={data} direction="patient_to_trial" subjectKey="P-001" canRun onProtocol={()=>{}} onCandidate={onCandidate} onReload={()=>{}}/>);
+    const select=screen.getByLabelText('患者') as HTMLSelectElement;
+    expect(select.value).toBe('P-001');
+    expect(screen.getByRole('button',{name:'开始评估'})).toBeEnabled();
+    fireEvent.change(select,{target:{value:'P-002'}});
+    expect(onCandidate).toHaveBeenLastCalledWith('P-002');
+    // The page keeps the patient: the select follows what the page was given, not what was clicked.
+    expect(select.value).toBe('P-001');
+    fireEvent.change(select,{target:{value:''}});
+    expect(onCandidate).toHaveBeenLastCalledWith('');
+    view.rerender(<MatchingPanelControls studyId="s1" data={data} direction="patient_to_trial" subjectKey={null} canRun onProtocol={()=>{}} onCandidate={onCandidate} onReload={()=>{}}/>);
+    expect((screen.getByLabelText('患者') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByRole('button',{name:'开始评估'})).toBeDisabled();
+  });
+  it('keeps the choice itself, and says nothing for the placeholder, where the page does not keep the patient',()=>{
+    const onCandidate=vi.fn();
+    const data={protocols:[{id:'p1',version:1,title:'方案一'}],candidateRoster:['P-001'],direction:'trial_to_patient'} as unknown as VcrMatchingTab;
+    render(<MatchingPanelControls studyId="s1" data={data} canRun onProtocol={()=>{}} onCandidate={onCandidate} onReload={()=>{}}/>);
+    fireEvent.change(screen.getByLabelText('患者'),{target:{value:'P-001'}});
+    expect(onCandidate).toHaveBeenCalledWith('P-001');
+    onCandidate.mockClear();
+    fireEvent.change(screen.getByLabelText('患者'),{target:{value:''}});
+    expect(onCandidate).not.toHaveBeenCalled();
+  });
   it('preserves Unicode offsets and requires renewed permission when a source authorization expired',()=>{
     const text='😀王小明住院。王小明否认胸痛。';
     expect(reviewedSpans(text,'王小明\n小明')).toEqual([{start:2,end:5,kind:'identifier'},{start:8,end:11,kind:'identifier'}]);

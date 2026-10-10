@@ -524,6 +524,8 @@ export class EvolutionMaintenance {
       return { id: row.id, maintenanceScore: (u.invoked ? u.succeeded / u.invoked : 0) + Math.log1p(u.invoked) + (u.retrieved ? u.invoked / u.retrieved : 0), protectedCoverage };
     }).sort((/** @type {any} */ a, /** @type {any} */ b) => a.maintenanceScore - b.maintenanceScore);
     const reviews = [];
+    /** What J12 said about each pair it was asked about, labelled as the judge's (plan 2026-10-06 §4.5). @type {any[]} */
+    const judgeAdvisory = [];
     const active = tools.filter(row => row.payload.status === 'active' && row.createdAt
       && this.service.now().getTime() - Date.parse(row.createdAt) >= 30 * 86400000);
     const lowest = rows.find(row => !row.protectedCoverage && active.some(tool => tool.id === row.id));
@@ -538,7 +540,13 @@ export class EvolutionMaintenance {
       if (overlap && a.payload.track === b.payload.track && this.judgeService) {
         try {
           const result = await this.judgeService.judge("J12", { left: { name: a.payload.name, description: a.payload.description }, right: { name: b.payload.name, description: b.payload.description } }, { userId: await this.service.owner(), projectId: "evimed-evolution", module: "evolution" });
-          if (['settled', 'escalated'].includes(result?.outcome) && ['same', 'related', 'different'].includes(result.value?.relation)) similar = result.value.relation === "same";
+          if (['settled', 'escalated'].includes(result?.outcome) && ['same', 'related', 'different'].includes(result.value?.relation)) {
+            // Advisory until the site is calibrated (review J-7): which merge reviews are proposed is the lexical rule's until the judge's
+            // "same / related / different" has been measured. A decision from a calibrated site decides; any other is recorded and read by nothing.
+            const applied = result.calibration === 'calibrated';
+            judgeAdvisory.push({ source: 'judge', site: 'J12', tools: [a.id, b.id], relation: result.value.relation, calibration: result.calibration ?? 'uncalibrated', appliedToReview: applied });
+            if (applied) similar = result.value.relation === "same";
+          }
         } catch { /* Keep the existing lexical fallback; case overlap is still required. */ }
       }
       if (overlap && similar && a.payload.track === b.payload.track) reviews.push(await this.proposeMaintenance('merge', [a.id, b.id], month,
@@ -548,7 +556,7 @@ export class EvolutionMaintenance {
     const benchmarkId = `evolution-retrieval-${month}`;
     if (!await this.service.get(benchmarkId)) await this.service.save('retrieval-benchmark', benchmarkId, { month, cases: benchmark, status: 'pending', score: evolutionRetrievalScore(benchmark, []) });
     if (benchmark.length) await this.service.enqueue('evaluate', { action: 'retrieval-selection', benchmarkId }, `retrieval:${month}`);
-    const report = { month, metricsMonth, tools: rows, reviews: reviews.map(row => row.id), retrievalBenchmarkId: benchmarkId, coverage: covered.size, activeBytes: tools.filter((/** @type {any} */ row) => row.payload.status === 'active').reduce((/** @type {number} */ sum, /** @type {any} */ row) => sum + Number(row.payload.artifactBytes ?? 0), 0), metrics: metricsRecord.payload.metrics };
+    const report = { month, metricsMonth, tools: rows, reviews: reviews.map(row => row.id), judgeAdvisory, retrievalBenchmarkId: benchmarkId, coverage: covered.size, activeBytes: tools.filter((/** @type {any} */ row) => row.payload.status === 'active').reduce((/** @type {number} */ sum, /** @type {any} */ row) => sum + Number(row.payload.artifactBytes ?? 0), 0), metrics: metricsRecord.payload.metrics };
     const id = `evolution-maintenance-${month}`;
     const previous = await this.service.get(id);
     return this.service.save('maintenance', id, report, previous);

@@ -205,10 +205,9 @@ test("a runtime carries the learned methods of the work it is for, and the platf
   assert.deepEqual(await names({ family: null }), [], "the platform's own work carries no researcher's method");
   assert.deepEqual(await names({}), ["geo-method", "legacy-method", "research-method"], "no family named is the whole library, as before");
 
-  // An evaluation names the method it measures, and gets it whatever its family.
-  const trialLearning = { ...fakeLearning(documents), async getMethod(/** @type {string} */ _userId, /** @type {string} */ id) {
-    return documents.find((document) => document.id === id);
-  } };
-  const trial = await selectLearnedMethods(trialLearning, { userId: "u1", projectId: "p1", family: null, trialMethodIds: ["method:learned:geo"] });
-  assert.deepEqual(trial.map((method) => [method.name, method.trial]), [["geo-method", true]]);
+  // No argument names a method to mount: the paired evaluation named the one it measured, whatever its family, and was deleted on
+  // 2026-10-10. A caller still passing `trialMethodIds` gets what everyone gets, so the platform's own work still carries none.
+  const lookup = { ...fakeLearning(documents), async getMethod(/** @type {string} */ _userId, /** @type {string} */ id) { return documents.find((document) => document.id === id); } };
+  const named = await selectLearnedMethods(lookup, { userId: "u1", projectId: "p1", family: null, trialMethodIds: ["method:learned:geo"] });
+  assert.deepEqual(named, []);
 });

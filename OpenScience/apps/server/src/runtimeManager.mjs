@@ -19,7 +19,6 @@ import {
 import { capsuleMethodsDirName, materializeCapsuleMethods, runtimeCapsuleMethodsDir } from "./capsuleMethods.mjs";
 import { learnedMethodFamilyForRuntime } from "./learnedMethodMount.mjs";
 import { KNOWLEDGE_BASE_DIR } from "./researchContext.mjs";
-import { CAPSULE_PROFILE_FACT_KINDS, renderCapsuleProfile } from "./capsuleProfile.mjs";
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
 import { proxyRuntimeUiMux } from "./runtimeUiMuxProxy.mjs";
@@ -3467,8 +3466,6 @@ export class RuntimeManager {
      *  last health call (`{ ok, code? }`), or null before one / without a
      *  controller. Read by `readinessRuntime`; it decides nothing else. */
     this.controllerReleaseManifest = null;
-    /** Frozen methods for private evaluation projects only; never a user-controlled override. */
-    this.evaluationMethodSnapshots = new Map();
     this.pluginOverrides = new Map();
     this.agentRegistry = agentRegistry;
     this.runtimeControllerMode = config.runtimeControllerMode ?? "direct";
@@ -3503,10 +3500,7 @@ export class RuntimeManager {
     this.cleanupRetries = new Map();
     /** What the retries came to (`open_science_runtime_cleanup_retries_total`). */
     this.cleanupRetryStats = { recovered: 0, failed: 0, confirmedGone: 0 };
-    // Which learned methods the last launch of each project mounted, by
-    // project key. Read by the observation producer, which otherwise knows only
-    // about approved methods and would record nothing for a candidate on trial
-    // -- the exact gap that makes a candidate unpromotable forever.
+    // Which learned methods the last launch of each project mounted, by project key.
     this.lastMountedLearnedMethods = new Map();
     // And which capsule methods, by project key: what the conversation panel
     // lists as mounted, instead of selecting every capsule again per read.
@@ -3655,10 +3649,6 @@ export class RuntimeManager {
    * Reads `this.capsuleService` and `this.learningService`, which only the
    * composition root assigns; either being null simply drops that source.
    *
-   * A trial is read per launch rather than cached: the evaluation harness sets
-   * it immediately before it dispatches, and a cached answer would measure the
-   * previous arm.
-   *
    * The researcher's recall pause (the account's, or 「本项目不使用记忆」) is read
    * here too, because methods are 记忆 as the memory page defines it: while it
    * holds, nothing is mounted and the directory an earlier launch wrote is
@@ -3675,27 +3665,15 @@ export class RuntimeManager {
    *
    * @param {any} project
    * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number,
-   *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
+   *   learned: {id: string, name: string, digest: string}[],
    *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
    */
   async syncCapsuleMethods(project) {
     const paused = await this.recallPausedFor(project);
-    let trialMethodIds = [];
-    if (this.learningService && !paused) {
-      // A trial that cannot be read is not a reason to refuse a launch: the
-      // researcher's own run does not depend on it, and failing here would
-      // make an evaluation-only feature able to take the product down.
-      try {
-        const trial = await this.learningService.methodTrial(String(project.userId), String(project.id));
-        trialMethodIds = trial?.methodIds ?? [];
-      } catch { trialMethodIds = []; }
-    }
     const mounted = await materializeCapsuleMethods({
       // Under a pause every source is dropped, which is also what clears the directory.
       capsules: paused ? null : this.capsuleService,
       learning: paused ? null : this.learningService ?? null,
-      frozenMethods: paused ? null : this.evaluationMethodSnapshots.get(this.key(project)) ?? null,
-      trialMethodIds,
       // Which learned methods this runtime may carry: none in the platform's
       // own learning, sources and frontier projects, GEO methods in a runtime
       // reserved for a GEO run, research methods everywhere else (L-G7).
@@ -5156,7 +5134,7 @@ export class RuntimeManager {
    * or null when it was routed to none; the index states it, and that is where the runtime reads it. A dispatch that writes
    * no context (a steer) leaves it out, and the index keeps what the context on disk was routed to.
    *
-   * @param {{ text: string, system?: string | null, routedCapability?: string | null, memoryContext?: string | null, residentProfile?: boolean, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer', recordPromptActor?:(request:any)=>Promise<void> }} input
+   * @param {{ text: string, system?: string | null, routedCapability?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer', recordPromptActor?:(request:any)=>Promise<void> }} input
    * @returns {Promise<void>}
    */
   /** Control-only observed proof; unsupported providers and failed probes never block delivery. @param {any} input */
@@ -5185,7 +5163,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, residentProfile = false, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue", recordPromptActor = null }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue", recordPromptActor = null }) {
     // Background work whose runtime a researcher's start just took says so, so
     // its owner waits and asks again instead of counting a failed attempt
     // (`RUNTIME_YIELDED_CODE`). Nothing was sent: the prompt is refused whole.
@@ -5215,12 +5193,12 @@ export class RuntimeManager {
     // inherit.
     if (typeof memoryContext === "string") {
       await this.writeRunMemoryFile(project, memoryContext, { sessionId, required: strictContext });
+      // Only where the researcher's own context belongs: a dispatch into the project's workspace that also passes its
+      // memory. A verification, a source reading or a learning run works in a directory of its own and passes none on
+      // purpose. The capsule's profile is part of that context now (`ResidentProfiles`), so the workspace-level file the
+      // socket still reads at every run's start is emptied here: a profile left from before would be handed over again.
+      await this.withdrawCapsuleProfileFile(project);
     }
-    // Only where the researcher's own context belongs: a dispatch into the
-    // project's workspace that also recalled memories. A verification, a
-    // source reading or a learning run works in a directory of its own and
-    // passes no memories on purpose; it does not ask for this either.
-    if (residentProfile) await this.syncCapsuleProfile(project, { sessionId });
     if (typeof runId === "string" && runId) {
       await this.writeRunBriefIndex(project, runId, {
         sessionId,
@@ -5295,49 +5273,32 @@ export class RuntimeManager {
   }
 
   /**
-   * Writes the resident capsule profile (`workspaceLayout.capsuleProfileFile`)
-   * the socket injects at the start of every run in this workspace — including
-   * the turns typed into the kernel's own window, which no dispatch precedes;
-   * that is why the frame route calls this too.
+   * Empties the workspace-level capsule profile (`workspaceLayout.capsuleProfileFile`, `.evimed-capsule/profile.md`).
    *
-   * Rendered from the researcher's own capsule, and empty when recall is off
-   * (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`): a profile left from before the
-   * switch was thrown would keep reaching runs the operator meant to run
-   * without memory. The same holds for the researcher's own pause — the
-   * account's, 「本项目不使用记忆」, or the conversation's when it is a trial of
-   * someone else's capsule (`sessionId`, which only a dispatch knows; a frame
-   * opened in the kernel's own window brings the account and the project) —
-   * and a pause that cannot be read withholds the block and says so, since the
-   * last one written would otherwise stay in force (2026-10-10 review M-1).
-   * Empty with no file on disk writes nothing, so a project
-   * that never had a capsule gains no directory. Isolated like the other
-   * context files — a run without the block is degraded, not invalid.
+   * Hidden knowledge: that file was the capsule's resident profile — written at every dispatch and read by the socket at
+   * every run's start. One file per project is read by every conversation of the project, so it could not be given to a
+   * conversation once: it was handed again at every follow-up, and two conversations dispatched together took each other's.
+   * The profile is now one block in the conversation's own context (`ResidentProfiles`, `capsuleProfile.mjs`), handed over
+   * when the conversation needs it. The socket still reads this file if it holds anything, and the workspaces of every
+   * project already hold the last profile that was written, so it is emptied rather than left to be handed over a second
+   * time. Nothing is written for a project that never had one. Isolated like the other context files: a profile left
+   * behind is a duplicate, not an invalid run.
    *
-   * @param {Record<string, any>} project @param {{ sessionId?: string | null }} [options]
-   * @returns {Promise<{ written: boolean, chars: number, error?: string }>}
+   * @param {Record<string, any>} project
+   * @returns {Promise<{ withdrawn: boolean, error?: string }>}
    */
-  async syncCapsuleProfile(project, { sessionId = null } = {}) {
+  async withdrawCapsuleProfileFile(project) {
     try {
-      /** @type {string | undefined} */
-      let pauseError;
-      let paused = false;
-      try {
-        paused = await this.recallPausedFor(project, sessionId);
-      } catch (error) {
-        paused = true;
-        pauseError = typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "memory_pause_unreadable";
-      }
-      const profile = this.capsuleService && this.config.memoryRecallEnabled !== false && !paused
-        ? renderCapsuleProfile(await this.capsuleService.profileFacts(String(project.userId), String(project.id), CAPSULE_PROFILE_FACT_KINDS))
-        : "";
       const file = path.join(project.workspaceDir, workspaceLayout.capsuleProfileFile);
-      if (!profile && !(await fs.lstat(file).catch(() => null))) return { written: false, chars: 0, ...(pauseError ? { error: pauseError } : {}) };
-      await writeFileAtomicNoFollow(project.workspaceDir, file, profile, { encoding: "utf8", mode: 0o444 });
-      await this.mirrorWorkspaceWrite(project, workspaceLayout.capsuleProfileFile, profile);
-      return { written: true, chars: profile.length, ...(pauseError ? { error: pauseError } : {}) };
+      const present = await fs.lstat(file).catch(() => null);
+      if (!present) return { withdrawn: false };
+      if (present.size === 0) return { withdrawn: false };
+      await writeFileAtomicNoFollow(project.workspaceDir, file, "", { encoding: "utf8", mode: 0o444 });
+      await this.mirrorWorkspaceWrite(project, workspaceLayout.capsuleProfileFile, "");
+      return { withdrawn: true };
     } catch (error) {
       // isolated: evimed_capsule_profile_write_failures_total
-      return { written: false, chars: 0, error: typeof error?.code === "string" ? error.code : "capsule_profile_write_failed" };
+      return { withdrawn: false, error: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "capsule_profile_write_failed" };
     }
   }
 

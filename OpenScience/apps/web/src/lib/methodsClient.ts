@@ -21,8 +21,7 @@ export interface WebMethod {
   status: "candidate" | "approved" | "retired" | string;
   statusReason: string | null;
   origin: "inferred" | "explicit" | string;
-  counts: { eligible: number; loaded: number; invoked: number; succeeded: number; validated: number; read: number } | null;
-  evaluations: { verdict?: string; report?: string; at?: string }[];
+  counts: { eligible: number; loaded: number; invoked: number; succeeded: number; read: number } | null;
   promotion: { status: string; reasons: string[]; missing: string[]; missingDetails?: MethodPromotionDetail[] };
   body: string;
   /** Which body this is, counting from 1: what 「第 N 版」 means. `revision`

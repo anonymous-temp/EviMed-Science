@@ -72,10 +72,14 @@ given, and keeps a finished evaluation re-aggregatable offline. Cost is
 reported as unavailable rather than guessed when neither returns settled rows.
 
 Called two ways. `--config` is the full form a person runs. `--method` with
-`--template` is what the nightly consolidation job spawns: it synthesises the
-two arms around one candidate and, with `--json`, prints one machine-readable
-line on stdout while the human summary goes to stderr. The server parses that
-line, so the two halves have one contract instead of two ideas of one.
+`--template` is what the nightly consolidation job used to spawn: it synthesises
+the two arms around one candidate and, with `--json`, prints one machine-readable
+line on stdout while the human summary goes to stderr. The server side of that
+mode is gone (2026-10-10, no paid method on/off study): the spawner, the private
+loopback bridge (`/api/evaluation/*`, the "private grant" path below) and the
+method trial route (`/api/methods/trial`, `set_method_trial`) were deleted, so
+those paths have no server to talk to. `--config`, which the memory ablations
+use, needs none of them.
 """
 
 from __future__ import annotations

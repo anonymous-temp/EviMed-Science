@@ -128,11 +128,20 @@ export function createEvolutionScout({ config, service, runs, registry, decision
         reference ??= { ok: false, resourceCode: error?.code ?? "independent-reference-unavailable" };
       }
       let semanticCovered = false;
+      /** What the judge said, labelled as the judge's and kept beside the measurements; null when it said nothing. @type {any} */
+      let judgeCoverage = null;
       if (judgeService) {
         const methods = [...Object.entries(METHOD_RECORDS).map(([recordId, record]) => ({ id: recordId, name: record.title ?? recordId, description: record.estimand ?? "" })), ...tools.filter(row => row.payload.status !== "retired").map(row => ({ id: row.payload.methodId ?? row.id, name: row.payload.name ?? "", description: row.payload.description ?? "" }))];
         try {
           const result = await judgeService.judge("J11", { method: { id: methodId, name: card.goal, description: card.methodTuple?.method ?? card.goal }, methods }, { userId: await service.owner(), projectId: "evimed-evolution", module: "evolution" });
-          semanticCovered = ['settled', 'escalated'].includes(result?.outcome) && typeof result.value?.methodId === "string" && methods.some(item => item.id === result.value.methodId);
+          if (['settled', 'escalated'].includes(result?.outcome)) {
+            const judged = typeof result.value?.methodId === "string" && methods.some(item => item.id === result.value.methodId) ? result.value.methodId : null;
+            // Advisory until the site is calibrated (review J-7, plan 2026-10-06 §4.5): a model's "this is already covered" must not
+            // close the eligibility gate or lower the priority of a candidate before anyone has measured how often it is right. Only
+            // a decision from a calibrated site takes part; every other one is recorded as the judge's and read by nothing.
+            semanticCovered = judged !== null && result.calibration === "calibrated";
+            judgeCoverage = { source: "judge", site: "J11", outcome: result.outcome, calibration: result.calibration ?? "uncalibrated", methodId: judged, appliedToEligibility: semanticCovered };
+          }
         } catch { /* Exact inventory identity remains the fallback. */ }
       }
       const covered = semanticCovered || Object.hasOwn(METHOD_RECORDS, methodId) || tools.some(row => row.payload.methodId === methodId && row.payload.status !== "retired");
@@ -145,7 +154,7 @@ export function createEvolutionScout({ config, service, runs, registry, decision
       const papers = (card.papers ?? card.sourcePapers ?? []).filter(paper => paper.doi || paper.pmid || paper.url);
       const eligibility = evolutionResearchEligibility({ card, features: rankingFeatures, reference,
         firstTool: !tools.some(row => ["active", "alias", "retired"].includes(row.payload.status)) });
-      const data = { ...card, methodId, id, papers, waitingAgendaIds: [], parentToolIds: parents.map(row => row.id), maintenanceReviewId: payload.maintenanceReviewId ?? null, rankingFeatures, measurements: { demand, reference },
+      const data = { ...card, methodId, id, papers, waitingAgendaIds: [], parentToolIds: parents.map(row => row.id), maintenanceReviewId: payload.maintenanceReviewId ?? null, rankingFeatures, measurements: { demand, reference, ...(judgeCoverage ? { judgeCoverage } : {}) },
         score: evolutionPriority(rankingFeatures), developmentRunId: run.id,
         eligibility };
       if (payload.decisionActionId && previous?.payload.decisionActionId !== payload.decisionActionId) Object.assign(data, { decisionActionId: payload.decisionActionId, buildAttempts: 0,

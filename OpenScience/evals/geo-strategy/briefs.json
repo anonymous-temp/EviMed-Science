@@ -42,7 +42,7 @@
         "minimal": true
       },
       "mustDo": [
-        "State at the top that the question set is the minimal 30 and what the conclusions therefore cover.",
+        "State at the top that the question set is a minimal one and what the conclusions therefore cover.",
         "Mark strategy.json minimal: true and keep per-engine cells at their real sample.",
         "Leave net effect and trend out: a minimal round has no control arm and no history."
       ],

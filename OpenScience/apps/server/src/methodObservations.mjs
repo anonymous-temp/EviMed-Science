@@ -5,10 +5,12 @@
  * its absence was invisible. Every other piece existed and was tested — the
  * counters, the promotion truth table, the paired-evaluation gate, the
  * retirement rule — and `recordObservation` had no caller anywhere in
- * production. So `learning.counts` stayed at zero for every method, which makes
- * `evaluationEligible` false forever, which makes `promotionVerdict` return
+ * production. So `learning.counts` stayed at zero for every method, which kept
+ * the gate that read them shut forever and made `promotionVerdict` return
  * `candidate` forever. A loop that distilled candidates nightly and could never
- * promote one looked exactly like a loop with nothing worth promoting.
+ * promote one looked exactly like a loop with nothing worth promoting. (The
+ * gate, and the paired evaluation behind it, are gone; the harm test that
+ * retires a method reads these same observations.)
  *
  * The composition test did not catch it either, because it asserted every
  * service was constructed and started. Constructed is not fed.

@@ -15,6 +15,9 @@ const memoryStore = {
   async status() { return { configured: true, connected: true, code: null, structured: true }; },
   async settings() { return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
   async relevant() { return []; },
+  // What a dispatch reads of the researcher's memory since review M6: the standing profile and the counts beside it.
+  async residentRecords() { return []; },
+  async lookupCounts() { return { user: 0, project: 0, session: 0 }; },
 };
 
 const until = async (/** @type {() => boolean} */ condition, ms = 8_000) => {

@@ -63,7 +63,7 @@ function harness() {
   const documents = productDocumentsDouble();
   let clock = Date.UTC(2026, 9, 4, 12, 0, 0);
   const now = () => new Date((clock += 60_000));
-  const learning = new LearningService({ documents, now, resolveBaselineDigest: async () => `sha256:${hex("c")}` });
+  const learning = new LearningService({ documents, now });
   const ledger = [];
   const feedback = new MethodFeedbackService({ learning, runs: { list: async () => ledger }, now });
   const distillation = new MethodDistillationRuns({ learning, jobs: { async enqueue() { return { id: "j" }; } },

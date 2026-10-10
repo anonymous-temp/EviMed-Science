@@ -9,7 +9,7 @@ import { JEV_RELATION_CRITERIA, jevDecisions, jevReplyRequest, judgeCitedSentenc
 import { JevError } from "../src/jevModel.mjs";
 import { createJudgeService } from "../src/judgeService.mjs";
 import { HttpError } from "../src/security.mjs";
-import { replyMessage } from "../src/reviewService.mjs";
+import { ReviewService, replyMessage } from "../src/reviewService.mjs";
 
 const REPLY = [
   "二甲双胍可使 HbA1c 较安慰剂降低约 0.9 个百分点 [1]。",
@@ -308,4 +308,17 @@ test("one unshrinkable source and the bounded batch ceiling fall back without lo
   assert.deepEqual(result.medicine, [6]);
   const indices = [...result.batches.flatMap(batch => batch.asked), ...result.skipped].sort((a, b) => a - b);
   assert.deepEqual(indices, [0, 1, 2, 3, 4, 5]);
+});
+
+test("the master switch takes the reply check's first pass with it: with it off the reviewer model reads every sentence, as before Jev", () => {
+  const base = { reviewJevEnabled: true, typesafeApiKey: "test-not-secret", reviewJevModel: "jev-1.13.0" };
+  const reviewFor = (/** @type {Record<string, any>} */ extra) => new ReviewService({ config: { ...base, ...extra }, database: null, store: {} });
+  // Its own lever and a key put it on; the flag absent is the master switch's default, on.
+  assert.equal(reviewFor({}).jevEnabled, true);
+  assert.equal(reviewFor({ jevEnabled: true }).jevEnabled, true);
+  // The master switch is stronger than the reply check's own lever: the key stays in place and nothing is asked.
+  assert.equal(reviewFor({ jevEnabled: false }).jevEnabled, false);
+  assert.equal(reviewFor({ jevEnabled: false }).stats().jev.enabled, false);
+  // The reply check's own lever still works alone.
+  assert.equal(reviewFor({ reviewJevEnabled: false }).jevEnabled, false);
 });

@@ -24,7 +24,7 @@ before(async () => {
   if (!url) return;
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000 });
   documents = new ProductDocuments(database);
-  learning = new LearningService({ documents, resolveBaselineDigest: async () => `sha256:${hex("c")}` });
+  learning = new LearningService({ documents });
 });
 after(async () => { if (database) { await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [owners]); await database.close(); } });
 

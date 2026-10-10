@@ -8,6 +8,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import { GEO_ROUTE_ERROR_CODES, knownErrorCodeMessage } from "@evimed/domain";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -171,6 +172,20 @@ test("the owner's roles are not a member's, a role outside the list is refused, 
   assert.equal((await call("editor", "GET", `/api/geo/projects/${id}`)).status, 404);
 });
 
+test("an id no account has is refused by name and stores nothing; a registered account is added with no invitation to accept (G9)", options, async () => {
+  const id = await made();
+  const members = async () => (await call("owner", "GET", `/api/geo/projects/${id}/members`)).body.data.members.map((/** @type {any} */ member) => member.userId);
+  const typo = await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: `${accounts.editor}x`, role: "editor" });
+  assert.deepEqual([typo.status, typo.body.code], [400, "geo_member_user_unknown"], "a well-formed id that no account has");
+  assert.deepEqual(await members(), [accounts.owner], "the typo is not a member");
+  assert.ok(GEO_ROUTE_ERROR_CODES.includes("geo_member_user_unknown"), "the refusal is registered");
+  assert.match(knownErrorCodeMessage("geo_member_user_unknown") ?? "", /账号/, "and has a sentence the page shows");
+  // The registered account is in at once: it reads the project the moment it is named, with nothing for it to accept.
+  assert.equal((await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: accounts.editor, role: "editor" })).status, 201);
+  assert.deepEqual((await members()).sort(), [accounts.editor, accounts.owner].sort());
+  assert.equal((await call("editor", "GET", `/api/geo/projects/${id}`)).status, 200);
+});
+
 test("a product card's author and reviewer are the real named members, and without a reviewing doctor no card is written", options, async () => {
   const id = await made({ producer: { kind: "enterprise", name: "某某制药有限公司", relation: "own_product" } });
   const geo = context.app.geo;
@@ -279,4 +294,18 @@ test("doctor use: a doctor project writes cards under their own name, and an art
   const references = await call("owner", "GET", `/api/geo/projects/${id}/articles/${article.id}/references`);
   assert.equal(references.status, 200, JSON.stringify(references.body));
   assert.equal(references.body.data.ok, true);
+});
+
+test("a member whose display name is their login name, or an address, is listed under a neutral word", options, async () => {
+  const id = await made();
+  // A local account's display name defaults to its login name; a member list is shown to everyone on the project.
+  await context.app.store.createUser("plain_login_member", PASSWORD, "plain_login_member");
+  await context.app.store.createUser("address_named_member", PASSWORD, "someone@example.invalid");
+  assert.equal((await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: "plain_login_member", role: "viewer" })).status, 201);
+  assert.equal((await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: "address_named_member", role: "viewer" })).status, 201);
+  const listed = await call("owner", "GET", `/api/geo/projects/${id}/members`);
+  const byId = Object.fromEntries(listed.body.data.members.map((/** @type {any} */ member) => [member.userId, member]));
+  assert.equal(byId.plain_login_member.name, "项目成员");
+  assert.equal(byId.address_named_member.name, "项目成员");
+  assert.equal(byId[accounts.owner].name, "王负责人", "a real display name is kept");
 });

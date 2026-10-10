@@ -522,6 +522,18 @@ function evidenceUpkeepSettings(overrides) {
 }
 
 /**
+ * A share from 0 to 1 (a sample of runs, `runSampling.mjs`), from an override or the environment. Unset or empty is the default; a value outside the
+ * range stops the process at start with the variable's name, as the module settings do, because a share nobody chose would decide how much is learned.
+ * @param {Record<string, any>} overrides @param {string} key @param {string} name @param {number} fallback
+ */
+function shareSetting(overrides, key, name, fallback) {
+  const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+  const value = raw == null || raw === "" ? fallback : Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error(`${name} must be a number from 0 to 1, got ${JSON.stringify(raw)}.`);
+  return value;
+}
+
+/**
  * What the evidence flywheel's learning loop and its figures switch on (evidence-flywheel plan §5.2, §5.5, §11, 2026-10-06), each off by default
  * and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
  *
@@ -540,6 +552,8 @@ function evidenceUpkeepSettings(overrides) {
  * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
  *   text-only entry, after an independent re-check; needs the evolution module and the learning loop on. `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY` (3, at most 30)
  *   bounds the candidates re-checked and activated in a day, each a model call of the evolution module's own budget.
+ *   `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE` (0.1, from 0 to 1) is the share of eligible runs a handbook entry on probation is served to, by a hash of
+ *   the run id, so that the harm test can observe it; an entry that is never served can never leave probation (review L-6, owner decision 7).
  *
  * @param {Record<string, any>} overrides
  */
@@ -566,6 +580,7 @@ function evidenceFlywheelSettings(overrides) {
     evolutionModuleLeadsPerDay: moduleLeadsPerDay,
     learningPlatformHandbooksEnabled: overrides.learningPlatformHandbooksEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", false),
     learningPlatformHandbooksPerDay: handbooksPerDay,
+    learningPlatformHandbooksProbationShare: shareSetting(overrides, "learningPlatformHandbooksProbationShare", "OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE", 0.1),
   };
 }
 
@@ -626,9 +641,10 @@ function memorySharingSettings(overrides, frontierEnabled) {
  * absent, so the default here applies), and a value outside its range stops
  * the process at start with the variable's name.
  *
- * - Off by default, and open to operators and the preview list only when on:
- *   the module spends model money (parse and judge), probe time and, once the
- *   marketplace is wired, real money.
+ * - Off by default, and open to every account once on (the owner's ruling of
+ *   2026-10-10; `operators` narrows it to operators and the preview list): the
+ *   module spends model money (parse and judge), probe time and, once the
+ *   marketplace is wired, real money, each held by its own budget.
  * - The engines are closed words (`GEO_ENGINES`); an unknown one is a startup
  *   error, not a silently unmeasured engine.
  * - The night window is `HH-HH` in the module's time zone (`22-07` wraps
@@ -676,7 +692,7 @@ function geoSettings(overrides) {
     }
     return value;
   };
-  const audience = String(read("geoAudience", "OPEN_SCIENCE_GEO_AUDIENCE", "operators")).trim().toLowerCase();
+  const audience = String(read("geoAudience", "OPEN_SCIENCE_GEO_AUDIENCE", "all")).trim().toLowerCase();
   if (!["all", "operators"].includes(audience)) {
     throw new Error(`OPEN_SCIENCE_GEO_AUDIENCE must be "all" or "operators", got ${JSON.stringify(audience)}.`);
   }
@@ -726,6 +742,17 @@ function geoSettings(overrides) {
     // request over the limit is answered with a notice and is not lost (the run keeps the question as a finding or an opportunity),
     // and a finished task frees its place. 0 queues none. Counted as `open_science_geo_service_total{kind="researchCapped"}`.
     geoResearchMaxOpen: integer("geoResearchMaxOpen", "OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN", 5, 0, 100),
+    // Versions of a project's value profile kept besides the milestones (a version another stored object points to, and the first of
+    // each calendar month): every version stores the whole merged profile, so a project worked on for months would hold hundreds of
+    // copies. The latest this many are never pruned; the rest are, by `geoValueUpkeep.mjs`, at most `geoValuePrunePerTick` versions in
+    // all per tick (every ten minutes), so a long backlog is worked off in turns. Counted as
+    // `open_science_geo_value_upkeep_total{event="versionsPruned"}`.
+    geoValueKeepVersions: integer("geoValueKeepVersions", "OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS", 20, 1, 1_000),
+    geoValuePrunePerTick: integer("geoValuePrunePerTick", "OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK", 200, 1, 10_000),
+    // Projects whose findings' sources the upkeep asks the platform's source-change record and the frontier feed about in a tick (every
+    // ten minutes), the one looked at longest ago first: a source a finding rests on that was retracted or corrected adds a `needs_review`
+    // entry to the project's profile. Each project costs a handful of reads. Counted as `open_science_geo_value_upkeep_total{event="watchProjects"}`.
+    geoSourceWatchProjectsPerTick: integer("geoSourceWatchProjectsPerTick", "OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK", 20, 1, 500),
     // Calls one project's runtime may make to the probe host in a minute (`geo_visibility_probe`: providers, ask, screenshot, counted
     // together). The probe answers one request at a time for minutes through the platform's logged-in vendor accounts, and the skills
     // use the tool for the one question a person asks about; this is the ceiling of a loop, not of a run. A call over it is refused
@@ -897,6 +924,10 @@ function vcrSettings(overrides) {
     // (vcrComposition, vcrGateway); the client clamps it to 5–60 s. Read since the registry client existed, defined
     // here only on 2026-10-10 — until then the variable reached nothing and the deadline was always 20 s.
     vcrRegistryTimeoutMs: integer("vcrRegistryTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS", 20_000, 5_000, 60_000),
+    // The most candidate trials one study holds (「给患者找试验」, vcrPatientTrials): each one costs an evaluation for every patient the
+    // study judges against it, so the count is bounded; a trial the study already holds can always be updated. Counter:
+    // `open_science_vcr_patient_trials_total{kind="capReached"}`.
+    vcrCandidateTrialsMax: integer("vcrCandidateTrialsMax", "OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX", 60, 1, 500),
     // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
     vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
     // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).
@@ -1243,6 +1274,11 @@ function reviewConfigured(overrides) {
  *   with a key in place, and the reply check then asks the reviewer model
  *   about every sentence, as it did before Jev (principle 15: the reason is
  *   cost and latency, the counter is `open_science_review_jev_requests_total`).
+ * - `OPEN_SCIENCE_JEV_ENABLED` (owner, 2026-10-10; default on) is the one switch
+ *   for every Jev site at once, the reply check's included: off, the key stays
+ *   mounted and each site takes the path it had before Jev. The per-site list
+ *   (`OPEN_SCIENCE_JEV_DISABLED_SITES`) and the reply check's own lever stay as
+ *   narrower switches under it.
  * - The timeout is how long a reply check waits for Jev before the reviewer
  *   takes every sentence. Jev answered in 0.2–1.3 s in the 2026-09-21 probes,
  *   so fifteen seconds is an outage, not a slow answer.
@@ -1267,12 +1303,12 @@ function reviewJevSettings(overrides, keyPresent) {
     throw new Error(`OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS must be a whole number from 1000 to 120000, got ${JSON.stringify(timeoutValue)}.`);
   }
   for(const [site,policy] of Object.entries(pin.sites??{})) {
-    if(!/^J([1-9]|1[0-9]|2[0-2])$/.test(site)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(site))throw new Error('Unknown registered Jev policy pin.');
+    if(!/^J([1-9]|1[0-9]|2[0-3])$/.test(site)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(site))throw new Error('Unknown registered Jev policy pin.');
     if(!(Number(policy.threshold)>0&&Number(policy.threshold)<=1)||!['uncalibrated','calibrated'].includes(policy.calibration))throw new Error('Invalid registered Jev threshold or calibration pin.');
     if(policy.calibration==='calibrated'&&!/^[a-f0-9]{64}$/.test(policy.promptFingerprint??''))throw new Error('A calibrated Jev policy needs its measured prompt fingerprint.');
   }
   const disabled = String(overrides.jevDisabledSites ?? process.env.OPEN_SCIENCE_JEV_DISABLED_SITES ?? '').split(',').map(value=>value.trim()).filter(Boolean);
-  if(disabled.some(id=>!/^J([1-9]|1[0-9]|2[0-2])$/.test(id)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(id)))throw new Error('OPEN_SCIENCE_JEV_DISABLED_SITES contains an unknown site.');
+  if(disabled.some(id=>!/^J([1-9]|1[0-9]|2[0-3])$/.test(id)&&!['reply-check','meta-evidence-role','peer-review-checklist'].includes(id)))throw new Error('OPEN_SCIENCE_JEV_DISABLED_SITES contains an unknown site.');
   // An empty value is "not set" (`NAME=` in .env.example and in a private override), not the number 0.
   const onlineTimeout=Number(overrides.jevOnlineTimeoutMs ?? (process.env.OPEN_SCIENCE_JEV_ONLINE_TIMEOUT_MS || 3000));
   const concurrency=Number(overrides.jevBackgroundConcurrency ?? (process.env.OPEN_SCIENCE_JEV_BACKGROUND_CONCURRENCY || 4));
@@ -1284,15 +1320,17 @@ function reviewJevSettings(overrides, keyPresent) {
   const registerValue = overrides.jevRegisterMaxLines ?? (process.env.OPEN_SCIENCE_JEV_REGISTER_MAX_LINES || REGISTER_JUDGE_MAX_LINES);
   const registerMaxLines = Number(registerValue);
   if(!Number.isSafeInteger(registerMaxLines)||registerMaxLines<1||registerMaxLines>5000)throw new Error(`OPEN_SCIENCE_JEV_REGISTER_MAX_LINES must be a whole number from 1 to 5000, got ${JSON.stringify(registerValue)}.`);
+  // Read once and folded into both flags below, so a consumer that reads only the reply check's flag cannot miss the master switch.
+  const master = Boolean(overrides.jevEnabled ?? boolEnv("OPEN_SCIENCE_JEV_ENABLED", true));
   return {
-    reviewJevEnabled: overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent),
+    reviewJevEnabled: master && Boolean(overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent)),
     reviewJevModel: model,
     reviewJevApiBase: String(pin.apiBase ?? "").replace(/\/+$/, ""),
     reviewJevSupportConfidence: threshold,
     reviewJevMaxRequestTokens: maxRequestTokens,
     reviewJevMaxStateTokens: maxStateTokens,
     reviewJevTimeoutMs: timeoutMs,
-    jevEnabled: overrides.jevEnabled ?? keyPresent,
+    jevEnabled: master && keyPresent,
     jevDisabledSites: disabled,
     jevOnlineTimeoutMs: onlineTimeout,
     jevBackgroundConcurrency: concurrency,
@@ -2496,6 +2534,22 @@ export function loadConfig(overrides = {}) {
     memoryContextMaxChars: Number(
       overrides.memoryContextMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS ?? 20_000,
     ),
+    // The standing profile a conversation is handed up front (review M6, 2026-10-10): the most entries it carries, research
+    // records and capsule entries together, inside the 1,500 tokens the block is held to. What is always present is paid for on
+    // every request and takes attention from the question, so it is capped; the rest is the recall tool's, and the line beside
+    // the profile says how many there are.
+    memoryProfileMaxRecords: Number(
+      overrides.memoryProfileMaxRecords ?? process.env.OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS ?? 24,
+    ),
+    // How many items the recall tool answers with when the model does not say, and the most it may ask for. The tool is the
+    // one path to episodic and project memory, and an answer is read by the model whole: five, eight at most, each above the
+    // relevance floor below.
+    memoryRecallToolLimit: Number(
+      overrides.memoryRecallToolLimit ?? process.env.OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT ?? 5,
+    ),
+    memoryRecallToolMaxLimit: Number(
+      overrides.memoryRecallToolMaxLimit ?? process.env.OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT ?? 8,
+    ),
     // The similarity below which an index hit is not offered: by the memory
     // page's search (2026-09-26 audit, M-4: 「信尔美」 also listed five unrelated
     // memories of another project) and, since 2026-10-10 (review M-3), by the
@@ -2503,7 +2557,8 @@ export function loadConfig(overrides = {}) {
     // neighbours. Measured on the pinned embedder (qwen3.7-text-embedding,
     // 2026-09-14): relevant hits score 0.71–0.87, unrelated ones fall to about
     // 0.21. The durable kinds (profile, preference, behavior, correction) are
-    // recalled whatever they score; recall keeps its own budget.
+    // not looked up under it: they are the standing profile, handed to a
+    // conversation up front whatever they would score (`memoryProfileMaxRecords`).
     memorySearchMinScore: Number(
       overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.5,
     ),
@@ -2807,14 +2862,15 @@ export function loadConfig(overrides = {}) {
     learningWindowTimeZone: String(overrides.learningWindowTimeZone
       ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE ?? "Asia/Shanghai"),
     // The learning loop's own caps, counted over `learning` spend only
-    // (`boundedRunBudget.mjs`). Zero means no cap. The daily cap is 10 CNY
-    // unless set (since 2026-10-07, when the Jev judge sites J1/J11/J12/J14/J16
-    // were booked to this purpose, `judgeSites.mjs`; they draw on it too); the
-    // weekly and per-run caps are off unless set. A step that meets the daily
-    // cap defers its job to the next window (`usage_budget_exceeded`), so a
-    // consolidation pass approves what it can before its model steps.
+    // (`boundedRunBudget.mjs`). Zero means no cap, and none is set by default:
+    // the owner's ruling of 2026-09-21 (nothing is to stop the product from being
+    // exercised while it is tested), restored on 2026-10-10 after the daily cap
+    // had read 10 CNY since 2026-10-07. The Jev sites booked to this purpose (J1,
+    // J14 and J16, `judgeSites.mjs`) draw on a cap that is set as well. A step
+    // that meets one defers its job to the next window (`usage_budget_exceeded`)
+    // rather than failing it.
     learningDailyLimitCny: Number(overrides.learningDailyLimitCny
-      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 10),
+      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 0),
     learningWeeklyLimitCny: Number(overrides.learningWeeklyLimitCny
       ?? process.env.OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY ?? 0),
     learningRunLimitCny: Number(overrides.learningRunLimitCny
@@ -2826,37 +2882,13 @@ export function loadConfig(overrides = {}) {
     // ran at all.
     learningConsolidationIntervalMs: Number(overrides.learningConsolidationIntervalMs
       ?? process.env.OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS ?? 3_600_000),
-    // How the nightly job runs a paired evaluation, if a deployment wants it to.
-    //
-    // Empty by default, and an `evaluate` job then fails by name rather than
-    // succeeding without evaluating. That default is deliberate: the harness
-    // dispatches hundreds of real runs (100 briefs x 2 arms x 3 repeats), and a
-    // timer on a shared box is the wrong place to start that.
-    //
-    // The whole command, including the template that carries the brief set,
-    // budget and judge. `--json`, `--method`, `--candidate-digest` and
-    // `--baseline-digest` are appended by `runLearningEvaluationProcess`; everything
-    // else is the operator's. For example:
-    //
-    //   python3 evals/method-quality/run_paired.py --template evals/method-quality/configs/nightly.json
-    learningEvaluationCommand: String(overrides.learningEvaluationCommand
-      ?? process.env.OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND ?? ""),
-    // Who may put a method on trial — that is, mount a candidate the loop has
-    // not approved into a real container.
-    //
-    // Empty by default, which means nobody, and the route answers 403. That is
-    // the whole access rule: an allowlist of user ids, no new role, no approval
-    // flow. The paired evaluation is the only component whose job is
-    // measurement, so it is the only one that may name the candidate it is
-    // measuring; a researcher's own account can never receive an unproven
-    // method by any path, which is what makes the mount safe to have at all.
-    learningEvaluationUsers: String(overrides.learningEvaluationUsers
-      ?? process.env.OPEN_SCIENCE_LEARNING_EVALUATION_USERS ?? "")
-      .split(",").map((value) => value.trim()).filter(Boolean),
+    // The share of finished deliveries that queue a distillation (owner decision 8, 2026-10-10; review L-15). Every successful run with artifacts used to cost a
+    // distillation run, and "no change" is the common answer. The share is chosen by a hash of the run id (`runSampling.mjs`), so a run is in or out for good;
+    // corrections and routines are explicit signals and are not sampled. 1 is every delivery, as before; 0 distils none from a clean delivery.
+    learningDistillSampleShare: shareSetting(overrides, "learningDistillSampleShare", "OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE", 0.33),
     // Who sees the operations page.
     //
-    // Same shape and same reason as the allowlist above: an id list, empty by
-    // default, no new role and no approval flow. It gates one surface — the
+    // An id list, empty by default, no new role and no approval flow. It gates one surface — the
     // readiness board, the audit, error and security ledgers, the hosted task
     // list and the runtime controls — which a researcher was shown in full
     // until 2026-09-15 because the settings page was the deployment's console
@@ -2873,12 +2905,6 @@ export function loadConfig(overrides = {}) {
     // so AND its owner is one of these accounts: a name a client chose is never a waiver
     // (`isInternalProjectOf`). The account is an id, as `operatorUsers` are.
     acceptanceUsername: String(overrides.acceptanceUsername ?? process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim(),
-    // How long a trial lasts if the caller does not say. A trial that outlives
-    // the evaluation that set it would keep an unproven method in front of
-    // every later run of that project, which is the failure the allowlist above
-    // exists to prevent; an expiry makes forgetting to clear it harmless.
-    learningTrialTtlMs: Number(overrides.learningTrialTtlMs
-      ?? process.env.OPEN_SCIENCE_LEARNING_TRIAL_TTL_MS ?? 6 * 60 * 60 * 1000),
     mountedMethodPromptBytes: mountedMethodPromptBytes(overrides),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),

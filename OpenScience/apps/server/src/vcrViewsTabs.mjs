@@ -44,6 +44,7 @@ import {
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { POPULATION_METHOD_WORDS, PROFILE_MISSING_SENTENCE, constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
+import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
   presentModelCard, registryDesignWords, resultNode, scenarioName, valueString,
@@ -193,6 +194,7 @@ export function qualityReportView(quality) {
   const specific = Object.values(object(object(report.utility).specific)).map(object);
   const violations = list(object(report.constraints).violations ?? report.constraints).map((entry) => numeric(object(entry).violations)).filter((value) => value !== null);
   const generator = object(report.generator);
+  const copiesReleased = numeric(object(report.release).copies);
   const groups = [
     { key: "fidelity", label: "保真度", rows: [
       ks.length ? row("ks", "最大 KS 距离", Math.max(...ks)) : null,
@@ -220,6 +222,10 @@ export function qualityReportView(quality) {
     groups,
     trainingRecords: numeric(generator.trainingObservations ?? generator.trainingRecords),
     copies: numeric(generator.syntheticCopies ?? generator.copies ?? generator.m),
+    // Which table each group of numbers describes, when the generator made several copies and the release holds them all: the
+    // hard-constraint count and the leakage rows read every copy stacked, the fidelity and utility rows the first.
+    scope: copiesReleased !== null && copiesReleased > 1
+      ? `硬约束与泄露检查读的是发布的全部 ${copiesReleased} 份合成记录（叠在一起）；保真度与可用性描述第 1 份，其余各份的数值在逐份评分里。` : null,
   };
 }
 
@@ -1076,6 +1082,43 @@ function verdictOf(summary, rows) {
 }
 
 /**
+ * 「给患者找试验」: one patient's trials as the page reads them — the list in the order the platform ranked it (each with the registry id and
+ * its link, the title, the phase and the status in the reader's words, the eligibility and how many criteria stand where) and the chosen
+ * trial's criterion table for this patient. Nothing is ranked or judged here: the order and every state were made in code.
+ * @param {Record<string, any>} bundle @param {{ available?: boolean, subjectKey: string | null, ranked: any[], detail: any }} held
+ */
+function presentPatientTrials(bundle, held) {
+  const { now } = bundle;
+  const count = (/** @type {any} */ counts, /** @type {string} */ key) => Number(object(counts)[key] ?? 0);
+  const trials = held.ranked.map((entry) => {
+    const counts = {
+      satisfied: count(entry.counts, "satisfied"), unknown: count(entry.counts, "unknown"),
+      notSatisfied: count(entry.counts, "not_satisfied"), pending: count(entry.counts, "pending_recheck"),
+    };
+    return {
+      id: String(entry.id), kind: entry.kind, rank: entry.rank,
+      registry: entry.registry ?? null, registryId: entry.registryId ?? null, url: entry.url ? String(entry.url) : null,
+      title: String(entry.title), phase: phaseLabel(entry.phase), status: registryStatusLabel(entry.status),
+      conditions: list(entry.conditions).map(String),
+      sites: entry.locations ? { total: numeric(entry.locations.total), countries: list(entry.locations.countries).map(String) } : null,
+      eligibility: entry.summary,
+      counts,
+      summary: [`${counts.satisfied} 条满足`, `${counts.unknown} 条未知`, `${counts.notSatisfied} 条不满足`, ...(counts.pending ? [`${counts.pending} 条待复评`] : [])].join(" · "),
+      assessedAt: zhTime(entry.asOf, now),
+    };
+  });
+  const detail = held.detail;
+  let selected = null;
+  if (detail) {
+    const codes = criterionCodes(detail.criteria);
+    const byCriterion = new Map(list(detail.judgments).map((/** @type {any} */ row) => [row.criterionId, row]));
+    const rows = detail.criteria.map((/** @type {any} */ criterion) => judgementView(criterion, codes.get(criterion.id) ?? "", byCriterion.get(criterion.id) ?? null, now));
+    selected = { id: String(detail.entry.id), criteria: rows, verdict: verdictOf(detail.entry.summary, rows), assessedAt: zhTime(detail.entry.asOf, now) };
+  }
+  return { available: held.available !== false, subject: held.subjectKey, trials, selected };
+}
+
+/**
  * `GET /api/vcr/studies/:id/matching`.
  * @param {Record<string, any>} bundle @param {{ view?: string | null, candidate?: string | null, direction?: string | null }} [query]
  */
@@ -1235,10 +1278,11 @@ export function presentMatchingTab(bundle, query = {}) {
       quote: fact.source?.quote ?? null, locator: fact.source ? { documentId: fact.source.documentId, start: fact.source.start, end: fact.source.end } : null })),
     headline: total ? `${total.toLocaleString("en-US")} 人已评估，${(eligible ?? 0).toLocaleString("en-US")} 人全部满足，${insufficient.toLocaleString("en-US")} 人至少有 1 条未知或待复评。` : null,
     partner: total ? { name: null, candidates: total, tier: study.dataTier, snapshotAt: match.snapshotAt ? zhDate(match.snapshotAt, now) : null } : null,
-    // One direction: from the protocol to the patients. 「给患者找试验」 has no data path (the evaluator only ever writes this direction), so
-    // it is not offered and a request for it reads the same view.
-    direction: "trial_to_patient",
-    directions: ["trial_to_patient"],
+    // Two directions, one evaluation run from either end. 「给试验找患者」 is the protocol's patients (everything below); 「给患者找试验」
+    // adds `patientTrials`: one patient's trials, ranked.
+    direction: match.patientTrials ? "patient_to_trial" : "trial_to_patient",
+    directions: ["trial_to_patient", "patient_to_trial"],
+    ...(match.patientTrials ? { patientTrials: presentPatientTrials(bundle, match.patientTrials) } : {}),
     funnel,
     candidates,
     selected,

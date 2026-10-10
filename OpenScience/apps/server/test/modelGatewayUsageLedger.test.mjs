@@ -831,4 +831,12 @@ test("only definite non-aborted DNS or connect failures release control-plane re
     assert.equal(events[1].code, expected === "release" ? "provider_not_accepted" : "provider_response_incomplete");
   }
 });
+test('a learning call is held to the learning daily cap only when the deployment sets one: unset and zero are no cap (review L-7)',async()=>{
+  for(const [setting,expected] of [[undefined,0],[0,0],[7,7]]){
+    const events=[];
+    await callModelForControlPlane({config:{...config('https://api.deepseek.com'),...(setting===undefined?{}:{learningDailyLimitCny:setting})},usageLedger:ledger(events),fetchImpl:async()=>Response.json({choices:[{message:{content:'{}'}}],usage:{prompt_tokens:20,completion_tokens:0,prompt_cache_hit_tokens:0,prompt_cache_miss_tokens:20}})},
+      {userId:'usage-owner',projectId:'default',purpose:'learning',operation:'distill',module:'learning',body:{model:'deepseek-v4-flash',max_tokens:100,messages:[{role:'user',content:'Learn.'}]}});
+    assert.equal(events[0].input.moduleLimit,expected,`learningDailyLimitCny ${setting===undefined?'unset':setting}`);
+  }
+});
 test('learning drift calls carry their module budget and registered attribution',async()=>{const events=[];await callModelForControlPlane({config:config('https://api.deepseek.com'),usageLedger:ledger(events),fetchImpl:async()=>Response.json({choices:[{message:{content:'{}'}}],usage:{prompt_tokens:20,completion_tokens:0,prompt_cache_hit_tokens:0,prompt_cache_miss_tokens:20}})},{userId:'usage-owner',projectId:'default',purpose:'learning',operation:'J1-baseline',taskId:'learning-task',module:'learning',limits:{moduleDaily:10,run:1},body:{model:'deepseek-v4-flash',max_tokens:100,messages:[{role:'user',content:'Screen.'}]}});assert.equal(events[0].input.moduleLimit,10);assert.equal(events[0].input.budgetPurpose,'learning');assert.equal(events[0].input.operation,'J1-baseline');assert.equal(events[0].input.taskId,'learning-task');assert.equal(events[0].input.module,'learning');assert.equal(events[0].input.runLimit,1);});
