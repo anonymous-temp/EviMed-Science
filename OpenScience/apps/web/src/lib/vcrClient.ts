@@ -894,6 +894,8 @@ export interface VcrCandidate {
   eligibility: VcrEligibility;
   /** The rules still open on this person: 「E3 未知」「E5 待复评 10月6日」. */
   open: Array<{ code: string; state: VcrCriterionState; note?: string | null }>;
+  /** What the evaluation rested on has since been withdrawn (the person's consent, or a record), or changed. */
+  basis?: "withdrawn" | "updated";
   /** The model's ranking hint, carried with its own label and never as a probability of benefit. */
   priority?: { label: string; score: number | null; rationale: string | null } | null;
 }
@@ -2351,6 +2353,10 @@ export interface VcrIntakeFile {
   blankPages: number | null;
   /** A table a FHIR, OMOP or ADaM import produced: which standard it came from. */
   importFormat: string | null;
+  /** The text of this record was erased (a withdrawal): the row and its hashes stay. */
+  erased?: boolean;
+  /** The reviewed texts saved of this record that are still live. */
+  projections?: Array<{ id: string; at: string | null }>;
 }
 
 export interface VcrIntakeIssue { code: string; message: string; table: string | null; column: string | null }
@@ -2492,6 +2498,8 @@ function readIntakeFile(raw: Loose): VcrIntakeFile {
     })),
     entries: finite(raw.entries), sheets: strings(raw.sheets), sheetUsed: text(raw.sheetUsed), subjectKey: text(raw.subjectKey), visibleAt: text(raw.visibleAt),
     sourceFormat: text(raw.sourceFormat), pages: finite(raw.pages), blankPages: finite(raw.blankPages), importFormat: text(raw.importFormat),
+    ...(raw.erased === true ? { erased: true } : {}),
+    ...(arr(raw.projections).length ? { projections: arr(raw.projections).map((projection) => ({ id: text(projection.id) ?? "", at: text(projection.at) })) } : {}),
   };
 }
 
@@ -2656,8 +2664,22 @@ export async function importVcrSource(studyId: string, sourceId: string, file: B
   return value.data as VcrImportResult;
 }
 
+/** `erased`: an evaluation was frozen on the record, so its text was erased and its row and hashes stay. */
 export function removeVcrFile(studyId: string, fileId: string) {
-  return productRequest<{ removed: boolean }>(`${dataRoute(studyId)}/files/${id(fileId)}`, "DELETE");
+  return productRequest<{ removed: boolean; erased?: boolean }>(`${dataRoute(studyId)}/files/${id(fileId)}`, "DELETE");
+}
+
+/** What a withdrawal or a retirement did, in counts: records and reviewed texts erased, what was read from them deleted or redacted. */
+export interface VcrErasure { files?: number; projections?: number; factsRemoved?: number; factsRedacted?: number; referralsClosed?: number; filesFailed?: number }
+
+/** A subject's consent withdrawn: the text of their records and of the reviewed texts of them is erased; hashes and the audit trail stay. */
+export function withdrawVcrSubject(studyId: string, subjectKey: string) {
+  return productRequest<{ withdrawn: VcrErasure }>(`${dataRoute(studyId)}/subjects/${id(subjectKey)}/withdraw`, "POST", {});
+}
+
+/** A reviewed text that missed an identifier, retired: it is not read again, its text is erased, and the newest live one (or the record) is read instead. */
+export function retireVcrProjection(studyId: string, projectionId: string) {
+  return productRequest<{ retired: VcrErasure }>(`${dataRoute(studyId)}/projections/${id(projectionId)}/retire`, "POST", {});
 }
 
 /** Propose (or edit) the source's field map. The answer names the entries and the whole-map problems, if any. */

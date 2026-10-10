@@ -240,6 +240,8 @@ function requests(target, ids) {
     "GET /studies/:id/data/documents/:document": async () => ["GET", `${S}/data/documents/sfl_none`, undefined],
     "POST /studies/:id/data/documents/:document/projection": async () => ["POST", `${S}/data/documents/sfl_none/projection`, {}],
     "POST /studies/:id/data/documents/:document/quote": async () => ["POST", `${S}/data/documents/sfl_none/quote`, {}],
+    "POST /studies/:id/data/projections/:projection/retire": async () => ["POST", `${S}/data/projections/prj_none/retire`, {}],
+    "POST /studies/:id/data/subjects/:subject/withdraw": async () => ["POST", `${S}/data/subjects/P_none/withdraw`, {}],
     "POST /studies/:id/data/sources": async () => { counter += 1; return ["POST", `${S}/data/sources`, { name: `数据源-${counter}`, ownerParty: "合作方" }]; },
     "POST /studies/:id/data/sources/:source/files": async () => ["POST", `${S}/data/sources/src_none/files?name=cohort.csv`, undefined],
     "DELETE /studies/:id/data/files/:file": async () => ["DELETE", `${S}/data/files/sfl_none`, undefined],

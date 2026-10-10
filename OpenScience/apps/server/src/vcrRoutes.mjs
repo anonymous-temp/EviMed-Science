@@ -210,6 +210,8 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/data/documents/:document": ["read_patient_level"],
   "POST /studies/:id/data/documents/:document/projection": ["manage_data"],
   "POST /studies/:id/data/documents/:document/quote": ["read_patient_level"],
+  "POST /studies/:id/data/projections/:projection/retire": ["manage_data"],
+  "POST /studies/:id/data/subjects/:subject/withdraw": ["manage_data"],
   "POST /studies/:id/data/sources/:source/files": ["manage_data"],
   "DELETE /studies/:id/data/files/:file": ["manage_data"],
   "POST /studies/:id/data/sources/:source/fieldmap": ["manage_data"],
@@ -911,6 +913,21 @@ export function createVcrRoutes(dependencies) {
         const body = await bodyOf(req, maxJsonBytes, ["start", "end", "quote"]);
         return reply({ evidence: await plane().resolveProjectionQuote({ studyId: id, documentId: parts[4], principal: actor,
           span: { start: body.start, end: body.end, quote: body.quote } }) });
+      }
+
+      // A projection that missed an identifier is retired: no read serves it, its text is overwritten, a newer one is chosen.
+      if (kind === "projections" && parts.length === 6 && parts[5] === "retire" && method === "POST") {
+        await authorize(id, "manage_data");
+        const body = await bodyOf(req, maxJsonBytes, ["reason"]);
+        return reply({ retired: await audited("vcr.data.projection.retire", (result) => ({ code: parts[4], detail: `${result.projections} projections ${result.factsRemoved + result.factsRedacted} facts` }),
+          { code: parts[4], detail: id }, () => plane().retireProjection({ ...S, projectionId: parts[4], reason: body.reason })) });
+      }
+      // A subject's consent withdrawn: the text of their documents and projections is erased, hashes and the audit trail stay.
+      if (kind === "subjects" && parts.length === 6 && parts[5] === "withdraw" && method === "POST") {
+        await authorize(id, "manage_data");
+        const body = await bodyOf(req, maxJsonBytes, ["reason"]);
+        return reply({ withdrawn: await audited("vcr.data.subject.withdraw", (result) => ({ code: parts[4], detail: `${result.files} documents ${result.projections} projections` }),
+          { code: parts[4], detail: id }, () => plane().withdrawSubject({ ...S, subjectKey: parts[4], reason: body.reason })) });
       }
 
       if (kind === "sources" && parts.length === 6 && parts[5] === "files" && method === "POST") {

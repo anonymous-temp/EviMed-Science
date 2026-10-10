@@ -328,6 +328,19 @@ describe("匹配与招募 — what a rule says about a person", () => {
     expect(screen.getByText("2 人")).toBeInTheDocument();
   });
 
+  it("says 已撤回 beside a person whose consent was withdrawn, and nothing beside the others", async () => {
+    const payload = fixture("ev201/matching.json");
+    payload.candidates[0].basis = "withdrawn";
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: payload.candidates[0].id });
+    const withdrawn = document.querySelector(`[data-vcr-candidate='${payload.candidates[0].id}']`) as HTMLElement;
+    expect(within(withdrawn).getByText("已撤回")).toBeInTheDocument();
+    const others = payload.candidates.slice(1).map((candidate: { id: string }) => document.querySelector(`[data-vcr-candidate='${candidate.id}']`) as HTMLElement).filter(Boolean);
+    expect(others.length).toBeGreaterThan(0);
+    for (const other of others) expect(within(other).queryByText("已撤回")).toBeNull();
+  });
+
   it("says the recruiting side is not here, and nothing else waits", async () => {
     server = installVcrServer(network.productRequest, {
       [`GET ${MATCHING}`]: { view: "matching", available: false, unavailable: { code: "vcr_matching_unavailable", message: "匹配与招募在本部署尚未接入；其余步骤照常。" }, funnel: [], candidates: [], selected: null, gaps: [], counts: null },

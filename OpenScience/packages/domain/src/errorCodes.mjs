@@ -1437,6 +1437,10 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_projection_span_invalid',
   'vcr_projection_unavailable',
   'vcr_subject_not_found',
+  // withdrawal of consent and the erasure of a record's text (2026-10-10)
+  'vcr_document_withdrawn',
+  'vcr_subject_withdrawn',
+  'vcr_erasure_unavailable',
 
   'review_proof_stale', 'document_review_conversion_incomplete', 'document_review_conversion_failed',
   'vcr_evaluation_input_restricted', 'vcr_evaluation_input_changed', 'vcr_evaluation_input_unavailable',
@@ -1933,6 +1937,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_projection_span_invalid: '替换范围重叠、超出文本或拆开了字符，请重新选择。',
   vcr_projection_unavailable: '这份病历尚未准备好经审阅的脱敏文本。',
   vcr_subject_not_found: '所选受试者不在本研究已登记的名单中。',
+  vcr_document_withdrawn: '这份病历已撤回，文本已清除。',
+  vcr_subject_withdrawn: '这位受试者已撤回同意，不再评估。',
+  vcr_erasure_unavailable: '本部署暂不支持这项清除。',
 
   ...EVOLUTION_ERROR_MESSAGES,
   // What the deployment's configuration check says (`/api/ready`): the operator console reads these.

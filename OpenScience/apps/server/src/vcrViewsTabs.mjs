@@ -1099,7 +1099,8 @@ export function presentMatchingTab(bundle, query = {}) {
     { key: "ineligible", label: "不符合", count: count("ineligible") ?? 0, note: null, tone: "neutral" },
   ] : [];
   const ordered = [...subjects].filter((row) => row.summary !== "ineligible").sort((a, b) =>
-    SUMMARY_ORDER.indexOf(a.summary) - SUMMARY_ORDER.indexOf(b.summary) || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0)
+    Number(a.basis === "withdrawn") - Number(b.basis === "withdrawn")
+      || SUMMARY_ORDER.indexOf(a.summary) - SUMMARY_ORDER.indexOf(b.summary) || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0)
       || String(a.subjectKey).localeCompare(String(b.subjectKey)));
   const candidateOf = (/** @type {any} */ row) => {
     const referral = referralBySubject.get(row.subjectKey) ?? null;
@@ -1110,6 +1111,8 @@ export function presentMatchingTab(bundle, query = {}) {
       summary: `${Number(counts.satisfied ?? 0)} 条满足 · ${Number(counts.unknown ?? 0)} 条未知 · ${Number(counts.pending_recheck ?? 0)} 条待复评`,
       site: referral?.siteId ? (sites.find((/** @type {any} */ site) => site.id === referral.siteId)?.name ?? null) : null,
       eligibility: row.summary,
+      // What the evaluation rested on has changed since, or was withdrawn: said as a state beside the person (依据已更新 / 已撤回).
+      ...(row.basis ? { basis: row.basis } : {}),
       open: (openByAssessment.get(row.id) ?? []).map((/** @type {any} */ open) => ({
         code: criterionCode(open.criterionId), state: open.state,
         note: open.recheckAt ? `${zhDate(open.recheckAt, now)} 复评` : null,
@@ -1241,6 +1244,9 @@ export function presentMatchingTab(bundle, query = {}) {
     directions: ["trial_to_patient"],
     funnel,
     candidates,
+    // The people whose evaluation rested on a basis that has since changed, for the one action the page offers: evaluate them again.
+    ...(subjects.some((row) => row.basis === "updated")
+      ? { basisUpdated: { count: subjects.filter((row) => row.basis === "updated").length, subjects: subjects.filter((row) => row.basis === "updated").slice(0, 50).map((row) => String(row.subjectKey)) } } : {}),
     selected,
     gaps,
     pendingReview: pendingReview.length ? { count: pendingReview.length, subjects: pendingReview.slice(0, 20) } : null,
@@ -1606,6 +1612,9 @@ export function presentIntake(bundle) {
         sourceFormat: text(file.sourceFormat), pages: numeric(file.pages), blankPages: numeric(file.blankPages),
         // A table a FHIR, OMOP or ADaM import produced.
         importFormat: text(file.importFormat),
+        // A record whose text was erased (a withdrawal): the row stays, the words are gone. And the reviewed texts saved of it, for the one to retire.
+        ...(file.erased === true ? { erased: true } : {}),
+        ...(list(file.projections).length ? { projections: list(file.projections).map((projection) => ({ id: String(object(projection).id), at: zhTime(object(projection).at, now) })) } : {}),
       })),
       fieldMap: {
         state: String(fieldMap.state ?? "none"), stateLabel: FIELD_MAP_STATE_ZH[String(fieldMap.state)] ?? "",

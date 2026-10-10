@@ -103,7 +103,7 @@
  */
 
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { constants as fsConstants, createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -142,6 +142,7 @@ export const VCR_DATA_PLANE_CODES = Object.freeze({
   fileNameInvalid: "vcr_data_file_name_invalid",
   fileNotFound: "vcr_source_file_not_found",
   fileFrozen: "vcr_source_file_frozen",
+  documentWithdrawn: "vcr_document_withdrawn",
   fileChanged: "vcr_source_file_changed",
   fieldMapInvalid: "vcr_field_map_invalid",
   fieldMapChanged: "vcr_field_map_changed",
@@ -218,6 +219,37 @@ export function assertDataPlaneRoot(dir) {
  * A file's absolute path inside the data plane, or a named refusal.
  * @param {string} dir @param {string} location
  */
+/**
+ * Overwrite a file of the plane in place and remove it: the bytes a withdrawal takes out are not left behind in a block that a later
+ * read of the disk could still find. The plane keeps its documents as plain files (a per-document key to destroy does not
+ * exist), so the overwrite is the erasure; a copy in a backup is the backup's retention, which the runbook says. Never follows a
+ * symlink, and never leaves the plane.
+ * @param {string} dir the plane's root @param {string} location relative to it
+ * @returns {Promise<boolean>} whether a file was there to overwrite
+ */
+export async function shredPlaneFile(dir, location) {
+  const target = assertDataPlaneLocation(dir, location);
+  let handle;
+  try {
+    handle = await fs.open(target, fsConstants.O_RDWR | fsConstants.O_NOFOLLOW);
+  } catch (error) {
+    if (/** @type {any} */ (error)?.code === "ENOENT") return false;
+    throw error;
+  }
+  try {
+    const { size } = await handle.stat();
+    const block = Buffer.alloc(64 * 1024);
+    for (let written = 0; written < size; written += block.length) {
+      await handle.write(block, 0, Math.min(block.length, size - written), written);
+    }
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await fs.rm(target, { force: true });
+  return true;
+}
+
 export function assertDataPlaneLocation(dir, location) {
   const root = assertDataPlaneRoot(dir);
   const candidate = String(location ?? "").trim();
@@ -1851,6 +1883,7 @@ export class VcrDataPlane {
    *   access?: VcrAccess | null, seal?: { recordOutcomeAccess?: (input: any) => Promise<unknown> } | null,
    *   extractor?: { available: boolean, counters?: Record<string, number>, describe?: () => any, extract: (input: { root: string, studyId: string, path: string, format: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
    *   importer?: { available: boolean, counters?: Record<string, number>, describe?: () => any, run: (input: any, consume: (done: any) => Promise<any>) => Promise<any> } | null,
+   *   erasure?: import("./vcrErasureStore.mjs").VcrErasureStore | null,
    *   now?: () => Date }} options
    *   `access` judges every operation (one is made from the store when none is
    *   given); `seal` records the first outcome read — it is composed after the
@@ -1860,7 +1893,7 @@ export class VcrDataPlane {
    *   held in FHIR, OMOP or ADaM (`importStandard`); without one the import is
    *   refused by name and ordinary uploads are unaffected.
    */
-  constructor({ store, config, profiler = null, access = null, seal = null, extractor = null, importer = null, now = () => new Date() }) {
+  constructor({ store, config, profiler = null, access = null, seal = null, extractor = null, importer = null, erasure = null, now = () => new Date() }) {
     if (!store) throw new TypeError("The VCR data plane needs its store.");
     this.store = store;
     this.config = config ?? {};
@@ -1873,8 +1906,13 @@ export class VcrDataPlane {
     this.seal = seal;
     this.extractor = extractor;
     this.importer = importer;
-    /** What the plane did for the cloud since this process started: reads by the basis they stood on, and reads it refused. */
-    this.counters = { cloudReadsDeploymentAgreements: 0, cloudReadsSourcePermission: 0, cloudReadsRefused: 0 };
+    /** Withdrawals, retirements and the marks on what was derived from a changed basis (`vcrErasureStore.mjs`); without it the plane only deletes. */
+    this.erasure = erasure;
+    /** What the plane did for the cloud since this process started: reads by the basis they stood on, and reads it refused; and what it erased. */
+    this.counters = {
+      cloudReadsDeploymentAgreements: 0, cloudReadsSourcePermission: 0, cloudReadsRefused: 0,
+      withdrawals: 0, documentsErased: 0, projectionsRetired: 0, filesOverwritten: 0, overwriteFailures: 0,
+    };
   }
 
   /** Attach a package composed after the plane (the seal). @param {{ seal?: any }} packages */
@@ -2221,14 +2259,23 @@ export class VcrDataPlane {
 
   /**
    * Forget a file no snapshot names. Its bytes go with the row: an upload that
-   * was a mistake should not outlive the correction.
+   * was a mistake should not outlive the correction. A patient document that an
+   * evaluation was frozen on cannot be forgotten without breaking that evaluation's
+   * record, so a deletion request for one erases its text instead (`eraseDocuments`):
+   * the row and its hashes stay, the words are gone, the evaluation reads as withdrawn.
    * @param {{ actor: string, studyId: string, fileId: string }} entry
    */
   async removeUpload(entry) {
     const root = this.root();
     await this.#manager(entry.studyId, entry.actor);
     if (!ID_PATTERN.test(String(entry.fileId ?? ""))) throw refuse(404, VCR_DATA_PLANE_CODES.fileNotFound, "File not found.");
-    const { removed, frozen } = await this.store.deleteSourceFile({ studyId: entry.studyId, fileId: entry.fileId, actor: String(entry.actor) });
+    const { removed, frozen, frozenBy } = await this.store.deleteSourceFile({ studyId: entry.studyId, fileId: entry.fileId, actor: String(entry.actor) });
+    if (frozen && frozenBy === "matching" && this.erasure) {
+      const erased = await this.#eraseAndOverwrite(entry.studyId, String(entry.actor), (userId) => this.erasure.eraseDocuments({
+        studyId: entry.studyId, userId, actor: String(entry.actor), fileIds: [entry.fileId], reason: "deletion" }));
+      this.counters.documentsErased += erased.counts.files;
+      return { removed: true, fileId: entry.fileId, erased: true, ...erased.report };
+    }
     if (frozen) throw refuse(409, VCR_DATA_PLANE_CODES.fileFrozen, "A snapshot holds this file; a frozen snapshot's files are its own record.");
     if (!removed) throw refuse(404, VCR_DATA_PLANE_CODES.fileNotFound, "File not found.");
     // The same bytes may be another source's file (a re-upload elsewhere): only
@@ -2239,6 +2286,75 @@ export class VcrDataPlane {
     // A converted record's original goes with it, unless another row still names it.
     if (removed.detail?.original?.location) await this.#dropUnnamedOriginal(entry.studyId, String(removed.detail.original.location));
     return { removed: true, fileId: removed.id };
+  }
+
+  /**
+   * A subject's consent withdrawn (2026-10-10): the text of every document of theirs and of the projections of those is
+   * overwritten and removed, what was read from them is deleted or redacted (a fact or judgment a frozen evaluation used keeps
+   * its id and its digest), the subject leaves every roster, their open referrals close, and the audit trail records hashes and
+   * counts. A frozen evaluation keeps its hashes and reads as withdrawn. Asked again it overwrites what a failed attempt left.
+   * @param {{ studyId: string, subjectKey: string, actor: string, reason?: string }} entry
+   */
+  async withdrawSubject(entry) {
+    this.root();
+    await this.#manager(entry.studyId, entry.actor);
+    if (!this.erasure) throw refuse(503, "vcr_erasure_unavailable", "Withdrawal is not available in this deployment.");
+    const subjectKey = String(entry.subjectKey ?? "");
+    if (!ID_PATTERN.test(subjectKey)) throw refuse(404, "vcr_subject_not_found", "Subject not found.");
+    const erased = await this.#eraseAndOverwrite(entry.studyId, String(entry.actor), (userId) => this.erasure.withdrawSubject({
+      studyId: entry.studyId, userId, actor: String(entry.actor), subjectKey, reason: String(entry.reason ?? "").slice(0, 300) }));
+    if (!erased.counts) throw refuse(404, "vcr_subject_not_found", "Subject not found.");
+    this.counters.withdrawals += 1;
+    this.counters.documentsErased += erased.counts.files;
+    return { subjectKey, ...erased.report };
+  }
+
+  /**
+   * A projection that missed an identifier, retired: no read serves it, its text is overwritten, what was quoted from it is
+   * deleted or redacted, and the newest projection that is still live (or the document itself) is read instead.
+   * @param {{ studyId: string, projectionId: string, actor: string, reason?: string }} entry
+   */
+  async retireProjection(entry) {
+    this.root();
+    await this.#manager(entry.studyId, entry.actor);
+    if (!this.erasure) throw refuse(503, "vcr_erasure_unavailable", "Retirement is not available in this deployment.");
+    const projectionId = String(entry.projectionId ?? "");
+    if (!ID_PATTERN.test(projectionId) || !projectionId.startsWith("prj_")) throw refuse(404, "vcr_projection_unavailable", "Projection not found.");
+    const erased = await this.#eraseAndOverwrite(entry.studyId, String(entry.actor), (userId) => this.erasure.retireProjection({
+      studyId: entry.studyId, userId, actor: String(entry.actor), projectionId, reason: String(entry.reason ?? "").slice(0, 300) }));
+    if (!erased.counts) throw refuse(404, "vcr_projection_unavailable", "Projection not found.");
+    this.counters.projectionsRetired += erased.counts.projections;
+    return { id: projectionId, ...erased.report };
+  }
+
+  /**
+   * The database commits what is erased; then the plane overwrites the files that held it. A file another live row still names
+   * (the same bytes uploaded again elsewhere) is left to that row.
+   * @param {string} studyId @param {string} actor
+   * @param {(userId: string) => Promise<any>} erase the store's operation, answering the files and projections to overwrite and the counts, or null
+   */
+  async #eraseAndOverwrite(studyId, actor, erase) {
+    const root = this.root();
+    const study = await this.store.studyOwner(studyId);
+    const done = await erase(study ?? actor);
+    if (!done) return { counts: null, report: {} };
+    const live = (await this.store.listSourceFilesForStudy(studyId)).filter((file) => !file.erasedAt);
+    const named = new Set(live.flatMap((file) => [file.location, file.detail?.original?.location].filter(Boolean).map(String)));
+    let overwritten = 0;
+    let failed = 0;
+    /** @param {string | null} location */
+    const overwrite = async (location) => {
+      if (!location || named.has(location)) return true;
+      try { if (await shredPlaneFile(root, location)) overwritten += 1; return true; }
+      catch { failed += 1; return false; }
+    };
+    for (const file of done.files) { await overwrite(file.location); await overwrite(file.originalLocation); }
+    const purged = [];
+    for (const projection of done.projections) if (await overwrite(projection.location)) purged.push(projection.id);
+    await this.erasure?.markPurged(studyId, purged).catch(() => { failed += 1; });
+    this.counters.filesOverwritten += overwritten;
+    this.counters.overwriteFailures += failed;
+    return { counts: done.counts, report: { ...done.counts, filesOverwritten: overwritten, ...(failed ? { filesFailed: failed } : {}) } };
   }
 
   // -------------------------------------------------------------------------
@@ -3078,6 +3194,8 @@ export class VcrDataPlane {
     const studyId = String(entry.studyId ?? "");
     const file = ID_PATTERN.test(String(entry.documentId ?? "")) ? await this.store.getSourceFile(studyId, entry.documentId) : null;
     if (!file || file.role !== "document") throw refuse(404, VCR_DATA_PLANE_CODES.documentNotFound, "Document not found.");
+    // A withdrawn document has no text to read; its row, its hashes and the evaluations frozen on it stay.
+    if (file.erasedAt) throw refuse(410, VCR_DATA_PLANE_CODES.documentWithdrawn, "This document was withdrawn.");
     await this.access.require({ actor: String(entry.principal), studyId, ability: "read_patient_level", sourceId: file.sourceId, purpose: entry.purpose ?? null, note: "document" });
     const opened = await openScopedFileNoFollow(root, assertDataPlaneLocation(root, file.location));
     let body;
@@ -3321,7 +3439,7 @@ export class VcrDataPlane {
   async listDocuments(entry) {
     await this.access.require({ actor: String(entry.principal), studyId: String(entry.studyId), ability: "read_patient_level", note: "document list" });
     return (await this.store.listSourceFilesForStudy(entry.studyId))
-      .filter((file) => file.role === "document" && (!entry.subjectKey || file.detail?.subjectKey === entry.subjectKey))
+      .filter((file) => file.role === "document" && !file.erasedAt && (!entry.subjectKey || file.detail?.subjectKey === entry.subjectKey))
       .map((file) => ({ id: file.id, sourceId: file.sourceId, name: file.name, chars: file.detail?.chars ?? null,
         subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null }));
   }
@@ -3398,6 +3516,11 @@ export class VcrDataPlane {
       this.store.listSnapshots({ studyId: study.id }), this.store.listAnalysisTables({ studyId: study.id }),
     ]);
     const grants = await this.store.grantsForSources(sources.map((source) => source.id));
+    // The reviewed texts saved of each document that are still live: the page offers to retire one that missed an identifier.
+    const projectionsOf = new Map();
+    for (const row of await this.store.liveProjectionsOfStudy(study.id)) {
+      projectionsOf.set(String(row.document_id), [...(projectionsOf.get(String(row.document_id)) ?? []), { id: String(row.id), at: row.created_at ? new Date(row.created_at).toISOString() : null }]);
+    }
     const openings = new Map();
     for (const source of sources) {
       const mine = source.userId === String(viewer.id);
@@ -3420,7 +3543,7 @@ export class VcrDataPlane {
           valueSource: source.valueSource, status: source.status, createdAt: source.createdAt,
           upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), cloudDestinations: vcrCloudDestinations(this.config), imports: this.importUpload() },
           // A source the viewer holds no grant on is a name and a state: its files' names, its map and who may read it are not theirs to see.
-          files: readable ? own.map((file) => fileView(file)) : [],
+          files: readable ? own.map((file) => fileView(file, true, projectionsOf.get(file.id))) : [],
           fieldMap: {
             state: source.fieldMapState, hash: source.fieldMapHash, by: source.fieldMapBy || null,
             confirmedBy: source.fieldMapConfirmedBy, confirmedAt: source.fieldMapConfirmedAt,
@@ -3570,7 +3693,7 @@ export function importAttemptAuditDetail(format, declaredLength) {
 }
 
 /** A stored file as a route answers it. @param {any} file @param {boolean} [withColumns] */
-export function fileView(file, withColumns = true) {
+export function fileView(file, withColumns = true, projections = undefined) {
   return {
     id: file.id, sourceId: file.sourceId, name: file.name, role: file.role, format: file.format, bytes: file.bytes,
     sha256: file.sha256, rowCount: file.rowCount, columnCount: file.columnCount, createdAt: file.createdAt,
@@ -3582,6 +3705,9 @@ export function fileView(file, withColumns = true) {
     } : {}),
     ...(file.role === "dictionary" ? { entries: (file.detail?.dictionary ?? []).length } : {}),
     ...(file.role === "document" ? { subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null, chars: file.detail?.chars ?? null,
+      // Its text was erased (a withdrawal, or a deletion after an evaluation used it): the row and the hashes stay.
+      ...(file.erasedAt ? { erased: true } : {}),
+      ...(projections?.length ? { projections } : {}),
       // A converted record says what it was converted from and how much of it had no text layer.
       ...(file.detail?.extraction ? { sourceFormat: file.detail.extraction.sourceFormat ?? null, pages: file.detail.extraction.pages ?? null, blankPages: file.detail.extraction.blankPages ?? 0 } : {}) } : {}),
     ...(file.detail?.sheets ? { sheets: file.detail.sheets, sheetUsed: file.detail.sheetUsed ?? null } : {}),

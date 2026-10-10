@@ -4,8 +4,8 @@ import { ClinicalTimeline, MatchingPanelControls } from './ClinicalMatchingDetai
 import { CloudDocuments, reviewedSpans } from './data/CloudDocuments';
 import type { VcrIntakeSource, VcrMatchingTab } from '@/lib/vcrClient';
 import { WebApiError } from '@/lib/apiClient';
-const api = vi.hoisted(() => ({ enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn() }));
-vi.mock('@/lib/vcrClient',()=>({enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection}));
+const api = vi.hoisted(() => ({ enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn(),retire:vi.fn() }));
+vi.mock('@/lib/vcrClient',()=>({enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection,retireVcrProjection:api.retire}));
 beforeEach(()=>vi.clearAllMocks());
 
 describe('evaluating from the controls',()=>{
@@ -203,6 +203,29 @@ describe('the identifiers the server suggests to the reviewer',()=>{
     fireEvent.click(screen.getByRole('button',{name:'打开原文'}));
     await screen.findByLabelText('受保护的原文');
     expect(screen.queryByRole('list',{name:'建议遮蔽'})).toBeNull();
+  });
+});
+
+describe('the reviewed texts saved of a record',()=>{
+  const source=(projections:unknown[])=>({id:'src',files:[{id:'doc1',name:'病历.txt',role:'document',projections},{id:'doc2',name:'另一份.txt',role:'document'},{id:'gone',name:'已撤回.txt',role:'document',erased:true}],
+    upload:{cloudDestinations:['https://api.example.org']},cloud:{state:'allowed',basis:'deployment_agreements'}}) as unknown as VcrIntakeSource;
+  it('lists the ones of the chosen record and retires the one that missed an identifier',async()=>{
+    api.retire.mockResolvedValue({retired:{projections:1}});
+    const changed=vi.fn();
+    render(<CloudDocuments studyId="s1" source={source([{id:'prj_a',at:'2026-10-09T08:00:00Z'},{id:'prj_b',at:'2026-10-10T08:00:00Z'}])} onChanged={changed}/>);
+    fireEvent.click(screen.getByText('病历云端处理 · 已开放'));
+    expect(screen.queryByRole('list',{name:'已保存的脱敏文本'})).toBeNull();
+    expect(screen.queryByRole('option',{name:'已撤回.txt'})).toBeNull();
+    fireEvent.change(screen.getByLabelText('准备脱敏文本'),{target:{value:'doc1'}});
+    const list=screen.getByRole('list',{name:'已保存的脱敏文本'});
+    const [first,second]=within(list).getAllByRole('listitem');
+    expect(first).toHaveTextContent('脱敏文本 1 · 2026-10-09 保存');expect(second).toHaveTextContent('脱敏文本 2 · 2026-10-10 保存');
+    fireEvent.click(within(second).getByRole('button',{name:'停用并清除'}));
+    await waitFor(()=>expect(api.retire).toHaveBeenCalledWith('s1','prj_b'));
+    await waitFor(()=>expect(changed).toHaveBeenCalled());
+    expect(await screen.findByText('已停用并清除这份脱敏文本。')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('准备脱敏文本'),{target:{value:'doc2'}});
+    expect(screen.queryByRole('list',{name:'已保存的脱敏文本'})).toBeNull();
   });
 });
 

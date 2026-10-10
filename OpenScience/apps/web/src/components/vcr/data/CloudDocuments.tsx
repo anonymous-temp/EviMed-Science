@@ -3,7 +3,7 @@ import { TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { Input, Select, Textarea } from '@/components/ui/Input';
-import { createVcrProjection, getVcrProtectedDocument, setVcrCloudPermission, type VcrCloudPermission, type VcrCloudState, type VcrIdentifierSuggestion, type VcrIntakeSource } from '@/lib/vcrClient';
+import { createVcrProjection, getVcrProtectedDocument, retireVcrProjection, setVcrCloudPermission, type VcrCloudPermission, type VcrCloudState, type VcrIdentifierSuggestion, type VcrIntakeSource } from '@/lib/vcrClient';
 import { ShowMore, useShowMore } from '@/components/ui/ShowMore';
 import { webErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/cn';
@@ -91,7 +91,9 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
   const [identifiers, setIdentifiers] = useState('');
   const [accepted, setAccepted] = useState<ReadonlyArray<VcrIdentifierSuggestion>>([]);
   const [reviewed, setReviewed] = useState(false);
-  const documents = source.files.filter(file => file.role === 'document');
+  const documents = source.files.filter(file => file.role === 'document' && !file.erased);
+  // The reviewed texts saved of the record being worked on: any of them that missed an identifier can be retired.
+  const saved = documents.find(file => file.id === documentId)?.projections ?? [];
   const destinations = source.upload.cloudDestinations ?? [];
   const cloud = cloudStateOf(source);
   const summary = cloud.state === 'restricted' ? '已限制'
@@ -140,6 +142,12 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
           <Button variant="secondary" disabled={!documentId || busy} onClick={() => void run(async () => {
             const answer = await getVcrProtectedDocument(studyId, documentId); setDocument(answer.document);
           }, '已打开原文，请核对身份信息。')}>打开原文</Button>
+          {saved.length > 0 && <ul aria-label="已保存的脱敏文本" className="flex flex-col divide-y divide-faint">
+            {saved.map((projection, index) => <li key={projection.id} className="flex items-center justify-between gap-3 py-2">
+              <span className="text-caption text-text-2">{`脱敏文本 ${index + 1}${projection.at ? ` · ${projection.at.slice(0, 10)} 保存` : ''}`}</span>
+              <Button variant="text" size="sm" disabled={busy} onClick={() => void run(() => retireVcrProjection(studyId, projection.id), '已停用并清除这份脱敏文本。')}>停用并清除</Button>
+            </li>)}
+          </ul>}
           {document && <Redaction document={document} identifiers={identifiers} accepted={accepted} reviewed={reviewed} busy={busy}
             onIdentifiers={value => { setIdentifiers(value); setReviewed(false); }} onReviewed={setReviewed}
             onAccepted={next => { setAccepted(next); setReviewed(false); }}

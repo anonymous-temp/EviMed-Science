@@ -73,6 +73,7 @@ import { HttpError } from "./security.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
 import { VcrDataPlane } from "./vcrDataPlane.mjs";
 import { VcrDataStore } from "./vcrDataStore.mjs";
+import { VcrErasureStore } from "./vcrErasureStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
 import { createVcrEngineProbe } from "./vcrEngineProbe.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
@@ -264,9 +265,10 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
     if (!criteria.length || criteria.length !== frozenIds.length || criteria.some((/** @type {any} */ c) => !frozenIds.includes(c.id))) {
       throw new HttpError(409, 'vcr_criteria_missing', 'The scenario and its frozen criteria disagree.');
     }
-    const [frozenFacts, frozenJudgments] = await Promise.all([
+    const [frozenFacts, frozenJudgments, withdrawn] = await Promise.all([
       matchStore.matchingFactsByIds(studyId, snapshot.facts.map((/** @type {any} */ row) => row.id)),
       matchStore.languageJudgmentsByIds(studyId, snapshot.languages.map((/** @type {any} */ row) => row.id)),
+      matchStore.withdrawnSubjects?.(studyId) ?? new Set(),
     ]);
     const { facts: allFacts, languages: languageBySubject } = hydrateMatchingInputs(snapshot, frozenFacts, frozenJudgments);
     /** @type {Map<string, any[]>} */
@@ -304,6 +306,13 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
     let voidedTotal = 0;
     let done = 0;
     for (const subjectKey of subjects) {
+      // A subject who withdrew consent after this batch was frozen is no longer evaluated; the roster counts them unavailable.
+      if (withdrawn.has(subjectKey)) {
+        errors.push("vcr_subject_withdrawn");
+        outcomes[subjectKey] = { state: "unavailable", code: "vcr_subject_withdrawn", jobId: job.id };
+        done += 1;
+        continue;
+      }
       try {
         const facts = factsBySubject.get(subjectKey) ?? [];
         const modelJudgments = languageBySubject.get(subjectKey) ?? {};
@@ -714,7 +723,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         const table = await subjectTable.read(study).catch(() => null);
         if (table?.available) {
           const candidates = subjectTableFacts({...table,variables:[],limit:Number.POSITIVE_INFINITY}).subjects.map(row=>row.subjectKey);
-          roster.push(...candidates.filter(key=>!roster.includes(key)));
+          const withdrawn = await matchStore.withdrawnSubjects?.(study.id) ?? new Set();
+          roster.push(...candidates.filter(key=>!roster.includes(key) && !withdrawn.has(key)));
           frozenTable = {snapshotId:table.snapshotId,sha256:table.sha256??null,identity:matchingTableIdentity(table),subjects:candidates};
         }
       }
@@ -1058,6 +1068,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const store = new VcrStore({ database: productDatabase, entityVocabulary });
   const dataStore = new VcrDataStore({ database: productDatabase });
   const matchStore = new VcrMatchStore({ database: productDatabase });
+  // Withdrawal, the retirement of a projection, and the marks on what was derived from a basis that has since changed.
+  const erasure = new VcrErasureStore({ database: productDatabase, matchStore });
   const evidenceStore = new VcrEvidenceStore({ database: productDatabase });
 
   const access = new VcrAccess({ store: dataStore });
@@ -1073,7 +1085,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // A source held in FHIR, OMOP or ADaM is converted in the same container (operation `convert`).
   const importer = createVcrImporter({ config, controller: intakeController, counters: intakeCounters, report });
   const dataPlane = String(config.vcrDataPlaneDir ?? "").trim()
-    ? new VcrDataPlane({ store: dataStore, config, access, extractor, importer })
+    ? new VcrDataPlane({ store: dataStore, config, access, extractor, importer, erasure })
     : null;
 
   const engineStatus = vcrEngineStatus(config);
@@ -1161,7 +1173,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     // Platform packs (flywheel F26): off, no platform row is read and the request is a 404 by its own code.
     platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
       people: (ids) => store.personNames(ids) } });
-  service.attach({ corrections, knowledge, engineProbe });
+  service.attach({ corrections, knowledge, engineProbe, erasure });
   // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
   if (projectStore?.renameProject) {
@@ -1193,7 +1205,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const records = createVcrRecords({ store, config });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
+    store, dataStore, matchStore, erasure, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).

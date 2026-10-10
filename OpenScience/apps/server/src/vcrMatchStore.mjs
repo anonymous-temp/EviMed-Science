@@ -107,8 +107,10 @@ const judgmentOf = (row) => (row ? {
   overrideNote: row.override_note ?? null,
 } : null);
 
-/** @param {any} row */
-const factOf = (row) => (row ? {
+/** A fact as the evaluator, the freeze and the page read it. A withdrawn fact keeps its structure and its words are gone (`withdrawn`
+ * also keeps the digest it had, so a frozen evaluation that referred to it still verifies).
+ * @param {any} row */
+export const factOf = (row) => (row ? {
   id: row.id,
   studyId: row.study_id,
   subjectKey: row.subject_key,
@@ -125,6 +127,7 @@ const factOf = (row) => (row ? {
   extractedBy: row.extracted_by,
   ...(row.provenance ? { provenance: row.provenance } : {}),
   ...(row.clinical ? { clinical: row.clinical, createdAt: new Date(row.created_at).toISOString() } : {}),
+  ...(row.withdrawn ? { withdrawn: row.withdrawn } : {}),
 } : null);
 
 /** @param {any} row */
@@ -403,7 +406,9 @@ export class VcrMatchStore extends VcrStoreBase {
   async assessmentTallies(studyId, protocolVersionId = null) {
     const rows = await this.rows(
       `SELECT summary, count(*)::int AS total FROM (SELECT DISTINCT ON (subject_key) summary FROM ${VCR_SCHEMA}.matching_assessments
-         WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id = $2) ORDER BY subject_key, as_of DESC, created_at DESC) latest GROUP BY summary`, [studyId, protocolVersionId]);
+         WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id = $2)
+           AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = matching_assessments.subject_key)
+         ORDER BY subject_key, as_of DESC, created_at DESC) latest GROUP BY summary`, [studyId, protocolVersionId]);
     /** @type {Record<string, number>} */
     const tallies = {};
     for (const row of rows) tallies[String(row.summary)] = Number(row.total);
@@ -710,6 +715,7 @@ export class VcrMatchStore extends VcrStoreBase {
     const rows = await this.rows(
       `SELECT * FROM ${VCR_SCHEMA}.matching_facts
         WHERE study_id = $1 AND ($2::text IS NULL OR subject_key = $2) AND ($3::timestamptz IS NULL OR visible_at <= $3)
+          AND withdrawn IS NULL
         ORDER BY subject_key, visible_at, id`, [studyId, subjectKey, visibleBy]);
     return rows.map(factOf);
   }
@@ -729,22 +735,31 @@ export class VcrMatchStore extends VcrStoreBase {
 
   async factSubjects(studyId) {
     const rows = await this.rows(
-      `SELECT subject_key, count(*)::int AS facts FROM ${VCR_SCHEMA}.matching_facts WHERE study_id = $1 GROUP BY subject_key ORDER BY subject_key`, [studyId]);
+      `SELECT subject_key, count(*)::int AS facts FROM ${VCR_SCHEMA}.matching_facts WHERE study_id = $1 AND withdrawn IS NULL GROUP BY subject_key ORDER BY subject_key`, [studyId]);
     return rows.map((row) => ({ subjectKey: String(row.subject_key), facts: Number(row.facts) }));
   }
 
   /** Includes uploaded charts even when extraction produced no facts.
    * @param {{studyId:string, visibleBy?:string|null}} input */
   async candidateSubjects({ studyId, visibleBy = null }) {
+    // A subject whose consent was withdrawn is nobody's candidate, whatever else the study still holds of them, and a document
+    // whose text was erased makes nobody a candidate.
     const rows = await this.rows(`SELECT subject_key FROM (
-      SELECT subject_key FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
-      UNION SELECT subject_key FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
+      SELECT subject_key FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND withdrawn IS NULL AND ($2::timestamptz IS NULL OR visible_at <= $2)
+      UNION SELECT subject_key FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND withdrawn IS NULL AND ($2::timestamptz IS NULL OR visible_at <= $2)
       UNION SELECT subject_key FROM ${VCR_SCHEMA}.matching_candidates WHERE study_id=$1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
       UNION SELECT detail->>'subjectKey' AS subject_key FROM ${VCR_SCHEMA}.source_files
-        WHERE study_id=$1 AND role='document' AND detail->>'subjectKey' IS NOT NULL
+        WHERE study_id=$1 AND role='document' AND erased_at IS NULL AND detail->>'subjectKey' IS NOT NULL
         AND ($2::timestamptz IS NULL OR COALESCE(NULLIF(detail->>'visibleAt','')::timestamptz,created_at) <= $2)
-      ) roster ORDER BY subject_key`, [studyId, visibleBy]);
+      ) roster WHERE NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id=$1 AND w.subject_key=roster.subject_key)
+      ORDER BY subject_key`, [studyId, visibleBy]);
     return rows.map(row => String(row.subject_key));
+  }
+
+  /** The subjects whose consent was withdrawn: the roster leaves them out, and a continued batch counts them unavailable.
+   * @param {string} studyId @returns {Promise<Set<string>>} */
+  async withdrawnSubjects(studyId) {
+    return new Set((await this.rows(`SELECT subject_key FROM ${VCR_SCHEMA}.subject_withdrawals WHERE study_id=$1`, [studyId])).map(row => String(row.subject_key)));
   }
 
   /** @param {{id:string,payload:any}} snapshot */
@@ -801,6 +816,7 @@ export class VcrMatchStore extends VcrStoreBase {
     return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND id=ANY($2::text[])`, [studyId, ids])).map(row => ({
       id: row.id, subjectKey: row.subject_key, criterionKey: row.criterion_key, state: row.state, evidence: row.evidence ?? [],
       protocolVersionId: row.protocol_version_id, criterionHash: row.criterion_hash, provenance: row.provenance ?? null,
+      ...(row.withdrawn ? { withdrawn: row.withdrawn } : {}),
     }));
   }
 
@@ -846,7 +862,7 @@ export class VcrMatchStore extends VcrStoreBase {
       `SELECT DISTINCT ON (subject_key, criterion_key) *
          FROM ${VCR_SCHEMA}.language_judgments
         WHERE study_id = $1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
-          AND protocol_version_id=$3
+          AND protocol_version_id=$3 AND withdrawn IS NULL
         ORDER BY subject_key, criterion_key, created_at DESC, id DESC`, [studyId, visibleBy, version]);
     /** @type {Map<string, Record<string, any>>} */
     const bySubject = new Map();

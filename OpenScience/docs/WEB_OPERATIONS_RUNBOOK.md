@@ -1575,13 +1575,34 @@ and deterministic historical replay remain available.
 
 The study delete operation hides a study; it has never meant erasing its project.
 Cloud dependencies continue to refuse its cached clinical content after hiding.
-Unfrozen source deletion removes its derived projections and facts. Inputs used by
-a frozen analysis remain protected for historical reproducibility and are identified
-as retained. Full project/account deletion removes the study tables, protected
-study directory and project conversations through the existing deletion path.
-Metadata-only audit records and authorized backup retention follow existing policy;
-this feature makes no claim of instant erasure from backup media or a provider.
-Do not treat these controls as HIPAA, GDPR or 21 CFR Part 11 certification.
+Unfrozen source deletion removes its derived projections and facts. A patient's
+consent withdrawal (`POST /api/vcr/studies/:id/data/subjects/:subject/withdraw`, role
+`manage_data`, the source panel's 「患者撤回同意」) and a deletion request for a document
+that an evaluation was frozen on erase the text instead of refusing: the plane keeps
+its documents as plain files (there is no per-document key to destroy), so each text
+file, converted original and projection manifest is overwritten in place with zeros,
+synced and removed, after the database commits that the row is erased (`source_files.
+erased_at`, `document_projections.retired_at`/`purged_at`); asked again, the request
+overwrites what a failed attempt left. The rows, their hashes and the audit trail stay
+(`source.file.erase` and `subject.withdraw` hold hashes and counts, never a word).
+What was read from the erased text is deleted when no evaluation was frozen on it and
+redacted when one was (quote kept as a hash, surface, written date, text value and the
+quotes of relations emptied; the digest it was frozen under is kept in
+`withdrawn.digest`), so a frozen evaluation still verifies and reads as 「已撤回」 beside the
+person. A withdrawn subject (`subject_withdrawals`) is on no roster, is counted
+unavailable in a batch frozen before the withdrawal, and their open referrals close as
+退出. A projection that missed an identifier is retired and purged the same way
+(`POST .../data/projections/:projection/retire`, the source panel's 「停用并清除」): no
+read serves it, what was quoted from it is deleted or redacted, and the newest live
+projection (or, with none, the document under the deployment's agreements) is read
+instead. Structured data files in a snapshot are the snapshot's own record and are not
+rewritten; text already copied into the project's conversations, and into backups made
+before the erasure, follows those stores' retention. Full project/account deletion
+removes the study tables, protected study directory and project conversations through
+the existing deletion path. Metadata-only audit records and authorized backup
+retention follow existing policy; this feature makes no claim of instant erasure from
+backup media or a provider. Do not treat these controls as HIPAA, GDPR or 21 CFR
+Part 11 certification.
 
 Matching jobs freeze the candidate roster, facts, language judgments, criteria and
 as-of time before queueing. Continue a batch using its `inputSnapshotId` and
