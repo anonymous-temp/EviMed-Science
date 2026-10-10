@@ -812,6 +812,98 @@ export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {
   });
 
   /**
+   * The store, with a hook that runs once the reserve has been written and before the send leaves (G10h): the window in which a pause or a
+   * stop can land after the money is held and before the vendor is asked. Methods are applied to the real store, whose state is private.
+   * @param {any} store @param {() => Promise<void>} after
+   */
+  const changingAfterTheReserve = (store, after) => new Proxy(store, {
+    get(target, key) {
+      const value = Reflect.get(target, key, target);
+      if (typeof value !== "function") return value;
+      return async (/** @type {any[]} */ ...args) => {
+        const out = await value.apply(target, args);
+        if (key === "reserveForSend" && out && "order" in out) await after();
+        return out;
+      };
+    },
+  });
+
+  test("a pause that lands after the reserve and before the send releases the money and sends nothing (G10h)", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const p = await w.project();
+      const paused = changingAfterTheReserve(w.fixture.store, () => w.fixture.alter.project(p.id, { status: "paused" }));
+      const counts = await tickOrders({ ...w.deps, store: paused });
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 0, "paused is paused, though the money was already held");
+      assert.equal(counts.submitted, 0);
+      assert.equal(counts.skipped.project_not_active, 1);
+      const [order] = await orders(w.fixture.store, p.id);
+      assert.equal(order.state, "planned", "the plan waits for the project to be resumed");
+      assert.deepEqual([(await moneyOf(w.fixture.store, p.id)).reservedCny, (await moneyOf(w.fixture.store, p.id)).settledCny], [0, 0], "the reserve is given back");
+      assert.deepEqual(projectIdentityBreaks(await orders(w.fixture.store, p.id), await w.fixture.store.ledgerSums({ geoProjectId: p.id })), []);
+      const history = await w.fixture.store.listOrderEvents(order.id, 20);
+      assert.deepEqual(history.map((event) => event.toState).filter((state) => ["reserved", "planned"].includes(state)).slice(-2), ["reserved", "planned"]);
+      // Resumed, the plan goes out as any other.
+      await w.fixture.alter.project(p.id, { status: "active" });
+      assert.equal((await tickOrders(w.deps)).submitted, 1);
+    } finally { await w.close(); }
+  });
+
+  test("a budget set to 0 after the reserve and before the send is the same stop (G10h)", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const p = await w.project();
+      const stopped = changingAfterTheReserve(w.fixture.store, () => w.fixture.alter.project(p.id, { budget: { totalCny: 0, dailyCny: 0 } }));
+      const counts = await tickOrders({ ...w.deps, store: stopped });
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 0);
+      assert.equal(counts.skipped.budget_stopped, 1);
+      const [order] = await orders(w.fixture.store, p.id);
+      assert.equal(order.state, "planned");
+      assert.equal((await moneyOf(w.fixture.store, p.id)).reservedCny, 0);
+      assert.deepEqual(projectIdentityBreaks(await orders(w.fixture.store, p.id), await w.fixture.store.ledgerSums({ geoProjectId: p.id })), []);
+    } finally { await w.close(); }
+  });
+
+  test("a project budget of 0 is a stop: nothing is planned, reserved or sent, the plan made before it waits, and raising the budget takes the stop off (G10h)", options, async () => {
+    // The vendor holds no balance at first, so the first tick plans and sends nothing: a plan made under a budget, waiting.
+    const w = await world(makeFixture, { balance: 0 });
+    try {
+      const p = await w.project({ articles: [{}, {}] });
+      const first = await tickOrders(w.deps);
+      assert.equal(first.planned, 2);
+      const before = await orders(w.fixture.store, p.id);
+      assert.deepEqual(before.map((order) => order.state), ["planned", "planned"]);
+
+      await setBudget(w.deps, { userId: p.userId, geoProjectId: p.id, totalCny: 0, dailyCny: 0 });
+      // An article that could be placed turns up, and the vendor would now take every order: still nothing leaves.
+      const extra = `${p.id}_late`;
+      w.bodies.set(extra, ARTICLE_MARKDOWN);
+      await w.fixture.seed.article({ id: extra, userId: p.userId, geoProjectId: p.id, layer: "popular", title: "后来的稿件", groupId: `${p.id}_g1`, gate: "passed",
+        safety: "clear", contentSha256: sha256Hex(ARTICLE_MARKDOWN), status: "publishable", createdAt: w.clock.now().toISOString() });
+      w.fake.state.balance.money = 5_000;
+      const stop = await tickOrders(w.deps);
+      assert.equal(stop.skipped.budget_stopped, 1, "the project is served and says why it does nothing");
+      assert.deepEqual([stop.planned, stop.submitted, stop.unknown, stop.refused], [0, 0, 0, 0]);
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 0);
+      assert.deepEqual((await orders(w.fixture.store, p.id)).map((order) => [order.id, order.state]), before.map((order) => [order.id, order.state]), "no new plan; the two waiting plans untouched");
+      assert.deepEqual([(await moneyOf(w.fixture.store, p.id)).reservedCny, (await moneyOf(w.fixture.store, p.id)).settledCny], [0, 0]);
+
+      // The reserve itself says no, whoever asks: an order planned before the stop reserves nothing.
+      const [planned] = before;
+      const reserve = await w.fixture.store.reserveForSend(planned.id, { at: w.clock.now().toISOString(), dayStart: "2026-09-25T00:00:00.000Z", sendDetail: { title: "t", bodySha256: "a".repeat(64) },
+        articleSha256: sha256Hex(ARTICLE_MARKDOWN) });
+      assert.deepEqual(reserve, { refused: "budget_stopped" });
+      assert.equal((await w.fixture.store.getOrder(planned.id)).state, "planned");
+
+      // Raised, the stop is off: the plans go out and the late article is planned.
+      await setBudget(w.deps, { userId: p.userId, geoProjectId: p.id, totalCny: 1_000, dailyCny: 1_000 });
+      const resumed = await tickOrders(w.deps);
+      assert.deepEqual([resumed.planned, resumed.submitted], [1, 3], "the late article is planned, and it and the two waiting plans go out");
+      assert.equal((await orders(w.fixture.store, p.id)).length, 3);
+    } finally { await w.close(); }
+  });
+
+  /**
    * An order sent, published, and about to be verified at +1 h, with a store that fails the first call of one method (M-2).
    * @param {any} w @param {(method: string, args: any[]) => boolean} failing
    */

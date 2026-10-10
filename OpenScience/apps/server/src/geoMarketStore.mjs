@@ -76,6 +76,17 @@ export function projectMoney(project, sums) {
 }
 
 /**
+ * Whether a project's budget is a stop: a total of nothing. A project with no budget is not served at all; one whose budget is zero is
+ * served and places nothing — no plan, no reserve, no send — and what is already placed runs its course (the owner's ruling of
+ * 2026-10-10, G10h). Raising the total takes the stop off.
+ * @param {{ budget?: { totalCny?: unknown } | null } | null | undefined} project
+ */
+export function budgetStopped(project) {
+  const total = project?.budget?.totalCny;
+  return total != null && Number(total) <= 0;
+}
+
+/**
  * The day's new commitments from ledger sums since the day began: per order,
  * what was reserved today less what came back today — a reserve released the
  * same day (a refused send, a settlement's remainder) is not the day's spend,
@@ -749,8 +760,8 @@ export class GeoMarketStore {
    * @param {string} orderId
    * @param {{ at: string, dayStart: string, reserveDetail?: Record<string, any>, sendDetail: Record<string, any>, patch?: Record<string, any>,
    *   articleSha256?: string | null }} move
-   * @returns {Promise<{ order: ReturnType<typeof mapOrder> } | { refused: "budget_exhausted" | "daily_cap_reached" | "project_missing" | "project_not_active"
-   *   | "article_not_placeable" | "article_changed_since_review" } | null>}
+   * @returns {Promise<{ order: ReturnType<typeof mapOrder> } | { refused: "budget_exhausted" | "budget_stopped" | "daily_cap_reached" | "project_missing"
+   *   | "project_not_active" | "article_not_placeable" | "article_changed_since_review" } | null>}
    *   null when the order was not planned any more
    */
   async reserveForSend(orderId, { at, dayStart, reserveDetail = {}, sendDetail, patch = {}, articleSha256 = null }) {
@@ -770,6 +781,8 @@ export class GeoMarketStore {
       const project = await client.query(`SELECT budget, status FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [row.geo_project_id]);
       if (!project.rows[0]) return { refused: "project_missing" };
       if (project.rows[0].status !== "active") return { refused: "project_not_active" };
+      // A budget of zero is a stop, and an order planned before it reserves nothing (even one that would cost nothing).
+      if (budgetStopped({ budget: project.rows[0].budget })) return { refused: "budget_stopped" };
       const reserve = Number(row.reserve_cny);
       const money = projectMoney({ budget: project.rows[0].budget }, await ledgerSumsWith(client, row.geo_project_id, null));
       if (money.availableCny == null || money.availableCny + EPSILON_CNY < reserve) return { refused: "budget_exhausted" };

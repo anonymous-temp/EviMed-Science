@@ -2,7 +2,7 @@ import { GEO_PLACEMENT_LABELS_ZH, stripGeoClaimReferences } from "@evimed/domain
 import { HttpError } from "./security.mjs";
 import { APPEAL_REASONS, MEDIA_FIELD_TYPES, MEDIA_TYPES, mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { compareProtectedSpans, extractProtectedSpans, htmlToText, markdownToHtml, sha256Hex, splitLeadingTitle } from "./geoMarketText.mjs";
-import { dailyReserved, projectMoney, sendInFlight } from "./geoMarketStore.mjs";
+import { budgetStopped, dailyReserved, projectMoney, sendInFlight } from "./geoMarketStore.mjs";
 import { geoAudienceAllows } from "./geoService.mjs";
 
 export { projectMoney };
@@ -62,6 +62,10 @@ export { projectMoney };
  *   the send. An in-flight send is declared unknown only after the client's
  *   send deadline plus a margin; if the vendor's answer comes back to an order
  *   that moved meanwhile, its order number is written into the history first.
+ * - A pause and a budget of zero stop the project's sending, and the stop reaches an order whose money is already held: the reserve is
+ *   refused for a project that is not active or whose budget is nothing, and a look just before the vendor is asked releases a reserve
+ *   made a moment before the pause or the stop landed (the plan waits). What is already placed — sent, accepted, published — runs its
+ *   course; neither a pause nor a zero budget recalls it (`cancelOrder` is the owner's, before the outlet accepts).
  * - Placing runs under the project's lock (a second tick skips the project),
  *   only for owners the module is still open to, and an article holds one
  *   live order at most — the database refuses a second.
@@ -954,6 +958,18 @@ async function recoverInterruptedSends(ctx) {
 }
 
 /**
+ * Why an order whose money is reserved must not be sent after all: its project was paused, taken away, or given a budget of zero since the
+ * reserve. Null when it may go. @param {ReturnType<typeof context>} ctx @param {string} geoProjectId
+ * @returns {Promise<"project_missing" | "project_not_active" | "budget_stopped" | null>}
+ */
+async function sendHold(ctx, geoProjectId) {
+  const project = await ctx.store.getProject({ geoProjectId });
+  if (!project) return "project_missing";
+  if (project.status !== "active") return "project_not_active";
+  return budgetStopped(project) ? "budget_stopped" : null;
+}
+
+/**
  * Reserve, then send one planned order exactly once.
  * @param {ReturnType<typeof context>} ctx @param {any} project @param {any} order
  * @param {{ balance: number, blocked: Set<string>, candidatesByKey: Map<string, any> }} state
@@ -1024,6 +1040,15 @@ async function placeOrder(ctx, project, order, state) {
     return reservation.refused;
   }
   const current = reservation.order;
+  // A pause or a stop that landed between the reserve and the send (G10h): the money was held under what has just changed and nothing has left,
+  // so it is released and the plan waits. The reserve itself is refused for a paused project or a zero budget, in its own transaction; this is
+  // the last look before the vendor. A look that cannot be had is not a reason to hold: the reserve's own check was made a moment ago.
+  const hold = await sendHold(ctx, project.id).catch(() => null);
+  if (hold) {
+    await transition(ctx, current, "planned", { detail: { reason: hold },
+      ledger: [{ kind: "release", amountCny: order.reserveCny, note: `held before the send: ${hold}` }] });
+    return hold;
+  }
   /** @type {{ orderNid: string } | null} */
   let answer = null;
   try {
@@ -1142,6 +1167,9 @@ export async function tickOrders(deps) {
   /** Plan, then send, for one project — under its lock. @param {any} project */
   const work = async (project) => {
     await withdrawStalePlans(ctx, project, candidatesByKey, counts);
+    // A budget of zero is a stop (G10h): nothing is planned, reserved or sent for the project; a plan made before it waits, and what is
+    // already placed runs its course (`setBudget`).
+    if (budgetStopped(project)) { skip("budget_stopped"); return; }
     await planProject(ctx, project, candidates, blocked, counts);
     if (!ctx.configured) { skip("market_unconfigured"); return; }
     if (stop.stopped) { skip("orders_stopped"); return; }
@@ -1822,7 +1850,8 @@ function parseMoney(value) {
 
 /**
  * Set a project's distribution budget: the one human stop on spending. A zero
- * total stops new orders; what is already placed runs its course.
+ * total stops new orders (no plan, no reserve, no send: `budgetStopped`); what is
+ * already placed runs its course.
  * @param {MarketDeps} deps @param {{ userId: string, geoProjectId: string, totalCny: unknown, dailyCny: unknown }} input
  */
 export async function setBudget(deps, { userId, geoProjectId, totalCny, dailyCny }) {

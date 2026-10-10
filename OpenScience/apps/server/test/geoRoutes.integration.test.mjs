@@ -510,6 +510,14 @@ test("distribution reads the orders; budget, cancel, run and export go to their 
     { budget: { totalCny: 5000, dailyCny: 500 } });
   assert.equal((await call("POST", `/api/geo/projects/${id}/orders/o1-${id}/cancel`, { body: {} })).payload.data.state, "cancelled");
   assert.deepEqual(seen, [["budget", ALICE, id, { totalCny: 5000, dailyCny: 500 }], ["cancel", ALICE, id, `o1-${id}`]]);
+  // A total of 0 is the stop (G10h), reachable: it takes a daily cap of 0 with it, and nothing else is let through on 0.
+  seen.length = 0;
+  assert.deepEqual((await call("PUT", `/api/geo/projects/${id}/budget`, { body: { totalCny: 0, dailyCny: 0 } })).payload.data, { budget: { totalCny: 0, dailyCny: 0 } });
+  assert.deepEqual(seen, [["budget", ALICE, id, { totalCny: 0, dailyCny: 0 }]]);
+  refused(await call("PUT", `/api/geo/projects/${id}/budget`, { body: { totalCny: 0, dailyCny: 5 } }), 400, "geo_budget_invalid");
+  refused(await call("PUT", `/api/geo/projects/${id}/budget`, { body: { totalCny: 100, dailyCny: 0 } }), 400, "geo_budget_invalid");
+  refused(await call("PUT", `/api/geo/projects/${id}/budget`, { body: { totalCny: 0 } }), 400, "geo_budget_invalid");
+  assert.equal(seen.length, 1, "the refused ones reached no hook");
   assert.deepEqual((await call("GET", `/api/geo/projects/${id}/distribution`)).payload.data.market, { configured: true });
   hooks.market = null;
 

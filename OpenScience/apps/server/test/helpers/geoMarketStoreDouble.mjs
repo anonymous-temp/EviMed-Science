@@ -9,6 +9,7 @@ import {
   GEO_ORDER_ARTICLE_LIVE_STATES,
   articleLiveError,
   articleRefusalAtSend,
+  budgetStopped,
   dailyReserved,
   projectMoney,
   GEO_MARKET_STORE_LIMITS,
@@ -345,6 +346,7 @@ export class GeoMarketStoreDouble {
     const project = this.projects.get(order.geoProjectId);
     if (!project || project.deletedAt) return { refused: "project_missing" };
     if (project.status !== "active") return { refused: "project_not_active" };
+    if (budgetStopped(project)) return { refused: "budget_stopped" };
     const money = projectMoney(project, await this.ledgerSums({ geoProjectId: order.geoProjectId }));
     if (money.availableCny == null || money.availableCny + EPSILON_CNY < order.reserveCny) return { refused: "budget_exhausted" };
     if (money.dailyCny != null && dailyReserved(await this.ledgerSums({ geoProjectId: order.geoProjectId, since })) + order.reserveCny > money.dailyCny + EPSILON_CNY) {
