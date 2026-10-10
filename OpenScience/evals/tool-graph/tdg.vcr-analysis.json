@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:02ce5ed049fa023e296d062f461485e0f749cb7e909df6cddad2b05d0fca4465",
+  "version": "sha256:8de3d2c39169fa34222c41a3a83521921651677d3aad842c5a5c4735106388b5",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 29,
@@ -1256,12 +1256,25 @@
               "trial_registry_record",
               "pack",
               "library",
-              "model_assessments"
+              "model_assessments",
+              "longitudinal"
             ]
           },
           "filter": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
+              "parentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
               "kind": {
                 "type": "string",
                 "minLength": 1,
@@ -1399,7 +1412,11 @@
               "negative_control_comparator",
               "tipping_point",
               "prognostic_adjustment_comparator",
-              "generate_patients_longitudinal"
+              "generate_patients_longitudinal",
+              "forecast_trajectories",
+              "evaluate_forecast",
+              "compare_forecasts",
+              "benchmark_trial_effect"
             ]
           },
           "scenario": {
@@ -1516,7 +1533,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Write this 虚拟临床研究 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition, or, for a real cohort, fromProtocol: true with a snapshotId (the protocol's own criteria become its rules); a definition may carry title (the study's name, 24 characters) and question. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration, scenario or definition carries only the keys the engine reads for the job that computes it: before you write a trial scenario, patient set, population or comparator, call vcr_simulate with action shape and that job's kind (design_analytic and design_simulation for a trial scenario; generate_patients, generate_patients_continuous, generate_patients_binary or generate_patients_longitudinal (a trajectory over a visit schedule) for a patient set; generate_population for a population; the comparator kind for a comparator) and write those keys and no others. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 虚拟临床研究 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition, or, for a real cohort, fromProtocol: true with a snapshotId (the protocol's own criteria become its rules); a definition may carry title (the study's name, 24 characters) and question. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration, scenario or definition carries only the keys the engine reads for the job that computes it: before you write a trial scenario, patient set, population or comparator, call vcr_simulate with action shape and that job's kind (design_analytic and design_simulation for a trial scenario; generate_patients, generate_patients_continuous, generate_patients_binary or generate_patients_longitudinal (a trajectory over a visit schedule) for a patient set; generate_population for a population; the comparator kind for a comparator) and write those keys and no others. Items are checked one by one; refused items come back in issues and the rest are written. what: trial_benchmark imports an existing external trial-effect JSON via data {predictionsFile: workspace-relative path}; actual effects are read from preserved evidence. Never generate the file's predictions yourself.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1546,7 +1563,10 @@
               "followup",
               "field_map",
               "pack",
-              "model_assessment"
+              "model_assessment",
+              "history",
+              "forecast_design",
+              "trial_benchmark"
             ]
           },
           "items": {
