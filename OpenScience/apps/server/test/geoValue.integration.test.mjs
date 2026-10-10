@@ -24,6 +24,35 @@ after(async () => { await database?.close(); await isolated?.drop(); });
 const fresh = () => store.createProject({ userId: "alice", projectId: randomUUID(), engines: ["deepseek"], coverageDays: 90 });
 const write = (project, what, data) => geoRuntimeWrite({ store, project, what, body: { data } });
 
+test("semantic observations respect real profile, group, audience and engine boundaries", options, async () => {
+  const project = await fresh();
+  await store.writeValue("alice", project.id, { findings: [{ id: "f1", statement: "Conditions matter" }] });
+  await store.writeValue("alice", project.id, { findings: [{ id: "f1", limitations: "New applicability condition" }] });
+  const groups = await write(project, "questions", { groups: [
+    { name: "Caregiver", pool: "P3", audience: "caregiver", questions: [{ text: "How much burden?", kind: "typical" }] },
+    { name: "Pharmacist", pool: "P2", audience: "pharmacist", questions: [{ text: "Which monitoring?", kind: "typical" }] },
+  ] });
+  const round = `gr_${randomUUID()}`;
+  await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status) VALUES($1,'alice',$2,'baseline','done')", [round, project.id]);
+  for (const [index, engine, question, version] of [[0, "deepseek", groups.questionIds[0][0], 2], [1, "kimi", groups.questionIds[0][0], 2],
+    [2, "deepseek", groups.questionIds[1][0], 2], [3, "deepseek", groups.questionIds[0][0], 1]]) {
+    const snapshot = `gs_${randomUUID()}`;
+    await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,question_id,asked_at) VALUES($1,'alice',$2,$3,$4,$5,now())",
+      [snapshot, project.id, round, engine, question]);
+    await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,judge_extract) VALUES($1,'alice',$2,now(),$3::jsonb)",
+      [snapshot, project.id, JSON.stringify({ valueBasisVersion: version, valueCoverage: [{ findingId: "f1", status: index === 0 ? "represented" : "contradicted" }] })]);
+  }
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
+  const current = await service.valueOf(project, { groupId: groups.ids[0], audience: "caregiver", engine: "deepseek" });
+  assert.equal(current.coverage.assessed, 1);
+  assert.equal(current.coverage.value, 100);
+  assert.equal(current.observations[0].basisVersion, 2);
+  const historical = await service.valueOf(project, { version: 1, groupId: groups.ids[0], audience: "caregiver", engine: "deepseek" });
+  assert.equal(historical.coverage.assessed, 1);
+  assert.equal(historical.coverage.value, 0);
+  assert.equal(historical.observations[0].basisVersion, 1);
+});
+
 test("backend owns versions, merges concurrent partial work, and isolates readers", options, async () => {
   const project = await fresh();
   await Promise.all([write(project, "value", { findings: [{ id: "f1", statement: "Conflicting effectiveness evidence" }] }),
