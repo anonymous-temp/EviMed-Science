@@ -771,7 +771,8 @@ describe("匹配与招募 — the controls stay while another page is read", () 
     await userEvent.click(screen.getByText("比较多个方案"));
     const panel = screen.getByText("比较多个方案").closest("details")!;
     expect(panel).toHaveAttribute("open");
-    await userEvent.selectOptions(screen.getByLabelText("选择方案（最多 10 项）"), ["prt_1", "prt_2"]);
+    const group = () => screen.getByRole("group", { name: "选择方案（最多 10 项）" });
+    await userEvent.click(within(group()).getByRole("checkbox", { name: "EV-201 方案 v2" }));
     const select = screen.getByLabelText("查看方案") as HTMLSelectElement;
     select.focus();
     fireEvent.change(select, { target: { value: "prt_2" } });
@@ -782,14 +783,16 @@ describe("匹配与招募 — the controls stay while another page is read", () 
     expect(select).toHaveFocus();
     expect(select.value).toBe("prt_2");
     expect(panel).toHaveAttribute("open");
-    expect([...(screen.getByLabelText("选择方案（最多 10 项）") as HTMLSelectElement).selectedOptions].map((option) => option.value)).toEqual(["prt_1", "prt_2"]);
+    expect(within(group()).getByRole("checkbox", { name: "EV-201 方案 v2" })).toBeChecked();
+    expect(within(group()).getByRole("checkbox", { name: "EV-201 方案 v1" })).not.toBeChecked();
     await act(async () => { arrive(withProtocols((payload) => { payload.protocolVersionId = "prt_2"; })); });
     await waitFor(() => expect(document.querySelector("[data-vcr-loading='tab']")).toBeNull());
     expect(screen.getByLabelText("查看方案")).toBe(select);
     expect(select).toHaveFocus();
     expect(select.value).toBe("prt_2");
     expect(panel).toHaveAttribute("open");
-    expect([...(screen.getByLabelText("选择方案（最多 10 项）") as HTMLSelectElement).selectedOptions].map((option) => option.value)).toEqual(["prt_1", "prt_2"]);
+    expect(within(group()).getByRole("checkbox", { name: "EV-201 方案 v2" })).toBeChecked();
+    expect(within(group()).getByRole("checkbox", { name: "EV-201 方案 v1" })).not.toBeChecked();
   });
 
   it("keeps the controls when the page for the protocol chosen cannot be read, so another protocol can be chosen", async () => {

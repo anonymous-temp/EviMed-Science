@@ -3,8 +3,9 @@ import { knownErrorCodeMessage } from '@evimed/domain';
 import { Button } from '@/components/ui/Button';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { Select } from '@/components/ui/Input';
-import { enqueueVcrMatching, resolveVcrQuote, type VcrMatchingTab } from '@/lib/vcrClient';
+import { enqueueVcrMatching, resolveVcrQuote, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
 import { webErrorMessage } from '@/lib/apiClient';
+import { cn } from '@/lib/cn';
 
 const summaries: Record<string, string> = { eligible: '全部满足', ineligible: '有不满足条件', insufficient_evidence: '证据不足', pending: '待复评' };
 const assertions: Record<string, string> = { affirmed: '已记录', negated: '已否认', possible: '疑似', hypothetical: '假设', conditional: '有条件', unknown: '未知', family: '家族史' };
@@ -47,6 +48,35 @@ export function useMatchingEvaluation(studyId: string, onQueued: () => void) {
 export function EvaluationNote({ message, failed }: { message: string; failed: boolean }) {
   if (!message) return null;
   return <p className={failed ? 'text-caption text-error' : 'text-caption text-text-2'} role={failed ? 'alert' : 'status'}>{message}</p>;
+}
+
+/** The most protocol versions one comparison takes: the server refuses more (`vcr_matching_selection_invalid`). */
+const MOST_PROTOCOLS = 10;
+
+/**
+ * The protocol versions to compare, as a group of checkboxes (review V-M1). A native multiple select needs Ctrl/Cmd-click that
+ * nothing mentions, cannot be used by touch, and showed an eleventh choice as chosen while the request carried ten. Here a plain
+ * click picks, each row is 44 px high, and at the limit the rest are disabled with the reason in view.
+ */
+function ProtocolChecklist({ protocols, chosen, onChange }: { protocols: readonly VcrProtocolChoice[]; chosen: readonly string[]; onChange: (next: string[]) => void }) {
+  const full = chosen.length >= MOST_PROTOCOLS;
+  return <fieldset className="min-w-0">
+    <legend className="mb-2 text-ui font-medium text-text">{`选择方案（最多 ${MOST_PROTOCOLS} 项）`}</legend>
+    <ul className="flex flex-col">
+      {protocols.map(protocol => {
+        const checked = chosen.includes(protocol.id);
+        const locked = full && !checked;
+        return <li key={protocol.id}>
+          <label className={cn('flex min-h-form-primary items-center gap-3 rounded px-2 text-ui', locked ? 'cursor-not-allowed text-text-3' : 'cursor-pointer text-text hover:bg-surface-2')}>
+            <input type="checkbox" className="h-4 w-4 shrink-0 accent-accent" checked={checked} disabled={locked}
+              onChange={event => onChange(event.target.checked ? [...chosen, protocol.id] : chosen.filter(id => id !== protocol.id))} />
+            <span className="min-w-0">{protocol.title || `方案版本 ${protocol.version}`}</span>
+          </label>
+        </li>;
+      })}
+    </ul>
+    <p className="mt-2 text-caption text-text-3" aria-live="polite">{full ? `已选 ${chosen.length} 项，已到上限；取消一项后才能再选。` : `已选 ${chosen.length} 项`}</p>
+  </fieldset>;
 }
 
 export function MatchingPanelControls({ studyId, data, direction, protocolId, settling = false, canRun, onProtocol, onCandidate, onReload }: {
@@ -94,9 +124,7 @@ export function MatchingPanelControls({ studyId, data, direction, protocolId, se
     <EvaluationNote message={evaluation.message} failed={evaluation.failed} />
     <Disclosure summary="比较多个方案">
       <div className="grid gap-3 md:grid-cols-2">
-        <Select label="选择方案（最多 10 项）" multiple className="h-auto min-h-form-primary" value={panel} onChange={event => setPanel(Array.from(event.target.selectedOptions).map(option => option.value).slice(0, 10))}>
-          {protocols.map(protocol => <option key={protocol.id} value={protocol.id}>{name(protocol)}</option>)}
-        </Select>
+        <ProtocolChecklist protocols={protocols} chosen={panel} onChange={setPanel} />
         <div className="flex flex-wrap items-start gap-2">
           {canRun && <Button loading={evaluation.busy} disabled={evaluation.busy || settling || !panel.length || needsPatient}
             onClick={() => void evaluation.evaluate({ protocolVersionIds: panel, direction: way, ...scope })}>开始评估所选方案</Button>}

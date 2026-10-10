@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClinicalTimeline, MatchingPanelControls } from './ClinicalMatchingDetails';
 import { CloudDocuments, reviewedSpans } from './data/CloudDocuments';
@@ -53,6 +53,43 @@ describe('evaluating from the controls',()=>{
   });
 });
 
+describe('choosing the protocols to compare',()=>{
+  const protocols=(count:number)=>Array.from({length:count},(_,index)=>({id:`p${index+1}`,version:index+1,title:`方案 ${index+1}`}));
+  const controls=(count:number)=>render(<MatchingPanelControls studyId="s1" data={{protocols:protocols(count),protocolVersionId:'p1',direction:'trial_to_patient'} as unknown as VcrMatchingTab} canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}}/>);
+  const group=()=>screen.getByRole('group',{name:'选择方案（最多 10 项）'});
+  const boxes=()=>within(group()).getAllByRole('checkbox') as HTMLInputElement[];
+  // Review V-M1: a native <select multiple> asks for Ctrl/Cmd-click with no hint, is unusable by touch, and showed an eleventh
+  // option as chosen while the request sent ten.
+  it('is a list of checkboxes — a group with one box per protocol — and not a multiple select',()=>{
+    const {container}=controls(3);
+    expect(container.querySelector('select[multiple]')).toBeNull();
+    expect(boxes().map(box=>box.closest('label')?.textContent)).toEqual(['方案 1','方案 2','方案 3']);
+    // A finger finds the whole row: 44 px high, from the heights the design system names.
+    for(const box of boxes())expect(box.closest('label')).toHaveClass('min-h-form-primary');
+  });
+  it('picks several with plain clicks and sends exactly those',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[{jobId:'a'},{jobId:'b'}],unavailable:[]});
+    controls(3);
+    const [first,second,third]=boxes();
+    fireEvent.click(first);fireEvent.click(third);
+    expect([first,second,third].map(box=>box.checked)).toEqual([true,false,true]);
+    fireEvent.click(screen.getByRole('button',{name:'开始评估所选方案'}));
+    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1','p3'],direction:'trial_to_patient'}));
+  });
+  it('stops at ten and says why, and lets another be chosen once one is let go',()=>{
+    controls(12);
+    for(const box of boxes().slice(0,10))fireEvent.click(box);
+    const [,,,,,,,,,,eleventh,twelfth]=boxes();
+    expect(eleventh).toBeDisabled();expect(twelfth).toBeDisabled();
+    expect(boxes().filter(box=>box.checked)).toHaveLength(10);
+    expect(within(group()).getByText(/^已选/)).toHaveTextContent('已选 10 项，已到上限；取消一项后才能再选。');
+    fireEvent.click(boxes()[0]);
+    expect(eleventh).toBeEnabled();
+    expect(within(group()).getByText(/^已选/)).toHaveTextContent('已选 9 项');
+    expect(within(group()).getByText(/^已选/)).not.toHaveTextContent('已到上限');
+  });
+});
+
 describe('clinical matching controls',()=>{
   it('keeps a patient-to-trial request unsubmitted until both patient and protocols are selected',async()=>{
     api.enqueue.mockResolvedValue({jobs:[{id:'job'}],unavailable:[]});
@@ -61,9 +98,8 @@ describe('clinical matching controls',()=>{
     fireEvent.click(screen.getByText('比较多个方案'));
     const button=screen.getByRole('button',{name:'开始评估所选方案'});
     expect(button).toBeDisabled();
-    const select=screen.getByLabelText('选择方案（最多 10 项）') as HTMLSelectElement;
-    for(const option of select.options)option.selected=true;
-    fireEvent.change(select);expect(button).toBeDisabled();
+    for(const box of within(screen.getByRole('group',{name:'选择方案（最多 10 项）'})).getAllByRole('checkbox'))fireEvent.click(box);
+    expect(button).toBeDisabled();
     fireEvent.change(screen.getByLabelText('受试者'),{target:{value:'P-001'}});
     fireEvent.click(button);
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1','p2'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
