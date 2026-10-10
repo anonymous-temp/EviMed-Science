@@ -750,7 +750,8 @@ export function presentVcrReview(review, context = {}) {
     // revision and an input digest are the platform's own record, and a reader of the page has no use for any of them.
     state, status, current: review.current !== false, by: ai ? null : review.reviewerName ?? null,
     at: context.raw === true ? at : zhTime(at, context.now ?? new Date()),
-    note: status === 'failed' ? '审查暂未完成；已完成的研究与导出仍可使用。' : '审查意见供参考，不代表实证验证。',
+    // What happened and what still works, when a review could not finish; a finished review carries no hedge about itself (owner ruling 2026-10-10).
+    note: status === 'failed' ? '审查暂未完成；已完成的研究与导出仍可使用。' : null,
     findings: findings.map(finding => context.raw === true
       ? { id: finding.id, kind: finding.kind, location: finding.location, evidence: finding.evidence,
         message: finding.message, fix: finding.fix, response: finding.response ?? null }

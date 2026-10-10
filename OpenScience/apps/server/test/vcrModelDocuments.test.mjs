@@ -145,7 +145,8 @@ test("the plan document is M15's four sections around the freeze, with the platf
   assert.match(freeze, /\| 冻结者 \| orchestrator \|/);
   assert.match(freeze, new RegExp(`\\| 内容哈希（sha256） \\| ${version.contentHash} \\|`));
   assert.match(freeze, /结局字段在冻结时尚未被读取/);
-  assert.match(freeze, /不在内容哈希的范围内/, "the prose is said to be outside what was frozen");
+  assert.doesNotMatch(freeze, /不在内容哈希的范围内|哈希覆盖的是/, "the document does not explain what its hash does and does not cover (owner ruling 2026-10-10)");
+  assert.match(freeze, /\| 内容哈希（sha256） \|/, "the hash itself is a fact of the freeze and stays");
   assert.match(sectionOf(md, "引言"), /本研究评估外部对照能否作为单臂试验的比较基准。/);
   assert.match(sectionOf(md, "目的"), /本节的文字尚未撰写。/, "a section the run wrote nothing for says so");
   const methods = sectionOf(md, "方法");
@@ -283,6 +284,27 @@ test("only the two model documents are rendered here; any other kind, or a model
 
 /** The document of one kind from a cover, the way the export adapter builds it. @param {string} kind @param {Record<string, any>} model @param {any[]} reports */
 const canonical = (kind, model, reports) => canonicalVcrDocument(study, { kind, cover: { results: model, reports } });
+
+// R35, 2026-10-10: the exported package is the study's record, and it is read by whoever the study is handed to. A review is listed with its label, its
+// outcome, its findings and when it ended; the model that wrote an AI review and the configuration it ran under are the platform's own record, and the
+// notes that a review is "for reference, not empirical validation" are the platform hedging about itself.
+test("an exported review names no model and no configuration revision, and carries no disclaimer; its findings and what could not be done stay", () => {
+  const aiReview = (status, over = {}) => ({ id: "rvw_1", reviewerKind: "ai", kind: "clinical", status, createdAt: "2026-10-02T09:07:00.000Z", nodes: [], current: true,
+    provenance: { model: "actual-reviewer-v7", configuration: { model: "configured-reviewer", revision: "study-review-v1" }, finishedAt: "2026-10-02T09:07:00.000Z",
+      findings: [{ id: "F1", location: "assumptions[0].value", message: "取值缺少来源。", fix: "补充来源。" }], ...over } });
+  const humanReview = { id: "rvw_2", reviewerKind: "human", kind: "statistical", status: "done", reviewerName: "王统计师", createdAt: "2026-10-03T09:07:00.000Z", nodes: [], current: true, provenance: { findings: [] } };
+  const model = { ...reportModelFor({ versions: [frozenVersion(modelInputs())] }), review: { records: [aiReview("done"), humanReview] } };
+  const text = canonical("model_analysis_report", model, prose).canonicalMarkdown;
+  assert.match(text, /## 复核与限制/);
+  assert.match(text, /- AI临床复核：有修订建议；2026-10-02T09:07:00\.000Z。/);
+  assert.match(text, /assumptions\[0\]\.value：取值缺少来源。 建议：补充来源。/, "a finding keeps its location, its sentence and its fix");
+  assert.match(text, /- 人工统计复核：已复核；王统计师；/, "a person who reviewed is named");
+  assert.doesNotMatch(text, /actual-reviewer|configured-reviewer|study-review-v1|配置 |身份未返回/);
+  assert.doesNotMatch(text, /审查意见供参考|不代表实证验证|旧意见保留供参考/);
+  // A review that could not finish says what happened and what still works.
+  const failed = canonical("model_analysis_report", { ...model, review: { records: [aiReview("failed", { error: "review_configuration_changed", findings: [] })] } }, prose).canonicalMarkdown;
+  assert.match(failed, /- AI临床复核：审查未完成；.*审查暂未完成；已完成的研究与导出仍可使用。 本次审查因服务配置变化未完成。/);
+});
 
 test("the exported document is the header the study's other packages carry, then the structure; its identity moves with a result", () => {
   for (const kind of ["model_analysis_plan", "model_analysis_report"]) {

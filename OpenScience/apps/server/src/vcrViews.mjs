@@ -1465,8 +1465,7 @@ function coverStatus({ cover, row, bundle, model }) {
       const shown = presentVcrReview(changed);
       status.push({ label, value: shown.state, state: 'attention', note: shown.note });
     } else if (changed) {
-      status.push({ label, value: "复核后有变更", state: "attention",
-        note: "被审查的内容有了新版本，旧意见保留供参考" });
+      status.push({ label, value: "复核后有变更", state: "attention", note: null });
     } else if (done) {
       const at = zhTime(object(done).at ?? object(done).createdAt, now);
       status.push({ label, value: `已复核${at ? `（${at.replace(/ \d\d:\d\d$/, "")}）` : ""}`, state: "ok",
@@ -1544,7 +1543,7 @@ function packageSections({ cover, bundle, model }) {
   add({
     id: "results", title: "结果",
     table: resultRows.length ? { columns: ["指标", "取值", "范围", "蒙特卡洛标准误"], rows: resultRows } : null,
-    note: resultRows.length ? "表中每个数都是这个研究的结果，不是手写的。" : "还没有可写入研究包的结果。",
+    note: resultRows.length ? null : "还没有可写入研究包的结果。",
   });
   const runs = [...bundle.executions.values()];
   if (runs.length) {

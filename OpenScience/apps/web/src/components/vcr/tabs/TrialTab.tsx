@@ -36,9 +36,6 @@ export const designRan = (design: Pick<VcrDesign, "measures" | "dominated">): bo
 /** What a design that has not been computed says where its numbers would be. */
 const NOT_RUN = "还没算";
 
-/** What the decision card says under its button, when the server does not say it itself. */
-const NO_AUTO_PICK = "平台不自动选定方案。";
-
 /**
  * What 「加一个方案」 and 「改假设」 put in the conversation's composer — never sent. A design is described and a hypothesis argued
  * in a sentence, which is the conversation's work (the model writes the structure, the platform computes it); the page's own edit
@@ -283,7 +280,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
       )}
 
       {choosing && (
-        <Drawer title="选定方案" description="平台不自动选定方案：先写比较目标，再选一个，并说明理由。" onClose={() => setChoosing(false)} widthClassName="max-w-md">
+        <Drawer title="选定方案" description="先写比较目标，再选一个，并说明理由。" onClose={() => setChoosing(false)} widthClassName="max-w-md">
           <DecisionForm
             // A recorded decision comes back from the server; the form starts again from what was recorded rather than from what was typed.
             key={data.decision?.recordedAt ?? "none"}
@@ -527,7 +524,6 @@ function DecisionForm({ studyId, decision, designs, onRecorded }: {
       />
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={!ready || busy} loading={busy}>写入决策记录</Button>
-        <span className="text-caption text-text-3">{decision?.note ?? NO_AUTO_PICK}</span>
         {decision?.recordedAt && <span className="text-caption tabular-nums text-text-3">{`上次记录于 ${decision.recordedAt}`}</span>}
       </div>
     </form>

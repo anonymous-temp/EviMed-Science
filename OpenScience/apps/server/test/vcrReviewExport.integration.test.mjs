@@ -105,6 +105,8 @@ test('a clean trusted review pair refreshes Word/PDF once without changing froze
     const bytes = (await f.conversion.download({ id: 'alice' }, updated.cover.documentExportId, format)).bytes.toString();
     assert.match(bytes, /AI临床复核：未发现明确问题/); assert.match(bytes, /AI统计复核：未发现明确问题/);
     assert.match(bytes, /人数 42，效能 81.23%/); assert.doesNotMatch(bytes, /尚未完成复核|已复核|实证验证通过/);
+    // The package names neither the model that wrote a review nor the configuration it ran under, and carries no hedge about it (owner ruling 2026-10-10).
+    assert.doesNotMatch(bytes, /actual-reviewer|configured-reviewer|study-review-v1|配置 |审查意见供参考|不代表实证验证/);
   }
   assert.deepEqual((await f.conversion.download({ id: 'alice' }, f.original.id, 'pdf')).bytes, originalPdf.bytes);
   await Promise.all(f.records.map(record => f.callback(record))); await f.reconcile(); await f.worker.tick();

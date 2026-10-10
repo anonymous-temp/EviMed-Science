@@ -889,7 +889,6 @@ export function presentTrialTab(bundle) {
       rationale: text(decision?.rationale),
       recordedAt: decision ? zhTime(decision.createdAt, now) : null,
       options: designs.map((design) => ({ id: design.id, label: design.code, name: design.name, disabled: design.dominated })),
-      note: "平台不自动选定方案。",
     } : null,
     runRecord,
     forecasts: forecastRows,

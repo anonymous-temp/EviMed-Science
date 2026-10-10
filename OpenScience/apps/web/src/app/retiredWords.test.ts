@@ -85,6 +85,13 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["本卡由平台议程完成", "a card does not say that the platform's agenda made it"],
   ["证明哈希", "a card does not carry the evaluator's proof hash"],
   ["内部研究记录", "a card does not tell its reader what the platform keeps in its internal project"],
+  // 虚拟临床研究's package and pages (R35): the platform's hedges about its own reviews, tables and hash.
+  ["审查意见供参考", "a finished review carries no hedge about itself"],
+  ["不代表实证验证", "same"],
+  ["旧意见保留供参考", "same"],
+  ["不是手写的", "a results table does not vouch that its numbers are not typed"],
+  ["平台不自动选定方案", "the platform does not announce what it does not do; the form says what to write"],
+  ["不在内容哈希的范围内", "a document does not explain what its hash does and does not cover"],
   // 数据含义 (R34): who vouches for a meaning is the contract; on the page it is a fact's own line (「依据：AI 判断」), not a count and not a tag.
   ["模型推断", "the page says 「依据：AI 判断」 on a fact's own line; there is no count of inferred facts and no tag"],
   ["你已确认", "same"],

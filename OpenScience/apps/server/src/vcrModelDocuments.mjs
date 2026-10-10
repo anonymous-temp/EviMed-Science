@@ -750,8 +750,7 @@ export function modelPlanDocumentSections(model, reports) {
     }
   }
   /** @type {VcrDocumentSection[]} */
-  const sections = [{ id: "freeze", title: "冻结信息", blocks: [...freeze, ...(plan
-    ? [/** @type {VcrDocumentBlock} */ ({ type: "note", text: "各节正文的文字是冻结之后在导出时写的，不在内容哈希的范围内；哈希覆盖的是下面的登记表、评估表、方法和情景。" })] : [])] }];
+  const sections = [{ id: "freeze", title: "冻结信息", blocks: freeze }];
   sections.push(...planSections(content, prose, { withProse: true }));
   sections.push({ id: "attribution", title: "说明", blocks: [{ type: "note", text: VCR_MODEL_DOCUMENT_ATTRIBUTION_ZH }] });
   return sections;

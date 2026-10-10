@@ -1019,7 +1019,8 @@ describe("试验", () => {
     expect(within(drawer).getByLabelText("比较目标")).toHaveValue("在成功把握尽量高、样本量尽量少的目标下选哪个方案");
     expect(within(drawer).getByRole("radio", { name: "B" })).toBeChecked();
     expect(within(drawer).getByLabelText("选择理由")).toHaveValue("成功把握与样本量的折中；方案 C 周期更长。");
-    expect(within(drawer).getByText("平台不自动选定方案。")).toBeInTheDocument();
+    expect(within(drawer).getByText("先写比较目标，再选一个，并说明理由。")).toBeInTheDocument();
+    expect(drawer).not.toHaveTextContent(/不自动选定/);
     expect(within(drawer).getByText("上次记录于 今天 09:07")).toBeInTheDocument();
   });
 

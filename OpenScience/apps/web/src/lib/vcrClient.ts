@@ -276,7 +276,7 @@ export interface VcrRecruitTodo {
 export interface VcrReviewSummary {
   id: string; reviewerKind: "ai" | "human"; role: string; label: string; state: string;
   status: "queued" | "running" | "done" | "failed"; current: boolean;
-  by?: string | null; at?: string | null; note: string;
+  by?: string | null; at?: string | null; note?: string | null;
   /**
    * One sentence each (`fix`, or `message` where the reviewer wrote no fix) and, when the finding is about an object this study holds, the
    * way to it. The reviewer's path into the frozen snapshot and the JSON it quoted are the review's own provenance and are not sent.
