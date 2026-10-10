@@ -213,3 +213,19 @@ test('a repair that cannot reproduce its failure is deferred when its window has
  const row=await f.service.get('repair-parked');assert.equal(row.payload.status,'deferred');assert.equal(row.payload.reason,'repair-failure-reproduction-required');
  assert.deepEqual((await f.service.get('repair-opportunity')).payload.wakeConditions,['new-data','new-method','new-tool','new-model'],'a mission parked with no wake condition leaves the closed default');
 });
+test('a module whose best opportunity is parked inside its resource window takes the next-ranked one the week after',async()=>{
+ const {f,missions}=planner({tools:{enabled:true}},{callbacks:{acquireResource:async()=>({ready:false,reason:'pending',wakeConditions:['new-data']})}});
+ const opportunities=async plan=>(await Promise.all(plan.missions.map(id=>f.service.get(id)))).map(row=>row.payload.opportunityId);
+ await opportunity(missions,'availability','tools',{failures:60,prerequisites:['measured-execution-reference']});await opportunity(missions,'paper','tools',{failures:30});
+ const first=await missions.plan({week:'2026-10-05'});assert.deepEqual(await opportunities(first),['availability']);
+ const parked=await missions.run({missionId:first.missions[0]});assert.equal(parked.payload.status,'waiting_resource');
+ f.advance(WEEK);
+ const second=await missions.plan({week:'2026-10-12'});
+ assert.deepEqual(await opportunities(second),['paper'],'the parked opportunity holds the module');
+ const decision=(await f.service.get(second.missions[0])).payload.decisions.find(item=>item.policyField==='weights');
+ assert.deepEqual([decision.choice,decision.opportunities.map(item=>item.id)],['paper',['paper']],'the recorded choice names what could be chosen, so a replay under other weights sees the same options');
+ assert.equal((await f.service.get(first.missions[0])).payload.resourceAttempts,1,'planning does not run a parked mission again');
+ assert.deepEqual((await missions.plan({week:'2026-10-12'})).missions,[],'one mission per module and week');
+ f.advance(6*86400000);
+ assert.deepEqual((await missions.plan({week:'2026-10-19'})).missions,[],'every opportunity of the module has an open mission');
+});

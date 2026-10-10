@@ -171,19 +171,25 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const dossiers = (await service.dossiers())
       .filter(row => row.payload.opportunity === true && !['published', 'impossible', 'review'].includes(row.payload.status) && !row.payload.deferred);
     const created = [];
+    const busy = new Set(all.filter(row => !TERMINAL.has(row.payload.status)).map(row => `${row.payload.moduleId}:${row.payload.opportunityId}`));
     // Modules missing their weekly allocation go first; measured priority orders opportunities inside a module.
     enabled.sort((a,b) => Number(thisWeek.some(row => row.payload.moduleId === a)) - Number(thisWeek.some(row => row.payload.moduleId === b)));
     for (const moduleId of enabled) {
       const othersReady = enabled.some(id => id !== moduleId && dossiers.some(row => row.payload.moduleId === id && row.payload.status === 'planned'));
       const spent = thisWeek.filter(row => row.payload.moduleId === moduleId && row.payload.budget.category === 'research').reduce((sum,row) => sum + Number(row.payload.researchCostCny ?? row.payload.budget.reservedCny),0);
       if (othersReady && spent >= config.evolutionDailyBudgetCny * 7 * current.budgetShares.research * current.moduleMaximumShare) continue;
+      // The mission id below is the module's and the week's: a module that has had its mission this week waits for the next.
+      if (thisWeek.some(row => row.payload.moduleId === moduleId)) continue;
       const missionId=`evolution-mission-${evolutionKey(['weekly',moduleId,week])}`;
       const assigned=await policy.assignedPolicy(missionId);
-      const choices=dossiers.filter(row=>row.payload.moduleId===moduleId).map(evolutionPriorityFeatures);
+      const own=dossiers.filter(row=>row.payload.moduleId===moduleId);
+      // An opportunity whose mission is still open (running, or parked on a resource inside its window) is not offered again and does not hold the
+      // module: it takes the next-ranked one (research plan 6.3, 「转去做别的」). A module whose every opportunity is open waits; with none it audits its baseline.
+      const open=own.filter(row=>!busy.has(`${moduleId}:${row.id}`));
+      if(own.length&&!open.length)continue;
+      const choices=open.map(evolutionPriorityFeatures);
       const ranked=choices.sort((a,b)=>policyPriority(b,assigned.policy)-policyPriority(a,assigned.policy)||String(a.id).localeCompare(String(b.id)));
-      const selected=dossiers.find(row=>row.id===ranked[0]?.id);
-      if (!selected && thisWeek.some(row => row.payload.moduleId === moduleId)) continue;
-      if(selected&&all.some(row=>row.payload.opportunityId===selected.id&&row.payload.moduleId===moduleId&&(row.payload.week===week||!TERMINAL.has(row.payload.status))))continue;
+      const selected=open.find(row=>row.id===ranked[0]?.id);
       const pending = selected?.payload.prerequisites?.length > 0;
       const row = await create({ id:missionId, decisions:[{id:`${missionId}:priority`,policyField:'weights',opportunities:structuredClone(choices),choice:selected?.id ?? `baseline-${moduleId}`,at:service.now().toISOString()}], opportunityId: selected?.id ?? `baseline-${moduleId}`, moduleId, week,
         cycle: `${week}:${selected?.revision ?? 0}`, kind: pending ? 'acquire-resource' : selected ? 'research' : 'baseline-audit',
