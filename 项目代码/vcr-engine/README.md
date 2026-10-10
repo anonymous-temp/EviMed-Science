@@ -179,7 +179,7 @@ that snapshot and validates every job against them before a handler runs.
 | `comparator.entropy_balance` | ATT weights, balance, ESS, whole-pipeline stratified bootstrap; dispatches on the endpoint (weighted mean, binary, or weighted KM + RMST(τ)) | WeightIt, cobalt |
 | `comparator.propensity_weight` | logistic PS weights (overlap diagnostics) | WeightIt |
 | `comparator.rmst` | weighted KM, RMST(τ), the τ rule | survRM2 |
-| `comparator.maic` | anchored / unanchored MAIC, whole-pipeline bootstrap variance | independent BFGS on TSD 18's objective |
+| `comparator.maic` | anchored / unanchored MAIC, whole-pipeline bootstrap variance; unanchored, `aggregateOutcome` / `aggregateSe` are the aggregate trial's outcome on its own scale (a proportion for the logit link, a positive mean or rate for the log link) and the link and the delta method are applied to them as to the IPD mean; anchored, `aggregateEstimate` is already a link-scale contrast | independent BFGS on TSD 18's objective; a hand-computed logit and log contrast (N14c) |
 | `comparator.weighted_cox` | weighted Cox hazard ratio, robust variance and whole-pipeline bootstrap, the proportional-hazards test, the RMST difference beside it | `survival::coxph` on WeightIt weights; `tt()` and hand-written Breslow score tests; a known hazard ratio |
 | `comparator.covariate_sets` | the comparator analysis (entropy balance, logistic propensity weights or the doubly robust estimate) re-run under 2-8 pre-declared covariate sets: each set's estimate and verdict, the range | WeightIt weights per set; the analyses' own jobs bit for bit; a design with known confounders |
 | `comparator.aipw` | doubly robust (AIPW) estimate of the ATT for a single-arm study against an external control (binary or continuous): influence-function and whole-pipeline bootstrap standard errors | the formula on WeightIt weights and `glm` (1e-10); a simulation with an exactly integrated truth, four model specifications |
@@ -191,7 +191,7 @@ that snapshot and validates every job against them before a handler runs.
 | `design.grid` | designs × truths, one immutable run per cell, a long-format table | — |
 | `design.assurance` | power averaged over a design prior (normal on effect, on log HR, on the risk difference); for a group-sequential design the probability of crossing a boundary at any look, with the share at each look and a simulated check carrying its Monte-Carlo error (section 12) | numerical integration, a Monte-Carlo z-test; rpact's group-sequential power integrated over the prior (N47) |
 | `design.procova` | prognostic-adjustment sample size, three paths | the closed form, EMA 2022 |
-| `accrual.poisson_gamma` | per-site Poisson-Gamma accrual, staggered starts, screen failure, event target | closed form vs simulation, metafor-style REML for the pool (N27) |
+| `accrual.poisson_gamma` | per-site Poisson-Gamma accrual, staggered starts, screen failure, event target (counted among the patients still to enrol: the target less the sites' `enrolled`; a larger one is refused by name, N27e) | closed form vs simulation, metafor-style REML for the pool (N27) |
 | `matching.evaluate` | Kleene three-valued eligibility; a criterion that does not apply cannot exclude | the truth table (N29) |
 
 ### Robustness methods (2026-10-04)

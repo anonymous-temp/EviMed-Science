@@ -30,6 +30,61 @@ vcr_case("N10", c("AC-12", "AC-30"), function() {
                         analytic, want, r$rmst, r$se, abs(r$rmst - analytic) / r$se, n, m, d_pkg, d_se))
 })
 
+vcr_case("N10b", c("AC-12", "AC-30"), function() {
+  # The closed-form RMST of a Weibull arm against the integral of its own survival
+  # function, S(u) = exp(-(u/scale)^shape), by adaptive quadrature -- a reference that
+  # shares no code with `vcr_rmst_analytic`. The first version returned the partial
+  # expectation E[T; T <= tau] (gamma shape 1 + 1/k), which leaves out the censored mass
+  # tau * S(tau) and is wrong by exactly that much at every shape and tau, so the case
+  # also reports the size of that term. Shapes below and above 1, a tau inside and far
+  # beyond the scale, and the hazard-scaled arm the design estimand subtracts.
+  integral <- function(shape, scale, tau, hr = 1) {
+    stats::integrate(function(u) exp(-hr * (u / scale)^shape), 0, tau, rel.tol = 1e-12, subdivisions = 1000L)$value
+  }
+  grid <- list(list(1, 10, 12), list(1.5, 10, 12), list(0.8, 20, 24), list(2, 15, 30), list(3, 8, 5), list(0.5, 6, 40), list(1.5, 12, 18))
+  d <- vapply(grid, function(g) {
+    abs(vcr_rmst_analytic(list(kind = "weibull", shape = g[[1]], scale = g[[2]]), g[[3]]) - integral(g[[1]], g[[2]], g[[3]]))
+  }, numeric(1))
+  # the arm with hazard ratio 0.7, as `.vcr_scale_hazard` builds it, and the difference the estimand is
+  dist <- list(kind = "weibull", shape = 1.5, scale = 12)
+  treated <- .vcr_scale_hazard(dist, 0.7)
+  want_diff <- integral(1.5, 12, 18, hr = 0.7) - integral(1.5, 12, 18)
+  got_diff <- vcr_rmst_analytic(treated, 18) - vcr_rmst_analytic(dist, 18)
+  # shape 1 is the exponential distribution with rate 1/scale
+  d_exp <- abs(vcr_rmst_analytic(list(kind = "weibull", shape = 1, scale = 10), 12) - vcr_rmst_analytic(list(kind = "exponential", rate = 0.1), 12))
+  missing_mass <- vapply(grid, function(g) g[[3]] * exp(-(g[[3]] / g[[2]])^g[[1]]), numeric(1))
+  list(pass = max(d) < 1e-8 && abs(got_diff - want_diff) < 1e-8 && d_exp < 1e-10,
+       detail = sprintf("Weibull RMST vs the integral of S over %d (shape, scale, tau) triples: max |d| = %.2e (the old expression was short by tau*S(tau) = %.3f to %.3f); hazard ratio 0.7 at shape 1.5, scale 12, tau 18: difference %.8f vs %.8f; shape 1 equals the exponential to %.1e",
+                        length(grid), max(d), min(missing_mass), max(missing_mass), got_diff, want_diff, d_exp))
+})
+
+vcr_case("N10c", c("AC-12", "AC-28", "AC-30"), function() {
+  # design.simulate with the RMST analysis under a Weibull control arm. The estimand is the
+  # analytic RMST difference, so a wrong closed form shows as a bias that is not there:
+  # with a Weibull control (shape 1.5, scale 12), hazard ratio 0.7 and tau 18 the old
+  # expression put the estimand at -0.48 months against a true +1.63, and the job reported
+  # a bias of about +2.1 months and a coverage near 0 for an analysis that is right.
+  # Here nobody is censored before tau (accrual 12 + follow-up 24 > 18, no dropout), so the
+  # Kaplan-Meier area is the mean of min(T, tau) and the estimator is unbiased: the reported
+  # bias must be zero to within the Monte-Carlo error of the mean of the replicates (3.5 MCSE,
+  # a false alarm on 1 run in 2,000). The estimand is also held to the integral of S.
+  sc <- list(design = list(kind = "two_arm_fixed", nTreat = 100, nControl = 100), endpoint = list(type = "time_to_event"),
+             truth = list(hazardRatio = 0.7, controlDistribution = list(kind = "weibull", shape = 1.5, scale = 12)),
+             analysis = list(method = "rmst", tau = 18, alpha = 0.025, sided = 1),
+             accrual = list(kind = "uniform", duration = 12, followup = 24), performance = list("bias", "coverage"))
+  r <- vcr_test_run(vcr_test_job("design.simulate", sc, seed = 1010L, replicates = 5000L, cores = VCR_TEST_CORES, job_id = "job_n10c"))
+  integral <- function(hr) stats::integrate(function(u) exp(-hr * (u / 12)^1.5), 0, 18, rel.tol = 1e-12, subdivisions = 1000L)$value
+  truth <- integral(0.7) - integral(1)
+  bias <- vcr_get_measure(r, "bias"); cover <- vcr_get_measure(r, "coverage")
+  z <- if (is.null(bias)) NA_real_ else bias$value / bias$mcse
+  ok <- identical(r$status, "succeeded") && !is.null(bias) && !is.null(cover) && abs(r$diagnostics$estimand - truth) < 1e-8 &&
+    is.finite(z) && abs(z) <= 3.5 && abs(cover$value - 0.95) <= 0.02
+  list(pass = ok,
+       detail = sprintf("Weibull control, HR 0.7, tau 18, %d replicates: estimand %.6f (integral of S %.6f); bias %.4f (MCSE %.4f, %.2f MCSE from 0); coverage %.4f (MCSE %.4f)",
+                        r$diagnostics$replicatesCompleted %||% NA_integer_, r$diagnostics$estimand %||% NA_real_, truth,
+                        bias$value %||% NA_real_, bias$mcse %||% NA_real_, z, cover$value %||% NA_real_, cover$mcse %||% NA_real_))
+})
+
 vcr_case("N11", c("AC-12", "AC-07"), function() {
   # tau past the shortest arm's longest follow-up must be refused by name,
   # and the refusal must carry the largest usable tau.

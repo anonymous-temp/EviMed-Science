@@ -139,9 +139,12 @@ vcr_rmst_analytic <- function(dist, tau) {
     return((1 - exp(-dist$rate * tau)) / dist$rate)
   }
   if (identical(kind, "weibull")) {
-    # E[min(T, tau)] = scale * gamma(1 + 1/shape) * pgamma((tau/scale)^shape, 1 + 1/shape)
+    # RMST = the integral of S(u) = exp(-(u/scale)^shape) over [0, tau]; substituting x = (u/scale)^shape
+    # gives scale * gamma(1 + 1/shape) * pgamma((tau/scale)^shape, 1/shape). The shape parameter is
+    # 1/shape, not 1 + 1/shape: the latter is the partial expectation E[T; T <= tau] and leaves out the
+    # censored mass tau * S(tau) that E[min(T, tau)] carries (N10b).
     k <- dist$shape; b <- dist$scale
-    return(b * gamma(1 + 1 / k) * stats::pgamma((tau / b)^k, 1 + 1 / k, lower.tail = TRUE))
+    return(b * gamma(1 + 1 / k) * stats::pgamma((tau / b)^k, 1 / k, lower.tail = TRUE))
   }
   if (identical(kind, "piecewise")) {
     breaks <- c(0, dist$breaks, Inf)

@@ -103,21 +103,53 @@ vcr_maic_anchored <- function(ipd, X, targets, agd_estimate, agd_se,
        interval = c(est - qnorm(0.975) * se, est + qnorm(0.975) * se))
 }
 
+#' The link function of a MAIC outcome and its derivative.
+.vcr_maic_link <- function(link) {
+  list(g = switch(link, identity = function(p) p, log = log, logit = stats::qlogis),
+       gp = switch(link, identity = function(p) 1, log = function(p) 1 / p, logit = function(p) 1 / (p * (1 - p))))
+}
+
+#' Is a level inside the link's domain: a proportion strictly between 0 and 1 for the logit, positive for the log, anything for the identity.
+.vcr_maic_in_domain <- function(link, level) {
+  is.finite(level) && switch(link, identity = TRUE, log = level > 0, logit = level > 0 && level < 1)
+}
+
 #' Unanchored MAIC: no common comparator, so every prognostic factor *and*
 #' every effect modifier must be matched. Always capped at `limited`.
+#'
+#' `agd_outcome` and `agd_se` are the aggregate trial's outcome and its standard
+#' error on the outcome's OWN scale (a proportion for the logit link, a positive
+#' mean or rate for the log link), the scale the IPD mean is on. The link is
+#' applied to both levels and the delta method carries both standard errors to the
+#' link scale (`se * g'(level)`), so the estimate is g(IPD level) - g(AgD level).
+#' The first version subtracted the untransformed aggregate outcome, which is
+#' only right on the identity link: logit(0.532) - 0.42 where the contrast is
+#' logit(0.532) - logit(0.42) (the sign flipped), and an aggregate error of 0.05
+#' where the delta method gives 0.205 (N14c). A level outside the link's domain
+#' is refused by name, never turned into a NaN.
 vcr_maic_unanchored <- function(ipd_y, X, targets, agd_outcome, agd_se,
                                 link = c("identity", "log", "logit"), tol = 1e-12, bootstrap = NULL) {
   link <- match.arg(link)
+  if (!.vcr_maic_in_domain(link, agd_outcome)) {
+    vcr_abort("scenario_value_invalid", "scenario.aggregateOutcome",
+              if (identical(link, "logit")) "On the logit link the aggregate outcome is a proportion strictly between 0 and 1, on its own scale (not log-odds)."
+              else if (identical(link, "log")) "On the log link the aggregate outcome is positive, on its own scale (not its log)."
+              else "The aggregate outcome is a finite number.")
+  }
   w <- vcr_maic_weights(X, targets, tol = tol)
   if (is.null(w$weights)) return(c(w, list(estimate = NULL)))
   mu <- stats::weighted.mean(ipd_y, w$weights)
+  if (!.vcr_maic_in_domain(link, mu)) {
+    vcr_abort("scenario_value_invalid", "scenario.outcomeColumn",
+              sprintf("The weighted mean of the outcome (%s) is outside the %s link's domain; the contrast has no value.", format(mu, digits = 6), link))
+  }
   ww <- w$weights / sum(w$weights)
   var_mu <- sum(ww^2 * (ipd_y - mu)^2) * length(ipd_y) / max(length(ipd_y) - 1, 1)
-  g <- switch(link, identity = function(p) p, log = log, logit = stats::qlogis)
-  gp <- switch(link, identity = function(p) 1, log = function(p) 1 / p,
-               logit = function(p) 1 / (p * (1 - p)))
-  est <- g(mu) - agd_outcome
-  se <- sqrt(var_mu * gp(mu)^2 + agd_se^2)
+  lk <- .vcr_maic_link(link); g <- lk$g; gp <- lk$gp
+  agd_link <- g(agd_outcome)
+  agd_link_se <- agd_se * abs(gp(agd_outcome))
+  est <- g(mu) - agd_link
+  se <- sqrt(var_mu * gp(mu)^2 + agd_link_se^2)
   boot <- NULL
   if (!is.null(bootstrap)) {
     fn <- function(idx) {
@@ -125,7 +157,7 @@ vcr_maic_unanchored <- function(ipd_y, X, targets, agd_outcome, agd_se,
       if (is.null(wb$weights)) return(NA_real_)
       g(stats::weighted.mean(ipd_y[idx], wb$weights))
     }
-    r <- .vcr_maic_bootstrap(fn, nrow(X), NULL, bootstrap, agd_se)
+    r <- .vcr_maic_bootstrap(fn, nrow(X), NULL, bootstrap, agd_link_se)
     se <- r$se; boot <- r$bootstrap
   }
   list(estimate = est, se = se, link = link,

@@ -60,7 +60,7 @@
 #' the 5,000-replicate floor instead of 20,000, and labels its measure `power`
 #' instead of `type_one_error`. Both errors are silent and both survive review.
 vcr_plan_replicates <- function(scenario, requested = NULL, estimand = NULL) {
-  flag <- scenario$truth$null
+  flag <- scenario$truth[["null"]]
   is_null_case <- if (is.logical(flag) && length(flag) == 1L && !is.na(flag)) flag
                   else if (!is.null(estimand) && length(estimand) == 1L && is.finite(estimand)) abs(estimand) < 1e-12
                   else vcr_is_null_scenario(scenario)
@@ -254,8 +254,8 @@ vcr_scenario_runner <- function(scenario) {
   }
 
   if (identical(endpoint, "binary")) {
-    p0 <- vcr_scalar(truth$controlRate, NULL)
-    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth$treatmentRate, NULL),
+    p0 <- vcr_scalar(truth[["controlRate"]], NULL)
+    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL),
                                     vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
     cl <- vcr_scalar(truth$covariateLogit, 0)
     estimand <- if (identical(method, "logistic")) log((p1 / (1 - p1)) / (p0 / (1 - p0))) else p1 - p0
@@ -319,6 +319,11 @@ vcr_dist_normalize <- function(d) {
   out <- d
   for (k in c("rate", "shape", "scale")) if (!is.null(d[[k]])) out[[k]] <- vcr_scalar(d[[k]])
   for (k in c("breaks", "rates")) if (!is.null(d[[k]])) out[[k]] <- vcr_num(d[[k]])
+  # one rate per interval: a shorter list gave every patient an NA event time (the validator refuses it first)
+  if (identical(out[["kind"]], "piecewise") && length(out[["rates"]]) != length(out[["breaks"]]) + 1L) {
+    vcr_abort("scenario_value_invalid", "scenario.truth.controlDistribution.rates",
+              "A piecewise distribution has one rate per interval: one more than it has breaks.")
+  }
   out
 }
 
@@ -624,8 +629,8 @@ vcr_analytic_check <- function(scenario, measures) {
                              else vcr_power_means(vcr_scalar(truth$effect), vcr_scalar(truth$sd, 1), n1, n0, alpha, sided))
   }
   if (identical(endpoint, "binary") && fixed && !identical(method, "logistic")) {
-    p0 <- vcr_scalar(truth$controlRate)
-    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth$treatmentRate, NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
+    p0 <- vcr_scalar(truth[["controlRate"]])
+    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
     analytic <- list(name = if (is_null) "type_one_error" else "power",
                      value = if (is_null) alpha else vcr_power_proportions(p0, p1, n1, n0, alpha, sided))
   }
@@ -660,8 +665,8 @@ vcr_analytic_check <- function(scenario, measures) {
   mcse <- sim[[1]]$mcse
   # An exact closed form is held to the simulation's own error; an approximation is
   # held to that error plus the bias it is documented to carry, and the result says so.
-  bias <- if (identical(analytic$basis, "asymptotic_logrank_score")) VCR_LOGRANK_APPROXIMATION_BIAS
-          else if (isTRUE(analytic$basis %in% c("first_order_one_sample_logrank", "asymptotic_one_sample_logrank"))) VCR_ONE_SAMPLE_LOGRANK_APPROXIMATION_BIAS else 0
+  bias <- if (identical(analytic[["basis"]], "asymptotic_logrank_score")) VCR_LOGRANK_APPROXIMATION_BIAS
+          else if (isTRUE(analytic[["basis"]] %in% c("first_order_one_sample_logrank", "asymptotic_one_sample_logrank"))) VCR_ONE_SAMPLE_LOGRANK_APPROXIMATION_BIAS else 0
   tolerance <- 3 * mcse + bias
   c(analytic, list(simulated = sim[[1]]$value, difference = d, mcse = mcse,
                    differenceInMcse = if (mcse > 0) d / mcse else NA_real_,
@@ -669,6 +674,24 @@ vcr_analytic_check <- function(scenario, measures) {
                    approximationBias = bias, tolerance = tolerance, withinTolerance = abs(d) <= tolerance,
                    toleranceBasis = if (bias > 0) "three Monte-Carlo standard errors plus the documented bias of a first-order approximation"
                                     else "three Monte-Carlo standard errors"))
+}
+
+#' The scenario one cell of a grid runs: the base with the cell's `design` and
+#' `truth` keys laid over it, key by key. A key the cell states REPLACES the
+#' base's whole value, an array and an object included -- the way the domain's
+#' `checkGrid` and the validator's `.vcrp_merge` (the very function used here)
+#' read a cell, so the cell that was validated is the cell that runs. The first
+#' version used `utils::modifyList`, which keeps the base when both sides are
+#' unnamed lists, i.e. JSON arrays: a cell's `informationRates`, `controlRates`,
+#' `treatmentRates` or a piecewise `controlDistribution`'s `breaks` / `rates` were
+#' dropped while the cell record still showed them (N06e). `[[` never matches a
+#' key by prefix: `design` is not `designs`.
+vcr_grid_cell_scenario <- function(base_scenario, design_override, truth_override) {
+  sc <- base_scenario
+  sc[["designs"]] <- NULL; sc[["truths"]] <- NULL
+  sc[["design"]] <- .vcrp_merge(base_scenario[["design"]], design_override)
+  sc[["truth"]] <- .vcrp_merge(base_scenario[["truth"]], truth_override)
+  sc
 }
 
 #' A design grid: designs x truth scenarios, every cell one immutable run.
@@ -684,11 +707,7 @@ vcr_design_grid <- function(base_scenario, designs, truths, seed, replicates = N
   cpu0 <- vcr_cpu_seconds()
   for (di in seq_along(designs)) for (ti in seq_along(truths)) {
     k <- k + 1L
-    override <- list(design = designs[[di]], truth = truths[[ti]])
-    sc <- base_scenario
-    sc$designs <- NULL; sc$truths <- NULL
-    sc$design <- utils::modifyList(sc$design %||% list(), override$design)
-    sc$truth <- utils::modifyList(sc$truth %||% list(), override$truth)
+    sc <- vcr_grid_cell_scenario(base_scenario, designs[[di]], truths[[ti]])
     # Each cell gets its own seed derived from the job seed and the cell index,
     # so adding a cell never changes another cell's numbers.
     cell_seed <- as.integer((as.numeric(seed) + k * 7919) %% 2147483647)

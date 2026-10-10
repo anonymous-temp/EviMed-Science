@@ -234,6 +234,20 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("one of uniform|piecewise; optional; default \"uniform\"", simulated["accrual.kind"])
         self.assertIn("read only when accrual.kind is piecewise", simulated["accrual.breaks"])
         self.assertNotIn("accrual.kind is", simulated["accrual.followup"], "shared by both variants")
+        # A piecewise profile states its tail and has one rate per interval, and the shape says both.
+        self.assertIn("accrual.tail: number >0 (time units); required once accrual is given", simulated["accrual.tail"])
+        rules = " ".join(vcr_platform.shape({"kind": "design_simulation"})["data"]["rules"])
+        self.assertIn("accrual.rates lists 1 more value than accrual.breaks (when endpoint.type is time_to_event and accrual.kind is piecewise", rules)
+        self.assertIn("truth.controlDistribution.rates lists 1 more value than truth.controlDistribution.breaks", rules)
+
+    def test_shape_of_the_unanchored_maic_says_which_scale_the_aggregate_outcome_is_on(self):
+        data = vcr_platform.shape({"kind": "maic_comparator"})["data"]
+        lines = {line.split(":", 1)[0]: line for line in data["keys"]}
+        self.assertIn("(the outcome's own scale)", lines["aggregateOutcome"])
+        self.assertIn("(link scale)", lines["aggregateEstimate"])
+        notes = " ".join(data["notes"])
+        self.assertIn("on the outcome's OWN scale (a proportion for link logit, a positive mean or rate for link log", notes)
+        self.assertIn("already the aggregate trial's contrast", notes)
 
     def test_shape_with_no_kind_lists_the_kinds_and_where_each_object_looks_its_shape_up(self):
         answer = vcr_platform.shape({})
@@ -256,6 +270,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
         accrual = vcr_platform.shape({"kind": "accrual_forecast"})["data"]
         self.assertEqual(accrual["runStates"], ["target", "eventTarget", "eventHazard", "byTimes"])
         self.assertEqual([line.split(":", 1)[0] for line in accrual["keys"]], ["target", "eventTarget", "eventHazard", "byTimes"])
+        # An event target is counted among the patients still to enrol, and the shape says what happens beyond them.
+        self.assertTrue(any("eventTarget counts events among the patients still to enrol" in note and "scenario_value_invalid at eventTarget" in note for note in accrual["notes"]))
 
     def test_read_says_what_matching_returns(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_read"]["description"]

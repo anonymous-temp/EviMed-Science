@@ -852,6 +852,90 @@
       }
     },
     {
+      "name": "maic_comparator on the log link, a positive mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "continuous"
+          },
+          "aggregateOutcome": 12,
+          "aggregateSe": 1.5,
+          "link": "log",
+          "outcomeColumn": "response"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "maic_comparator on the identity link, a negative mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "continuous"
+          },
+          "aggregateOutcome": -3.5,
+          "aggregateSe": 0.5,
+          "link": "identity",
+          "outcomeColumn": "response"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
       "name": "maic_comparator #17",
       "job": {
         "jobId": "job_1",
@@ -1208,6 +1292,7 @@
               10,
               20
             ],
+            "tail": 6,
             "followup": 6
           },
           "performance": []
@@ -1535,6 +1620,51 @@
           ],
           "target": 120,
           "eventTarget": 80,
+          "eventHazard": 0.05,
+          "screenFailure": {
+            "alpha": 2,
+            "beta": 6
+          },
+          "byTimes": [
+            6,
+            12,
+            18
+          ]
+        },
+        "inputs": [],
+        "replicates": 20000
+      }
+    },
+    {
+      "name": "accrual forecast with an event target at the patients still to enrol",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "accrual_forecast",
+        "method": "accrual.poisson_gamma",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "sites": [
+            {
+              "id": "site_a",
+              "alpha": 2,
+              "beta": 4,
+              "startTime": 0
+            },
+            {
+              "id": "site_b",
+              "alpha": 3,
+              "beta": 5,
+              "startTime": 3,
+              "enrolled": 4,
+              "exposureTime": 5
+            }
+          ],
+          "target": 120,
+          "eventTarget": 116,
           "eventHazard": 0.05,
           "screenFailure": {
             "alpha": 2,
@@ -5765,7 +5895,8 @@
             "kind": "piecewise",
             "breaks": [
               3
-            ]
+            ],
+            "tail": 6
           },
           "performance": [
             "power",
@@ -5795,6 +5926,307 @@
       },
       "expected": [
         "scenario_field_missing@scenario.accrual.rates"
+      ]
+    },
+    {
+      "name": "piecewise accrual without a tail",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "piecewise",
+            "breaks": [
+              3,
+              6
+            ],
+            "rates": [
+              5,
+              10,
+              20
+            ],
+            "followup": 6
+          },
+          "performance": [
+            "power",
+            "bias",
+            "coverage"
+          ],
+          "targetMcse": 0.005,
+          "costs": {
+            "perPatient": 12000,
+            "perSite": 50000,
+            "perMonth": 8000,
+            "sites": 20
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_dropout@2",
+            "hash": null,
+            "value": {
+              "key": "dropout",
+              "pointValue": 0.1
+            }
+          }
+        ],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_field_missing@scenario.accrual.tail"
+      ]
+    },
+    {
+      "name": "piecewise accrual with a rate missing",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "piecewise",
+            "breaks": [
+              3,
+              6
+            ],
+            "rates": [
+              5,
+              10
+            ],
+            "tail": 6,
+            "followup": 6
+          },
+          "performance": [
+            "power",
+            "bias",
+            "coverage"
+          ],
+          "targetMcse": 0.005,
+          "costs": {
+            "perPatient": 12000,
+            "perSite": 50000,
+            "perMonth": 8000,
+            "sites": 20
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_dropout@2",
+            "hash": null,
+            "value": {
+              "key": "dropout",
+              "pointValue": 0.1
+            }
+          }
+        ],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.accrual.rates"
+      ]
+    },
+    {
+      "name": "piecewise accrual with a rate too many",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "piecewise",
+            "breaks": [
+              3,
+              6
+            ],
+            "rates": [
+              5,
+              10,
+              20,
+              30
+            ],
+            "tail": 6,
+            "followup": 6
+          },
+          "performance": [
+            "power",
+            "bias",
+            "coverage"
+          ],
+          "targetMcse": 0.005,
+          "costs": {
+            "perPatient": 12000,
+            "perSite": 50000,
+            "perMonth": 8000,
+            "sites": 20
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_dropout@2",
+            "hash": null,
+            "value": {
+              "key": "dropout",
+              "pointValue": 0.1
+            }
+          }
+        ],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.accrual.rates"
+      ]
+    },
+    {
+      "name": "piecewise control distribution with a rate missing",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlDistribution": {
+              "kind": "piecewise",
+              "breaks": [
+                6,
+                12
+              ],
+              "rates": [
+                0.1,
+                0.05
+              ]
+            }
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "piecewise",
+            "breaks": [
+              3,
+              6
+            ],
+            "rates": [
+              5,
+              10,
+              20
+            ],
+            "tail": 6,
+            "followup": 6
+          },
+          "performance": [
+            "power",
+            "bias",
+            "coverage"
+          ],
+          "targetMcse": 0.005,
+          "costs": {
+            "perPatient": 12000,
+            "perSite": 50000,
+            "perMonth": 8000,
+            "sites": 20
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_dropout@2",
+            "hash": null,
+            "value": {
+              "key": "dropout",
+              "pointValue": 0.1
+            }
+          }
+        ],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.controlDistribution.rates"
       ]
     },
     {
@@ -6016,6 +6448,7 @@
               10,
               20
             ],
+            "tail": 6,
             "followup": 6
           },
           "performance": []
@@ -6072,6 +6505,7 @@
               10,
               20
             ],
+            "tail": 6,
             "followup": 6
           },
           "performance": []
@@ -6123,6 +6557,7 @@
               10,
               20
             ],
+            "tail": 6,
             "followup": 6
           },
           "performance": []
@@ -6247,6 +6682,7 @@
               10,
               20
             ],
+            "tail": 6,
             "followup": 6
           },
           "performance": []
@@ -9408,6 +9844,141 @@
       ]
     },
     {
+      "name": "an unanchored MAIC on the logit link with an aggregate outcome that is not a proportion",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "binary"
+          },
+          "aggregateSe": 0.05,
+          "link": "logit",
+          "outcomeColumn": "response",
+          "aggregateOutcome": 1.2
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.aggregateOutcome"
+      ]
+    },
+    {
+      "name": "an unanchored MAIC on the logit link with an aggregate outcome of zero",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "binary"
+          },
+          "aggregateSe": 0.05,
+          "link": "logit",
+          "outcomeColumn": "response",
+          "aggregateOutcome": 0
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.aggregateOutcome"
+      ]
+    },
+    {
+      "name": "an unanchored MAIC on the log link with a non-positive aggregate outcome",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_comparator",
+        "method": "comparator.maic",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "anchored": false,
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "binary"
+          },
+          "aggregateSe": 0.05,
+          "link": "log",
+          "outcomeColumn": "response",
+          "aggregateOutcome": -0.5
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.aggregateOutcome"
+      ]
+    },
+    {
       "name": "an anchored MAIC with an unanchored key",
       "job": {
         "jobId": "job_1",
@@ -10226,6 +10797,100 @@
       },
       "expected": [
         "scenario_field_unknown@scenario.replicates"
+      ]
+    },
+    {
+      "name": "an event target beyond the patients still to enrol",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "accrual_forecast",
+        "method": "accrual.poisson_gamma",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "sites": [
+            {
+              "id": "site_a",
+              "alpha": 2,
+              "beta": 4,
+              "startTime": 0
+            },
+            {
+              "id": "site_b",
+              "alpha": 3,
+              "beta": 5,
+              "startTime": 3,
+              "enrolled": 4,
+              "exposureTime": 5
+            }
+          ],
+          "target": 120,
+          "eventTarget": 117,
+          "eventHazard": 0.05,
+          "screenFailure": {
+            "alpha": 2,
+            "beta": 6
+          },
+          "byTimes": [
+            6,
+            12,
+            18
+          ]
+        },
+        "inputs": [],
+        "replicates": 20000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.eventTarget"
+      ]
+    },
+    {
+      "name": "an event target beyond the enrolment target with nothing enrolled",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "accrual_forecast",
+        "method": "accrual.poisson_gamma",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "sites": [
+            {
+              "id": "site_a",
+              "alpha": 2,
+              "beta": 4,
+              "startTime": 0
+            },
+            {
+              "id": "site_b",
+              "alpha": 3,
+              "beta": 5,
+              "startTime": 3
+            }
+          ],
+          "target": 120,
+          "eventTarget": 121,
+          "eventHazard": 0.05,
+          "screenFailure": {
+            "alpha": 2,
+            "beta": 6
+          },
+          "byTimes": [
+            6,
+            12,
+            18
+          ]
+        },
+        "inputs": [],
+        "replicates": 20000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.eventTarget"
       ]
     },
     {
@@ -13055,6 +13720,49 @@
       },
       "expected": [
         "scenario_value_invalid@scenario.design.n1"
+      ]
+    },
+    {
+      "name": "Simon without its total sample size",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "simon_two_stage",
+            "n1": 10,
+            "r1": 1,
+            "r": 5
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3,
+            "responseRate": 0.1
+          },
+          "analysis": {
+            "method": "simon_boundary",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design.n"
       ]
     },
     {

@@ -125,6 +125,26 @@ vcr_case("N19b", c("AC-07", "AC-30"), function() {
                         identical(conf$status, "failed"), identical(conf_ok$status, "succeeded"), identical(ln_bad$status, "failed")))
 })
 
+vcr_case("N19c", c("AC-07", "AC-04"), function() {
+  # The label a design prior carries is the one it states. `prior$basis` read `basisOverride` when `basis` was absent (R's `$`
+  # matches a name by its prefix when exactly one name begins with it), so a prior that only says "I know this is a confidence
+  # interval, that is deliberate" (basisOverride = true, the basis left at its default) was labelled "TRUE". The default is the
+  # prediction distribution; a confidence interval needs its override; and an override on its own changes neither.
+  sc <- function(prior) list(design = list(nTreat = 200, nControl = 200), endpoint = list(type = "continuous"), truth = list(sd = 1),
+                             designPrior = prior, analysis = list(alpha = 0.025))
+  run <- function(prior, tag) vcr_test_run(vcr_test_job("design.assurance", sc(prior), seed = 1L, job_id = paste0("job_n19c_", tag)))
+  plain <- run(list(mean = 0.3, sd = 0.15), "p"); only_override <- run(list(mean = 0.3, sd = 0.15, basisOverride = TRUE), "o")
+  deliberate <- run(list(mean = 0.3, sd = 0.15, basis = "confidence", basisOverride = TRUE), "c"); refused <- run(list(mean = 0.3, sd = 0.15, basis = "confidence"), "r")
+  assurance <- function(r) vcr_measure_value(r, "assurance")
+  ok <- identical(plain$diagnostics$priorBasis, "prediction") && identical(only_override$diagnostics$priorBasis, "prediction") &&
+    identical(deliberate$diagnostics$priorBasis, "confidence") && identical(refused$status, "failed") &&
+    identical(assurance(plain), assurance(only_override))
+  list(pass = ok,
+       detail = sprintf("basis left out -> '%s'; basisOverride alone -> '%s' (same assurance %.6f vs %.6f); basis 'confidence' with the override -> '%s'; without it -> %s (%s)",
+                        plain$diagnostics$priorBasis, only_override$diagnostics$priorBasis, assurance(plain), assurance(only_override),
+                        deliberate$diagnostics$priorBasis, refused$status, paste(vcr_test_issue_codes(refused), collapse = ",")))
+})
+
 vcr_case("N20", c("AC-10", "AC-28"), function() {
   # The operating characteristics of a borrowing design over a grid of
   # control-rate drift (plan 5.3: type-I error and power in scenarios where the

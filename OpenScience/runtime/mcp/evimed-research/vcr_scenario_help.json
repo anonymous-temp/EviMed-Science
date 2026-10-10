@@ -431,14 +431,32 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
         }
       ],
       "rules": [
+        {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
         {"kind":"exactlyOne","keys":["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],"when":[{"path":"endpoint.type","in":["binary"]}]},
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        }
       ],
       "examples": [{"label":"a continuous endpoint","scenario":{"design":{"nTreat":60,"nControl":60},"endpoint":{"type":"continuous"},"truth":{"effect":-0.5,"sd":1.2}}}]
     },
@@ -584,14 +602,32 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
         }
       ],
       "rules": [
+        {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
         {"kind":"exactlyOne","keys":["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],"when":[{"path":"endpoint.type","in":["binary"]}]},
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        }
       ],
       "examples": [{"label":"a binary endpoint","scenario":{"design":{"nTreat":60,"nControl":60},"endpoint":{"type":"binary"},"truth":{"controlRate":0.3,"oddsRatio":1.5}}}]
     },
@@ -737,14 +773,32 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
         }
       ],
       "rules": [
+        {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
         {"kind":"exactlyOne","keys":["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],"when":[{"path":"endpoint.type","in":["binary"]}]},
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        }
       ],
       "examples": [
         {
@@ -880,6 +934,9 @@
     },
     "comparator.maic": {
       "endpoints": ["continuous","binary","time_to_event"],
+      "notes": [
+        "Scales. Unanchored: aggregateOutcome and aggregateSe are the aggregate trial's outcome and its standard error on the outcome's OWN scale (a proportion for link logit, a positive mean or rate for link log, any number for identity), the scale of the outcomeColumn's mean; the engine applies the link to the level and the delta method to the standard error. A level outside the link's domain (a proportion not strictly between 0 and 1 on logit, a mean not above 0 on log) is refused (scenario_value_invalid). Anchored: aggregateEstimate and aggregateSe are already the aggregate trial's contrast and its standard error on the link scale (a log odds ratio, a log risk ratio, a mean difference)."
+      ],
       "rows": [
         {"path":"covariates","type":"list","count":{"min":1,"max":100},"items":{"type":"string","maxLength":64,"role":"column"},"unique":true,"required":true},
         {"path":"targets","type":"map","of":{"type":"number"},"keysFrom":"covariates","count":{"min":1,"max":100},"required":true},
@@ -887,8 +944,8 @@
         {"path":"endpoint","type":"object"},
         {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true,"within":"endpoint"},
         {"path":"anchored","type":"boolean","default":false},
-        {"path":"aggregateEstimate","type":"number","required":true,"when":[{"path":"anchored","in":["true"]}]},
-        {"path":"aggregateOutcome","type":"number","required":true,"when":[{"path":"anchored","notIn":["true"]}]},
+        {"path":"aggregateEstimate","type":"number","unit":"link scale","required":true,"when":[{"path":"anchored","in":["true"]}]},
+        {"path":"aggregateOutcome","type":"number","unit":"the outcome's own scale","required":true,"when":[{"path":"anchored","notIn":["true"]}]},
         {"path":"aggregateSe","type":"number","gt":0,"required":true},
         {"path":"outcomeColumn","type":"string","maxLength":64,"role":"column","default":"y","when":[{"path":"anchored","notIn":["true"]}]},
         {"path":"link","type":"string","values":["identity","log","logit"],"default":"identity"},
@@ -896,7 +953,7 @@
       ],
       "examples": [
         {
-          "label": "an unanchored indirect comparison on a binary outcome",
+          "label": "an unanchored indirect comparison on a binary outcome: the aggregate trial's response rate is 0.42 (standard error 0.05), on the logit link",
           "scenario": {
             "covariates": ["age","male"],
             "targets": {"age":60,"male":0.5},
@@ -1139,6 +1196,14 @@
         }
       ],
       "rules": [
+        {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
         {
           "kind": "exactlyOne",
           "keys": ["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],
@@ -1474,6 +1539,8 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
@@ -1494,11 +1561,27 @@
       ],
       "rules": [
         {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
+        {
           "kind": "exactlyOne",
           "keys": ["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],
           "when": [{"path":"endpoint.type","in":["binary"]},{"path":"design.kind","notIn":["single_arm","single_arm_external","simon_two_stage"]}]
         },
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        }
       ],
       "examples": [
         {
@@ -1857,6 +1940,8 @@
           "path": "accrual.tail",
           "type": "number",
           "gt": 0,
+          "unit": "time units",
+          "required": true,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
@@ -1957,11 +2042,34 @@
       ],
       "rules": [
         {
+          "kind": "lengthRule",
+          "key": "truth.controlDistribution.rates",
+          "of": "truth.controlDistribution.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"truth.controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        },
+        {
           "kind": "exactlyOne",
           "keys": ["truth.treatmentRate","truth.riskDifference","truth.oddsRatio"],
           "when": [{"path":"endpoint.type","in":["binary"]},{"path":"design.kind","notIn":["single_arm","single_arm_external","simon_two_stage"]}]
         },
-        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]}
+        {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "lengthRule",
+          "key": "accrual.rates",
+          "of": "accrual.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
+        },
+        {
+          "kind": "lengthRule",
+          "key": "truths[].controlDistribution.rates",
+          "of": "truths[].controlDistribution.breaks",
+          "plus": 1,
+          "variant": {"on":"truths[].controlDistribution.kind","is":["piecewise"],"default":"exponential"}
+        }
       ],
       "examples": [
         {
@@ -2087,6 +2195,9 @@
     },
     "accrual.poisson_gamma": {
       "endpoints": [],
+      "notes": [
+        "eventTarget counts events among the patients still to enrol: the target less the patients already enrolled (the sum of sites[].enrolled, which the platform fills from the study's ledger). The events of patients already enrolled are not observed or simulated, so an eventTarget above that number is refused (scenario_value_invalid at eventTarget); write it within the patients still to enrol, and eventHazard with it."
+      ],
       "rows": [
         {"path":"sites","type":"list","count":{"min":1,"max":5000},"items":{"type":"object"},"required":true},
         {"path":"sites[].id","type":"string","minLength":1,"maxLength":80,"required":true},

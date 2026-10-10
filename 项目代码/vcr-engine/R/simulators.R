@@ -278,7 +278,18 @@ vcr_sim_tte <- function(n_treat, n_control, control_dist, hazard_ratio,
   if (identical(kind, "piecewise")) {
     breaks <- c(0, vcr_num(accrual$breaks))
     rates <- vcr_num(accrual$rates)
-    widths <- diff(c(breaks, breaks[length(breaks)] + (vcr_scalar(accrual$tail, 1e6))))
+    # The last interval is open in the profile, so the length of the enrolment period is `tail`, and it is stated: it used
+    # to default to 1,000,000 time units, which put every patient far outside any follow-up and made a trial look complete.
+    # One rate per interval: a shorter list used to be recycled with a warning. (The validator refuses both first; these
+    # are the second line, for the simulators called on their own.)
+    tail <- vcr_scalar(accrual[["tail"]], NULL)
+    if (is.null(tail) || !is.finite(tail) || !(tail > 0)) {
+      vcr_abort("scenario_field_missing", "scenario.accrual.tail", "A piecewise accrual states the length of its last interval (tail): there is no default.")
+    }
+    if (length(rates) != length(breaks)) {
+      vcr_abort("scenario_value_invalid", "scenario.accrual.rates", "A piecewise accrual has one rate per interval: one more than it has breaks.")
+    }
+    widths <- diff(c(breaks, breaks[length(breaks)] + tail))
     mass <- rates * widths
     p <- mass / sum(mass)
     cum <- c(0, cumsum(p))

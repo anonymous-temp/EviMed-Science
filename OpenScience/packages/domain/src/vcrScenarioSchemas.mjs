@@ -18,7 +18,7 @@
  *   the two verdicts equal on a fixture set of jobs. Nothing here is a
  *   function: a `when` is `{ path, in | notIn | present }`, a value list can
  *   depend on another field (`valuesBy`), and the cross-field rules are named
- *   options (`exactlyOne`, `atLeastOne`, `requires`).
+ *   options (`exactlyOne`, `atLeastOne`, `requires`, `lengthRules`).
  * - **Design × endpoint is a table.** The engine implements fixed two-arm
  *   designs for all three endpoint families and group-sequential only for
  *   time-to-event. Binary exact single-arm, frozen Simon and the explicit
@@ -41,7 +41,7 @@
  *   boolean
  *   string   { values | valuesBy, maxLength, pattern, ref: 'input', badValueCode, default }
  *   array    { items, min, max, increasing, last, unique }
- *   object   { fields, exactlyOne, atLeastOne, requires }
+ *   object   { fields, exactlyOne, atLeastOne, requires, lengthRules }
  *   variant  { on, variants: { <value>: object-fields }, default }   discriminated object
  *   map      { values, keysFrom, min, max }             keys are column names
  *   matrix   { min, max, size }                         square, numeric
@@ -191,6 +191,12 @@ const COVARIATE_EFFECTS = { t: 'map', values: number(), min: 1, max: 100 }
 // Shared blocks
 // ---------------------------------------------------------------------------
 
+/**
+ * A piecewise profile lists the end of every interval but the last (`breaks`) and one rate per interval (`rates`), the last
+ * running on: one rate more than there are breaks. A list of the wrong length used to be recycled with a warning or read as NA.
+ */
+const ONE_RATE_PER_INTERVAL = Object.freeze({ lengthRules: Object.freeze([Object.freeze({ key: 'rates', of: 'breaks', plus: 1 })]) })
+
 /** Control-arm survival: exponential, Weibull or piecewise-exponential. */
 const CONTROL_DISTRIBUTION = {
   t: 'variant', on: 'kind', default: 'exponential',
@@ -202,6 +208,7 @@ const CONTROL_DISTRIBUTION = {
       rates: req(array(number({ gt: 0 }), { min: 2, max: 51 })),
     },
   },
+  variantGroups: { piecewise: ONE_RATE_PER_INTERVAL },
 }
 
 /**
@@ -246,14 +253,17 @@ const SIMULATED_ACCRUAL = gated({
       maxFollowup: number({ gt: 0, unit: 'time units' }),
     },
     piecewise: {
+      // rates[i] is the accrual per time unit on the i-th interval; the last interval is open in the profile, so its length is stated:
+      // patients enter for `tail` time units after the last break. There is no default length (the engine once assumed 1,000,000).
       breaks: req(array(number({ gt: 0 }), { min: 1, max: 50, increasing: true })),
       rates: req(array(number({ gt: 0 }), { min: 2, max: 51 })),
-      tail: number({ gt: 0 }),
+      tail: req(number({ gt: 0, unit: 'time units' })),
       followup: number({ min: 0, unit: 'time units' }),
       dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per 12 time units' }),
       maxFollowup: number({ gt: 0, unit: 'time units' }),
     },
   },
+  variantGroups: { piecewise: ONE_RATE_PER_INTERVAL },
 }, TIME_TO_EVENT)
 
 const SIMULATED_ANALYSIS = object({
@@ -637,8 +647,11 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     treatmentColumn: { ...COLUMN, default: 'arm' },
     endpoint: ENDPOINT(),
     anchored: boolean({ default: false }),
-    aggregateEstimate: req(gated(number(), is('anchored', 'true'))),
-    aggregateOutcome: req(gated(number(), isNot('anchored', 'true'))),
+    // Anchored: the aggregate trial's contrast, already on the link scale (a log odds ratio, a log risk ratio, a mean difference).
+    // Unanchored: its outcome on the outcome's OWN scale -- a proportion for the logit link, a positive mean or rate for the log link --
+    // with the standard error of that level; the engine applies the link to the level and the delta method to the error.
+    aggregateEstimate: req(gated(number({ unit: 'link scale' }), is('anchored', 'true'))),
+    aggregateOutcome: req(gated(number({ unit: 'the outcome\'s own scale' }), isNot('anchored', 'true'))),
     aggregateSe: req(number({ gt: 0 })),
     outcomeColumn: gated({ ...COLUMN, default: 'y' }, isNot('anchored', 'true')),
     link: string({ values: ['identity', 'log', 'logit'], default: 'identity' }),
@@ -1201,6 +1214,14 @@ function checkObject(node, value, path, ctx) {
       if (!present(value, need)) raise(ctx, 'scenario_field_missing', at(path, need), `${need} is required when ${key} is given.`)
     }
   }
+  // A list that has one entry per interval of another: a missing or malformed list is reported by its own field, not twice.
+  for (const rule of node.lengthRules ?? []) {
+    const list = value[rule.key]
+    const of = value[rule.of]
+    if (!Array.isArray(list) || !Array.isArray(of)) continue
+    const want = of.length + (rule.plus ?? 0)
+    if (list.length !== want) raise(ctx, 'scenario_value_invalid', at(path, rule.key), `${rule.key} needs ${want} values (${rule.plus ?? 0} more than the ${of.length} in ${rule.of}); it has ${list.length}.`)
+  }
 }
 
 /**
@@ -1280,6 +1301,39 @@ function checkDesignSemantics(scenario, path, ctx) {
 }
 
 /**
+ * The aggregate outcome of an unanchored MAIC is on the outcome's own scale -- the engine applies the link to it, and to its standard
+ * error by the delta method -- so it has to lie inside the link's domain: a proportion strictly between 0 and 1 for the logit link, a
+ * positive mean or rate for the log link. Mirrored by protocol.R.
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkMaicSemantics(scenario, path, ctx) {
+  const link = scenario.link ?? 'identity'
+  const value = scenario.aggregateOutcome
+  if (scenario.anchored === true || !isNumber(value)) return
+  if (link === 'logit' && !(value > 0 && value < 1)) raise(ctx, 'scenario_value_invalid', at(path, 'aggregateOutcome'), 'On the logit link the aggregate outcome is a proportion strictly between 0 and 1, on its own scale (not log-odds).')
+  if (link === 'log' && !(value > 0)) raise(ctx, 'scenario_value_invalid', at(path, 'aggregateOutcome'), 'On the log link the aggregate outcome is positive, on its own scale (not its log).')
+}
+
+/**
+ * A target number of events is counted among the patients still to enrol. The forecast draws the enrolment target less the patients the
+ * sites already report (`sites[].enrolled`) and gives each an event time, so a target above that number is never reached, in any replicate:
+ * the run found no event time at all and ended as a handler error, after every replicate. It is refused by name instead. With nothing left
+ * to enrol the forecast is complete and the event target is not judged here. Mirrored by protocol.R.
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkAccrualSemantics(scenario, path, ctx) {
+  const { eventTarget, target, sites } = scenario
+  if (!isNumber(eventTarget) || !isNumber(target) || !Array.isArray(sites)) return
+  const enrolled = sites.reduce((/** @type {number} */ sum, /** @type {any} */ site) => sum + (isObject(site) && isNumber(site.enrolled) && site.enrolled > 0 ? site.enrolled : 0), 0)
+  const remaining = target - enrolled
+  if (remaining > 0 && eventTarget > remaining) {
+    raise(ctx, 'scenario_value_invalid', at(path, 'eventTarget'), enrolled > 0
+      ? `Events are counted among the patients still to enrol: ${remaining} (target ${target} less ${enrolled} already enrolled); an event target of ${eventTarget} is never reached.`
+      : `Events are counted among the ${target} patients to enrol; an event target of ${eventTarget} is never reached.`)
+  }
+}
+
+/**
  * Validate one method's scenario against its schema. Returns issues; empty is
  * valid. `inputIds` is the set of the job's input ids, for keys that name one.
  * @param {string} method @param {unknown} scenario
@@ -1301,6 +1355,8 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
   }
   checkObject(schema, scenario, path, ctx)
   if (method === 'design.simulate' || method === 'design.grid' || method === 'design.analytic') checkDesignSemantics(scenario, path, ctx)
+  if (method === 'comparator.maic') checkMaicSemantics(scenario, path, ctx)
+  if (method === 'accrual.poisson_gamma') checkAccrualSemantics(scenario, path, ctx)
   if (schema.gridCells) checkGrid(schema, scenario, ctx)
 
   // The same defect can be reported by two walkers; say it once.

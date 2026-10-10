@@ -362,7 +362,7 @@ vcr_estimate_source <- function(used) if (identical(used, "imputed")) "imputed" 
 #' The diagnostics block every table-reading method carries: the weakest source
 #' among the columns it used, and which columns those were.
 vcr_value_sources_used <- function(used) {
-  list(weakest = if (is.na(used$source)) NULL else used$source, basis = used$basis, columns = used$columns)
+  list(weakest = if (is.na(used$source)) NULL else used$source, basis = used[["basis"]], columns = used$columns)
 }
 
 #' Refuse a table that is not a record of real people. The accepted sources
@@ -399,6 +399,11 @@ vcr_table_counts <- function(df, events = NULL) {
 
 VCR_SHAPE_REQUIRED <- list(
   subject = "USUBJID", long = c("USUBJID", "PARAMCD", "AVAL"), event = c("USUBJID", "AVAL", "CNSR"))
+
+#' The column that names a person in every analysis-table shape: the data plane writes it as the study's own pseudonym
+#' (`P` + an HMAC of the source id), the first column each shape requires. It is an identifier and never a variable: a method
+#' that learns from every column, or that reports the levels of a column, leaves it out.
+VCR_SUBJECT_KEY_COLUMNS <- unique(vapply(VCR_SHAPE_REQUIRED, function(cols) cols[[1L]], character(1)))
 
 #' The tables a job carries, by shape. A `snapshot_file` is a raw table of no
 #' declared shape; it is returned under `file`.

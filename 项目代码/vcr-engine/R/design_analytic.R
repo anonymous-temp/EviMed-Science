@@ -191,10 +191,10 @@ vcr_analytic_effect_guard <- function(kind, endpoint, truth) {
     eff <- vcr_scalar(truth$effect, NULL)
     if (!is.null(eff) && tiny(eff)) refuse("scenario.truth.effect", "effect 0")
   } else if (identical(endpoint, "binary")) {
-    p0 <- vcr_scalar(truth$controlRate, NULL)
-    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth$treatmentRate, NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
+    p0 <- vcr_scalar(truth[["controlRate"]], NULL)
+    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
     if (tiny(p1 - p0)) {
-      field <- if (!is.null(truth$treatmentRate)) "scenario.truth.treatmentRate"
+      field <- if (!is.null(truth[["treatmentRate"]])) "scenario.truth.treatmentRate"
                else if (!is.null(truth$riskDifference)) "scenario.truth.riskDifference" else "scenario.truth.oddsRatio"
       refuse(field, switch(field, scenario.truth.treatmentRate = "treatmentRate equal to controlRate",
                            scenario.truth.riskDifference = "riskDifference 0", "oddsRatio 1"))

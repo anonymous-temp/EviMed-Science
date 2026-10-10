@@ -718,6 +718,14 @@ vcr_pattern_match <- function(pattern, x) {
       if (!.vcrp_present(value, need)) raise("scenario_field_missing", .vcrp_at(path, need), "This key is required when another is given.")
     }
   }
+  # A list that has one entry per interval of another (a piecewise profile: one rate more than there are breaks). A missing or
+  # malformed list is reported by its own field, not twice.
+  for (rule in node$lengthRules %||% list()) {
+    items <- .vcrp_items(value[[rule$key]])
+    of <- .vcrp_items(value[[rule$of]])
+    if (is.null(items) || is.null(of)) next
+    if (length(items) != length(of) + (rule$plus %||% 0)) raise("scenario_value_invalid", .vcrp_at(path, rule$key), "The list does not have one value per interval of the other.")
+  }
   invisible(NULL)
 }
 
@@ -783,13 +791,40 @@ vcr_pattern_match <- function(pattern, x) {
   if(sided==1 && .vcrp_num(an$alpha) && an$alpha>=.5)bad("analysis.alpha","A one-sided analysis uses alpha below one half.")
   if (kind=="single_arm" && sided!=if(identical(an$alternative,"two.sided"))2 else 1) bad("analysis.sided","Sidedness must agree with the exact binomial alternative.")
   if (kind=="simon_two_stage") {
-    if (.vcrp_num(d$n1) && .vcrp_num(d$n) && d$n1>=d$n) bad("design.n1","Stage one is smaller than the total sample size.")
-    if (.vcrp_num(d$r1) && .vcrp_num(d$n1) && d$r1>=d$n1) bad("design.r1","Stage one continues only above r1 < n1.")
-    if (.vcrp_num(d$r) && .vcrp_num(d$n) && (d$r>=d$n || (!is.null(d$r1) && d$r<d$r1))) bad("design.r","The final threshold satisfies r1 <= r < n.")
+    # `[[`, not `$`: `d$n` is `n1` when `n` is absent (R matches a name by its prefix when exactly one name begins with it)
+    if (.vcrp_num(d[["n1"]]) && .vcrp_num(d[["n"]]) && d[["n1"]]>=d[["n"]]) bad("design.n1","Stage one is smaller than the total sample size.")
+    if (.vcrp_num(d[["r1"]]) && .vcrp_num(d[["n1"]]) && d[["r1"]]>=d[["n1"]]) bad("design.r1","Stage one continues only above r1 < n1.")
+    if (.vcrp_num(d[["r"]]) && .vcrp_num(d[["n"]]) && (d[["r"]]>=d[["n"]] || (!is.null(d[["r1"]]) && d[["r"]]<d[["r1"]]))) bad("design.r","The final threshold satisfies r1 <= r < n.")
     if (sided!=1) bad("analysis.sided","Simon uses the upper one-sided frozen boundary rule.")
     if (.vcrp_num(tr$alternativeRate) && .vcrp_num(tr$nullRate) && tr$alternativeRate<=tr$nullRate) bad("truth.alternativeRate","The alternative rate exceeds the null rate.")
   }
   if (.vcrp_lgl(tr[["null"]]) && !identical(tr[["null"]],.vcrp_is_null_scenario(sc))) bad("truth.null","The null label must agree with the generating estimand.")
+  invisible(NULL)
+}
+
+# The aggregate outcome of an unanchored MAIC is on the outcome's own scale -- the link is applied to it, and to its standard error by the
+# delta method -- so it has to be inside the link's domain: a proportion strictly between 0 and 1 for the logit link, a positive mean or
+# rate for the log link. Mirrors checkMaicSemantics in the domain.
+.vcrp_check_maic_semantics <- function(sc, path, ctx) {
+  link <- .vcrp_get(sc, "link") %||% "identity"
+  value <- .vcrp_get(sc, "aggregateOutcome")
+  if (isTRUE(.vcrp_get(sc, "anchored")) || !.vcrp_num(value) || !.vcrp_chr(link)) return(invisible(NULL))
+  if (identical(link, "logit") && !(value > 0 && value < 1)) ctx$raise("scenario_value_invalid", .vcrp_at(path, "aggregateOutcome"), "On the logit link the aggregate outcome is a proportion strictly between 0 and 1.")
+  if (identical(link, "log") && !(value > 0)) ctx$raise("scenario_value_invalid", .vcrp_at(path, "aggregateOutcome"), "On the log link the aggregate outcome is positive.")
+  invisible(NULL)
+}
+
+# A target number of events is counted among the patients still to enrol: the forecast draws the enrolment target less the patients the sites
+# already report (`sites[].enrolled`) and gives each an event time, so a target above that number is never reached. Nothing left to enrol:
+# the forecast is complete and the event target is not judged. Mirrors checkAccrualSemantics in the domain.
+.vcrp_check_accrual_semantics <- function(sc, path, ctx) {
+  event_target <- .vcrp_get(sc, "eventTarget"); target <- .vcrp_get(sc, "target"); sites <- .vcrp_items(.vcrp_get(sc, "sites"))
+  if (!.vcrp_num(event_target) || !.vcrp_num(target) || is.null(sites)) return(invisible(NULL))
+  enrolled <- sum(vapply(sites, function(s) { e <- .vcrp_get(s, "enrolled"); if (.vcrp_num(e) && e > 0) e else 0 }, numeric(1)))
+  remaining <- target - enrolled
+  if (remaining > 0 && event_target > remaining) {
+    ctx$raise("scenario_value_invalid", .vcrp_at(path, "eventTarget"), "Events are counted among the patients still to enrol (the target less those already enrolled); this event target is never reached.")
+  }
   invisible(NULL)
 }
 
@@ -807,6 +842,8 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
   }
   .vcrp_check_object(schema, scenario, path, ctx)
   if (method %in% c("design.simulate","design.grid","design.analytic")) .vcrp_check_design_semantics(scenario,path,ctx)
+  if (identical(method, "comparator.maic")) .vcrp_check_maic_semantics(scenario, path, ctx)
+  if (identical(method, "accrual.poisson_gamma")) .vcrp_check_accrual_semantics(scenario, path, ctx)
   if (!is.null(schema$gridCells)) .vcrp_check_grid(schema, scenario, ctx)
   seen <- character(0)
   Filter(function(issue) {
@@ -991,7 +1028,7 @@ vcr_validate_job <- function(job) {
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")
   if(!.vcrp_chr(base))base<-""
   designs<-.vcrp_get(sc,"designs")
-  kinds<-if(identical(job$method,"design.grid") && is.list(designs))
+  kinds<-if(identical(job[["method"]],"design.grid") && is.list(designs))
     vapply(designs,function(d){k<-.vcrp_get(d,"kind") %||% base;if(.vcrp_chr(k))k else ""},character(1)) else base
   if(!is.null(spec$legacyVersion) && identical(job$methodVersion,spec$legacyVersion)) {
     if(!length(kinds))return(TRUE) # malformed/missing design is refused by its scenario issue

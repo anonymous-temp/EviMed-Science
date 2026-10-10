@@ -23,7 +23,7 @@
  *   for, and the variant it belongs to. Nothing is invented: a unit, a range or a
  *   default that the schema does not state is not in the row.
  * - **The coupled rules the walker applies are in the help too**: `exactlyOne`,
- *   `atLeastOne` and `requires` from the schema, the design × endpoint table
+ *   `atLeastOne`, `requires` and `lengthRules` from the schema, the design × endpoint table
  *   (`VCR_DESIGN_SUPPORT`) and which analysis a design may run, read from the
  *   tables the validator reads.
  * - **The examples are checked, not trusted.** Each is run through
@@ -63,7 +63,7 @@ export const VCR_RUN_SCENARIO_FIELDS = Object.freeze({
  *   values?: string[], valuesBy?: { path: string, map: Record<string, string[]> }, minLength?: number, maxLength?: number, role?: string,
  *   count?: { min?: number, max?: number }, items?: Record<string, any>, of?: Record<string, any>, keysFrom?: string,
  *   increasing?: boolean, last?: number, unique?: boolean, size?: string }} VcrHelpRow
- * @typedef {{ kind: 'exactlyOne' | 'atLeastOne' | 'requires', keys?: string[], key?: string, needs?: string[], when?: VcrHelpWhen[], variant?: VcrHelpVariant }} VcrHelpRule
+ * @typedef {{ kind: 'exactlyOne' | 'atLeastOne' | 'requires' | 'lengthRule', keys?: string[], key?: string, needs?: string[], of?: string, plus?: number, when?: VcrHelpWhen[], variant?: VcrHelpVariant }} VcrHelpRule
  */
 
 // ---------------------------------------------------------------------------
@@ -161,6 +161,9 @@ function emitRules(state, node, path, context) {
   }
   for (const [key, needs] of Object.entries(node.requires ?? {})) {
     state.rules.push(/** @type {VcrHelpRule} */ ({ kind: 'requires', key: at(path, key), needs: /** @type {string[]} */ (needs).map((need) => at(path, need)), ...base }))
+  }
+  for (const rule of node.lengthRules ?? []) {
+    state.rules.push(/** @type {VcrHelpRule} */ ({ kind: 'lengthRule', key: at(path, rule.key), of: at(path, rule.of), plus: rule.plus ?? 0, ...base }))
   }
 }
 
@@ -293,7 +296,7 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
   'comparator.entropy_balance': [{ label: 'entropy balancing on three covariates', scenario: { covariates: ['age', 'ecog', 'ldh'], estimand: 'ATT' } }],
   'comparator.propensity_weight': [{ label: 'propensity weights for a binary endpoint', scenario: { covariates: ['age'], endpoint: { type: 'binary' }, estimand: 'ATO' } }],
   'comparator.rmst': [{ label: 'restricted mean survival time to 24 months', scenario: { tau: 24, treatmentColumn: 'arm', timeUnit: 'months' } }],
-  'comparator.maic': [{ label: 'an unanchored indirect comparison on a binary outcome', scenario: {
+  'comparator.maic': [{ label: 'an unanchored indirect comparison on a binary outcome: the aggregate trial\'s response rate is 0.42 (standard error 0.05), on the logit link', scenario: {
     covariates: ['age', 'male'], targets: { age: 60, male: 0.5 }, endpoint: { type: 'binary' }, aggregateOutcome: 0.42, aggregateSe: 0.05, link: 'logit', outcomeColumn: 'response' } }],
   'comparator.evalue': [{ label: 'the E-value of a hazard ratio', scenario: { riskRatio: 0.6, confidenceLimit: 0.8, scale: 'hazard_ratio', rare: true } }],
   'comparator.map_prior': [{ label: 'a robust MAP prior from three historical control arms', scenario: {
@@ -382,12 +385,25 @@ function designNotes(method) {
   return notes
 }
 
+/**
+ * What a row's type and range cannot say: the scale a number is on. Read by the model that writes the scenario, next to the rows.
+ * @type {Readonly<Record<string, readonly string[]>>}
+ */
+const METHOD_NOTES = Object.freeze({
+  'accrual.poisson_gamma': Object.freeze([
+    'eventTarget counts events among the patients still to enrol: the target less the patients already enrolled (the sum of sites[].enrolled, which the platform fills from the study\'s ledger). The events of patients already enrolled are not observed or simulated, so an eventTarget above that number is refused (scenario_value_invalid at eventTarget); write it within the patients still to enrol, and eventHazard with it.',
+  ]),
+  'comparator.maic': Object.freeze([
+    'Scales. Unanchored: aggregateOutcome and aggregateSe are the aggregate trial\'s outcome and its standard error on the outcome\'s OWN scale (a proportion for link logit, a positive mean or rate for link log, any number for identity), the scale of the outcomeColumn\'s mean; the engine applies the link to the level and the delta method to the standard error. A level outside the link\'s domain (a proportion not strictly between 0 and 1 on logit, a mean not above 0 on log) is refused (scenario_value_invalid). Anchored: aggregateEstimate and aggregateSe are already the aggregate trial\'s contrast and its standard error on the link scale (a log odds ratio, a log risk ratio, a mean difference).',
+  ]),
+})
+
 /** The file's rendering of one method. @param {string} method */
 function methodEntry(method) {
   const { rows, rules } = vcrScenarioRows(method)
   const schema = /** @type {Record<string, any>} */ (VCR_SCENARIO_SCHEMAS)[method]
   const spec = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]
-  const notes = designNotes(method)
+  const notes = [...designNotes(method), .../** @type {Record<string, readonly string[]>} */ (METHOD_NOTES)[method] ?? []]
   return compact({
     endpoints: [...spec.endpoints],
     designs: /** @type {Record<string, any>} */ (VCR_DESIGN_SUPPORT)[method] ? JSON.parse(JSON.stringify(/** @type {Record<string, any>} */ (VCR_DESIGN_SUPPORT)[method])) : undefined,

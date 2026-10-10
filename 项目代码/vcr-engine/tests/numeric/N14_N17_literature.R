@@ -224,6 +224,82 @@ vcr_case("N14b", c("AC-08", "AC-30"), function() {
                         paste(vcr_test_issue_codes(mixed), collapse = ",")))
 })
 
+vcr_case("N14c", c("AC-08", "AC-30"), function() {
+  # An unanchored MAIC on a LOGIT or LOG link. `aggregateOutcome` and `aggregateSe` are the aggregate trial's outcome and its
+  # standard error on the outcome's OWN scale (a proportion, a positive mean or rate): the engine applies the link to the
+  # level and the delta method to the standard error, exactly as it does to the IPD mean. The first version subtracted the
+  # aggregate outcome untransformed (logit(IPD rate) - 0.42) and added its SE untransformed, so the help example -- a response
+  # rate of 0.42 with SE 0.05 on the logit link, IPD rate 0.532 -- came out -0.291 where the logit-scale difference is +0.451,
+  # a sign flip, with an aggregate error of 0.05 where the delta method gives 0.205.
+  #
+  # A reference that needs no weighting code: one binary covariate x, targets 0.6. The weights make the weighted x-mean exactly 0.6,
+  # so the weighted outcome mean is 0.6 * (mean in x = 1) + 0.4 * (mean in x = 0) whatever the weights are. Logit: 100 people with
+  # x = 1 (62 responders), 150 with x = 0 (60 responders) -> 0.6 * 0.62 + 0.4 * 0.40 = 0.532. Log: strata means 20 and 10 -> 16.
+  X <- matrix(c(rep(1, 100), rep(0, 150)), ncol = 1, dimnames = list(NULL, "x"))
+  y_bin <- c(rep(c(1, 0), c(62, 38)), rep(c(1, 0), c(60, 90)))
+  y_pos <- c(rep(c(18, 22), 50), rep(c(9, 11), 75))
+  want_rate <- 0.6 * 0.62 + 0.4 * 0.40; want_mean <- 0.6 * 20 + 0.4 * 10
+  # the variance of the weighted mean, from the weights the closed form implies: w(x = 1) / w(x = 0) = (0.6 / 0.4) / (100 / 150)
+  weights <- c(rep(2.25, 100), rep(1, 150)); ww <- weights / sum(weights)
+  var_of <- function(y) { mu <- sum(ww * y); sum(ww^2 * (y - mu)^2) * length(y) / (length(y) - 1) }
+  # logit
+  lg <- vcr_maic_unanchored(y_bin, X, c(x = 0.6), agd_outcome = 0.42, agd_se = 0.05, link = "logit")
+  want_lg <- stats::qlogis(want_rate) - stats::qlogis(0.42)
+  se_lg <- sqrt(var_of(y_bin) / (want_rate * (1 - want_rate))^2 + (0.05 / (0.42 * 0.58))^2)
+  # log
+  lo <- vcr_maic_unanchored(y_pos, X, c(x = 0.6), agd_outcome = 12, agd_se = 1.5, link = "log")
+  want_lo <- log(want_mean) - log(12)
+  se_lo <- sqrt(var_of(y_pos) / want_mean^2 + (1.5 / 12)^2)
+  # identity: not touched
+  id <- vcr_maic_unanchored(y_pos, X, c(x = 0.6), agd_outcome = 12, agd_se = 1.5)
+  se_id <- sqrt(var_of(y_pos) + 1.5^2)
+  # through the job, which is what the help example describes
+  df <- data.frame(USUBJID = sprintf("S%03d", 1:250), x = as.vector(X), response = y_bin)
+  inp <- vcr_test_input(df, "snp_n14c:subject", "subject")
+  job <- vcr_test_run(vcr_test_job("comparator.maic", list(covariates = list("x"), targets = list(x = 0.6), endpoint = list(type = "binary"),
+                                                           aggregateOutcome = 0.42, aggregateSe = 0.05, link = "logit", outcomeColumn = "response"),
+                                   list(inp), seed = 3L, replicates = 300L, job_id = "job_n14c"))
+  est_job <- vcr_measure_value(job, "indirect_estimate"); se_job <- job$diagnostics$se
+  # the old arithmetic, for the size of the error
+  old <- stats::qlogis(want_rate) - 0.42
+  ok <- abs(lg$estimate - want_lg) < 1e-9 && abs(lg$se - se_lg) < 1e-9 && abs(lo$estimate - want_lo) < 1e-9 && abs(lo$se - se_lo) < 1e-9 &&
+    abs(id$estimate - (want_mean - 12)) < 1e-9 && abs(id$se - se_id) < 1e-9 &&
+    identical(job$status, "succeeded") && abs(est_job - want_lg) < 1e-9 && se_job > 0.205
+  list(pass = ok,
+       detail = sprintf("logit, rate 0.532 against 0.42 (SE 0.05): estimate %.6f (want qlogis(0.532) - qlogis(0.42) = %.6f; the untransformed subtraction gave %.3f), SE %.6f (want %.6f; aggregate part %.4f, not 0.05); log, mean 16 against 12 (SE 1.5): %.6f (want %.6f), SE %.6f (want %.6f); identity unchanged: %.6f, SE %.6f; the job: estimate %.6f, SE %.4f",
+                        lg$estimate, want_lg, old, lg$se, se_lg, 0.05 / (0.42 * 0.58), lo$estimate, want_lo, lo$se, se_lo, id$estimate, id$se, est_job %||% NA_real_, se_job %||% NA_real_))
+})
+
+vcr_case("N14d", c("AC-04", "AC-26"), function() {
+  # The aggregate outcome has to be inside the link's domain, because the link is applied to it: a proportion strictly between 0
+  # and 1 for the logit link, a positive mean or rate for the log link. Anything else is refused by name -- by the validator
+  # (the domain's and the engine's agree, N00f) and, as the second line, by the function that applies the link -- rather than
+  # becoming a NaN or an infinite estimate. The identity link takes any number, and an anchored job states a contrast, not a level.
+  sc <- function(outcome, link = NULL) {
+    out <- list(covariates = list("x"), targets = list(x = 0.6), endpoint = list(type = "binary"), aggregateOutcome = outcome, aggregateSe = 0.05)
+    if (!is.null(link)) out$link <- link     # (a NULL element would be written as `null`, which is not a value)
+    out
+  }
+  issues <- function(scenario) vapply(vcr_validate_scenario("comparator.maic", vcr_test_json(scenario)), function(i) paste0(i$code, "@", i$field), character(1))
+  want <- "scenario_value_invalid@scenario.aggregateOutcome"
+  refused <- list(logit_above = issues(sc(1.2, "logit")), logit_one = issues(sc(1, "logit")), logit_zero = issues(sc(0, "logit")), logit_negative = issues(sc(-0.3, "logit")),
+                  log_zero = issues(sc(0, "log")), log_negative = issues(sc(-2, "log")))
+  fine <- list(logit = issues(sc(0.42, "logit")), log = issues(sc(12, "log")), identity_negative = issues(sc(-3.5, "identity")), identity_default = issues(sc(0)))
+  X <- matrix(c(rep(1, 100), rep(0, 150)), ncol = 1, dimnames = list(NULL, "x"))
+  y <- c(rep(c(1, 0), c(62, 38)), rep(c(1, 0), c(60, 90)))
+  second <- function(outcome, link) tryCatch({ vcr_maic_unanchored(y, X, c(x = 0.6), outcome, 0.05, link); "ran" }, vcr_refusal = function(e) paste0(e$issue$code, "@", e$issue$field))
+  direct <- c(second(1.2, "logit"), second(0, "log"), second(0.42, "logit"))
+  # through the job: refused before the handler
+  df <- data.frame(USUBJID = sprintf("S%03d", 1:250), x = as.vector(X), response = y)
+  inp <- vcr_test_input(df, "snp_n14d:subject", "subject")
+  job <- vcr_test_run(vcr_test_job("comparator.maic", c(sc(1.2, "logit"), list(outcomeColumn = "response")), list(inp), seed = 3L, replicates = 300L, job_id = "job_n14d"))
+  ok <- all(vapply(refused, function(v) identical(v, want), logical(1))) && all(vapply(fine, length, integer(1)) == 0L) &&
+    identical(direct, c(want, want, "ran")) && identical(job$status, "failed") && "scenario_value_invalid" %in% vcr_test_issue_codes(job)
+  list(pass = ok,
+       detail = sprintf("refused as %s: %s; accepted: %s; the function applying the link: %s; the job with a logit-link outcome of 1.2 -> %s (%s)",
+                        want, paste(names(refused), collapse = ", "), paste(names(fine), collapse = ", "), paste(direct, collapse = " / "), job$status, paste(vcr_test_issue_codes(job), collapse = ",")))
+})
+
 vcr_case("N15b", c("AC-08", "AC-11"), function() {
   # The MAIC standard error accounts for the weights having been estimated. With
   # the aggregate trial's own error set to zero, the reported SE of an unanchored

@@ -174,13 +174,26 @@ vcr_case("C2-05", c("AC-09"), function() {
   # of 240. Also: a holdout share of 0 works (it emptied the training table),
   # fewer than five copies are refused, rare levels are merged before synthesis,
   # and every copy is scored, not only the first.
+  #
+  # The table is the one the control plane hands the job: a SUBJECT table, one row
+  # per person, with its pseudonymous key `USUBJID`. (This case used to delete the
+  # key first, so no case ever ran the real shape: with the key in, every pseudonym
+  # was a level held by one row, the merge listed all of them BY NAME in
+  # `diagnostics.rareLevelsMerged`, and the propensity model fitted to a 240-level
+  # factor took minutes.) The key is not a variable, so the synthetic table has none;
+  # the result says how many levels it merged in which column and never a level's
+  # name, and no string anywhere in the diagnostics is a pseudonym or a value that
+  # fewer than the small-cell floor of rows hold -- a profile may name the levels
+  # that enough people share, and that is all it may name.
   set.seed(505L, kind = VCR_RNG_KIND)
   n <- 300L
   real <- data.frame(USUBJID = sprintf("S%03d", seq_len(n)), age = stats::rnorm(n, 60, 10), sex = stats::rbinom(n, 1L, 0.5),
                      event = stats::rbinom(n, 1L, 0.3), site = sample(c("north", "south", "east", "rare"), n, TRUE, prob = c(0.45, 0.3, 0.22, 0.03)),
                      stringsAsFactors = FALSE)
-  real$USUBJID <- NULL
-  inp <- vcr_test_input(real, "snp_c205:1", source = "observed")
+  real$site[real$site == "rare"] <- "north"; real$site[sample.int(n, 6L)] <- "rare"   # exactly six rows: below the floor whatever the split
+  # a mutation column: two common genotypes and three held by one to three people each (a name that points at a person)
+  real$genotype <- c(rep("exon19del", 150L), rep("L858R", 144L), "L861Q", "G719A", "G719A", "S768I", "S768I", "S768I")[sample.int(n)]
+  inp <- vcr_test_input(real, "snp_c205:subject", shape = "subject", source = "observed")
   run <- function(sc, dir = NULL) vcr_test_run(vcr_test_job("population.synthpop", sc, list(inp), seed = 505L, job_id = "job_c205"), output_dir = dir)
   out <- tempfile("c2out"); dir.create(out)
   r <- run(list(m = 10L, holdoutShare = 0.2), out)
@@ -188,21 +201,62 @@ vcr_case("C2-05", c("AC-09"), function() {
   tb <- vcr_test_table(r, "synthetic-population", out)
   r0 <- run(list(m = 5L, holdoutShare = 0))
   r_few <- run(list(m = 3L, holdoutShare = 0.2))
-  merged <- unlist(lapply(r$diagnostics$rareLevelsMerged, function(x) x$mergedLevels))
+  counts_of <- function(res) {
+    merged <- res$diagnostics$rareLevelsMerged
+    stats::setNames(vapply(merged, function(x) as.numeric(x$mergedLevelCount %||% NA_real_), numeric(1)), vapply(merged, function(x) as.character(x$column), character(1)))
+  }
+  merged <- r$diagnostics$rareLevelsMerged
+  merged_count <- counts_of(r)       # the training split decides which rare levels it holds: at most the table's
+  all_count <- counts_of(r0)         # no holdout: the whole table is the training table, so the count is the table's
+  # every string in the diagnostics, against the values few rows hold and the pseudonyms
+  strings <- function(x) if (is.character(x)) x else if (is.list(x)) unlist(lapply(x, strings), use.names = FALSE) else character(0)
+  floor_ <- vcr_limit("minCellSize", 10)
+  few <- unique(unlist(lapply(real[vapply(real, is.character, logical(1))], function(v) { t <- table(v); names(t)[t < floor_] })))
+  seen <- unique(c(strings(r$diagnostics), strings(r0$diagnostics)))
+  leaked <- intersect(seen, c(real$USUBJID, few))
   ok <- identical(r$status, "succeeded") && r$counts$realPatients == 0 && gen == train_obs * copies && copies == 10 &&
     identical(r$diagnostics$inferenceLabel, "exploratory") && nrow(tb) == gen && identical(sort(unique(tb$copy)), 1:10) &&
-    !("rare" %in% tb$site) && "rare" %in% merged &&
+    !("rare" %in% tb$site) && !any(c("L861Q", "G719A", "S768I") %in% tb$genotype) &&
+    !("USUBJID" %in% names(tb)) && identical(unlist(r$diagnostics$subjectKeyDropped), "USUBJID") &&
+    identical(all_count[["site"]], 1) && identical(all_count[["genotype"]], 3) && identical(sort(names(all_count)), c("genotype", "site")) &&
+    merged_count[["site"]] == 1 && merged_count[["genotype"]] >= 1 && merged_count[["genotype"]] <= 3 && !("USUBJID" %in% names(merged_count)) &&
+    !any(vapply(merged, function(x) "mergedLevels" %in% names(x), logical(1))) && length(leaked) == 0L && length(setdiff(few, real$USUBJID)) == 4L &&
     nrow(r$diagnostics$qualityByCopy) == 10L &&
     identical(r0$status, "succeeded") && identical(r0$diagnostics$holdoutRows, 0L) && isFALSE(r0$diagnostics$quality$disclosure$available) &&
     identical(r_few$status, "failed")
   out_r <- list(pass = ok,
-       detail = sprintf("%d generated records from %d training observations x %d copies, and the table on disk has %d rows in %d copies; realPatients stays %s; inference labelled %s; rare level 'rare' merged before synthesis: %s; %d per-copy quality rows; holdoutShare 0 -> %s with the disclosure axis withheld (%s); m=3 -> %s (%s); allowed uses %s",
+       detail = sprintf("a subject table with its USUBJID key: %d generated records from %d training observations x %d copies, and the table on disk has %d rows in %d copies and no key column; realPatients stays %s; inference labelled %s; rare levels merged before synthesis (the whole table, no holdout): site %s level(s), genotype %s level(s), the key column none (dropped: %s); no level name in the report (%s); %d strings in the diagnostics, %d of them a pseudonym or a value held by fewer than %d rows (%d such values in the table besides the pseudonyms); %d per-copy quality rows; holdoutShare 0 -> %s with the disclosure axis withheld (%s); m=3 -> %s (%s); allowed uses %s",
                         gen, train_obs, copies, nrow(tb), length(unique(tb$copy)), r$counts$realPatients, r$diagnostics$inferenceLabel,
-                        "rare" %in% merged, nrow(r$diagnostics$qualityByCopy), r0$status, r0$diagnostics$quality$disclosure$reason %||% "?",
+                        all_count[["site"]], all_count[["genotype"]], paste(unlist(r$diagnostics$subjectKeyDropped), collapse = ","),
+                        paste(vapply(merged, function(x) paste(names(x), collapse = "/"), character(1)), collapse = " | "),
+                        length(seen), length(leaked), floor_, length(setdiff(few, real$USUBJID)),
+                        nrow(r$diagnostics$qualityByCopy), r0$status, r0$diagnostics$quality$disclosure$reason %||% "?",
                         r_few$status, paste(vcr_test_issue_codes(r_few), collapse = ","),
                         paste(unlist(r$diagnostics$allowedUses), collapse = "/")))
   unlink(out, recursive = TRUE)
   out_r
+})
+
+vcr_case("C2-05b", c("AC-09", "AC-26"), function() {
+  # What the rare-level merge reports. The merge folds every level held by fewer than the small-cell floor of rows into
+  # "other" before synthesis, and its report named the levels it folded. A level below the floor is a small cell, and the
+  # engine's rule for a merged cell (`vcr_suppress_cells`) is that nothing of it is kept but that it was merged: no count, no
+  # complement, no name. So the report is the column and the number of levels, and the table it returns is the same table it
+  # always returned. A per-study pseudonym is a level held by one row: forty rows, forty ids, three rare genotypes.
+  set.seed(5051L, kind = VCR_RNG_KIND)
+  d <- data.frame(USUBJID = sprintf("p_%04x", sample.int(65535L, 40L)), age = stats::rnorm(40L, 60, 9), stringsAsFactors = FALSE)
+  d$egfr <- sample(c(rep("exon19del", 20L), rep("L858R", 17L), "L861Q", "G719A", "S768I"))
+  m <- .vcr_merge_rare_levels(d, 10)
+  by <- stats::setNames(m$report, vapply(m$report, function(x) as.character(x$column), character(1)))
+  strings <- function(x) if (is.character(x)) x else if (is.list(x)) unlist(lapply(x, strings), use.names = FALSE) else character(0)
+  named <- intersect(strings(m$report), c(d$USUBJID, unique(d$egfr)))
+  ok <- identical(names(by), c("USUBJID", "egfr")) && identical(by$USUBJID$mergedLevelCount, 40L) && identical(by$egfr$mergedLevelCount, 3L) &&
+    length(named) == 0L && setequal(unique(m$data$egfr), c("L858R", "exon19del", "other")) && sum(m$data$egfr == "other") == 3L &&
+    all(m$data$USUBJID == "other")
+  list(pass = ok,
+       detail = sprintf("columns reported: %s; levels merged per column: %s; level names in the report: %d (%s); the table folds the 3 rare genotypes and the %d pseudonyms into 'other'",
+                        paste(names(by), collapse = ", "), paste(vapply(by, function(x) as.character(x$mergedLevelCount %||% NA), character(1)), collapse = " / "),
+                        length(named), paste(utils::head(named, 3L), collapse = ", "), sum(m$data$USUBJID == "other")))
 })
 
 vcr_case("C2-06", c("AC-20"), function() {

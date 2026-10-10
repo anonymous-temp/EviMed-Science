@@ -713,6 +713,50 @@ test("populations, patient sets and grids are built as their own schemas, and a 
   assert.deepEqual(validateScenario("design.grid", grid.stages[0].scenario), []);
 });
 
+test("a grid cell inherits nothing from the first design: a key the first one states and a later one leaves out is refused where it applies, and let through where it does not", () => {
+  const plan = (/** @type {Record<string, any>} */ dimensions, /** @type {Array<Record<string, any>>} */ truthScenarios) => /** @type {any} */ (vcrBuildStages({
+    kind: "design_grid", row: { id: "grd_inherit", version: 1, dimensions, truthScenarios } }, context));
+  const base = { endpoint: { type: "continuous" }, analysis: { method: "ttest", alpha: 0.025, sided: 1 }, performance: ["power"] };
+  const truths = [{ effect: 0.3, sd: 1 }, { effect: 0.6, sd: 1 }];
+  const fixed = (/** @type {number} */ nTreat, /** @type {Record<string, any>} */ more = {}) => ({ kind: "two_arm_fixed", nTreat, ...more });
+
+  // The engine lays every cell over a base the plan completes from the first design: design 2 says 200 treated and design 1 said 50 controls,
+  // so cell 2 would run 200 against 50 under the label 「每组 200」. Refused, naming the key and the entry.
+  const unequal = plan({ designs: [fixed(100, { nControl: 50, label: "100 对 50" }), fixed(200, { label: "每组 200" })], base }, truths);
+  assert.equal(unequal.ok, false, JSON.stringify(unequal));
+  assert.equal(unequal.refused.code, "vcr_job_scenario_invalid");
+  assert.deepEqual(unequal.refused.paths, ["dimensions.designs[1].nControl"]);
+  assert.match(unequal.refused.message, /第 2 个设计没有写 nControl/);
+  // Stated in every design, it is a grid.
+  const stated = plan({ designs: [fixed(100, { nControl: 50 }), fixed(200, { nControl: 200 })], base }, truths);
+  assert.equal(stated.ok, true, JSON.stringify(stated));
+  assert.deepEqual(validateScenario("design.grid", stated.stages[0].scenario), []);
+
+  // A truth the same way: effect 0.6 filed as a null scenario because truth 1 said `null: true` (an explicit label beats the estimand for a two-arm design).
+  const labelled = plan({ designs: [fixed(100), fixed(200)], base }, [{ effect: 0, null: true }, { effect: 0.6 }]);
+  assert.equal(labelled.ok, false, JSON.stringify(labelled));
+  assert.deepEqual(labelled.refused.paths, ["truthScenarios[1].null"]);
+  assert.equal(plan({ designs: [fixed(100), fixed(200)], base }, [{ effect: 0, null: true }, { effect: 0.6, null: false }]).ok, true);
+
+  // A key the later design does not use reaches nothing: a fixed design after a group-sequential one leaves out the looks.
+  const mixed = plan({ designs: [{ kind: "group_sequential", nTreat: 100, informationRates: [0.5, 1], spending: "obrien_fleming" }, fixed(100)],
+    base: { ...base, endpoint: { type: "time_to_event" }, analysis: { method: "logrank", alpha: 0.025, sided: 1 } } }, [{ hazardRatio: 0.7, controlMedian: 12 }, { hazardRatio: 1, controlMedian: 12 }]);
+  assert.equal(mixed.ok, true, JSON.stringify(mixed));
+  // ...but a group-sequential design that leaves its looks out would run on the first design's.
+  const looks = plan({ designs: [{ kind: "group_sequential", nTreat: 100, informationRates: [0.5, 1] }, { kind: "group_sequential", nTreat: 100 }],
+    base: { ...base, endpoint: { type: "time_to_event" }, analysis: { method: "logrank", alpha: 0.025, sided: 1 } } }, [{ hazardRatio: 0.7, controlMedian: 12 }]);
+  assert.equal(looks.ok, false);
+  assert.deepEqual(looks.refused.paths, ["dimensions.designs[1].informationRates"]);
+
+  // What the base says of a key is its value for every cell: leaving the key out is leaving it at the base's, which is what design 1 has too.
+  const shared = plan({ designs: [{ nTreat: 100 }, { nTreat: 200 }], base: { ...base, design: { kind: "two_arm_fixed" } } }, truths);
+  assert.equal(shared.ok, true, JSON.stringify(shared));
+  // ...but a base value design 1 overrides is not what a design that stays silent gets.
+  const overridden = plan({ designs: [{ nTreat: 100, nControl: 50 }, { nTreat: 200 }], base: { ...base, design: { kind: "two_arm_fixed", nControl: 100 } } }, truths);
+  assert.equal(overridden.ok, false);
+  assert.deepEqual(overridden.refused.paths, ["dimensions.designs[1].nControl"]);
+});
+
 // --- the comparator-effect methods are reachable from the comparator step ------------------------------
 
 const CMP_T2 = { ...context, study: { ...seedStudy, dataTier: "T2" } };

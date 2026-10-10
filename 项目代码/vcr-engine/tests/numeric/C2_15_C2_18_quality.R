@@ -41,6 +41,30 @@ vcr_case("C2-15", c("AC-04", "AC-20"), function() {
   out
 })
 
+vcr_case("C2-15b", c("AC-31", "AC-04"), function() {
+  # `population.quality` is a seeded job. The disclosure report compares size-matched subsamples of the larger set (400 training
+  # records against 100 held out), drawn from the caller's RNG stream; the handler never seeded it, though the result echoes the
+  # job's seed and claims repeatability (AC-31). Three fresh processes on identical inputs gave a nearest-neighbour share of 0.532,
+  # 0.563 and 0.573, which straddles the 0.55 band. Run twice in one process, with other draws in between so that an unseeded
+  # stream cannot repeat by luck, the same seed gives the same report to the last digit, and a different seed draws different subsamples.
+  set.seed(1520L, kind = VCR_RNG_KIND)
+  mk <- function(n) { x1 <- stats::rnorm(n, 60, 10); x2 <- stats::rbinom(n, 1L, 0.5); data.frame(x1 = x1, x2 = x2, y = 0.5 * x1 + 3 * x2 + stats::rnorm(n)) }
+  in_tr <- vcr_test_input(mk(400L), "train_c215b@1", source = "observed")
+  in_ho <- vcr_test_input(mk(100L), "hold_c215b@1", source = "observed")
+  in_sy <- vcr_test_input(mk(400L), "syn_c215b@1", source = "synthetic", kind = "snapshot_file")
+  run <- function(seed) vcr_test_run(vcr_test_job("population.quality",
+    list(trainingInputId = "train_c215b@1", syntheticInputId = "syn_c215b@1", holdoutInputId = "hold_c215b@1"),
+    list(in_tr, in_ho, in_sy), seed = seed, job_id = "job_c215b"))
+  a <- run(1520L); stats::runif(11L); b <- run(1520L); stats::rnorm(5L); c_ <- run(1521L)
+  share <- function(r) r$diagnostics$quality$disclosure$nearestNeighbourInTrainShare
+  report <- function(r) list(quality = r$diagnostics$quality, measures = r$measures)
+  ok <- all(vapply(list(a, b, c_), function(r) identical(r$status, "succeeded") && isTRUE(r$diagnostics$quality$disclosure$available), logical(1))) &&
+    identical(report(a), report(b)) && identical(a$seed, 1520L) && !identical(report(a), report(c_)) && !identical(share(a), share(c_))
+  list(pass = ok,
+       detail = sprintf("seed 1520 twice in one process: nearest-neighbour share %.6f and %.6f, whole report identical: %s; seed 1521: %.6f",
+                        share(a) %||% NA_real_, share(b) %||% NA_real_, identical(report(a), report(b)), share(c_) %||% NA_real_))
+})
+
 vcr_case("C2-16", c("AC-04"), function() {
   # A baseline must be the same size as what it is compared with. "Is the
   # synthetic record nearer to a training record than to a holdout record?" has
