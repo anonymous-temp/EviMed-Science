@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { geoValueText, GEO_VALUE_DOMAINS } from "@evimed/domain";
 import { getGeoValue, type GeoProject, type GeoValue } from "@/lib/geoClient";
 import { Disclosure } from "@/components/ui/Disclosure";
@@ -5,6 +6,8 @@ import { safeWebHref } from "@/lib/readPages";
 import { AskAi } from "../AskAi";
 import { engineName } from "../geoText";
 import { TabError, TabSection, useGeoLoad } from "./geoTabKit";
+import { tabPath } from "./geoTabText";
+import { ShowMore, useShowMore } from "./showMore";
 
 export type ValueMode = "summary" | "profile" | "safety" | "decisions" | "actions" | "sources" | "coverage";
 const TITLES: Record<ValueMode, string> = {
@@ -17,6 +20,12 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 const STATUS: Record<string, string> = { represented: "表达完整", partial: "表达不完整", contradicted: "与依据冲突", not_addressed: "未涉及", not_applicable: "不适用", uncertain: "尚不能判断" };
 const TASK: Record<string, string> = { pending: "等待研究", claimed: "正在研究", running: "正在研究", done: "可查看研究结果", failed: "查看已有结果与待补问题" };
 
+/** Rows listed before 「显示更多」: three in the excerpt on 总览, which links to the whole list on 方案, twelve anywhere else. */
+const firstOf = (mode: ValueMode): number => (mode === "summary" ? 3 : 12);
+/** How many each press of 「显示更多」 adds, and how many of the answers a round was judged on 可见度 lists to begin with. */
+const STEP = 20;
+const OBSERVATIONS_SHOWN = 20;
+
 /** The rows of the profile that still stand: a retired or superseded one is history, not a finding. */
 const standing = (entry: unknown): boolean => !["retired", "superseded"].includes(String(record(entry).status));
 
@@ -27,7 +36,7 @@ function entriesOf(value: GeoValue, mode: ValueMode): unknown[] {
   const entries = mode === "decisions" ? rows(data.decisions)
     : mode === "actions" ? rows(data.opportunities)
     : mode === "safety" ? findings.filter(entry => ["safety", "effectiveness"].includes(String(record(entry).dimension)))
-    : mode === "sources" ? rows(data.sourceChanges)
+    : mode === "sources" ? rows(data.sourceChanges).filter(standing)
     : mode === "coverage" ? [] : findings;
   return entries.filter(entry => text(entry));
 }
@@ -60,10 +69,21 @@ export function ValueSection({ geoId, project, mode = "profile", className }: { 
   if (state.kind === "error") return <TabError message="药品价值分析暂时无法读取。" onRetry={reload} />;
   const value = state.data;
   if (!value || !hasContent(value, mode)) return mode === "profile" && (!value || !begun(value)) ? <StartAnalysis project={project} className={className} /> : null;
+  return <ValueBody geoId={geoId} value={value} mode={mode} className={className} />;
+}
+
+function ValueBody({ geoId, value, mode, className }: { geoId: string; value: GeoValue; mode: ValueMode; className?: string }) {
   const data = value.data ?? {};
-  const shown = entriesOf(value, mode).slice(0, mode === "summary" ? 3 : 12);
+  const entries = entriesOf(value, mode);
+  const listed = useShowMore(entries, { first: firstOf(mode), step: STEP, resetKey: `${geoId}:${mode}` });
+  const observed = useShowMore(value.observations ?? [], { first: OBSERVATIONS_SHOWN, step: STEP, resetKey: geoId });
+  const excerpt = mode === "summary";
+  // What is not listed is counted: the heading says how many there are, and the rest is one press away — on the excerpt, one link.
+  const meta = entries.length > firstOf(mode)
+    ? excerpt ? <Link to={tabPath(geoId, "plan")} className="text-link hover:underline">{`查看全部 ${entries.length} 条`}</Link> : `共 ${entries.length} 条`
+    : undefined;
   return (
-    <TabSection title={TITLES[mode]} level={["decisions", "sources"].includes(mode) ? "compact" : mode === "profile" ? "ui" : "section"} className={className}>
+    <TabSection title={TITLES[mode]} meta={meta} level={["decisions", "sources"].includes(mode) ? "compact" : mode === "profile" ? "ui" : "section"} className={className}>
       {["summary", "profile"].includes(mode) && <ScopeDetail scope={data.scope} />}
       {text(data.summary) && ["summary", "profile"].includes(mode) && <p className="mb-3 max-w-measure text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
       {mode === "coverage" ? <>
@@ -72,28 +92,34 @@ export function ValueSection({ geoId, project, mode = "profile", className }: { 
           : "还没有足够的回答判断药品价值是否被准确表达。"}</p>
         {Boolean(value.coverage?.uncertain || value.coverage?.notApplicable) && <p className="mt-2 text-caption text-text-3">尚不能判断 {value.coverage.uncertain} 条，不适用 {value.coverage.notApplicable} 条。</p>}
         {Boolean(value.coverage?.assessed && value.coverage?.basisVersion && value.coverage.basisVersion !== value.version) && <p className="mt-2 text-caption text-text-3">以上按第 {value.coverage.basisVersion} 版药品价值分析测得；分析已更新到第 {value.version} 版，下一轮测量后按新版本判断。</p>}
-        {!!value.observations?.length && <Disclosure summary="查看回答中的表达" className="mt-3">
+        {!!value.observations?.length && <Disclosure summary={value.observations.length > OBSERVATIONS_SHOWN ? `查看回答中的表达 · 共 ${value.observations.length} 条` : "查看回答中的表达"} className="mt-3">
           <ul className="divide-y divide-border">
-            {value.observations.slice(0, 20).map((observation, index) => <li key={`${observation.findingId}:${index}`} className="py-3 text-ui">
+            {observed.visible.map((observation, index) => <li key={`${observation.findingId}:${index}`} className="py-3 text-ui">
               <p className="text-text-2">{engineName(observation.engine)} · {STATUS[observation.status] ?? "尚不能判断"}</p>
               {observation.quote && <blockquote className="mt-1 max-w-measure break-words text-text">{observation.quote}</blockquote>}
               {observation.reason && <p className="mt-1 max-w-measure text-caption text-text-3">{observation.reason}</p>}
             </li>)}
           </ul>
+          <ShowMore remaining={observed.remaining} unit="条" onMore={observed.more} />
         </Disclosure>}
       </> : <>
-        {!!shown.length && <ul className="divide-y divide-border">
-          {shown.map((entry, index) => <li key={String(record(entry).id ?? index)} className="py-3">
+        {!!listed.visible.length && <ul className="divide-y divide-border">
+          {listed.visible.map((entry, index) => <li key={String(record(entry).id ?? index)} className="py-3">
             <p className="max-w-measure break-words text-ui leading-relaxed text-text">{text(entry)}</p>
             <FindingDetail entry={record(entry)} />
           </li>)}
         </ul>}
+        {!excerpt && <ShowMore remaining={listed.remaining} unit="条" onMore={listed.more} />}
         {mode === "actions" && !!value.research?.length && <Disclosure summary="查看相关研究" className="mt-3">
           <ul className="space-y-3">{value.research.map(task => <li key={task.id} className="text-ui">
             <p className="max-w-measure text-text">{task.question}</p><span className="text-caption text-text-3">{TASK[task.status] ?? "研究中"}</span>
           </li>)}</ul>
         </Disclosure>}
-        {!!value.impacts?.length && ["actions", "sources", "profile"].includes(mode) && <p className="mt-3 text-ui text-text-2">有 {value.impacts.length} 项依据变化，可检查相关结论和内容。</p>}
+        {/* On 信源 the changes are the list above; elsewhere the count leads to them. */}
+        {!!value.impacts?.length && (mode === "actions" || mode === "profile") && <p className="mt-3 text-ui text-text-2">
+          有 {value.impacts.length} 项依据变化，可检查相关结论和内容。
+          <Link to={tabPath(geoId, "sources")} className="ml-2 text-link hover:underline">去信源查看</Link>
+        </p>}
       </>}
     </TabSection>
   );

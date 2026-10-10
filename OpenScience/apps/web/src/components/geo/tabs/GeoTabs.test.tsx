@@ -1228,6 +1228,16 @@ describe("药品价值分析在页签里", () => {
     expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
   });
 
+  it("信源: the changed sources are read before any engine's citation exists, above the step that makes them", async () => {
+    client.getGeoValue.mockResolvedValue(valueFilled);
+    client.getGeoSources.mockResolvedValue({ sources: [], expectations: [], battlefield: null, tiers: [], chosenTier: null });
+    renderTab(<SourcesTab {...props(geoProject({ sources: "done" }))} />);
+    const heading = await screen.findByRole("heading", { name: "依据与传播" });
+    const step = await screen.findByRole("button", { name: "让 AI 做" });
+    expect(screen.getByText("知识库资料已更新，可检查引用它的结论与内容。")).toBeInTheDocument();
+    expect(heading.compareDocumentPosition(step) & FOLLOWS).toBeTruthy();
+  });
+
   it("总览: the headline and the metric band come first, and the analysis is the last thing on the tab", async () => {
     client.getGeoValue.mockResolvedValue(valueFilled);
     renderTab(TABS[0].render());

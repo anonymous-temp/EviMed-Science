@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -164,5 +164,98 @@ describe("a project that has an analysis", () => {
     await userEvent.click(screen.getByText("查看相关研究"));
     expect(view.container.querySelectorAll("[data-geo-ask-ai]")).toHaveLength(0);
     for (const name of [/继续分析/, /推进这个问题/, /分析表达效果/, /问 AI/, /开始药品价值分析/]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  });
+});
+
+/** `count` findings with a statement each, numbered from 1. */
+const findings = (count: number) => Array.from({ length: count }, (_, index) => ({ id: `f${index + 1}`, statement: `第 ${index + 1} 条结论` }));
+const rowsIn = (heading: HTMLElement) => within(heading.closest("section") as HTMLElement).getAllByRole("listitem");
+
+describe("a long list is not cut without a word", () => {
+  it("lists twelve of fifteen, says there are 15, and 显示更多 brings the rest", async () => {
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: findings(15) } });
+    show("profile");
+    const heading = await screen.findByRole("heading", { name: "药品价值分析" });
+    expect(heading.parentElement).toHaveTextContent("共 15 条");
+    expect(rowsIn(heading)).toHaveLength(12);
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 3 条" }));
+    expect(rowsIn(heading)).toHaveLength(15);
+    expect(screen.getByText("第 15 条结论")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
+    expect(heading.parentElement).toHaveTextContent("共 15 条");
+  });
+
+  it("a list that fits says no total and offers no 显示更多", async () => {
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: findings(12) } });
+    show("profile");
+    const heading = await screen.findByRole("heading", { name: "药品价值分析" });
+    expect(rowsIn(heading)).toHaveLength(12);
+    expect(heading.parentElement).not.toHaveTextContent("共");
+    expect(screen.queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
+  });
+
+  it("the excerpt on 总览 shows three and links the whole list on 方案, with how many there are", async () => {
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: findings(5) } });
+    show("summary");
+    const heading = await screen.findByRole("heading", { name: "药品价值与机会" });
+    expect(rowsIn(heading)).toHaveLength(3);
+    expect(within(heading.parentElement as HTMLElement).getByRole("link", { name: "查看全部 5 条" })).toHaveAttribute("href", "/app/geo/geo_1/plan");
+    expect(screen.queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
+  });
+
+  it("an excerpt of three or fewer needs no link", async () => {
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: findings(3) } });
+    show("summary");
+    await screen.findByRole("heading", { name: "药品价值与机会" });
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("lists twenty of the answers a round was judged on, counts them all, and shows the rest on request", async () => {
+    const observations = Array.from({ length: 25 }, (_, index) => ({ findingId: `f${index}`, status: "represented", quote: `回答 ${index + 1}`, reason: "", engine: "deepseek", basisVersion: 3, rubricVersion: "1", askedAt: null }));
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 25, represented: 25, partial: 0, contradicted: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
+    show("coverage");
+    await userEvent.click(await screen.findByText("查看回答中的表达 · 共 25 条"));
+    const fold = screen.getByText("回答 1").closest("details") as HTMLElement;
+    expect(within(fold).getAllByRole("listitem")).toHaveLength(20);
+    await userEvent.click(within(fold).getByRole("button", { name: "显示更多 · 还有 5 条" }));
+    expect(within(fold).getAllByRole("listitem")).toHaveLength(25);
+    expect(screen.getByText("回答 25")).toBeInTheDocument();
+  });
+
+  it("a fold that fits says no total", async () => {
+    const observations = [{ findingId: "f1", status: "represented", quote: "回答 1", reason: "", engine: "deepseek", basisVersion: 3, rubricVersion: "1", askedAt: null }];
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 1, represented: 1, partial: 0, contradicted: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
+    show("coverage");
+    expect(await screen.findByText("查看回答中的表达")).toBeInTheDocument();
+  });
+});
+
+describe("a changed source is a place to go, not a count to read", () => {
+  const changed = (extra: Partial<GeoValue> = {}): GeoValue => ({
+    ...empty(), version: 3, data: { findings: findings(1), opportunities: [{ id: "o1", statement: "补一篇科普稿" }], sourceChanges: [{ id: "c1", summary: "资料 A 已更新" }, { id: "c2", summary: "资料 B 已更新" }] },
+    impacts: [{ change: { id: "c1" }, findingIds: ["f1"], groupIds: [], articleIds: [] }, { change: { id: "c2" }, findingIds: [], groupIds: [], articleIds: [] }], ...extra,
+  });
+
+  it.each(["actions", "profile"] as const)("%s: the sentence links to 信源", async (mode) => {
+    client.getGeoValue.mockResolvedValue(changed());
+    show(mode);
+    const sentence = (await screen.findByText(/有 2 项依据变化/)).closest("p") as HTMLElement;
+    expect(within(sentence).getByRole("link", { name: "去信源查看" })).toHaveAttribute("href", "/app/geo/geo_1/sources");
+  });
+
+  it("sources: the changes are the list itself, so there is no sentence to a place that is already here", async () => {
+    client.getGeoValue.mockResolvedValue(changed());
+    show("sources");
+    expect(await screen.findByText("资料 A 已更新")).toBeInTheDocument();
+    expect(screen.getByText("资料 B 已更新")).toBeInTheDocument();
+    expect(screen.queryByText(/项依据变化/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("sources: a change that has been dealt with is history and is not listed", async () => {
+    client.getGeoValue.mockResolvedValue(changed({ data: { sourceChanges: [{ id: "c1", summary: "资料 A 已更新" }, { id: "c2", summary: "资料 B 已更新", status: "retired" }] } }));
+    show("sources");
+    expect(await screen.findByText("资料 A 已更新")).toBeInTheDocument();
+    expect(screen.queryByText("资料 B 已更新")).not.toBeInTheDocument();
   });
 });
