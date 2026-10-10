@@ -64,6 +64,7 @@ export class GeoMarketStoreDouble {
       id: project.id, userId: project.userId, projectId: project.projectId ?? `p_${project.id}`, product: project.product ?? {},
       competitors: project.competitors ?? [], engines: project.engines ?? ["deepseek", "doubao"], tier: project.tier ?? "2",
       budget: project.budget ?? null, status: project.status ?? "active", deletedAt: null, createdAt: project.createdAt ?? new Date().toISOString(),
+      servedAt: null,
     });
   }
 
@@ -202,13 +203,38 @@ export class GeoMarketStoreDouble {
     return clone(project);
   }
 
-  /** @param {number} limit @param {{ activeOnly?: boolean }} [options] */
-  async listBudgetedProjects(limit, { activeOnly = true } = {}) {
+  /** @param {number} limit @param {{ activeOnly?: boolean, offset?: number }} [options] */
+  async listBudgetedProjects(limit, { activeOnly = true, offset = 0 } = {}) {
     assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
+    const from = assertOffset(offset);
     return [...this.projects.values()]
       .filter((project) => project.budget && !project.deletedAt && (!activeOnly || project.status === "active"))
       .sort((a, b) => byTime(a.createdAt, b.createdAt) || (a.id < b.id ? -1 : 1))
-      .slice(0, limit).map(clone);
+      .slice(from, from + limit).map(clone);
+  }
+
+  /** @param {number} limit @param {{ offset?: number }} [options] */
+  async listProjectsInTurn(limit, { offset = 0 } = {}) {
+    assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
+    const from = assertOffset(offset);
+    return [...this.projects.values()]
+      .filter((project) => project.budget && !project.deletedAt && project.status === "active")
+      // Never served first, then the one served longest ago; the rest by age.
+      .sort((a, b) => (a.servedAt ? Date.parse(a.servedAt) : -Infinity) - (b.servedAt ? Date.parse(b.servedAt) : -Infinity) || byTime(a.createdAt, b.createdAt) || (a.id < b.id ? -1 : 1))
+      .slice(from, from + limit).map(clone);
+  }
+
+  /** @param {string[]} ids @param {string} at */
+  async markProjectsServed(ids, at) {
+    const unique = [...new Set(ids.map(String))];
+    if (unique.length > GEO_MARKET_STORE_LIMITS.servedMax) throw storeError("Too many projects in one mark.");
+    const when = assertAt(at);
+    let marked = 0;
+    for (const id of unique) {
+      const project = this.projects.get(id);
+      if (project) { project.servedAt = when; marked += 1; }
+    }
+    return marked;
   }
 
   /** @param {{ geoProjectId: string, userId: string, budget: Record<string, any>, ledgerRow: Record<string, any>, at: string }} change */

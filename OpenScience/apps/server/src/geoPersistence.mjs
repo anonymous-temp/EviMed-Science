@@ -617,6 +617,11 @@ CREATE INDEX IF NOT EXISTS geo_schedule_marks_open_idx ON evimed_geo.schedule_ma
 -- tag when the product was written — and a pass over those rows tags them.
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS entity_keys text[];
 
+-- When the market last took its turn with a project (\`tickOrders\`): the projects are served in turn, the one served longest ago
+-- first, so a tick that stops at its send cap leaves the others at the front of the next one. NULL is not served yet. Not
+-- \`updated_at\`: that orders the owner's project list, and a market tick is not an edit.
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS market_served_at timestamptz;
+
 -- A claim's source as a reader names it (「玛仕度肽注射液说明书（国家药监局 2025）」);
 -- source_ref stays the machine reference the quote is checked against.
 ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS source_label text;
