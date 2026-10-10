@@ -1908,15 +1908,17 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   const base = `http://127.0.0.1:${app.server.address().port}`;
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
-  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "worker"]);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "valueUpkeep", "worker"]);
   assert.equal(typeof app.geo.articleExists, "function");
   // Every slot is filled: the worker with all twelve loops wired (measurement,
-  // orchestration, market), the orchestrator, the exporter and the market's
-  // user and operator hooks.
+  // orchestration, market) and the value profiles' upkeep, the orchestrator,
+  // the exporter and the market's user and operator hooks.
   const status = app.geo.worker.status();
   assert.deepEqual(status.missing, [], "every loop has its function");
   assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
-    "verify", "reconcile", "topups", "questionBank"], "the question bank's loop is in the table and is not wired while its lever is off");
+    "verify", "reconcile", "topups", "questionBank", "valueUpkeep"], "the question bank's loop is in the table and is not wired while its lever is off");
+  assert.equal(status.loops.valueUpkeep.wired, true, "the value profiles' upkeep is composed with the module (G10c, G10e)");
+  assert.equal(typeof app.geo.valueUpkeep.tick, "function");
   assert.equal(typeof app.geo.orchestrator.runStep, "function");
   assert.equal(typeof app.geo.exporter.export, "function");
   for (const hook of ["setBudget", "cancelOrder", "confirmTopup", "resolveUnknownOrder", "markOrderLost", "clearStop", "balance", "configured"]) {
