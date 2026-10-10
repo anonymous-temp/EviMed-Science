@@ -42,6 +42,10 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["不会带上", "what the automatic scan left out is not listed, counted or explained; the scan still gates the mount, on the server"],
   ["没有通过自动检查", "same"],
   ["没有带上", "same"],
+  ["不含脚本", "what a shared file holds is not assured to the researcher; the export is text by construction"],
+  ["只含文字", "same"],
+  ["脚本不会随", "same"],
+  ["引用时只引用原始来源", "how a subscribed zone is cited is the model's context, not a sentence on the zone page"],
   // The two modules' names (R10 plan §1, the owner's rulings of 2026-10-07): 「循证 GEO」 again —
   // 「循证传播」 was its name from 2026-10-06 — and 「虚拟临床研究」 for what was 「虚拟临研」. A search
   // still reads the old names as the new ones until 2027-01-07 — `@evimed/domain`'s

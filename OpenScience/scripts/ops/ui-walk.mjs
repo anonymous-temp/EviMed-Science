@@ -209,6 +209,8 @@ export const BACK_OFFICE = [
   // The owner's ruling of 2026-10-10 (「全平台都不要呈现给用户看」): a received pack is shown as what comes in, with no trust verdict and no
   // word of what the automatic scan left out. Specific shapes, because 「没有带上」 alone is a researcher's own sentence.
   /来源未验证/, /不会带上\s*(?:\d+\s*条|：)/, /\d+\s*条没有带上/, /没有通过自动检查/,
+  // What a shared file or a subscribed zone holds is not assured to the researcher.
+  /只分享文字，不含脚本/, /脚本不会随它分享/, /引用时只引用原始来源/,
 ];
 
 /**

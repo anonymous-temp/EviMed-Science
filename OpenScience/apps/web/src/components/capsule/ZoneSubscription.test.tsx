@@ -23,7 +23,8 @@ describe("用作当前项目的参考", () => {
     render(<ZoneSubscription zoneId="ez_1" />);
     await userEvent.click(await screen.findByRole("button", { name: "用作当前项目的参考" }));
     await waitFor(() => expect(client.subscribeZone).toHaveBeenCalledWith("project-a", "ez_1"));
-    expect(await screen.findByText(/已用作“房颤研究”的参考：这个项目的对话会把专区里的卡片当作线索，引用时只引用原始来源。/)).toBeInTheDocument();
+    expect(await screen.findByText("已用作“房颤研究”的参考：这个项目的对话会把专区里的卡片当作线索。")).toBeInTheDocument();
+    expect(screen.queryByText(/引用时只引用原始来源/)).not.toBeInTheDocument();
   });
 
   it("taking the reference away is one click and takes effect at once", async () => {

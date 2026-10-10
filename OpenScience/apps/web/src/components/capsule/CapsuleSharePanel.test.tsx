@@ -80,13 +80,15 @@ describe("分享给平台里的人", () => {
     await waitFor(() => expect(client.revokeShareLink).toHaveBeenCalledWith("cap-1", "l1"));
   });
 
-  it("exports the method pack and says it holds text only", async () => {
+  it("exports the method pack, and does not assure the researcher what the file holds", async () => {
     client.downloadMethodPack.mockResolvedValue(undefined);
-    render(<CapsuleSharePanel capsuleId="cap-1" />);
-    expect(screen.getByText("已学到的做法按通用的技能格式导出；脚本不会随它分享。")).toBeInTheDocument();
+    const { container } = render(<CapsuleSharePanel capsuleId="cap-1" />);
+    expect(screen.getByText("已学到的做法按通用的技能格式导出。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "导出做法" }));
     await waitFor(() => expect(client.downloadMethodPack).toHaveBeenCalledWith("cap-1"));
-    expect(await screen.findByText(/只含文字/)).toBeInTheDocument();
+    expect(await screen.findByText("已下载。每个做法一个文件夹，带署名和来源，可以放进其他支持技能的工具。")).toBeInTheDocument();
+    // The mechanism assurances are the back office's (owner ruling 2026-10-10).
+    expect(container.textContent).not.toMatch(/只含文字|不含脚本|脚本不会/);
   });
 
   it("does nothing without a capsule", () => {
