@@ -1864,9 +1864,10 @@ export function geoMetricFamilies(enabled, snapshot) {
     add("run_import_total", "Finished runs' deliveries imported into their GEO projects since this process started: runs imported whole, and attempts that lost a write or threw.", "counter",
       ["imported", "failed"].map((outcome) => ({ labels: { outcome }, value: Number(/** @type {any} */ (snapshot.imports)[outcome] ?? 0) })));
   }
-  // The value profiles' upkeep (geoValueUpkeep.mjs): ticks, projects looked at, and the versions pruned (OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS).
+  // The value profiles' upkeep (geoValueUpkeep.mjs): ticks, projects looked at, and the versions pruned (OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS); and the
+  // source watch: projects whose findings' sources were looked up, the sources they rest on, and the retractions and corrections added to a profile.
   if (snapshot.valueUpkeep) {
-    add("value_upkeep_total", "The value profiles' upkeep since this process started: ticks, projects over the version limit that were looked at, versions pruned and projects they were pruned from, and passes that failed.", "counter",
+    add("value_upkeep_total", "The value profiles' upkeep since this process started: ticks, projects over the version limit that were looked at, versions pruned and projects they were pruned from, projects whose findings' sources were looked up and the sources they rest on, changes of a source (a retraction, a correction) added to a profile or linked to a finding written since, projects that gained any, and passes that failed.", "counter",
       Object.entries(snapshot.valueUpkeep).map(([event, value]) => ({ labels: { event }, value: Number(value) })));
   }
   // The platform's own medication-question bank (flywheel F22), where the deployment has it on.

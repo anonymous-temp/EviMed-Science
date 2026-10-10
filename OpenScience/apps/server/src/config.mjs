@@ -726,6 +726,10 @@ function geoSettings(overrides) {
     // `open_science_geo_value_upkeep_total{event="versionsPruned"}`.
     geoValueKeepVersions: integer("geoValueKeepVersions", "OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS", 20, 1, 1_000),
     geoValuePrunePerTick: integer("geoValuePrunePerTick", "OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK", 200, 1, 10_000),
+    // Projects whose findings' sources the upkeep asks the platform's source-change record and the frontier feed about in a tick (every
+    // ten minutes), the one looked at longest ago first: a source a finding rests on that was retracted or corrected adds a `needs_review`
+    // entry to the project's profile. Each project costs a handful of reads. Counted as `open_science_geo_value_upkeep_total{event="watchProjects"}`.
+    geoSourceWatchProjectsPerTick: integer("geoSourceWatchProjectsPerTick", "OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK", 20, 1, 500),
     // Calls one project's runtime may make to the probe host in a minute (`geo_visibility_probe`: providers, ask, screenshot, counted
     // together). The probe answers one request at a time for minutes through the platform's logged-in vendor accounts, and the skills
     // use the tool for the one question a person asks about; this is the ceiling of a loop, not of a run. A call over it is refused

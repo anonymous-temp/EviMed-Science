@@ -123,7 +123,8 @@ test("the loop prunes a bounded number of versions a tick across projects, count
   await store.writeValue("alice", first.id, { findings: [{ id: "another", statement: "A new version" }] });
   const tick4 = await upkeep.tick();
   assert.deepEqual([tick4.versionsPruned, tick4.projectsChecked], [1, 1], "a new version makes the oldest unkept one prunable, and only that project is looked at");
-  assert.deepEqual(upkeep.metrics(), { ticks: 4, projectsChecked: 4, versionsPruned: 19, projectsPruned: 4, failures: 0 });
+  assert.deepEqual(upkeep.metrics(), { ticks: 4, projectsChecked: 4, versionsPruned: 19, projectsPruned: 4, watchProjects: 0, watchIdentifiers: 0, changesFlagged: 0,
+    changesExtended: 0, projectsFlagged: 0, failures: 0 });
   assert.deepEqual(reported, []);
 });
 
@@ -131,7 +132,7 @@ test("a pass that fails is counted and reported and the loop goes on", options, 
   const reported = [];
   const broken = { query: async () => { throw Object.assign(new Error("down"), { code: "57P01" }); }, transaction: async () => { throw new Error("unreached"); } };
   const upkeep = createGeoValueUpkeep({ store: broken, report: (code) => reported.push(code) });
-  assert.deepEqual(await upkeep.tick(), { projectsChecked: 0, versionsPruned: 0, projectsPruned: 0 });
+  assert.deepEqual(await upkeep.tick(), { projectsChecked: 0, versionsPruned: 0, projectsPruned: 0, watchProjects: 0, changesFlagged: 0 });
   assert.deepEqual(reported, ["prune:57P01"]);
   assert.equal(upkeep.metrics().failures, 1);
 });

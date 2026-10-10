@@ -4853,7 +4853,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evidenceMetricSections.questionBank = (query) => geoParts.questionBank.summary(query);
     }
     // The value profiles' upkeep (geoValueUpkeep.mjs): the module's own loop, always composed with it.
-    geoParts.valueUpkeep = createGeoValueUpkeep({ store: geoParts.store, config, report: (code) => process.stderr.write(`geo value upkeep: ${code}\n`) });
+    geoParts.valueUpkeep = createGeoValueUpkeep({ store: geoParts.store, sourceChanges, entityVocabulary, config, report: (code) => process.stderr.write(`geo value upkeep: ${code}\n`) });
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier, policies:evolutionModulePolicies,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,

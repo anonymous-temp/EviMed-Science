@@ -31,7 +31,7 @@ test("the upkeep needs its store, and keeps twenty versions and prunes two hundr
   assert.throws(() => createGeoValueUpkeep(/** @type {any} */ ({})), /needs the GEO store/);
   const asked = [];
   const upkeep = createGeoValueUpkeep({ store: { query: async (/** @type {string} */ _sql, /** @type {unknown[]} */ values) => { asked.push(values); return { rows: [] }; } } });
-  assert.deepEqual(await upkeep.tick(), { projectsChecked: 0, versionsPruned: 0, projectsPruned: 0 });
+  assert.deepEqual(await upkeep.tick(), { projectsChecked: 0, versionsPruned: 0, projectsPruned: 0, watchProjects: 0, changesFlagged: 0 });
   assert.deepEqual(asked, [[20]]);
   const narrower = createGeoValueUpkeep({ store: { query: async (/** @type {string} */ _sql, /** @type {unknown[]} */ values) => { asked.push(values); return { rows: [] }; } },
     config: { geoValueKeepVersions: 5 } });

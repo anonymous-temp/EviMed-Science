@@ -210,6 +210,8 @@ const operatorLevers = {
   // the upkeep deletes a tick. A lever that never arrived leaves the default in force while the operator believes theirs applies.
   OPEN_SCIENCE_GEO_VALUE_KEEP_VERSIONS: ["open-science-web"],
   OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK: ["open-science-web"],
+  // …and how many projects a tick asks the source-change record and the frontier feed about (G10e): the watch's work per tick.
+  OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK: ["open-science-web"],
   // The probe gateway's window (2026-10-10, Q-8): a limit that never arrived would leave the default in force while the operator
   // believes theirs applies, on a channel that drives the platform's logged-in vendor accounts.
   OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE: ["open-science-web"],
