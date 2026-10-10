@@ -321,6 +321,23 @@ describe("the rail and the next step", () => {
     expect(railSteps(funded, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "active" });
     expect(nextSteps(funded).some((step) => step.key === "budget")).toBe(false);
   });
+
+  it("asks for nothing about a placement nobody asked for: the rail and 下一步 agree that it is not waiting on the reader", () => {
+    // The server sends every step; an untouched one is { status: "none", requested: false } (`normalizedSteps`).
+    const untouched = geoProject({ sources: "done" }, { budget: null });
+    const steps = { ...untouched.steps, distribution: { status: "none" as const, requested: false, updatedAt: null } };
+    const never = { ...untouched, steps, overview: { ...untouched.overview, steps } };
+    expect(railSteps(never, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "todo", note: null });
+    expect(nextSteps(never).some((step) => step.key === "budget" || step.key === "market" || step.state === "waiting")).toBe(false);
+  });
+
+  it("still asks for the budget once placement has been requested, before it has started", () => {
+    const asked = geoProject({ sources: "done" }, { budget: null });
+    const steps = { ...asked.steps, distribution: { status: "none" as const, requested: true, updatedAt: null } };
+    const requested = { ...asked, steps, overview: { ...asked.overview, steps } };
+    expect(railSteps(requested, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "waiting", note: "待你确认预算" });
+    expect(nextSteps(requested)[0]).toMatchObject({ key: "budget", state: "waiting" });
+  });
 });
 
 describe("a chart's heading", () => {
