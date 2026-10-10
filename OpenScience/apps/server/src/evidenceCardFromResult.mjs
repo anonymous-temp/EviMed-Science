@@ -40,6 +40,7 @@ import {
   verifyEvidenceCardClaims,
 } from "@evimed/domain";
 import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
+import { senderDisplayName } from "./capsuleShareLabel.mjs";
 import { evidenceContract, evidenceStructuredContent } from "./evidenceCardContent.mjs";
 import { recordEvidenceSimulatedRefused } from "./evidenceCardMetrics.mjs";
 import { evidenceSourceUrl } from "./evidenceZoneService.mjs";
@@ -601,9 +602,11 @@ export class EvidenceCardFromResult {
    * @param {{ id: string, name?: string }} user
    */
   async #nameOf(user) {
-    if (typeof user.name === "string" && user.name.trim()) return clip(user.name.trim(), 300);
-    const { rows } = await this.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [user.id]);
-    return clip(text(rows[0]?.name) || "研究者", 300);
+    // A display name that is the login name (a local account's default) or holds an e-mail address (an external identity
+    // with no name claim) is never printed on a card that becomes public: the share card's rule (review 2026-10-10 M-9).
+    const name = typeof user.name === "string" && user.name.trim() ? user.name
+      : text((await this.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [user.id])).rows[0]?.name);
+    return clip(senderDisplayName(name, user.id, "研究者"), 300);
   }
 
   /**

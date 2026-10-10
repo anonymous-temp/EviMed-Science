@@ -27,6 +27,10 @@ test("a sender is named by their display name, and by a neutral label when that 
   // The recipient reads it as the label under every entry of the pack.
   const received = { payload: { imported: true, card: { author: senderDisplayName("alice", "alice") } } };
   assert.equal(sharedFrom(received)?.label, "来自 一位研究者 的分享");
+  // A published evidence card is signed by the same rule with its own neutral word.
+  assert.equal(senderDisplayName("someone@example.invalid", "oidc_0123", "研究者"), "研究者");
+  assert.equal(senderDisplayName("alice", "alice", "研究者"), "研究者");
+  assert.equal(senderDisplayName("李主任", "alice", "研究者"), "李主任");
 });
 
 test("a method pack is signed with the sender's display name, never their login name or address", async () => {

@@ -31,12 +31,13 @@ const EMAIL_ADDRESS = /[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/;
  * id and never an e-mail address. A local account's display name defaults to its login name, and an external
  * identity's was its provider's e-mail address when no name came; a card is shown to whoever receives the pack, so a
  * name that is the login name, or contains an address, is replaced by a neutral label (2026-10-10 review M-9).
- * @param {unknown} name @param {unknown} accountId @returns {string}
+ * An evidence card a researcher publishes is signed by the same rule, with its own neutral word (`fallback`).
+ * @param {unknown} name @param {unknown} accountId @param {string} [fallback] @returns {string}
  */
-export function senderDisplayName(name, accountId) {
+export function senderDisplayName(name, accountId, fallback = NEUTRAL_SENDER_NAME) {
   const shown = typeof name === "string" ? name.replace(/\s+/g, " ").trim() : "";
-  if (!shown) return NEUTRAL_SENDER_NAME;
-  if (shown.toLowerCase() === String(accountId ?? "").trim().toLowerCase()) return NEUTRAL_SENDER_NAME;
-  if (EMAIL_ADDRESS.test(shown)) return NEUTRAL_SENDER_NAME;
+  if (!shown) return fallback;
+  if (shown.toLowerCase() === String(accountId ?? "").trim().toLowerCase()) return fallback;
+  if (EMAIL_ADDRESS.test(shown)) return fallback;
   return shown;
 }

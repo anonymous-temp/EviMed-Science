@@ -102,6 +102,17 @@ test("a clinical result becomes a draft with only its verified claims, hashed so
   assert.equal(counter("open_science_evidence_result_cards_total", "outcome", "created"), 1);
 });
 
+test("a card is never signed with the account's login name: a display name that is the login name reads 「研究者」", options, async (t) => {
+  // A local account's display name defaults to its login name, and an external identity's falls back to its e-mail
+  // address; a card is public once published, so neither is shown (the share card's rule, review 2026-10-10 M-9).
+  const f = await clinicalResultFixture(t);
+  const { report } = await f.deliver();
+  const zone = await ownZone();
+  const { evidence: card } = await publisherFor(f).publish({ id: "alice", name: "alice" }, report.versionId, { projectId: "p", zoneId: zone.id });
+  assert.equal(card.producer.name, "研究者");
+  assert.deepEqual(card.disclosure.authors, [{ name: "研究者" }]);
+});
+
 test("an unverified claim is in only when the caller names it, and the card then marks it ⚠", options, async (t) => {
   const f = await clinicalResultFixture(t);
   const { report } = await f.deliver();
