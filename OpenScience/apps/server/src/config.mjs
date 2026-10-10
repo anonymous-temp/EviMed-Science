@@ -1540,6 +1540,8 @@ export function loadConfig(overrides = {}) {
   const publicSourceCredentialSpecs = {
     evimedEvidence: ["evimedApiKey", "OPEN_SCIENCE_EVIMED_API_KEY", "evimed.api-key"],
     semanticScholar: ["semanticScholarApiKey", "OPEN_SCIENCE_SEMANTIC_SCHOLAR_API_KEY", "semantic-scholar.api-key"],
+    // Optional, and read by the control plane only (evolutionScholarEnrichment.mjs): without it OpenAlex is not asked about a shortlisted paper.
+    openAlex: ["openAlexApiKey", "OPEN_SCIENCE_OPENALEX_API_KEY", "openalex.api-key"],
     core: ["coreApiKey", "OPEN_SCIENCE_CORE_API_KEY", "core.api-key"],
     unpaywall: ["unpaywallEmail", "OPEN_SCIENCE_UNPAYWALL_EMAIL", "unpaywall.email"],
     umls: ["umlsApiKey", "OPEN_SCIENCE_UMLS_API_KEY", "umls.api-key"],
@@ -2741,6 +2743,14 @@ export function loadConfig(overrides = {}) {
     // this work and leaves the daytime to researchers. Collection and the light jobs run at any hour. A value that cannot be read is no window.
     evolutionHeavyWindow: String(overrides.evolutionHeavyWindow ?? process.env.OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW ?? "22:00-07:00").trim(),
     evolutionOperatorSignalFloor: Number(overrides.evolutionOperatorSignalFloor ?? process.env.OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR ?? 1),
+    // The weekly self-research funnel (evolutionSelfResearch.mjs): what a week may screen, shortlist, read whole and write.
+    // The caps are the platform's attention, not its money (a full week is about half a million input tokens); the text bound keeps one paper's
+    // full text to what a card can quote from in one call.
+    evolutionSelfResearchScreenLimit: Number(overrides.evolutionSelfResearchScreenLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SCREEN_LIMIT ?? 300),
+    evolutionSelfResearchShortlistLimit: Number(overrides.evolutionSelfResearchShortlistLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SHORTLIST_LIMIT ?? 30),
+    evolutionSelfResearchFullTextLimit: Number(overrides.evolutionSelfResearchFullTextLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_FULL_TEXT_LIMIT ?? 12),
+    evolutionSelfResearchCardLimit: Number(overrides.evolutionSelfResearchCardLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_CARD_LIMIT ?? 8),
+    evolutionSelfResearchTextChars: Number(overrides.evolutionSelfResearchTextChars ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS ?? 60_000),
     evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 8),
     evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
     evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),

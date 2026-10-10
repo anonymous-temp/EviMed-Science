@@ -114,6 +114,38 @@ export function evolutionOpsMetricFamilies(composed, snapshot, refusal = null) {
     help: "Heavy, model-intensive evolution jobs claimed since process start, by whether the window was open: `outside` counts only jobs asked for by kind (an operator's or a test's), never the polling worker's.",
     series: ["inside", "outside"].map((window) => ({ value: Number(limits.heavyWindow.started?.[window]) || 0, labels: { window } })),
   });
+  if (limits.selfResearch) {
+    const research = limits.selfResearch;
+    const entries = (/** @type {any} */ map) => Object.entries(map ?? {});
+    families.push({
+      name: "open_science_evolution_self_research_items_total", type: "counter",
+      help: "What the weekly self-research funnel did with the entries the plugin's AI-discovery rows brought, since process start, by stage: collected (entries read), merged (papers and posts left after merging the rows that list the same one), already_screened (left out: screened in the last two weeks), screened, shortlisted, full_texts (papers read whole), cards (mechanism cards written), rejected (cards that failed the quotation and field checks), venue_events (proceedings volumes set apart).",
+      series: [["collected", "collected"], ["merged", "merged"], ["alreadyScreened", "already_screened"], ["screened", "screened"], ["shortlisted", "shortlisted"],
+        ["fullTexts", "full_texts"], ["cards", "cards"], ["rejected", "rejected"], ["venueEvents", "venue_events"]]
+        .map(([key, stage]) => ({ value: Number(research[key]) || 0, labels: { stage } })),
+    }, {
+      name: "open_science_evolution_self_research_cap_hits_total", type: "counter",
+      help: "Weeks, since process start, in which a stage of the self-research funnel had more than its cap let through (OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_*_LIMIT; collect is the week's fixed ceiling on entries read).",
+      series: entries(research.capHits).map(([cap, value]) => ({ value: Number(value) || 0, labels: { cap } })),
+    }, {
+      name: "open_science_evolution_self_research_failures_total", type: "counter",
+      help: "What failed inside the funnel without failing the week, since process start: triage_batch (a screening call that gave no answer), extraction (a card call that gave none), venue_quote (a venue claim whose quoted words were not in the text, so the claim was dropped).",
+      series: [["triageBatchesFailed", "triage_batch"], ["extractFailed", "extraction"], ["venueQuotesRejected", "venue_quote"]]
+        .map(([key, kind]) => ({ value: Number(research[key]) || 0, labels: { kind } })),
+    }, {
+      name: "open_science_evolution_self_research_sources_total", type: "counter",
+      help: "Plugin rows the funnel found readable (read) or that the plugin reports unreadable, drifted or off (skipped), summed over the weeks since process start; a skipped row does not stop the others.",
+      series: [["sourcesRead", "read"], ["sourcesSkipped", "skipped"]].map(([key, state]) => ({ value: Number(research[key]) || 0, labels: { state } })),
+    }, {
+      name: "open_science_evolution_self_research_full_text_fallbacks_total", type: "counter",
+      help: "Papers read from their abstract instead of whole, since process start, by the closed reason (no_reader, not_arxiv, a web-read code, empty, unreachable).",
+      series: entries(research.fullTextFallbacks).map(([reason, value]) => ({ value: Number(value) || 0, labels: { reason } })),
+    }, {
+      name: "open_science_evolution_self_research_enrichment_total", type: "counter",
+      help: "Weeks, since process start, in which a scholarly index was asked about the shortlist, by provider and outcome: ok, no_key (skipped: the deployment has no key), or the closed code of what failed.",
+      series: entries(research.enrichment).flatMap(([provider, outcomes]) => entries(outcomes).map(([outcome, value]) => ({ value: Number(value) || 0, labels: { provider, outcome } }))),
+    });
+  }
   families.push({
     name: "open_science_evolution_executor_reachable", type: "gauge", series: [{ value: snapshot.executor ? 1 : 0 }],
     help: "Whether the runtime controller answered for the candidate executor's counters on this scrape (0: the executor series below are absent).",

@@ -6,8 +6,9 @@ from knowledge_plugin.source_requests import admitted_requests
 
 
 def discovery_row():
+    """An arXiv phrase row of the registry, as the platform would word a request for one."""
     doc = json.loads((Path(__file__).parents[1] / "registry/extra-sources.json").read_text())
-    return next(row for row in doc["sources"] if row["id"] == "arxiv-agent-self-improvement")
+    return next(row for row in doc["sources"] if row["id"] == "ai-discovery-arxiv-judges-evals")
 
 
 def test_supported_discovery_admitted_and_arbitrary_host_refused():

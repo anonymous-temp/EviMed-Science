@@ -5190,7 +5190,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     usageLedger, notifications: notificationService, registry: agentRegistry, runtimeManager, researchSessions, agentRuns,
     evaluationIsolation, sourceService, autopilot: autopilotService, dataSemantics, resolvePositiveEvidence,
     observeHandbookOutcome: input => platformHandbooks?.observeTool(input), controller: overrides.evolutionController ?? new RuntimeControllerClient(config),
-    canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
+    canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase, webReader,
     report: code => process.stderr.write(`evolution: ${code}\n`) });
   if (evolution) {
     evolution.loops.configureModules({ editor: frontier?.editor, planner: autopilotPlanner, runtimeSession:evolution.runtimeSession, engineBuilder:evolution.engineBuilder,

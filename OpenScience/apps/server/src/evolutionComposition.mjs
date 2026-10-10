@@ -81,7 +81,7 @@ export function createEvolutionDecisionModel({ config, usageLedger, fetchImpl, o
 /** Compose the optional platform loop using the same ledger, runtime and inbox as research.
  * @param {any} dependencies */
 export function createEvolution({ config, store, documents, jobs, database, usageLedger, notifications, registry, runtimeManager,
-  researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, resolvePositiveEvidence = null, observeHandbookOutcome = null, judgeService = null, report = () => {}, fetchImpl = fetch }) {
+  researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, resolvePositiveEvidence = null, observeHandbookOutcome = null, judgeService = null, report = () => {}, fetchImpl = fetch, webReader = null }) {
   if (!config.evolutionEnabled || !database || !documents || !jobs || !usageLedger) return null;
   const settingsIssues = validateEvolutionConfiguration(config);
   // A module whose settings are wrong stays off with the reason reported; it never stops the platform (`loadConfig` refuses first).
@@ -150,7 +150,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     dispatch: input => runs.dispatch(input), runtimeManager, controller, fetchImpl });
   const limits = { daily: config.evolutionDailyBudgetCny, weekly: 0 };
   const model = createEvolutionDecisionModel({ config, usageLedger, fetchImpl, owner: () => service.owner() });
-  const loops = createEvolutionLoops({service,integration,config,database,registry,model,fetchImpl});
+  const loops = createEvolutionLoops({service,integration,config,database,registry,model,fetchImpl,webReader});
   service.callbacks.observeSignal = input => loops.signals.record(input);
   service.callbacks.moduleObservation = input => loops.observe(input);
   // Nested callbacks inherit the worker's mission; independent maintenance has its own durable allocation.
@@ -615,7 +615,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   // What the candidate executor has done and refused, read from the runtime controller where it acts (`evolutionOpsMetrics.mjs`).
   const executorCounters = async () => (await controller.evolutionAdmissionAvailable())?.executor ?? null;
   // The counters of the limits that act inside the loops, scraped through `evolutionOpsMetrics.mjs`.
-  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters, policy: loops.policy.counters,
+  const limitCounters = () => ({ signals: loops.signals.counters, engineReviews: engineReviews.counters, policy: loops.policy.counters, selfResearch: loops.selfResearch.counters,
     heavyWindow: { open: worker.heavyWindowOpen(), started: worker.counters.heavyStarted } });
   return { service, loops, engineBuilder, engineReviews, model, budgeted, runtimeSession, limitCounters, observeVerifiedRun: feedback.observeVerifiedRun, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
     observeFeedback: feedback.observeFeedback };

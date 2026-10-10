@@ -20,14 +20,16 @@ import { createModuleEvolutionPolicies } from './moduleEvolutionPolicies.mjs';
 import { createModuleEvolutionAdapters, moduleProposalWithFacts } from './moduleEvolutionAdapters.mjs';
 import { createModuleEvolutionEvaluators } from './moduleEvolutionEvaluators.mjs';
 import { createEvolutionSelfResearch } from './evolutionSelfResearch.mjs';
+import { createEvolutionScholarEnrichment } from './evolutionScholarEnrichment.mjs';
+import { createEvolutionFullTextReader } from './evolutionFullText.mjs';
 import { createFrontierEvolutionDiscovery } from './frontierEvolution.mjs';
 import { evolutionToolGraph } from './evolutionScout.mjs';
 import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
 import { evolutionKey } from './evolutionService.mjs';
 
 /** Compose all three loops. Missing observations are durable waits, not successful synthetic evaluations.
- * @param {{service:any,integration?:any,fetchImpl?:typeof fetch,loadReleaseSource?:any,config:any,database:any,registry:any,model:(system:string,input:any)=>Promise<any>}} dependencies */
-export function createEvolutionLoops({ service, config, database, registry, model, fetchImpl, loadReleaseSource }) {
+ * @param {{service:any,integration?:any,fetchImpl?:typeof fetch,loadReleaseSource?:any,config:any,database:any,registry:any,model:(system:string,input:any)=>Promise<any>,webReader?:any}} dependencies */
+export function createEvolutionLoops({ service, config, database, registry, model, fetchImpl, loadReleaseSource, webReader = null }) {
   const provenance=createEvolutionPublicProvenance({service,fetchImpl,loadReleaseSource,now:()=>service.now()});
   const policy = createEvolutionPolicy({ service, now: () => service.now(), propose: async input => {
     const messages = evolutionPolicyProposalMessages(input);
@@ -69,9 +71,19 @@ export function createEvolutionLoops({ service, config, database, registry, mode
   }
   service.callbacks.evolutionProgress=async day=>progress(new Date(`${day}T00:00:00+08:00`).toISOString(),new Date(Date.parse(`${day}T00:00:00+08:00`)+86400000).toISOString());
   const discovery = config.frontierEnabled ? createFrontierEvolutionDiscovery({ database }) : null;
+  const scholar = createEvolutionScholarEnrichment({ semanticScholarKey: config.publicSourceCredentials?.semanticScholar ?? '', openAlexKey: config.publicSourceCredentials?.openAlex ?? '', fetchImpl });
+  const fullText = createEvolutionFullTextReader({ webReader, maxChars: config.evolutionSelfResearchTextChars });
   const selfResearch = createEvolutionSelfResearch({ service, now: () => service.now(),
-    // Self-research reads the AI discovery channel (the medical feed drops it, frontierPipeline), not the medical entries.
-    discover: input => discovery?.discover({ ...input, discovery: 'only' }) ?? Promise.resolve([]),
+    limits: { screen: config.evolutionSelfResearchScreenLimit, shortlist: config.evolutionSelfResearchShortlistLimit, fullText: config.evolutionSelfResearchFullTextLimit, cards: config.evolutionSelfResearchCardLimit },
+    // Self-research reads the AI discovery channel (the medical feed drops it, frontierPipeline) and the lab feeds both read, not the medical entries.
+    discover: input => discovery?.discover({ ...input, discovery: 'self-research' }) ?? Promise.resolve([]),
+    sourceHealth: () => discovery?.sources() ?? Promise.resolve([]),
+    // What the screening call weighs a paper against: the platform's own open problems, as the dossiers state them.
+    problems: async () => (await service.dossiers()).filter((/** @type {any} */ row) => row.payload.opportunity === true && ['planned', 'waiting_resource'].includes(row.payload.status))
+      .sort((/** @type {any} */ a, /** @type {any} */ b) => (b.payload.score ?? 0) - (a.payload.score ?? 0)).map((/** @type {any} */ row) => String(row.payload.goal ?? '').trim().slice(0, 200)).filter(Boolean),
+    triage: input => model(input.messages[0].content, JSON.parse(input.messages[1].content)),
+    enrich: papers => scholar.enrich(papers),
+    readFullText: paper => fullText.read(paper),
     verify: async entry => {
       if (!entry.sourceText || !entry.sourceUrl) return null;
       const text = entry.sourceText;
@@ -80,7 +92,7 @@ export function createEvolutionLoops({ service, config, database, registry, mode
       await service.save('resource-asset', `evolution-resource-${digest}`, { kinds: ['knowledge','method'], scope: 'public', sourceRoot: chronology.sourceRoot ?? entry.sourceRoot ?? entry.id, studyFamilyId:chronology.sourceRoot ?? entry.sourceRoot ?? entry.id, sourceAliases:chronology.aliases ?? [],
         sourceUrl: entry.sourceUrl, sourceHash: digest, text, use: 'self-research', exposedToDevelopment: true, at: service.now().toISOString() });
       return { text, digest, url: entry.sourceUrl, publicationStatus: entry.publicationStatus };
-    }, screen: input => model(input.messages[0].content, { entries: input.entries, existingCards: input.existingCards, triedCandidates: input.triedCandidates }),
+    }, extract: input => model(input.messages[0].content, { entries: input.entries, existingCards: input.existingCards, triedCandidates: input.triedCandidates }),
     addOpportunity: input => missions.opportunity({ moduleId: input.module, sources: ['self-research'], mechanismFamily: input.mechanismKey,
       evidenceRoots: [input.mechanismCardId], features: { estimatedCostCny: input.estimatedCostCny }, goal: input.problem,
       cheapestNextStep: 'replay-recorded-platform-problem', failureHypotheses: ['mechanism-may-not-transfer'] }) });

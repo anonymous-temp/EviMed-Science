@@ -160,6 +160,20 @@ test("the loops' own limits reach the scrape: the account floors by class", asyn
   assert.equal(sample(window, "open_science_evolution_heavy_window_open"), 0);
   assert.equal(sample(window, "open_science_evolution_heavy_jobs_started_total", { window: "inside" }), 4);
   assert.equal(sample(window, "open_science_evolution_heavy_jobs_started_total", { window: "outside" }), 1);
+  const research = evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ selfResearch: {
+    collected: 40, merged: 31, alreadyScreened: 3, screened: 28, shortlisted: 9, fullTexts: 5, cards: 3, rejected: 1, venueEvents: 2,
+    capHits: { collect: 0, screen: 1, shortlist: 2, fullText: 1, cards: 0 }, triageBatchesFailed: 1, extractFailed: 2, venueQuotesRejected: 4, sourcesRead: 20, sourcesSkipped: 4,
+    fullTextFallbacks: { web_read_robots_disallowed: 3, not_arxiv: 2 }, enrichment: { semanticScholar: { no_key: 2 }, openAlex: { ok: 1, http_429: 1 } } } }) } }));
+  for (const [stage, value] of [["collected", 40], ["merged", 31], ["already_screened", 3], ["screened", 28], ["shortlisted", 9], ["full_texts", 5], ["cards", 3], ["rejected", 1], ["venue_events", 2]]) {
+    assert.equal(sample(research, "open_science_evolution_self_research_items_total", { stage }), value, stage);
+  }
+  assert.equal(sample(research, "open_science_evolution_self_research_cap_hits_total", { cap: "shortlist" }), 2);
+  assert.equal(sample(research, "open_science_evolution_self_research_failures_total", { kind: "venue_quote" }), 4);
+  assert.equal(sample(research, "open_science_evolution_self_research_failures_total", { kind: "triage_batch" }), 1);
+  assert.equal(sample(research, "open_science_evolution_self_research_sources_total", { state: "skipped" }), 4);
+  assert.equal(sample(research, "open_science_evolution_self_research_full_text_fallbacks_total", { reason: "web_read_robots_disallowed" }), 3);
+  assert.equal(sample(research, "open_science_evolution_self_research_enrichment_total", { provider: "semanticScholar", outcome: "no_key" }), 2);
+  assert.equal(sample(research, "open_science_evolution_self_research_enrichment_total", { provider: "openAlex", outcome: "http_429" }), 1);
   // A module that composed no counters says nothing rather than zeros.
   assert.equal(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: {} })).some((family) => family.name === "open_science_evolution_signal_groups"), false);
 });

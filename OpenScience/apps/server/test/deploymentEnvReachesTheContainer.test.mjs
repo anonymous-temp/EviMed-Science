@@ -271,6 +271,13 @@ const operatorLevers = {
   // The hours the heavy evolution work waits for (2026-10-10, E13w): the worker runs in the API, so only the API reads it. A window that never arrived
   // would leave the default in force while an operator believes theirs applies, or leave the work running by day at full price.
   OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW: ["open-science-web"],
+  // The weekly self-research funnel's caps (2026-10-10, E13e): numeric settings the evolution module validates in both processes, so both receive them;
+  // the worker that applies them runs in the API. One that never arrived would leave the default in force while an operator believes theirs applies.
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SCREEN_LIMIT: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SHORTLIST_LIMIT: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_FULL_TEXT_LIMIT: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_CARD_LIMIT: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ["open-science-web"],
