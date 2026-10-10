@@ -3,7 +3,8 @@ import { TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { Input, Select, Textarea } from '@/components/ui/Input';
-import { createVcrProjection, getVcrProtectedDocument, setVcrCloudPermission, type VcrCloudPermission, type VcrCloudState, type VcrIntakeSource } from '@/lib/vcrClient';
+import { createVcrProjection, getVcrProtectedDocument, setVcrCloudPermission, type VcrCloudPermission, type VcrCloudState, type VcrIdentifierSuggestion, type VcrIntakeSource } from '@/lib/vcrClient';
+import { ShowMore, useShowMore } from '@/components/ui/ShowMore';
 import { webErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/cn';
 
@@ -40,12 +41,16 @@ export function maskedParts(text: string, spans: ReadonlyArray<{ start: number; 
   return parts;
 }
 
-/** Exact operator-selected identifiers, never a free-text identifier detector. */
-export function reviewedSpans(text: string, identifiers: string) {
+/**
+ * The spans of the projection: the exact identifiers the reviewer listed (every place they stand) and the suggestions the reviewer
+ * accepted, each with its own kind. Nothing is a span until the reviewer put it there; overlapping spans are one span, the first's kind.
+ */
+export function reviewedSpans(text: string, identifiers: string, accepted: ReadonlyArray<{ start: number; end: number; kind: string }> = []) {
   const spans: Array<{ start: number; end: number; kind: string }> = [];
   for (const identifier of listedIdentifiers(identifiers)) {
     for (const start of occurrencesOf(text, identifier)) spans.push({ start, end: start + identifier.length, kind: 'identifier' });
   }
+  for (const span of accepted) spans.push({ start: span.start, end: span.end, kind: span.kind });
   spans.sort((a, b) => a.start - b.start || b.end - a.end);
   const merged: typeof spans = [];
   for (const span of spans) {
@@ -54,6 +59,14 @@ export function reviewedSpans(text: string, identifiers: string) {
     else merged.push({ ...span });
   }
   return merged;
+}
+
+/** What a suggestion is, in the reviewer's words. */
+export function suggestionLabel(suggestion: Pick<VcrIdentifierSuggestion, 'format' | 'birth'>): string {
+  if (suggestion.format === 'resident_id') return '居民身份证号';
+  if (suggestion.format === 'mobile') return '手机号';
+  if (suggestion.format === 'record_number') return '病历编号';
+  return suggestion.birth ? '出生日期' : '日期';
 }
 
 /** Where a source stands for the cloud models: the server says so; an older answer is read from the recorded permission. */
@@ -76,6 +89,7 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
   const [documentId, setDocumentId] = useState('');
   const [document, setDocument] = useState<{ id: string; text: string; sourceHash: string } | null>(null);
   const [identifiers, setIdentifiers] = useState('');
+  const [accepted, setAccepted] = useState<ReadonlyArray<VcrIdentifierSuggestion>>([]);
   const [reviewed, setReviewed] = useState(false);
   const documents = source.files.filter(file => file.role === 'document');
   const destinations = source.upload.cloudDestinations ?? [];
@@ -85,7 +99,7 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
       : cloud.expired ? '授权已到期' : '未授权';
   // The record and the names typed beside it are the most sensitive text on the page: they live only while the reviewer is working on
   // them, and go when the text is saved, when another record is chosen, or when the fold is closed.
-  const forget = () => { setDocument(null); setIdentifiers(''); setReviewed(false); };
+  const forget = () => { setDocument(null); setIdentifiers(''); setAccepted([]); setReviewed(false); };
   const run = async (work: () => Promise<unknown>, success: string) => {
     if (busy) return;
     setBusy(true); setMessage(''); setFailed(false);
@@ -126,11 +140,12 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
           <Button variant="secondary" disabled={!documentId || busy} onClick={() => void run(async () => {
             const answer = await getVcrProtectedDocument(studyId, documentId); setDocument(answer.document);
           }, '已打开原文，请核对身份信息。')}>打开原文</Button>
-          {document && <Redaction document={document} identifiers={identifiers} reviewed={reviewed} busy={busy}
+          {document && <Redaction document={document} identifiers={identifiers} accepted={accepted} reviewed={reviewed} busy={busy}
             onIdentifiers={value => { setIdentifiers(value); setReviewed(false); }} onReviewed={setReviewed}
+            onAccepted={next => { setAccepted(next); setReviewed(false); }}
             onSave={() => void run(async () => {
               await createVcrProjection(studyId, document.id, {
-                sourceHash: document.sourceHash, spans: reviewedSpans(document.text, identifiers),
+                sourceHash: document.sourceHash, spans: reviewedSpans(document.text, identifiers, accepted),
                 attestation: source.cloudPermission?.reference || reference || '病历审阅人已核对脱敏文本',
               });
               forget();
@@ -150,15 +165,16 @@ const PREVIEW_REGION = { tabIndex: 0, role: 'region', 'aria-label': '脱敏后�
  * will be saved, with each located span masked and everything else as written (review V-C1). A name the reviewer did not list is
  * plainly still in it; an identifier that stands nowhere in the record is counted as 0 and flagged, not hidden inside a total.
  */
-function Redaction({ document, identifiers, reviewed, busy, onIdentifiers, onReviewed, onSave }: {
-  document: { id: string; text: string; sourceHash: string };
-  identifiers: string; reviewed: boolean; busy: boolean;
-  onIdentifiers: (value: string) => void; onReviewed: (value: boolean) => void; onSave: () => void;
+function Redaction({ document, identifiers, accepted, reviewed, busy, onIdentifiers, onAccepted, onReviewed, onSave }: {
+  document: { id: string; text: string; sourceHash: string; suggestions?: VcrIdentifierSuggestion[] };
+  identifiers: string; accepted: ReadonlyArray<VcrIdentifierSuggestion>; reviewed: boolean; busy: boolean;
+  onIdentifiers: (value: string) => void; onAccepted: (next: ReadonlyArray<VcrIdentifierSuggestion>) => void; onReviewed: (value: boolean) => void; onSave: () => void;
 }) {
-  const spans = reviewedSpans(document.text, identifiers);
+  const spans = reviewedSpans(document.text, identifiers, accepted);
   const counts = identifierCounts(document.text, identifiers);
   return <>
     <Textarea label="受保护的原文" value={document.text} readOnly rows={8} />
+    <Suggestions text={document.text} suggestions={document.suggestions ?? []} accepted={accepted} onAccepted={onAccepted} />
     <Textarea label="需替换的姓名、编号或地址（每行一项）" value={identifiers} onChange={event => onIdentifiers(event.target.value)} rows={4} />
     {counts.length > 0 && <ul aria-label="需替换的内容" className="flex flex-col gap-1">
       {counts.map(({ identifier, count }) => <li key={identifier} className={cn('flex items-center gap-2 text-caption', count === 0 ? 'text-warn-strong' : 'text-text-2')}>
@@ -181,4 +197,44 @@ function Redaction({ document, identifiers, reviewed, busy, onIdentifiers, onRev
       已检查脱敏后的全文；其余文本已获授权，可用于所列云端服务</label>
     <Button loading={busy} disabled={busy || !reviewed} onClick={onSave}>保存脱敏文本</Button>
   </>;
+}
+
+/** The characters of context shown either side of a suggestion, so a date can be told from the date of birth. */
+const SUGGESTION_CONTEXT = 8;
+const SUGGESTIONS_SHOWN = 20;
+
+/**
+ * The identifiers of closed formats the server found in the record, as spans to accept one by one (or all at once). None is applied
+ * until the reviewer accepts it: an accepted suggestion joins the spans of the projection, and a suggestion left alone stays in the text.
+ */
+function Suggestions({ text, suggestions, accepted, onAccepted }: {
+  text: string; suggestions: ReadonlyArray<VcrIdentifierSuggestion>; accepted: ReadonlyArray<VcrIdentifierSuggestion>;
+  onAccepted: (next: ReadonlyArray<VcrIdentifierSuggestion>) => void;
+}) {
+  const shown = useShowMore(suggestions, { first: SUGGESTIONS_SHOWN, step: SUGGESTIONS_SHOWN, resetKey: text.length.toString() });
+  if (!suggestions.length) return null;
+  const taken = (suggestion: VcrIdentifierSuggestion) => accepted.some(other => other.start === suggestion.start && other.end === suggestion.end);
+  const open = suggestions.filter(suggestion => !taken(suggestion));
+  return <div className="flex flex-col gap-2">
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-ui font-medium text-text">{`建议遮蔽 · ${suggestions.length} 处`}</p>
+      {open.length > 0 && <Button variant="text" size="sm" onClick={() => onAccepted([...accepted, ...open])}>全部接受</Button>}
+    </div>
+    <ul aria-label="建议遮蔽" className="flex flex-col divide-y divide-faint">
+      {shown.visible.map(suggestion => {
+        const on = taken(suggestion);
+        const value = text.slice(suggestion.start, suggestion.end);
+        return <li key={`${suggestion.start}-${suggestion.end}`} className="flex items-center gap-3 py-2">
+          <span className="w-24 shrink-0 text-caption text-text-3">{suggestionLabel(suggestion)}</span>
+          <span className="min-w-0 flex-1 break-words text-caption text-text-3">
+            {text.slice(Math.max(0, suggestion.start - SUGGESTION_CONTEXT), suggestion.start)}<span className="text-ui text-text">{value}</span>{text.slice(suggestion.end, suggestion.end + SUGGESTION_CONTEXT)}
+          </span>
+          <Button variant="text" size="sm" aria-label={`${on ? '取消接受' : '接受'} ${value}`}
+            onClick={() => onAccepted(on ? accepted.filter(other => !(other.start === suggestion.start && other.end === suggestion.end)) : [...accepted, suggestion])}>
+            {on ? '已接受' : '接受'}</Button>
+        </li>;
+      })}
+    </ul>
+    <ShowMore remaining={shown.remaining} unit="处" onMore={shown.more} />
+  </div>;
 }

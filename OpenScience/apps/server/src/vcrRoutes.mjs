@@ -67,7 +67,7 @@ import { createReadStream } from "node:fs";
 
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
-import { VCR_LONGITUDINAL_JOBS } from '@evimed/domain';
+import { VCR_LONGITUDINAL_JOBS, suggestIdentifierSpans } from '@evimed/domain';
 import { presentLongitudinal } from './vcrLongitudinalPresentation.mjs';
 import { LONGITUDINAL_TEMPLATES } from './vcrLongitudinal.mjs';
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
@@ -895,7 +895,9 @@ export function createVcrRoutes(dependencies) {
         const document = await plane().documentText({ studyId: id, documentId: parts[4], principal: actor, purpose: 'vcr' });
         if (!document) throw new HttpError(404, 'vcr_document_not_found', 'Document not found.');
         const { createHash } = await import('node:crypto');
-        return reply({ document: { id: document.id, text: document.text, sourceHash: createHash('sha256').update(document.text).digest('hex') } });
+        // The reviewer is shown the identifiers of closed formats in it as spans to accept; none is applied (domain `suggestIdentifierSpans`).
+        return reply({ document: { id: document.id, text: document.text, sourceHash: createHash('sha256').update(document.text).digest('hex'),
+          suggestions: suggestIdentifierSpans(document.text) } });
       }
       if (kind === "documents" && parts.length === 6 && parts[5] === "projection" && method === "POST") {
         await authorize(id, "manage_data");

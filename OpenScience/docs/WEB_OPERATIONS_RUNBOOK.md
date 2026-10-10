@@ -1551,9 +1551,14 @@ and optional expiry. A recorded approved permission still stands beside the agre
 and a projection reviewed under it stays bound to it. Original text is shown only
 through the authenticated protected view. Explicitly reviewed identifier spans produce
 a study-scoped text projection with an exact UTF-16 mapping back to the original. This
-is not an automatic PII detector. Images, scanned records, unsupported geometry and
-date shifting are not added by this projection feature. A refusal affects that source
-operation only.
+is not an automatic PII detector. The reviewer is offered suggestions for the identifiers
+that have a closed format (`@evimed/domain`'s `suggestIdentifierSpans`: an 18-digit
+mainland resident identity number with its region, birth date and check character, a
+mobile number, the number after a record-number label such as 住院号 or MRN, and a date
+with its year): each is a span the reviewer accepts or leaves, none is applied by itself,
+and no date is shifted. Names and addresses stay the reviewer's to list. Images, scanned
+records and unsupported geometry are not added by this projection feature. A refusal
+affects that source operation only.
 
 Cloud reads record source/projection hashes, served windows and the run/session
 that received them, without putting text in audit rows. A served window is not

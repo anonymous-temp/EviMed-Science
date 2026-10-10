@@ -576,6 +576,22 @@ test("CS-7 every route in the ability table is driven as every role, and 403 fal
   assert.ok(asserted >= (VCR_MEMBER_ROLES.length + 1) * Object.keys(VCR_ROUTE_ABILITIES).length, "the walk covered the whole grid");
 });
 
+test("the protected document comes with the identifiers of closed formats in it as spans to accept, and none of them applied", async () => {
+  const text = "患者王小明，身份证号 11010519491231002X，电话 13812345678，住院号：20261234，入院 2026-10-01。";
+  const overrides = composedHooks();
+  overrides.dataPlane = { ...overrides.dataPlane, documentText: async () => ({ id: "sfl_1", text }) };
+  const { routes } = fixture({ overrides });
+  const res = response();
+  await routes(request("GET", "/api/vcr/studies/std_1/data/documents/sfl_1"), res);
+  assert.equal(res.status, 200);
+  const { document } = res.json().data;
+  assert.equal(document.text, text, "the original is shown exactly as it is");
+  assert.deepEqual(document.suggestions.map((/** @type {any} */ span) => [span.format, text.slice(span.start, span.end)]),
+    [["resident_id", "11010519491231002X"], ["mobile", "13812345678"], ["record_number", "20261234"], ["date", "2026-10-01"]]);
+  assert.deepEqual(document.suggestions.map((/** @type {any} */ span) => span.kind), ["identifier", "contact", "identifier", "date"]);
+  assert.ok(!document.suggestions.some((/** @type {any} */ span) => "text" in span || "replacement" in span), "spans only: the reviewer decides, and the projection is built from what was accepted");
+});
+
 test("a computation queued from the page names the object it is for: the id is checked against the study's objects and rides the job; a bad id is refused", async () => {
   /** @type {any[]} */
   const queued = [];

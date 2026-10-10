@@ -2583,8 +2583,14 @@ const dataRoute = (studyId: string) => `${study(studyId)}/data`;
 
 export const setVcrCloudPermission = (studyId: string, sourceId: string, permission: VcrCloudPermission) =>
   productRequest(`${dataRoute(studyId)}/sources/${encodeURIComponent(sourceId)}/cloud-permission`, 'POST', { permission });
+/** An identifier of a closed format found in a record (a resident identity number, a mobile number, a record number, a date), as a span to accept. */
+export interface VcrIdentifierSuggestion {
+  start: number; end: number; format: 'resident_id' | 'record_number' | 'mobile' | 'date'; kind: string;
+  /** A date written after a word for birth. */
+  birth?: true;
+}
 export const getVcrProtectedDocument = (studyId: string, documentId: string) =>
-  productRequest<{ document: { id: string; text: string; sourceHash: string } }>(`${dataRoute(studyId)}/documents/${encodeURIComponent(documentId)}`, 'GET');
+  productRequest<{ document: { id: string; text: string; sourceHash: string; suggestions?: VcrIdentifierSuggestion[] } }>(`${dataRoute(studyId)}/documents/${encodeURIComponent(documentId)}`, 'GET');
 export const createVcrProjection = (studyId: string, documentId: string, input: { sourceHash: string; spans: Array<{ start: number; end: number; kind: string }>; attestation: string }) =>
   productRequest(`${dataRoute(studyId)}/documents/${encodeURIComponent(documentId)}/projection`, 'POST', input);
 export const resolveVcrQuote = (studyId: string, documentId: string, span: { start: number; end: number; quote: string }) =>

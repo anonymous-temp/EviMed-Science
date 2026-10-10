@@ -83,3 +83,15 @@ test('identifiable records are a data class of their own, held to the private te
   assert.deepEqual(cloudState({ schema: 1, status: 'revoked' }, allDestinations, at, agreements), { state: 'restricted', basis: null });
   assert.deepEqual(cloudState(record, allDestinations, at, agreements), { state: 'allowed', basis: 'source_permission' });
 });
+
+test('an accepted suggestion is replaced as the kind it was suggested as; a date nobody accepted stays what the chart wrote, and no date is shifted', () => {
+  const text = '电话 13812345678，出生日期 1980-02-29，入院 2026-10-01，肌酐 1.2 mg/dL。';
+  const at = value => ({ start: text.indexOf(value), end: text.indexOf(value) + value.length });
+  const projection = buildCloudProjection({ text, key: Buffer.alloc(32, 7), attestation: 'Reviewed synthetic canary',
+    spans: [{ ...at('13812345678'), kind: 'contact' }, { ...at('1980-02-29'), kind: 'date' }] });
+  assert.match(projection.text, /^电话 \[contact:[a-f0-9]{16}\]，出生日期 \[date:[a-f0-9]{16}\]，入院 2026-10-01，肌酐 1\.2 mg\/dL。$/);
+  assert.equal(projection.dateShift, null, 'a date is masked or kept, never moved');
+  const restored = originalProjectionSpan(projection, text, { start: 0, end: projection.text.length, quote: projection.text });
+  assert.equal(restored.quote, text);
+  assert.throws(() => buildCloudProjection({ text, key: Buffer.alloc(32), attestation: 'x', spans: [{ ...at('2026-10-01'), kind: 'timestamp' }] }), { code: 'vcr_projection_span_invalid' });
+});

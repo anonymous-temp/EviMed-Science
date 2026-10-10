@@ -1585,6 +1585,16 @@ export {
   suppressForModel,
 } from './src/vcrSuppression.mjs'
 
+// vcrIdentifierSuggestions — 5 exports: the identifiers of closed formats in a patient record (resident identity number with its
+// checksum, mobile number, record number after its label, date) as spans a reviewer may accept; never applied, no date shifted
+export {
+  VCR_IDENTIFIER_FORMATS,
+  VCR_IDENTIFIER_KINDS,
+  VCR_IDENTIFIER_SUGGESTION_LIMIT,
+  isResidentIdNumber,
+  suggestIdentifierSpans,
+} from './src/vcrIdentifierSuggestions.mjs'
+
 // vcrPopulationProfile — 4 exports: the profile block of a generated population (scenario, literature,
 // empirical synthetic) the 人群 tab draws, and its validator
 export {

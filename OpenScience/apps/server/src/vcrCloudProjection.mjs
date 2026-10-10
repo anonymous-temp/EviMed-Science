@@ -12,7 +12,7 @@ import { HttpError } from './security.mjs';
 
 /** @param {string} text */
 export const projectionHash = text => createHash('sha256').update(text, 'utf8').digest('hex');
-const kinds = ['person', 'identifier', 'address', 'contact', 'organization'];
+const kinds = ['person', 'identifier', 'address', 'contact', 'organization', 'date'];
 /** @param {string} code */
 const invalid = code => new HttpError(400, code, 'The cloud permission or reviewed projection is invalid.');
 /** @param {unknown} input */
