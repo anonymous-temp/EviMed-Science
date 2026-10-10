@@ -381,21 +381,33 @@ export class CapsuleTransferService {
   }
 
   /**
-   * The X25519 keys of the accounts a pack is sealed for (build spec §9.2):
-   * each named account on this deployment can open it with its own key, and
-   * nobody needs the password. An account that does not exist is refused by
-   * name rather than silently left out of a pack its sender thinks it reaches.
+   * The accounts a pack is to be sealed for (build spec §9.2), checked and nothing more: a named account that does not exist is
+   * refused by name rather than silently left out of a pack its sender thinks it reaches. This reads, and creates nothing for
+   * any account: a refused export used to leave key files for every existing account it had named, one more for each name a
+   * sender probed (review C-9). The keys are made by `#recipientKeys`, once the export can no longer be refused.
    * @param {unknown} recipients @param {string} sender
+   * @returns {Promise<string[]>}
    */
-  async #recipientKeys(recipients, sender) {
+  async #recipientIds(recipients, sender) {
     if (recipients == null) return [];
     if (!Array.isArray(recipients) || recipients.length > 32 || recipients.some((id) => typeof id !== "string" || !id.trim())) throw invalid();
     const ids = [...new Set(recipients.map((id) => id.trim()))].filter((id) => id !== sender);
-    const keys = [];
     for (const id of ids) {
       productId(id, "user");
       const exists = await this.documents.database.query("SELECT 1 FROM evimed_control.users WHERE id=$1", [id]);
       if (exists.rowCount !== 1) throw new HttpError(400, "capsule_recipient_unknown", "A named recipient is not an account on this deployment.");
+    }
+    return ids;
+  }
+
+  /**
+   * The X25519 keys of the accounts a pack is sealed for: each named account on this deployment can open it with its own key,
+   * and nobody needs the password. An account without a key is given one here, which is why this runs last.
+   * @param {readonly string[]} ids
+   */
+  async #recipientKeys(ids) {
+    const keys = [];
+    for (const id of ids) {
       const identity = await this.withAccount(id, null, () => this.identities.forUser(id));
       if (!identity?.encryption?.keyId || !identity.encryption.publicKey) throw new HttpError(503, "capsule_identity_unavailable", "A recipient key is unavailable.");
       keys.push({ userId: id, encKeyId: identity.encryption.keyId, publicKey: identity.encryption.publicKey });
@@ -470,9 +482,9 @@ export class CapsuleTransferService {
     const channel = ["delivery", "link"].includes(String(options.channel)) ? String(options.channel) : "file";
     await this.assertOwnCapsule(userId, capsuleId);
     await this.#assertRoomForSnapshot(userId);
-    const recipients = await this.#recipientKeys(input.recipients, userId);
+    const recipientIds = await this.#recipientIds(input.recipients, userId);
     // Sealed for a password, for named accounts, or both; never for nobody.
-    if (input.password === undefined && recipients.length === 0) throw invalid();
+    if (input.password === undefined && recipientIds.length === 0) throw invalid();
     const source = await this.#assemble(userId, capsuleId, kinds);
     if (!source.facts.length) throw new HttpError(409, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
     if (source.facts.length > MAX_ENTRIES) throw new HttpError(413, "capsule_transfer_too_large", "A snapshot supports at most 100 approved entries.");
@@ -484,6 +496,11 @@ export class CapsuleTransferService {
     });
     const card = await this.#card(userId, entries, previous, input.card);
     const files = renderedFiles(snapshotId, entries);
+    // Every sealed entry is its text and 28 bytes, in base64 inside the archive: a pack that cannot fit is refused here, before
+    // any recipient is given a key for it. (The exact size is checked once the pack is made.)
+    const sealedBytes = Object.values(files).reduce((sum, content) => sum + Buffer.byteLength(content) + 28, 0);
+    if (Math.ceil(sealedBytes / 3) * 4 > CAPSULE_TRANSFER_MAX_BYTES) throw new HttpError(413, "capsule_transfer_too_large", "This encrypted snapshot exceeds 2 MiB.");
+    const recipients = await this.#recipientKeys(recipientIds);
     const identity = await this.withAccount(userId, accountCreatedAt, () => this.identities.forUser(userId, { accountCreatedAt }));
     /** @type {Awaited<ReturnType<typeof packCapsule>>} */
     let container;
