@@ -121,8 +121,9 @@ def _post(payload: dict) -> dict:
             detail or "geo_probe_upstream_error",
             "The GEO probe gateway returned HTTP %d." % error.code,
             # 429 here is the probe being busy with another question. It is the
-            # ordinary case in a batch, not an incident.
-            retryable=error.code in (409, 429, 502, 503, 504),
+            # ordinary case in a batch, not an incident. A module that is not open to
+            # this account is a 503 that retrying cannot change.
+            retryable=error.code in (409, 429, 502, 503, 504) and detail != "geo_probe_disabled",
         ) from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise GeoProbeError("geo_probe_unavailable", "The GEO probe gateway is unreachable.", retryable=True) from error

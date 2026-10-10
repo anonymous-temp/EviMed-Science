@@ -717,6 +717,11 @@ function geoSettings(overrides) {
     // request over the limit is answered with a notice and is not lost (the run keeps the question as a finding or an opportunity),
     // and a finished task frees its place. 0 queues none. Counted as `open_science_geo_service_total{kind="researchCapped"}`.
     geoResearchMaxOpen: integer("geoResearchMaxOpen", "OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN", 5, 0, 100),
+    // Calls one project's runtime may make to the probe host in a minute (`geo_visibility_probe`: providers, ask, screenshot, counted
+    // together). The probe answers one request at a time for minutes through the platform's logged-in vendor accounts, and the skills
+    // use the tool for the one question a person asks about; this is the ceiling of a loop, not of a run. A call over it is refused
+    // with `geo_probe_gateway_rate_limited` (429), which reaches the operator's ledger by its code. 12 is the social channel's.
+    geoProbeCallsPerMinute: integer("geoProbeCallsPerMinute", "OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE", 12, 1, 600),
     geoSocialUrl: origin("geoSocialUrl", "OPEN_SCIENCE_GEO_SOCIAL_URL"),
     geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 140_000, 5_000,
       MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS - 10_000),

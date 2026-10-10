@@ -252,6 +252,9 @@ test("every optional evidence channel the platform configures reaches the runtim
       // variable to take this route.
       geoProbeUrl: "http://geo-probe.internal:9999",
       geoProbeGatewayInternalUrl: "https://gateway.internal/internal/geo-probe/v1",
+      // The probe is given to an account the module is open to (Q-8), so the module is on.
+      geoEnabled: true,
+      geoAudience: "all",
       publicSourceCredentials: { unpaywall: "evimed@example.test" },
       // The two server-side searches ride the same runtime token and reach
       // the MCP by one variable each.
@@ -361,6 +364,35 @@ test("循证 GEO's tools reach a runtime only where the module is on and open to
     const remoteEnv = dshProfileInput(dshConfig({ geoEnabled: true, geoAudience: "all", geoSocialUrl: "http://social.internal:9966" }), project, remote,
       "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
     assert.equal(remoteEnv.EVIMED_GEO_GATEWAY_URL, "https://evimed.example/runtime-gateway/geo/v1", "a remote session is given the public prefix");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// The probe host serves one request at a time and drives the platform's logged-in consumer-AI accounts, so its address goes
+// only to a runtime of an account the module is open to (Q-8): the GEO gateway's rule, and the probe gateway checks the same
+// thing again when the call arrives. A runtime without the address answers `geo_probe_unconfigured` and the run goes on.
+test("the GEO probe's address reaches a runtime only where 循证 GEO is on and open to its account", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-geo-probe-mcp-"));
+  try {
+    const { project, plan } = await fixture(tmp);
+    const environment = (overrides, thePlan = plan) => dshProfileInput(dshConfig({
+      publicSourceGatewayInternalUrl: "https://gateway.internal/internal/sources/v1/fetch",
+      geoProbeUrl: "http://geo-probe.internal:9999", geoProbeGatewayInternalUrl: "https://gateway.internal/internal/geo-probe/v1",
+      geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreviewUsers: [], ...overrides,
+    }), project, thePlan, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment.EVIMED_GEO_PROBE_GATEWAY_URL;
+    const url = "https://gateway.internal/internal/geo-probe/v1";
+    assert.equal(environment({}), url);
+    assert.equal(environment({ geoEnabled: false }), undefined, "the module is off");
+    assert.equal(environment({ geoAudience: "operators" }), undefined, "operators only, and user-1 is none");
+    assert.equal(environment({ geoAudience: "operators", operatorUsers: ["user-1"] }), url);
+    assert.equal(environment({ geoAudience: "operators", geoPreviewUsers: ["user-1"] }), url);
+    assert.equal(environment({ geoProbeUrl: "" }), undefined, "no probe host, no address");
+    const remote = { ...plan, gateways: { model: "https://evimed.example/runtime-gateway/model/v1", publicSource: "https://evimed.example/runtime-gateway/sources/v1/fetch",
+      geoProbe: "https://evimed.example/runtime-gateway/geo-probe/v1", adapters: {} } };
+    assert.equal(environment({}, remote), "https://evimed.example/runtime-gateway/geo-probe/v1", "a remote session is given the public prefix");
+    assert.equal(environment({ geoEnabled: false }, remote), undefined, "and none where the module is off");
+    assert.equal(environment({ geoAudience: "operators" }, remote), undefined, "or closed to the account");
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

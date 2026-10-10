@@ -403,6 +403,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "geo_probe_gateway_failed",
   "geo_probe_gateway_token_missing",
   "geo_probe_gateway_token_invalid",
+  // Who may use the probe (Q-8, 2026-10-10): the module off or not open to the account, and one project's window of calls a minute.
+  // Both mean "this runtime may not put a question to a vendor now", which is a limitation the report states, never a vendor
+  // that stayed silent.
+  "geo_probe_disabled",
+  "geo_probe_gateway_rate_limited",
   // The private evidence API is not configured for this deployment. It is host
   // configuration, like the Unpaywall case above, and the keyless public
   // sources are what the tool falls back to — failing a run over it would
@@ -1917,6 +1922,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   tooluniverse_unavailable: '补充科研数据源尚未配置，可继续使用其他文献和指南来源。',
   tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',
   tooluniverse_rate_limited: '补充科研数据源请求过于频繁，请稍后再试。',
+  geo_probe_disabled: '循证 GEO 没有对这个账号开放，可见度探测不可用；报告会写明这一点，不会把没测的当作没提到。',
+  geo_probe_gateway_rate_limited: '这个项目一分钟内的可见度探测太频繁了，稍后再试；被拒的这次不算测量，也不会记成没提到。',
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
   geo_source_not_found: '找不到这个信源，它可能已被移除。',
   geo_producer_invalid: '出品方设置不对：类型选“企业”或“医生”，医生要写姓名，与产品的关系只能选列出的几种。',
