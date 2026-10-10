@@ -583,6 +583,19 @@ svg.lucide {
   background-clip: content-box;
 }
 
+/* What the browser draws on its own — the tick in a checkbox or a radio, the thumb of a range, the caret in a field, the text a reader
+   selects — wears the brand and not the browser's blue or system colour, in both themes (the craft floor's 「Browser surfaces」). They
+   read the accent role, which the theme layer already switches, so nothing here restates a value; forced colours put the system's
+   own back. */
+:root {
+  accent-color: var(--accent);
+  caret-color: var(--accent);
+}
+::selection {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
 /* Global keyboard-focus indicator (spec §10.3). Placed after the Tailwind
    utilities so it also wins over `outline-none` on buttons and links. Always
    an outline, never a box-shadow: forced-colours mode removes every shadow,
