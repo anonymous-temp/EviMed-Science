@@ -112,18 +112,40 @@ export class CapsuleIdentityStore {
     }
   }
 
-  /** Only called while the control-plane account advisory lock is held. Keeps private keys until DB commit. */
+  /**
+   * Only called while the control-plane account advisory lock is held. Keeps private keys until DB commit.
+   *
+   * The state is a file and the deletion it announces is a database transaction, so the file can outlive a transaction that
+   * rolled back. What it overwrites (an earlier account's completed tombstone) rides in it as `previous`, one level deep,
+   * so that `restoreAfterRolledBackDeletion` can put the directory back as it was (review C-11).
+   */
   async prepareDeletion(userId, accountCreatedAt) {
     const previous = await this.deletionState(userId);
     if (previous?.phase === "pending" && previous.accountCreatedAt === accountCreatedAt) return previous;
     const keys = await protectedCapsuleDirectory(this.dataDir, "capsule-keys");
     const content = await readProtectedCapsuleFile(keys, `account-${capsuleAccountHash(userId)}.json`, 16384);
     const identity = content ? JSON.parse(content) : null;
+    const { previous: _older, ...earlier } = previous ?? {};
     const state = { phase: "pending", userId, accountCreatedAt,
-      binding: identity ? { issuerId: identity.issuerId, keyId: identity.signing.keyId, publicKey: identity.signing.publicKey, revoked: true } : null };
+      binding: identity ? { issuerId: identity.issuerId, keyId: identity.signing.keyId, publicKey: identity.signing.publicKey, revoked: true } : null,
+      ...(previous ? { previous: earlier } : {}) };
     const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-revocations");
     await replaceProtectedCapsuleFile(directory, `account-${capsuleAccountHash(userId)}.json`, JSON.stringify(state));
     return state;
+  }
+
+  /**
+   * The deletion that wrote this pending state did not commit: the account is still here, so the state goes and the earlier
+   * one comes back (or none, when there was none). Only called while the account's advisory lock is held and the live account
+   * is the generation the state names, which is how a rollback is told from a deletion that is still to commit.
+   * @param {string} userId @param {{ previous?: unknown }} state
+   */
+  async restoreAfterRolledBackDeletion(userId, state) {
+    const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-revocations");
+    const name = `account-${capsuleAccountHash(userId)}.json`;
+    if (state.previous && typeof state.previous === "object") await replaceProtectedCapsuleFile(directory, name, JSON.stringify(state.previous));
+    else await unlinkCapsuleFile(directory, name);
+    await syncCapsuleDirectory(directory);
   }
 
   /** Retain only public revocation evidence after removing both the private identity and owner binding. */
@@ -177,9 +199,10 @@ export class CapsuleIdentityStore {
 
 export function capsuleAccountHash(userId) { return createHash("sha256").update(productId(userId, "user")).digest("hex"); }
 
+/** Remove one protected file. @returns {Promise<boolean>} whether there was a file to remove */
 export async function unlinkCapsuleFile(directory, name) {
   if (!/^[a-zA-Z0-9_-]+\.(?:json|evimedcap)(?:\.[a-f0-9-]{36}\.tmp)?$/.test(name)) throw unavailable();
-  await fs.unlink(path.join(directory, name)).catch(error => { if (error.code !== "ENOENT") throw error; });
+  return fs.unlink(path.join(directory, name)).then(() => true, error => { if (error.code !== "ENOENT") throw error; return false; });
 }
 
 /** Atomic, durable replacement for deletion state only; never used to replace identity keys. */

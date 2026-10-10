@@ -1574,9 +1574,8 @@ test("a supersession the store cannot verify is dropped, and the new fact is sti
 
 test("a memory the researcher removed is not inferred back; their own statement brings it back", async () => {
   const feedbackEvents = {
-    async list(_userId, { trigger }) {
-      assert.equal(trigger, "memory-rejected");
-      return { items: [{ detail: { kind: "behavior", key: "behavior.late_night", reason: "undone" } }] };
+    async rejectedMemoryKeys(_userId, pairs) {
+      return new Set(pairs.filter((pair) => pair.kind === "behavior" && pair.key === "behavior.late_night").map((pair) => `${pair.kind}\u0000${pair.key}`));
     },
   };
   const propose = (origin) => modelFetch((sources) => [{
@@ -1592,6 +1591,36 @@ test("a memory the researcher removed is not inferred back; their own statement 
   const stated = await new MemoryIntelligence(config, store, { feedbackEvents, fetchImpl: propose("explicit") })
     .recordRun(project(), run("run_said"), [message("m2", "记住，我习惯深夜工作")]);
   assert.equal(stated.extracted, 1, "the researcher saying so is the one thing that brings it back");
+});
+
+test("a memory the researcher removed long ago still blocks an inference, however many removals came after it (review M-13)", async () => {
+  // A ledger of 450 removals; the one that matters is the oldest. The reader that has the whole ledger is asked for the keys a
+  // run is about to write; `list`, which is a newest-first page, only holds the 200 most recent and is honest about it.
+  const removals = Array.from({ length: 450 }, (_, index) => ({ detail: index === 449
+    ? { kind: "behavior", key: "behavior.late_night", reason: "deleted" }
+    : { kind: "preference", key: `preference.removed_${index}`, reason: "deleted" } }));
+  const feedbackEvents = {
+    async list(_userId, { trigger, limit = 50 }) {
+      assert.equal(trigger, "memory-rejected");
+      return { items: removals.slice(0, limit), nextCursor: null };
+    },
+    async rejectedMemoryKeys(_userId, pairs) {
+      const held = new Set(removals.map((item) => `${item.detail.kind}\u0000${item.detail.key}`));
+      return new Set(pairs.map((pair) => `${pair.kind}\u0000${pair.key}`).filter((pair) => held.has(pair)));
+    },
+  };
+  const propose = (origin) => modelFetch((sources) => [{
+    scope: "user", kind: "behavior", key: "behavior.late_night", value: "常在深夜工作", summary: "深夜工作",
+    origin, importance: 0.3, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
+  }]);
+  const store = new MemoryStoreDouble();
+  const inferred = await new MemoryIntelligence(config, store, { feedbackEvents, fetchImpl: propose("inferred") })
+    .recordRun(project(), run("run_again"), [message("m1", "又忙到深夜了")]);
+  assert.equal([...store.records.values()].filter((record) => record.kind === "behavior").length, 0, "the oldest removal still holds");
+  assert.ok(inferred.rejectionReasons.some((reason) => /removed by the researcher; only their own statement brings it back/.test(reason)));
+  const stated = await new MemoryIntelligence(config, store, { feedbackEvents, fetchImpl: propose("explicit") })
+    .recordRun(project(), run("run_said"), [message("m2", "记住，我习惯深夜工作")]);
+  assert.equal(stated.extracted, 1, "and their own statement still brings it back");
 });
 
 test("what a run wrote is shown where the researcher is, and never posted to the inbox", async () => {

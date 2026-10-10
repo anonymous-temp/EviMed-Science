@@ -10,6 +10,8 @@ import { EXTENSION_CUSTOMER_KINDS, exportExtensionAccountRow, exportPersonalSkil
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 import { migrateFrontierEventReading } from "./frontierEventReading.mjs";
 import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
+import { senderDisplayName } from "./capsuleShareLabel.mjs";
+import { receivedPackForExport, sentSnapshotForExport } from "./capsuleSharerAccount.mjs";
 
 const MAX_ROWS = 50000;
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -79,7 +81,8 @@ const queries = [
   ["shareDeliveriesSent", `SELECT d.id,d.capsule_id AS "capsuleId",d.snapshot_id AS "snapshotId",d.archive_sha256 AS "archiveSha256",d.state,u.name AS "recipientName",
     d.created_at AS "createdAt",d.opened_at AS "openedAt",d.imported_at AS "importedAt",d.closed_at AS "closedAt"
     FROM evimed_share.deliveries d JOIN evimed_control.users u ON u.id=d.recipient_id WHERE d.owner_id=$1 ORDER BY d.created_at,d.id`],
-  ["shareDeliveriesReceived", `SELECT d.id,d.state,u.name AS "senderName",
+  // `ownerId` is read to decide the sender's label (their display name defaults to their login name) and is dropped before the archive is written.
+  ["shareDeliveriesReceived", `SELECT d.id,d.state,u.name AS "senderName",d.owner_id AS "ownerId",
     (SELECT s.payload->'card'->>'title' FROM evimed_product.documents s WHERE s.user_id=d.owner_id AND s.kind='preferences' AND s.id=d.snapshot_id) AS "packTitle",
     d.archive_sha256 AS "packSha256",d.created_at AS "createdAt",d.opened_at AS "openedAt",d.imported_at AS "importedAt",d.closed_at AS "closedAt"
     FROM evimed_share.deliveries d JOIN evimed_control.users u ON u.id=d.owner_id WHERE d.recipient_id=$1 ORDER BY d.created_at,d.id`],
@@ -329,6 +332,10 @@ export function exportDocumentRow(row) {
   if (row.kind === "source") return { ...row, payload: projectSourceManifestRecord(row).payload };
   const sourceDerived = projectSourceDerivedRecord(row);
   if (sourceDerived) return { ...row, payload: sourceDerived };
+  // A received pack and its entries carry their sharer's account id, and a snapshot the account sent carries the ids of the accounts it
+  // was sealed for: what belongs to the account leaves, and what came from another account leaves under its display label (review C-9).
+  if (row.kind === "capsule" || row.kind === "fact") return { ...row, payload: receivedPackForExport(row.payload) };
+  if (row.kind === "preferences") return { ...row, payload: sentSnapshotForExport(row.payload) };
   if (row.kind !== "plugin") return row;
   return exportPluginDocumentRow(row);
 }
@@ -420,6 +427,9 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       bytes += Number(size.rows[0].bytes);
       if (!Number.isSafeInteger(rows) || !Number.isSafeInteger(bytes) || rows > maxRows || bytes > maxBytes) throw tooLarge();
       tables[key] = (await client.query(query, values)).rows;
+      if (key === "shareDeliveriesReceived") {
+        tables[key] = tables[key].map((/** @type {any} */ { ownerId, ...delivery }) => ({ ...delivery, senderName: senderDisplayName(delivery.senderName, ownerId) }));
+      }
       if (key === "documents" || key === "revisions") tables[key] = tables[key].flatMap((/** @type {any} */ row) => {
         const exported = exportDocumentRow(row);
         if (exported) return [exported];

@@ -8,6 +8,7 @@ import {
   unwrapUserWrappers,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
+import { searchTokens } from "./memoryRecallPolicy.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { memoryPausedFor, sourceLinkOf } from "./researchMemory.mjs";
 
@@ -1027,7 +1028,7 @@ export class MemoryIntelligence {
     // user.profile.work_domain for the same fact — so the profile accumulates
     // near-duplicates that each stay at one observation instead of one memory
     // that accumulates them.
-    const existing = await this.memoryStore.listRecords(project.userId, { pageSize: 100 });
+    const existing = await this.#existingRecords(project, run, sources);
     const known = new Map(existing.map((record) => [canonicalKey(record), record]));
 
     let candidates = [];
@@ -1044,6 +1045,7 @@ export class MemoryIntelligence {
       // replaced by guesses.
       extractionError = boundedText(error?.message ?? "memory extraction failed", 200);
     }
+    await this.#addNamedRecords(project, run, known, candidates, forgetRequests);
     // What fades: an inference is a pattern, and a pattern observed in one
     // stressful week must not harden into the profile. It lives for the TTL
     // from its last observation, and every re-observation extends it; the
@@ -1060,7 +1062,7 @@ export class MemoryIntelligence {
         candidate.lastConfirmedAt = null;
       }
     }
-    const rejectedKeys = await this.#rejectedKeys(project.userId);
+    const rejectedKeys = await this.#rejectedKeys(project.userId, candidates.slice(0, 12));
     let extracted = 0;
     let activated = 0;
     let sensitive = 0;
@@ -1188,6 +1190,40 @@ export class MemoryIntelligence {
   }
 
   /**
+   * What the extractor is shown and what its candidates are first compared with: the memories this conversation can see — the
+   * researcher's own, this project's, this conversation's — those that mention what the researcher said first, then the most
+   * important of the rest. It was the 100 most important of the whole account, another project's included, so an older memory
+   * the conversation was about was neither shown to the model (which minted a synonym beside it) nor known to the comparison
+   * (review M-14). A store that predates the read (a test double) answers with its newest page, as before.
+   * @param {any} project @param {any} run @param {readonly { role?: string, text?: string }[]} sources
+   */
+  async #existingRecords(project, run, sources) {
+    if (typeof this.memoryStore.comparableRecords !== "function") return this.memoryStore.listRecords(project.userId, { pageSize: 100 });
+    const said = sources.filter((source) => source.role === "user").map((source) => String(source.text ?? "")).join("\n");
+    return this.memoryStore.comparableRecords(project.userId, { projectId: project.id, sessionId: run.sessionId ?? null, terms: searchTokens(said), limit: 100 });
+  }
+
+  /**
+   * Add to what the write is compared with the memories the model named, wherever they are in the account: a candidate's own
+   * key, the key it replaces or disagrees with, and a key the researcher asked to forget. The page above shows the extractor the
+   * memories most likely to matter; these are the ones the comparison cannot do without, found exactly (review M-14).
+   * @param {any} project @param {any} run @param {Map<string, any>} known @param {readonly any[]} candidates @param {readonly any[] | undefined} forgetRequests
+   */
+  async #addNamedRecords(project, run, known, candidates, forgetRequests) {
+    if (typeof this.memoryStore.comparableRecords !== "function") return;
+    const keys = new Set();
+    for (const candidate of candidates.slice(0, 12)) for (const key of [candidate.key, candidate.supersedesKey, candidate.conflictsWithKey]) if (key) keys.add(key);
+    for (const request of (forgetRequests ?? []).slice(0, 12)) {
+      const key = boundedText(request?.key, 255).toLowerCase();
+      if (key) keys.add(key);
+    }
+    if (keys.size === 0) return;
+    for (const record of await this.memoryStore.comparableRecords(project.userId, { projectId: project.id, sessionId: run.sessionId ?? null, keys: [...keys], limit: 0 })) {
+      known.set(canonicalKey(record), record);
+    }
+  }
+
+  /**
    * Record that the memory just written disagrees with another stored one, when
    * the conversation said so. A label and not a verdict: both memories stay in
    * force, recall tells the model they disagree, and nothing is rewritten. A
@@ -1254,18 +1290,18 @@ export class MemoryIntelligence {
   }
 
   /**
-   * The memories the researcher took out, as `kind NUL key`: deleted,
-   * archived, or undone (`memory-rejected` in the feedback ledger). Best
-   * effort — an unreadable ledger must not cost the run its memory.
-   * @param {string} userId @returns {Promise<Set<string>>}
+   * Which of these candidates' memories the researcher took out — deleted, archived, or undone (`memory-rejected` in the
+   * feedback ledger) — as `kind NUL key`. Every removal there has ever been of the memories asked about, however long ago
+   * (it read the newest 200 removals of the account until review M-13, so an older one could be learned again). Best effort —
+   * an unreadable ledger must not cost the run its memory.
+   * @param {string} userId @param {readonly { kind: string, key: string, origin?: string }[]} candidates @returns {Promise<Set<string>>}
    */
-  async #rejectedKeys(userId) {
-    if (!this.feedbackEvents) return new Set();
+  async #rejectedKeys(userId, candidates) {
+    // Only an inference can be refused for it (the researcher's own statement brings a memory back), so only theirs are asked.
+    const pairs = candidates.filter((candidate) => candidate.origin !== "explicit").map((candidate) => ({ kind: candidate.kind, key: candidate.key }));
+    if (!this.feedbackEvents || pairs.length === 0) return new Set();
     try {
-      const page = await this.feedbackEvents.list(userId, { trigger: "memory-rejected", limit: 200 });
-      return new Set((page?.items ?? [])
-        .filter((event) => typeof event?.detail?.key === "string" && typeof event?.detail?.kind === "string")
-        .map((event) => `${event.detail.kind}\u0000${event.detail.key}`));
+      return await this.feedbackEvents.rejectedMemoryKeys(userId, pairs);
     } catch (error) {
       await this.audit("memory.extraction.rejected_keys", error);
       return new Set();
@@ -1295,7 +1331,9 @@ export class MemoryIntelligence {
       return { stored, next };
     } catch (error) {
       if (!(error instanceof HttpError) || error.code !== "memory_conflict") throw error;
-      const refreshed = await this.memoryStore.listRecords(project.userId, { query: candidate.key, pageSize: 100 });
+      const refreshed = typeof this.memoryStore.comparableRecords === "function"
+        ? await this.memoryStore.comparableRecords(project.userId, { projectId: project.id, sessionId: run.sessionId ?? null, keys: [candidate.key], limit: 0 })
+        : await this.memoryStore.listRecords(project.userId, { query: candidate.key, pageSize: 100 });
       const current = refreshed.find((record) => canonicalKey(record) === canonicalKey(candidate));
       if (!current) throw error;
       const retried = continuedFrom(current, candidate);

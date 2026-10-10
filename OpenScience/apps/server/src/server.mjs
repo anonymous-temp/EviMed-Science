@@ -197,7 +197,7 @@ import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { CapsuleShareLinks } from "./capsuleShareLinks.mjs";
 import { CapsuleSharing } from "./capsuleSharing.mjs";
-import { capsuleShareMetricFamilies } from "./capsuleShareMetrics.mjs";
+import { capsuleShareMetricFamilies, capsuleStewardshipMetricFamilies } from "./capsuleShareMetrics.mjs";
 import { createGuestInfluence } from "./capsuleShareTrust.mjs";
 import { EvidenceZoneSubscriptions, createEvidenceLinkStates, subscriptionsForAudience } from "./evidenceZoneSubscription.mjs";
 import { reownOperatorImportedZones } from "./evidenceReown.mjs";
@@ -1550,6 +1550,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     : null;
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
     privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
+    // What became of an account's capsule cleanup: a deletion that rolled back and was released, or a cleanup that stopped on a code.
+    report: (event, details) => { void securityAudit(config, "capsule.account-cleanup", event === "rolled_back" ? "released" : "failed", { userId: details.userId, code: details.code ?? event }).catch(() => {}); },
   }) : null;
   // Sharing a capsule with other accounts of this deployment, in the app (plan §7, F17): share links, deliveries to named accounts, and
   // taking either back. Off with its own switch (`OPEN_SCIENCE_CAPSULE_SHARE_ENABLED`): not composed, so no table of it is read and its routes
@@ -2598,11 +2600,23 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** The hourly look at the cards and frontier items memories name (knowledgeChange.mjs `sweepEvidenceLinks`, F19). */
   let evidenceLinkTimer = null;
   let capsuleCleanupRun = null;
+  /** When the snapshot files nothing can serve were last looked for (review C-10): at start and then hourly, on the cleanup's own timer. */
+  let capsuleSnapshotSweepAt = 0;
   const retryCapsuleCleanup = () => {
     if (!capsuleTransferService) return Promise.resolve();
     if (capsuleCleanupRun) return capsuleCleanupRun;
-    capsuleCleanupRun = maintenanceMutation(() => capsuleTransferService.recoverPendingDeletions())
-      .then(async result => { if (result.pending) await securityAudit(config, "capsule.cleanup", "pending", result); })
+    capsuleCleanupRun = maintenanceMutation(async () => {
+      const result = await capsuleTransferService.recoverPendingDeletions();
+      if (Date.now() - capsuleSnapshotSweepAt >= 3_600_000) {
+        capsuleSnapshotSweepAt = Date.now();
+        // Best effort: a sweep that cannot run is counted and tried again next hour, and never costs the cleanup its result.
+        await capsuleTransferService.sweepSnapshots().catch((error) => securityAudit(config, "capsule.snapshots.sweep", "failed", { code: typeof error?.code === "string" ? error.code : "capsule_sweep_failed" }));
+      }
+      return result;
+    })
+      .then(async result => {
+        if (result.pending) await securityAudit(config, "capsule.cleanup", "pending", { code: result.causes[0] ?? null, detail: `completed=${result.completed} pending=${result.pending} rolledBack=${result.rolledBack}` });
+      })
       .catch((error) => {
         if (error?.code !== "maintenance_active") console.error("Capsule cleanup retry failed; protected pending state was retained.");
       })
@@ -9247,6 +9261,8 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, conf
   // Sharing memory inside the platform (capsuleShareMetrics.mjs): shares, imports, trials, declines, take-downs, what the write-side
   // defences refused, zone subscriptions, and what learning did with runs that used a guest capsule.
   if (config.capsuleShareEnabled === true) for (const family of capsuleShareMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // And what bounds the capsule store itself (password derivations refused, snapshot files removed, an account's cleanup), sharing on or off.
+  if (capsuleService) for (const family of capsuleStewardshipMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Recalculation cards (evidenceRecalculation.mjs): the switch, and what became of each proof the evolution module recorded.
   for (const family of evidenceRecalculationMetricFamilies(evidenceRecalculation, config)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The prediction registry (predictionRegistry.mjs): the switch, registrations, scores and what each published paper that named a registered trial led to.

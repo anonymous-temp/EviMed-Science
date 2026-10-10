@@ -72,8 +72,10 @@ function piecesOf(entry) {
 
 /** Link shapes that act by themselves or carry what they should not. */
 const LINK_RULES = Object.freeze([
-  // A scheme other than the web's: runs, embeds or reaches local files.
-  { code: "unsafe_link_scheme", pattern: /\b(?:javascript|vbscript|data|file|blob):/i },
+  // A scheme other than the web's: runs, embeds or reaches local files. Each is matched in the shape that does something — a script
+  // scheme by its name, a data URL by its media type and its comma, a file URL by the slash or drive after it, a blob URL by the
+  // origin right after the colon — so a label in prose (「Data: pooled from 12 trials」, 「File: protocol.pdf」) is not one (review C-12).
+  { code: "unsafe_link_scheme", pattern: /\b(?:javascript|vbscript):|\bdata:[^\s,;]*(?:;[^\s,;]*)*,|\bfile:(?=[/\\]|[a-z]:)|\bblob:(?=\S)/i },
   // An image the reader's client fetches on sight — the classic way to send
   // what a model read to someone else's server.
   { code: "auto_loading_image", pattern: /!\[[^\]]*\]\(\s*[^)\s]+|<img\b/i },

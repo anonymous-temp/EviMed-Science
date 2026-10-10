@@ -21,6 +21,32 @@ test("closed sets: the platform's own tool names and paths, and links that act b
   assert.equal(closedSetFindings("Fetch https://admin:test-only-password@internal.example/ first")[0].code, "credential_in_link");
 });
 
+// 2026-10-10 review C-12: the scheme rule matched the bare word followed by a colon, so ordinary text such as
+// 「Data: pooled from 12 trials」 was dropped from the pack as an "unsafe link".
+test("a label in prose is not a link scheme, and every shape that does something still is", () => {
+  for (const prose of [
+    "Data: the pooled estimate comes from 12 trials, see Table 2.",
+    "Raw data: kept in the shared folder, one file per site.",
+    "Extract data:\n- outcome\n- follow-up",
+    "File: protocol.pdf and Blob: not used here.",
+    "Source file: analysis-plan.docx",
+    "Metadata: version 3",
+  ]) assert.deepEqual(closedSetFindings(prose), [], prose);
+  for (const link of [
+    "[x](data:text/html;base64,PHNjcmlwdD4=)",
+    "see data:image/png;base64,iVBORw0KGgo=",
+    "open data:text/plain;charset=utf-8,hello",
+    "data:,hello",
+    "DATA:;base64,QUJD",
+    "[x](file:///etc/passwd)",
+    "file:/etc/hosts",
+    "file:C:/Users/someone/notes.txt",
+    "fetch blob:https://app.example/5b1f-uuid",
+    "[x](JavaScript:alert(1))",
+    "[x](vbscript: msgbox 1)",
+  ]) assert.equal(closedSetFindings(link)[0]?.code, "unsafe_link_scheme", link);
+});
+
 test("a model flag stands only on words the entry contains; the pack is not held when the model is down", async () => {
   const calls = [];
   const scanner = new CapsuleScanner(available, {

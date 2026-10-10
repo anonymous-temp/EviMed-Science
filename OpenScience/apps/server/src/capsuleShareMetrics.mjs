@@ -10,10 +10,15 @@
 // made-up one.
 
 export const CAPSULE_SHARE_CHANNELS = Object.freeze(["file", "delivery", "link"]);
-const REFUSALS = Object.freeze(["not_text_only", "link_expired", "link_revoked", "link_exhausted", "taken_down", "rate_limited"]);
+const REFUSALS = Object.freeze(["not_text_only", "link_expired", "link_revoked", "link_exhausted", "taken_down", "rate_limited", "snapshot_limit"]);
 const TAKEDOWN_BY = Object.freeze(["author", "operator"]);
 const SUBSCRIPTION_EVENTS = Object.freeze(["subscribed", "unsubscribed", "recalled"]);
 const LEARNING_EVENTS = Object.freeze(["kept_from_platform", "counted"]);
+// What keeps the capsule store bounded and honest whether or not sharing is on (review C-10, C-11): the password derivation's
+// refusals, the snapshot files taken off the disk, and how an account's capsule cleanup ended.
+const KDF_REFUSALS = Object.freeze(["account_busy", "queue_full", "waited_out", "params_unsupported"]);
+const SNAPSHOT_FILES = Object.freeze(["orphan", "revoked", "temporary", "discarded", "failed"]);
+const ACCOUNT_CLEANUP = Object.freeze(["completed", "rolled_back", "failed"]);
 
 /** @param {readonly string[]} labels */
 const table = (labels) => new Map(labels.map((label) => [label, 0]));
@@ -29,6 +34,9 @@ const takedownCopies = table(TAKEDOWN_BY);
 const refusals = table(REFUSALS);
 const subscriptions = table(SUBSCRIPTION_EVENTS);
 const learning = table(LEARNING_EVENTS);
+const kdfRefusals = table(KDF_REFUSALS);
+const snapshotFiles = table(SNAPSHOT_FILES);
+const accountCleanup = table(ACCOUNT_CLEANUP);
 
 /** A pack handed to others. @param {string} channel */
 export function recordShared(channel) { bump(shared, channel); }
@@ -47,9 +55,16 @@ export function recordSubscriptionEvent(event) { bump(subscriptions, event); }
 /** A finished run's guest-capsule influence, as learning handled it. @param {string} event */
 export function recordShareLearning(event) { bump(learning, event); }
 
+/** A password key derivation refused: this account already has one, the line is full, the wait ran out, or the container asked for a cost the platform never wrote. @param {string} reason */
+export function recordKdfRefused(reason) { bump(kdfRefusals, reason); }
+/** A snapshot file taken off the disk, or one that could not be. @param {string} event @param {number} [count] */
+export function recordSnapshotFile(event, count = 1) { bump(snapshotFiles, event, Math.max(0, Math.trunc(count) || 0)); }
+/** How one account's capsule cleanup after a deletion attempt ended. @param {string} outcome */
+export function recordAccountCleanup(outcome) { bump(accountCleanup, outcome); }
+
 /** The test hook: counters are process state. */
 export function resetCapsuleShareMetrics() {
-  for (const map of [shared, imported, trials, declined, takedowns, takedownCopies, refusals, subscriptions, learning]) {
+  for (const map of [shared, imported, trials, declined, takedowns, takedownCopies, refusals, subscriptions, learning, kdfRefusals, snapshotFiles, accountCleanup]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -80,5 +95,21 @@ export function capsuleShareMetricFamilies() {
       help: "Evidence-zone subscriptions of a project: subscribed, unsubscribed, and recalls that carried a zone's cards as index-only context." },
     { name: "open_science_capsule_share_learning_total", type: "counter", series: series(learning, "event"),
       help: "Finished runs that used a guest capsule: kept from platform-level learning because the share is not yet corroborated, or counted because it is." },
+  ];
+}
+
+/**
+ * The counters that bound the capsule store itself, exported with or without sharing: file export, import and an account's
+ * deletion all pass through them.
+ * @returns {Array<{ name: string, help: string, type: "counter" | "gauge", series: Array<{ value: number, labels?: Record<string, string> }> }>}
+ */
+export function capsuleStewardshipMetricFamilies() {
+  return [
+    { name: "open_science_capsule_password_refused_total", type: "counter", series: series(kdfRefusals, "reason"),
+      help: "Capsule password key derivations refused, by why: the account already had one in progress, the line was full, the wait ran out, or the container named a cost this platform never wrote." },
+    { name: "open_science_capsule_snapshot_files_total", type: "counter", series: series(snapshotFiles, "event"),
+      help: "Snapshot files taken off the disk, by why: no snapshot record names them, their snapshot was revoked, they were a crashed write's leftover, or a revoke discarded them; and the ones that could not be removed." },
+    { name: "open_science_capsule_account_cleanup_total", type: "counter", series: series(accountCleanup, "outcome"),
+      help: "Capsule cleanup after an account's deletion attempt, by how it ended: finished, rolled back (the account stayed and its capsules were released), or failed and retried later." },
   ];
 }

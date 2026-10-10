@@ -1249,6 +1249,13 @@ const capsuleTransferErrorCodes = Object.freeze([
   'capsule_export_empty',
   'capsule_recipient_unknown',
   'capsule_password_required',
+  // The password key derivation (`capsuleKdfGate.mjs`, `capsuleContainer.mjs`; review C-10, 2026-10-10): it runs one at a time
+  // in this process and gives an account one place in the line, so a request that finds this account's place taken or the
+  // line full is told to try again; and a container whose password wrap asks for a cost this platform never wrote is not run.
+  'capsule_password_busy',
+  'capsule_password_params_unsupported',
+  // An account keeps a bounded number of live snapshots (`CapsuleTransferService`, review C-10).
+  'capsule_snapshots_limit',
   // 「回到上一版」 on a learned method (`learningService.rollback`): a method
   // with one body has nothing to go back to, which is a fact about the
   // method, not 「内容已发生变化」 — what a bare 409 used to be read as.
@@ -2552,6 +2559,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   capsule_export_empty: '还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。',
   capsule_recipient_unknown: '要分享给的账号不在这个平台上，请核对账号名。',
   capsule_password_required: '这个胶囊需要发送者设定的口令才能打开。',
+  capsule_password_busy: '口令解密这会儿在排队：你已有一次在进行，或等待的人太多。几秒后再试一次即可。',
+  capsule_password_params_unsupported: '这个胶囊的口令加密方式不是本平台写出的，没有尝试打开。请让发送者在本平台重新导出一份。',
+  capsule_snapshots_limit: '你有效的分享快照太多了。先在“分享与导入”里撤回不再需要的，再新建。',
   // Sharing inside the platform (`capsuleTransferService.mjs`, `capsuleShareLinks.mjs`): text only, the author's own
   // pack, and what the recipient hears when a share can no longer be used.
   capsule_share_not_enabled: '这个部署没有开放胶囊分享。',

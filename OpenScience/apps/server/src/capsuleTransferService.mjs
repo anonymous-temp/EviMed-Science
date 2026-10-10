@@ -13,7 +13,7 @@ import { boundedText } from "./researchMemory.mjs";
 import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
-import { recordShareImported, recordShareRefused, recordShared } from "./capsuleShareMetrics.mjs";
+import { recordAccountCleanup, recordKdfRefused, recordShareImported, recordShareRefused, recordShared, recordSnapshotFile } from "./capsuleShareMetrics.mjs";
 
 export const CAPSULE_TRANSFER_MAX_BYTES = 2 * 1024 * 1024;
 const MAX_ENTRIES = 100;
@@ -63,6 +63,39 @@ const notTextOnly = () => {
   recordShareRefused("not_text_only");
   return new HttpError(400, "capsule_share_not_text_only", "The shared pack carries more than text.");
 };
+
+/** The most live (not revoked) snapshots one account keeps: each is a file of up to 2 MiB that stays on the disk until it is revoked. */
+export const MAX_LIVE_SNAPSHOTS = 300;
+/** How long a snapshot file may sit without a record before it is taken for a crashed write's leftover, not one being written. */
+const SNAPSHOT_FILE_GRACE_MS = 60 * 60_000;
+/** The most files one sweep looks at: a valve against a directory that has run away, not a schedule (a normal one holds far fewer). */
+const SNAPSHOT_SWEEP_FILES = 20_000;
+/** The file names a sweep may touch: `<account hash>-<snapshot id>.evimedcap`, the flat `<snapshot id>.evimedcap` older builds wrote, and a write's temporary copy. */
+const SNAPSHOT_FILE = /^(?:([a-f0-9]{64})-)?([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\.evimedcap(\.[a-f0-9-]{36}\.tmp)?$/;
+
+/** What went wrong, as a short code an audit line and a counter can carry: the error's own code, else its name. @param {any} error */
+function causeCode(error) {
+  const cause = error?.cause ?? error;
+  const code = typeof cause?.code === "string" && cause.code ? cause.code : typeof cause?.name === "string" && cause.name ? cause.name : "unknown";
+  return code.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 80);
+}
+
+/**
+ * What a refused or unrunnable password derivation is to the person who asked: a named answer instead of a failure that reads
+ * as a wrong password or as the server breaking. Null for anything else.
+ * @param {{ code?: unknown, reason?: unknown } | null | undefined} cause
+ */
+function kdfRefusalOf(cause) {
+  if (cause?.code === "capsule_password_busy") {
+    recordKdfRefused(String(cause.reason ?? "account_busy"));
+    return new HttpError(429, "capsule_password_busy", "Capsule password operations are busy; try again shortly.", { retryAfterSeconds: 2 });
+  }
+  if (cause?.code === "capsule_password_params_unsupported") {
+    recordKdfRefused("params_unsupported");
+    return new HttpError(400, "capsule_password_params_unsupported", "The capsule's password key derivation is not one this platform writes.");
+  }
+  return null;
+}
 /** @param {any} manifest @param {readonly string[]} payloadPaths */
 function assertShareTextOnly(manifest, payloadPaths) {
   if (!Array.isArray(manifest?.entries)) throw invalid();
@@ -213,11 +246,16 @@ async function exportableMethods(client, userId, rows) {
 /** Portable snapshots are immutable ciphertext; online state can be revoked, offline copies cannot. */
 export class CapsuleTransferService {
   /** @param {{documents: import('./productStore.mjs').ProductDocuments, capsules: import('./capsuleService.mjs').CapsuleService, identities: import('./capsuleIdentityStore.mjs').CapsuleIdentityStore, dataDir: string,
-   *   scanner?: import('./capsuleScan.mjs').CapsuleScanner | null, privateAccountCleanup?: ((userId:string)=>Promise<void>) | null}} options */
-  constructor({ documents, capsules, identities, dataDir, scanner = null, privateAccountCleanup = null }) {
+   *   scanner?: import('./capsuleScan.mjs').CapsuleScanner | null, privateAccountCleanup?: ((userId:string)=>Promise<void>) | null,
+   *   maxLiveSnapshots?: number, now?: () => number, report?: (event: "rolled_back" | "cleanup_failed", details: { userId: string, code?: string }) => void}} options */
+  constructor({ documents, capsules, identities, dataDir, scanner = null, privateAccountCleanup = null, maxLiveSnapshots = MAX_LIVE_SNAPSHOTS, now = Date.now, report = () => {} }) {
     this.documents = documents; this.capsules = capsules; this.identities = identities; this.dataDir = dataDir;
     this.scanner = scanner;
     this.privateAccountCleanup = privateAccountCleanup;
+    this.maxLiveSnapshots = maxLiveSnapshots;
+    this.now = now;
+    /** Where an account's capsule cleanup says what became of it, for the operator's audit line; never for the account. */
+    this.report = report;
     /** One scan per pack and account while a preview turns into an import. @type {Map<string, { at: number, result: any }>} */
     this.scans = new Map();
   }
@@ -343,26 +381,53 @@ export class CapsuleTransferService {
   }
 
   /**
-   * The X25519 keys of the accounts a pack is sealed for (build spec §9.2):
-   * each named account on this deployment can open it with its own key, and
-   * nobody needs the password. An account that does not exist is refused by
-   * name rather than silently left out of a pack its sender thinks it reaches.
+   * The accounts a pack is to be sealed for (build spec §9.2), checked and nothing more: a named account that does not exist is
+   * refused by name rather than silently left out of a pack its sender thinks it reaches. This reads, and creates nothing for
+   * any account: a refused export used to leave key files for every existing account it had named, one more for each name a
+   * sender probed (review C-9). The keys are made by `#recipientKeys`, once the export can no longer be refused.
    * @param {unknown} recipients @param {string} sender
+   * @returns {Promise<string[]>}
    */
-  async #recipientKeys(recipients, sender) {
+  async #recipientIds(recipients, sender) {
     if (recipients == null) return [];
     if (!Array.isArray(recipients) || recipients.length > 32 || recipients.some((id) => typeof id !== "string" || !id.trim())) throw invalid();
     const ids = [...new Set(recipients.map((id) => id.trim()))].filter((id) => id !== sender);
-    const keys = [];
     for (const id of ids) {
       productId(id, "user");
       const exists = await this.documents.database.query("SELECT 1 FROM evimed_control.users WHERE id=$1", [id]);
       if (exists.rowCount !== 1) throw new HttpError(400, "capsule_recipient_unknown", "A named recipient is not an account on this deployment.");
+    }
+    return ids;
+  }
+
+  /**
+   * The X25519 keys of the accounts a pack is sealed for: each named account on this deployment can open it with its own key,
+   * and nobody needs the password. An account without a key is given one here, which is why this runs last.
+   * @param {readonly string[]} ids
+   */
+  async #recipientKeys(ids) {
+    const keys = [];
+    for (const id of ids) {
       const identity = await this.withAccount(id, null, () => this.identities.forUser(id));
       if (!identity?.encryption?.keyId || !identity.encryption.publicKey) throw new HttpError(503, "capsule_identity_unavailable", "A recipient key is unavailable.");
       keys.push({ userId: id, encKeyId: identity.encryption.keyId, publicKey: identity.encryption.publicKey });
     }
     return keys;
+  }
+
+  /**
+   * An account keeps a bounded number of live snapshots: each is a file of up to 2 MiB that stays on the disk until it is
+   * revoked, and nothing else limited how many an account could make. One beyond the bound is refused by name before any key
+   * is derived or anything is written (review C-10); revoking an old one makes room.
+   * @param {string} userId
+   */
+  async #assertRoomForSnapshot(userId) {
+    const live = await this.documents.database.query(`SELECT count(*)::integer AS n FROM evimed_product.documents
+      WHERE user_id=$1 AND kind='preferences' AND deleted_at IS NULL AND payload @> '{"recordType":"capsule-snapshot","status":"active"}'::jsonb`, [productId(userId)]);
+    if (live.rows[0].n >= this.maxLiveSnapshots) {
+      recordShareRefused("snapshot_limit");
+      throw new HttpError(409, "capsule_snapshots_limit", "Too many live shared snapshots; revoke some first.");
+    }
   }
 
   /**
@@ -416,9 +481,10 @@ export class CapsuleTransferService {
     const scopes = scopesOf(input.scopes); const kinds = kindsFor(scopes);
     const channel = ["delivery", "link"].includes(String(options.channel)) ? String(options.channel) : "file";
     await this.assertOwnCapsule(userId, capsuleId);
-    const recipients = await this.#recipientKeys(input.recipients, userId);
+    await this.#assertRoomForSnapshot(userId);
+    const recipientIds = await this.#recipientIds(input.recipients, userId);
     // Sealed for a password, for named accounts, or both; never for nobody.
-    if (input.password === undefined && recipients.length === 0) throw invalid();
+    if (input.password === undefined && recipientIds.length === 0) throw invalid();
     const source = await this.#assemble(userId, capsuleId, kinds);
     if (!source.facts.length) throw new HttpError(409, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
     if (source.facts.length > MAX_ENTRIES) throw new HttpError(413, "capsule_transfer_too_large", "A snapshot supports at most 100 approved entries.");
@@ -430,8 +496,15 @@ export class CapsuleTransferService {
     });
     const card = await this.#card(userId, entries, previous, input.card);
     const files = renderedFiles(snapshotId, entries);
+    // Every sealed entry is its text and 28 bytes, in base64 inside the archive: a pack that cannot fit is refused here, before
+    // any recipient is given a key for it. (The exact size is checked once the pack is made.)
+    const sealedBytes = Object.values(files).reduce((sum, content) => sum + Buffer.byteLength(content) + 28, 0);
+    if (Math.ceil(sealedBytes / 3) * 4 > CAPSULE_TRANSFER_MAX_BYTES) throw new HttpError(413, "capsule_transfer_too_large", "This encrypted snapshot exceeds 2 MiB.");
+    const recipients = await this.#recipientKeys(recipientIds);
     const identity = await this.withAccount(userId, accountCreatedAt, () => this.identities.forUser(userId, { accountCreatedAt }));
-    const container = await packCapsule({ capsuleId: snapshotId, version: source.revision, createdAt: new Date().toISOString(),
+    /** @type {Awaited<ReturnType<typeof packCapsule>>} */
+    let container;
+    try { container = await packCapsule({ capsuleId: snapshotId, version: source.revision, createdAt: new Date().toISOString(), account: userId,
       issuer: { userId: identity.issuerId, signingKeyId: identity.signing.keyId, signingPrivateKey: identity.signing.privateKey },
       scope: scopes, layers: [...new Set([...entries.map(entry => entry.layer), "methods"])],
       ...(input.password !== undefined ? { password: input.password } : {}),
@@ -443,7 +516,7 @@ export class CapsuleTransferService {
       entries: Object.entries(files).map(([file, content]) => ({ path: file, content,
         mime: file.endsWith(".json") ? "application/json" : file.endsWith(".jsonl") ? "application/x-ndjson" : "text/markdown",
         layer: file === "provenance.json" ? "methods" : entries.find(entry => entry.path === file).layer })),
-    });
+    }); } catch (error) { throw kdfRefusalOf(/** @type {any} */ (error)) ?? error; }
     const archive = JSON.stringify({ format: "evimedcap", version: 1, manifest: container.manifest, issuerPublicKey: identity.signing.publicKey,
       ...(container.passwordWrap ? { passwordWrap: container.passwordWrap.toString("base64") } : {}),
       payload: Object.fromEntries(Object.entries(container.payload).map(([file, bytes]) => [file, bytes.toString("base64")])) });
@@ -526,6 +599,7 @@ export class CapsuleTransferService {
         if (record.payload.status === "revoked") continue;
         await this.documents.put(userId, "preferences", record.id, { ...record.payload, status: "revoked", revokedAt: new Date().toISOString() },
           { expectedRevision: record.revision });
+        await this.#discardArchive(userId, record.id);
         revoked.push(record.id);
       }
       if (!page.nextCursor) break;
@@ -553,7 +627,73 @@ export class CapsuleTransferService {
 
   async revoke(userId, capsuleId, snapshotId, expectedRevision) {
     const record = await this.snapshot(userId, capsuleId, snapshotId);
-    return snapshotView(await this.documents.put(userId, "preferences", record.id, { ...record.payload, status: "revoked", revokedAt: new Date().toISOString() }, { expectedRevision }));
+    const revoked = snapshotView(await this.documents.put(userId, "preferences", record.id, { ...record.payload, status: "revoked", revokedAt: new Date().toISOString() }, { expectedRevision }));
+    await this.#discardArchive(userId, record.id);
+    return revoked;
+  }
+
+  /**
+   * A revoked snapshot is never served again (`snapshotArchive` and `download` refuse it by its record), so its ciphertext has
+   * no reader left and goes off the disk with the revoke. Best effort, because the revoke has already happened: a file that
+   * could not be removed is counted, and the sweep (`sweepSnapshots`) takes it later. A snapshot a take-down revoked is
+   * kept — what an operator took down may be wanted for review — and so is nothing else this does not name.
+   * @param {string} userId @param {string} snapshotId
+   */
+  async #discardArchive(userId, snapshotId) {
+    try {
+      const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
+      const hashed = await unlinkCapsuleFile(directory, `${capsuleAccountHash(userId)}-${snapshotId}.evimedcap`);
+      const flat = await unlinkCapsuleFile(directory, `${snapshotId}.evimedcap`);
+      if (hashed || flat) recordSnapshotFile("discarded");
+    } catch { recordSnapshotFile("failed"); }
+  }
+
+  /**
+   * Take off the disk what nothing can serve: a snapshot file no snapshot record names (a write that crashed between the file
+   * and its record, or whose cleanup failed), a revoked snapshot's file that its revoke could not remove, and a write's
+   * temporary copy. A file younger than `graceMs` is left alone, since an export in flight has written its file a moment before
+   * its record; a take-down's file and a file whose record belongs to someone else are never touched. Idempotent, and bounded
+   * to `limit` files per pass. Nothing here reads a file's contents.
+   * @param {{ graceMs?: number, limit?: number }} [options]
+   * @returns {Promise<{ examined: number, removed: { orphan: number, revoked: number, temporary: number }, failed: number }>}
+   */
+  async sweepSnapshots({ graceMs = SNAPSHOT_FILE_GRACE_MS, limit = SNAPSHOT_SWEEP_FILES } = {}) {
+    const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
+    const result = { examined: 0, removed: { orphan: 0, revoked: 0, temporary: 0 }, failed: 0 };
+    /** @param {string} name @param {"orphan" | "revoked" | "temporary"} why */
+    const remove = async (name, why) => {
+      try { if (await unlinkCapsuleFile(directory, name)) { result.removed[why] += 1; recordSnapshotFile(why); } }
+      catch { result.failed += 1; recordSnapshotFile("failed"); }
+    };
+    /** @type {{ name: string, hash: string | null, id: string }[]} */
+    let batch = [];
+    const settle = async () => {
+      const wanted = batch; batch = [];
+      if (!wanted.length) return;
+      const rows = (await this.documents.database.query(`SELECT user_id,id,payload->>'status' AS status,(payload->'takenDown') IS NOT NULL AS taken_down
+        FROM evimed_product.documents WHERE kind='preferences' AND id=ANY($1::text[]) AND payload @> '{"recordType":"capsule-snapshot"}'::jsonb`,
+      [wanted.map((file) => file.id)])).rows;
+      for (const file of wanted) {
+        const records = rows.filter((/** @type {any} */ row) => row.id === file.id);
+        if (!records.length) { await remove(file.name, "orphan"); continue; }
+        const own = records.find((/** @type {any} */ row) => file.hash === null || capsuleAccountHash(row.user_id) === file.hash);
+        if (own && own.status === "revoked" && !own.taken_down) await remove(file.name, "revoked");
+      }
+    };
+    const entries = await fs.opendir(directory);
+    for await (const entry of entries) {
+      const match = SNAPSHOT_FILE.exec(entry.name);
+      if (!match || !entry.isFile()) continue;
+      const info = await fs.lstat(path.join(directory, entry.name)).catch(() => null);
+      if (!info || !info.isFile() || this.now() - info.mtimeMs < graceMs) continue;
+      if (result.examined >= limit) break;
+      result.examined += 1;
+      if (match[3]) { await remove(entry.name, "temporary"); continue; }
+      batch.push({ name: entry.name, hash: match[1] ?? null, id: match[2] });
+      if (batch.length >= 200) await settle();
+    }
+    await settle();
+    return result;
   }
 
   /**
@@ -648,11 +788,12 @@ export class CapsuleTransferService {
     const keys = addressed
       ? { recipient: { encKeyId: own.encryption.keyId, privateKey: own.encryption.privateKey, publicKey: own.encryption.publicKey } }
       : { password: input.password, passwordWrap: passwordWrap ?? undefined };
-    const opened = await openCapsule(container, { issuer: { signingPublicKey: beforeKdf?.publicKey ?? envelope.issuerPublicKey }, ...keys });
+    const opened = await openCapsule(container, { issuer: { signingPublicKey: beforeKdf?.publicKey ?? envelope.issuerPublicKey }, account: userId, ...keys });
     if ("issues" in opened) {
       // The container's own refusals of executable content or an unlisted entry are the same property as the share's.
       if (opened.issues.some((/** @type {any} */ issue) => ["capsule_executable_content", "capsule_method_shape_invalid", "capsule_unlisted_entry"].includes(issue.code))) throw notTextOnly();
-      throw new HttpError(opened.issues[0]?.code === "capsule_password_busy" ? 429 : 400, "capsule_transfer_open_failed", "The capsule could not be verified or decrypted.");
+      // A busy derivation and a cost nobody wrote are named, not read as a wrong password.
+      throw kdfRefusalOf(opened.issues[0]) ?? new HttpError(400, "capsule_transfer_open_failed", "The capsule could not be verified or decrypted.");
     }
     // KDF can outlive account deletion. Refresh the issuer and retain any prior
     // local classification; disappearance must never grant foreign-import fallback.
@@ -853,9 +994,24 @@ export class CapsuleTransferService {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-user:${productId(userId)}`]);
       const row = (await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId])).rows[0];
       if (!row || (expectedCreatedAt !== null && row.generation !== expectedCreatedAt)) throw new HttpError(409, "product_account_changed", "The account changed before this operation completed.");
+      // With the account's lock held no deletion is mid-flight, so a pending state for the generation that is still live is a
+      // deletion that rolled back: it is released here rather than answered 409 for good (review C-11).
+      const pending = await this.identities.deletionState(userId);
+      if (pending?.phase === "pending" && pending.accountCreatedAt === row.generation) await this.#releaseRolledBackDeletion(userId, pending);
       await this.identities.assertAccountActive(userId, row.generation);
       return operation ? operation() : row.generation;
     });
+  }
+
+  /**
+   * Put the capsule side of an account back as it was before a deletion that rolled back, and say so: a counter and the
+   * operator's audit line. The cause of the rollback is the deletion's own error, which the route has already answered; what is
+   * recorded here is that the state had to be released and for which account. @param {string} userId @param {any} state
+   */
+  async #releaseRolledBackDeletion(userId, state) {
+    await this.identities.restoreAfterRolledBackDeletion(userId, state);
+    recordAccountCleanup("rolled_back");
+    this.report("rolled_back", { userId });
   }
 
   /** Runs inside PostgresStore.deleteUser's account lock before its DELETE commits. */
@@ -880,8 +1036,11 @@ export class CapsuleTransferService {
         const state = await this.identities.deletionState(userId);
         if (!state || state.phase === "completed") return { completed: true };
         const live = (await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId])).rows[0];
-        // DB rollback leaves the original live account and its private keys intact.
-        if (live?.generation === state.accountCreatedAt) return { completed: false, awaitingAccountDeletion: true };
+        // DB rollback leaves the original live account and its private keys intact, and nothing else will clear the state.
+        if (live?.generation === state.accountCreatedAt) {
+          await this.#releaseRolledBackDeletion(userId, state);
+          return { completed: false, rolledBack: true };
+        }
         // Private extension roots are account-owned, so a recreated account
         // must not have its new files erased by an older pending deletion.
         if (live && this.privateAccountCleanup) return { completed: false, awaitingAccountDeletion: true };
@@ -893,18 +1052,34 @@ export class CapsuleTransferService {
         await syncCapsuleDirectory(directory);
         await this.privateAccountCleanup?.(userId);
         await this.identities.finishDeletion(userId, state);
+        recordAccountCleanup("completed");
         return { completed: true };
       });
-    } catch { throw new HttpError(503, "capsule_cleanup_pending", "The account is removed, but protected capsule cleanup must be retried."); }
+    } catch (error) {
+      // The cleanup stays pending and is retried; what stopped it is kept as a code (it used to be thrown away).
+      recordAccountCleanup("failed");
+      this.report("cleanup_failed", { userId, code: causeCode(error) });
+      throw Object.assign(new HttpError(503, "capsule_cleanup_pending", "The account is removed, but protected capsule cleanup must be retried."), { cause: error });
+    }
   }
 
-  /** Durable post-commit cleanup resumes after restart; failures remain pending for the next attempt. */
+  /**
+   * Durable post-commit cleanup resumes after restart; failures remain pending for the next attempt. `rolledBack` counts the
+   * states of accounts that are still here (their deletion did not commit), released; `causes` is the codes that kept a cleanup
+   * from finishing.
+   * @returns {Promise<{ completed: number, pending: number, rolledBack: number, causes: string[] }>}
+   */
   async recoverPendingDeletions() {
-    const results = { completed: 0, pending: 0 };
+    /** @type {{ completed: number, pending: number, rolledBack: number, causes: string[] }} */
+    const results = { completed: 0, pending: 0, rolledBack: 0, causes: [] };
     for (const userId of await this.identities.pendingDeletions()) {
-      try { const result = await this.finishAccountDeletion(userId); results[result.completed ? "completed" : "pending"]++; }
-      catch { results.pending++; }
+      try {
+        const result = await this.finishAccountDeletion(userId);
+        if (result.rolledBack) results.rolledBack++;
+        else results[result.completed ? "completed" : "pending"]++;
+      } catch (error) { results.pending++; results.causes.push(causeCode(error)); }
     }
+    results.causes = [...new Set(results.causes)];
     return results;
   }
 

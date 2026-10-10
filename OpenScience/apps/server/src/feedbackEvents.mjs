@@ -29,9 +29,11 @@
  *
  * What is live today, and what waits on a surface. The three memory triggers
  * are the ones the product writes by itself: the memory PATCH and DELETE routes
- * record them, and nothing reads them back — the substrate exists so that the
- * extractor's own thresholds can one day be answered from what the researcher
- * did, and that consumer is not in this release. The two deliverable triggers
+ * record them. A removal (`memory-rejected`) is read back, whole, by extraction
+ * (`rejectedMemoryKeys`) so that an inference does not write a memory the
+ * researcher took out straight back, and by the timeline; an acceptance and an
+ * edit are read only by the evolution roll-up, and nothing yet answers the
+ * extractor's own thresholds from them. The two deliverable triggers
  * are the only ones the producer below reads, and no page posts them yet: they
  * have an HTTP route (`POST /api/feedback/events`) and a typed client function
  * (`reportWebDeliverableFeedback` in `apps/web/src/lib/apiClient.ts`), and
@@ -430,6 +432,28 @@ export class FeedbackEvents {
       nextCursor: result.rows.length > limit && last
         ? Buffer.from(JSON.stringify([last.occurredAt, last.id])).toString("base64url") : null,
     };
+  }
+
+  /**
+   * Which of these memories the researcher has ever removed: deleted, archived or undone (`memory-rejected`), by kind and key.
+   *
+   * Every removal, not the latest page of them. Extraction asked `list` for the newest 200 removals and read those, so a
+   * memory removed before the 200th most recent one could be learned again from a later conversation (review M-13). This is one
+   * read for the pairs a run is about to write, however long the ledger has grown, on an index of its own
+   * (`feedback_events_rejected_key_idx`). A removal records a key and a kind and no value, so the key is what is matched.
+   *
+   * @param {string} userId @param {readonly { kind: string, key: string }[]} pairs
+   * @returns {Promise<Set<string>>} `kind NUL key` of every pair asked about that was ever removed
+   */
+  async rejectedMemoryKeys(userId, pairs) {
+    const wanted = new Set(pairs.filter((pair) => typeof pair?.kind === "string" && typeof pair?.key === "string" && pair.key)
+      .map((pair) => `${pair.kind}\u0000${pair.key}`));
+    if (wanted.size === 0) return new Set();
+    await migrateProductStore(this.database);
+    const found = await this.database.query(`SELECT DISTINCT detail->>'kind' AS kind, detail->>'key' AS key FROM evimed_product.feedback_events
+      WHERE user_id=$1 AND trigger_kind='memory-rejected' AND detail->>'key'=ANY($2::text[])`,
+    [productId(userId, "user"), [...new Set([...wanted].map((pair) => pair.slice(pair.indexOf("\u0000") + 1)))]]);
+    return new Set(found.rows.map((/** @type {any} */ row) => `${row.kind}\u0000${row.key}`).filter((/** @type {string} */ pair) => wanted.has(pair)));
   }
 
   /** @param {string} userId @param {string} id */

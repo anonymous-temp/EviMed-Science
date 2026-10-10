@@ -493,6 +493,7 @@ CREATE TABLE IF NOT EXISTS evimed_product.feedback_events (
 CREATE INDEX IF NOT EXISTS feedback_events_subject_idx ON evimed_product.feedback_events(user_id,subject_type,subject_id,occurred_at DESC,id);
 CREATE INDEX IF NOT EXISTS feedback_events_owner_idx ON evimed_product.feedback_events(user_id,occurred_at DESC,id);
 CREATE INDEX IF NOT EXISTS feedback_events_project_fk_idx ON evimed_product.feedback_events(user_id,project_id);
+CREATE INDEX IF NOT EXISTS feedback_events_rejected_key_idx ON evimed_product.feedback_events(user_id,(detail->>'key')) WHERE trigger_kind='memory-rejected';
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-07-feedback-events-v1') ON CONFLICT DO NOTHING;
 DO $feedback_vocabulary$
 BEGIN

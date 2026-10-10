@@ -87,3 +87,49 @@ test("the feedback table is append-only, owner-scoped and refuses an unknown tri
   const remaining = await database.query("SELECT count(*)::integer AS count FROM evimed_product.feedback_events WHERE user_id=$1", [userId]);
   assert.equal(remaining.rows[0].count, 0);
 });
+
+test("every removal of a memory is found by its key however long ago it was, and only this account's (review M-13)", integration, async (t) => {
+  const database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 5, databaseConnectionTimeoutMs: 2_000 });
+  const userId = `fb_${randomUUID()}`;
+  const otherId = `fb_${randomUUID()}`;
+  t.after(async () => {
+    await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[userId, otherId]]);
+    await database.close();
+  });
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) SELECT id,'Feedback','development' FROM unnest($1::text[]) AS id", [[userId, otherId]]);
+  const feedback = new FeedbackEvents({ database });
+  // The ledger orders by whole seconds, so each removal is a second after the last: the order is then the test's, not the hash's.
+  let second = 0;
+  const removed = (/** @type {string} */ user, /** @type {string} */ kind, /** @type {string} */ key, /** @type {number} */ version = 1) =>
+    feedback.record(user, { trigger: "memory-rejected", subject: { type: "memory-record", id: `record_${kind}_${key}` }, identity: [String(version)],
+      detail: { key, kind, version, reason: "deleted" }, occurredAt: new Date(Date.UTC(2026, 0, 1, 0, 0, second++)).toISOString() });
+
+  // The oldest removal, then more than the 200 the extractor used to read, all newer. Extraction read the newest page of 200
+  // and so lost this one, and an inference could write the memory straight back.
+  await removed(userId, "behavior", "behavior.late_night");
+  for (let index = 0; index < 250; index += 1) await removed(userId, "preference", `preference.later_${index}`);
+  assert.equal((await feedback.list(userId, { trigger: "memory-rejected", limit: 200 })).items.some((item) => item.detail.key === "behavior.late_night"), false,
+    "the newest 200 removals no longer hold it");
+
+  await removed(otherId, "preference", "preference.only_theirs");
+  const found = await feedback.rejectedMemoryKeys(userId, [
+    { kind: "behavior", key: "behavior.late_night" },
+    { kind: "preference", key: "behavior.late_night" },
+    { kind: "behavior", key: "behavior.never_removed" },
+    { kind: "preference", key: "preference.later_0" },
+    { kind: "preference", key: "preference.only_theirs" },
+  ]);
+  assert.deepEqual([...found].sort(), ["behavior\u0000behavior.late_night", "preference\u0000preference.later_0"],
+    "found by kind and key, however old; not another kind's, not a key never removed, not another account's");
+  assert.deepEqual([...await feedback.rejectedMemoryKeys(userId, [])], []);
+  assert.deepEqual([...await feedback.rejectedMemoryKeys(otherId, [{ kind: "preference", key: "preference.only_theirs" }])], ["preference\u0000preference.only_theirs"]);
+
+  // A removal is a removal whatever else was recorded about the memory.
+  await feedback.record(userId, { trigger: "memory-value-edited", subject: { type: "memory-record", id: "record_edit" }, identity: ["2"], detail: { key: "preference.only_edited", kind: "preference" } });
+  assert.deepEqual([...await feedback.rejectedMemoryKeys(userId, [{ kind: "preference", key: "preference.only_edited" }])], []);
+
+  // One read for the pairs asked about, however long the ledger: by an index of its own.
+  const index = await database.query("SELECT indexdef FROM pg_indexes WHERE schemaname='evimed_product' AND indexname='feedback_events_rejected_key_idx'");
+  assert.equal(index.rowCount, 1);
+  assert.match(index.rows[0].indexdef, /user_id, \(\(detail ->> 'key'::text\)\)\) WHERE \(trigger_kind = 'memory-rejected'::text\)/);
+});

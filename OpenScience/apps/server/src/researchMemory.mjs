@@ -55,6 +55,8 @@ export const MEMORY_QUERY_LIMIT = 500;
 export const MEMORY_QUOTE_LIMIT = 4_000;
 export const MEMORY_SOURCE_TYPE_LIMIT = 64;
 export const MEMORY_SOURCE_REF_LIMIT = 500;
+/** The most rows one recall reads before it scores them: a valve for a runaway account, not a window (review M-14). */
+export const MEMORY_RECALL_CANDIDATE_LIMIT = 1_000;
 /** One statement answers a whole export. Past this a caller is not exporting,
  *  it is asking the process to hold a database in memory. */
 export const MEMORY_EXPORT_LIMIT = 100_000;
@@ -1774,6 +1776,59 @@ export class ResearchMemoryStore {
     return publicSessionState(result.rows[0]);
   }
 
+  /**
+   * The rows a recall can use, selected by what it needs: the records its reader may be handed (the researcher's own, this
+   * project's, this conversation's; never a run summary or a sensitive one), in a status it can use, and either of a durable kind
+   * (the long-term profile applies to every question) or mentioning a word of the question. Validity at the time asked, the
+   * expiry of an inference and the narrower of two scopes are decided afterwards, by `versionsInForce`, from these rows. The
+   * bound is a valve for a runaway account, not a window: past it the least important rows are the ones left out.
+   * @param {string} userId
+   * @param {{ statuses: readonly string[], projectId: string | null, sessionId: string | null, terms: readonly string[] }} need
+   */
+  async #recallCandidates(userId, { statuses, projectId, sessionId, terms }) {
+    const result = await this.#query(`SELECT * FROM evimed_memory.records
+      WHERE user_id=$1 AND kind<>'run_summary' AND NOT sensitive AND status=ANY($2::text[])
+        AND (scope='user' OR (scope='project' AND scope_id=$3) OR (scope='session' AND scope_id=$4))
+        AND (kind=ANY($5::text[]) OR EXISTS (SELECT 1 FROM unnest($6::text[]) AS term(t)
+          WHERE strpos(lower(key||' '||coalesce(summary,'')||' '||coalesce(value,'')), t) > 0))
+      ORDER BY importance DESC, confidence DESC, updated_at DESC, id DESC LIMIT $7`,
+    [assertUserId(userId), [...statuses], projectId == null ? null : String(projectId), sessionId == null ? null : String(sessionId),
+      [...DURABLE_RECALL_KINDS], [...terms], MEMORY_RECALL_CANDIDATE_LIMIT]);
+    return result.rows;
+  }
+
+  /**
+   * What a conversation can set a write against: the records it can see (the researcher's own, this project's, this
+   * conversation's), whatever their status. Three reads in one, merged without repeats and in this order:
+   *  - those with a key in `keys`, exactly: the memories a candidate, a replacement, a disagreement or a request to forget names;
+   *  - up to `limit` that mention a word of `terms`, most important first: the memories the conversation is about;
+   *  - the `limit` most important of all: the standing picture.
+   * `limit` 0 reads only the named keys. Run summaries are the run's own events and are read only when named. Extraction used to
+   * read the 100 most important records of the whole account, whoever's project they were in, so a memory beyond them was
+   * unknown to it: a replacement could not find what it replaced, and a fact stated again was written as a new one (review M-14).
+   * @param {string} userId
+   * @param {{ projectId?: string | null, sessionId?: string | null, keys?: readonly string[], terms?: readonly string[], limit?: number }} [need]
+   */
+  async comparableRecords(userId, { projectId = null, sessionId = null, keys = [], terms = [], limit = 100 } = {}) {
+    const owner = assertUserId(userId);
+    const named = [...new Set(keys.map(String).filter(Boolean))].slice(0, 100);
+    const words = [...new Set(terms.map((term) => String(term).toLowerCase()).filter(Boolean))].slice(0, 64);
+    const bound = Math.max(0, Math.min(100, Math.trunc(Number(limit)) || 0));
+    const visible = `user_id=$1 AND (scope='user' OR (scope='project' AND scope_id=$2) OR (scope='session' AND scope_id=$3))`;
+    const order = "ORDER BY importance DESC, confidence DESC, updated_at DESC, id DESC";
+    const scope = [owner, projectId == null ? null : String(projectId), sessionId == null ? null : String(sessionId)];
+    const none = { rows: [] };
+    const [byKey, byTerm, byImportance] = await Promise.all([
+      named.length ? this.#query(`SELECT * FROM evimed_memory.records WHERE ${visible} AND key=ANY($4::text[]) ${order} LIMIT 500`, [...scope, named]) : none,
+      words.length && bound ? this.#query(`SELECT * FROM evimed_memory.records WHERE ${visible} AND kind<>'run_summary'
+        AND EXISTS (SELECT 1 FROM unnest($4::text[]) AS term(t) WHERE strpos(lower(key||' '||coalesce(summary,'')||' '||coalesce(value,'')), t) > 0)
+        ${order} LIMIT $5`, [...scope, words, bound]) : none,
+      bound ? this.#query(`SELECT * FROM evimed_memory.records WHERE ${visible} AND kind<>'run_summary' ${order} LIMIT $4`, [...scope, bound]) : none,
+    ]);
+    const seen = new Set();
+    return [...byKey.rows, ...byTerm.rows, ...byImportance.rows].filter((row) => !seen.has(row.id) && seen.add(row.id)).map(publicRecord);
+  }
+
   // ------------------------------------------------------------- composites
 
   /**
@@ -1804,21 +1859,16 @@ export class ResearchMemoryStore {
     // History is recallable only for a question about the time before it was
     // replaced; for now, a replaced fact is not true and is not read.
     const statuses = past ? ["active", "superseded"] : ["active"];
-    // Durable memories are fetched in their own query. A single page ordered by
-    // importance cannot hold both: run summaries arrive one per run and a failed
-    // one carries importance 0.7 against a preference's 0.6, so past a hundred
-    // runs the page is all episodes and the user's long-term picture becomes
-    // permanently unreachable — silently, because a full page still looks fine.
-    const [durableRecords, episodicRecords] = await Promise.all([
-      this.listRecords(userId, { statuses, kinds: [...DURABLE_RECALL_KINDS], pageSize: 100 }),
-      this.listRecords(userId, { statuses, pageSize: 100 }),
-    ]);
-    const seenRecordIds = new Set();
-    const records = [...durableRecords, ...episodicRecords].filter((record) => {
-      if (seenRecordIds.has(record.id)) return false;
-      seenRecordIds.add(record.id);
-      return true;
-    });
+    // What the question can use is read, not a window of the account. This used to
+    // be two pages of 100 ordered by importance (the durable kinds, and anything),
+    // taken from the whole account and only then cut down to this project, this
+    // time and the words of the question, so an account with more than that lost
+    // the rest however well it matched — every question about an earlier time, and
+    // every recall while the index is out, silently, because a full page still
+    // looks fine (review M-14). Two failures older than that stay prevented: run
+    // summaries cannot crowd the long-term profile out (they are not read), and the
+    // durable kinds are read whatever the question says.
+    const records = (await this.#recallCandidates(userId, { statuses, projectId, sessionId, terms })).map(publicRecord);
     const context = { now, asOf, projectId, sessionId };
     // A run summary is the timeline's, not memory the next prompt is handed
     // (2026-09-19 proposal §4.1): it held the platform's own earlier answer,
