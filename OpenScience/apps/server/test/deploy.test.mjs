@@ -2031,7 +2031,9 @@ test("a capability's two skill copies never drift apart by more than their known
     "adr-analysis": 63,
     "bibliometric-analysis": 58,
     // Raised on 2026-10-05 (evidence-flywheel F04): one sentence saying to look in the frontier feed first for what is new (+1).
-    "clinical-evidence-synthesis": 268,
+    // Raised on 2026-10-10 (review G-D3): the brief's session-scoped path, the same words in both copies, wrapped to
+    // paragraphs that begin differently (+2).
+    "clinical-evidence-synthesis": 270,
     "comprehensive-drug-evaluation": 45,
     // The optional-output scoping revision synchronized the retained body too.
     "dataset-research-scoping": 0,
