@@ -1,0 +1,152 @@
+{
+  "schema": 1,
+  "reviewedAt": "2026-10-10",
+  "defaultAccess": "external_prediction_file",
+  "deployment": "cloud_only",
+  "runtime": "DeepSeek + DSH",
+  "outputContract": "endpoint_by_horizon_marginals_v1",
+  "jointTrajectorySupport": false,
+  "candidates": [
+    {
+      "id": "healthflux",
+      "name": "HealthFlux",
+      "paper": "https://www.medrxiv.org/content/10.64898/2026.09.19.26363460v2.full.pdf",
+      "revision": "User-supplied v2, posted 2026-09-24; this functional review reads that PDF directly.",
+      "status": "research_candidate",
+      "apiAvailability": "not_verified",
+      "trainingPopulation": "UK Biobank; transportability must be evaluated",
+      "inputModalities": [
+        "longitudinal clinical events",
+        "demographics",
+        "genetics",
+        "blood biochemistry",
+        "haematology",
+        "physical function",
+        "lifestyle",
+        "proteomics",
+        "metabolomics",
+        "abdominal MRI features",
+        "brain MRI features"
+      ],
+      "outputs": [
+        "biomarker trajectories",
+        "disease probabilities"
+      ],
+      "separateTrialEffectModel": true,
+      "modelLicense": "not_verified",
+      "dataAccess": "UK Biobank application and contractual terms; no patient data bundled",
+      "clinicalValidationHere": false,
+      "laterRevision": {
+        "url": "https://www.medrxiv.org/content/10.64898/2026.09.19.26363460v3",
+        "posted": "2026-10-07",
+        "reviewScope": "Abstract rechecked; full-text access returned 403. Do not mix version-specific methods with the supplied v2."
+      },
+      "medicationModel": "v2 paired medication-on/off rollouts use a trained action residual with frozen world model/readouts; follow-up biomarkers and external RCT log hazard ratios supervise it.",
+      "benchmarkCaveat": "v2 Fig. 4b selects numerically concordant comparisons. Held-out trial-family and exact medication-endpoint exclusions are separately described for Fig. 4c; neither is validation of this deployment."
+    },
+    {
+      "id": "delphi",
+      "name": "Delphi",
+      "paper": "https://www.nature.com/articles/s41586-025-09529-3",
+      "repository": "https://github.com/gerstung-lab/Delphi",
+      "status": "research_candidate",
+      "apiAvailability": "not_verified",
+      "codeLicense": "MIT",
+      "weightsLicense": "CC-BY-NC-ND; commercial permission is separate",
+      "outputs": [
+        "disease event sequences"
+      ],
+      "clinicalValidationHere": false
+    },
+    {
+      "id": "ehrworld",
+      "name": "EHRWorld",
+      "paper": "https://arxiv.org/abs/2602.03569",
+      "status": "research_candidate",
+      "apiAvailability": "not_verified",
+      "modelLicense": "not_verified",
+      "clinicalValidationHere": false
+    },
+    {
+      "id": "chronomedicalworld",
+      "name": "ChronoMedicalWorld",
+      "paper": "https://arxiv.org/abs/2605.21963",
+      "status": "research_candidate",
+      "apiAvailability": "not_verified",
+      "modelLicense": "not_verified",
+      "clinicalValidationHere": false
+    },
+    {
+      "id": "unlearn",
+      "name": "Unlearn",
+      "source": "https://www.unlearn.ai/platform/digital-twin-technology",
+      "status": "commercial_partner_candidate",
+      "apiAvailability": "contract_required_not_verified",
+      "modelLicense": "commercial_contract",
+      "clinicalValidationHere": false
+    },
+    {
+      "id": "tabpfn",
+      "name": "TabPFN cloud",
+      "source": "https://github.com/PriorLabs/tabpfn-client",
+      "terms": "https://priorlabs.ai/privacy-policy",
+      "status": "synthetic_nonpersonal_research_candidate",
+      "apiAvailability": "public_client",
+      "patientDataUse": "public_service_prohibits_personal_data",
+      "clinicalValidationHere": false
+    }
+  ],
+  "cardFields": [
+    "intendedUse",
+    "inputCodes",
+    "units",
+    "outcomeDefinition",
+    "predictionOrigin",
+    "historyWindow",
+    "supportedHorizons",
+    "absorbingEvents",
+    "uncertaintyMeaning",
+    "trainingPopulation",
+    "trainingOverlap",
+    "externalValidation",
+    "apiEvidence",
+    "modelVersion",
+    "license",
+    "dataProcessingTerms"
+  ],
+  "references": [
+    {
+      "topic": "reporting",
+      "url": "https://www.bmj.com/content/385/bmj-2023-078378"
+    },
+    {
+      "topic": "risk_of_bias",
+      "url": "https://www.bmj.com/content/388/bmj-2024-082505"
+    },
+    {
+      "topic": "external_validation",
+      "url": "https://www.bmj.com/content/384/bmj-2023-074820"
+    },
+    {
+      "topic": "model_informed_development",
+      "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/m15-general-principles-model-informed-drug-development"
+    },
+    {
+      "topic": "prognostic_adjustment_scope",
+      "url": "https://www.ema.europa.eu/en/documents/regulatory-procedural-guideline/qualification-opinion-prognostic-covariate-adjustment-procovatm_en.pdf"
+    },
+    {
+      "topic": "event_schema",
+      "url": "https://github.com/Medical-Event-Data-Standard/meds"
+    },
+    {
+      "topic": "bulk_data",
+      "url": "https://hl7.org/fhir/uv/bulkdata/"
+    },
+    {
+      "topic": "reverse_km_tie_convention",
+      "url": "https://scikit-survival.readthedocs.io/en/v0.28.0/api/generated/sksurv.nonparametric.kaplan_meier_estimator.html"
+    }
+  ],
+  "endpointPanelSupport": "User-uploaded multiple marginal endpoints with shared history; no joint-path dependence inferred."
+}

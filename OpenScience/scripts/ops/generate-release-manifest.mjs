@@ -51,6 +51,7 @@ const inputPaths = [
   // rides along, which costs a digest and no more.
   "packages/socket",
   "packages/domain",
+  "packages/contracts/healthflux/candidates.json",
   "packages/design-tokens",
   "packages/harness-port",
   "deploy/runtime-dsh",

@@ -90,6 +90,7 @@ COPY --from=build /app/scripts/ops ./scripts/ops
 COPY --from=build /app/scripts/runtime/extensions/cowork ./scripts/runtime/extensions/cowork
 COPY --from=build /app/packages/domain/index.mjs ./packages/domain/index.mjs
 COPY --from=build /app/packages/domain/src ./packages/domain/src
+COPY --from=build /app/packages/contracts/healthflux/candidates.json ./packages/contracts/healthflux/candidates.json
 COPY --from=build /app/packages/harness-port/index.mjs /app/packages/harness-port/seam-manifest.json ./packages/harness-port/
 COPY --from=build /app/packages/harness-port/src ./packages/harness-port/src
 COPY --from=build /app/packages/socket/index.mjs /app/packages/socket/cordis.patch.yml ./packages/socket/

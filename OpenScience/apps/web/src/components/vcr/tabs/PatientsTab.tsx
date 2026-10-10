@@ -8,6 +8,7 @@ import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrTornadoChart } from "../VcrDiagrams";
 import { SourceTag } from "../VcrMarks";
 import { VcrModelAssessments } from "../VcrModelAssessments";
+import { VcrLongitudinalPanel } from "../VcrLongitudinalPanel";
 import { VcrNumber } from "../VcrNumber";
 import { NotApplicableCard, PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useVcrLoad, VcrHeadline, VcrTabError, VcrToolbar } from "../vcrTabKit";
@@ -48,10 +49,18 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
   // set: a study with an assessment and no patients is a study with no virtual patients yet, and the assessment follows that sentence.
   const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity;
   const assessed = data.assessments.records.length > 0;
+  // The longitudinal panel (histories, forecasts and their validation) is the study's own data, so it is offered whether or not
+  // the virtual patients have been made.
+  const longitudinal = <VcrLongitudinalPanel studyId={studyId} canRun={study.abilities.includes("run")} />;
   if (nothing && !assessed) {
-    return failed
-      ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
-      : <VcrStepPending studyId={studyId} study={study} step="patients" />;
+    return (
+      <div className="flex flex-col gap-6">
+        {failed
+          ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
+          : <VcrStepPending studyId={studyId} study={study} step="patients" />}
+        {longitudinal}
+      </div>
+    );
   }
   const twin = data.twin ?? (data.model?.twinLabel ? { label: data.model.twinLabel, reason: data.model.twinReason ?? null } : null);
   // A chart is drawn only when it has a series to draw; a card whose plot is empty is a title over an empty box.
@@ -65,6 +74,7 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
           ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
           : <VcrStepPending studyId={studyId} study={study} step="patients" />}
         <VcrModelAssessments studyId={studyId} assessments={data.assessments} canEdit={study.abilities.includes("manage_study")} onSaved={reload} withoutPatients />
+        {longitudinal}
       </div>
     );
   }
@@ -166,6 +176,7 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
       )}
       {data.model && <ModelChipRow model={data.model} twin={twin} />}
       <VcrModelAssessments studyId={studyId} assessments={data.assessments} canEdit={study.abilities.includes("manage_study")} onSaved={reload} />
+      {longitudinal}
     </div>
   );
 }

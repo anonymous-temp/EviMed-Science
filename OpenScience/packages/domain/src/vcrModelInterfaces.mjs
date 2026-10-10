@@ -12,12 +12,10 @@
  *   out — the shape of generative event models such as Epic CoMET. Mechanistic
  *   models (QSP, PBPK) are a third matter, a model *type* with its own package
  *   contract in the engine (`vcr_mechanistic_spec_issues`), not a call shape.
- * - **Only the first shape is hosted.** No executor for the second exists in
- *   this deployment, and this module does not add one: it fixes the card a
- *   model must arrive with so that a package adopted later is a card and an
- *   executor, not a second code path. A patient set that names a model of the
- *   second shape is refused by name rather than run through a generator that is
- *   not that model (`VCR_HOSTED_MODEL_INTERFACES`).
+ * - **The statistical patient-set executor hosts the first shape.** The second
+ *   uses the control plane's cloud forecast adapter or externally imported
+ *   predictions, with its own history/version provenance. Availability is read
+ *   from configured providers; an arbitrary card never becomes a callable API.
  * - **A card with no `interfaceShape` is the first shape.** Every card written
  *   before this module existed is one, and none is asked for anything new.
  * - **The second shape's card says what it reads, what it returns, where it
@@ -56,7 +54,8 @@ export const VCR_MODEL_INTERFACE_LABELS_ZH = Object.freeze({
 })
 /** What a card without an `interfaceShape` is. */
 export const VCR_DEFAULT_MODEL_INTERFACE = 'baseline_to_outcome'
-/** The shapes this deployment has an executor for. Adding a word here is adding the executor first. */
+/** Shapes handled by the statistical patient-set generator. Cloud history models
+ * use forecast_trajectories; they must never fall through into an R simulator. */
 export const VCR_HOSTED_MODEL_INTERFACES = frozen(['baseline_to_outcome'])
 
 /** The time units a horizon is stated in, with the days each stands for (a month is the mean Gregorian month). */

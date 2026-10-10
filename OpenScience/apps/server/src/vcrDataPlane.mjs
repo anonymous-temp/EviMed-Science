@@ -3006,12 +3006,16 @@ export class VcrDataPlane {
     }
     const files = (await this.store.listSourceFiles(snapshot.sourceId)).filter((file) => snapshot.fileHashes.some((/** @type {any} */ frozen) => frozen.id === file.id));
     const dictionary = (await this.store.listSourceFiles(snapshot.sourceId)).filter((file) => file.role === "dictionary").flatMap((file) => file.detail?.dictionary ?? []);
+    const frozen = snapshotFreezeNotes(snapshot);
     return {
       snapshotId: snapshot.id, sourceId: snapshot.sourceId, version: snapshot.version,
       sha256: snapshot.sha256, rowCount: snapshot.rowCount != null && snapshot.rowCount < floor ? null : snapshot.rowCount,
       columnCount: snapshot.columnCount, frozenAt: snapshot.frozenAt, valueSource: snapshot.valueSource,
-      ...(snapshotFreezeNotes(snapshot).asOf ? { asOf: snapshotFreezeNotes(snapshot).asOf } : {}),
-      files: files.map((file) => ({ name: file.name, format: file.format })),
+      ...(frozen.asOf ? { asOf: frozen.asOf } : {}),
+      files: files.filter(file => file.role === 'data').map((file) => ({ name: file.name, format: file.format,
+        inputId: `${snapshot.id}:${snapshot.fileHashes.filter((/** @type {any} */ item) => item.role === 'data').findIndex((/** @type {any} */ item) => item.id === file.id)+1}` })),
+      inputProjection: { subjectColumn: 'USUBJID', subjectColumnBasis: 'generated_study_pseudonym',
+        otherColumns: 'field_map_alias_or_source_column', profileColumns: 'original_source_columns' },
       sealedFields: sealActive ? [...sealed].sort() : [],
       sealedUntil: snapshot.sealedUntil,
       clocks: snapshotClocks(fieldMaps),
@@ -3019,6 +3023,7 @@ export class VcrDataPlane {
         table: map.tableName, column: map.columnName, role: map.role, parameter: map.parameter, alias: map.alias, concept: map.concept,
         unit: map.unit, codingSystem: map.codingSystem, timeKind: map.timeKind, missingReason: map.missingReason,
         identifier: map.identifier, outcome: map.outcome, reviewState: map.reviewState,
+        valueSource: frozen.columnSources.find(column => column.table === map.tableName && column.column === map.columnName)?.valueSource ?? snapshot.valueSource,
       })),
       dictionary,
       columns,

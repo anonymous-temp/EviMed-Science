@@ -657,6 +657,7 @@ services:
       OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS:
       OPEN_SCIENCE_VCR_MIN_CELL_SIZE:
       OPEN_SCIENCE_VCR_DERIVED_TABLE_MAX_BYTES:
+      OPEN_SCIENCE_VCR_FORECAST_PROVIDERS_FILE: ${OPEN_SCIENCE_VCR_FORECAST_HOST_DIR:+/run/evimed/vcr-forecast/providers.json}
       # Numerical validation is operator-installed evidence, never a model
       # write. Set the container path only when its read-only host file exists.
       OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:+/run/evimed/vcr-method-validation.json}
@@ -1176,6 +1177,14 @@ services:
       - type: bind
         source: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:-/dev/null}
         target: /run/evimed/vcr-method-validation.json
+        read_only: true
+        bind:
+          create_host_path: false
+      # Cloud forecast configuration and token files belong to the control plane.
+      # A directory bind preserves operator config and credential rotations.
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_FORECAST_HOST_DIR:-/dev/null}
+        target: /run/evimed/vcr-forecast
         read_only: true
         bind:
           create_host_path: false

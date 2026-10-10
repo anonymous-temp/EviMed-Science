@@ -2002,5 +2002,17 @@
     "scorecard": "evals/vcr-matching/openmed-scorecard.json#/localReview20261010",
     "clinicalAcceptance": "Not established; default-off study allow-list preserved. 38 engineering implementations plus 6 native reuse decisions are not 44 independently validated clinical functions.",
     "sourceTimingLimitation": "Model-interpreted assertions, occurredAt and declared intervals remain subject to clinical validation; quote checking alone does not verify their semantic truth."
+  },
+  "functionalRecheck20261010": {
+    "reference": "https://github.com/maziyarpanahi/openmed/releases/tag/v3.0.0",
+    "scope": "Reviewed release functions and every adoption/conditional task against the supplied HealthFlux paper and current source.",
+    "result": "The longitudinal extensions close the remaining selected-adoption workflow gaps; original external clinical validation and licensed/partner optional prerequisites stay explicit.",
+    "crossReference": "packages/contracts/healthflux/implementation.json#/functionalReview",
+    "countsUnchanged": {
+      "implemented": 38,
+      "external_validation_required": 1,
+      "native_reused": 6,
+      "conditional_not_activated": 7
+    }
   }
 }

@@ -58,6 +58,7 @@
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
 import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 import { createHash } from "node:crypto";
+import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
 
 import {
   VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
@@ -95,7 +96,7 @@ const answerBudgetMs = 10_000;
 const REGISTRY_MARGIN_MS = 3_000;
 /** The registry client's default deadline (its own default), when the deployment names none: `OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS`. */
 const REGISTRY_DEADLINE_MS = 20_000;
-const readFilterFields = Object.freeze(["kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "query"]);
+const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "query"]);
 const WRITE_MAX_ITEMS = 200;
 
 /**
@@ -111,6 +112,7 @@ export const VCR_FORBIDDEN_WRITE_KEYS = Object.freeze([
 
 /** Codes this gateway answers with. */
 export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
+  ...VCR_LONGITUDINAL_ERROR_CODES,
   "vcr_disabled", "vcr_no_study", "vcr_gateway_token_missing", "vcr_gateway_token_invalid", "vcr_gateway_rate_limited",
   "vcr_gateway_timeout", "vcr_gateway_unavailable", "vcr_request_invalid", "vcr_request_too_large",
   "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
@@ -214,7 +216,7 @@ function readRequest(body) {
   }
   /** @type {Record<string, any>} */
   const filter = {};
-  for (const key of ["kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId"]) {
+  for (const key of ["id", "parentId", "kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId"]) {
     if (raw[key] == null) continue;
     if (!ID.test(String(raw[key]))) throw gatewayError(400, "vcr_read_filter_invalid", `filter.${key} is not an id.`);
     filter[key] = String(raw[key]);
@@ -881,7 +883,7 @@ const WRITERS = {
   async evidence_item(item, { evidence, study, service }, extra) {
     if (!item.only(["registry", "registryId", "parameter", "arm", "armRole", "value", "valueText", "unit", "ciLow", "ciHigh", "sampleSize",
       "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note",
-      "source", "candidateFrom"])) return null;
+      "source", "candidateFrom", "timepoint"])) return null;
     const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
     const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: true });
     const parameter = item.str("parameter", { max: 120, required: true });
@@ -920,7 +922,7 @@ const WRITERS = {
     const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, item: {
       registry, registryId, parameter, arm, armRole, value, valueText, unit, ciLow, ciHigh, sampleSize, events, valueSource, quote, locator,
       endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note,
-      ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
+      timepoint: item.row.timepoint, ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
     } });
     if (written.status !== "ok") return void item.bad(written.code === "vcr_precedent_not_in_study" ? "registryId" : "quote", written.message ?? "没有写入。",
       written.code === "vcr_precedent_not_in_study" ? "vcr_write_value_invalid" : "vcr_evidence_unverified");
@@ -1143,6 +1145,27 @@ const WRITERS = {
     // the applicability check declines to answer for it, field by field, and every other result of the study goes on.
     for (const found of list(saved?.issues)) item.issues.push(issue(item.index, String(found.field), "vcr_model_card_incomplete", String(found.text)));
     return saved?.id ?? null;
+  },
+
+  async history(item, {service,study}) {
+    if (!item.only(['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation'])) return null;
+    const longitudinal = service.packages.longitudinal;
+    if (!longitudinal) return void item.bad('snapshotId','数据平面尚未接入；可以继续文献情景分析。');
+    const saved = await longitudinal.freezeHistory(study,item.row,study.userId);
+    return saved.id;
+  },
+  async trial_benchmark(item,{service,study}) {
+    if (!item.only(['model','comparisons','split','trainingOverlap','sourceFile'])) return null;
+    if (!service.packages.longitudinal) return void item.bad('comparisons','纵向研究尚未接入。');
+    return (await service.packages.longitudinal.importBenchmark(study,item.row,study.userId)).id;
+  },
+  async forecast_design(item,{service,study}) {
+    if (!item.only(['predictionId','controlPredictionId','horizonDays','allocation','alpha','power','prognosticEvaluationId','randomizationAt','lambda','gamma'])) return null;
+    const longitudinal = service.packages.longitudinal;
+    if (!longitudinal) return void item.bad('predictionId','数据平面尚未接入；可以继续文献情景分析。');
+    const queued = await longitudinal.enqueueDesign(study,item.row,study.userId);
+    if (!queued.available) return void item.bad('predictionId',`这项计算缺少可用输入：${queued.code}。其他研究结果继续保留。`);
+    return queued.jobId;
   },
 
   /**
@@ -1531,6 +1554,7 @@ const WRITERS = {
       const index = reports.findIndex(entry => entry.section === section);
       if (index < 0) reports.push(report); else reports[index] = report;
       return { ...cover, reports, report, results: model, intendedUse: model.intendedUse ?? study.intendedUse,
+        longitudinalDigest: model.longitudinal?.records?.length ? model.longitudinal.digest : null,
         reviews: model.review?.records ?? [], staleResults: model.stale?.length ?? 0, seal: model.seal ?? null,
         ...(cover.inputDigest ?? writtenFrom ? { inputDigest: cover.inputDigest ?? writtenFrom } : {}) };
     };
@@ -1982,7 +2006,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
             ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
-          return vcr.service.forModel(answer);
+          return vcr.service.forModel(answer, { projection: "job_result" });
         };
       }
 
@@ -2038,6 +2062,11 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
  *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any }} request
  */
 async function startJob(vcr, study, request) {
+  if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
+    if (!vcr.longitudinal) throw gatewayError(503,'vcr_gateway_unavailable','纵向数据尚未接入；其他分析可以继续。');
+    const {job} = await vcr.longitudinal.prepare(study,request,study.userId);
+    return {action:'start',jobId:job.id,state:job.state,progress:job.progress};
+  }
   if (request.kind === "pool_evidence") {
     if (!vcr.evidence?.poolParameter) throw gatewayError(503, "vcr_gateway_unavailable", "证据参数化未接入本部署：这一步暂不可用。");
     const unknown = Object.keys(request.scenario).filter((key) => !POOL_REQUEST_FIELDS.includes(key));

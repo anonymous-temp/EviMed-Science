@@ -83,7 +83,7 @@ export const VCR_TABLES = Object.freeze([
   "populations", "patient_sets", "comparator_designs", "trial_scenarios", "design_grids",
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
-  "jobs", "executions", "results", "forecasts",
+  "jobs", "executions", "results", "forecasts", "longitudinal_artifacts",
   "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "matching_candidates", "matching_producers",
   "referrals", "referral_events", "sites", "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
@@ -899,6 +899,22 @@ CREATE INDEX IF NOT EXISTS vcr_results_study_idx ON evimed_vcr.results (study_id
 
 -- A prediction registered before the outcome it predicts, with the timestamp
 -- and hash that prove the order (plan §5.4, AC-23).
+CREATE TABLE IF NOT EXISTS evimed_vcr.longitudinal_artifacts (
+  id text PRIMARY KEY,
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  kind text NOT NULL,
+  sha256 text NOT NULL,
+  location text NOT NULL,
+  snapshot_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  source_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  parent_id text,
+  summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(study_id,kind,sha256)
+);
+CREATE INDEX IF NOT EXISTS vcr_longitudinal_study_idx ON evimed_vcr.longitudinal_artifacts(study_id,created_at DESC);
+ALTER TABLE evimed_vcr.longitudinal_artifacts ADD COLUMN IF NOT EXISTS bindings jsonb NOT NULL DEFAULT '[]'::jsonb;
+
 CREATE TABLE IF NOT EXISTS evimed_vcr.forecasts (
   id            text PRIMARY KEY,
   study_id      text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,

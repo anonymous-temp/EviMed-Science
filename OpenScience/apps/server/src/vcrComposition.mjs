@@ -64,6 +64,8 @@ import { clinicalDocumentWindow } from './vcrDocumentWindow.mjs';
  */
 
 import { createHash } from "node:crypto";
+import { createVcrLongitudinal } from './vcrLongitudinal.mjs';
+import { VCR_LONGITUDINAL_METHODS } from '@evimed/domain';
 
 import { PLATFORM_PUBLISHER_USER_ID, VCR_DRAFT_STUDY_NAME, VCR_ENGINE_PROTOCOL_VERSION, VCR_LEGACY_DEFAULT_STUDY_NAME, canonicalScenarioJson, vcrResultOutputPayload } from "@evimed/domain";
 
@@ -1144,6 +1146,12 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents,
   });
 
+  const longitudinal = createVcrLongitudinal({store,dataStore,dataPlane,matchStore,access,jobs,config,fetchImpl});
+  if (longitudinal) {
+    for (const method of Object.keys(VCR_LONGITUDINAL_METHODS)) jobs.localExecutors[method] = longitudinal.execute;
+    service.attach({longitudinal});
+  }
+
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
   // by the runtime's `pack` and `library` and by the population writer; the job queue is the comparison's.
@@ -1184,7 +1192,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const records = createVcrRecords({ store, config });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
+    store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).

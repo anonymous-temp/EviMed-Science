@@ -50,6 +50,7 @@ import { HttpError } from "./security.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 import { withReviewState } from "./vcrViewsKit.mjs";
+import { longitudinalIndex } from './vcrLongitudinalStore.mjs';
 
 /** @param {unknown} value */
 const iso = (value) => (value == null ? null : new Date(/** @type {any} */ (value)).toISOString());
@@ -69,7 +70,7 @@ const list = (value) => (Array.isArray(value) ? value : []);
  */
 export const VCR_RESULT_KINDS = Object.freeze([
   "population", "patient_set", "comparator", "trial_scenario", "design_grid",
-  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile",
+  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal",
 ]);
 
 /** Which lineage node kind each research object is. */
@@ -368,6 +369,8 @@ export class VcrStore extends VcrStoreBase {
     return { tagged };
   }
 
+  /** @param {string} studyId @param {any} [filter] */
+  longitudinalIndex(studyId,filter = {}) { return longitudinalIndex(this,studyId,filter); }
   /** Read every report input at one PostgreSQL snapshot. @param {(store:VcrStore) => Promise<any>} operation */
   async reportSnapshot(operation) {
     await this.ready();

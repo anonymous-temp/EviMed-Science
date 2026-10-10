@@ -320,7 +320,8 @@ test("the engine service is the real one: R, the receipt key and the table route
   const health = await engine.health();
   assert.equal(health.ok, true);
   assert.deepEqual([...health.methods].sort(), Object.keys(VCR_ENGINE_METHODS).sort(), "the engine and the domain publish the same methods");
-  assert.equal(VCR_JOB_KINDS.length, Object.keys(VCR_ENGINE_METHODS).length, "one job kind per published method");
+  const engineKinds = VCR_JOB_KINDS.filter(kind => Object.hasOwn(VCR_ENGINE_METHODS, VCR_JOB_METHODS[kind]));
+  assert.equal(engineKinds.length, Object.keys(VCR_ENGINE_METHODS).length, "one R job kind per published method; cloud forecasts run in the control plane");
   assert.match(health.rVersion, /^R 4\./);
 });
 

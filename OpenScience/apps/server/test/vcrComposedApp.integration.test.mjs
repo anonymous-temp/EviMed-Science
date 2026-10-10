@@ -182,6 +182,10 @@ function requests(target, ids) {
     "GET /studies/:id/cards": async () => ["GET", `${S}/cards?kind=criteria`, undefined],
     // A request that no card answers: the point of the grid is who is refused, and a write that reaches nothing proves that as well.
     "POST /studies/:id/cards": async () => ["POST", `${S}/cards`, { kind: "criteria", set: { "99.requirement.value": 1 } }],
+    "GET /studies/:id/longitudinal": async () => ["GET", `${S}/longitudinal`, undefined],
+    "POST /studies/:id/longitudinal/histories": async () => ["POST", `${S}/longitudinal/histories`, {}],
+    "POST /studies/:id/longitudinal/predictions": async () => ["POST", `${S}/longitudinal/predictions`, {}],
+    "POST /studies/:id/longitudinal/benchmarks": async () => ["POST", `${S}/longitudinal/benchmarks`, {}],
     "PATCH /studies/:id name,question,action": async () => ["PATCH", S, { name: "改个名字", question: "同一个问题" }],
     "PATCH /studies/:id dataTier,intendedUse,status": async () => ["PATCH", S, { status: "active" }],
     "DELETE /studies/:id": async () => ["DELETE", `/api/vcr/studies/${await ids.disposable()}`, undefined],

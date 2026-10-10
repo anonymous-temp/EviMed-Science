@@ -1,0 +1,689 @@
+{
+  "schema": 1,
+  "branch": "codex/vcr-longitudinal-integration-20261010",
+  "base": "3561e64bd",
+  "principles": [
+    "DeepSeek + pinned DSH remains the only agent kernel",
+    "No local model weights, training, GPU serving or second patient database",
+    "AI selects and interprets; code performs arithmetic and preserves inputs",
+    "An unavailable operation does not withhold other research or erase partial results",
+    "Uncertainty and missing evidence are represented, not fabricated"
+  ],
+  "tasks": [
+    {
+      "id": "D01",
+      "title": "Longitudinal uploads and explicit field mappings",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "apps/server/src/vcrDataPlane.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D02",
+      "title": "Task-specific data readiness without admission thresholds",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D03",
+      "title": "Reuse source-anchored clinical extraction with assertion and medication state",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "packages/domain/src/clinicalFact.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D04",
+      "title": "Replay occurrence and availability clocks at the prediction origin",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D05",
+      "title": "Resolve duplicates, correction chains and conflicting revisions",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D06",
+      "title": "Immutable histories, predictions and incremental snapshot lineage",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinalStore.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D07",
+      "title": "Reuse study grants, field grants and destination-specific cloud permission",
+      "status": "reused",
+      "evidence": [
+        "apps/server/src/vcrAccess.mjs",
+        "apps/server/src/vcrCloudProjection.mjs",
+        "apps/server/src/vcrLongitudinalStore.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "D08",
+      "title": "Connect a real partner incremental feed",
+      "status": "external_dependency",
+      "evidence": [
+        "apps/server/src/vcrImport.mjs",
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": [
+        "Requires the partner endpoint, incremental cursor semantics, credentials and authorized dataset. Existing FHIR/OMOP/ADaM intake and explicit priorHistoryId updates are implemented; no live partner connector is claimed."
+      ]
+    },
+    {
+      "id": "M01",
+      "title": "Evidence-based candidate and API availability register",
+      "status": "implemented",
+      "evidence": [
+        "packages/contracts/healthflux/candidates.json"
+      ],
+      "remaining": [
+        "Candidate publications do not establish callable APIs or commercial/data-processing rights."
+      ]
+    },
+    {
+      "id": "M02",
+      "title": "Versioned event-history and marginal endpoint prediction contract",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs",
+        "packages/contracts/healthflux/providers.example.json"
+      ],
+      "remaining": [
+        "v1 is marginal endpoint-by-horizon output. Joint event trajectories and multimodal model training are not implemented or represented as present."
+      ]
+    },
+    {
+      "id": "M03",
+      "title": "Cloud batching, cancellation, replay, time/cost tracking and rollback",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrForecastProvider.mjs",
+        "apps/server/src/vcrLongitudinal.mjs",
+        "deploy/web/docker-compose.yml",
+        "deploy/web/.env.example"
+      ],
+      "remaining": [
+        "Only the generic cloud protocol is tested. Configure and probe an actual licensed provider. Cost is provider-reported; unknown charges cannot be bounded by a client-side estimate."
+      ]
+    },
+    {
+      "id": "M04",
+      "title": "Import externally computed predictions",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrRoutes.mjs",
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "M05",
+      "title": "Re-predict from a new history or model while preserving prior versions",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "M06",
+      "title": "Per-row numerical meaning checks with partial retention",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "M07",
+      "title": "Keep literature scenarios and sensitivity analysis usable without a model",
+      "status": "reused",
+      "evidence": [
+        "capabilities/vcr-analysis/SKILL.md",
+        "apps/server/src/vcrOrchestrator.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V01",
+      "title": "Separate synthetic engineering, clinical NLP and actual outcome evaluations",
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/run_native_longitudinal.mjs",
+        "packages/contracts/openmed/implementation.json",
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V02",
+      "title": "Freeze patient, calendar, site and trial-family splits",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "packages/domain/src/vcrTrialBenchmark.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V03",
+      "title": "Same-subject persistence, trend and independent risk/trial baselines",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrForecastEvaluation.mjs",
+        "packages/domain/src/vcrTrialBenchmark.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V04",
+      "title": "Errors, calibration, distribution scoring, censoring and patient-cluster intervals",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": [
+        "AUROC/AP use observed-at-horizon cases. IPCW uses marginal independent-censoring assumptions; conditional/competing-risk models and full trajectory-distribution scores require a separate model contract."
+      ]
+    },
+    {
+      "id": "V05",
+      "title": "Keep predictive, parameter, model and Monte Carlo uncertainties distinct",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrLongitudinal.mjs",
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": [
+        "Model and parameter uncertainty remain not estimated unless the external provider supplies the corresponding distribution. Patient bootstrap does not replace these."
+      ]
+    },
+    {
+      "id": "V06",
+      "title": "Replay perturbations, freshness and local split shift diagnostics",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "V07",
+      "title": "Independent preserved-evidence RCT benchmark machinery",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrTrialBenchmark.mjs",
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": [
+        "Requires rights-cleared independent trial predictions, preserved result sources and declared trial-family identities. No HealthFlux benchmark or clinical replication is claimed."
+      ]
+    },
+    {
+      "id": "R01",
+      "title": "Dynamic endpoint forecasts at requested horizons",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R02",
+      "title": "Paired model scenario contrasts with explicit causal limits",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrForecastEvaluation.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R03",
+      "title": "Translate saved common-subject forecasts to the existing design engine",
+      "status": "implemented",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R04",
+      "title": "Reuse prognostic adjustment and connect heldout correlations to PROCOVA design",
+      "status": "reused_with_conditions",
+      "evidence": [
+        "apps/server/src/vcrLongitudinal.mjs",
+        "packages/domain/src/vcrScenarioSchemas.mjs",
+        "capabilities/vcr-analysis/SKILL.md"
+      ],
+      "remaining": [
+        "Actual patient-level binary/survival adjustment uses the existing externally supplied, prespecified score-column workflow. This adapter does not relabel a forecast as an observed trial outcome or claim EMA qualification. Real clinical use needs independent validation and trial-specific pre-randomization inputs."
+      ]
+    },
+    {
+      "id": "R05",
+      "title": "Predicted outcomes never become observed matching facts",
+      "status": "reused",
+      "evidence": [
+        "apps/server/src/vcrMatching.mjs",
+        "apps/server/src/vcrLongitudinal.mjs",
+        "capabilities/vcr-matching/SKILL.md"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "R06",
+      "title": "Separate trial-effect models from patient trajectory predictions",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/src/vcrTrialBenchmark.mjs"
+      ],
+      "remaining": [
+        "No new treatment-effect model is trained or served locally. The module evaluates externally supplied trial-effect outputs; it does not infer causal identification from forecast differences."
+      ]
+    },
+    {
+      "id": "L01",
+      "title": "Integrate history, import, versions and validation into the patient tab",
+      "status": "implemented",
+      "evidence": [
+        "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx",
+        "apps/web/src/lib/vcrLongitudinalClient.ts"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "L02",
+      "title": "Update all five DSH skills, existing tools and report number sources",
+      "status": "implemented",
+      "evidence": [
+        "capabilities/vcr-analysis/SKILL.md",
+        "capabilities/vcr-evidence/SKILL.md",
+        "capabilities/vcr-matching/SKILL.md",
+        "capabilities/vcr-package/SKILL.md",
+        "capabilities/vcr-protocol/SKILL.md",
+        "apps/server/src/vcrService.mjs",
+        "runtime/mcp/evimed-research/vcr_platform.py"
+      ],
+      "remaining": []
+    },
+    {
+      "id": "L03",
+      "title": "T2D pilot across literature, longitudinal and imported-prediction paths",
+      "status": "implemented",
+      "evidence": [
+        "evals/method-quality/run_native_longitudinal.mjs",
+        "apps/server/test/vcrLongitudinal.integration.test.mjs"
+      ],
+      "remaining": [
+        "The executed pilot is authored synthetic data and a real DeepSeek API through pinned DSH. It is not real patient validation or a live dedicated world-model service."
+      ]
+    },
+    {
+      "id": "L04",
+      "title": "Test arithmetic, permissions, provider failures, UI and real DeepSeek/DSH execution",
+      "status": "implemented",
+      "evidence": [
+        "packages/domain/test/vcrLongitudinal.test.mjs",
+        "apps/server/test/vcrForecastProvider.test.mjs",
+        "apps/server/test/vcrLongitudinal.integration.test.mjs",
+        "apps/web/src/components/vcr/VcrLongitudinalPanel.test.tsx",
+        "evals/method-quality/run_native_longitudinal.mjs",
+        "apps/server/src/vcrForecastCalculation.mjs",
+        "apps/server/test/vcrForecastCalculation.test.mjs",
+        "apps/server/test/vcrComposition.test.mjs"
+      ],
+      "remaining": [
+        "Full hosted production deployment, real partner prediction service and prospective clinical validation are outside this isolated branch acceptance."
+      ]
+    }
+  ],
+  "reviewRemediation": {
+    "reviewedCommit": "4a053f41a",
+    "reviewDate": "2026-10-10",
+    "scope": "All twelve source-review findings; isolated branch implementation and engineering acceptance.",
+    "findings": [
+      {
+        "id": "HF-R01",
+        "priority": "P1",
+        "title": "Forecast versions are absent from design job identity",
+        "status": "completed",
+        "resolution": "Computation identity includes immutable prediction and validation ids, horizon and randomization time alongside the queue-owned scenario hash. Inputs with equal numbers but different provenance cannot reuse an old design.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R02",
+        "priority": "P1",
+        "title": "New imported forecasts do not invalidate a cached export",
+        "status": "completed",
+        "resolution": "Both document kinds bind to longitudinal metadata digests. Input cover and report projections read through repeatable-read snapshots; a concurrent import does not leak into an earlier report.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinalStore.mjs",
+          "apps/server/src/vcrOrchestrator.mjs",
+          "apps/server/src/vcrService.mjs",
+          "apps/server/src/vcrGateway.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R03",
+        "priority": "P1",
+        "title": "Trial benchmark target alignment omits arm and horizon",
+        "status": "completed",
+        "resolution": "Preserved quotes anchor the endpoint timepoint and arm. Import aligns trial, endpoint, scale, unit, arm, arm role and horizon; mismatched or unknown targets are local exclusions.",
+        "evidence": [
+          "apps/server/src/vcrEvidence.mjs",
+          "apps/server/src/vcrLongitudinal.mjs",
+          "packages/domain/src/vcrTrialBenchmark.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R04",
+        "priority": "P1",
+        "title": "Per-horizon validation denominators omit missing predictions",
+        "status": "completed",
+        "resolution": "Each horizon starts from the eligible frozen history population. Evaluated, missing forecast, invalid forecast and missing outcome counts partition the requested population.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "packages/domain/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "packages/domain/test/vcrLongitudinal.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R05",
+        "priority": "P2",
+        "title": "One malformed provider row discards valid peers",
+        "status": "completed",
+        "resolution": "A valid batch envelope preserves valid peers, original exchanges, per-row rejection identities and receipts. Replay reuses preserved rows without another provider charge.",
+        "evidence": [
+          "apps/server/src/vcrForecastProvider.mjs",
+          "apps/server/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrForecastProvider.test.mjs",
+          "evals/method-quality/run_native_longitudinal.mjs"
+        ]
+      },
+      {
+        "id": "HF-R06",
+        "priority": "P2",
+        "title": "Synthetic zero-event validation is hidden by generic suppression",
+        "status": "completed",
+        "resolution": "Only platform-owned synthetic summaries bypass generic small-cell display suppression. Real small cells retain a horizon and display reason; mixed-source histories stay patient data.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinalPresentation.mjs",
+          "apps/server/src/vcrRoutes.mjs",
+          "apps/server/src/vcrService.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinalPresentation.test.mjs",
+          "apps/server/test/vcrLongitudinal.integration.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R07",
+        "priority": "P2",
+        "title": "Recent-record limit can hide histories still referenced by predictions",
+        "status": "completed",
+        "resolution": "Metadata supports pagination and exact-id/parent-id reads. Related histories and latest evaluations remain reachable; cumulative batch checkpoints collapse in lists but remain individually addressable.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinalStore.mjs",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx",
+          "runtime/mcp/evimed-research/vcr_platform.py"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.test.tsx"
+        ]
+      },
+      {
+        "id": "HF-R08",
+        "priority": "P2",
+        "title": "Trial benchmark has no researcher or DSH import entry",
+        "status": "completed",
+        "resolution": "Researcher upload and DSH workspace-file import both create a benchmark id. The engine reads actual effects only from preserved evidence, retaining the external prediction content identity.",
+        "evidence": [
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx",
+          "apps/web/src/lib/vcrLongitudinalClient.ts",
+          "apps/server/src/vcrGateway.mjs",
+          "runtime/mcp/evimed-research/vcr_platform.py"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs",
+          "runtime/mcp/evimed-research/test/test_vcr_platform.py",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.test.tsx"
+        ]
+      },
+      {
+        "id": "HF-R09",
+        "priority": "P2",
+        "title": "Predictive samples cannot supply available design variance",
+        "status": "completed",
+        "resolution": "Declared predictive samples supply within-subject sample variance with n-1 denominator. Parameter draws and single samples do not. Real R design and PROCOVA consume the derived design inputs.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "apps/server/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "packages/domain/test/vcrLongitudinal.test.mjs",
+          "apps/server/test/vcrLongitudinal.integration.test.mjs",
+          "evals/method-quality/run_native_longitudinal.mjs"
+        ]
+      },
+      {
+        "id": "HF-R10",
+        "priority": "P2",
+        "title": "Increasing survival probabilities are accepted without a finding",
+        "status": "completed",
+        "resolution": "Survival probability increases are recorded as rejected cells; consistent horizons and other subjects remain usable.",
+        "evidence": [
+          "packages/domain/src/vcrLongitudinal.mjs"
+        ],
+        "tests": [
+          "packages/domain/test/vcrLongitudinal.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-R11",
+        "priority": "P2",
+        "title": "Validation UI hides baselines and incomplete-result explanations",
+        "status": "completed",
+        "resolution": "The page shows denominator partitions, same-subject baselines, unavailable distribution inputs, local exclusions and interruptions, with refresh and older versions. The AI receives explicit per-baseline directions without a new delivery gate.",
+        "evidence": [
+          "apps/web/src/components/vcr/VcrForecastEvaluation.tsx",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx",
+          "runtime/mcp/evimed-research/vcr_platform.py"
+        ],
+        "tests": [
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.test.tsx",
+          "runtime/mcp/evimed-research/test/test_vcr_platform.py"
+        ]
+      },
+      {
+        "id": "HF-R12",
+        "priority": "P2",
+        "title": "Automatic model-analysis document tables exclude longitudinal results",
+        "status": "completed",
+        "resolution": "Frozen model plans and generated reports include longitudinal identity, model version, validation, coverage, baseline and trial-benchmark tables whose numbers bind to the saved report model.",
+        "evidence": [
+          "apps/server/src/vcrModelDocuments.mjs",
+          "apps/server/src/vcrLongitudinalDocuments.mjs"
+        ],
+        "tests": [
+          "apps/server/test/vcrLongitudinal.integration.test.mjs",
+          "evals/method-quality/run_native_longitudinal.mjs"
+        ]
+      }
+    ],
+    "remainingExternalDependencies": [
+      "A callable dedicated forecasting provider and its actual protocol probe.",
+      "A partner incremental endpoint and cursor contract.",
+      "Independent rights-cleared longitudinal outcomes, RCT benchmark and Chinese extraction references."
+    ],
+    "acceptance": "packages/contracts/healthflux/validation.json#reviewClosure"
+  },
+  "functionalReview": {
+    "reviewedAt": "2026-10-10",
+    "baseCommit": "b948c0fec",
+    "reference": {
+      "version": "v2",
+      "filename": "2026.09.19.26363460v2.full.pdf",
+      "sha256": "8b6e2b21139c8ae99864bcf36fa6cb4a6ba815c1133c3e7ceb9165093b3f9c3b"
+    },
+    "scope": "Revisited the full conversation, supplied paper and OpenMed adoption decisions; cloud APIs and user uploads, DeepSeek + DSH only. No production deployment.",
+    "closedGaps": [
+      {
+        "id": "HF-F01",
+        "title": "Incident event risk sets",
+        "status": "implemented",
+        "paper": "Methods 464-469, 594-607",
+        "result": "Exclude confirmed prevalent patient events from incident validation and the calibration baseline; report original and eligible denominators separately. Explicit all-subject/recurrent-event estimands remain selectable.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "packages/domain/test/vcrLongitudinal.test.mjs"
+        ]
+      },
+      {
+        "id": "HF-F02",
+        "title": "Multimodal missing-input sensitivity without cohort attrition",
+        "status": "implemented",
+        "paper": "Methods 370-397, 735-752",
+        "result": "Preserve mapped modality and row-level kind, omit modalities explicitly, retain subjects without observations in API batches, imports, validation denominators and lineage. Protected unablated evaluation context retains site membership and prevalent exclusions without sending omitted inputs to the provider.",
+        "evidence": [
+          "packages/domain/src/vcrLongitudinal.mjs",
+          "apps/server/src/vcrLongitudinal.mjs",
+          "apps/server/src/vcrForecastProvider.mjs"
+        ]
+      },
+      {
+        "id": "HF-F03",
+        "title": "Usable sensitivity, model-version and observation-update comparisons",
+        "status": "implemented",
+        "paper": "Main text 39-45, Methods 457-462, 772-784",
+        "result": "Compare paired subjects at common calendar targets across histories, model versions and landmark updates; record unmatched coverage, changed factors and conditional-risk window differences. UI queues the comparison and retrieves completion.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "apps/web/src/components/vcr/VcrForecastComparison.tsx"
+        ]
+      },
+      {
+        "id": "HF-F04",
+        "title": "Multi-endpoint upload with partial retention",
+        "status": "implemented",
+        "paper": "Results 55-71, 147-175",
+        "result": "One external file can carry up to 32 independently addressable endpoints. Invalid components do not erase valid peers. Templates, patient-tab endpoint selection, evaluation and design use the same existing routes. This is explicitly marginal output, not a jointly sampled generative path.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinal.mjs",
+          "apps/web/src/components/vcr/VcrLongitudinalPanel.tsx"
+        ]
+      },
+      {
+        "id": "HF-F05",
+        "title": "Site-specific validation and explicit independence meaning",
+        "status": "implemented",
+        "paper": "Methods 349-369, 562-580",
+        "result": "Optional validation by recorded input site uses the same frozen split and denominator logic; unknown/multiple sites persist. Local calibration partitioning is explicitly distinct from unknown provider training overlap.",
+        "evidence": [
+          "packages/domain/src/vcrForecastEvaluation.mjs",
+          "apps/web/src/components/vcr/VcrForecastEvaluation.tsx"
+        ]
+      },
+      {
+        "id": "HF-F06",
+        "title": "Stable report references and complete presentation",
+        "status": "implemented",
+        "result": "Every saved record exposes a stable numberPath; report_model has an id-indexed summary map. Multi-endpoint import, incident exclusions, site evaluations and paired version comparisons render automatically with existing suppression semantics and export snapshots.",
+        "evidence": [
+          "apps/server/src/vcrLongitudinalStore.mjs",
+          "apps/server/src/vcrLongitudinalDocuments.mjs",
+          "runtime/mcp/evimed-research/vcr_platform.py"
+        ]
+      }
+    ],
+    "coverage": [
+      {
+        "area": "Patient Journey, extraction, corrections, medication states and matching",
+        "disposition": "existing OpenMed adoption; longitudinal modality and missing-input extensions completed here",
+        "reference": "packages/contracts/openmed/implementation.json"
+      },
+      {
+        "area": "User data upload, FHIR/OMOP/ADaM and iterative histories",
+        "disposition": "implemented; a live partner feed still needs the actual endpoint/cursor/credentials and dataset"
+      },
+      {
+        "area": "Irregular observations, event/availability clocks and leakage replay",
+        "disposition": "implemented; early prefixes remain immutable and perturbations now have a comparison path"
+      },
+      {
+        "area": "Cloud inference, external forecasts, multiple diseases/biomarkers and versioned updates",
+        "disposition": "implemented interface and external marginal panels; no dedicated licensed world-model endpoint is asserted"
+      },
+      {
+        "area": "Forecast error, calibration, censoring, baseline comparison, split and site validation",
+        "disposition": "implemented deterministic research evaluation; no independent clinical performance claim"
+      },
+      {
+        "area": "Paired medication scenarios, trial evidence benchmarking and design/PROCOVA",
+        "disposition": "implemented; model contrasts remain hypotheses and actual trial evidence is independently preserved"
+      },
+      {
+        "area": "Joint stochastic event paths, latent 384-dimensional state and ODE transitions",
+        "disposition": "external-model capability, not reproduced by the chat model; no joint trajectory contract claimed"
+      },
+      {
+        "area": "Learned HSI, strict unseen-disease transfer, test-time adaptation and MRI encoders/gradients",
+        "disposition": "model training/readout/weights experiments outside the explicitly cloud-only adoption; supplied model scores can be represented as versioned external endpoints, not recomputed or relabeled HealthFlux"
+      },
+      {
+        "area": "Prospective Chinese clinical validation and use of restricted biobanks",
+        "disposition": "requires independently labeled authorized data; benchmark interfaces and source/rights manifests cannot supply that evidence"
+      },
+      {
+        "area": "Raw scans, interaction/dose/adverse-event providers, partner-specific SMART/Bulk/FHIR export",
+        "disposition": "original optional OpenMed tasks remain conditional on a concrete provider/data contract, not silently enabled"
+      },
+      {
+        "area": "UI, DSH tools, output documents, run receipts and operational rollback",
+        "disposition": "implemented on this isolated branch; deployment qualification remains separately measured"
+      }
+    ],
+    "notGates": [
+      "Missing modalities and incomplete endpoint panels retain usable results.",
+      "A worse prediction metric does not veto a design or report.",
+      "No new human review or local-model installation flow."
+    ]
+  }
+}

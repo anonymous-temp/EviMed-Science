@@ -109,6 +109,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     },
   };
   const service = {
+    packages: {longitudinal: overrides.longitudinal},
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
     isOperator: (/** @type {any} */ user) => operators.includes(String(user?.id)),
     async listStudies() { calls.push(["list"]); return { studies: [] }; },
@@ -431,6 +432,10 @@ test("the study lead holds review_any: it countersigns every kind, which no othe
  * @type {Record<string, [string, string, any]>}
  */
 const REQUESTS = {
+  "GET /studies/:id/longitudinal": ["GET", "/api/vcr/studies/std_1/longitudinal", undefined],
+  "POST /studies/:id/longitudinal/histories": ["POST", "/api/vcr/studies/std_1/longitudinal/histories", {}],
+  "POST /studies/:id/longitudinal/predictions": ["POST", "/api/vcr/studies/std_1/longitudinal/predictions", {}],
+  "POST /studies/:id/longitudinal/benchmarks": ["POST", "/api/vcr/studies/std_1/longitudinal/benchmarks", {}],
   "GET /studies/:id": ["GET", "/api/vcr/studies/std_1", undefined],
   "GET /studies/of-project/:project": ["GET", "/api/vcr/studies/of-project/prj_1", undefined],
   "GET /studies/:id/:tab": ["GET", "/api/vcr/studies/std_1/overview", undefined],
@@ -500,6 +505,7 @@ function composedHooks() {
   const ok = async () => ({ ok: true, released: [], removed: 1, job: { id: "job_1" }, created: true, export: { id: "exp_1" } });
   return {
     corrections: { exportDataset: ok, readDataset: ok, replay: ok },
+    longitudinal: {view: async () => ({records:[],providers:[]}), freezeHistory:ok, importPrediction:ok, importBenchmark:ok},
     evidence: { curves: { recordSelection: async () => ({ id: "curve", origin: "human_click" }), receipts: async () => [] } },
     orchestrator: { runStep: ok, recomputeAfterChange: ok },
     jobs: { enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
