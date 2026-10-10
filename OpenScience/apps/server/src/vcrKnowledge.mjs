@@ -280,8 +280,12 @@ export class VcrKnowledge {
   }
 
   /**
-   * The pack a study works from, resolved, or null.
+   * The pack a study works from, resolved, or null, with how it was resolved: `recorded` is the edition the study chose (its own
+   * preserved copy, or the catalogue's edition when that is the same one), `newest_compatible` the newest edition of the same pack
+   * that stands in for one the catalogue no longer holds.
    * @param {any} study
+   * @returns {Promise<{ binding: Record<string, any>, origin: "shipped" | "stored", pack: Record<string, any>, row: Record<string, any> | null,
+   *   resolution: "recorded" | "newest_compatible" } | null>}
    */
   async studyPack(study) {
     const binding = await this.store.studyBinding(study.id);
@@ -292,14 +296,16 @@ export class VcrKnowledge {
         : await this.store.getPack(study.userId, binding.packId);
       // Review metadata can change without rewriting the selected clinical body.
       const pack = row?.version === binding.packVersion ? {...binding.packBody,status:row.status} : binding.packBody;
-      return {binding,origin:binding.origin,pack,row};
+      return {binding,origin:/** @type {"shipped" | "stored"} */ (binding.origin),pack,row,resolution:"recorded"};
     }
     try {
       const resolved = await this.resolvePack(study.userId, binding.packId);
-      // Legacy bindings have no preserved body: a different edition is not
-      // a reconstruction of the one this study actually chose.
-      if (Number(resolved.pack.version) !== binding.packVersion) return null;
-      return { binding, ...resolved };
+      // A binding that kept no copy reads the edition it recorded when the catalogue still holds it. When the catalogue has moved
+      // on, the newest edition of the same pack that this build can read stands in for it and the read says so (`resolution`):
+      // the study used to lose its pack without a word. A pack written in a schema this build does not read is not stood in for.
+      if (Number(resolved.pack.version) === binding.packVersion) return { binding, ...resolved, resolution: "recorded" };
+      if (resolved.pack.schema !== undefined && resolved.pack.schema !== VCR_PACK_SCHEMA) return null;
+      return { binding, ...resolved, resolution: "newest_compatible" };
     } catch (error) {
       if (error instanceof HttpError && error.status === 404) return null;
       throw error;
@@ -498,6 +504,8 @@ export class VcrKnowledge {
       : null;
     return {
       pack: pack ? { ...pack, boundAt: bound?.binding.boundAt ?? null, canPromote: Boolean(canPromote && bound?.row && bound.row.status === "ai-draft"),
+        // The edition the study chose, and whether this is it: a study whose edition the catalogue no longer holds reads the newest.
+        binding: { version: Number(bound?.binding.packVersion), resolution: bound?.resolution ?? "recorded" },
         ...(platform ? { platformRequest: platform } : {}) } : null,
       definitions: definitions.map((entry) => ({ ...entry, packRefs: entry.packRefs })),
       comparisons: comparisons.map(presentComparison).filter(Boolean),
@@ -525,7 +533,9 @@ export class VcrKnowledge {
     const summary = presentPackSummary(bound.binding.origin, bound.pack, bound.row);
     const mapping = await this.packMapping(study, bound.pack);
     const head = {
-      bound: { origin: summary.origin, id: summary.id, status: summary.status, version: summary.version, name: summary.name, nameZh: summary.nameZh, counts: summary.counts },
+      bound: { origin: summary.origin, id: summary.id, status: summary.status, version: summary.version, name: summary.name, nameZh: summary.nameZh, counts: summary.counts,
+        // Said only when the edition read is not the one the study chose, so a run does not take an edition for the study's own.
+        ...(bound.resolution === "recorded" ? {} : { boundVersion: Number(bound.binding.packVersion), resolution: bound.resolution }) },
       disease: bound.pack.disease, mapping,
     };
     // No section named: the index. A section named: that section whole, with the sources its entries cite.

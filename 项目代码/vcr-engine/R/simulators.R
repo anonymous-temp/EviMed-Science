@@ -21,10 +21,13 @@
 #   that the Cox/log-rank analysis does not assume, and the continuous
 #   generator carries a baseline covariate the unadjusted t-test ignores.
 # - **`dropoutAnnual` is a rate, not a proportion.** A "10% annual dropout"
-#   means S(12 months) = 0.9, i.e. hazard = -log(0.9)/12 per month, not
-#   0.1/12. Getting this wrong inflates events by a few percent, which is
-#   invisible in a single run and shows up as a persistent disagreement with
-#   the analytic event count.
+#   means S(1 year) = 0.9, i.e. hazard = -log(0.9)/(periods in a year) per time
+#   unit -- 12 for a scenario in months, 1 in years -- not 0.1/12. Getting this
+#   wrong inflates events by a few percent, which is invisible in a single run
+#   and shows up as a persistent disagreement with the analytic event count.
+#   The scenario's unit (`timeUnit`) decides what a year is: it used to be 12
+#   whatever the scenario's times were in, so a scenario in years lost 0.9%
+#   a year and one in weeks 36.7% (E4).
 # - **Entry time is independent of arm, and every uniform is always drawn.**
 #   The first version sorted the entry times and assigned them in arm order, so
 #   the treated arm was enrolled first and had the longest follow-up: hazard
@@ -221,8 +224,25 @@ vcr_inverse_cumhaz <- function(H, dist) {
 
 vcr_dist_exponential_from_median <- function(median) list(kind = "exponential", rate = log(2) / median)
 
+#' The unit a scenario states its times in -- months unless it says another (`timeUnit`) -- and what the engine needs of it.
+#' The days each unit stands for are the domain's one table (`timeUnits` in R/domain-snapshot.json), never a number written
+#' here. `perYear` is how many of the unit a "per year" proportion is spread over (the dropout), `months` how many months
+#' one of the unit is (the `_months` measures and a cost per month are in months), `zh` the unit's word on a page.
+#' Nothing else in a scenario reads a time as a unit: a median, a duration, a follow-up and a horizon are in it.
+vcr_time_unit <- function(sc) {
+  table <- vcr_domain()$timeUnits
+  unit <- as.character(sc[["timeUnit"]] %||% table$default)
+  days <- table$daysPerUnit
+  if (length(unit) != 1L || !(unit %in% names(days))) {
+    vcr_abort("scenario_value_invalid", "scenario.timeUnit", paste0("The time unit is one of ", paste(names(days), collapse = ", "), "."))
+  }
+  list(unit = unit, perYear = 365.25 / days[[unit]], months = days[[unit]] / days[["months"]],
+       zh = c(days = "天", weeks = "周", months = "月", years = "年")[[unit]])
+}
+
 #' The dropout hazard a scenario's annual proportion means: a "10% annual
-#' dropout" is S(12 months) = 0.9, so hazard = -log(0.9) / 12 per month.
+#' dropout" is S(1 year) = 0.9, so hazard = -log(0.9) / (periods in a year) per time unit:
+#' 12 for a scenario in months (the default), 1 in years, 365.25 / 7 in weeks.
 vcr_dropout_hazard <- function(dropout_annual, period = 12) {
   p <- dropout_annual %||% 0
   if (!is.finite(p) || p < 0 || p >= 1) {
@@ -239,8 +259,9 @@ vcr_dropout_hazard <- function(dropout_annual, period = 12) {
 #'            the piecewise rates only shape the entry times.
 #' `followup`: minimum follow-up F after the accrual period; administrative
 #'             censoring is at calendar time A + F.
-#' `dropoutAnnual`: proportion still in follow-up lost per `dropoutPeriod`
-#'             (default 12 time units): hazard = -log(1 - p) / period.
+#' `dropoutAnnual`: proportion still in follow-up lost per year; `dropout_period` is how
+#'             many of the scenario's time unit make a year (12 for months, the default; see
+#'             `vcr_time_unit`): hazard = -log(1 - p) / period per time unit.
 #' `lp`: an extra per-subject log-hazard-ratio term (covariate effects).
 vcr_sim_tte <- function(n_treat, n_control, control_dist, hazard_ratio,
                         accrual = list(kind = "uniform", duration = 0),

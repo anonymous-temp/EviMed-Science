@@ -148,9 +148,9 @@ function engineResult(job, overrides = {}) {
  * The whole module, composed the way `server.mjs` composes it, with the things
  * outside it faked: the dispatcher, the engine's transport, the inbox and the
  * researcher project.
- * @param {{ resultFor?: (job: any) => Record<string, any>, now?: () => Date, dataPlane?: any, dispatch?: boolean }} [options]
+ * @param {{ resultFor?: (job: any) => Record<string, any>, now?: () => Date, dataPlane?: any, dispatch?: boolean, longitudinal?: any }} [options]
  */
-function compose({ resultFor = (job) => engineResult(job), now = () => new Date(), dataPlane = null, dispatch = true } = {}) {
+function compose({ resultFor = (job) => engineResult(job), now = () => new Date(), dataPlane = null, dispatch = true, longitudinal = null } = {}) {
   /** @type {any[]} */
   const dispatched = [];
   /** @type {any[]} */
@@ -181,7 +181,7 @@ function compose({ resultFor = (job) => engineResult(job), now = () => new Date(
   });
   const seal = createVcrSeal({ store });
   const orchestrator = new VcrOrchestrator({
-    store, jobs, config: cfg, notifier, seal, now,
+    store, jobs, config: cfg, notifier, seal, now, longitudinal,
     dispatchRun: dispatch ? async (/** @type {any} */ input) => {
       dispatched.push(input);
       return { runId: `run_${dispatched.length}`, sessionId: `ses_${dispatched.length}` };
@@ -964,6 +964,36 @@ async function computedStudy(module, label) {
   return { study, write };
 }
 
+test("TU-4 a design's result says the unit its times were settled in, and the jobs that ran carry the scenario in it: the evidence's unit when its cards agree, months when nothing says (E4, OI-1)", options, async () => {
+  const module = compose();
+  /** @param {string} label @param {any[]} cards */
+  const run = async (label, cards) => {
+    const study = await makeStudy(label);
+    const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+      study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+    await write("definition", definition);
+    assert.equal((await write("assumption", cards)).ok, true);
+    await write("trial_scenario", trialA);
+    await module.orchestrator.advance(study.id);
+    await drainJobs(module, study);
+    const jobs = await store.rows("SELECT kind, scenario FROM evimed_vcr.jobs WHERE study_id = $1 AND kind IN ('design_analytic', 'design_simulation') ORDER BY created_at", [study.id]);
+    const [result] = await store.results(study.id, "trial_scenario");
+    return { jobs, result };
+  };
+  const hazard = { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" };
+  const dropout = { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" };
+  const median = (/** @type {Record<string, any>} */ extra = {}) => ({ key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 26, sourceKind: "expert_set", valueSource: "assumed", ...extra });
+
+  const inWeeks = await run("tuweeks", [hazard, dropout, median({ unit: "weeks" })]);
+  assert.equal(inWeeks.jobs.length, 2, "both stages of the design ran");
+  for (const job of inWeeks.jobs) assert.deepEqual([job.scenario.timeUnit, job.scenario.truth.controlMedian], ["weeks", 26], `${job.kind}: the scenario is in the unit its evidence is in`);
+  assert.deepEqual(inWeeks.result.diagnostics.timeUnitBasis, { unit: "weeks", basis: "evidence" }, "and the result says where the unit came from");
+
+  const nobody = await run("tumonths", [hazard, dropout, median()]);
+  for (const job of nobody.jobs) assert.deepEqual([job.scenario.timeUnit, job.scenario.truth.controlMedian], ["months", 26]);
+  assert.deepEqual(nobody.result.diagnostics.timeUnitBasis, { unit: "months", basis: "assumed" }, "nothing says: months, and the result says it was assumed — the job still ran");
+});
+
 test("AC-16 a changed assumption marks everything downstream stale, recomputes it under the new version, and deletes nothing", options, async () => {
   const module = compose();
   const { study, write } = await computedStudy(module, "stale");
@@ -1627,3 +1657,79 @@ test("a comparator that declares robustness analyses plans them beside the compa
   assert.equal(result.diagnostics.stageResults.tipping_point.conclusion, "estimable", "the stage's own verdict is not edited");
 });
 // --- end robustness methods ---
+
+test("G12 a patient set naming an event-history model is queued on the longitudinal forecast path; with no provider that one step is skipped in the platform's sentence and the study's other work is queued all the same", options, async () => {
+  const { knownErrorCodeMessage } = await import("@evimed/domain");
+  /** @type {any[]} */
+  const prepared = [];
+  const providers = [{ id: "prov-1", name: "Event model", model: "event-model", version: "2.1.0", endpoints: ["HbA1c"], maxHorizonDays: 365 }];
+  let configured = providers;
+  const longitudinal = {
+    providers: { list: async () => configured },
+    // The module's own queueing is its test's; here the question is what the orchestrator asks of it, and what it does when told no.
+    async prepare(/** @type {any} */ study, /** @type {any} */ request, /** @type {string} */ actor, /** @type {any} */ extra) {
+      prepared.push({ studyId: study.id, request, actor, extra });
+      return { job: { id: "job_forecast_1", state: "queued", progress: {} }, created: true };
+    },
+  };
+  const module = compose({ longitudinal });
+  const study = await makeStudy("g12event");
+  const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+    study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+  assert.equal((await write("definition", { ...definition, title: "事件历史推演", question: "未来两年糖化血红蛋白会怎样？" })).ok, true);
+  await write("assumption", [{ key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" }]);
+  const saved = await store.saveModel({ userId: study.userId, studyId: study.id, name: "event-model", version: "2.1.0", tier: "literature", risk: "low", endpointType: "time_to_event",
+    card: { interfaceShape: "event_history_to_trajectories", type: "generative", inputs: ["诊断事件"], outputs: "N 条未来轨迹，是预测分布的抽样，不是对某个人的预报。",
+      history: { eventTypes: ["diagnosis"], fields: ["subject", "event_type", "time"] }, trajectories: { max: 500, absorbing: ["death"] }, knownLimits: ["罕见事件校准较差"] },
+    applicability: { population: "成人 2 型糖尿病", endpoints: ["time_to_event"], eventTypes: ["death"], horizon: { max: 24, unit: "months" } }, validation: { temporal: "时间外验证" } });
+  assert.ok(saved?.id);
+  await write("patient_set", [{ name: "两年推演", modelId: "event-model", modelVersion: "2.1.0",
+    scenario: { endpoint: { code: "HbA1c", type: "continuous", unit: "%" }, horizonsDays: [90, 180] } }]);
+  await write("trial_scenario", [{ label: "A 2:1 随机", design: "two_arm_fixed", endpointType: "time_to_event", assumptionIds: ["hazard_ratio", "control_median_pfs"],
+    configuration: trialA.configuration }]);
+  const marks = async () => Object.fromEntries((await store.rows(`SELECT key, state, job_id, detail FROM evimed_vcr.schedule_marks WHERE study_id=$1 AND kind='job'`, [study.id]))
+    .map((row) => [row.key, row]));
+  const patientMark = (/** @type {Record<string, any>} */ all) => Object.values(all).find((row) => /patient_set/.test(row.key) || row.detail?.jobKind === "forecast_trajectories");
+
+  // No history frozen yet: this step is skipped, said in the sentence the platform has for it, and the design is queued regardless.
+  await module.orchestrator.advance(study.id);
+  const waiting = patientMark(await marks());
+  assert.equal(waiting.state, "skipped");
+  assert.equal(waiting.detail.reason, "forecast_history_missing");
+  assert.equal(waiting.detail.message, knownErrorCodeMessage("vcr_history_required"));
+  assert.deepEqual(prepared, [], "nothing was queued on the forecast path");
+  assert.ok((await store.jobs(study.id)).some((job) => job.kind === "design_analytic"), "the study's other work is queued");
+  // The same with no provider configured: the sentence is the one already written for it, and it is not a failure of the study.
+  configured = [];
+  const stranger = await makeStudy("g12none");
+  const writeIn = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+    study: stranger, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+  await writeIn("definition", { ...definition, title: "事件历史推演", question: "未来两年糖化血红蛋白会怎样？" });
+  await store.saveModel({ userId: stranger.userId, studyId: stranger.id, name: "event-model", version: "2.1.0", tier: "literature", risk: "low", endpointType: "time_to_event",
+    card: saved ? (await store.models(study.userId)).find((model) => model.id === saved.id)?.card : {}, applicability: { population: "成人 2 型糖尿病", endpoints: ["time_to_event"], eventTypes: ["death"], horizon: { max: 24, unit: "months" } }, validation: { temporal: "时间外验证" } });
+  await writeIn("patient_set", [{ name: "两年推演", modelId: "event-model", modelVersion: "2.1.0", scenario: { endpoint: { code: "HbA1c", type: "continuous", unit: "%" }, horizonsDays: [90] } }]);
+  await module.orchestrator.advance(stranger.id);
+  const none = Object.values(await store.rows(`SELECT key, state, detail FROM evimed_vcr.schedule_marks WHERE study_id=$1 AND kind='job'`, [stranger.id])).find((row) => row.state === "skipped");
+  assert.equal(none.detail.reason, "forecast_provider_unavailable");
+  assert.equal(none.detail.message, knownErrorCodeMessage("vcr_forecast_provider_unavailable"));
+  assert.deepEqual(prepared, []);
+
+  // With a provider that declares the model and a frozen history, the step is queued by the forecast module, with the orchestrator's own key and detail.
+  // The step was skipped for want of a history; nothing else about the patient set moved, and the next pass asks again all the same.
+  configured = providers;
+  await store.query(`INSERT INTO evimed_vcr.longitudinal_artifacts (id, study_id, kind, sha256, location, snapshot_ids, source_ids, summary, bindings)
+    VALUES ('vlf_history_1', $1, 'history', $2, 'x', '[]', '[]', '{}', '[]')`, [study.id, "a".repeat(64)]);
+  assert.equal(patientMark(await marks()).state, "skipped", "still declined until a pass has seen the history");
+  await module.orchestrator.advance(study.id);
+  assert.equal(prepared.length, 1);
+  const [call] = prepared;
+  assert.equal(call.request.kind, "forecast_trajectories");
+  assert.deepEqual(call.request.scenario, { historyId: "vlf_history_1", providerId: "prov-1", endpoint: { code: "HbA1c", type: "continuous", unit: "%" }, horizonsDays: [90, 180], modelVersion: "2.1.0" });
+  assert.equal(call.actor, study.userId);
+  assert.match(call.extra.idempotencyKey, /^vcr:/);
+  assert.equal(typeof call.extra.detail.node, "string");
+  assert.equal(call.extra.detail.resultKind, undefined, "not filed as the patient set's own table");
+  const running = patientMark(await marks());
+  assert.deepEqual([running.state, running.job_id], ["running", "job_forecast_1"]);
+});

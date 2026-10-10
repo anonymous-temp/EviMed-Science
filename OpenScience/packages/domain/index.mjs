@@ -1568,6 +1568,7 @@ export {
 export {
   VCR_DEFAULT_MODEL_INTERFACE,
   VCR_EVENT_HISTORY_CARD_FIELDS,
+  VCR_FORECAST_MODEL_INTERFACES,
   VCR_HORIZON_UNIT_DAYS,
   VCR_HOSTED_MODEL_INTERFACES,
   VCR_MODEL_INTERFACES,
@@ -1576,6 +1577,18 @@ export {
   vcrModelCardIssues,
   vcrModelInterfaceOf,
 } from './src/vcrModelInterfaces.mjs'
+
+// vcrTimeUnits — the one closed table of time units (the model cards' horizon table), the spellings a source writes them in, and
+// the conversions: evidence in mixed units is converted before it is pooled, and a scenario's unit is stated, taken from its
+// evidence, or months
+export {
+  VCR_DEFAULT_TIME_UNIT,
+  VCR_TIME_UNITS,
+  vcrCommonTimeUnit,
+  vcrConvertTime,
+  vcrTimeUnitOf,
+  vcrTimeUnitPeriodsPerYear,
+} from './src/vcrTimeUnits.mjs'
 
 // vcrSuppression — 2 exports: small-cell suppression for everything a model may read: every people-count
 // below the floor, in any shape the stores produce

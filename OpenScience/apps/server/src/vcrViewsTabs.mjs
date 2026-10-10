@@ -52,7 +52,7 @@ import {
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
   personName, plainText, PARAMETER_LABELS, METHOD_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
-  vcrFailureSentence, vcrPageSentence,
+  TIME_UNIT_WORDS, zhUnit, vcrFailureSentence, vcrPageSentence,
 } from "./vcrViewsKit.mjs";
 
 /** A plain value (a number or `{ value, unit, … }` a row stored) as a page value. @param {unknown} raw @param {Record<string, any>} defaults */
@@ -530,6 +530,11 @@ export function presentPatientsTab(bundle) {
   };
 }
 
+/** How the unit of a result's times was settled, in the words of someone who must be able to check it. */
+const TIME_UNIT_BASIS_ZH = Object.freeze(/** @type {Record<string, string>} */ ({
+  stated: "方案里写明", evidence: "取自证据里的单位", assumed: "没有写明，按月计算",
+}));
+
 // --- 对照 -------------------------------------------------------------------------------------------------------------------------
 
 // --- robustness methods ---
@@ -673,14 +678,17 @@ export function presentComparatorTab(bundle) {
   }).filter((row) => row !== null);
   const estimandLabel = current ? (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[current.estimand] ?? current.estimand : null;
   const rmstValue = rmstMeasure ? value(rmstMeasure) : null;
+  // The unit τ is in is the one the engine echoed (months when it echoed none); a spelling the unit table does not hold is left unnamed, never called months.
+  const echoedUnit = diagnostics.timeUnit === undefined ? TIME_UNIT_WORDS.months : TIME_UNIT_WORDS[String(diagnostics.timeUnit)] ?? null;
+  const tauWords = numeric(diagnostics.tau) !== null && echoedUnit ? `${diagnostics.tau} ${echoedUnit.after} ` : "";
   const conclusion = result?.conclusion ?? shown?.conclusion ?? null;
   return {
     headline: shown && conclusion && conclusion !== "not_estimable"
-      ? `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[shown.route] ?? "对照"}：${(/** @type {Record<string, string>} */ ({ estimable: "可估计", limited: "有限制地估计" }))[conclusion] ?? ""}${rmstValue && rmstValue.value !== null ? `，${numeric(diagnostics.tau) !== null ? `${diagnostics.tau} 个月 ` : ""}RMST ${valueString(rmstValue)}` : ""}${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
+      ? `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[shown.route] ?? "对照"}：${(/** @type {Record<string, string>} */ ({ estimable: "可估计", limited: "有限制地估计" }))[conclusion] ?? ""}${rmstValue && rmstValue.value !== null ? `，${tauWords}RMST ${valueString(rmstValue)}` : ""}${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
       : null,
     routes,
     curves,
-    rmst: rmstValue ? { value: rmstValue, tau: numeric(diagnostics.tau), label: numeric(diagnostics.tau) !== null ? `τ = ${diagnostics.tau} 个月` : null } : null,
+    rmst: rmstValue ? { value: rmstValue, tau: numeric(diagnostics.tau), label: numeric(diagnostics.tau) !== null ? `τ = ${diagnostics.tau}${echoedUnit ? ` ${echoedUnit.after}` : ""}` : null } : null,
     median: medianMeasure ? value(medianMeasure) : null,
     qc,
     // The method by its Chinese name (`METHOD_LABELS`); an id the table does not hold is shown as a plain word, never as the engine's own.
@@ -760,8 +768,12 @@ function qcRow(key, check) {
 
 // --- 试验 --------------------------------------------------------------------------------------------------------------------------
 
-/** The ADEMP lines, from the study and the headline scenario. @param {Record<string, any>} bundle @param {Record<string, any> | null} scenario */
-function adempOf(bundle, scenario) {
+/**
+ * The ADEMP lines, from the study and the headline scenario; the unit its times are in is one of them where the platform settled it
+ * (`diagnostics.timeUnitBasis`): a result that read an unstated unit as months says so, where the researcher reads the numbers.
+ * @param {Record<string, any>} bundle @param {Record<string, any> | null} scenario @param {Record<string, any>} [diagnostics] the headline result's
+ */
+function adempOf(bundle, scenario, diagnostics = {}) {
   const { study, definition } = bundle;
   const configuration = object(scenario?.configuration);
   const truth = object(configuration.truth);
@@ -787,6 +799,9 @@ function adempOf(bundle, scenario) {
   if (performance.length) {
     lines.push({ key: "measures", label: "看哪些指标", text: performance.map((name) => (/** @type {Record<string, string>} */ (VCR_PERFORMANCE_MEASURE_LABELS_ZH))[name] ?? measureLabel(name)).join("、") });
   }
+  const basis = object(diagnostics.timeUnitBasis);
+  const unit = TIME_UNIT_WORDS[String(basis.unit)];
+  if (unit) lines.push({ key: "timeUnit", label: "时间单位", text: `${unit.bare}（${TIME_UNIT_BASIS_ZH[String(basis.basis)] ?? "按月计算"}）` });
   return lines;
 }
 
@@ -872,7 +887,7 @@ export function presentTrialTab(bundle) {
   const goal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
   return {
     headline: trialHeadline(designs),
-    ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null),
+    ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics)),
     designs,
     columns,
     grid: grids.heat,
@@ -1026,14 +1041,24 @@ function forecastView(forecast, now) {
 // --- 匹配与招募 ---------------------------------------------------------------------------------------------------------------------
 
 const SUMMARY_ORDER = Object.freeze(["eligible", "insufficient_evidence", "pending", "ineligible"]);
+/** The most citations a criterion row shows under its verdict. */
+const EVIDENCE_SHOWN = 3;
 
 /**
  * The criterion the way a coordinator reads it: the protocol's own words, the
  * patient's own sentence, and what to ask for.
  * @param {Record<string, any>} criterion @param {string} code @param {Record<string, any> | null} judgment @param {Date} now
  */
-function judgementView(criterion, code, judgment, now) {
-  const evidence = list(judgment?.evidence).map(object)[0] ?? null;
+function judgementView(criterion, code, judgment, now, documentNames = new Map()) {
+  // Every citation the verdict rests on, not only the first: an `unknown` that waits on a prescription also shows the administration it
+  // was set against. Each says what it quotes, where (the document by the name the data tab lists it under, never a person's), and
+  // when what it records happened.
+  const cited = list(judgment?.evidence).map(object).filter((item) => text(item.quote)).slice(0, EVIDENCE_SHOWN).map((evidence) => ({
+    quote: String(evidence.quote), locator: evidence.locator ?? null,
+    source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
+      : evidence.quoteKind === "verbatim" ? (documentNames.get(String(object(evidence.locator).documentId)) ?? "病历原文") : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
+    at: zhDate(evidence.at ?? evidence.occurredAt ?? object(evidence.locator).at, now),
+  }));
   const state = judgment?.overrideState ?? judgment?.state ?? "unknown";
   const needed = list(criterion.evidenceNeeded).map((item) => (typeof item === "string" ? item : text(object(item).description) ?? text(object(item).text) ?? text(object(item).variable))).filter(Boolean);
   return {
@@ -1044,12 +1069,8 @@ function judgementView(criterion, code, judgment, now) {
     text: text(criterion.sourceText) ?? "",
     state,
     applicable: judgment ? judgment.applicable !== false : true,
-    evidence: evidence && text(evidence.quote) ? {
-      quote: String(evidence.quote), locator: evidence.locator ?? null,
-      source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
-        : evidence.quoteKind === "verbatim" ? "病历原文" : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
-      at: zhDate(evidence.at ?? evidence.occurredAt ?? object(evidence.locator).at, now),
-    } : null,
+    evidence: cited[0] ?? null,
+    evidenceItems: cited,
     request: state === "unknown" || state === "pending_recheck" ? (needed[0] ?? null) : null,
     requestNote: state === "pending_recheck" && judgment?.recheckAt ? `${zhDate(judgment.recheckAt, now)} 起可复评` : null,
     decidedBy: judgment?.decidedBy ?? null,
@@ -1122,6 +1143,8 @@ export function presentMatchingTab(bundle, query = {}) {
       funnel: [], candidates: [], selected: null, gaps: [], counts: null };
   }
   const { criteria, referrals, sites, siteFunnel, followups, tallies, openByAssessment, gapsByCriterion, pendingReview, subjects, protocol } = match;
+  /** The names the data tab lists the reviewed documents under, by the id a citation carries (the document's own or its reviewed text's). @type {Map<string, string>} */
+  const documentNames = match.documentNames instanceof Map ? match.documentNames : new Map();
   const codes = criterionCodes(criteria);
   const criterionCode = (/** @type {string} */ id) => codes.get(id) ?? "";
   const referralBySubject = new Map(referrals.map((/** @type {any} */ referral) => [referral.subjectKey, referral]));
@@ -1157,7 +1180,7 @@ export function presentMatchingTab(bundle, query = {}) {
   const selectedAssessment = match.selected ?? null;
   const selected = chosen && selectedAssessment && selectedAssessment.subjectKey === chosen.id ? (() => {
     const judgments = new Map(list(selectedAssessment.judgments).map((/** @type {any} */ row) => [row.criterionId, row]));
-    const rows = criteria.map((/** @type {any} */ criterion) => judgementView(criterion, criterionCode(criterion.id), judgments.get(criterion.id) ?? null, now));
+    const rows = criteria.map((/** @type {any} */ criterion) => judgementView(criterion, criterionCode(criterion.id), judgments.get(criterion.id) ?? null, now, documentNames));
     const verdict = verdictOf(selectedAssessment.summary, rows);
     const referral = referralBySubject.get(chosen.id) ?? null;
     return {
@@ -1267,6 +1290,7 @@ export function presentMatchingTab(bundle, query = {}) {
       at: fact.occurredAt ?? null, assertion: fact.clinical?.assertion ?? fact.polarity, experiencer: fact.clinical?.experiencer ?? null,
       medicationState: fact.clinical?.medication?.state ?? null, correctionOf: fact.clinical?.correctionOf ?? null,
       superseded: fact.superseded === true, conflictFactIds: fact.conflicts ?? [], correctionReason: fact.clinical?.correctionReason ?? null,
+      document: documentNames.get(String(fact.source?.documentId)) ?? null,
       quote: fact.source?.quote ?? null, locator: fact.source ? { documentId: fact.source.documentId, start: fact.source.start, end: fact.source.end } : null })),
     headline: total ? `${total.toLocaleString("en-US")} 人已评估，${(eligible ?? 0).toLocaleString("en-US")} 人全部满足，${insufficient.toLocaleString("en-US")} 人至少有 1 条未知或待复评。` : null,
     partner: total ? { name: null, candidates: total, tier: study.dataTier, snapshotAt: match.snapshotAt ? zhDate(match.snapshotAt, now) : null } : null,
@@ -1393,7 +1417,7 @@ export function presentDataTab(bundle, query = {}) {
       ...(newEvidence ? { newEvidence } : {}),
       // What an edit starts from. A person's value is an expert setting: it keeps the card's endpoint and applicability but not the pooled
       // evidence, which no longer supports the number (AC-25).
-      edit: { pointValue: numeric(card.pointValue), unit: text(card.unit), note: text(card.note), endpoint: text(card.endpoint), applicability: object(card.applicability) },
+      edit: { pointValue: numeric(card.pointValue), unit: zhUnit(text(card.unit)), note: text(card.note), endpoint: text(card.endpoint), applicability: object(card.applicability) },
       detail: {
         subtitle: [text(card.endpoint), text(pooling.calibre) ? `汇总口径：${CALIBRE_LABELS[String(pooling.calibre)] ?? pooling.calibre}` : null].filter(Boolean).join(" · ") || null,
         stats: [
@@ -1636,6 +1660,9 @@ export function presentIntake(bundle) {
         })),
         entries: numeric(file.entries), sheets: list(file.sheets).map(String), sheetUsed: text(file.sheetUsed),
         subjectKey: text(file.subjectKey), visibleAt: text(file.visibleAt),
+        // How much of a reviewed record a run was shown and how much it never was: counts, never who read it or how many reads it took.
+        reading: object(file.reading).read !== undefined
+          ? { chars: numeric(object(file.reading).chars), read: numeric(object(file.reading).read) ?? 0, skipped: numeric(object(file.reading).skipped), complete: object(file.reading).complete === true } : null,
         // A record converted from PDF or Word: what it was, how many pages, how many had no text layer.
         sourceFormat: text(file.sourceFormat), pages: numeric(file.pages), blankPages: numeric(file.blankPages),
         // A table a FHIR, OMOP or ADaM import produced.

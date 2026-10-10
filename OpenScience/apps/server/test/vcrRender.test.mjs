@@ -12,6 +12,7 @@ import {
   vcrTypedNumbers,
 } from "../src/vcrRender.mjs";
 import { VCR_SCENARIO_SCHEMAS, proseNumbers, resultNumbers, vcrStudyPackageFindings } from "@evimed/domain";
+import { TIME_UNIT_WORDS } from "../src/vcrViewsKit.mjs";
 
 const results = {
   conclusion: "estimable",
@@ -255,8 +256,17 @@ test("every unit the engine writes has a reading: its one percentage says so, an
       if (/\bvalue\s*=/.test(line) && /\b100\s*\*|\*\s*100\b/.test(line)) scaledToPercent.push(`${name}: ${line.trim()}`);
     }
   }
-  // The walk proves it walked: the three units `vcr_patient_summary` writes are found.
-  assert.deepEqual([...literals].sort(), ["%", "例", "月"].sort(), "a unit the engine now writes that the renderer has never been told about");
+  // The duration `vcr_patient_summary` writes is in the scenario's own time unit, whose word the engine names once (`vcr_time_unit`): the same
+  // four words, for the same four units, as the pages say them.
+  const simulators = await readFile(new URL("simulators.R", directory), "utf8");
+  const wordTable = /zh\s*=\s*c\(([^)]*)\)/.exec(simulators);
+  assert.ok(wordTable, "the engine's table of time-unit words was read");
+  const timeWords = Object.fromEntries([...wordTable[1].matchAll(/(\w+)\s*=\s*"([^"]*)"/g)].map((match) => [match[1], match[2]]));
+  assert.deepEqual(timeWords, Object.fromEntries(Object.entries(TIME_UNIT_WORDS).map(([unit, words]) => [unit, words.bare])),
+    "the engine says a time unit in the words the pages do");
+  for (const word of Object.values(timeWords)) literals.add(word);
+  // The walk proves it walked: the units `vcr_patient_summary` writes are found — a percentage and a count as literals, a duration as the unit's word.
+  assert.deepEqual([...literals].sort(), ["%", "例", "天", "周", "月", "年"].sort(), "a unit the engine now writes that the renderer has never been told about");
   assert.ok(scaledToPercent.length >= 1, "the scan found the summary that stores a percentage");
   for (const line of scaledToPercent) assert.match(line, /unit\s*=\s*"%"/, `a value stored as a percentage must say so: ${line}`);
   // Every literal unit: a percentage is printed as it stands, anything else is refused by a percent format.

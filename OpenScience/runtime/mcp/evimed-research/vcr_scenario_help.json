@@ -404,7 +404,7 @@
           "type": "number",
           "min": 0,
           "lt": 1,
-          "unit": "proportion per 12 time units",
+          "unit": "proportion per year",
           "default": 0,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}]
@@ -440,7 +440,8 @@
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
-        }
+        },
+        {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"default":"months","when":[{"path":"endpoint.type","in":["time_to_event"]}]}
       ],
       "rules": [
         {
@@ -575,7 +576,7 @@
           "type": "number",
           "min": 0,
           "lt": 1,
-          "unit": "proportion per 12 time units",
+          "unit": "proportion per year",
           "default": 0,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}]
@@ -611,7 +612,8 @@
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
-        }
+        },
+        {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"default":"months","when":[{"path":"endpoint.type","in":["time_to_event"]}]}
       ],
       "rules": [
         {
@@ -746,7 +748,7 @@
           "type": "number",
           "min": 0,
           "lt": 1,
-          "unit": "proportion per 12 time units",
+          "unit": "proportion per year",
           "default": 0,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}]
@@ -782,7 +784,8 @@
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
-        }
+        },
+        {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"default":"months","when":[{"path":"endpoint.type","in":["time_to_event"]}]}
       ],
       "rules": [
         {
@@ -1197,11 +1200,12 @@
           "type": "number",
           "min": 0,
           "lt": 1,
-          "unit": "proportion per 12 time units",
+          "unit": "proportion per year",
           "default": 0,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}]
-        }
+        },
+        {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"default":"months","when":[{"path":"endpoint.type","in":["time_to_event"]}]}
       ],
       "rules": [
         {
@@ -1518,7 +1522,7 @@
           "type": "number",
           "min": 0,
           "lt": 1,
-          "unit": "proportion per 12 time units",
+          "unit": "proportion per year",
           "default": 0,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}]
@@ -1555,6 +1559,7 @@
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
         },
+        {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"default":"months","when":[{"path":"endpoint.type","in":["time_to_event"]}]},
         {
           "path": "performance",
           "type": "list",
@@ -1921,7 +1926,7 @@
           "type": "number",
           "min": 0,
           "lt": 1,
-          "unit": "proportion per 12 time units",
+          "unit": "proportion per year",
           "default": 0,
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}]
@@ -1958,6 +1963,7 @@
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
         },
+        {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"default":"months","when":[{"path":"endpoint.type","in":["time_to_event"]}]},
         {
           "path": "performance",
           "type": "list",

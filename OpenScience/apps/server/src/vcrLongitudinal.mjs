@@ -208,8 +208,10 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     const saved = await artifacts.save(study,'prediction',content,summary,{snapshotIds:history.row.snapshot_ids,sourceIds:history.row.source_ids,bindings:history.row.bindings,parentId:input.priorPredictionId ?? input.historyId});
     return longitudinalArtifactView(saved);
   }
-  /** @param {any} study @param {any} request @param {string} actor */
-  async function prepare(study,request,actor) {
+  /** `extra` is the orchestrator's own (never a caller's: the gateway and the routes name neither): the idempotency key of the stage it
+   * queues for and the detail its marks and results are read by.
+   * @param {any} study @param {any} request @param {string} actor @param {{ idempotencyKey?: string, detail?: Record<string, any> }} [extra] */
+  async function prepare(study,request,actor,extra = {}) {
     await authorize(study,actor,'run');
     const method = VCR_LONGITUDINAL_JOBS[/** @type {keyof typeof VCR_LONGITUDINAL_JOBS} */ (request.kind)];
     const scenario = obj(request.scenario);
@@ -229,7 +231,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     }
     return jobs.enqueue({studyId:study.id,userId:study.userId,principal:actor,kind:request.kind,scenario,inputs,internal:true,
       seed:request.seed ?? null,cpuSecondsLimit:Math.min(600,request.cpuSecondsLimit ?? 120),maxAttempts:1,
-      detail:{longitudinal:true,principal:actor}});
+      ...(extra.idempotencyKey ? {idempotencyKey:extra.idempotencyKey} : {}),
+      detail:{...(extra.detail ?? {}),longitudinal:true,principal:actor}});
   }
   /** @param {any} input */
   async function execute({job,onProgress,isCanceled = async () => false}) {

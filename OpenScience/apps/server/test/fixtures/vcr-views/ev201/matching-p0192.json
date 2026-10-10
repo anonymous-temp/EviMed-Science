@@ -214,6 +214,17 @@
           "source": "数据快照字段「age」",
           "at": "8 月 14 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "age = 63 year",
+            "locator": {
+              "field": "age",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「age」",
+            "at": "8 月 14 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -235,6 +246,17 @@
           "source": "数据快照字段「ecog」",
           "at": "9 月 10 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "ecog = 1",
+            "locator": {
+              "field": "ecog",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「ecog」",
+            "at": "9 月 10 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -256,6 +278,17 @@
           "source": "数据快照字段「first_line_platinum」",
           "at": "1 月 5 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "first_line_platinum = true",
+            "locator": {
+              "field": "first_line_platinum",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「first_line_platinum」",
+            "at": "1 月 5 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -269,6 +302,7 @@
         "state": "unknown",
         "applicable": true,
         "evidence": null,
+        "evidenceItems": [],
         "request": "申请近 4 周头颅 MRI",
         "requestNote": null,
         "decidedBy": "code",
@@ -290,6 +324,17 @@
           "source": "数据快照字段「last_immunotherapy」",
           "at": "9 月 20 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "last_immunotherapy = 2026-09-20T00:00:00.000Z",
+            "locator": {
+              "field": "last_immunotherapy",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「last_immunotherapy」",
+            "at": "9 月 20 日"
+          }
+        ],
         "request": "末次免疫治疗日期",
         "requestNote": "10 月 18 日 起可复评",
         "decidedBy": "code",
@@ -311,6 +356,17 @@
           "source": "数据快照字段「pregnancy」",
           "at": "9 月 1 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "pregnancy = false",
+            "locator": {
+              "field": "pregnancy",
+              "snapshotId": "snp_partner"
+            },
+            "source": "数据快照字段「pregnancy」",
+            "at": "9 月 1 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",

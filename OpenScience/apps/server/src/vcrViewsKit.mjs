@@ -433,10 +433,20 @@ export const MEASURE_META = Object.freeze({
   ...ROBUSTNESS_MEASURE_META,
 });
 
-/** The unit words the engine writes, said in Chinese. */
-const UNIT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
-  months: "个月", month: "个月", days: "天", day: "天", weeks: "周", years: "年", "%": "%",
+/**
+ * The time units a page names, keyed by the domain's one table (`VCR_TIME_UNITS`; a test holds the two to each other): the word after
+ * a number (a horizon of 24 个月) and the bare unit (时间单位：月).
+ */
+export const TIME_UNIT_WORDS = Object.freeze(/** @type {Record<string, { after: string, bare: string }>} */ ({
+  days: { after: "天", bare: "天" }, weeks: { after: "周", bare: "周" }, months: { after: "个月", bare: "月" }, years: { after: "年", bare: "年" },
 }));
+/** The unit words the engine and the platform write, said in Chinese: the time units by their table, their singular forms, and the percent sign. */
+const UNIT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
+  ...Object.fromEntries(Object.entries(TIME_UNIT_WORDS).map(([unit, words]) => [unit, words.after])),
+  month: TIME_UNIT_WORDS.months.after, day: TIME_UNIT_WORDS.days.after, "%": "%",
+}));
+/** A unit as a page says it: an English unit word of the engine's or the platform's in Chinese, any other spelling as it was written. @param {string | null} unit */
+export const zhUnit = (unit) => (unit === null ? null : UNIT_WORDS[unit] ?? unit);
 
 /** @param {string} name */
 const isProportionName = (name) => MEASURE_META[name]?.percent === true || name.startsWith("probability_by_");

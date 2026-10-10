@@ -21,7 +21,7 @@ import {
   analysisScaleInput, applicabilityStratum, assumptionFromPooling, calibres, chooseCalibre, createVcrEvidencePipeline,
   defaultArmRoleOf, distributionFromPooled, evidenceResultsJson, expertSetCard, numberIsInQuote, pathIsInSource,
   poolEligibility, poolJob, precedentSimilarity, readPoolResult, seedForScenario, stratumMismatches,
-  twoSidedZ, unavailableParameters, verifyExtraction,
+  timeCardUnit, twoSidedZ, unavailableParameters, verifyExtraction,
 } from "../src/vcrEvidence.mjs";
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 
@@ -1147,4 +1147,51 @@ test("every column the evidence store writes exists in the migration that create
   const tables = new Set([...store.matchAll(/\$\{VCR_SCHEMA\}\.([a-z_]+)/g)].map((match) => match[1]));
   // `audit` is written by `VcrStoreBase`, which every package shares.
   assert.deepEqual([...tables].sort(), ["assumptions", "evidence_items", "precedent_versions", "precedents", "study_precedents"]);
+});
+
+test("times in months, weeks and years are converted to one unit before they are pooled, not pooled as if they were one (D1)", () => {
+  // Three medians that all mean about a year: 12 months, 52 weeks, 1 year. Pooled raw they were estimates 12, 52 and 1.
+  const item = (/** @type {string} */ id, /** @type {number} */ value, /** @type {string} */ unit, /** @type {any} */ extra = {}) =>
+    ({ id, value, unit, ci_low: value * 0.8, ci_high: value * 1.25, arm: "SoC", ...extra });
+  const items = [item("evd_m", 12, "Months"), item("evd_w", 52, "Weeks"), item("evd_y", 1, "Year"), item("evd_c", 12, "cycles"), item("evd_u", 12, ""), item("evd_cn", 365.25 / 30.4375, "个月")];
+  const built = poolJob({ studyId: "std_1", parameter: "median_time", endpointKey: "os", armRole: "control", calibre: "overall", items });
+  assert.equal(built.about.scale, "log");
+  const estimate = (/** @type {string} */ id) => built.job.scenario.studies.find((entry) => entry.studyId === id)?.estimate;
+  assert.ok(Math.abs(Math.exp(estimate("evd_m")) - 12) < 1e-9, "months are the unit the pool is in");
+  assert.ok(Math.abs(Math.exp(estimate("evd_w")) - 52 * 7 / 30.4375) < 1e-9, "52 weeks is 11.96 months");
+  assert.ok(Math.abs(Math.exp(estimate("evd_y")) - 12) < 1e-9, "a year is twelve months");
+  assert.ok(Math.abs(Math.exp(estimate("evd_u")) - 12) < 1e-9, "a value that names no unit is read in months, which the pool says");
+  assert.ok(Math.abs(Math.exp(estimate("evd_cn")) - 365.25 / 30.4375) < 1e-9, "the Chinese word for months is months");
+  // The error of a ratio scale does not move with the unit: the interval 0.8 to 1.25 is the same width in every one.
+  const se = (/** @type {string} */ id) => built.job.scenario.studies.find((entry) => entry.studyId === id)?.se;
+  assert.ok(Math.abs(se("evd_m") - se("evd_w")) < 1e-12 && Math.abs(se("evd_m") - se("evd_y")) < 1e-12);
+  // A unit outside the table is left out of the pool with its reason, never pooled raw and never refusing the pool.
+  assert.deepEqual(built.excluded, [{ id: "evd_c", reason: "time_unit_unrecognised" }]);
+  assert.deepEqual(built.evidenceIds, ["evd_m", "evd_w", "evd_y", "evd_u", "evd_cn"]);
+  assert.equal(built.valid, true, JSON.stringify(built.issues));
+  // What was converted and what was assumed is said on the pool, beside the unit it is in.
+  assert.deepEqual(built.about.timeUnit, { unit: "months", converted: 2, assumed: 1 });
+
+  // A parameter named in months is in months when the item names no unit, and a quantity that is not a time is never converted.
+  const named = poolJob({ studyId: "std_1", parameter: "median_survival_months", endpointKey: "os", armRole: "control", calibre: "overall", items: [item("evd_n", 14, "")] });
+  assert.deepEqual(named.about.timeUnit, { unit: "months", converted: 0, assumed: 0 }, "the parameter's own name is the unit it states");
+  const rate = poolJob({ studyId: "std_1", parameter: "control_event_rate", endpointKey: "orr", armRole: "control", calibre: "overall", items: [{ id: "evd_r", value: 31, ci_low: 25, ci_high: 38, unit: "%", arm: "SoC" }] });
+  assert.equal(rate.about.timeUnit, undefined, "no unit is said of a proportion");
+  assert.equal(rate.excluded.length, 0);
+
+  // The pooled card is in months whatever the writer called its unit: the numbers in it are.
+  const pool = { ok: true, scale: "log", poolingMethod: "random_effects_reml", k: 4, pooled: Math.log(12), confidence: { low: Math.log(10), high: Math.log(14) },
+    prediction: { low: Math.log(7), high: Math.log(20) }, i2: 0.1, tau2: 0.01 };
+  const card = assumptionFromPooling({ key: "control_median", name: "对照组中位生存", parameter: "median_time", endpoint: "os", unit: "weeks", pools: { overall: pool },
+    evidenceIdsByCalibre: { overall: ["evd_m", "evd_w", "evd_y"] } });
+  assert.equal(card.ok, true);
+  assert.equal(card.card.unit, "months", "the pool was converted to months, so the card is");
+  // The writer's own spelling of months stands (the page says 个月 for it); a unit that is not months, or none, is the table's word.
+  const written = (/** @type {string} */ unit) => assumptionFromPooling({ key: "control_median", name: "对照组中位生存", parameter: "median_time", endpoint: "os", unit, pools: { overall: pool },
+    evidenceIdsByCalibre: { overall: ["evd_m"] } }).card?.unit;
+  assert.deepEqual([written("个月"), written("Months"), written("years"), written("")], ["个月", "Months", "months", "months"]);
+  assert.deepEqual([timeCardUnit("median_time", "周"), timeCardUnit("median_time", "月"), timeCardUnit("control_event_rate", "weeks")], ["months", "月", "weeks"]);
+  const proportion = assumptionFromPooling({ key: "ctl", name: "对照事件率", parameter: "control_event_rate", endpoint: "orr", unit: "%", pools: { overall: { ...pool, scale: "logit", pooled: Math.log(0.3 / 0.7),
+    confidence: { low: -1.2, high: -0.5 }, prediction: { low: -1.5, high: -0.3 } } }, evidenceIdsByCalibre: { overall: ["evd_r"] } });
+  assert.equal(proportion.card.unit, "%", "a unit that is not a time is the writer's own");
 });

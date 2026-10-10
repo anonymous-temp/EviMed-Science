@@ -1290,17 +1290,21 @@ export async function vcrMetricsSnapshot(vcr) {
   }
   let matching = null;
   try {
-    matching = await vcr.store.one(`SELECT
-      (SELECT count(*)::int FROM evimed_vcr.matching_facts WHERE clinical IS NOT NULL) AS contextual_facts,
-      (SELECT count(*)::int FROM evimed_vcr.matching_facts WHERE clinical IS NULL) AS legacy_facts,
-      (SELECT count(*)::int FROM evimed_vcr.matching_producers) AS producer_receipts,
-      (SELECT count(*)::int FROM evimed_vcr.matching_assessments WHERE summary='insufficient_evidence') AS incomplete_assessments,
-      (SELECT count(*)::int FROM evimed_vcr.matching_inputs) AS frozen_batches,
-      (SELECT count(*)::int FROM evimed_vcr.document_projections) AS reviewed_projections`);
+    matching = await vcr.store.one(`SELECT ${MATCHING_RECORD_COUNTS.map(({ kind, from }) => `(SELECT count(*)::int FROM evimed_vcr.${from}) AS ${kind}`).join(", ")}`);
   } catch { /* Missing metrics never stop research or masquerade as zero. */ }
+  // The receipts behind stored facts and judgments, by the model that answered the producing run's latest call (the run's own
+  // ledger could say nothing for the rest). The operator's view of which model the study's evidence rests on; no run, request or hash.
+  /** @type {Array<{ model: string, receipts: number }> | null} */
+  let matchingProducers = null;
+  try {
+    matchingProducers = (await vcr.store.rows(`SELECT coalesce(NULLIF(provenance->'requests'->0->>'observedModel', ''), 'unrecorded') AS model, count(*)::int AS receipts
+      FROM evimed_vcr.matching_producers GROUP BY 1 ORDER BY receipts DESC, model LIMIT ${MATCHING_PRODUCER_MODELS_SHOWN}`))
+      .map((/** @type {any} */ row) => ({ model: String(row.model), receipts: Number(row.receipts) }));
+  } catch { /* As above. */ }
   return {
     tables,
     matching,
+    matchingProducers,
     service: vcr.service?.counters ?? {},
     jobs: vcr.jobs?.status?.() ?? null,
     orchestrator: vcr.orchestrator?.status?.() ?? null,
@@ -1316,6 +1320,26 @@ export async function vcrMetricsSnapshot(vcr) {
       ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
   };
 }
+
+/**
+ * What the matching gauge counts, one row per `kind`: what it counts (in the words the runbook uses) and where it is counted from.
+ * The query, the gauge's help and the runbook's paragraph all read these rows — `vcrMetricsRunbook.test.mjs` holds the runbook to them —
+ * so the three cannot name different things. They are counts of stored rows over every revision; recall, latency and spend are not
+ * here (the runbook says where each is read).
+ * @type {ReadonlyArray<{ kind: string, counts: string, from: string }>}
+ */
+const MATCHING_RECORD_COUNTS = Object.freeze([
+  { kind: "contextual_facts", counts: "facts written with the clinical block", from: "matching_facts WHERE clinical IS NOT NULL" },
+  { kind: "legacy_facts", counts: "facts written without it", from: "matching_facts WHERE clinical IS NULL" },
+  { kind: "producer_receipts", counts: "the model-call receipts behind facts and language judgments", from: "matching_producers" },
+  { kind: "incomplete_assessments", counts: "assessments that ended insufficient_evidence", from: "matching_assessments WHERE summary='insufficient_evidence'" },
+  { kind: "frozen_batches", counts: "frozen matching inputs", from: "matching_inputs" },
+  { kind: "reviewed_projections", counts: "reviewed text projections of documents", from: "document_projections" },
+]);
+/** The most models the producer split names: the models behind a study's evidence are few, and a label set stays bounded. */
+const MATCHING_PRODUCER_MODELS_SHOWN = 20;
+/** The kinds of `open_science_vcr_matching_records` and what each counts. */
+export const VCR_MATCHING_RECORD_KINDS = Object.freeze(Object.fromEntries(MATCHING_RECORD_COUNTS.map(({ kind, counts }) => [kind, counts])));
 
 /**
  * The module's metric families, `open_science_vcr_*`, in the shape
@@ -1381,8 +1405,13 @@ export function vcrMetricFamilies(enabled, snapshot) {
       Object.entries(snapshot.publications).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
   if (snapshot.matching) {
-    add('matching_records', 'Stored clinical matching records, including historical revisions; no patient or study labels.', 'gauge',
-      Object.entries(snapshot.matching).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+    add('matching_records', `Stored clinical matching records, counted over every revision, with no patient or study label. By kind: ${
+      MATCHING_RECORD_COUNTS.map(({ kind, counts }) => `${kind} = ${counts}`).join('; ')}.`, 'gauge',
+    MATCHING_RECORD_COUNTS.filter(({ kind }) => kind in snapshot.matching).map(({ kind }) => ({ labels: { kind }, value: Number(/** @type {any} */ (snapshot.matching)[kind]) })));
+  }
+  if (snapshot.matchingProducers?.length) {
+    add('matching_producers', 'The model-call receipts behind stored matching facts and language judgments, by the model that answered the producing run\'s latest call (unrecorded where the run ledger could not say); no run, request or study label.', 'gauge',
+      snapshot.matchingProducers.map(({ model, receipts }) => ({ labels: { model }, value: receipts })));
   }
   const loops = Object.entries(snapshot.worker?.loops ?? {}).filter(([, loop]) => loop?.wired);
   if (loops.length) {

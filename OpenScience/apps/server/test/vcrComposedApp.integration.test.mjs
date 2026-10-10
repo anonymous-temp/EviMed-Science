@@ -24,6 +24,7 @@ import { roleAllows, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUM
 import { exportHash } from "../src/documentExport.mjs";
 import { documentExportDirectory } from "../src/documentRenderController.mjs";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
+import { VCR_MATCHING_RECORD_KINDS } from "../src/vcrComposition.mjs";
 
 import { VcrStore } from "../src/vcrStore.mjs";
 import { VCR_ROUTE_ABILITIES } from "../src/vcrRoutes.mjs";
@@ -808,6 +809,8 @@ test("DL-13 DL-15 readiness names the module and its engine; the metrics carry t
     /^open_science_vcr_jobs\{state="queued"\} \d+$/m, /^open_science_vcr_jobs\{state="running"\} \d+$/m, /^open_science_vcr_jobs\{state="awaiting_budget"\} \d+$/m]) {
     assert.match(text, line);
   }
+  // The matching gauge reads every kind it declares from the real schema (the runbook names exactly these: vcrMetricsRunbook.test.mjs).
+  for (const kind of Object.keys(VCR_MATCHING_RECORD_KINDS)) assert.match(text, new RegExp(`^open_science_vcr_matching_records\\{kind="${kind}"\\} \\d+$`, "m"), kind);
   const names = [...new Set([...text.matchAll(/^# TYPE (open_science_vcr_[a-z_]+) /gm)].map((match) => match[1]))];
   assert.ok(names.length >= 8, `${names.length} vcr families: ${names.join(", ")}`);
   assert.equal(text.includes("evimed_vcr_"), false, "the platform's prefix, not the module's own");

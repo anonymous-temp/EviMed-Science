@@ -815,7 +815,7 @@ vcr_job_generate_patients <- function(job, output_dir = NULL, ...) {
     hr <- .vcr_need(tr$hazardRatio, "scenario.truth.hazardRatio", "A time-to-event scenario states the hazard ratio (1 for the null).")
     acc <- sc$accrual %||% list(kind = "uniform", duration = 0)
     vcr_sim_tte(n1, n0, vcr_control_distribution(tr), hr, acc, vcr_scalar(acc$followup, Inf),
-                vcr_scalar(acc$dropoutAnnual, 0), max_followup = vcr_scalar(acc$maxFollowup, Inf), z = z, lp = lp)
+                vcr_scalar(acc$dropoutAnnual, 0), dropout_period = vcr_time_unit(sc)$perYear, max_followup = vcr_scalar(acc$maxFollowup, Inf), z = z, lp = lp)
   }
   ids <- vapply(seq_len(nrow(d)), function(i) substr(vcr_sha256(paste(job$seed, job$jobId %||% "", i, sep = ":")), 1L, 12L), character(1))
   out <- data.frame(patientId = paste0("vp_", ids), stringsAsFactors = FALSE)
@@ -832,8 +832,8 @@ vcr_job_generate_patients <- function(job, output_dir = NULL, ...) {
                           note = "Scenario simulation from stated parameters; no baseline-conditioned or digital-twin claim is made."),
                        # what the patients page draws: the arms' survival curves and their summary numbers,
                        # and how the headline moves if each stated parameter is off by a fifth
-                       vcr_patient_summary(d, endpoint),
-                       list(sensitivity = tryCatch(vcr_patient_sensitivity(endpoint, tr), error = function(e) NULL))),
+                       vcr_patient_summary(d, endpoint, vcr_time_unit(sc)$zh),
+                       list(sensitivity = tryCatch(vcr_patient_sensitivity(endpoint, tr, vcr_time_unit(sc)$zh), error = function(e) NULL))),
        tables = .vcr_tables_of(list(vcr_write_table(out, "virtual-patients", output_dir))))
 }
 
@@ -1544,7 +1544,7 @@ vcr_job_design_analytic <- function(job, ...) {
     }
     if (!is.null(sc$accrual)) {
       dist <- vcr_control_distribution(tr)
-      eta <- vcr_dropout_hazard(vcr_scalar(sc$accrual$dropoutAnnual, 0))
+      eta <- vcr_dropout_hazard(vcr_scalar(sc$accrual$dropoutAnnual, 0), vcr_time_unit(sc)$perYear)
       A <- vcr_scalar(sc$accrual$duration, 0); Fu <- vcr_scalar(sc$accrual$followup, NA_real_)
       if (is.na(Fu)) vcr_abort("scenario_field_missing", "scenario.accrual.followup", "The required-patients calculation needs the follow-up after accrual.")
       # The event probability is computed for the control distribution the scenario declares: the closed form for

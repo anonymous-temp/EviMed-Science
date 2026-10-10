@@ -1,6 +1,6 @@
 import { knownErrorCodeMessage } from "@evimed/domain";
 import { WebApiError, webErrorMessage } from "@/lib/apiClient";
-import type { VcrFieldMapEntry, VcrFieldRole, VcrImportFormat, VcrImportResult, VcrIntakeSource } from "@/lib/vcrClient";
+import type { VcrFieldMapEntry, VcrFieldRole, VcrImportFormat, VcrImportResult, VcrIntakeFile, VcrIntakeSource } from "@/lib/vcrClient";
 
 /**
  * What the data-intake flow decides on the page rather than on the server:
@@ -348,4 +348,16 @@ const INTAKE_CODES: Record<string, string> = {
 export function intakeErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof WebApiError && error.code && Object.hasOwn(INTAKE_CODES, error.code)) return INTAKE_CODES[error.code];
   return webErrorMessage(error, { fallback });
+}
+
+/**
+ * How much of a reviewed record a run was shown, in the words a reader uses for it: the whole text, none of it yet, or so many characters
+ * of so many with the rest never shown. A shown window is not an extraction, so this says 读过, not 提取.
+ */
+export function readingText(reading: VcrIntakeFile["reading"]): string | null {
+  if (!reading) return null;
+  const count = (value: number) => value.toLocaleString("en-US");
+  if (reading.complete) return "全文已读";
+  if (reading.read === 0) return "尚未读取";
+  return reading.chars != null ? `已读 ${count(reading.read)} / ${count(reading.chars)} 字，其余没读到` : `已读 ${count(reading.read)} 字`;
 }

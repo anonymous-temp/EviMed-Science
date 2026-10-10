@@ -41,6 +41,7 @@
       "superseded": false,
       "conflictFactIds": [],
       "correctionReason": null,
+      "document": null,
       "quote": null,
       "locator": null
     },
@@ -57,6 +58,7 @@
       "superseded": false,
       "conflictFactIds": [],
       "correctionReason": null,
+      "document": null,
       "quote": null,
       "locator": null
     },
@@ -73,6 +75,7 @@
       "superseded": false,
       "conflictFactIds": [],
       "correctionReason": null,
+      "document": null,
       "quote": null,
       "locator": null
     }
@@ -222,6 +225,17 @@
             "source": "数据快照字段「age」",
             "at": "9 月 10 日"
           },
+          "evidenceItems": [
+            {
+              "quote": "age = 63 year",
+              "locator": {
+                "field": "age",
+                "snapshotId": ""
+              },
+              "source": "数据快照字段「age」",
+              "at": "9 月 10 日"
+            }
+          ],
           "request": null,
           "requestNote": null,
           "decidedBy": "code",
@@ -243,6 +257,17 @@
             "source": "数据快照字段「ecog」",
             "at": "9 月 10 日"
           },
+          "evidenceItems": [
+            {
+              "quote": "ecog = 1",
+              "locator": {
+                "field": "ecog",
+                "snapshotId": ""
+              },
+              "source": "数据快照字段「ecog」",
+              "at": "9 月 10 日"
+            }
+          ],
           "request": null,
           "requestNote": null,
           "decidedBy": "code",
@@ -264,6 +289,17 @@
             "source": "数据快照字段「active_brain_metastasis」",
             "at": "9 月 10 日"
           },
+          "evidenceItems": [
+            {
+              "quote": "active_brain_metastasis = false",
+              "locator": {
+                "field": "active_brain_metastasis",
+                "snapshotId": ""
+              },
+              "source": "数据快照字段「active_brain_metastasis」",
+              "at": "9 月 10 日"
+            }
+          ],
           "request": null,
           "requestNote": null,
           "decidedBy": "code",
@@ -373,6 +409,17 @@
           "source": "数据快照字段「age」",
           "at": "9 月 10 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "age = 63 year",
+            "locator": {
+              "field": "age",
+              "snapshotId": ""
+            },
+            "source": "数据快照字段「age」",
+            "at": "9 月 10 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -394,6 +441,17 @@
           "source": "数据快照字段「ecog」",
           "at": "9 月 10 日"
         },
+        "evidenceItems": [
+          {
+            "quote": "ecog = 1",
+            "locator": {
+              "field": "ecog",
+              "snapshotId": ""
+            },
+            "source": "数据快照字段「ecog」",
+            "at": "9 月 10 日"
+          }
+        ],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",

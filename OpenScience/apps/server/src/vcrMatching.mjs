@@ -67,11 +67,13 @@ export function publicMatchingProvenance(provenance) {
  * of the domain's own reasons for a missing fact. Each one says what would have
  * to change: a criterion written outside the grammar is the protocol step's to
  * fix, a code the vocabulary cannot read is the field map's, a number with no
- * unit cannot be compared to one that names a unit, and a fact with no date
- * cannot decide a question about a window (contract §2.2).
+ * unit cannot be compared to one that names a unit, a fact with no date
+ * cannot decide a question about a window (contract §2.2), and a prescription
+ * the chart never says was given leaves a washout open (`unresolved_exposure`).
  */
 export const VCR_EVALUATOR_UNKNOWN_REASONS = Object.freeze([
   "criterion_malformed", "coding_unmapped", "coding_version_unavailable", "unit_missing", "unit_mismatch", "undated", "evaluation_error", "conflicting_evidence",
+  "unresolved_exposure",
 ]);
 /** Every reason a gap may carry. */
 const GAP_REASONS = Object.freeze([...VCR_MISSING_REASONS, ...VCR_EVALUATOR_UNKNOWN_REASONS]);
@@ -295,10 +297,13 @@ export function verifyFactEvidence(fact, context = {}) {
   if (typeof fact?.dateSurface === "string" && fact.dateSurface.trim() && !span.includes(fact.dateSurface)) {
     return { ok: false, reason: "date_not_in_span" };
   }
-  if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory)) === false) return {ok:false,reason:'unit_not_in_span'};
+  // A unit supports a number only where the quote prints it beside that number: a quote with two units supports each for its own
+  // value, not for every value of the fact (E-10). A fact whose value is not a number is held to the older question, unit anywhere.
+  const printedValue = (/** @type {unknown} */ value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory),printedValue(fact.value)) === false) return {ok:false,reason:'unit_not_in_span'};
   const original = fact.clinical?.laboratory;
   if (original?.originalValue != null && !numeralsIn(span).some(number => Math.abs(number-original.originalValue)<1e-9)) return {ok:false,reason:'value_not_in_span'};
-  if (original?.originalUnit && clinicalUnitInQuote(original.originalUnit,span,true) === false) return {ok:false,reason:'unit_not_in_span'};
+  if (original?.originalUnit && clinicalUnitInQuote(original.originalUnit,span,true,printedValue(original.originalValue)) === false) return {ok:false,reason:'unit_not_in_span'};
   return { ok: true, reason: null };
 }
 
@@ -686,13 +691,37 @@ function compareFact(node, fact, context) {
  * `pending_recheck` dated at the day the washout ends, because the answer is
  * known to change on a known date and the ledger should say so rather than make
  * the coordinator re-derive it.
+ *
+ * Only an administration or a stop is an exposure. A prescription, a plan, a
+ * medication-list entry or a mention in an unstated state is not one — and is
+ * not nothing either: one dated after the last recorded exposure, and recent
+ * enough that had it been given the washout would not be clear, leaves the
+ * criterion `unknown` (`unresolved_exposure`) with the prescription and the
+ * administration it is set against as its evidence. Dropping it read a washout
+ * as clear on the strength of an administration the later prescription may have
+ * followed (E-04). One that cannot change the answer — older than the last
+ * exposure, dated after the assessment, or too old to matter — is left out, as
+ * is one that cannot be placed in time, exactly as an undated administration is
+ * beside a dated one.
  * @param {any} node @param {any} context @returns {RequirementVerdict}
  */
 function evaluateElapsed(node, context) {
   const variable = String(node.variable ?? "");
-  const everything = factsFor(context, variable).filter(fact => !fact.clinical?.copiedFrom && (!fact.clinical?.medication
-    || fact.clinical.assertion === 'negated' || ['administered', 'stopped'].includes(fact.clinical.medication.state)));
+  const held = factsFor(context, variable).filter(fact => !fact.clinical?.copiedFrom);
+  const isExposure = (/** @type {any} */ fact) => !fact.clinical?.medication
+    || fact.clinical.assertion === 'negated' || ['administered', 'stopped'].includes(fact.clinical.medication.state);
+  const everything = held.filter(isExposure);
   const affirmed = everything.filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed");
+  const needed = Number(node.days ?? 0);
+  const strict = String(node.comparator ?? "gte") === "gt";
+  const clear = (/** @type {number} */ at) => { const elapsed = daysBetween(at, context.asOf); return strict ? elapsed > needed : elapsed >= needed; };
+  /** The medication facts that are not exposures, newer than `since` (any when null), that would reopen the washout were they one.
+   * @param {number | null} since @returns {any[]} newest first */
+  const unresolvedSince = (since) => held.filter((fact) => !isExposure(fact) && String(fact?.polarity ?? "affirmed") === "affirmed")
+    .filter((fact) => { const at = instant(fact.occurredAt); return at !== null && at <= context.asOf && (since === null || at > since) && !clear(at); })
+    .sort((a, b) => (instant(b.occurredAt) ?? 0) - (instant(a.occurredAt) ?? 0));
+  /** @param {any[]} unresolved @param {any[]} against */
+  const stillOpen = (unresolved, against) => unknownBecause(variable, "unresolved_exposure", [...unresolved.slice(0, 1), ...against].map(citation));
   // What happened after the assessment date is not yet a fact of it.
   const dated = affirmed.filter((fact) => instant(fact?.occurredAt) !== null && /** @type {number} */ (instant(fact.occurredAt)) <= context.asOf);
   const denied = everything.filter((fact) => {
@@ -705,21 +734,27 @@ function evaluateElapsed(node, context) {
       && instant(interval.start) <= context.asOf - Number(node.days ?? 0) * DAY_MS && instant(interval.end) >= context.asOf;
   });
   if (!dated.length) {
-    // 「从未接受过」 is a complete answer to 「距上次治疗已满 N 天」.
-    if (denied.length && node.deniedSatisfies !== false) return conflictingEvidence(variable, denied) ?? verdict(SATISFIED, { evidence: denied.map(citation) });
+    // 「从未接受过」 is a complete answer to 「距上次治疗已满 N 天」 — as of the day it was said: it cannot settle a prescription written after it.
+    if (denied.length && node.deniedSatisfies !== false) {
+      const said = denied.map((fact) => instant(fact.clinical?.occurredInterval?.end ?? fact.occurredAt));
+      const later = unresolvedSince(said.every((time) => time !== null) ? Math.max(.../** @type {number[]} */ (said)) : null);
+      if (later.length) return stillOpen(later, denied);
+      return conflictingEvidence(variable, denied) ?? verdict(SATISFIED, { evidence: denied.map(citation) });
+    }
     const undated = affirmed.filter((fact) => instant(fact?.occurredAt) === null);
     if (undated.length) return conflictingEvidence(variable, undated) ?? unknownBecause(variable, "undated", undated.map(citation));
-    return unknownBecause(variable, "not_recorded");
+    // No administration is recorded; say whether the chart holds a prescription that bears on the window rather than that it holds nothing.
+    const open = unresolvedSince(null);
+    return open.length ? stillOpen(open, []) : unknownBecause(variable, "not_recorded");
   }
   const latest = [...dated].sort((a, b) => (instant(b.occurredAt) ?? 0) - (instant(a.occurredAt) ?? 0))[0];
   const at = /** @type {number} */ (instant(latest.occurredAt));
   // The verdict rests on the last exposure (and any other at that instant); an older disagreement is not asked about.
   const blocked = conflictingEvidence(variable, dated.filter((fact) => instant(fact.occurredAt) === at));
   if (blocked) return blocked;
-  const needed = Number(node.days ?? 0);
-  const elapsed = daysBetween(at, context.asOf);
-  const strict = String(node.comparator ?? "gte") === "gt";
-  if (strict ? elapsed > needed : elapsed >= needed) return verdict(SATISFIED, { evidence: [citation(latest)] });
+  const open = unresolvedSince(at);
+  if (open.length) return stillOpen(open, [latest]);
+  if (clear(at)) return verdict(SATISFIED, { evidence: [citation(latest)] });
   return verdict(PENDING_RECHECK, {
     evidence: [citation(latest)],
     // Strictly more than N days is true one moment after N days have passed.

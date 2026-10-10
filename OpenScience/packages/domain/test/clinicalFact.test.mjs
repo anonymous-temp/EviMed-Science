@@ -114,8 +114,46 @@ test('units that differ only in case are one unit where the table lists them; a 
   assert.equal(clinicalUnitInQuote('mg/dL', '肌酐 1.2 MG/DL'), true);
   assert.equal(clinicalUnitInQuote('ng/mL', '肌钙蛋白 0.02 NG/ML', true), true);
   assert.equal(clinicalUnitInQuote('ng/mL', '肌钙蛋白 0.02 ug/mL', true), false);
-  assert.equal(clinicalUnitInQuote('ng/mL', '肌钙蛋白 0.02，单位未记载'), null, 'caseVariants adds no quote requirement');
+  assert.equal(clinicalUnitInQuote('ng/mL', '肌钙蛋白 0.02，单位未记载'), false, 'a unit of the table is held to the quote whether or not the fact says it is a laboratory value (E-10)');
+  assert.equal(clinicalUnitInQuote('ng/mL', '肌钙蛋白 0.02 NG/ML'), true);
   assert.equal(clinicalUnitInQuote('mU/L', '促甲状腺素 3 MU/L', true), false, 'an unlisted unit is still found exactly');
+});
+
+test('a unit supports a value only where it is printed beside that value, for any fact whose unit can be checked (E-10)', () => {
+  // The quote prints two units; the fact's own number carries only one of them. "Somewhere in the quote" passed both.
+  const two = '血糖 6.1 mmol/L（110 mg/dL）';
+  assert.equal(clinicalUnitInQuote('mmol/L', two, false, 6.1), true);
+  assert.equal(clinicalUnitInQuote('mg/dL', two, false, 110), true);
+  assert.equal(clinicalUnitInQuote('mg/dL', two, false, 6.1), false, 'mg/dL is in the quote, beside 110 and not beside 6.1');
+  assert.equal(clinicalUnitInQuote('mmol/L', two, false, 110), false);
+  assert.equal(clinicalUnitInQuote('mg/dL', two), true, 'asked without a value it is the old question: is the unit anywhere in the quote');
+  // A few characters of flag or punctuation between the number and its unit, a thousands separator, a header unit before the number.
+  assert.equal(clinicalUnitInQuote('umol/L', '肌酐 98 ↑ μmol/L 参考 44-133', false, 98), true);
+  assert.equal(clinicalUnitInQuote('mg/dL', '肌酐 1.2（偏高）mg/dL', false, 1.2), true);
+  assert.equal(clinicalUnitInQuote('U/L', 'ALT 1,200 U/L', false, 1200), true);
+  assert.equal(clinicalUnitInQuote('umol/L', '肌酐(μmol/L)：98', false, 98), true, 'a unit named in brackets before its number');
+  assert.equal(clinicalUnitInQuote('10^9/L', '白细胞 4.5×10^9/L', false, 4.5), true);
+  assert.equal(clinicalUnitInQuote('mg/dL', '肌酐 1.2 和 1.5 mg/dL', false, 1.2), false, 'another number stands between 1.2 and the unit');
+  assert.equal(clinicalUnitInQuote('mg/dL', '血清 mg/dL 法测得肌酐为 1.2，单位未记载', false, 1.2), false, 'a unit elsewhere in the sentence is not beside it');
+  assert.equal(clinicalUnitInQuote('g/L', '血红蛋白 11.5 mg/L', false, 11.5), false, 'g/L is not the tail of mg/L');
+  // A number is the number printed, not a digit run inside a longer one.
+  assert.equal(clinicalUnitInQuote('mg/dL', '肌酐 11.2 mg/dL', false, 1.2), false);
+  // Unlisted units still need literal support, beside the value, with the case they were written in.
+  assert.equal(clinicalUnitInQuote('mmol/mol', 'HbA1c 48 mmol/mol', true, 48), true);
+  assert.equal(clinicalUnitInQuote('mmol/mol', 'HbA1c 48，单位未记载', true, 48), false);
+  assert.equal(clinicalUnitInQuote('mL/min/1.73m2', 'eGFR 85 mL/min/1.73 m2', true, 85), true, 'spacing inside the unit is not part of the unit');
+  assert.equal(clinicalUnitInQuote('mU/L', '促甲状腺素 3 MU/L', true, 3), false);
+  // The fact need not carry a laboratory block: a unit in the table, or one written as a ratio or a percentage, is held to the quote too.
+  assert.equal(clinicalUnitInQuote('ng/mL', '肌钙蛋白 0.02，单位未记载', false, 0.02), false);
+  assert.equal(clinicalUnitInQuote('mmol/mol', 'HbA1c 48，单位未记载', false, 48), false);
+  assert.equal(clinicalUnitInQuote('%', '血氧饱和度 97%', false, 97), true);
+  assert.equal(clinicalUnitInQuote('%', '血氧饱和度 97，单位未记载', false, 97), false);
+  // A unit spelled as a word or a bare symbol is not chased: the same chart writes 岁, 公斤, 厘米.
+  for (const [unit, quote, value] of /** @type {[string, string, number][]} */ ([['year', '年龄44岁', 44], ['kg', '体重 70 公斤', 70], ['score', 'ECOG 评分 1 分', 1]])) {
+    assert.equal(clinicalUnitInQuote(unit, quote, false, value), null, unit);
+  }
+  assert.equal(clinicalUnitInQuote('kg', '体重 70 公斤', true, 70), false, 'but a fact that says it is a laboratory value is held to what it says');
+  assert.equal(clinicalUnitInQuote('kg', '体重 70kg', true, 70), true);
 });
 
 test('pack grounding follows exact nested criteria and exposes only versioned definitions with their sources',()=>{

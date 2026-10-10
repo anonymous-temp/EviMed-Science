@@ -1,7 +1,7 @@
 {
   "version": "evimed-lab-units-2",
   "scope": "Selected analyte conversions only; this is not a UCUM parser or a diagnostic reference range.",
-  "caseRule": "Unit symbols are matched exactly and never case-folded, because a symbol's case can change its magnitude: Mmol/L is not mmol/L, MU/L is not mU/L, and G/L (giga per litre) is not g/L (gram per litre), so g/L has no upper-case spelling. The only equivalences are the spellings listed here: the all-lower and all-upper rendering a single-case report prints, and the litre as L or l. `aliases` is also the closed vocabulary a unit must be found in within a quote; `caseVariants` only says that two spellings are one unit and adds no quote requirement.",
+  "caseRule": "Unit symbols are matched exactly and never case-folded, because a symbol's case can change its magnitude: Mmol/L is not mmol/L, MU/L is not mU/L, and G/L (giga per litre) is not g/L (gram per litre), so g/L has no upper-case spelling. The only equivalences are the spellings listed here: the all-lower and all-upper rendering a single-case report prints, and the litre as L or l. `aliases` and `caseVariants` together are the closed vocabulary of units a quote must print, beside the value they qualify, in one of the spellings listed for the unit; a unit outside them is required literally only for a laboratory value or when it is written as a ratio, a power or a percentage.",
   "references": [
     "https://ucum.org/ucum",
     "https://www.labcorp.com/test-menu/resources/si-unit-conversion-table"

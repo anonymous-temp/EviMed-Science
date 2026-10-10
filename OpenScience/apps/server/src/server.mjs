@@ -4837,7 +4837,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       : null;
     vcr.jobs.notifier = vcr.notifier;
     const orchestrator = new VcrOrchestrator({
-      store: vcr.store, jobs: vcr.jobs, config, notifier: vcr.notifier, seal: vcr.seal,
+      store: vcr.store, jobs: vcr.jobs, config, notifier: vcr.notifier, seal: vcr.seal, longitudinal: vcr.longitudinal ?? null,
       queueExport: documentExportService && vcrDocumentAdapter ? (user, study, row) => vcrDocumentAdapter.queue(documentExportService, user, study, row) : null,
       queueReviews: (studyId, options) => vcr.review?.queue(studyId, options) ?? Promise.resolve([]),
       dispatchRun: overrides.vcrDispatchRun ?? dispatchVcrRun,

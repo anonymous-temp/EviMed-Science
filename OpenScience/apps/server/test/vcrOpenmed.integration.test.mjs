@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
-import { composeVcr, vcrMatchingExecutor, vcrMatchingSeam } from '../src/vcrComposition.mjs';
+import { composeVcr, vcrMatchingExecutor, vcrMatchingSeam, vcrMetricFamilies, vcrMetricsSnapshot } from '../src/vcrComposition.mjs';
 import { projectionHash } from '../src/vcrCloudProjection.mjs';
 import { vcrRuntimeWrite } from '../src/vcrGateway.mjs';
 import { deleteVcrStudyRows } from '../src/vcrStoreBase.mjs';
@@ -14,6 +14,8 @@ import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { streamOf } from './helpers/vcrIntakeData.mjs';
 import { freezeMatchingInputs } from '../src/vcrMatchingSnapshot.mjs';
 import { VcrStore } from '../src/vcrStore.mjs';
+import { vcrSchemaSql } from '../src/vcrPersistence.mjs';
+import { MATCHING_BATCHES_SQL } from '../src/vcrMatchStore.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'An isolated test PostgreSQL is required' };
 const origin = 'https://api.example.org';
@@ -302,6 +304,117 @@ test('continued batches share one denominator without mixing later facts or othe
   const changed=freezeMatchingInputs({...base,asOf:'2026-10-02'});
   await vcr.matchStore.saveMatchingSnapshot(changed);
   assert.ok((await vcr.matchStore.matchingProgress(target.id,changed.id)).every(row=>row.state==='pending'));
+});
+
+test('the batches of one candidate denominator are found by a stored, indexed digest of the manifest without its offset, which the migration fills for older rows (E-23)', options, async () => {
+  const target = await study();
+  const base = { studyId: target.id, protocolVersionId: 'p-digest', asOf: '2026-10-01', criteria: [], facts: [], languages: new Map(), subjects: ['a', 'b', 'c'], limit: 1 };
+  const first = freezeMatchingInputs(base), second = freezeMatchingInputs({ ...base, offset: 1 }), changed = freezeMatchingInputs({ ...base, asOf: '2026-10-02' });
+  for (const snapshot of [first, second, changed]) await vcr.matchStore.saveMatchingSnapshot(snapshot);
+  const digests = async () => Object.fromEntries((await database.query('SELECT id, manifest_digest FROM evimed_vcr.matching_inputs WHERE study_id=$1', [target.id])).rows
+    .map(row => [row.id, row.manifest_digest]));
+  const stored = await digests();
+  assert.match(stored[first.id], /^[a-f0-9]{64}$/);
+  assert.equal(stored[first.id], stored[second.id], 'two batches that differ only by offset are one denominator');
+  assert.notEqual(stored[first.id], stored[changed.id], 'any other difference is another');
+  // The progress read asks for the digest, and the index answers it: with sequential scans forbidden the plan still exists, and names the index.
+  const plan = await database.transaction(async client => {
+    await client.query('SET LOCAL enable_seqscan = off');
+    return JSON.stringify((await client.query(`EXPLAIN (FORMAT JSON) ${MATCHING_BATCHES_SQL}`, [target.id, stored[first.id]])).rows[0]['QUERY PLAN']);
+  });
+  assert.match(plan, /vcr_matching_inputs_digest_idx/);
+  // A row written before the digest existed is filled by the migration, and filling again changes nothing.
+  await database.query('UPDATE evimed_vcr.matching_inputs SET manifest_digest = NULL WHERE study_id=$1', [target.id]);
+  for (let pass = 0; pass < 2; pass += 1) {
+    await database.transaction(async client => { await client.query(vcrSchemaSql()); });
+    assert.deepEqual(await digests(), stored, `migration pass ${pass + 1}`);
+  }
+  await vcr.matchStore.recordMatchingOutcomes(target.id, first.id, { a: { state: 'evaluated' } });
+  await vcr.matchStore.recordMatchingOutcomes(target.id, second.id, { b: { state: 'unavailable', reason: 'source_unavailable' } });
+  assert.deepEqual((await vcr.matchStore.matchingProgress(target.id, second.id)).map(row => row.state), ['evaluated', 'unavailable', 'pending']);
+  assert.deepEqual((await vcr.matchStore.latestMatchingProgress(target.id, 'p-digest')).requested, 3, 'the latest batch of a protocol is still found');
+});
+
+test('the data tab says how much of each reviewed document a run was shown and how much it never was (E-06)', options, async () => {
+  const target = await study();
+  const source = await vcr.dataPlane.registerSource({ userId: 'owner', studyId: target.id, name: 'Synthetic notes' });
+  const text = '随访记录：'.repeat(14);
+  const stored = (body, subject) => vcr.dataPlane.storeUpload({ actor: 'owner', studyId: target.id, sourceId: source.id, name: 'note.txt', role: 'document', subject, stream: streamOf(body) });
+  const [first, second] = [await stored(text, 'CANARY-READ'), await stored('另一份未审阅的记录。', 'CANARY-UNREVIEWED')];
+  await vcr.dataPlane.setCloudPermission({ studyId: target.id, sourceId: source.id, actor: 'owner', permission: {
+    status: 'approved', dataClass: 'synthetic', purpose: 'vcr', destinations: [origin], reference: 'Authored synthetic fixture', retention: 'unknown', training: 'unknown', humanReview: 'unknown' } });
+  const projection = await vcr.dataPlane.createDocumentProjection({ studyId: target.id, documentId: first.file.id, actor: 'owner',
+    sourceHash: projectionHash(text), spans: [], attestation: 'Reviewed synthetic note' });
+  const reading = async (file) => (await vcr.dataPlane.tabFor(target, { id: 'owner' })).sources[0].files.find((entry) => entry.id === file.file.id).reading;
+
+  // Reviewed and never read: nothing was shown. Not reviewed: there is nothing to have shown, and no line about it.
+  assert.deepEqual(await reading(first), { chars: text.length, read: 0, skipped: text.length, complete: false, windows: 0 });
+  assert.equal(await reading(second), null);
+
+  // A run reads two windows of it, ten characters from the start and ten from further on, with a stretch between them nobody saw.
+  target.cloudContext = { runId: 'run_reading', sessionId: 'session_reading' };
+  const reader = vcr.documents;
+  const windowChars = reader.windowChars;
+  const input = { subjectKey: first.file.detail.subjectKey, documentId: projection.id };
+  reader.windowChars = 10;
+  try {
+    assert.equal((await reader.subjectDocuments(target, { ...input, offset: 0 })).available, true);
+    assert.equal((await reader.subjectDocuments(target, { ...input, offset: 40 })).available, true);
+  } finally { reader.windowChars = windowChars; }
+  assert.deepEqual(await reading(first), { chars: text.length, read: 20, skipped: text.length - 20, complete: false, windows: 2 });
+
+  // Another conversation reads the first fifty: the ranges are one union, and what both saw counts once.
+  target.cloudContext = { runId: 'run_reading_2', sessionId: 'session_reading_2' };
+  reader.windowChars = 50;
+  try { await reader.subjectDocuments(target, { ...input, offset: 0 }); } finally { reader.windowChars = windowChars; }
+  assert.deepEqual(await reading(first), { chars: text.length, read: 50, skipped: text.length - 50, complete: false, windows: 3 });
+  const tab = JSON.stringify((await vcr.dataPlane.tabFor(target, { id: 'owner' })).sources);
+  assert.equal(tab.includes('run_reading') || tab.includes('session_reading'), false, 'which conversation read it is not the tab\'s to say');
+});
+
+test('the matching tab names the document each citation is in by the name the data tab lists it under, whichever id the citation carries (E-06)', options, async () => {
+  const target = await study();
+  await write(target, 'criteria', [{ criteria: [{ kind: 'exclusion', criterionType: 'prior_treatment', sourceText: '距上次多西他赛满 28 天',
+    requirement: { op: 'elapsed_since', variable: 'docetaxel', days: 28 } }] }]);
+  const protocol = await vcr.matchStore.latestProtocol(target.id);
+  const [criterion] = await vcr.matchStore.listCriteria({ studyId: target.id, protocolVersionId: protocol.id });
+  const source = await vcr.dataPlane.registerSource({ userId: 'owner', studyId: target.id, name: 'Synthetic notes' });
+  const [note, older] = ['2026-09-26 处方多西他赛。', '2026-06-01 给予多西他赛。'];
+  const stored = (body, subject) => vcr.dataPlane.storeUpload({ actor: 'owner', studyId: target.id, sourceId: source.id, name: 'note.txt', role: 'document', subject, stream: streamOf(body) });
+  const [recent, old] = [await stored(note, 'CANARY-CITE'), await stored(older, 'CANARY-CITE')];
+  await vcr.dataPlane.setCloudPermission({ studyId: target.id, sourceId: source.id, actor: 'owner', permission: {
+    status: 'approved', dataClass: 'synthetic', purpose: 'vcr', destinations: [origin], reference: 'Authored synthetic fixture', retention: 'unknown', training: 'unknown', humanReview: 'unknown' } });
+  const projection = await vcr.dataPlane.createDocumentProjection({ studyId: target.id, documentId: recent.file.id, actor: 'owner', sourceHash: projectionHash(note), spans: [], attestation: 'Reviewed synthetic note' });
+  const subjectKey = recent.file.detail.subjectKey;
+  const cited = (quote, documentId, occurredAt) => ({ factId: 'fac_x', variable: 'docetaxel', quote, quoteKind: 'verbatim', locator: { documentId, start: 0, end: quote.length }, occurredAt, visibleAt: null, polarity: 'affirmed' });
+  await vcr.matchStore.saveAssessment({ userId: 'owner', assessment: { studyId: target.id, protocolVersionId: protocol.id, subjectKey, asOf: '2026-10-01T00:00:00.000Z',
+    summary: 'insufficient_evidence', counts: { satisfied: 0, unknown: 1, pending_recheck: 0 }, evidenceGaps: [{ variable: 'docetaxel', reason: 'unresolved_exposure', criterionIds: [criterion.id] }], provenance: {},
+    judgments: [{ criterionId: criterion.id, state: 'unknown', applicable: true, decidedBy: 'code', evidence: [
+      cited('2026-09-26 处方多西他赛', projection.id, '2026-09-26T00:00:00.000Z'), cited('2026-06-01 给予多西他赛', old.file.id, '2026-06-01T00:00:00.000Z')] }] } });
+  const shown = await vcr.service.tab({ id: 'owner' }, target.id, 'matching', new URLSearchParams(`candidate=${subjectKey}`));
+  const row = shown.selected.criteria[0];
+  const names = Object.fromEntries((await vcr.dataPlane.tabFor(target, { id: 'owner' })).sources[0].files.map((file) => [file.id, file.name]));
+  assert.deepEqual(row.evidenceItems.map((item) => item.source), [names[recent.file.id], names[old.file.id]], 'the reviewed text and the original are the same document the data tab lists, by one name');
+  assert.ok(row.evidenceItems.every((item) => /^document-[0-9a-f]{8}\.txt$/.test(item.source)), 'a name derived from content, never from what was uploaded');
+});
+
+test('the receipts of the model calls behind stored facts are read back for operators, split by the model that answered, and by nothing a person is (E-06)', options, async () => {
+  const target = await study();
+  const producer = (model, requestedModel = 'deepseek-v4-flash') => ({ schema: 1, status: 'recorded', runId: `run_${model}`, association: 'run_requests_before_write', requests: [
+    { id: `req_${model}`, requestedModel, observedModel: model, requestHash: 'a'.repeat(64), providerRequestId: 'prov_1', status: 'settled' }] });
+  await vcr.store.transaction(async client => {
+    await vcr.matchStore.saveProducer(client, target.id, 'fac_one', producer('deepseek-v4-flash'));
+    await vcr.matchStore.saveProducer(client, target.id, 'fac_two', producer('deepseek-v4-flash'));
+    await vcr.matchStore.saveProducer(client, target.id, 'fac_three', producer('deepseek-v4-pro'));
+    await vcr.matchStore.saveProducer(client, target.id, 'fac_none', { schema: 1, status: 'unknown', runId: null, requests: [] });
+  });
+  const snapshot = await vcrMetricsSnapshot(vcr);
+  const split = Object.fromEntries(snapshot.matchingProducers.map(entry => [entry.model, entry.receipts]));
+  assert.ok(split['deepseek-v4-flash'] >= 2 && split['deepseek-v4-pro'] >= 1 && split.unrecorded >= 1, JSON.stringify(split));
+  const family = vcrMetricFamilies(true, snapshot).find(entry => entry.name === 'open_science_vcr_matching_producers');
+  assert.ok(family, 'the split is a metric of its own');
+  assert.deepEqual(family.series.map(entry => Object.keys(entry.labels ?? {})).flat().filter((key, index, all) => all.indexOf(key) === index), ['model']);
+  assert.equal(/run_|req_|prov_|a{64}/.test(JSON.stringify(family)), false, 'no run, request or hash is a label or a value');
 });
 
 test('study-scoped enrichment can be removed without deleting prior facts or changing another study', options, async () => {

@@ -62,6 +62,7 @@ import {
 import {
   VCR_ROW_RULE_COLUMN_PATTERN, findExpressionFields, validateNamedRules, validateRowRule,
 } from './vcrRules.mjs'
+import { VCR_DEFAULT_TIME_UNIT, VCR_TIME_UNITS } from './vcrTimeUnits.mjs'
 
 /** @typedef {{ code: string, field: string, detail: string }} VcrScenarioIssue */
 
@@ -108,6 +109,13 @@ const has = (path, present = true) => ({ path, present })
 const CONTINUOUS = is('endpoint.type', 'continuous')
 const BINARY = is('endpoint.type', 'binary')
 const TIME_TO_EVENT = is('endpoint.type', 'time_to_event')
+/**
+ * The unit every time quantity of a time-to-event scenario is stated in (a medians, a duration, a follow-up, a horizon): the closed
+ * table of `@evimed/domain` (`VCR_TIME_UNITS`). It decides how long a year is for the dropout (`dropoutAnnual` is a proportion lost
+ * per year whatever the unit), and names the `_months` measures' conversion; nothing else in the engine reads a time as a unit.
+ * Left out, it is months — the unit the engine always assumed — and the control plane says so in the result.
+ */
+const TIME_UNIT = () => gated(string({ values: [...VCR_TIME_UNITS], default: VCR_DEFAULT_TIME_UNIT }), TIME_TO_EVENT)
 const SINGLE_BINARY = is('design.kind', 'single_arm', 'simon_two_stage')
 const SINGLE_EXTERNAL = is('design.kind', 'single_arm_external')
 const TWO_ARM_BINARY = [BINARY, isNot('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage')]
@@ -249,7 +257,7 @@ const SIMULATED_ACCRUAL = gated({
     uniform: {
       duration: number({ min: 0, default: 0, unit: 'time units' }),
       followup: number({ min: 0, unit: 'time units' }),
-      dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per 12 time units' }),
+      dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
       maxFollowup: number({ gt: 0, unit: 'time units' }),
     },
     piecewise: {
@@ -259,7 +267,7 @@ const SIMULATED_ACCRUAL = gated({
       rates: req(array(number({ gt: 0 }), { min: 2, max: 51 })),
       tail: req(number({ gt: 0, unit: 'time units' })),
       followup: number({ min: 0, unit: 'time units' }),
-      dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per 12 time units' }),
+      dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
       maxFollowup: number({ gt: 0, unit: 'time units' }),
     },
   },
@@ -304,6 +312,7 @@ const SIMULATE_FIELDS = {
   analysis: { ...SIMULATED_ANALYSIS, reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') },
   external: req(gated(EXTERNAL_MODEL, SINGLE_EXTERNAL)),
   accrual: SIMULATED_ACCRUAL,
+  timeUnit: TIME_UNIT(),
   performance: PERFORMANCE,
   targetMcse: TARGET_MCSE,
   costs: COSTS,
@@ -315,6 +324,7 @@ const patientsFields = () => ({
   endpoint: req(ENDPOINT()),
   truth: req(object(truthFields({ generator: true, extra: { covariateEffects: COVARIATE_EFFECTS } }), { exactlyOne: truthGroups() })),
   accrual: SIMULATED_ACCRUAL,
+  timeUnit: TIME_UNIT(),
 })
 
 // ---------------------------------------------------------------------------
@@ -723,8 +733,9 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     accrual: gated(object({
       duration: req(number({ min: 0, unit: 'time units' })),
       followup: req(number({ min: 0, unit: 'time units' })),
-      dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per 12 time units' }),
+      dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
     }), TIME_TO_EVENT),
+    timeUnit: TIME_UNIT(),
   }),
 
   'design.simulate': object({ ...SIMULATE_FIELDS }),

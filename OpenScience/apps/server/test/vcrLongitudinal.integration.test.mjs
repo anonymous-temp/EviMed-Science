@@ -11,6 +11,7 @@ import { vcrRuntimeWrite } from '../src/vcrGateway.mjs';
 import { renderVcrNumbers } from '../src/vcrRender.mjs';
 import { modelReportDocumentSections } from '../src/vcrModelDocuments.mjs';
 import { VcrOrchestrator } from '../src/vcrOrchestrator.mjs';
+import { knownErrorCodeMessage } from '@evimed/domain';
 
 const options = {skip:!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'An isolated test PostgreSQL is required'};
 let database,isolated,root,vcr,target,history,outcomes,snapshot,mappings,source;
@@ -319,4 +320,50 @@ test('over one hundred versions remain pageable with their input history; batch 
   const report=await vcr.service.reportModel(target,{kind:'model_analysis_report'});
   assert.ok(report.longitudinal.records.length>100);
   assert.deepEqual(report.modelAnalysis.longitudinal.records,report.longitudinal.records);
+});
+
+test('G12 a patient set naming an event-history model reaches the real forecast module: declined while no provider is configured, queued under the orchestrator\'s own key once one is, and never twice',options,async()=>{
+  const orchestrator = new VcrOrchestrator({store:vcr.store,jobs:vcr.jobs,config:{},dispatchRun:null,longitudinal:vcr.longitudinal});
+  const provider = {id:'event-partner',name:'Event partner',url:'https://forecast.example.org/predict',model:'event-model',version:'2.1.0',enabled:true,
+    protocol:'evimed-event-history-v1',endpoints:['HbA1c'],maxHorizonDays:365};
+  await fs.writeFile(path.join(root,'providers.json'),JSON.stringify({providers:[]}));
+  await vcr.store.saveModel({userId:'owner',studyId:target.id,name:'event-model',version:'2.1.0',tier:'literature',risk:'low',endpointType:'time_to_event',
+    card:{interfaceShape:'event_history_to_trajectories',type:'generative',inputs:['诊断事件'],outputs:'N 条未来轨迹，是预测分布的抽样，不是对某个人的预报。',
+      history:{eventTypes:['diagnosis'],fields:['subject','event_type','time']},trajectories:{max:500,absorbing:['death']},knownLimits:['罕见事件校准较差']},
+    applicability:{population:'成人 2 型糖尿病',endpoints:['time_to_event'],eventTypes:['death'],horizon:{max:24,unit:'months'}},validation:{temporal:'时间外验证'}});
+  const write = (/** @type {string} */ what,/** @type {any} */ data) => vcrRuntimeWrite({study:target,store:vcr.store,service:vcr.service,orchestrator,what,
+    items:Array.isArray(data) ? data : null,data:Array.isArray(data) ? null : data});
+  assert.equal((await write('definition',{pico:{population:'成人 2 型糖尿病',intervention:'事件历史模型',comparator:'现状',outcome:'HbA1c'},
+    estimand:{population:'成人 2 型糖尿病',variable:'HbA1c',treatment:'模型预测',intercurrentEvents:[{event:'后续治疗',strategy:'treatment_policy'}],summary:'均值差'},
+    endpointType:'time_to_event',fieldSources:{endpointType:'AI 设定：按主要终点的测量方式'}})).ok,true);
+  await write('patient_set',[{name:'事件历史推演',modelId:'event-model',modelVersion:'2.1.0',
+    scenario:{historyId:history.id,endpoint:{code:'HbA1c',type:'continuous',unit:'%'},horizonsDays:[30]}}]);
+  const marks = () => vcr.store.rows(`SELECT key, state, job_id, detail FROM evimed_vcr.schedule_marks WHERE study_id=$1 AND kind='job' AND key LIKE 'job:patient_set:%'`,[target.id]);
+  const orchestrated = () => vcr.store.rows(`SELECT id, state, idempotency_key, scenario, inputs, checkpoint FROM evimed_vcr.jobs
+    WHERE study_id=$1 AND kind='forecast_trajectories' AND idempotency_key LIKE 'vcr:%'`,[target.id]);
+
+  // No provider is configured: this one step is declined in the platform's own sentence and nothing is queued for it.
+  await orchestrator.advance(target.id);
+  const [declined] = await marks();
+  assert.deepEqual([declined.state,declined.detail.reason],['skipped','forecast_provider_unavailable']);
+  assert.equal(declined.detail.message,knownErrorCodeMessage('vcr_forecast_provider_unavailable'));
+  assert.deepEqual(await orchestrated(),[]);
+
+  // A provider that declares the model appears: the next pass asks again, and the module queues it under the orchestrator's key.
+  await fs.writeFile(path.join(root,'providers.json'),JSON.stringify({providers:[provider]}));
+  await orchestrator.advance(target.id);
+  const [queued] = await orchestrated();
+  assert.ok(queued,'the forecast was queued');
+  assert.deepEqual(queued.scenario,{historyId:history.id,providerId:'event-partner',endpoint:{code:'HbA1c',type:'continuous',unit:'%'},horizonsDays:[30],modelVersion:'2.1.0'});
+  assert.ok(queued.inputs.some((/** @type {any} */ input) => input.kind === 'source' && input.id === history.id),'the frozen history is the job\'s input');
+  assert.ok(queued.inputs.some((/** @type {any} */ input) => input.kind === 'provider' && input.id === 'event-partner'),'and so is the provider\'s configuration');
+  assert.equal(queued.checkpoint.longitudinal,true,'it is a longitudinal job');
+  assert.match(queued.checkpoint.node,/^patient_set:/,'and the orchestrator\'s record of it names the patient set');
+  assert.equal(queued.checkpoint.resultKind,undefined,'it is not filed as the patient set\'s own table');
+  const [running] = await marks();
+  assert.deepEqual([running.state,running.job_id],['running',queued.id]);
+
+  // The same pass again queues nothing new.
+  await orchestrator.advance(target.id);
+  assert.equal((await orchestrated()).length,1);
 });

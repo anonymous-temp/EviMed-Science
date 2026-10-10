@@ -49,7 +49,7 @@ import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocu
 import { vcrObjectNode } from "./vcrStore.mjs";
 import {
   allResultsOf, countsView, dominatedScenarioMap, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
-  text, cpuText, zhTime, vcrFailureSentence, vcrPageSentence,
+  text, cpuText, zhUnit, zhTime, vcrFailureSentence, vcrPageSentence,
 } from "./vcrViewsKit.mjs";
 
 /** The lineage node a result carries. @param {Record<string, any>} result */
@@ -1127,7 +1127,7 @@ export function assumptionValue(card, context) {
   return {
     value: numeric(card.pointValue),
     text: numeric(card.pointValue) === null ? "—" : null,
-    unit: text(card.unit),
+    unit: zhUnit(text(card.unit)),
     source,
     interval,
     mcse: null,

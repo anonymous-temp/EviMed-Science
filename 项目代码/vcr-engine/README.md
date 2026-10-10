@@ -325,6 +325,13 @@ intended contract.
 `designPrior.kind`, `.basis`, `.basisOverride`, `analysis.sided` · `design.procova`:
 `analysis.sided` · `accrual.poisson_gamma`: `eventHazard`.
 
+`timeUnit` (`design.simulate`, `.grid`, `.analytic` and the `patients.*` generators of a time-to-event scenario; `days`, `weeks`,
+`months` or `years`, months when absent) is the unit every time of the scenario is stated in, the days each stands for being the
+domain's one table (`timeUnits` in `R/domain-snapshot.json`). Three things in the engine are not unit-free and read it: the dropout
+(`dropoutAnnual` is a proportion lost per year, spread over the unit's periods in a year), the measures named in months
+(`duration_months`, and a cost per month, are in months whatever the unit), and the words on a page (月, 周, 天, 年). A median, a
+duration, a follow-up and a horizon are in the unit and are not converted.
+
 ## 8. Layout
 
 ```
@@ -386,7 +393,7 @@ name is data and never code (N30), single-arm references (N31)), `C2-01-C2-18`
 robustness methods: negative controls, tipping point, prognostic adjustment), `N40`
 (their protocol parity and breaking battery), `N41` (reference cases for
 `profile.snapshot` and `population.synthpop`), `N42` (two versions of a cohort
-definition compared on one table), `N43-N44` (a design is sized for an effect: `design.analytic` refuses a null effect by name in every family, and `design.simulate` on the same null scenarios reports the type I error), `N45` (the profile of a generated population), `N46` (longitudinal virtual patients), `N47` (the assurance of a group-sequential design), `N48` (single-arm means and survival times), `N49` (the extensions' protocol parity, breaking battery and published examples), `E01-E10` (the engine itself: accrual, cancel and
+definition compared on one table), `N43-N44` (a design is sized for an effect: `design.analytic` refuses a null effect by name in every family, and `design.simulate` on the same null scenarios reports the type I error), `N45` (the profile of a generated population), `N46` (longitudinal virtual patients), `N47` (the assurance of a group-sequential design), `N48` (single-arm means and survival times), `N49` (the extensions' protocol parity, breaking battery and published examples), `N51` (the time unit a scenario states, months when it says nothing: the dropout is a proportion per year in every unit, `duration_months` and a cost per month are in months, and one trial stated in months, years, weeks or days is one trial, the same required size and the same simulated patients), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries

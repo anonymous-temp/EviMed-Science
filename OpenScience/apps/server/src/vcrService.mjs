@@ -1127,12 +1127,17 @@ export class VcrService {
     const clinicalTimeline = timeline.map(fact => ({ ...fact, superseded: longitudinal.superseded.includes(fact.id),
       conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [] }));
     const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
+    // The documents the page cites, by the names the data tab lists them under: a citation carries an id, a reader needs a name.
+    const cited = [...list(selected?.judgments).flatMap((/** @type {any} */ judgment) => list(judgment.evidence).map((/** @type {any} */ item) => item?.locator?.documentId)),
+      ...clinicalTimeline.map(fact => fact.source?.documentId)].filter(Boolean);
+    const documentNames = cited.length && typeof matchStore.documentNames === 'function' ? await matchStore.documentNames(study.id, cited).catch(() => new Map()) : new Map();
     // 「给患者找试验」: the patient the page asks for, and the trials that have judged them (the candidates a run found, and the study's own
     // protocol) in order. Read only for that direction, and only for a patient the study holds.
     const patientTrials = query.direction === "patient_to_trial" && (query.view ?? "matching") === "matching"
       ? await this.#patientTrials(study, candidateRoster, query) : null;
     return {
       ...(candidateCoverage ? {candidateCoverage} : {}),
+      documentNames,
       ...(patientTrials ? { patientTrials } : {}),
       protocols, candidateRoster, comparisons, timeline: clinicalTimeline,
       protocol, criteria, subjects, referrals, sites, siteFunnel, followups, selected, referralEvents, openByAssessment,
