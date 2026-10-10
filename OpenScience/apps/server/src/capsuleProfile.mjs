@@ -28,7 +28,7 @@
  * @module capsuleProfile
  */
 
-import { SOCKET_TOOL_NAMES } from "@evimed/domain";
+import { SOCKET_TOOL_NAMES, stripPlatformTags } from "@evimed/domain";
 import { estimatePromptTokens } from "./modelGateway.mjs";
 
 /** The kinds a resident profile carries, in the order it lists them. */
@@ -55,7 +55,16 @@ export const CAPSULE_PROFILE_MAX_TOKENS = 1_500;
 /** One entry's share of the block at most, so one long entry cannot crowd out the rest. */
 const ENTRY_MAX_CHARS = 400;
 
-const HEADER = "以下条目来自用户本人的记忆胶囊，均经用户确认：";
+/**
+ * The block's first line. Only an entry the researcher wrote (`origin: "explicit"`) is theirs in so many words;
+ * a note the assistant took in a conversation (`inferred`, effective at once by the 2026-09-19 ruling, no
+ * confirmation step) is said to be one. Until 2026-10-10 every entry was introduced as 「均经用户确认」, so a
+ * sentence a page talked the model into noting reached every later run as the user's confirmed word
+ * (principle 18: an inference never auto-promotes to a fact).
+ */
+const HEADER_CONFIRMED = "以下条目来自用户本人的记忆胶囊，由用户写下：";
+const HEADER_MIXED = "以下条目来自用户本人的记忆胶囊；标“未经确认”的是助手在对话中记下的，用户没有确认过：";
+const UNCONFIRMED = "（未经确认）";
 
 /** @param {string} text */
 function oneLine(text) {
@@ -67,7 +76,7 @@ function oneLine(text) {
 /**
  * The profile block, or "" when there is nothing to say.
  *
- * @param {ReadonlyArray<{ factKind: string, content: string, updatedAt?: string | null }>} facts
+ * @param {ReadonlyArray<{ factKind: string, content: string, updatedAt?: string | null, origin?: string | null }>} facts
  * @param {{ maxTokens?: number }} [options]
  * @returns {string}
  */
@@ -81,7 +90,8 @@ export function renderCapsuleProfile(facts, { maxTokens = CAPSULE_PROFILE_MAX_TO
   // Room kept for the line that says something was left out, so saying it
   // cannot itself break the budget.
   const budget = maxTokens - estimatePromptTokens(omittedLine(9_999));
-  let used = estimatePromptTokens(HEADER);
+  let used = estimatePromptTokens(HEADER_MIXED);
+  let unconfirmed = 0;
   let omitted = 0;
   for (const kind of CAPSULE_PROFILE_FACT_KINDS) {
     // The current value first: a corrected entry is newer than the one it
@@ -90,10 +100,13 @@ export function renderCapsuleProfile(facts, { maxTokens = CAPSULE_PROFILE_MAX_TO
       .sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
     const seen = new Set();
     for (const fact of entries) {
-      const content = oneLine(fact.content);
-      if (seen.has(content)) continue;
+      // Platform tags in an entry are envelopes nobody typed; one the model was talked into writing must not open
+      // a block of its own inside this one.
+      const content = oneLine(stripPlatformTags(fact.content));
+      if (!content || seen.has(content)) continue;
       seen.add(content);
-      const line = `- ${KIND_LABELS_ZH[/** @type {keyof typeof KIND_LABELS_ZH} */ (kind)]}：${content}`;
+      const confirmed = fact.origin === "explicit";
+      const line = `- ${KIND_LABELS_ZH[/** @type {keyof typeof KIND_LABELS_ZH} */ (kind)]}：${content}${confirmed ? "" : UNCONFIRMED}`;
       const cost = estimatePromptTokens(line) + 1;
       if (used + cost > budget) {
         omitted += 1;
@@ -101,10 +114,11 @@ export function renderCapsuleProfile(facts, { maxTokens = CAPSULE_PROFILE_MAX_TO
       }
       lines.push(line);
       used += cost;
+      if (!confirmed) unconfirmed += 1;
     }
   }
   if (!lines.length) return "";
-  return [HEADER, ...lines, ...(omitted ? [omittedLine(omitted)] : [])].join("\n") + "\n";
+  return [unconfirmed ? HEADER_MIXED : HEADER_CONFIRMED, ...lines, ...(omitted ? [omittedLine(omitted)] : [])].join("\n") + "\n";
 }
 
 /** @param {number} count */

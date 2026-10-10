@@ -648,7 +648,7 @@ export class CapsuleService {
    * recall away instead of being presented as who this researcher is.
    *
    * @param {string} userId @param {string|null} projectId @param {readonly string[]} kinds
-   * @returns {Promise<{ id: string, capsuleId: string, factKind: string, content: string, updatedAt: string | null }[]>}
+   * @returns {Promise<{ id: string, capsuleId: string, factKind: string, content: string, updatedAt: string | null, origin: string }[]>}
    */
   async profileFacts(userId, projectId, kinds) {
     for (const kind of kinds) member(kind, CAPSULE_FACT_KINDS, "fact kind");
@@ -665,7 +665,8 @@ export class CapsuleService {
         // Newest fifty of each kind is more than a 1,500-token block can hold.
         const page = await this.documents.list(userId, "fact", { limit: 50, filter: { capsuleId: capsule.id, status: "approved", factKind } });
         for (const entry of page.items) {
-          facts.push({ id: entry.id, capsuleId: capsule.id, factKind, content: String(entry.payload.content ?? ""), updatedAt: entry.updatedAt ?? null });
+          facts.push({ id: entry.id, capsuleId: capsule.id, factKind, content: String(entry.payload.content ?? ""), updatedAt: entry.updatedAt ?? null,
+            origin: String(entry.payload.origin ?? "") });
         }
       }
     }
