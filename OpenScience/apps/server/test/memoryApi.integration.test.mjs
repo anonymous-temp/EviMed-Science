@@ -330,6 +330,27 @@ test("deleting a project deletes its memory and leaves personal memory alone", o
 
 // 2026-10-10 review M-10: a conversation's own records (scope "session") carry no project, so the project's deletion
 // has to be told which conversations the project had; the route names them from the project's sessions and runs.
+// A pause turned on under a runtime that is already up: its methods were mounted at launch (2026-10-10 review L-5), so the
+// idle ones are let go and the next launch mounts none. Turning learning off, or recall back on, lets go of nothing.
+test("turning recall off asks the runtime manager to let go of the account's idle runtimes that carry methods", options, async (t) => {
+  const { app, base, headers, user } = await fixture(t);
+  /** @type {string[]} */ const asked = [];
+  app.runtimeManager.releasePausedMethodRuntimes = async (/** @type {string} */ userId) => { asked.push(userId); return []; };
+  const put = async (/** @type {any} */ body) => {
+    const response = await fetch(`${base}/api/memory/settings`, { method: "PUT", headers, body: JSON.stringify(body) });
+    assert.equal(response.status, 200, await response.clone().text());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  };
+  await put({ learningPaused: true });
+  assert.deepEqual(asked, [], "pausing learning mounts and unmounts nothing");
+  await put({ recallPaused: true });
+  assert.deepEqual(asked, [user.id]);
+  await put({ recallPaused: false, pausedProjects: ["default"] });
+  assert.deepEqual(asked, [user.id, user.id], "and so does 「本项目不使用记忆」");
+  await put({ recallPaused: false, pausedProjects: [] });
+  assert.deepEqual(asked, [user.id, user.id], "turning it back on asks for nothing");
+});
+
 test("deleting a project deletes what its conversations wrote, and not what another project's did", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
   const projectId = "project-session-delete";

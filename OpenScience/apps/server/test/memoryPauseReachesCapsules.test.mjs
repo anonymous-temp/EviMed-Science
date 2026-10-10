@@ -222,3 +222,32 @@ test("the composition root gives the runtime manager the researcher's switches f
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+// The pause is read at a launch, so a pause turned on under a runtime that is already up would otherwise wait for that
+// runtime's next launch (up to its idle timeout) with the researcher's methods still in its prompt. The idle ones are let go.
+test("turning a pause on lets go of the account's idle runtimes that carry methods, and of no other", async () => {
+  const manager = new RuntimeManager({ runtimeMode: "mock" });
+  const live = (/** @type {string} */ userId, /** @type {string} */ id, /** @type {number} */ mounted) => {
+    const project = { userId, id };
+    manager.runtimes.set(manager.key(project), { project, capsuleMethodsMounted: mounted });
+  };
+  live(USER, "p-paused", 2);
+  live(USER, "p-open", 2);
+  live(USER, "p-empty", 0);
+  live(USER, "p-busy", 2);
+  live("another-user", "p-paused", 2);
+  manager.memoryPause = pauseOf({ projects: ["p-paused", "p-empty", "p-busy"] }).read;
+  /** @type {string[]} */ const stopped = [];
+  manager.idleVerdict = async (project) => (project.id === "p-busy" ? "working" : "idle");
+  manager.stopIdleRuntime = async (project, options) => { stopped.push(`${project.userId}/${project.id}/${options?.event}`); return true; };
+
+  assert.deepEqual(await manager.releasePausedMethodRuntimes(USER), ["p-paused"]);
+  assert.deepEqual(stopped, [`${USER}/p-paused/memory_paused`],
+    "not the project that is not paused, not one with nothing mounted, not one that is working, not another account's");
+
+  // A switch that cannot be read, or a runtime that cannot be stopped, leaves that runtime to its idle timer.
+  manager.memoryPause = pauseOf({ unreadable: true }).read;
+  assert.deepEqual(await manager.releasePausedMethodRuntimes(USER), []);
+  manager.memoryPause = null;
+  assert.deepEqual(await manager.releasePausedMethodRuntimes(USER), [], "no store, nothing paused");
+});

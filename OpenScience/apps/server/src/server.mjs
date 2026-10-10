@@ -1579,6 +1579,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, researchMemory, memorySubstrate, memoryIndexWorker, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
     // 「重置记忆」 clears what the page shows: the methods, handbooks and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
+    // A pause for recall turned on under a live runtime: the methods it mounted at launch leave with the idle ones.
+    releasePausedRuntimes: userId => runtimeManager.releasePausedMethodRuntimes(userId),
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
   /** The accounts an integration key of `ownerId` made for the people behind

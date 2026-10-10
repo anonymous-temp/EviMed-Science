@@ -3597,6 +3597,31 @@ export class RuntimeManager {
   }
 
   /**
+   * Let go of this account's idle runtimes that were launched with methods mounted, for the projects whose recall the
+   * researcher has since paused. The methods are mounted at a launch (`syncCapsuleMethods`) and a live runtime keeps them
+   * in its prompt for as long as it lives, so a pause turned on under one would otherwise wait for that runtime's next
+   * launch — up to its idle timeout — with the researcher's methods still in every conversation (2026-10-10 review L-5).
+   * Only a runtime nothing is using goes (`idleVerdict`: no session mid-turn, no run in the ledger; and no open connection,
+   * which `stopIdleRuntime` keeps); the next dispatch starts one that mounts none. A runtime that is working, or tab-held,
+   * keeps its mount until it stops. Returns the ids of the projects released.
+   * @param {string} userId @returns {Promise<string[]>}
+   */
+  async releasePausedMethodRuntimes(userId) {
+    /** @type {string[]} */
+    const released = [];
+    for (const runtime of [...this.runtimes.values()]) {
+      const project = runtime?.project;
+      if (!project || String(project.userId) !== String(userId) || !(Number(runtime.capsuleMethodsMounted) > 0)) continue;
+      try {
+        if (!(await this.recallPausedFor(project))) continue;
+        if (await this.idleVerdict(project) !== "idle") continue;
+        if (await this.stopIdleRuntime(project, { event: "memory_paused" })) released.push(String(project.id));
+      } catch { /* a runtime that cannot be asked about is left to its idle timer */ }
+    }
+    return released;
+  }
+
+  /**
    * Materialize the methods this project's runs may read: the approved
    * work-style entries of its active capsules, and the learned methods the
    * distillation loop has admitted.
@@ -3619,7 +3644,12 @@ export class RuntimeManager {
    * holds, nothing is mounted and the directory an earlier launch wrote is
    * cleared (2026-10-10 review L-5). It is read once per launch, so a pause
    * set while a runtime is up takes effect at that runtime's next launch — the
-   * same moment a disabled capsule's methods leave (`CapsuleService.disable`).
+   * same moment a disabled capsule's methods leave (`CapsuleService.disable`)
+   * — and an idle runtime is let go when the pause is turned on
+   * (`releasePausedMethodRuntimes`) so that moment comes at the next dispatch.
+   * One mid-turn, or held open by a tab, keeps its methods until it stops, and
+   * so does a 「试用一次」 conversation inside a runtime that has them: a prompt
+   * section registered at launch cannot be taken from one conversation.
    * A pause that cannot be read refuses the launch, as every other failure of
    * the mount does: mounting nothing quietly is what this method exists to end.
    *

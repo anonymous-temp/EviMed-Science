@@ -46,6 +46,7 @@ import {
  *   memorySubstrate?: any,
  *   memoryIndexWorker?: { drainWithdrawals?: () => Promise<any> } | null,
  *   resetProduct?: ((userId: string) => Promise<{ methods: number, handbooks: number, entries: number }>) | null,
+ *   releasePausedRuntimes?: ((userId: string) => Promise<unknown>) | null,
  *   feedbackEvents: any,
  *   store: any,
  *   context: (req: any, res: any) => Promise<any>,
@@ -56,7 +57,7 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, researchMemory, memorySubstrate = null, memoryIndexWorker = null, resetProduct = null, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+  config, researchMemory, memorySubstrate = null, memoryIndexWorker = null, resetProduct = null, releasePausedRuntimes = null, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
 
@@ -116,6 +117,12 @@ export function createMemoryRoutes({
       await audit(ctx, "memory.settings.update", "completed", {
         learningPaused: settings.learningPaused, recallPaused: settings.recallPaused, pausedProjects: settings.pausedProjects.length,
       });
+      // A pause for recall turned on under a runtime that is already up: the methods it mounted at launch are read from
+      // it, so the idle ones are let go and the next launch mounts none (`RuntimeManager.releasePausedMethodRuntimes`).
+      // Not waited on, and never a reason the switch did not take.
+      if (releasePausedRuntimes && (body.recallPaused === true || (Array.isArray(body.pausedProjects) && body.pausedProjects.length > 0))) {
+        void Promise.resolve(releasePausedRuntimes(ctx.user.id)).catch(() => {});
+      }
       sendJson(res, 200, { data: settings });
       return true;
     }
