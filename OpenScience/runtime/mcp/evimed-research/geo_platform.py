@@ -113,8 +113,9 @@ def tool_definitions():
         {
             "name": "geo_write",
             "description": (
-                "Write this 循证 GEO project's data; valid items survive individual refusals. "
-                "value merges optional drug-value context; send known fields, reuse ids to amend. "
+                "Write this 循证 GEO project; valid items survive individual refusals. "
+                "value merges findings; reuse ids to amend. "
+                "questions: groups[].questions[].isMeasured:true selects probes before lock_questions; existing answers are not required. "
                 "research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. "
                 "owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}."
             ),

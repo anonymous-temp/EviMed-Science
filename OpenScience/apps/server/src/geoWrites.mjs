@@ -525,7 +525,7 @@ export function geoLockCheck(groups, minimal) {
   const measured = measuredQuestions.length;
   const [low, high] = minimal ? GEO_MEASURED_RANGE.minimal : GEO_MEASURED_RANGE.full;
   if (measured === 0) {
-    refusals.push({ field: "measured", code: "measured_count", message: "There is no measured question to ask." });
+    refusals.push({ field: "measured", code: "measured_count", message: "No question is selected for measurement. Write the questions with isMeasured: true, then lock this set; existing probe answers are not required." });
   }
   if (measured > 0 && (measured < low || measured > high)) notices.push({ field: "measured", code: "notice", message: `This set measures ${measured} questions, outside the suggested ${low}–${high}; interpret within its actual scope.` });
   const missing = GEO_POOLS.filter((pool) => !measuredQuestions.some((question) => question.pool === pool));
