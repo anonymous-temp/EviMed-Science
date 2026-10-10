@@ -18,12 +18,17 @@ import { GEO_VALUE_COVERAGE_STATUSES, geoValueContext, geoValueList } from "@evi
  * - **Code re-verifies what is checkable, and a verdict that fails is dropped,
  *   never softened** (principle 5): the statement must be in the answer; the
  *   claim must be one the judge was shown; the evidence quote must be in that
- *   claim's quote verbatim; the numbers — doses, frequencies, ages, durations,
- *   percentages — of a statement judged correct must all be the claim's, and
- *   a statement judged wrong on a number must carry a number the claim does
- *   not. A wrong verdict without an error type or severity cannot be traced
- *   and is dropped too. Named entities, recommendation sentences and safety
- *   terms must be in the answer; red-flag ids must be the ones offered.
+ *   claim's quote verbatim; the numbers — doses, counts of tablets, capsules
+ *   and the like, frequencies, ranges, ages, durations, percentages — of a
+ *   statement judged correct must all be the claim's, and a statement judged
+ *   wrong on a number must carry a number the claim does not. A correct
+ *   verdict whose statement writes a number that no pattern reads and the
+ *   claim's quote never writes is not stored as correct: nothing confirmed
+ *   it, so it is stored `unverifiable` (left out of the accuracy rate) and
+ *   named in `dropped`. A wrong verdict without an error type or severity
+ *   cannot be traced and is dropped too. Named entities, recommendation
+ *   sentences and safety terms must be in the answer; red-flag ids must be
+ *   the ones offered.
  * - **Severity is 初判** (`severity_basis: 'initial'`) until a pharmacist
  *   calibration set exists: the scale is anchored to NCC MERP (S2 needs
  *   monitoring or intervention, S3 temporary harm, S4 permanent harm or
@@ -164,8 +169,14 @@ function chineseNumber(text) {
   return total + current;
 }
 
-// Units a Chinese numeral is read before; anything else ("一般", "一些") stays text.
-const CN_NUMERAL_BEFORE_UNIT = /([零〇一二两三四五六七八九十百]+)(?=\s*(?:次|片|粒|袋|支|丸|滴|贴|岁|周|星期|天|日|小时|个|分钟|月|年|倍|毫克|克|毫升|升|微克|单位))/gu;
+/** What a dose is counted in: tablets, capsules, sachets, vials, pills, drops, patches and sprays. */
+const COUNT_UNITS = "片|粒|袋|支|丸|滴|贴|喷";
+const CN_NUMERALS = "零〇一二两三四五六七八九十百";
+// Units a Chinese numeral is read before, also at the head of a range (「一至两片」); anything else ("一般", "一些") stays text.
+const CN_NUMERAL_BEFORE_UNIT = new RegExp(
+  `([${CN_NUMERALS}]+)(?=\\s*(?:[-~～至到]\\s*[${CN_NUMERALS}\\d.]+\\s*)?(?:次|${COUNT_UNITS}|岁|周|星期|天|日|小时|个|分钟|月|年|倍|毫克|克|毫升|升|微克|单位))`, "gu");
+/** 「半片」 is half a tablet: 0.5, so that it is not read as nothing (or, as 「1/2片」, as two). */
+const HALF_BEFORE_COUNT_UNIT = new RegExp(`半(?=\\s*(?:${COUNT_UNITS}))`, "gu");
 
 const UNIT_CANON = /** @type {Record<string, string>} */ ({
   毫克: "mg", 克: "g", 千克: "kg", 微克: "μg", ug: "μg", mcg: "μg", µg: "μg", 毫升: "ml", 升: "l", 单位: "iu",
@@ -176,46 +187,92 @@ const canonUnit = (unit) => UNIT_CANON[unit] ?? UNIT_CANON[unit.toLowerCase()] ?
 /** @param {string} value */
 const canonNumber = (value) => String(Number(value));
 
+// Every pattern that reads a number and its unit takes the second end of a range (「2~3」, 「1-2」, 「1至2」) as a quantity of its own.
 const AMOUNT = /(\d+(?:\.\d+)?)(?:\s*[-~～至到]\s*(\d+(?:\.\d+)?))?\s*(kg\/m2|kg\/m²|mmol\/l|mg\/dl|mg|mcg|μg|µg|ug|kg|g|ml|iu|l|%|％|毫克|千克|微克|克|毫升|升|单位)(?![a-z])/giu;
-const FREQUENCY_PER = /每\s*(\d+(?:\.\d+)?)?\s*(日|天|周|星期|个月|月|小时|h)[^\d，。；,;！？\n]{0,6}?(\d+)\s*次/gu;
-const FREQUENCY_COUNT = /(\d+)\s*(日|天|周|星期|月)\s*(\d+)\s*次/gu;
-const FREQUENCY_SLASH = /(\d+)\s*次\s*\/\s*(日|天|周|星期|月)/gu;
+const COUNT = new RegExp(`(?<!/)(\\d+(?:\\.\\d+)?)(?:\\s*[-~～至到]\\s*(\\d+(?:\\.\\d+)?))?\\s*(${COUNT_UNITS})`, "gu");
+const FREQUENCY_PER = /每\s*(\d+(?:\.\d+)?)?\s*(日|天|周|星期|个月|月|小时|h)[^\d，。；,;！？\n]{0,6}?(\d+)(?:\s*[-~～至到]\s*(\d+))?\s*次/gu;
+const FREQUENCY_COUNT = /(\d+)\s*(日|天|周|星期|月)\s*(\d+)(?:\s*[-~～至到]\s*(\d+))?\s*次/gu;
+const FREQUENCY_SLASH = /(\d+)(?:\s*[-~～至到]\s*(\d+))?\s*次\s*\/\s*(日|天|周|星期|月)/gu;
 const AGE = /(\d+)(?:\s*[-~～至到]\s*(\d+))?\s*岁/gu;
-const SPAN = /(\d+(?:\.\d+)?)\s*(个月|小时|分钟|周|星期|天|日|月|年)/gu;
+const SPAN = /(\d+(?:\.\d+)?)(?:\s*[-~～至到]\s*(\d+(?:\.\d+)?))?\s*(个月|小时|分钟|周|星期|天|日|月|年)/gu;
 const TIMES = /(\d+(?:\.\d+)?)\s*倍/gu;
+/** 「一次」 is each dose and 「分3次」 a number of occasions: read as numbers of something, but never compared. */
+const OCCASIONS = /\d+(?:\.\d+)?\s*次/gu;
+const NUMERAL = /\d+(?:\.\d+)?/g;
+/** A name that carries a digit and is not a quantity: GLP-1, SGLT2, HbA1c, CYP3A4, COVID-19. */
+const IDENTIFIER = /[A-Za-z][A-Za-z0-9]*(?:[-–][A-Za-z0-9]+)*/g;
+
+/**
+ * What a text states in numbers, read once: the canonical quantity tokens
+ * (see `quantityTokens`), the numerals no pattern read (`unread`: the 30 of
+ * 「BMI≥30」, the 2 of 「2型」 or of a unit the patterns do not know; not the 1
+ * of 「GLP-1」) and every numeral the text writes (`numbers`; the 1 of 「一次」
+ * is a count of occasions, not a number the text states). Chinese numerals
+ * before a unit are read as numbers and full-width forms are folded first.
+ * @param {unknown} value
+ * @returns {{ tokens: Set<string>, unread: Set<string>, numbers: Set<string> }}
+ */
+export function readQuantities(value) {
+  const text = String(value ?? "").normalize("NFKC")
+    .replace(CN_NUMERAL_BEFORE_UNIT, (match) => String(chineseNumber(match) ?? match))
+    .replace(HALF_BEFORE_COUNT_UNIT, "0.5");
+  /** @type {Set<string>} */
+  const tokens = new Set();
+  /** The stretches of the text a pattern read, as [start, end). @type {Array<[number, number]>} */
+  const read = [];
+  /** @param {RegExp} pattern @param {(match: RegExpMatchArray) => void} add */
+  const scan = (pattern, add) => {
+    for (const match of text.matchAll(pattern)) {
+      add(match);
+      const start = /** @type {number} */ (match.index);
+      read.push([start, start + match[0].length]);
+    }
+  };
+  /** @param {string} unit @param {...(string | undefined)} numbers */
+  const addEach = (unit, ...numbers) => { for (const number of numbers) if (number) tokens.add(`${canonNumber(number)}${unit}`); };
+  scan(AMOUNT, (match) => addEach(canonUnit(match[3]), match[1], match[2]));
+  scan(COUNT, (match) => addEach(match[3], match[1], match[2]));
+  /** @param {string | undefined} period @param {string} unit @param {...(string | undefined)} times */
+  const addFrequency = (period, unit, ...times) => {
+    for (const count of times) if (count) tokens.add(`freq:${canonNumber(count)}/${canonNumber(period ?? "1")}${canonUnit(unit)}`);
+  };
+  scan(FREQUENCY_PER, (match) => addFrequency(match[1], match[2], match[3], match[4]));
+  scan(FREQUENCY_COUNT, (match) => addFrequency(match[1], match[2], match[3], match[4]));
+  scan(FREQUENCY_SLASH, (match) => addFrequency("1", match[3], match[1], match[2]));
+  scan(AGE, (match) => { tokens.add(`age:${canonNumber(match[1])}`); if (match[2]) tokens.add(`age:${canonNumber(match[2])}`); });
+  scan(SPAN, (match) => {
+    // A span that is the period of a frequency ("每1周") is part of that frequency.
+    const before = text.slice(Math.max(0, /** @type {number} */ (match.index) - 1), match.index);
+    if (before !== "每") for (const number of [match[1], match[2]]) if (number) tokens.add(`span:${canonNumber(number)}${canonUnit(match[3])}`);
+  });
+  scan(TIMES, (match) => tokens.add(`x:${canonNumber(match[1])}`));
+  // The numbers written outside the occasions: the ones a statement's own unread number can be found among.
+  const counted = text.split("");
+  for (const match of text.matchAll(OCCASIONS)) {
+    const start = /** @type {number} */ (match.index);
+    read.push([start, start + match[0].length]);
+    counted.fill(" ", start, start + match[0].length);
+  }
+  const rest = text.split("");
+  for (const [start, end] of read) rest.fill(" ", start, end);
+  const unread = new Set([...rest.join("").replace(IDENTIFIER, " ").matchAll(NUMERAL)].map((match) => canonNumber(match[0])));
+  const numbers = new Set([...counted.join("").matchAll(NUMERAL)].map((match) => canonNumber(match[0])));
+  return { tokens, unread, numbers };
+}
 
 /**
  * The quantities a text states, as canonical tokens: amounts (`2.5mg`,
- * `30%`), frequencies (`freq:1/1周`), ages (`age:18`), spans (`span:12周`)
- * and multiples (`x:2`). Chinese numerals before a unit are read as numbers
- * and full-width forms are folded first, so 「每周一次」 and 「每周1次」 are the
+ * `30%`), counts of tablets, capsules, sachets, vials, pills, drops, patches
+ * and sprays (`2片`), frequencies (`freq:1/1周`), ages (`age:18`), spans
+ * (`span:12周`) and multiples (`x:2`). A range (`1~2片`, `每日2~3次`) states
+ * both of its ends. Chinese numerals before a unit are read as numbers and
+ * full-width forms are folded first, so 「每周一次」 and 「每周1次」 are the
  * same token. A format reading of numbers and units — never of meaning.
  * @param {unknown} value
  * @returns {Set<string>}
  */
 export function quantityTokens(value) {
-  const text = String(value ?? "").normalize("NFKC")
-    .replace(CN_NUMERAL_BEFORE_UNIT, (match) => String(chineseNumber(match) ?? match));
-  const tokens = new Set();
-  for (const match of text.matchAll(AMOUNT)) {
-    const unit = canonUnit(match[3]);
-    tokens.add(`${canonNumber(match[1])}${unit}`);
-    if (match[2]) tokens.add(`${canonNumber(match[2])}${unit}`);
-  }
-  for (const match of text.matchAll(FREQUENCY_PER)) tokens.add(`freq:${canonNumber(match[3])}/${canonNumber(match[1] ?? "1")}${canonUnit(match[2])}`);
-  for (const match of text.matchAll(FREQUENCY_COUNT)) tokens.add(`freq:${canonNumber(match[3])}/${canonNumber(match[1])}${canonUnit(match[2])}`);
-  for (const match of text.matchAll(FREQUENCY_SLASH)) tokens.add(`freq:${canonNumber(match[1])}/1${canonUnit(match[2])}`);
-  for (const match of text.matchAll(AGE)) {
-    tokens.add(`age:${canonNumber(match[1])}`);
-    if (match[2]) tokens.add(`age:${canonNumber(match[2])}`);
-  }
-  for (const match of text.matchAll(SPAN)) {
-    // A span that is the period of a frequency ("每1周") is part of that frequency.
-    const before = text.slice(Math.max(0, /** @type {number} */ (match.index) - 1), match.index);
-    if (before !== "每") tokens.add(`span:${canonNumber(match[1])}${canonUnit(match[2])}`);
-  }
-  for (const match of text.matchAll(TIMES)) tokens.add(`x:${canonNumber(match[1])}`);
-  return tokens;
+  return readQuantities(value).tokens;
 }
 
 // ───────────────────────── the judge's input ─────────────────────────
@@ -354,11 +411,19 @@ export function verifyJudgement(answer, built, input) {
     const evidence = String(raw?.evidence ?? "").trim();
     const quote = compactText(claim.quote);
     if (compactText(evidence).length < EVIDENCE_MIN_CHARS || !quote.includes(compactText(evidence))) { drop("evidence_not_in_claim"); continue; }
-    const stated = quantityTokens(text);
-    const claimed = quantityTokens(claim.quote);
+    const stated = readQuantities(text);
+    const claimed = readQuantities(claim.quote);
     if (verdict === "correct") {
-      const unsupported = [...stated].filter((token) => !claimed.has(token));
+      const unsupported = [...stated.tokens].filter((token) => !claimed.tokens.has(token));
       if (unsupported.length) { drop("number_not_in_claim"); continue; }
+      // A number no pattern reads (a unit this check does not know) cannot be compared; but a number the claim's quote never
+      // writes cannot have been confirmed by it either, and a statement nothing confirmed is not a correct one (Q-1).
+      if ([...stated.unread].some((number) => !claimed.numbers.has(number))) {
+        drop("number_not_confirmed");
+        seen.add(key);
+        statements.push({ text, verdict: "unverifiable", claimId: claim.id, claimKey: claim.key ?? null, errorType: null, severity: null, evidence: null, ...judgedAgainst });
+        continue;
+      }
       seen.add(key);
       statements.push({ text, verdict: "correct", claimId: claim.id, claimKey: claim.key ?? null, errorType: null, severity: null, evidence, ...judgedAgainst });
       continue;
@@ -368,8 +433,8 @@ export function verifyJudgement(answer, built, input) {
     if (!GEO_ERROR_TYPES.includes(errorType)) { drop("error_type_invalid"); continue; }
     if (!GEO_SEVERITIES.includes(severity)) { drop("severity_invalid"); continue; }
     if (errorType === "number") {
-      const differs = [...stated].some((token) => !claimed.has(token));
-      if (!claimed.size || !differs) { drop("number_matches_claim"); continue; }
+      const differs = [...stated.tokens].some((token) => !claimed.tokens.has(token));
+      if (!claimed.tokens.size || !differs) { drop("number_matches_claim"); continue; }
     }
     seen.add(key);
     statements.push({ text, verdict: "wrong", claimId: claim.id, claimKey: claim.key ?? null, errorType, severity, evidence, ...judgedAgainst });

@@ -162,10 +162,79 @@ test("quantities read the same whatever numerals and width they are written in",
   assert.deepEqual([...quantityTokens("每周一次皮下注射")], ["freq:1/1周"]);
   assert.deepEqual([...quantityTokens("每周1次")], ["freq:1/1周"]);
   assert.deepEqual([...quantityTokens("玛仕度肽每天注射一次")], ["freq:1/1日"]);
-  assert.deepEqual([...quantityTokens("一日三次，每次２片")].sort(), ["freq:3/1日", "span:1日"].sort());
+  assert.deepEqual([...quantityTokens("一日三次，每次２片")].sort(), ["2片", "freq:3/1日", "span:1日"].sort());
   assert.ok(quantityTokens("起始剂量为2 mg，最大 6毫克").has("6mg"));
   assert.ok(quantityTokens("18-75岁成人").has("age:75"));
   assert.equal(quantityTokens("一般来说比较安全").size, 0, "「一般」 is a word, not a number");
+});
+
+test("counts of tablets, capsules, sachets, vials, drops, patches and sprays are quantities, and both ends of a range are stated (Q-1)", () => {
+  const tokens = (/** @type {string} */ text) => [...quantityTokens(text)].sort();
+  assert.deepEqual(tokens("每次服用2片，每日3次"), ["2片", "freq:3/1日"].sort());
+  assert.deepEqual(tokens("口服，成人一次1片，一日3次"), ["1片", "freq:3/1日", "span:1日"].sort());
+  for (const [text, expected] of /** @type {Array<[string, string[]]>} */ ([
+    ["每次2粒", ["2粒"]], ["皮下注射 一次1支", ["1支"]], ["每次10滴，每日2次", ["10滴", "freq:2/1日"]], ["每次1袋", ["1袋"]],
+    ["每次1丸", ["1丸"]], ["贴于患处，每次1贴", ["1贴"]], ["每次2喷", ["2喷"]], ["每次两片", ["2片"]], ["每次半片", ["0.5片"]],
+    // A range states both of its ends, however the dash is written.
+    ["每次1~2粒", ["1粒", "2粒"]], ["一次2-3片", ["2片", "3片"]], ["每次一至两片", ["1片", "2片"]], ["每次1～2片", ["1片", "2片"]],
+    ["每日2~3次", ["freq:2/1日", "freq:3/1日"]], ["一日2至3次", ["freq:2/1日", "freq:3/1日", "span:1日"]], ["2~3次/日", ["freq:2/1日", "freq:3/1日"]],
+    ["疗程12~24周", ["span:12周", "span:24周"]],
+    // Half a tablet written as a fraction is not two tablets.
+    ["每次1/2片", []],
+  ])) assert.deepEqual(tokens(text), [...expected].sort(), text);
+  // Packs and ordinary words are not doses.
+  assert.deepEqual(tokens("一般来说比较安全，一次性使用"), []);
+});
+
+test("a dose in tablets is held to the label like a dose in milligrams (Q-1)", () => {
+  const claim = { id: "claim-tab", key: "tablets", statement: "成人每次1片，每日3次", quote: "【用法用量】口服，成人一次1片，一日3次。", inLabel: true, sourceKind: "label" };
+  const judge = (/** @type {string} */ answer, /** @type {Record<string, any>} */ statement, quote = claim.quote, evidence = "成人一次1片，一日3次") => {
+    const input = { ...judgeInput(answer), claims: [{ ...claim, quote }] };
+    return verifyJudgement({ statements: [{ text: answer, topic: "dosage", claim: "C1", evidence, ...statement }] }, buildJudgeInput(input), input);
+  };
+  const ranged = "口服，一次1～2片，一日2～3次。";
+  const doubled = "每次服用2片，每日3次";
+  // The model saw the error and named it: the number check can now confirm it instead of dropping it.
+  const wrong = judge(doubled, { verdict: "wrong", errorType: "number", severity: "S2" });
+  assert.deepEqual(wrong.statements.map((statement) => [statement.verdict, statement.errorType]), [["wrong", "number"]]);
+  assert.deepEqual(wrong.dropped, []);
+  // The model called it correct: a number the claim does not have cannot be correct, and nothing is stored.
+  const correct = judge(doubled, { verdict: "correct" });
+  assert.deepEqual(correct.statements, []);
+  assert.deepEqual(correct.dropped.map((entry) => entry.reason), ["number_not_in_claim"]);
+  // The dose the label gives stays correct, and a range inside it is the label's too.
+  assert.deepEqual(judge("成人一次1片，一日3次", { verdict: "correct" }).statements.map((statement) => statement.verdict), ["correct"]);
+  assert.deepEqual(judge("每次1~2片，每日2~3次", { verdict: "correct" }, ranged, "一次1～2片，一日2～3次").statements.map((statement) => statement.verdict), ["correct"]);
+  assert.deepEqual(judge("每次2~3片，每日2~3次", { verdict: "correct" }, ranged, "一次1～2片，一日2～3次").dropped.map((entry) => entry.reason), ["number_not_in_claim"]);
+  // A frequency range that stretches past the label's is a wrong number.
+  assert.equal(judge("每日2~3次", { verdict: "wrong", errorType: "number", severity: "S2" }, "一日2次。", "一日2次").statements[0]?.verdict, "wrong");
+  // Half a tablet is not the label's whole one.
+  assert.deepEqual(judge("每次半片，每日3次", { verdict: "correct" }).dropped.map((entry) => entry.reason), ["number_not_in_claim"]);
+});
+
+test("a correct verdict on a number nothing could confirm is stored unverifiable, not correct (Q-1)", () => {
+  const spoon = { id: "claim-spoon", key: "spoon", statement: "成人每次1勺，每日3次", quote: "【用法用量】成人一次1勺，一日3次。", inLabel: true, sourceKind: "label" };
+  const judge = (/** @type {string} */ answer, /** @type {string} */ quote = spoon.quote, evidence = "成人一次1勺，一日3次") => {
+    const input = { ...judgeInput(answer), claims: [{ ...spoon, quote }] };
+    return verifyJudgement({ statements: [{ text: answer, topic: "dosage", verdict: "correct", claim: "C1", evidence }] }, buildJudgeInput(input), input);
+  };
+  // 「勺」 is a unit the check does not read; the 2 is written nowhere in the label, so nothing confirmed it.
+  const unconfirmed = judge("每次服用2勺，每日3次");
+  assert.deepEqual(unconfirmed.statements.map((statement) => [statement.verdict, statement.claimId, statement.errorType, statement.evidence]), [["unverifiable", "claim-spoon", null, null]]);
+  assert.deepEqual(unconfirmed.dropped.map((entry) => [entry.what, entry.reason]), [["statement", "number_not_confirmed"]]);
+  // The label's own numerals stay correct, whatever the unit.
+  assert.deepEqual(judge("成人每次服用1勺，每日3次").statements.map((statement) => statement.verdict), ["correct"]);
+  // A number no pattern reads (「2型」, 「BMI≥30」) is confirmed by the label writing it.
+  const type2 = "用于成人2型糖尿病、BMI≥30的患者，一次3勺";
+  assert.deepEqual(judge("2型糖尿病成人每次3勺", type2, "一次3勺").statements.map((statement) => statement.verdict), ["correct"]);
+  assert.deepEqual(judge("BMI≥30的成人每次3勺", type2, "一次3勺").statements.map((statement) => statement.verdict), ["correct"]);
+  // ...and 「1型」 is not 「2型」, nor 35 the label's 30.
+  assert.deepEqual(judge("1型糖尿病成人每次3勺", type2, "一次3勺").statements.map((statement) => statement.verdict), ["unverifiable"]);
+  assert.deepEqual(judge("BMI≥35的成人每次3勺", type2, "一次3勺").statements.map((statement) => statement.verdict), ["unverifiable"]);
+  // A number inside a name (GLP-1, SGLT2), and 「一次」 meaning each dose, are not doses.
+  assert.deepEqual(judge("这类 GLP-1 药物成人一次1勺").dropped, []);
+  assert.deepEqual(judge("SGLT2 抑制剂成人每日3次，一次1勺").statements.map((statement) => statement.verdict), ["correct"]);
+  assert.deepEqual(judge("成人一次1勺").dropped, []);
 });
 
 const claims = [
