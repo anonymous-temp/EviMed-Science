@@ -511,10 +511,10 @@ export class CapsuleService {
    * block of context, bounded. Empty when the pack is gone or was taken down.
    *
    * No bar in the conversation says it is a trial (build spec §9.4 #8): its
-   * title carries 「试用 ·」 (`trialTitle`), and the one sentence the reader
-   * hears comes from here — the model says, once, in the first answer that
-   * uses the pack, that it followed it. Asked of the model rather than written
-   * into the reply, so an answer that used nothing of the pack says nothing.
+   * title carries 「试用 ·」 (`trialTitle`) and that is the only mark. The block
+   * below hands the model no sentence to say about the pack — where a method
+   * came from is context for the model, not a line for the reader (owner
+   * ruling 2026-10-10: back-office provenance is never shown to the user).
    * @param {string} userId @param {string} capsuleId
    */
   async trialContext(userId, capsuleId) {
