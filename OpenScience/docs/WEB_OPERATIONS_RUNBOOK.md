@@ -692,7 +692,13 @@ not sufficient containment for those events.
   sudo systemctl enable --now evimed-knowledge-db-backup.timer
   ```
 
-  Restoring it follows the platform procedure with the same variables set.
+  Restoring it follows the platform procedure with the same variables set; a
+  restore puts the plugin's entry numbers back behind the platform's cursor,
+  which the platform notices by itself (`/api/ready` `checks.frontier.plugin`
+  `degraded` with `lastError` `knowledge_plugin_cursor_ahead`,
+  `open_science_frontier_cursor_rewinds_total`), rewinding the cursor to the
+  start of what the plugin holds and reading the stream again — a replay
+  stores nothing twice — until the lag is 0; nothing is done by hand.
   Readiness does not read this receipt: an outage of the plugin database
   degrades 「前沿动态」, not the platform, and the unit's own failure is what
   `systemctl --failed` shows.

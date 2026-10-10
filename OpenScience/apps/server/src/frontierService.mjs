@@ -1683,6 +1683,8 @@ export function frontierMetricFamilies(enabled, snapshot) {
   }
   add("cursor_gaps_total", "Times the cursor fell behind what the plugin still holds.", "counter", [{ value: plugin.gaps.count }]);
   add("cursor_gap_entries_total", "Entries skipped because the plugin had purged them before they were pulled.", "counter", [{ value: plugin.gaps.entries }]);
+  add("cursor_rewinds_total", "Times the cursor was found ahead of the plugin's latest seq (its database was restored) and was rewound to the start of its stream.", "counter",
+    [{ value: plugin.rewinds?.count ?? 0 }]);
   add("ingest_entries_total", "Entries received from the plugin by what became of them.", "counter", [
     { labels: { outcome: "inserted" }, value: plugin.counters.inserted },
     { labels: { outcome: "duplicate" }, value: plugin.counters.duplicates },

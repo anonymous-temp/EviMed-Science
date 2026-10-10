@@ -79,6 +79,17 @@ test("D-02: the jobs put back after giving up, and the attempts given back, are 
   assert.equal(outcome("open_science_frontier_notifications_total", "refunded"), 2);
 });
 
+test("D-03: a cursor rewound because the plugin's numbering went back is a counter, and the flag shows as the last error", () => {
+  const view = snapshot(null);
+  view.plugin.rewinds = { count: 2, from: 2000, to: 0, at: "2026-10-10T03:00:00Z" };
+  view.plugin.lastError = "knowledge_plugin_cursor_ahead";
+  const families = frontierMetricFamilies(true, view);
+  assert.deepEqual(family(families, "open_science_frontier_cursor_rewinds_total")?.series, [{ value: 2 }]);
+  assert.equal(family(families, "open_science_frontier_cursor_rewinds_total")?.type, "counter");
+  assert.deepEqual(family(families, "open_science_frontier_pull_last_error")?.series, [{ labels: { code: "knowledge_plugin_cursor_ahead" }, value: 1 }]);
+  assert.deepEqual(family(frontierMetricFamilies(true, snapshot(null)), "open_science_frontier_cursor_rewinds_total")?.series, [{ value: 0 }], "a plugin that never went back has counted none");
+});
+
 test("the edit failures are exported by kind as well as by field, and the trimmed summaries are counted", () => {
   const view = snapshot(null);
   view.editor = { counters: {

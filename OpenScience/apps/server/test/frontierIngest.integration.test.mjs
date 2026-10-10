@@ -171,6 +171,102 @@ test("a cursor behind what the plugin still holds resumes from there and counts 
   assert.deepEqual(fresh.status().gaps, { count: 0, entries: 0 });
 });
 
+/** Health answers rewritten on their way: `latest` is called with the real answer and returns the one the ingest sees, or throws. */
+function interceptHealth(ingest, latest) {
+  const fetchImpl = ingest.plugin.fetch;
+  ingest.plugin.fetch = async (input, init) => {
+    const response = await fetchImpl(input, init);
+    if (!String(input).includes("/v1/health")) return response;
+    const body = await response.json();
+    return new Response(JSON.stringify({ ...body, latest_seq: latest(body.latest_seq) }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+}
+
+test("D-03: a cursor ahead of the plugin's latest seq (a restored plugin database) is rewound and flagged, and what the plugin numbers is not skipped", options, async () => {
+  // The review's seq_probe: the platform consumed up to seq 2000 of the old plugin database; the plugin was restored from
+  // a backup (its sequence is back near 1,400) and has numbered ten new entries. The pull asked for "after 2000", got an
+  // empty page, and reported ok with lag 0 — and every entry the plugin numbered up to 2000 would never have been asked for.
+  await database.query("UPDATE evimed_frontier.meta SET value='2000'::jsonb WHERE key='plugin_cursor'");
+  const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: Array.from({ length: 10 }, (_, index) => pluginEntry("nejm", 1401 + index)) });
+  const ingest = ingestFor(plugin, { pageLimit: 50 });
+  await ingest.mirrorSources();
+  const pulled = await ingest.pull();
+  assert.deepEqual(pulled.rewound, { from: 2000, to: 0 }, "the plugin's whole stream is read again: the keys make a replay a no-op");
+  assert.equal(pulled.inserted, 10, "the entries the restored plugin already numbered are delivered");
+  assert.equal(await cursor(), 1410);
+  let status = ingest.status();
+  assert.equal(status.state, "degraded");
+  assert.equal(status.lastError, "knowledge_plugin_cursor_ahead");
+  assert.equal(status.cursorAhead, true);
+  assert.equal(status.rewinds.count, 1);
+  assert.equal(status.rewinds.from, 2000);
+
+  // What the restored plugin numbers from now on sits below the old cursor and used to be skipped.
+  plugin.entries.push(...[1411, 1412, 1413].map((seq) => pluginEntry("nejm", seq)));
+  const next = await ingest.pull();
+  assert.equal(next.inserted, 3);
+  assert.equal(next.rewound, undefined);
+  status = ingest.status();
+  assert.deepEqual([status.state, status.lastError, status.cursorAhead, status.rewinds.count], ["ok", null, false, 1], "caught up: the flag clears, the count stays");
+  assert.equal(await cursor(), 1413);
+  // A replay of what the platform already holds stores nothing twice.
+  await database.query("UPDATE evimed_frontier.meta SET value='2000'::jsonb WHERE key='plugin_cursor'");
+  const again = await ingest.pull();
+  assert.equal(again.inserted, 0);
+  assert.equal(again.duplicates, 13);
+  assert.equal((await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.entries")).rows[0].n, 13);
+});
+
+test("D-03: a replay the page budget splits stays flagged until the cursor has caught up, and starts at what the plugin still holds", options, async () => {
+  await database.query("UPDATE evimed_frontier.meta SET value='2000'::jsonb WHERE key='plugin_cursor'");
+  const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: [5, 6, 7, 8, 9, 10].map((seq) => pluginEntry("nejm", seq)), oldest: 5 });
+  const ingest = ingestFor(plugin, { pageLimit: 2, maxPagesPerPull: 1 });
+  await ingest.mirrorSources();
+  const first = await ingest.pull();
+  assert.deepEqual(first.rewound, { from: 2000, to: 4 }, "from just below the oldest seq the plugin holds");
+  assert.deepEqual(ingest.status().gaps, { count: 0, entries: 0 }, "a rewind is not a purge gap");
+  assert.deepEqual([ingest.status().cursorAhead, ingest.status().lag, ingest.status().state], [true, 4, "degraded"]);
+  await ingest.pull();
+  assert.deepEqual([ingest.status().cursorAhead, ingest.status().lag, ingest.status().state], [true, 2, "degraded"]);
+  await ingest.pull();
+  assert.deepEqual([ingest.status().cursorAhead, ingest.status().lag, ingest.status().state, ingest.status().lastError], [false, 0, "ok", null]);
+  assert.equal(ingest.status().rewinds.count, 1);
+  assert.equal(await cursor(), 10);
+});
+
+test("D-03: a stale health answer, or one that a second control plane has already outrun, does not rewind a healthy cursor", options, async () => {
+  const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: [1, 2, 3, 4, 5].map((seq) => pluginEntry("nejm", seq)) });
+  const ingest = ingestFor(plugin, { pageLimit: 50 });
+  await ingest.mirrorSources();
+  await ingest.pull();
+  assert.equal(ingest.status().latestSeq, 5);
+  // The health read fails while the stream still answers: latestSeq stays at 5 as the cursor moves past it.
+  plugin.entries.push(...[6, 7, 8, 9].map((seq) => pluginEntry("nejm", seq)));
+  const fetchImpl = ingest.plugin.fetch;
+  ingest.plugin.fetch = async (input, init) => {
+    if (String(input).includes("/v1/health")) throw new TypeError("fetch failed");
+    return fetchImpl(input, init);
+  };
+  assert.equal((await ingest.pull()).inserted, 4);
+  assert.equal(await cursor(), 9);
+  assert.equal(ingest.status().latestSeq, 5, "the last answer is stale");
+  // The next pull finds the cursor (9) past that stale answer (5) and the health read still failing.
+  assert.equal((await ingest.pull()).rewound, undefined);
+  assert.equal(await cursor(), 9);
+  assert.equal(ingest.status().rewinds.count, 0, "a stale answer is not evidence");
+  ingest.plugin.fetch = fetchImpl;
+  // The first health answer is behind the cursor (another control plane moved it a moment after the answer was read);
+  // the second read, which a rewind needs, is not.
+  plugin.entries.push(...[10, 11, 12].map((seq) => pluginEntry("nejm", seq)));
+  let reads = 0;
+  interceptHealth(ingest, (real) => (reads++ === 0 ? 3 : real));
+  const pulled = await ingest.pull();
+  assert.equal(reads, 2, "the suspicion was checked against a second answer");
+  assert.equal(pulled.rewound, undefined);
+  assert.equal(pulled.inserted, 3);
+  assert.deepEqual([ingest.status().rewinds.count, ingest.status().cursorAhead, ingest.status().state], [0, false, "ok"]);
+});
+
 test("the defensive re-check drops unsafe rows with a reason and filters facts to the whitelist", options, async () => {
   const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: [
     pluginEntry("nejm", 1, { url: "javascript:alert(1)" }),
