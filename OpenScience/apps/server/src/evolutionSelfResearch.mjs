@@ -165,6 +165,14 @@ export function cardIsComplete(card, source) {
     && Array.isArray(card.targetObjects) && Number.isFinite(card.estimatedCostCny) && card.estimatedCostCny >= 0;
 }
 
+/** The opportunity a mechanism card is for the platform loop, read from the card as it is stored. @param {{ id: string, payload: any }} card */
+function opportunityOf(card) {
+  const { payload } = card;
+  return { source: 'self-research', kind: 'platform-mechanism', mechanismCardId: card.id, mechanismKey: payload.mechanismKey,
+    module: (payload.targetObjects ?? []).find((/** @type {string} */ value) => ['tools', 'frontier', 'geo', 'autopilot', 'sources', 'evidence', 'memory', 'runtime'].includes(value)) ?? 'memory',
+    problem: payload.problem, estimatedCostCny: payload.estimatedCostCny, evidenceStatus: 'hypothesis', sourceRefs: [payload.source] };
+}
+
 /**
  * @param {{
  *   service: any,
@@ -256,7 +264,8 @@ export function createEvolutionSelfResearch({ service, discover, verify, extract
     const waiting = candidates.filter(candidate => candidate.fit == null).sort((a, b) => Number(b.attention) - Number(a.attention)
       || Number(b.venueRow) - Number(a.venueRow) || Number(Boolean(b.codeLink)) - Number(Boolean(a.codeLink))
       || String(b.publishedAt ?? '').localeCompare(String(a.publishedAt ?? '')) || a.key.localeCompare(b.key));
-    const screenable = waiting.slice(0, caps.screen);
+    // The cap is the week's, not the run's: what an earlier run of this week screened counts against it.
+    const screenable = waiting.slice(0, Math.max(0, caps.screen - Object.keys(report.verdicts).length));
     if (waiting.length > screenable.length) counters.capHits.screen += 1;
     const open = (await (problems?.() ?? Promise.resolve([])).catch(() => [])).slice(0, OPEN_PROBLEMS_SHOWN);
     let triageFailed = 0;
@@ -355,7 +364,12 @@ export function createEvolutionSelfResearch({ service, discover, verify, extract
           if (card?.entryId !== preserved.entryId || !cardIsComplete(card, preserved)) { rejected += 1; counters.rejected += 1; continue; }
           const key = hash(card.mechanismKey.toLowerCase().trim().replace(/\s+/g, ' '));
           const cardId = `evolution-mechanism-card-${key.slice(0, 32)}`;
-          if (await service.get(cardId)) continue;
+          const written = await service.get(cardId);
+          if (written) {
+            // A card an earlier attempt of this same week wrote may have stopped before its opportunity was recorded; recording one is idempotent.
+            if (written.payload.week === id) { if (addOpportunity) await addOpportunity(opportunityOf(written)); cardsHere += 1; }
+            continue;
+          }
           if (triedCandidates.some((/** @type {any} */ tried) => tried.mechanismKey === key)) continue;
           const payload = { ...card, mechanismKey: key, status: 'hypothesis', origin: 'external-source',
             source: { entryId: preserved.entryId, url: preserved.sourceUrl, digest: preserved.sourceDigest, quote: card.quote },
@@ -367,9 +381,7 @@ export function createEvolutionSelfResearch({ service, discover, verify, extract
             createdAt: date.toISOString(), week: id };
           const saved = await service.save('mechanism-card', cardId, payload);
           existingCards.push({ id: saved.id, mechanism: card.mechanism, problem: card.problem });
-          if (addOpportunity) await addOpportunity({ source: 'self-research', kind: 'platform-mechanism', mechanismCardId: saved.id, mechanismKey: key,
-            module: card.targetObjects.find((/** @type {string} */ value) => ['tools', 'frontier', 'geo', 'autopilot', 'sources', 'evidence', 'memory', 'runtime'].includes(value)) ?? 'memory',
-            problem: card.problem, estimatedCostCny: card.estimatedCostCny, evidenceStatus: 'hypothesis', sourceRefs: [payload.source] });
+          if (addOpportunity) await addOpportunity(opportunityOf(saved));
           cardsHere += 1;
         }
         if (cardsHere) outcome = 'card';

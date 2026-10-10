@@ -318,6 +318,52 @@ test("a run that stops midway resumes: what was screened and what was read is no
   assert.equal(Object.keys(result.processed).length, 3);
 });
 
+test("the screening cap is the week's: a run that resumes does not screen past what the week may", async () => {
+  const entries = Array.from({ length: 6 }, (_, index) => entry({ id: `c${index}` }));
+  const { rows, service } = ledger();
+  let broken = true;
+  /** @type {number[]} */
+  const screens = [];
+  const build = () => createEvolutionSelfResearch({ service, now: () => MONDAY, discover: async () => entries, limits: { screen: 4 },
+    triage: async ({ items }) => { screens.push(items.length); return { items: items.map((/** @type {any} */ item) => ({ id: item.id, fit: 3, venue: { status: "none", quote: "" } })) }; },
+    verify: async (/** @type {any} */ item) => ({ text: item.sourceText, digest: `d${item.id}`, url: item.sourceUrl, publicationStatus: item.publicationStatus }),
+    extract: async (/** @type {any} */ input) => { if (broken) throw new Error("model down"); return { cards: [cardFor(input.entries[0])] }; } });
+  await assert.rejects(build().tick(), { code: "evolution_self_research_unavailable" });
+  assert.equal(Object.keys(rows.get(WEEK_ID).payload.verdicts).length, 4);
+  broken = false;
+  const result = await build().tick();
+  assert.deepEqual(screens, [4], "the second run screens nothing more: four is the week's cap");
+  assert.equal(result.status, "complete");
+  assert.equal(result.funnel.screened, 0);
+  assert.equal(result.funnel.deferred, 2, "the two the cap left wait for next week");
+});
+
+test("a card whose opportunity could not be recorded is recorded by the run that comes after, once", async () => {
+  const entries = [entry({ id: "o1" })];
+  let failOnce = true;
+  /** @type {any[]} */
+  const recorded = [];
+  const { research, rows } = funnel(entries, { addOpportunity: async (/** @type {any} */ input) => { if (failOnce) { failOnce = false; throw new Error("the ledger went away"); } recorded.push(input); } });
+  await assert.rejects(research.tick(), { code: "evolution_self_research_unavailable" });
+  assert.equal([...rows.values()].filter(row => row.type === "mechanism-card").length, 1, "the card was written before the opportunity failed");
+  assert.equal(recorded.length, 0);
+  const result = await research.tick();
+  assert.equal(result.status, "complete");
+  assert.equal(recorded.length, 1, "the opportunity is recorded now");
+  assert.equal(recorded[0].mechanismCardId, [...rows.values()].find(row => row.type === "mechanism-card").id);
+  assert.deepEqual([recorded[0].source, recorded[0].kind, recorded[0].module, recorded[0].evidenceStatus], ["self-research", "platform-mechanism", "memory", "hypothesis"]);
+  assert.equal(result.funnel.cards, 1);
+  assert.equal([...rows.values()].filter(row => row.type === "mechanism-card").length, 1);
+  // A card from an earlier week that the model proposes again is not recorded again.
+  const later = createEvolutionSelfResearch({ service: { get: async (/** @type {string} */ id) => rows.get(id) ?? null, list: async (/** @type {string} */ type) => [...rows.values()].filter(row => row.type === type),
+    save: async (/** @type {string} */ type, /** @type {string} */ id, /** @type {any} */ payload, /** @type {any} */ previous) => { const row = { type, id, payload, revision: (previous?.revision ?? 0) + 1 }; rows.set(id, row); return row; } },
+  now: () => new Date(MONDAY.getTime() + 21 * 86_400_000), discover: async () => [entry({ id: "o2" })], verify: async (/** @type {any} */ item) => ({ text: item.sourceText, digest: "d", url: item.sourceUrl }),
+  triage: async ({ items }) => ({ items: items.map((/** @type {any} */ item) => ({ id: item.id, fit: 3, venue: { status: "none", quote: "" } })) }),
+  extract: async (/** @type {any} */ input) => ({ cards: [cardFor(input.entries[0], "mechanism of o1")] }), addOpportunity: async (/** @type {any} */ input) => { recorded.push(input); } });
+  assert.equal((await later.tick()).funnel.cards, 0);
+  assert.equal(recorded.length, 1);
+});
+
 test("a paper screened in the last two weeks is not screened again", async () => {
   const early = [entry({ id: "w1" }), entry({ id: "w2" })];
   const { research, rows, seen } = funnel(early);
