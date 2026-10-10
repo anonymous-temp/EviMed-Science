@@ -1307,8 +1307,14 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
                 measures = list(), counts = vcr_counts(realPatients = nrow(subj)),
                 diagnostics = list(detail = res$detail, valueSourcesUsed = vcr_value_sources_used(used))))
   }
+  # What the weights are worth, said in the result and never a refusal: the estimate stands, and the conclusion says what it rests on.
+  # No weights at all (a target outside the covariates' range) is the not-estimable return above; weights whose moments the solver did
+  # not reach, or a Kish effective sample size under the domain's floor, are reported and limit the conclusion.
+  ess_floor <- vcr_limit("essFloor", 10)
+  limited_by <- c(if (!isTRUE(res$converged)) "entropy_balance_not_converged",
+                  if (res$effectiveSampleSize < ess_floor) "effective_sample_size_below_floor")
   list(status = "succeeded",
-       conclusion = if (identical(res$conclusionCeiling, "limited")) "limited" else "estimable",
+       conclusion = if (identical(res$conclusionCeiling, "limited") || length(limited_by)) "limited" else "estimable",
        measures = list(
          vcr_measure("indirect_estimate", res$estimate, source = est_src,
                      interval = vcr_interval("confidence", res$interval[1], res$interval[2])),
@@ -1316,6 +1322,11 @@ vcr_job_maic <- function(job, output_dir = NULL, ...) {
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = res$effectiveSampleSize),
        diagnostics = list(anchored = res$anchored, targetPopulation = res$targetPopulation,
                           valueSourcesUsed = vcr_value_sources_used(used),
+                          weights = list(effectiveSampleSize = res$effectiveSampleSize, essShare = res$effectiveSampleSize / nrow(subj),
+                                         essFloor = ess_floor, belowEssFloor = res$effectiveSampleSize < ess_floor,
+                                         converged = isTRUE(res$converged), iterations = res$iterations,
+                                         worstRelativeDiscrepancy = res$discrepancy),
+                          limitedBy = as.list(limited_by),
                           conclusionCeiling = res$conclusionCeiling %||% NULL,
                           varianceBasis = res$varianceBasis, se = res$se,
                           bootstrapReplicates = if (!is.null(res$bootstrap)) res$bootstrap$replicates else NULL,
