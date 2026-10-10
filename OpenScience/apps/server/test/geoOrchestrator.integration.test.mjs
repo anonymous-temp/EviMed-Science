@@ -384,6 +384,45 @@ test("a tiny question set locked in conversation is a diagnosis, not the full pr
   await q(`UPDATE evimed_geo.projects SET status = 'paused' WHERE id = ANY($1::text[])`, [[project.id, asked.project.id]]);
 });
 
+test("a locked set with no control group is a diagnosis only: content and distribution start when the researcher asks for them, never by the orchestrator's chaining (G10i)", options, async () => {
+  // A full-size set — twelve groups of four, 48 measured questions in all four pools — whose groups none is a control: a net effect cannot
+  // be computed from it, so what follows the diagnosis (the strategy, the articles, the placing, the weekly monitoring) is not the
+  // platform's to start from it. The lock is allowed; nothing is refused.
+  const world = harness();
+  const { project, user, userId } = await newProject();
+  const current = () => /** @type {Promise<any>} */ (store.getProject(userId, project.id));
+  await geoRuntimeWrite({ store, project: await current(), what: "claims", body: { items: [
+    { claimKey: "dosing", statement: "每周一次皮下注射", quote: "本品每周一次皮下注射给药。", sourceRef: "说明书 2025 版", sourceKind: "label" }] } });
+  for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  const pools = ["P1", "P2", "P3", "P4"];
+  const groups = Array.from({ length: 12 }, (_unused, index) => ({ pool: pools[index % 4], name: `语义群${index + 1}`, typicalQuestion: `典型问句 ${index + 1}`, weight: 12 - index,
+    isControl: false, questions: Array.from({ length: 4 }, (_n, at) => ({ text: `问句 ${index + 1}-${at + 1}`, kind: "typical", isMeasured: true })) }));
+  assert.equal((await geoRuntimeWrite({ store, project: await current(), what: "questions", body: { data: { groups } } })).ok, true);
+  const locked = await geoRuntimeWrite({ store, project: await current(), what: "lock_questions", body: { data: {} } });
+  assert.equal(locked.ok, true, "the lock is allowed");
+  assert.equal(locked.measuredCount, 48);
+  assert.equal((await statuses(project.id)).questions, "minimal", "full size, but no control group: a diagnosis");
+
+  // The orchestrator's ticks: one round for the diagnosis, and nothing else however many ticks pass or whatever finishes.
+  await world.orchestrator.advance(project.id);
+  assert.deepEqual(world.enqueued.map((round) => round.kind), ["single_step"]);
+  await finishRound(world.enqueued[0].id);
+  for (let tick = 0; tick < 4; tick += 1) await world.orchestrator.advance(project.id);
+  assert.deepEqual(world.dispatched, [], "no run is started by the platform: not the strategy, not the articles");
+  assert.deepEqual(Object.entries(await statuses(project.id)).filter(([step]) => ["sources", "content", "distribution", "monitoring"].includes(step)),
+    [["sources", "none"], ["content", "none"], ["distribution", "none"], ["monitoring", "none"]]);
+  assert.deepEqual(world.enqueued.map((round) => round.kind), ["single_step"], "and no weekly or noise round");
+  assert.equal((await statuses(project.id)).diagnosis, "minimal");
+
+  // The researcher asks for the articles (「让 AI 做」): that step starts, and only that one.
+  const answer = await world.orchestrator.runStep(user, project, "content");
+  assert.ok(answer.runId, JSON.stringify(answer));
+  assert.deepEqual(world.dispatched.map((run) => run.capabilityId), ["geo-content"]);
+  const requested = Object.entries((await reload(project.id)).steps).filter(([, step]) => /** @type {any} */ (step).requested).map(([name]) => name);
+  assert.deepEqual(requested, ["diagnosis", "content"], "asked for by the researcher, not by chaining");
+  await q(`UPDATE evimed_geo.projects SET status = 'paused' WHERE id = $1`, [project.id]);
+});
+
 test("a single step (信源分析与预期) builds only its minimal upstream: identity, 30 questions, one round, the strategy", options, async () => {
   const world = harness();
   const { project, control, user, userId } = await newProject("诺和盈");
