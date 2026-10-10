@@ -673,7 +673,7 @@
       },
       {
         "area": "Raw scans, interaction/dose/adverse-event providers, partner-specific SMART/Bulk/FHIR export",
-        "disposition": "original optional OpenMed tasks remain conditional on a concrete provider/data contract, not silently enabled"
+        "disposition": "original optional OpenMed tasks (E01, F01-F06) read ready_waiting_for_data: neither open work nor closed, each naming the provider or data contract it waits for and what that input turns on (packages/contracts/openmed/implementation.json)"
       },
       {
         "area": "UI, DSH tools, output documents, run receipts and operational rollback",

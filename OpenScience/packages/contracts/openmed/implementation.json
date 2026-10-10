@@ -343,11 +343,14 @@
         "A02",
         "B05"
       ],
-      "status": "external_validation_required",
+      "status": "ready_waiting_for_data",
+      "formerStatus": "external_validation_required",
       "evidence": [
         "evals/vcr-matching/corpora/chinese-synthetic/inputs.json",
         "evals/vcr-matching/corpora/chinese-synthetic/reference.json",
-        "evals/vcr-matching/corpora/chinese-synthetic/splits.json"
+        "evals/vcr-matching/corpora/chinese-synthetic/splits.json",
+        "evals/vcr-matching/run_matching_evaluation.mjs",
+        "evals/vcr-matching/run_matching_evaluation.test.mjs"
       ],
       "acceptance": "A patient-level holdout is frozen before prompt tuning. Labels distinguish unknown, not applicable and not satisfied. Report inter-rater disagreement without treating it as a universal mathematical ceiling. Expert labeling is an evaluation activity, not a new mandatory approval step for every research run.",
       "owner": "Clinical evaluation",
@@ -373,9 +376,19 @@
         "C139",
         "C141"
       ],
-      "implementationSummary": "Authored twelve Chinese development regressions and explicit split/label provenance. None is falsely described as an untouched clinical holdout.",
+      "implementationSummary": "Twelve authored Chinese development regressions with explicit split and label provenance (none is an untouched holdout), and the path an independent set takes the day it exists: one command runs the production matching evaluator over it and reports rater agreement apart from accuracy.",
+      "waitingFor": "An independently labelled, rights-cleared Chinese reference set: patient-level cases with gold criterion states from two raters, frozen before any prompt is tuned.",
+      "readyBecause": [
+        "`runMatchingEvaluation` (vcrMatching.mjs) scores a labelled set with `assessSubject`, the evaluator a study's matching runs: unknown, not applicable and not satisfied stay separate states, subject-level eligible recall and false-exclusion rate are reported, and two raters' agreement and Cohen's kappa are reported as a property of that set, with no pass mark.",
+        "`evals/vcr-matching/run_matching_evaluation.mjs` runs it on a file shaped like `matching-eval-sample.json` and stamps the report with the file's SHA-256, which is the freeze; a file that is not a labelled set is refused by name instead of printing an empty report. It makes no model call.",
+        "`corpora/chinese-synthetic/splits.json` already carries the development / untouchedHoldout split and the limitation text; the holdout list is empty because no independent set exists."
+      ],
+      "onArrival": [
+        "Save the set as a labelled-set file (`\"synthetic\": false`, two raters per gold judgement), write down the SHA-256 the command prints before any prompt is tuned, and run `node evals/vcr-matching/run_matching_evaluation.mjs --dataset <set.json> --out <report.json>`.",
+        "The report is the first measurement on cases that were not used for tuning: criterion and subject confusion, eligible recall and false exclusions, and the raters' actual disagreement. Chart text still goes through the native clinical extraction under the set's own data-class terms (A03/A04) before its facts are in the file; the authored cases are never scored in its place."
+      ],
       "remaining": [
-        "Acquire an independently labeled, rights-cleared Chinese reference set and freeze patient-level holdout before tuning; measure actual reviewer disagreement."
+        "Acquire the independently labelled, rights-cleared Chinese set and freeze its patient-level holdout before tuning; measure the raters' actual disagreement. Until then the twelve authored cases are development regressions, not clinical validation."
       ],
       "validationStatus": "external_prerequisite"
     },
@@ -1362,7 +1375,8 @@
         "C08",
         "C11"
       ],
-      "status": "conditional_not_activated",
+      "status": "ready_waiting_for_data",
+      "formerStatus": "conditional_not_activated",
       "evidence": [
         "runtime/mcp/evimed-research/vcr_import_convert.py",
         "apps/server/test/vcrImport.test.mjs",
@@ -1385,8 +1399,17 @@
         "C097"
       ],
       "implementationSummary": "Retained and regression-tested native bounded FHIR R4 import and its source/coverage records. No target partner profile was supplied for a new exporter, SMART or Bulk route.",
+      "waitingFor": "A named partner exchange use case: its FHIR resource/profile contract and authorized sample bundles to round-trip.",
+      "readyBecause": [
+        "FHIR R4 import is part of the VCR import path and runs wherever the module's data plane and the runtime controller's intake container are composed: `vcr_import_convert.py` reads Patient, Condition, Observation, MedicationRequest, MedicationStatement, Procedure and Encounter from JSON bundles, NDJSON or a zip of them, in the disposable no-network container (`vcrIntakeController.mjs`, operation `convert`). It has no switch of its own.",
+        "Every import states what it did not carry: unsupported resource types, rows without a subject, values not carried and date notices are counted with a named reason in the coverage ledger, and a file that is not FHIR is refused by name (`vcrImport.test.mjs`, `vcrImport.integration.test.mjs`)."
+      ],
+      "onArrival": [
+        "The partner's authorized bundles import as they are, with their loss report; whatever its profile adds (extensions, further resource types) becomes columns of the same tables plus a coverage line, written against those fixtures.",
+        "An export, SMART or Bulk route is added only for a partner that names it, with the same round-trip fixtures; the native protected data plane stays the system of record."
+      ],
       "remaining": [
-        "A specific partner resource/profile contract and authorized round-trip fixtures are required for new export/SMART/Bulk work."
+        "A partner resource/profile contract and authorized round-trip fixtures are needed before new export, SMART or Bulk work; full FHIR/US Core support is not claimed."
       ],
       "validationStatus": "external_prerequisite"
     },
@@ -1598,7 +1621,8 @@
         "C08",
         "B02"
       ],
-      "status": "conditional_not_activated",
+      "status": "ready_waiting_for_data",
+      "formerStatus": "conditional_not_activated",
       "evidence": [
         "packages/contracts/openmed/data-rights.json",
         "runtime/mcp/evimed-research/drug_assessment.py",
@@ -1617,9 +1641,18 @@
         "C050",
         "C051"
       ],
-      "implementationSummary": "Existing drug-evidence workflows remain available. No interaction database was supplied or licensed; missing coverage is documented as unknown, not no interaction.",
+      "implementationSummary": "Existing drug-evidence workflows remain available. No interaction source was supplied or licensed; its absence is reported as a named evidence gap, never as no interaction.",
+      "waitingFor": "A licensed, versioned drug-interaction source, with reference cases for it.",
+      "readyBecause": [
+        "A missing interaction source is already a named evidence gap, not a no-interaction conclusion (vcr-analysis SKILL, clinical extraction boundary; adr-analysis SKILL on an unavailable or empty private reference).",
+        "A licensed table has two ways in, neither switched off: as a project source it is parsed, content-addressed (`src_<sha256>`) and quote-checked like any source; or as one more dataset of the private reference index (`build_pharmacy_reference.py` `DATASETS`; the index records each file's SHA-256 and its release), read by `pharmacy_reference_search`."
+      ],
+      "onArrival": [
+        "Interaction statements quote the licensed source by its id and version (file digest or index release) and stop being a named gap for the pairs it covers; pairs it does not cover stay a gap.",
+        "The source's reference cases go into `evals/adr-analysis` before it is described as validated."
+      ],
       "remaining": [
-        "A licensed versioned interaction source/provider and reference cases are required before building/activating that optional provider."
+        "A licensed, versioned interaction source and its reference cases are needed before interaction statements can be made from it."
       ],
       "validationStatus": "external_prerequisite"
     },
@@ -1631,7 +1664,8 @@
         "F01",
         "C07"
       ],
-      "status": "conditional_not_activated",
+      "status": "ready_waiting_for_data",
+      "formerStatus": "conditional_not_activated",
       "evidence": [
         "packages/domain/src/clinical-safety-rules.json",
         "runtime/mcp/evimed-research/drug_assessment.py",
@@ -1650,9 +1684,17 @@
         "C050",
         "C051"
       ],
-      "implementationSummary": "No patient dose decision route is enabled without suitable versioned indication/renal/weight rules; native drug evidence and safety framing remain in use.",
+      "implementationSummary": "No dose-check route exists yet: it takes suitable versioned indication, renal and weight rules, and none were supplied. Native drug evidence and safety framing remain in use, and a missing rule is a named evidence gap.",
+      "waitingFor": "Suitable licensed dose-rule tables with indication, renal and weight applicability cases.",
+      "readyBecause": [
+        "Dose rules reach a run by the same two ways in as F01: a project source, or a dataset of the private reference index (which already holds `high-risk-dose`, `special-populations`, `monitoring` and `laboratory-thresholds` tables for institution-specific screening).",
+        "A figure derived from a rule is a `derived` claim: it must name its quote-anchored inputs, method, assumptions and sensitivities, is marked as derived in the report, and never carries practical safety advice (`clinicalEvidence.mjs`)."
+      ],
+      "onArrival": [
+        "A dose-rule table is quoted as the rule source of any dose statement; a derived figure names the rule row and the patient inputs it used, and a missing input leaves that figure as insufficient information while the rest of the work stands."
+      ],
       "remaining": [
-        "Suitable licensed rules and applicability cases are required before implementing a new dose-check route."
+        "Suitable licensed dose rules with indication, renal and weight applicability cases are needed before a dose statement can be made from them."
       ],
       "validationStatus": "external_prerequisite"
     },
@@ -1666,7 +1708,8 @@
         "C08",
         "B02"
       ],
-      "status": "conditional_not_activated",
+      "status": "ready_waiting_for_data",
+      "formerStatus": "conditional_not_activated",
       "evidence": [
         "capabilities/adr-analysis/SKILL.md",
         "runtime/mcp/evimed-research/drug_assessment.py",
@@ -1685,9 +1728,18 @@
         "C050",
         "C051"
       ],
-      "implementationSummary": "Reuse existing ADR capability when a report-level dataset is commissioned; no unsupported signal dataset or causal trial parameter was added.",
+      "implementationSummary": "Reuse of the existing ADR capability and drug-safety engine: its live openFDA tier answers today and says so in every output (`data_source`), and its frozen report-level path is built for the day a dataset is converted into the snapshot format. No unsupported signal dataset or causal trial parameter was added.",
+      "waitingFor": "A commissioned, authorized report-level adverse-event dataset, with its case ids, case versions and drug-role fields.",
+      "readyBecause": [
+        "The drug-safety engine (`项目代码/药物安全分析agent`) has a frozen report-level tier: JSON fixtures or an indexed SQLite snapshot (`write_sqlite_snapshot`, `FAERS_SNAPSHOT_PATH`), deduplicated by case version, drug name and ROLE_COD bound on the same drug row, one ROR/PRR implementation, and every signal row carrying `data_source`, `snapshot_id` and `snapshot_sha256`; duplicate reports and changed follow-up versions are exercised in its tests (`tests/test_faers_frozen.py`).",
+        "The `adr-analysis` guidance already reads those provenance fields and states that a ratio is a signal, never an incidence, causal effect, patient risk or trial outcome rate; its tools run by default with no switch of their own."
+      ],
+      "onArrival": [
+        "The dataset is converted once into the engine's `ReportRecord` snapshot (there is no ETL yet for quarterly FAERS ASCII, and the converter is written against the dataset's real layout, not guessed) and the deployment passes `FAERS_SNAPSHOT_PATH` to the drug-safety engine.",
+        "From then on a managed job answers from `frozen_faers`: signals regenerate from the preserved counts and are reproducible within the snapshot's hash, and the live-tier approximation is no longer what the report rests on."
+      ],
       "remaining": [
-        "A commissioned authorized adverse-event report dataset is required to measure duplicate/follow-up reconciliation and signals."
+        "A commissioned authorized report-level dataset is needed to measure duplicate and follow-up reconciliation and the signals on it; the converter into the snapshot format is written when its layout is known."
       ],
       "validationStatus": "external_prerequisite"
     },
@@ -1699,7 +1751,8 @@
         "D06",
         "E03"
       ],
-      "status": "conditional_not_activated",
+      "status": "ready_waiting_for_data",
+      "formerStatus": "conditional_not_activated",
       "evidence": [
         "apps/server/src/vcrMatching.mjs",
         "apps/server/src/vcrRecruit.mjs",
@@ -1718,8 +1771,17 @@
         "C053"
       ],
       "implementationSummary": "Reuse native research evidence-gap states. No new care-management measure or quality-denominator definition was requested.",
+      "waitingFor": "A concrete research measure: its definition, time window and denominator.",
+      "readyBecause": [
+        "A measure is expressible today as protocol criteria (`present` / `absent` / `compare` with a `window`, an `aggregate` and an as-of time, `vcrRules.mjs`) evaluated by three-valued matching: a missing test is an `unknown` with a named evidence gap for the coordinator to find, never a diagnosis or a recommendation (`evidenceGaps`, the criterion funnel).",
+        "Every change of definition is a new protocol version, and every evaluation freezes its roster, facts and as-of time with evaluated, pending and unavailable candidates partitioned, so the denominator of a run is recorded (`vcrMatchStore.mjs`, D06)."
+      ],
+      "onArrival": [
+        "The measure is written as criteria in a protocol version and evaluated over the roster, with its window and denominator readable beside the counts; no adapter is needed for a research measure.",
+        "An adapter for a care-management or quality-measure specification (named numerators, denominators and exclusions) is added only for a specification that is supplied."
+      ],
       "remaining": [
-        "A concrete research measure, time window and denominator are required before adding a new measure adapter."
+        "A concrete research measure, time window and denominator are needed before any measure-specific adapter."
       ],
       "validationStatus": "external_prerequisite"
     },
@@ -1734,7 +1796,8 @@
         "C11",
         "B04"
       ],
-      "status": "conditional_not_activated",
+      "status": "ready_waiting_for_data",
+      "formerStatus": "conditional_not_activated",
       "evidence": [
         "apps/server/src/vcrRecordExtract.mjs",
         "apps/server/src/vcrIntakeController.mjs",
@@ -1755,9 +1818,18 @@
         "C083",
         "C086"
       ],
-      "implementationSummary": "No approved clinical scan/OCR provider and terms were supplied. Native protected text extraction remains available; scans retain named unavailable states and never fall through to the ordinary external parser.",
+      "implementationSummary": "No approved clinical scan/OCR provider and terms were supplied. Native protected text extraction runs by default; a scan is refused by name (`vcr_document_needs_text`) and never falls through to the ordinary external parser.",
+      "waitingFor": "An explicitly approved clinical OCR service with its processing terms, and a reference set of scans.",
+      "readyBecause": [
+        "Text PDFs and DOCX are extracted inside the disposable no-network intake container (`vcrRecordExtract.mjs`, `vcrIntakeController.mjs`); a document without text is refused by name with `vcr_document_needs_text`, affecting only that document, and never reaches the ordinary document parser.",
+        "The cloud-read permission a scan route needs already exists per source: processing purpose, approved HTTPS origins, terms, authorization reference and expiry, with every served window recorded (A03/A04, `data-rights.json`)."
+      ],
+      "onArrival": [
+        "The service's origin is recorded on the source's permission and a client for its API is added at the `needs_text` refusal, so only scans take that route and text documents still never leave the container.",
+        "The scan reference set measures OCR slips in decimal points, units and negation end to end, kept apart from extraction accuracy."
+      ],
       "remaining": [
-        "An explicitly approved clinical OCR service, processing terms and scan reference set are required before enabling cloud scan processing."
+        "An explicitly approved clinical OCR service, its processing terms and a scan reference set are needed before any scan is processed."
       ],
       "validationStatus": "external_prerequisite"
     },
@@ -1771,7 +1843,8 @@
         "E01",
         "E02"
       ],
-      "status": "conditional_not_activated",
+      "status": "ready_waiting_for_data",
+      "formerStatus": "conditional_not_activated",
       "evidence": [
         "apps/server/src/vcrImport.mjs",
         "runtime/mcp/evimed-research/vcr_import_convert.py",
@@ -1796,9 +1869,18 @@
         "C096",
         "C097"
       ],
-      "implementationSummary": "No new partner format/language use case was supplied. Existing FHIR R4, OMOP and ADaM boundaries and limitations remain explicit.",
+      "implementationSummary": "No new partner format or language use case was supplied. FHIR R4, OMOP CDM and CDISC ADaM import run by default, each with its coverage ledger and stated limits.",
+      "waitingFor": "A named partner format or language, with acceptance fixtures for each.",
+      "readyBecause": [
+        "The three formats are one path: `FORMATS` / `CONVERTERS` in `vcr_import_convert.py`, each producing the module's own tables, a field map, a dictionary and a coverage of what was read, skipped and why; `vcrImport.mjs` re-checks every converter output against the data plane's limits.",
+        "Chinese-first terminology is versioned data (coding edition, source, basis and ambiguity on every fact, C01/C08) and source text in either language goes through the same extraction and matching, so a language is not a code path."
+      ],
+      "onArrival": [
+        "A format is one more converter in the same table with its own supported-version statement and acceptance fixtures; the product claims only what those fixtures show.",
+        "A language adds terminology rows as versioned coding metadata and its own source-level cases; general email, billing, mobile inference and media platforms stay outside the adoption scope."
+      ],
       "remaining": [
-        "A named partner format/language and its acceptance fixtures are required for each extension."
+        "A named partner format or language and its acceptance fixtures are needed for each extension."
       ],
       "validationStatus": "external_prerequisite"
     },
@@ -1964,24 +2046,28 @@
       "validationStatus": "engineering_verified"
     }
   ],
-  "updatedAt": "2026-10-09",
+  "updatedAt": "2026-10-10",
   "deliveryScope": "Selective cloud-API adoption on an isolated branch; no production rollout.",
   "statusMeaning": {
     "implemented": "Engineering change is present; consult remaining and validationStatus for unmet acceptance.",
     "native_reused": "Existing implementation was retained and its applicable regressions exercised.",
-    "conditional_not_activated": "Explicit optional prerequisite is absent; no unsupported capability was enabled.",
-    "external_validation_required": "Evaluation scaffolding exists but independent reference data cannot be fabricated."
+    "ready_waiting_for_data": "Neither open work nor closed. Everything that can be done before the input exists is built and on by default, with no switch of its own; the task waits only for the licensed, partner or independently labelled input named in waitingFor. readyBecause says what already runs and onArrival what that input turns on. Nothing is called verified or validated until the input has been used, and no input is made up in its place."
+  },
+  "statusCounts": {
+    "implemented": 38,
+    "ready_waiting_for_data": 8,
+    "native_reused": 6
   },
   "productionEnabled": false,
   "independentClinicalValidation": false,
   "scientificPromotion": false,
-  "note": "All tasks have an explicit disposition, not all original scientific/partner acceptance criteria are met. No conditional task is relabeled verified.",
+  "note": "All tasks have an explicit disposition; not all original scientific/partner acceptance criteria are met. ready_waiting_for_data is neither open work nor closed, and no waiting task is relabeled verified.",
+  "relabelled20261010": "By the owner ruling of 2026-10-10, B03 (formerly external_validation_required) and E01, F01-F06 (formerly conditional_not_activated) read ready_waiting_for_data. The relabel adds, removes and verifies no task and changes no engineering fact; each task keeps its former word in formerStatus.",
   "localReview20261010": {
-    "coverageCountsUnchanged": {
+    "coverageCounts": {
       "implemented": 38,
-      "external_validation_required": 1,
-      "native_reused": 6,
-      "conditional_not_activated": 7
+      "ready_waiting_for_data": 8,
+      "native_reused": 6
     },
     "independentChineseDataset": "missing; authored development fixtures are not independent validation",
     "implementedWithRemaining": [
@@ -2008,11 +2094,10 @@
     "scope": "Reviewed release functions and every adoption/conditional task against the supplied HealthFlux paper and current source.",
     "result": "The longitudinal extensions close the remaining selected-adoption workflow gaps; original external clinical validation and licensed/partner optional prerequisites stay explicit.",
     "crossReference": "packages/contracts/healthflux/implementation.json#/functionalReview",
-    "countsUnchanged": {
+    "counts": {
       "implemented": 38,
-      "external_validation_required": 1,
-      "native_reused": 6,
-      "conditional_not_activated": 7
+      "ready_waiting_for_data": 8,
+      "native_reused": 6
     }
   }
 }

@@ -1631,5 +1631,13 @@ other inventoried corpora. The internal scorecard distinguishes this pilot from
 the twelve authored Chinese development cases. Those cases were seen during
 tuning; they are not an untouched holdout. Neither an observed improvement on
 these examples nor a successful replay establishes independent clinical validity.
-External expert labels, licensed drug/terminology references, an approved clinical
-OCR route and a partner exchange profile remain explicit conditional work.
+Eight tasks wait only for an input that is not ours to make up: B03 (an independently
+labelled Chinese reference set), E01 (a partner FHIR profile), F01 and F02 (licensed
+interaction and dose sources), F03 (an authorized adverse-event report dataset), F04 (a
+concrete research measure), F05 (an approved clinical OCR service) and F06 (a named
+partner format or language). The ledger reads them `ready_waiting_for_data`: neither open
+work nor closed, with no switch of their own to turn on. Per task, `readyBecause` says
+what already runs and `onArrival` what the input turns on. An independently labelled
+matching set is evaluated with
+`node evals/vcr-matching/run_matching_evaluation.mjs --dataset <set.json>`; the report
+carries the file's SHA-256 so the holdout can be frozen before tuning.

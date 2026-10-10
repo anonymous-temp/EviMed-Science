@@ -8,10 +8,10 @@
   "publicLeaderboardSubmission": false,
   "taskDispositions": {
     "implemented": 38,
-    "external_validation_required": 1,
-    "native_reused": 6,
-    "conditional_not_activated": 7
+    "ready_waiting_for_data": 8,
+    "native_reused": 6
   },
+  "taskDispositionsNote": "B03 and E01, F01-F06 read ready_waiting_for_data (2026-10-10 owner ruling): neither open work nor closed. packages/contracts/openmed/implementation.json says per task what it waits for and what its input turns on.",
   "syntheticPaired": {
     "archive": "results/openmed-v3-20261009/native-predictions.json",
     "scorer": "../method-quality/score_native_clinical.py",
@@ -1854,7 +1854,7 @@
       "researchMode": "Existing research mode can preserve qualified partial findings; no clinical quality guarantee.",
       "enhancementDefaultOff": true,
       "independentClinicalValidation": false,
-      "partnerConditionalIntegrations": "Seven retain conditional_not_activated: FHIR partner export, licensed interaction source, dose rules, authorized adverse-event dataset, concrete measure, approved clinical OCR, named partner format/language. No credentials or deferred materials were re-requested.",
+      "partnerConditionalIntegrations": "Seven (E01, F01-F06) read ready_waiting_for_data, as does B03: FHIR partner export, licensed interaction source, dose rules, authorized adverse-event dataset, concrete measure, approved clinical OCR, named partner format/language. No credentials or deferred materials were re-requested.",
       "relationEvidence": "Located clinical links require a single preserved quote instance covering both exact fact spans; unsupported links remain unresolved while preserving the facts. See ../acceptance/local-release-closure-20261010/relation-evidence-summary.json."
     },
     "evidenceRoot": "/tmp/evimed-release-closure-20261010/models",
