@@ -62,7 +62,7 @@ import sanityTable from './geo/sanity.json' with { type: 'json' }
  */
 /**
  * @typedef {object} GeoMetricsTable
- * @property {{ source: string, version: string, sha256: Record<string, string>, converted: string, rule: string, constants: Record<string, string>, computation: Record<string, string>, engines: string, platform: Record<string, string> }} _provenance
+ * @property {{ source: string, version: string, sha256: Record<string, string>, converted: string, rule: string, constants: Record<string, string>, documentation_only: Record<string, string>, held_by_copy: Record<string, string>, computation: Record<string, string>, engines: string, platform: Record<string, string> }} _provenance
  * @property {string} version
  * @property {Record<string, GeoPoolDefinition>} pools
  * @property {GeoMetricDefinition[]} metrics

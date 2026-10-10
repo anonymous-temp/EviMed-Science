@@ -46,7 +46,7 @@ import {
   GEO_GAP_CLASSES, GEO_GAP_CLASS_LABELS_ZH,
   GEO_GROUP_SIGNALS, GEO_IDENTITY_STATUSES, GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS, GEO_QUESTION_KINDS, GEO_QUESTION_PLATFORMS,
   GEO_RX_CLASSES, GEO_SOURCE_KINDS, GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS,
-  GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoClaimJourneyStage, geoConstant } from "@evimed/domain";
+  GEO_METRICS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoClaimJourneyStage, geoConstant } from "@evimed/domain";
 import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -59,10 +59,23 @@ export const GEO_WRITE_LIMITS = Object.freeze({
   claims: 200, sources: 200, articles: 50, targets: 60, groups: 80, questionsPerGroup: 60, questions: 400, competitors: 20,
   journeyEntries: 60, planEntries: 60, ownedLinks: 50, jsonBytes: 256 * 1024,
 });
-/** Measured questions a locked set holds: the full program, and a single step's minimal set. */
-export const GEO_MEASURED_RANGE = Object.freeze({ full: Object.freeze([40, 120]), minimal: Object.freeze([30, 120]) });
-/** Control groups in the full program, and the share of groups they make up (≈ 20–30 %, with a tolerance of five points). */
-export const GEO_CONTROL_RANGE = Object.freeze({ groups: Object.freeze([3, 5]), share: Object.freeze([0.15, 0.35]) });
+/** Measured questions a locked set holds: the full program, and a single step's minimal set (the owner's table has its floor). */
+export const GEO_MEASURED_RANGE = Object.freeze({ full: Object.freeze([40, 120]), minimal: Object.freeze([Number(geoConstant("SINGLE_STEP_MIN_QUESTIONS")), 120]) });
+/** The tolerance the share of control groups is given on each side of the owner's range, in points of a share. */
+const CONTROL_SHARE_TOLERANCE = 0.05;
+/** @param {number} share */
+const points = (share) => Math.round(share * 100);
+/**
+ * Control groups in the full program (the table's net-effect minimum and maximum), and the share of groups they make up: the table's
+ * `CONTROL_CLUSTER_SHARE_MIN` to `_MAX` (≈ 20–30 %), with a tolerance of five points on each side.
+ */
+export const GEO_CONTROL_RANGE = Object.freeze({
+  groups: Object.freeze([GEO_METRICS.net_effect.control_group_count_min, GEO_METRICS.net_effect.control_group_count_max]),
+  share: Object.freeze([
+    (points(Number(geoConstant("CONTROL_CLUSTER_SHARE_MIN"))) - points(CONTROL_SHARE_TOLERANCE)) / 100,
+    (points(Number(geoConstant("CONTROL_CLUSTER_SHARE_MAX"))) + points(CONTROL_SHARE_TOLERANCE)) / 100,
+  ]),
+});
 
 /**
  * Whether the program asked for this project's question map only as an
@@ -539,7 +552,7 @@ export function geoLockCheck(groups, minimal) {
   const controlIssue = control < fewest || control > most
     ? `${fewest} to ${most} control groups are needed; this set has ${control}.`
     : share < lowShare || share > highShare
-      ? `Control groups should be about 20–30 % of the groups; here they are ${Math.round(share * 100)} %.`
+      ? `Control groups should be about ${points(Number(geoConstant("CONTROL_CLUSTER_SHARE_MIN")))}–${points(Number(geoConstant("CONTROL_CLUSTER_SHARE_MAX")))} % of the groups; here they are ${points(share)} %.`
       : null;
   if (controlIssue) notices.push({ field: "control", code: "notice", message: controlIssue });
   return { refusals, notices, measured, thin: measured < GEO_MEASURED_RANGE.full[0] || control === 0 };

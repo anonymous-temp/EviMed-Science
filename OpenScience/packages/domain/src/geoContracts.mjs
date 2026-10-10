@@ -42,6 +42,7 @@
  */
 
 import { checkIdOf, citationIntegrityIssues, clinicalSafetyRuleHits, quoteIsPresent, runtimeLeakageLine } from './clinicalEvidence.mjs'
+import { GEO_METRICS, geoConstant } from './geoMetrics.mjs'
 
 /** @typedef {'required'|'advisory'} GeoSeverity */
 /**
@@ -98,8 +99,17 @@ const PROPOSAL_KINDS = Object.freeze({
   weekly: Object.freeze({ pdf: 1, docx: 1 }),
 })
 
-/** Measured-question bounds of a locked question set (build spec §4). */
-export const GEO_QUESTION_SET_BOUNDS = Object.freeze({ min: 40, max: 120, minimal: 30, controlGroups: Object.freeze({ min: 3, max: 5 }), controlShare: Object.freeze({ min: 0.2, max: 0.3 }) })
+/**
+ * Measured-question bounds of a locked question set (build spec §4). The minimal set, the control groups and their share of the groups
+ * are the owner's table's (`SINGLE_STEP_MIN_QUESTIONS`, `net_effect.control_group_count_*`, `CONTROL_CLUSTER_SHARE_*`), read, not restated.
+ */
+export const GEO_QUESTION_SET_BOUNDS = Object.freeze({
+  min: 40,
+  max: 120,
+  minimal: Number(geoConstant('SINGLE_STEP_MIN_QUESTIONS')),
+  controlGroups: Object.freeze({ min: GEO_METRICS.net_effect.control_group_count_min, max: GEO_METRICS.net_effect.control_group_count_max }),
+  controlShare: Object.freeze({ min: Number(geoConstant('CONTROL_CLUSTER_SHARE_MIN')), max: Number(geoConstant('CONTROL_CLUSTER_SHARE_MAX')) }),
+})
 /** A full claim library holds at least this many claims; a minimal one need not. */
 export const GEO_CLAIM_LIBRARY_MIN = 30
 /** A 问答 article is 300–600 characters (plan §3.6). */
@@ -346,7 +356,8 @@ export function geoInsightFindings(input) {
       const share = controls.length / measuredGroups.length
       if (controls.length < GEO_QUESTION_SET_BOUNDS.controlGroups.min || controls.length > GEO_QUESTION_SET_BOUNDS.controlGroups.max
         || share < GEO_QUESTION_SET_BOUNDS.controlShare.min || share > GEO_QUESTION_SET_BOUNDS.controlShare.max) {
-        notes.push(`${controls.length} control group(s) of ${measuredGroups.length} measured (${Math.round(share * 100)}%), where the net effect needs 3–5, about 20–30%`)
+        const { controlGroups, controlShare } = GEO_QUESTION_SET_BOUNDS
+        notes.push(`${controls.length} control group(s) of ${measuredGroups.length} measured (${Math.round(share * 100)}%), where the net effect needs ${controlGroups.min}–${controlGroups.max}, about ${Math.round(controlShare.min * 100)}–${Math.round(controlShare.max * 100)}%`)
       }
     }
     if (notes.length) {
