@@ -885,3 +885,13 @@ test('a current medication denial does not establish absence throughout a lookba
   assert.equal(evaluate({...scoped,occurredInterval:{start:'2026-09-09',end:'2026-10-08'}}),UNKNOWN);
   assert.equal(evaluateCriterion(criterion,{facts:[{...fact,clinical:null}],asOf}).state,SATISFIED);
 });
+
+
+test('laboratory units outside the conversion vocabulary must still be stated in their source',()=>{
+  const source=chart('肌钙蛋白 0.02，单位未记载。');
+  const clinical={schema:1,assertion:'affirmed',experiencer:'patient',laboratory:{analyte:'troponin',originalValue:0.02,originalUnit:'ng/mL'}};
+  const guessed=source.fact('肌钙蛋白 0.02',{variable:'troponin',value:0.02,unit:'ng/mL',clinical});
+  assert.deepEqual(verifyFactEvidence(guessed,{documents:source.documents}),{ok:false,reason:'unit_not_in_span'});
+  const stated=chart('肌钙蛋白 0.02 ng/mL。');
+  assert.deepEqual(verifyFactEvidence(stated.fact('肌钙蛋白 0.02 ng/mL',{variable:'troponin',value:0.02,unit:'ng/mL',clinical}),{documents:stated.documents}),{ok:true,reason:null});
+});

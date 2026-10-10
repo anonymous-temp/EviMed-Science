@@ -8,9 +8,10 @@ export function clinicalUnitToken(unit) {
 }
 /** Exact evidence check for this table's closed unit vocabulary only. Unknown
  * units return null; this is not a parser for medical prose or all UCUM units.
- * @param {unknown} unit @param {string} quote @returns {boolean|null} */
-export function clinicalUnitInQuote(unit, quote) {
-  const aliases = Object.values(table.aliases).find(values => values.includes(String(unit ?? '').trim()));
+ * @param {unknown} unit @param {string} quote @param {boolean} [exactUnknown] @returns {boolean|null} */
+export function clinicalUnitInQuote(unit, quote, exactUnknown = false) {
+  const token = String(unit ?? '').trim();
+  const aliases = Object.values(table.aliases).find(values => values.includes(token)) ?? (exactUnknown && token ? [token] : null);
   if (!aliases) return null;
   const text = quote.replace(/\s+/g,'');
   return aliases.some(alias => {

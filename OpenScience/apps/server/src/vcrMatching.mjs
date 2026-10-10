@@ -292,10 +292,10 @@ export function verifyFactEvidence(fact, context = {}) {
   if (typeof fact?.dateSurface === "string" && fact.dateSurface.trim() && !span.includes(fact.dateSurface)) {
     return { ok: false, reason: "date_not_in_span" };
   }
-  if (clinicalUnitInQuote(fact.unit,span) === false) return {ok:false,reason:'unit_not_in_span'};
+  if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory)) === false) return {ok:false,reason:'unit_not_in_span'};
   const original = fact.clinical?.laboratory;
   if (original?.originalValue != null && !numeralsIn(span).some(number => Math.abs(number-original.originalValue)<1e-9)) return {ok:false,reason:'value_not_in_span'};
-  if (original?.originalUnit && clinicalUnitInQuote(original.originalUnit,span) === false) return {ok:false,reason:'unit_not_in_span'};
+  if (original?.originalUnit && clinicalUnitInQuote(original.originalUnit,span,true) === false) return {ok:false,reason:'unit_not_in_span'};
   return { ok: true, reason: null };
 }
 
