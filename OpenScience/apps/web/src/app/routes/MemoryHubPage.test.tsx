@@ -340,8 +340,8 @@ describe("记忆胶囊", () => {
     await user.click(row);
     const drawer = await screen.findByRole("dialog", { name: "背景" });
     expect(within(drawer).getByText("药学背景，关注老年人用药安全与抗栓治疗。")).toBeInTheDocument();
-    // Whose words it is, once, in a sentence — and since when.
-    expect(within(drawer).getByText("你说的 · 9月12日")).toBeInTheDocument();
+    // Since when, and nothing of whose words it is (owner ruling of 2026-10-10).
+    expect(within(drawer).getByText("9月12日")).toBeInTheDocument();
     expect(within(drawer).getByText("“我是临床药师”")).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "来源对话" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "编辑" })).toBeInTheDocument();
@@ -352,14 +352,15 @@ describe("记忆胶囊", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("says in the drawer that EviMed learned a memory it inferred, and offers 「这不对」 for it alone", async () => {
+  it("does not say in the drawer that EviMed learned a memory it inferred, and offers 「不再记这条」 on every memory", async () => {
     const user = userEvent.setup();
     open();
     await user.click(await screen.findByRole("button", { name: /偏好结论先行的回答/ }));
     const drawer = await screen.findByRole("dialog", { name: "偏好" });
-    expect(within(drawer).getByText("从对话中学到 · 9月12日")).toBeInTheDocument();
+    expect(within(drawer).getByText("9月12日")).toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/从对话中学到|推断|你说的/);
     await user.click(within(drawer).getByRole("button", { name: "更多" }));
-    expect(await screen.findByRole("menuitem", { name: "这不对" })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: "不再记这条" })).toBeInTheDocument();
   });
 
   it("forgets from the drawer at once, and the toast's 撤销 takes it back", async () => {
@@ -388,7 +389,7 @@ describe("记忆胶囊", () => {
     expect(screen.queryByText("纳入范围覆盖疳证与小儿厌食症。")).toBeNull();
     // The drawer of a project's fact names the project.
     await user.click(screen.getByRole("button", { name: /信尔美为处方药/ }));
-    expect(await screen.findByText(/信尔美 · 你说的/)).toBeInTheDocument();
+    expect(await screen.findByText(/^信尔美 · \d+月\d+日$/)).toBeInTheDocument();
   });
 
   it("lists the studies of 虚拟临床研究 and the projects of 循证 GEO in a group of their own in the dropdown", async () => {
@@ -429,7 +430,7 @@ describe("记忆胶囊", () => {
     open("?tab=methods");
     await user.click(await screen.findByRole("button", { name: /提交前给成品做最后把关/ }));
     const drawer = await screen.findByRole("dialog", { name: "提交前给成品做最后把关" });
-    expect(within(drawer).getByText("做法 · 从你的对话中学到 · 第 2 版 · 9月22日")).toBeInTheDocument();
+    expect(within(drawer).getByText("做法 · 第 2 版 · 9月22日")).toBeInTheDocument();
     expect(within(drawer).getByText(/先复制一份/)).toBeInTheDocument();
     expect(drawer.textContent).not.toMatch(/Purpose|the last guards/);
     expect(within(drawer).getByText("报告交付前")).toBeInTheDocument();
@@ -454,7 +455,8 @@ describe("记忆胶囊", () => {
     open("?tab=methods");
     await user.click(await screen.findByRole("button", { name: /每一句结论落回来源/ }));
     const drawer = await screen.findByRole("dialog", { name: "每一句结论落回来源" });
-    expect(within(drawer).getByText(/^用在.+ · 从你的对话中学到/)).toBeInTheDocument();
+    expect(within(drawer).getByText(/^用在.+ · 第 \d+ 版/)).toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/从你的对话中学到|你定下的/);
     expect(await within(drawer).findByText("1. 对应每个引用。")).toBeInTheDocument();
     expect(within(drawer).getByText("写综述结论时")).toBeInTheDocument();
     // One version: nothing to go back to, and nothing earlier to read.
@@ -572,7 +574,7 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(fetchMemoryProfile.mock.calls.length).toBeGreaterThan(1));
   });
 
-  it("keeps a medicine-safety hold visible in the drawer and confirmable", async () => {
+  it("shows a memory that waits for confirmation in plain words in the drawer, confirmable, with no safety hold named", async () => {
     const user = userEvent.setup();
     fetchMemoryProfile.mockResolvedValue({
       records: [record({ id: "rec_pending", kind: "profile", summary: "长期服用华法林。", value: "长期服用华法林。", status: "pending" })],
@@ -581,7 +583,8 @@ describe("记忆胶囊", () => {
     open();
     await user.click(await screen.findByRole("button", { name: /长期服用华法林/ }));
     const drawer = await screen.findByRole("dialog", { name: "背景" });
-    expect(within(drawer).getByText("待确认（用药安全）")).toBeInTheDocument();
+    expect(within(drawer).getByText("待确认")).toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/用药安全/);
     expect(within(drawer).getByRole("button", { name: "确认" })).toBeInTheDocument();
   });
 

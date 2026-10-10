@@ -736,6 +736,36 @@ export class CapsuleService {
   }
 
   /**
+   * How many entries the active capsules hold that the resident profile does not carry — what a recall could find there, as
+   * the line beside the profile counts it (review M6): the approved entries of a guest capsule, and of the researcher's own
+   * capsules those of a kind the profile does not list. Approximate on purpose: it is a pointer to where to look, and the
+   * recall itself decides what a project may be handed (`#inProject`).
+   * @param {string} userId @param {string|null} projectId @param {readonly string[]} profileKinds
+   * @returns {Promise<number>}
+   */
+  async lookupCount(userId, projectId, profileKinds) {
+    const database = this.documents.database;
+    if (typeof database?.query !== "function") return 0;
+    const local = await this.active(userId, projectId);
+    const global = projectId ? await this.active(userId, null) : { items: [] };
+    const active = [...local.items, ...global.items]
+      .filter((item, index, all) => all.findIndex((other) => other.capsuleId === item.capsuleId) === index).slice(0, 8);
+    /** @type {string[]} */ const own = [];
+    /** @type {string[]} */ const guest = [];
+    for (const selection of active) {
+      const capsule = await this.documents.get(userId, "capsule", selection.capsuleId);
+      if (!capsule || capsule.payload.takenDown) continue;
+      (selection.mode === "own" && !capsule.payload.imported ? own : guest).push(capsule.id);
+    }
+    if (own.length === 0 && guest.length === 0) return 0;
+    const result = await database.query(`SELECT count(*)::integer AS n FROM evimed_product.documents
+      WHERE user_id=$1 AND kind='fact' AND deleted_at IS NULL AND payload->>'status'='approved'
+        AND ((payload->>'capsuleId' = ANY($2::text[]) AND coalesce(payload->>'factKind','') <> ALL($4::text[]))
+          OR payload->>'capsuleId' = ANY($3::text[]))`, [userId, own, guest, [...profileKinds]]);
+    return Number(result.rows[0]?.n) || 0;
+  }
+
+  /**
    * `selection` names the capsules to search instead of the ones in force —
    * the agent-memory API's `capsuleIds`, which is how 同病异治对照 asks one
    * named school at a time. The caller has checked that each is this account's

@@ -68,23 +68,24 @@ describe("one memory, opened from its row", () => {
   beforeEach(() => { vi.clearAllMocks(); });
   afterEach(cleanup);
 
-  it("says what it is, whose words it is and since when — once, in a sentence — and shows the sentence whole", () => {
+  // Owner ruling of 2026-10-10 (review R9): whose words a memory is, is not said on the page — not for what the researcher said,
+  // not for what was learned from a conversation. The drawer says what it is and since when.
+  it("says what it is and since when, and nothing of whose words it is, and shows the sentence whole", () => {
     open(fact());
     const drawer = screen.getByRole("dialog", { name: "偏好" });
     expect(within(drawer).getByText("证据先用表格")).toBeInTheDocument();
-    expect(within(drawer).getByText("你说的 · 9月12日")).toBeInTheDocument();
-    expect(within(drawer).queryByText("推断")).not.toBeInTheDocument();
+    expect(within(drawer).getByText("9月12日")).toBeInTheDocument();
     cleanup();
     open(fact(inferred), { projectName: "疳证 Meta 文献检索" });
-    expect(screen.getByText("疳证 Meta 文献检索 · 从对话中学到 · 9月12日")).toBeInTheDocument();
+    expect(screen.getByText("疳证 Meta 文献检索 · 9月12日")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/你说的|你确认的|你改过的|从对话中学到|推断|助手|未经/);
   });
 
   // Eleven whole `<evimed-brief>` task briefs were once stored as durable
   // preferences and rendered verbatim, tag and all (2026-09-16 review, M1).
-  it("shows a stored brief without the machine's envelope, and never as the researcher's word", () => {
+  it("shows a stored brief without the machine's envelope", () => {
     open(fact({ summary: "<evimed-brief> 请以《某某》为题完成证据评审。</evimed-brief>" }));
     expect(screen.getByText("请以《某某》为题完成证据评审。")).toBeInTheDocument();
-    expect(screen.getByText(/从对话中学到/)).toBeInTheDocument();
   });
 
   it("shows the words it rests on, the versions it had, and a link to the conversation it came from — only here", async () => {
@@ -95,7 +96,9 @@ describe("one memory, opened from its row", () => {
       version: 2,
     }));
     expect(screen.getByText("“请用中文回答。”")).toBeInTheDocument();
-    expect(screen.getByText(/你改的：证据先用列表/)).toBeInTheDocument();
+    // The earlier wording and when it changed; who made the change is not said (R11).
+    expect(screen.getByText(/：证据先用列表/)).toBeInTheDocument();
+    expect(screen.queryByText(/你改的|系统整理|从对话中学到/)).not.toBeInTheDocument();
     expect(screen.getByText("以前的版本")).toBeInTheDocument();
     // Never the store's own references.
     expect(screen.queryByText(/conversation_message|sessions\/ses_9/)).not.toBeInTheDocument();
@@ -156,23 +159,25 @@ describe("one memory, opened from its row", () => {
     expect(toasts.success).toHaveBeenCalledWith("已保存");
   });
 
-  it("offers 「这不对」 in the 「⋯」 of what EviMed learned, and not of what the researcher said", async () => {
+  // Review R10: the item used to appear only on what was learned from a conversation, so having it said the memory was an inference.
+  it("offers 「不再记这条」 in the 「⋯」 of every memory, so that having it says nothing about where the memory came from", async () => {
     open(fact(inferred));
     const menu = await openMenu();
-    expect(within(menu).getByRole("menuitem", { name: "这不对" })).toHaveClass("text-danger");
+    expect(within(menu).getByRole("menuitem", { name: "不再记这条" })).toHaveClass("text-danger");
     cleanup();
-    open(fact({ revisions: [{ version: 1, value: "a", summary: "a", status: "active", changedAt: null, reason: "x" }] }));
+    open(fact());
     const plain = await openMenu();
-    expect(within(plain).queryByRole("menuitem", { name: "这不对" })).not.toBeInTheDocument();
+    expect(within(plain).getByRole("menuitem", { name: "不再记这条" })).toBeInTheDocument();
   });
 
-  it("「这不对」 deletes only after asking, and says what the gentler option is", async () => {
+  it("「不再记这条」 deletes only after asking, and says what the gentler option is", async () => {
     api.deleteStructuredMemory.mockResolvedValue(undefined);
     const { onClose } = open(fact(inferred));
-    await userEvent.click(within(await openMenu()).getByRole("menuitem", { name: "这不对" }));
-    const dialog = await screen.findByRole("alertdialog", { name: "这条推断不对？" });
-    expect(dialog).toHaveTextContent("之后也不再推断出来");
+    await userEvent.click(within(await openMenu()).getByRole("menuitem", { name: "不再记这条" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "不再记这条？" });
+    expect(dialog).toHaveTextContent("删除后也不会再记下类似的内容");
     expect(dialog).toHaveTextContent("请选“忘记”");
+    expect(dialog.textContent).not.toMatch(/推断/);
     expect(api.deleteStructuredMemory).not.toHaveBeenCalled();
     await userEvent.click(within(dialog).getByRole("button", { name: "删除" }));
     await waitFor(() => expect(api.deleteStructuredMemory).toHaveBeenCalledWith("mem_1"));
@@ -187,17 +192,22 @@ describe("one memory, opened from its row", () => {
     expect(client.announceMemoryChanged).toHaveBeenCalled();
     cleanup();
     open(fact());
-    expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
+    // The 「⋯」 of a memory always holds 「不再记这条」; the undo is in it only once there is a change to take back.
+    expect(within(await openMenu()).queryByRole("menuitem", { name: "撤销上次改动" })).not.toBeInTheDocument();
   });
 
-  it("keeps a medicine-safety hold visible, and asks before a sensitive one takes effect, by either path", async () => {
+  // Review R12 (owner ruling of 2026-10-10): the medicine-safety hold is retired, so what waits to be confirmed is a proposal an
+  // outside agent made, and it says only that. A sensitive one still says what confirming does before it does it.
+  it("shows what waits to be confirmed in plain words, and asks before a sensitive one takes effect, by either path", async () => {
     api.updateStructuredMemory.mockImplementation(async (value: object, update: object) => ({ ...value, ...update }));
     open(fact({ id: "mem_sensitive", summary: "我在服用某种药物。", status: "pending", sensitive: true }));
-    expect(screen.getByText("待确认（用药安全）")).toBeInTheDocument();
+    expect(screen.getByText("待确认")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/用药安全/);
     await userEvent.click(screen.getByRole("button", { name: "确认" }));
     const dialog = await screen.findByRole("alertdialog", { name: "确认这条敏感记忆？" });
     // Both recall paths drop a sensitive record whatever its status.
-    expect(dialog).toHaveTextContent("敏感记忆不会被自动调取到后续研究中");
+    expect(dialog).toHaveTextContent("敏感记忆不会被自动用于后续研究");
+    expect(dialog.textContent).not.toMatch(/隐私保护/);
     expect(api.updateStructuredMemory).not.toHaveBeenCalled();
     await userEvent.click(within(dialog).getByRole("button", { name: "确认保留" }));
     await waitFor(() => expect(api.updateStructuredMemory).toHaveBeenCalledWith(
@@ -314,11 +324,11 @@ describe("a note of the researcher's own capsule, opened from its row", () => {
     return { kind: "entry", key: "entry:entry_1", group: "self", section: "habit", projectId: null, at: "", text: "引用写到页码。", entry } as never;
   }
 
-  it("is the same drawer: its words, whose they are, 编辑 and 忘记", () => {
+  it("is the same drawer: its words, its date, 编辑 and 忘记", () => {
     open(note());
     const drawer = screen.getByRole("dialog", { name: "写作习惯" });
     expect(within(drawer).getByText("引用写到页码。")).toBeInTheDocument();
-    expect(within(drawer).getByText("你说的 · 9月14日")).toBeInTheDocument();
+    expect(within(drawer).getByText("9月14日")).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "编辑" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "忘记" })).toBeInTheDocument();
   });
@@ -334,11 +344,12 @@ describe("a note of the researcher's own capsule, opened from its row", () => {
     await waitFor(() => expect(product.updateCapsuleEntry).toHaveBeenCalledWith("cap_1", "entry_1", { content: "引用写到页码和行号。", expectedRevision: 1 }));
   });
 
-  it("forgets it with an undo, and says it was inferred when it was not the researcher's own word", async () => {
+  it("forgets it with an undo, and says nothing of whether it was the researcher's own word", async () => {
     client.retireCapsuleEntry.mockResolvedValue({ id: "entry_1", revision: 2 });
     client.undoCapsuleEntry.mockResolvedValue({ undone: "restored", entry: {} });
     const { onClose } = open(note({ payload: { capsuleId: "cap_1", factKind: "preference", layer: "profile", content: "偏好表格。", status: "approved", origin: "inferred", provenance: [] } }));
-    expect(screen.getByText("从对话中学到 · 9月14日")).toBeInTheDocument();
+    expect(screen.getByText("9月14日")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/从对话中学到|你说的|推断/);
     await userEvent.click(screen.getByRole("button", { name: "忘记" }));
     await waitFor(() => expect(client.retireCapsuleEntry).toHaveBeenCalledWith("cap_1", "entry_1", 1));
     expect(onClose).toHaveBeenCalled();

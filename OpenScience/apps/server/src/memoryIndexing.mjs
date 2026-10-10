@@ -57,7 +57,8 @@ export class MemoryIndexing {
     // drops weak but correct hits; every hit is re-checked against PostgreSQL
     // and then ranked and budgeted by the caller, so a weak one costs a slot,
     // not correctness. A deployment that would rather spend fewer slots sets a
-    // floor here.
+    // floor here: the composition passes the research recall's own, so that a
+    // lookup in which neither half reaches it can answer so (review M6).
     this.scoreThreshold = Number(scoreThreshold) || 0;
   }
 
