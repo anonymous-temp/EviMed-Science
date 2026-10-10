@@ -9,6 +9,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FRONTIER_FACT_KEYS } from "@evimed/domain";
 import { FRONTIER_FACT_RULES, FrontierIngest, whitelistFacts } from "../src/frontierIngest.mjs";
+import { frontierMetricFamilies } from "../src/frontierService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { KnowledgePluginClient } from "../src/knowledgePluginClient.mjs";
 import { TEST_VOCABULARY, memoryPlugin, pluginEntry, pluginSource } from "./helpers/frontierFixtures.mjs";
@@ -265,6 +266,26 @@ test("D-03: a stale health answer, or one that a second control plane has alread
   assert.equal(pulled.rewound, undefined);
   assert.equal(pulled.inserted, 3);
   assert.deepEqual([ingest.status().rewinds.count, ingest.status().cursorAhead, ingest.status().state], [0, false, "ok"]);
+});
+
+test("D-10: the plugin's host budget is kept from each health answer, and a plugin that does not say leaves no table", options, async () => {
+  const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: [1, 2].map((seq) => pluginEntry("nejm", seq)) });
+  const ingest = ingestFor(plugin, { pageLimit: 50 });
+  await ingest.mirrorSources();
+  await ingest.pull();
+  assert.equal(ingest.status().pluginHealthDetail?.hostBudget, null, "not a table of zeros: a plugin of an older minor does not report it");
+  plugin.hostBudget = { "api.crossref.org": { used: 2750, cap: 3000 }, "api.fda.gov": { used: 0, cap: 300 } };
+  await ingest.pull();
+  assert.deepEqual(ingest.status().pluginHealthDetail?.hostBudget, plugin.hostBudget);
+  plugin.hostBudget = { "api.crossref.org": { used: 3000, cap: 3000 }, "api.fda.gov": { used: 0, cap: 300 } };
+  await ingest.pull();
+  assert.equal(ingest.status().pluginHealthDetail?.hostBudget?.["api.crossref.org"]?.used, 3000, "the spend moves with the plugin's own count");
+  // ...and the metrics endpoint's families are made from exactly that status: the plugin's answer reaches the gauges the alert reads.
+  const families = frontierMetricFamilies(true, { tables: null, composer: null, actions: null, editor: null, budget: { spentCny: 0, budgetCny: 10, state: "ok" },
+    worker: { pipeline: {}, loops: {} }, client: { counters: { requests: 0, retries: 0, failures: 0 } }, service: {}, plugin: ingest.status() });
+  const series = (/** @type {string} */ name) => families.find((family) => family.name === name)?.series;
+  assert.deepEqual(series("open_science_frontier_plugin_host_budget_used"), [{ labels: { host: "api.crossref.org" }, value: 3000 }, { labels: { host: "api.fda.gov" }, value: 0 }]);
+  assert.deepEqual(series("open_science_frontier_plugin_host_budget_cap"), [{ labels: { host: "api.crossref.org" }, value: 3000 }, { labels: { host: "api.fda.gov" }, value: 300 }]);
 });
 
 const entryRequests = (/** @type {ReturnType<typeof memoryPlugin>} */ plugin) => plugin.requests.filter((request) => request.path === "/v1/entries").map((request) => Number(request.query.limit));

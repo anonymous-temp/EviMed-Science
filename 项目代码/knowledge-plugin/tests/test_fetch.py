@@ -219,6 +219,32 @@ async def test_api_404_with_a_body_goes_to_the_adapter(plain_settings, upstream)
     await fetcher.aclose()
 
 
+@pytest.mark.parametrize("response", [httpx.Response(204), httpx.Response(200, content=b""), httpx.Response(200, content=b" \r\n\t ")],
+                         ids=["204", "zero-byte 200", "whitespace-only 200"])
+async def test_a_204_or_a_body_with_nothing_in_it_is_the_sources_failure_not_a_read(plain_settings, upstream, response):
+    """Review 2026-10-10, D-07: this was `FetchError("empty", ...)`, and `empty` is also what a page that parsed to no entries
+    is called, which the plugin counts as a successful read. It has a name of its own now, and the name is on the failing side."""
+    from knowledge_plugin.model import SUCCESS_OUTCOMES
+
+    upstream.route("api.example.org", "/nothing", response)
+    fetcher = make_fetcher(plain_settings, upstream)
+    with pytest.raises(FetchError) as refused:
+        await fetcher.fetch(RequestSpec(url="https://api.example.org/nothing", api=True))
+    assert refused.value.outcome not in SUCCESS_OUTCOMES, "whatever it is called, it is not a read"
+    assert (refused.value.outcome, refused.value.detail, refused.value.status) == ("empty-body", "empty_body", response.status_code)
+    await fetcher.aclose()
+
+
+async def test_an_empty_robots_txt_is_still_a_site_that_allows_everything(plain_settings, upstream):
+    """The one place an empty body is an answer: robots.txt with nothing in it says nothing is disallowed."""
+    upstream.route("www.example.org", "/robots.txt", httpx.Response(200, content=b""))
+    upstream.route("www.example.org", "/news", httpx.Response(200, content=ARTICLE, headers={"content-type": "text/html"}))
+    fetcher = make_fetcher(plain_settings, upstream)
+    result = await fetcher.fetch(RequestSpec(url="https://www.example.org/news"))
+    assert result.status == 200
+    await fetcher.aclose()
+
+
 async def test_credentials_are_injected_on_the_wire_and_never_returned(plain_settings, upstream, tmp_path):
     key = tmp_path / "ncbi"
     key.write_text("secret-ncbi-key\n")

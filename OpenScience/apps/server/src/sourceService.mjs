@@ -1138,7 +1138,12 @@ export class SourceService {
       const updated = await this.documents.put(job.userId, "source", source.id, payload, { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
       return { sourceId: source.id, sourceRevision: updated.revision, status, understandingId: output ? id : null };
     }, false, true);
-    if(published?.sourceRevision){try{await this.evolutionSignals?.record({userId:job.userId,projectId:job.projectId,eventId:`source:${published.sourceId}:${published.sourceRevision}`,moduleId:"sources",kind:hasOmission?"source-omission":"availability",capability:"source-understanding",operation:"extract",dataShape:"text",version:published.sourceRevision});}catch{/* publication remains complete */}}
+    // `withSourceLease(..., finish)` hands back the finished job, and what the publication returned is its `result`: the revision was read
+    // off the job itself, where it is never, so no signal of either kind was ever recorded from here (review D-E18).
+    const publication=published?.result;
+    // Only a revision with something missing from it is a signal. A clean one used to be recorded as `availability`, which the growth
+    // loop reads as new data and, once five accounts had one, turns into an opportunity for this module: a success counted as a lead.
+    if(publication?.sourceRevision&&hasOmission){try{await this.evolutionSignals?.record({userId:job.userId,projectId:job.projectId,eventId:`source:${publication.sourceId}:${publication.sourceRevision}`,moduleId:"sources",kind:"source-omission",capability:"source-understanding",operation:"extract",dataShape:"text",version:publication.sourceRevision});}catch{/* publication remains complete */}}
     return published;
   }
 

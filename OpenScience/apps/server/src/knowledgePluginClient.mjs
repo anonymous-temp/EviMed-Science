@@ -70,6 +70,10 @@ const MAX_TEXT_CHARS = 20_000;
 const MAX_ABSTRACT_CHARS = 50_000;
 const SHA256 = /^[a-f0-9]{64}$/;
 const CAPABILITY_ID = /^[a-z][a-z0-9-]{1,60}$/;
+/** Contract 1.4.0 `Health.host_budget`: a host as a DNS name, how many hosts one answer may name, and a bound on a day's count. */
+const HOST_NAME = /^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/;
+const MAX_BUDGET_HOSTS = 64;
+const MAX_BUDGET_COUNT = 1_000_000_000;
 
 /** @param {number} status @param {string} code @param {string} message */
 function pluginError(status, code, message) {
@@ -360,6 +364,20 @@ function validateHealth(raw) {
     max: integer(value.rate_limited_1h.max, 0, 1_000_000) ?? 0,
     host: text(value.rate_limited_1h.host, 253) ?? null,
   } : null;
+  // Contract 1.4.0: today's (UTC) use against each host's own daily cap. A spent cap makes the plugin refuse that host's polls
+  // until 00:00 UTC, an outcome that counts against no source's health, so this table is the only place the spend shows. Null
+  // when the plugin does not say (a build of an older minor): absent is not a table of zeros.
+  /** @type {Record<string, { used: number, cap: number }> | null} */
+  let hostBudget = null;
+  if (isObject(value.host_budget)) {
+    hostBudget = {};
+    for (const [host, row] of Object.entries(value.host_budget).slice(0, MAX_BUDGET_HOSTS)) {
+      if (!HOST_NAME.test(host) || !isObject(row)) continue;
+      const used = integer(row.used, 0, MAX_BUDGET_COUNT);
+      const cap = integer(row.cap, 1, MAX_BUDGET_COUNT);
+      if (used !== undefined && cap !== undefined) hostBudget[host] = { used, cap };
+    }
+  }
   return {
     status: ["ok", "degraded", "down"].includes(value.status) ? value.status : "degraded",
     contract,
@@ -372,6 +390,7 @@ function validateHealth(raw) {
     last_new_entry_at: isoTime(value.last_new_entry_at),
     rate_limited_1h: rateLimited,
     model_calls_24h: integer(value.model_calls_24h, 0, 10_000_000) ?? null,
+    host_budget: hostBudget,
     latest_seq: integer(value.latest_seq, 0, Number.MAX_SAFE_INTEGER) ?? null,
   };
 }

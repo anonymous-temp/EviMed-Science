@@ -82,6 +82,34 @@ test("the token is read on every call, and health is sent none", async () => {
   await writeFile(tokenFile, "test-only-token-one\n", { mode: 0o600 });
 });
 
+test("D-10: the health answer's host budget is read per host as a use against a cap, and what is not that shape is left out", async () => {
+  const sources = { healthy: 2 };
+  const { plugin } = client([
+    { body: { status: "ok", contract: "1.4.0", sources, egress: {}, host_budget: {
+      "api.crossref.org": { used: 2750, cap: 3000 }, "api.fda.gov": { used: 0, cap: 300 },
+      "negative.example.org": { used: -1, cap: 10 }, "no-cap.example.org": { used: 5 }, "float.example.org": { used: 1.5, cap: 10 },
+      "zero-cap.example.org": { used: 0, cap: 0 }, "text.example.org": { used: "3", cap: 10 }, "Bad Host!": { used: 1, cap: 2 },
+      "list.example.org": [1, 2], "string.example.org": "2/3" } } },
+    // A key named __proto__ only exists in parsed JSON (in an object literal it would set a prototype).
+    { body: '{"status":"ok","contract":"1.4.0","sources":{"healthy":2},"egress":{},"host_budget":{"__proto__":{"used":1,"cap":2},"api.fda.gov":{"used":1,"cap":300}}}' },
+    { body: { status: "ok", contract: "1.3.0", sources, egress: {} } },
+    { body: { status: "ok", contract: "1.4.0", sources, egress: {}, host_budget: [1, 2] } },
+    { body: { status: "ok", contract: "1.4.0", sources, egress: {}, host_budget: {} } },
+    { body: { status: "ok", contract: "1.4.0", sources, egress: {}, host_budget: Object.fromEntries(
+      Array.from({ length: 200 }, (_, index) => [`host-${index}.example.org`, { used: index, cap: 1000 }])) } },
+  ]);
+  const health = await plugin.health();
+  assert.deepEqual(health.host_budget, { "api.crossref.org": { used: 2750, cap: 3000 }, "api.fda.gov": { used: 0, cap: 300 } });
+  const hostile = (await plugin.health()).host_budget;
+  assert.deepEqual(hostile, { "api.fda.gov": { used: 1, cap: 300 } });
+  assert.equal(Object.getPrototypeOf(hostile), Object.prototype, "a table that names __proto__ does not change what it is");
+  assert.equal(/** @type {any} */ ({}).used, undefined);
+  assert.equal((await plugin.health()).host_budget, null, "a plugin of an older minor does not say; absent is not zero");
+  assert.equal((await plugin.health()).host_budget, null, "a list is not a table of hosts");
+  assert.deepEqual((await plugin.health()).host_budget, {}, "a plugin with no capped host says so");
+  assert.equal(Object.keys((await plugin.health()).host_budget).length, 64, "a table is read to a bound, whatever it holds");
+});
+
 test("a token file anyone else can read is refused by name, and the token never appears in an error", async () => {
   const loose = path.join(dir, "loose");
   await writeFile(loose, "test-only-loose-token\n");

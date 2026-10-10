@@ -29,7 +29,8 @@ function snapshot(detail) {
 }
 
 const HEALTH = { egress: { direct: "ok", relay: "ok" }, backlog: { due_sources: 1, pending_texts: 254, oldest_due_s: 30 },
-  lastOkFetchAt: "2026-09-28T03:00:00Z", lastNewEntryAt: "2026-09-28T02:00:00Z", rateLimited: { max: 0, host: null } };
+  lastOkFetchAt: "2026-09-28T03:00:00Z", lastNewEntryAt: "2026-09-28T02:00:00Z", rateLimited: { max: 0, host: null },
+  hostBudget: { "api.crossref.org": { used: 100, cap: 3000 } } };
 
 /** @param {any[]} families @param {string} name */
 const family = (families, name) => families.find((entry) => entry.name === name);
@@ -98,6 +99,48 @@ test("D-14: the exit-outage alert covers every exit that serves sources and can 
   const runbook = await readFile(path.join(repoRoot, "docs/WEB_OPERATIONS_RUNBOOK.md"), "utf8");
   assert.ok(runbook.includes(`\`${rule.alert}\``), "the runbook has a row for it");
   for (const exit of ["relay", "browser", "evimed-api"]) assert.match(runbook.slice(runbook.indexOf(`\`${rule.alert}\``)).split("\n")[0], new RegExp(`\`${exit}\``), `the row names the ${exit} exit`);
+});
+
+test("D-10: each capped host's use and cap are gauges, a plugin that does not report them has none, and one alert reads their ratio", async () => {
+  // A host whose daily cap is spent is refused by the plugin itself until 00:00 UTC, which counts against no source's health:
+  // every source stayed `healthy` and the platform saw only fewer entries a day later.
+  const reported = { "api.crossref.org": { used: 2750, cap: 3000 }, "api.fda.gov": { used: 0, cap: 300 }, "eutils.ncbi.nlm.nih.gov": { used: 1900, cap: 2000 },
+    "export.arxiv.org": { used: 90, cap: 100 }, "www.ema.europa.eu": { used: 271, cap: 300 } };
+  const families = frontierMetricFamilies(true, snapshot({ ...HEALTH, hostBudget: reported }));
+  const used = family(families, "open_science_frontier_plugin_host_budget_used");
+  const cap = family(families, "open_science_frontier_plugin_host_budget_cap");
+  assert.equal(used?.type, "gauge");
+  assert.equal(cap?.type, "gauge");
+  assert.deepEqual(used?.series, Object.entries(reported).map(([host, row]) => ({ labels: { host }, value: row.used })));
+  assert.deepEqual(cap?.series, Object.entries(reported).map(([host, row]) => ({ labels: { host }, value: row.cap })));
+  for (const name of ["open_science_frontier_plugin_host_budget_used", "open_science_frontier_plugin_host_budget_cap"]) {
+    assert.deepEqual(family(frontierMetricFamilies(true, snapshot({ ...HEALTH, hostBudget: null })), name), undefined, "a plugin that does not say has no series");
+  }
+
+  const rules = JSON.parse(await readFile(path.join(repoRoot, "deploy/web/monitoring/open-science.rules.json"), "utf8"));
+  const group = rules.groups.find((/** @type {any} */ entry) => entry.name === "evimed-frontier");
+  const budgetRules = group.rules.filter((/** @type {any} */ rule) => String(rule.expr).includes("plugin_host_budget"));
+  assert.equal(budgetRules.length, 1, "one rule over every host");
+  const [rule] = budgetRules;
+  assert.equal(rule.for, "30m");
+  assert.equal(rule.labels.severity, "warning");
+  // The rule is `used / cap > threshold`, joined on the host label; evaluate it over what the module exports.
+  const parsed = /^(open_science_frontier_plugin_host_budget_used) \/ (open_science_frontier_plugin_host_budget_cap) > (0\.\d+)$/.exec(String(rule.expr));
+  assert.ok(parsed, `the rule is used / cap > threshold: ${rule.expr}`);
+  assert.equal(Number(parsed[3]), 0.9);
+  const cell = (/** @type {any} */ series, /** @type {string} */ host) => series.find((/** @type {any} */ row) => row.labels.host === host).value;
+  const firing = used.series.map((/** @type {any} */ row) => row.labels.host).filter((/** @type {string} */ host) => cell(used.series, host) / cell(cap.series, host) > Number(parsed[3])).sort();
+  assert.deepEqual(firing, ["api.crossref.org", "eutils.ncbi.nlm.nih.gov", "www.ema.europa.eu"],
+    "above nine tenths of its own cap, per host: a host at rest does not fire, and exactly nine tenths is not above it");
+  // The alert names its host in the rule and in the operator's inbox, and the runbook has a row for it.
+  assert.match(rule.annotations.summary, /\{\{ \$labels\.host \}\}/);
+  assert.match(ALERT_NOTICES[rule.alert].sentence, /\{host\}/);
+  assert.match(alertNoticeText({ alertname: rule.alert, summary: "", description: "", labels: { host: "api.crossref.org" } }).sentence, /api\.crossref\.org/);
+  const runbook = await readFile(path.join(repoRoot, "docs/WEB_OPERATIONS_RUNBOOK.md"), "utf8");
+  const row = runbook.slice(runbook.indexOf(`\`${rule.alert}\``)).split("\n")[0];
+  assert.ok(row.startsWith(`\`${rule.alert}\``), "the runbook has a row for it");
+  assert.match(row, /host_budget/);
+  assert.match(row, /budget\.py/);
 });
 
 test("weekly and notification metrics distinguish unavailable delivery and scan gaps", () => {

@@ -277,7 +277,7 @@ class RecordingFetcher:
         elif status < 200 or status >= 300:
             error = FetchError("http-error", f"http_{status}", status=status)
         elif not body.strip():
-            error = FetchError("empty", "empty_body", status=status)
+            error = FetchError("empty-body", "empty_body", status=status)
         if body:
             self._store(meta, body, headers.get("content-type", ""))
         if error is not None:

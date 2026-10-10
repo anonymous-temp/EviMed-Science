@@ -9,7 +9,7 @@ data and makes no content-generating model call (plan `docs/superpowers/specs/20
 
 ## The contract
 
-`contract/knowledge-plugin-openapi.yaml` (v1.3.0, normative; a vendored copy of the plan's file,
+`contract/knowledge-plugin-openapi.yaml` (v1.4.0, normative; a vendored copy of the plan's file,
 kept byte-identical by a test while this lives in the monorepo). Paths: `/v1/manifest`,
 `/v1/health` (no token), `/v1/sources[/{id}]`, `/v1/entries?after=<seq>` (the stream, ascending
 `seq`), `/v1/entries/{id}`, `/v1/entries/{id}/text` (on-demand abstract and enrichment),

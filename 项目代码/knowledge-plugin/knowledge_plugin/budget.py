@@ -21,9 +21,11 @@ anything else               1     1.5 s          none       and the site's robot
 
 A 429 (or a 503 with ``Retry-After``) pauses the whole host, not just the source that met it; the
 pause and the day's count are persisted (``host_state``, ``host_counters``), because a restart that
-forgot them would spend a shared allowance twice (review finding 13 #9). Waiting is bounded: a
-request that would wait more than a minute for its slot is refused as ``host-budget`` /
-``host_busy`` with the time to come back, so a slow host cannot hold every worker.
+forgot them would spend a shared allowance twice (review finding 13 #9). The day's count against each
+cap is reported on ``/v1/health`` (``host_budget``): a spent cap is the plugin's own refusal, which no
+source's health shows. Waiting is bounded: a request that would wait more than a minute for its slot
+is refused as ``host-budget`` / ``host_busy`` with the time to come back, so a slow host cannot hold
+every worker.
 """
 
 from __future__ import annotations
@@ -217,6 +219,17 @@ class HostBudget:
         await self._store.pause(host, self._paused[host], reason)
         log.warning("host %s paused for %.0f s (%s)", host, seconds, reason)
         return self._paused[host]
+
+    async def usage(self, day: date | None = None) -> dict[str, dict[str, int]]:
+        """Today's (UTC) requests against every daily cap: ``{host: {"used": n, "cap": cap}}``, by host, for the
+        hosts that have a cap (the others have nothing to be spent against).
+
+        A spent cap refuses the host's polls as ``host-budget`` until 00:00 UTC, which is neutral to every source's
+        health, so this is the one place the spend shows: ``/v1/health`` ``host_budget`` (contract 1.4.0; review
+        2026-10-10, D-10). The counts are the persisted ones, so a restart does not reset what is reported."""
+        counts = await self._store.counts(day or self._clock().date())
+        return {host: {"used": int(counts.get(host, 0)), "cap": rule.daily_cap}
+                for host, rule in sorted(self._rules.items()) if rule.daily_cap is not None}
 
     def rate_limited_last_hour(self) -> tuple[str | None, int]:
         """The host that answered 429 most often in the last hour, and how often (this process's

@@ -4,13 +4,18 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
 
 from knowledge_plugin import policy
-from knowledge_plugin.model import EntryTextResult, FetchError, FetchResult, NormalizedEntry, ParseOutput, RequestSpec, SourceConfig
+from knowledge_plugin.api import create_app
+from knowledge_plugin.budget import HostBudget, MemoryCounterStore
+from knowledge_plugin.fetch import ProtectedFetcher
+from knowledge_plugin.model import (SUCCESS_OUTCOMES, EntryTextResult, FetchError, FetchResult, NormalizedEntry, ParseOutput,
+                                    RequestSpec, SourceConfig)
 from knowledge_plugin.registry import RegistryRow, sync_registry
 from knowledge_plugin.scheduler import Crawler
-from knowledge_plugin.store import schedule_text
+from knowledge_plugin.store import insert_fetch, reliability_24h, schedule_text
 
 pytestmark = pytest.mark.db
 
@@ -382,6 +387,138 @@ async def test_a_list_that_parses_to_nothing_twice_is_drifted(settings, pool):
     assert outcomes == ["ok", "empty", "empty"]
     row = await state_of(pool, src.id)
     assert row["zero_streak"] == 2 and row["health"] == "drifted"
+
+
+# ------------------------------------------------------------------ a body with nothing in it, and a page with no entries
+#
+# Review 2026-10-10, D-07. `empty` named both: a 200 that parsed to no entries (a quiet day, a successful read) and a 204 or a
+# zero-byte 200 (a broken edge). The scheduler failed the source for the second while the plugin's vocabulary, the fetch log's
+# reliability and `/v1/health` counted that same poll as a read. These run the real protected fetcher over a scripted transport,
+# so the verdict on the response is the fetcher's, not the test's.
+
+
+async def _no_sleep(seconds):
+    return None
+
+
+def real_fetcher(settings, handler):
+    async def resolver(host, port):
+        return ["93.184.216.34"]
+
+    return ProtectedFetcher(settings, HostBudget(MemoryCounterStore(), {}, sleep=_no_sleep), resolver=resolver,
+                            transport_factory=lambda: httpx.MockTransport(handler))
+
+
+async def health_of(settings, pool, now):
+    app = create_app(settings, pool=pool, clock=lambda: now)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://plugin") as http:
+        response = await http.get("/v1/health")
+    assert response.status_code == 200
+    return response.json()
+
+
+@pytest.mark.parametrize("status, body", [(204, b""), (200, b""), (200, b" \n ")], ids=["204", "zero-byte 200", "whitespace-only 200"])
+async def test_a_204_or_a_zero_byte_body_fails_the_poll_in_every_account_of_it(settings, pool, status, body):
+    clock = Clock()
+    src = source("empty-feed", access="json-api", url="https://empty-feed.example.org/feed")
+    await seed(pool, src)
+    adapter = ScriptedAdapter(access="json-api", pages={src.config["url"]: ParseOutput(entries=[])})
+    crawler = crawler_for(settings, pool, clock, adapter, real_fetcher(settings, lambda request: httpx.Response(status, content=body)))
+    [report] = await poll_now(crawler)
+    assert adapter.parsed == [], "there was nothing to hand the adapter"
+
+    # The fetch log does not count the poll as a read: not in the reliability the source's health is judged by, not in the
+    # plugin's own stats (`last_ok_fetch_at`, the exit's state).
+    [logged] = await fetch_rows(pool, src.id)
+    assert logged["outcome"] not in SUCCESS_OUTCOMES, f"the log called a poll that read nothing {logged['outcome']!r}, a successful read"
+    async with pool.connection() as conn:
+        assert await reliability_24h(conn, src.id, T0 + timedelta(minutes=1)) == (0, 1)
+    health = await health_of(settings, pool, T0 + timedelta(minutes=1))
+    assert health["last_ok_fetch_at"] is None, "no fetch has read anything"
+    assert health["egress"]["direct"] == "down"
+
+    # The source failed, as it always did: a failure counted, since when, never read, backed off like any other failure.
+    assert (report.outcome, report.detail) == (logged["outcome"], "empty_body") and report.outcome == "empty-body"
+    row = await state_of(pool, src.id)
+    assert (row["consecutive_failures"], row["failing_since"], row["last_ok_at"], row["health"]) == (1, T0, None, "degraded")
+    assert row["next_poll_at"] == T0 + timedelta(seconds=policy.failure_delay_s(3600, 1))
+
+    # Kept up for three days it is unreadable, like any failing source.
+    clock.advance(days=3, minutes=1)
+    await poll_now(crawler)
+    row = await state_of(pool, src.id)
+    assert row["consecutive_failures"] == 2 and row["health"] == "unreadable"
+
+
+async def test_a_page_that_parsed_to_no_entries_is_still_a_successful_read(settings, pool):
+    clock = Clock()
+    src = source("quiet-feed", access="json-api", url="https://quiet-feed.example.org/feed")
+    await seed(pool, src)
+    adapter = ScriptedAdapter(access="json-api", pages={src.config["url"]: ParseOutput(entries=[])})
+    crawler = crawler_for(settings, pool, clock, adapter, real_fetcher(settings, lambda request: httpx.Response(200, content=b'{"items": []}')))
+    [report] = await poll_now(crawler)
+    assert adapter.parsed == [src.config["url"]]
+    assert (report.outcome, report.detail) == ("empty", None)
+    [logged] = await fetch_rows(pool, src.id)
+    assert logged["outcome"] == "empty" and logged["outcome"] in SUCCESS_OUTCOMES
+    row = await state_of(pool, src.id)
+    assert (row["consecutive_failures"], row["failing_since"], row["last_ok_at"]) == (0, None, T0)
+    async with pool.connection() as conn:
+        assert await reliability_24h(conn, src.id, T0 + timedelta(minutes=1)) == (1, 0)
+    health = await health_of(settings, pool, T0 + timedelta(minutes=1))
+    assert health["last_ok_fetch_at"] == "2026-09-22T08:00:00Z"
+    assert health["egress"]["direct"] == "ok"
+
+
+async def test_a_database_made_before_empty_body_takes_it_at_the_next_start(settings, pool):
+    """The fetch log's outcome list is a CHECK on the table, and a table that exists keeps the one it was made with: without a
+    step in the startup migration, the first zero-byte body after the upgrade would be refused by the database, and the poll
+    would crash and retry for ever instead of counting a failure."""
+    import psycopg
+
+    from knowledge_plugin.db import migrate
+
+    async def refused(outcome):
+        async with pool.connection() as conn:
+            try:
+                await insert_fetch(conn, source_id="feed-a", fetched_at=T0, egress="direct", host="x", http_status=200, outcome=outcome,
+                                   bytes_=0, duration_ms=1, content_sha256=None, entries_seen=0, entries_new=0, error_detail=None, requests=1)
+            except psycopg.errors.CheckViolation:
+                return True
+            await conn.execute("DELETE FROM evimed_knowledge.fetches")
+            return False
+
+    async def constraint_oid():
+        async with pool.connection() as conn:
+            return (await (await conn.execute(
+                "SELECT oid FROM pg_constraint WHERE conrelid = 'evimed_knowledge.fetches'::regclass AND conname = 'fetches_outcome_check'"
+            )).fetchone())["oid"]
+
+    await seed(pool, source())
+    old = ", ".join(f"'{outcome}'" for outcome in ("ok", "not-modified", "empty", "challenge", "blocked", "timeout", "http-error",
+                                                  "parse-error", "robots-denied", "host-budget", "too-large"))
+    try:
+        async with pool.connection() as conn:
+            await conn.execute("ALTER TABLE evimed_knowledge.fetches DROP CONSTRAINT fetches_outcome_check")
+            await conn.execute(f"ALTER TABLE evimed_knowledge.fetches ADD CONSTRAINT fetches_outcome_check CHECK (outcome IN ({old}))")
+        assert await refused("empty-body"), "the test must start from the table as the first release made it"
+        assert not await refused("empty")
+
+        async with pool.connection() as conn:
+            await migrate(conn)
+        assert not await refused("empty-body")
+        assert not await refused("empty") and not await refused("host-budget")
+        assert await refused("not-an-outcome"), "the list is widened by one, not dropped"
+
+        before = await constraint_oid()
+        async with pool.connection() as conn:
+            await migrate(conn)
+        assert await constraint_oid() == before, "a second start leaves the constraint alone"
+    finally:
+        from knowledge_plugin.db import schema_sql
+
+        async with pool.connection() as conn:
+            await conn.execute(schema_sql())
 
 
 async def test_chains_are_followed_and_capped(settings, pool):

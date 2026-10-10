@@ -28,7 +28,8 @@ One request, in order:
    Aliyun and Volcano WAF markers — the detector of ``tools/verify_feed.py``) are ``challenge``;
    401/403/451 are ``blocked``; other errors ``http-error``; see ``model.FETCH_OUTCOMES``. Empty
    HTML shells (< 300 visible characters) are also ``challenge`` — decided by the scheduler after
-   the adapter found no entries on the page (``is_empty_shell``).
+   the adapter found no entries on the page (``is_empty_shell``). A 204, or a 200 with nothing in
+   it, is ``empty-body``: the source's failure, where ``empty`` is a page that parsed to no entries.
 
 Identity: ``User-Agent: EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor;
 mailto:<contact>)``. FDA, CDC and Health Canada refuse a browser string from a datacenter address
@@ -409,6 +410,10 @@ class ProtectedFetcher:
         """The host with the most 429 answers in the last hour, and the count."""
         return self._budget.rate_limited_last_hour()
 
+    async def host_budget_usage(self) -> dict[str, dict[str, int]]:
+        """Today's use against each host's daily cap (``Health.host_budget``, contract 1.4.0)."""
+        return await self._budget.usage()
+
     def evimed_status(self) -> str:
         """The team's EviMed API: unconfigured without a key; else by the last answer it gave."""
         if not self._settings.secret("evimed_api_key"):
@@ -722,7 +727,8 @@ class ProtectedFetcher:
         if status < 200 or status >= 300:
             raise FetchError("http-error", f"http_{status}", status=status, final_url=final_url)
         if status == 204 or not content.strip():
-            raise FetchError("empty", "empty_body", status=status, final_url=final_url)
+            # A broken edge, the source's failure; `empty` is the scheduler's word for a page that parsed to no entries.
+            raise FetchError("empty-body", "empty_body", status=status, final_url=final_url)
         return FetchResult(request=spec, final_url=final_url, status=status, headers=headers, body=content, fetched_at=now)
 
     # ---------------------------------------------------------------- robots.txt through the same exit
@@ -734,8 +740,8 @@ class ProtectedFetcher:
         except FetchError as error:
             if error.status is not None and 400 <= error.status < 500 and error.outcome in ("http-error", "blocked"):
                 return error.status, None
-            if error.outcome == "empty":
-                return 200, ""
+            if error.outcome == "empty-body":
+                return 200, ""         # a robots.txt with nothing in it disallows nothing
             if error.outcome == "challenge" and error.status is not None and 400 <= error.status < 500:
                 return error.status, None
             return None, None

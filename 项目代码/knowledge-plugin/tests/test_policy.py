@@ -104,6 +104,19 @@ def test_reliability_counts_a_run_of_failures_as_one_episode():
     assert policy.reliability(["challenge", "ok", "blocked", "ok", "timeout"]) == (2, 3)
 
 
+def test_a_page_with_no_entries_is_a_read_and_a_zero_byte_body_is_not():
+    """Review 2026-10-10, D-07: `empty` named both a 200 that parsed to no entries (a quiet day: a success) and a 204 or a
+    zero-byte 200 (a broken edge: the scheduler failed the source for it). Two outcomes now, and the vocabulary decides
+    once which side each is on, so health, reliability and the stats read the same thing."""
+    from knowledge_plugin.model import FETCH_OUTCOMES, NEUTRAL_OUTCOMES, SUCCESS_OUTCOMES
+
+    assert "empty" in SUCCESS_OUTCOMES, "a page that parsed to no entries is still a read"
+    assert "empty-body" in FETCH_OUTCOMES
+    assert "empty-body" not in SUCCESS_OUTCOMES and "empty-body" not in NEUTRAL_OUTCOMES, "a zero-byte body is the source's failure"
+    assert policy.reliability(["ok", "empty-body", "ok"]) == (2, 1)
+    assert policy.reliability(["empty", "empty-body", "empty-body", "empty"]) == (2, 1), "a run of failures is one episode"
+
+
 def test_the_polls_of_2026_09_27_replayed():
     """pubmed-mendelian-randomization's 24 h to 2026-09-28 01:00Z (production fetch log): NCBI's outage
     answered four backoff re-polls (02:30, 03:00, 04:00 ``eutils_search_error``, 06:00 ``http_500``),

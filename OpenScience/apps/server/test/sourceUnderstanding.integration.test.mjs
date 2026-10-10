@@ -9,15 +9,16 @@ import { SourceService, projectSourceManifestRecord } from "../src/sourceService
 import { SourceIngestionWorker } from "../src/sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "../src/sourceUnderstandingRuns.mjs";
 import { createSourceMaterials } from "../src/sourceMaterials.mjs";
+import { evolutionOpportunitySource } from "../src/evolutionGrowth.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) { const url = new URL(databaseUrl); assert.ok(["localhost", "127.0.0.1", "::1"].includes(url.hostname)); assert.match(url.pathname, /evimed_test/); }
 const options = { skip: !databaseUrl, timeout: 20000 };
 
-async function fixture(t, depth = "structured") {
+async function fixture(t, depth = "structured", { evolutionSignals = null } = {}) {
   const database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 5, databaseConnectionTimeoutMs: 2000 });
   const userId = `su_${randomUUID()}`;
-  const documents = new ProductDocuments(database); const jobs = new ProductJobs(database); const sources = new SourceService(documents, jobs);
+  const documents = new ProductDocuments(database); const jobs = new ProductJobs(database); const sources = new SourceService(documents, jobs, { evolutionSignals });
   t.after(async () => { await database.query("DELETE FROM evimed_control.users WHERE id=$1", [userId]); await database.close(); });
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Source understanding','development')", [userId]);
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Default',1048576)", [userId]);
@@ -89,6 +90,34 @@ test("real PostgreSQL recovery freezes complete input, reuses one dispatch, publ
   await f.sources.retry(f.userId, current.id, { expectedRevision: current.revision });
   assert.equal((await f.sources.getUnderstanding(f.userId, f.source.id)).current, null);
   assert.equal((await f.sources.understandingHistory(f.userId, f.source.id)).items.length, 1);
+});
+
+test("D-E18: a source published with nothing missing records no evolution signal, and one with something missing records the omission", options, async t => {
+  // Two things were wrong in the line that records the signal. It read the revision off the finished job (`withSourceLease` hands the job
+  // back; the publication is its `result`), so it never recorded anything. And what it would have recorded for a clean publication was
+  // `availability`, which the growth loop reads as 「new data」: once five accounts had parsed a document it became an opportunity for the
+  // sources module - a success counted as a lead.
+  const recorded = [];
+  const evolutionSignals = { record: async input => { recorded.push(input); return null; } };
+  const publish = async f => { await f.worker().tick(); await f.worker().tick(); f.state.complete = true; await f.due(); await f.worker().tick(); };
+
+  const clean = await fixture(t, "deep", { evolutionSignals });
+  await publish(clean);
+  assert.ok((await clean.sources.getUnderstanding(clean.userId, clean.source.id)).current, "the understanding was published");
+  assert.equal((await clean.sources.get(clean.userId, clean.source.id)).payload.status, "complete");
+  assert.deepEqual(recorded, [], "a parse that worked says nothing to the evolution loop");
+
+  const cut = await fixture(t, "deep", { evolutionSignals });
+  cut.parser.parse = async () => ({ text: "Record the outcome.\r\nKeep the original notes.", summary: "Research notes",
+    extractor: { name: "fixture", version: "1", parser: "fallback" }, units: [{ id: "page1", unitType: "page", status: "failed", itemIds: [] }] });
+  await publish(cut);
+  const published = await cut.sources.get(cut.userId, cut.source.id);
+  assert.equal(published.payload.status, "needs_attention", "a unit the parser could not read leaves the source needing attention");
+  assert.equal(recorded.length, 1, "the omission is recorded, once");
+  assert.deepEqual(recorded[0], { userId: cut.userId, projectId: "default", eventId: `source:${cut.source.id}:${published.revision}`, moduleId: "sources",
+    kind: "source-omission", capability: "source-understanding", operation: "extract", dataShape: "text", version: published.revision });
+  // What the growth loop makes of it: a repair lead, never new data.
+  assert.deepEqual(recorded.map(input => evolutionOpportunitySource(input.kind)), ["repair"]);
 });
 
 test("an understanding comes with the pages of the text its anchors point into, and with none when the parse had none", options, async t => {

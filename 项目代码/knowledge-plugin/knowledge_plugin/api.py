@@ -1,4 +1,4 @@
-"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.3.0), served exactly.
+"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.4.0), served exactly.
 
 Rules the handlers keep:
 
@@ -441,6 +441,8 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
                     (now - timedelta(hours=24),),
                 )).fetchall()
             body["egress"] = egress_health(state.get("fetcher"), egress_rows, now)
+            if fetcher is not None:
+                body["host_budget"] = await fetcher.host_budget_usage()
             body["last_fetch_at"] = stats["last_fetch_at"].isoformat().replace("+00:00", "Z") if stats["last_fetch_at"] else None
             body["last_ok_fetch_at"] = (stats["last_ok_fetch_at"].isoformat().replace("+00:00", "Z")
                                         if stats["last_ok_fetch_at"] else None)

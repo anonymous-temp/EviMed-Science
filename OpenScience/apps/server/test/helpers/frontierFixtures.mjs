@@ -70,7 +70,7 @@ export function memoryPlugin({ sources = [], entries = [], contract = "1.0.0", o
       if (url.pathname === "/v1/health") {
         const latest = plugin.entries.reduce((max, row) => Math.max(max, row.seq), 0);
         return json({ status: "ok", contract: plugin.contract, sources: { healthy: plugin.sources.length }, egress: { direct: "ok" }, latest_seq: latest,
-          model_calls_24h: plugin.modelCalls24h ?? 0 });
+          model_calls_24h: plugin.modelCalls24h ?? 0, ...(plugin.hostBudget ? { host_budget: plugin.hostBudget } : {}) });
       }
       if (url.pathname === "/v1/sources") {
         const offset = Number(query.cursor ?? 0);
