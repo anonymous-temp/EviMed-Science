@@ -113,6 +113,11 @@ test("the coverage headline is represented over assessed: unspoken, inapplicable
     assert.ok(text.length > 1_000, `${file} was read`);
     assert.doesNotMatch(text, /valueCoverage|valueBasisVersion|summarizeGeoValueCoverage/, `${file} does not read the value coverage`);
   }
+
+  // The skill a run reads says the same: what the headline counts, and that an unsaid finding is beside it and no fault.
+  const skill = await fs.readFile(new URL("../../../capability-skills/geo-drug-value/SKILL.md", import.meta.url), "utf8");
+  assert.match(skill, /represented over assessed/);
+  assert.match(skill, /notAddressed\) are counted beside it as an observed omission[\s\S]{0,40}not\s+as a fault of the product/);
 });
 
 test("answer interpretation retains clinical conditions, drops fabricated quotations only, and leaves absent observations unknown", () => {

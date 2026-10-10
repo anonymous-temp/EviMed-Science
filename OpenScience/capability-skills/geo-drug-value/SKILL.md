@@ -138,10 +138,14 @@ burden. Innovation means a meaningful clinical difference, not merely novelty.
    publication authorization and budget rules still apply. Check that published
    versions retain material conditions before attributing performance to them.
 7. Diagnose visibility and semantic value uptake separately. Read value.coverage
-   and observations alongside metrics, snapshots, control/noise results. Consider
-   unassessed coverage unknown: it proves neither answer omissions, weak
-   competition nor an easy visibility gain. Those explanations need observed
-   answers or must remain hypotheses.
+   and observations alongside metrics, snapshots, control/noise results. Its
+   headline is represented over assessed, the answers that spoke of a finding
+   (represented, partial, contradicted); answers that left a finding unsaid
+   (notAddressed) are counted beside it as an observed omission to explain, not
+   as a fault of the product. Consider uncertain and not-applicable coverage
+   unknown: it proves neither answer omissions, weak competition nor an easy
+   visibility gain. Those explanations need observed answers or must remain
+   hypotheses.
    Consider
    missing or distorted conditions, source retrieval, ambiguous product identity,
    topic mismatch, genuine evidence limitations and reasonable non-recommendation.
