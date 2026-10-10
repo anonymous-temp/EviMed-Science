@@ -78,6 +78,12 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/packages\/contracts\/healthflux\/validation\.json$/,
+    line: /"executable"\s*:/,
+    why: "the longitudinal VCR validation records the kernel its native DeepSeek + DSH sessions ran on; an upgrade cannot change that observation",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/evals\/vcr-matching\/openmed-scorecard\.json$/,
     line: /"kernel"\s*:/,
     why: "the scorecard records the kernel used by its live evaluation; an upgrade cannot change that observation",
