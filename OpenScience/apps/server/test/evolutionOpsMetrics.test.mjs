@@ -156,6 +156,10 @@ test("the loops' own limits reach the scrape: the account floors by class", asyn
   const reviews = evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ engineReviews: { announced: 3, announceFailed: 1, adopted: 2, declined: 1 } }) } }));
   for (const [outcome, value] of [["announced", 3], ["announce_failed", 1], ["adopted", 2], ["declined", 1]]) assert.equal(sample(reviews, "open_science_evolution_engine_reviews_total", { outcome }), value, outcome);
   assert.equal(sample(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ policy: { ignoredFields: 5 } }) } })), "open_science_evolution_policy_ignored_fields_total"), 5);
+  const window = evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: { limitCounters: () => ({ heavyWindow: { open: false, started: { inside: 4, outside: 1 } } }) } }));
+  assert.equal(sample(window, "open_science_evolution_heavy_window_open"), 0);
+  assert.equal(sample(window, "open_science_evolution_heavy_jobs_started_total", { window: "inside" }), 4);
+  assert.equal(sample(window, "open_science_evolution_heavy_jobs_started_total", { window: "outside" }), 1);
   // A module that composed no counters says nothing rather than zeros.
   assert.equal(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: {} })).some((family) => family.name === "open_science_evolution_signal_groups"), false);
 });

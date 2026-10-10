@@ -2735,6 +2735,11 @@ export function loadConfig(overrides = {}) {
     // How many different accounts of a class a user-originated signal or lead needs before the platform loop reads it (review D-E12). Researchers
     // need five, always: one person's private work must not steer the platform. An operator's own account is the platform's, and on a deployment
     // with a handful of accounts five could never be reached, so the operator class is counted on its own against this floor (1 to 5).
+    // The hours the heavy, model-intensive evolution work (scouting, building, evaluation, missions with their confirmation runs and fresh-paper sets,
+    // the monthly policy loop, the audits, the weekly self-research that writes mechanism cards) is claimed in, `HH:MM-HH:MM` in China time, or `always`.
+    // 22:00-07:00 is 14:00-23:00 UTC, wholly inside DeepSeek's half-price hours (peak: weekdays 01:00-04:00 and 06:00-10:00 UTC), so it halves the cost of
+    // this work and leaves the daytime to researchers. Collection and the light jobs run at any hour. A value that cannot be read is no window.
+    evolutionHeavyWindow: String(overrides.evolutionHeavyWindow ?? process.env.OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW ?? "22:00-07:00").trim(),
     evolutionOperatorSignalFloor: Number(overrides.evolutionOperatorSignalFloor ?? process.env.OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR ?? 1),
     evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 8),
     evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),

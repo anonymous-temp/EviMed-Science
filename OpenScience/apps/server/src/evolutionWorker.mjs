@@ -2,22 +2,28 @@ import { withEvolutionUsage } from './evolutionUsage.mjs';
 import { randomUUID } from 'node:crypto';
 import { EVOLUTION_JOB_KINDS } from '@evimed/domain';
 import { evolutionKey } from './evolutionService.mjs';
+import { EVOLUTION_HEAVY_WINDOW_KINDS, evolutionHeavyWindowOpen } from './evolutionHeavyWindow.mjs';
 const LIGHT_KINDS = ['evolution-event','evolution-decision','evolution-digest','evolution-maintain','evolution-plan','evolution-mission','evolution-meta','evolution-research','evolution-audit'];
 const SEARCH_KINDS = new Set(['evolution-scout','evolution-build','evolution-mission','evolution-mission-heavy','evolution-plan','evolution-meta','evolution-research']);
 /** Durable work with budget and concurrency admission. */
 export class EvolutionWorker {
   /** @param {any} dependencies */
-  constructor({ service, decisions, maintenance, callbacks = {}, config = {}, canRun = () => true, logger = console, lane = null }) {
+  constructor({ service, decisions, maintenance, callbacks = {}, config = {}, canRun = () => true, logger = console, lane = null, counters = null }) {
     this.service = service; this.decisions = decisions; this.maintenance = maintenance; this.callbacks = callbacks; this.config = config; this.canRun = canRun; this.logger = logger;
     this.workerId = `evolution-${randomUUID()}`; this.timer = null; this.running = false;
     this.activePromise = null; this.abortController = null; this.closed = false;
     /** @type {Set<Promise<any>>} */ this.inFlight = new Set(); /** @type {Promise<any>|null} */ this.housekeepingPromise = null;
     this.lane = lane;
+    /** Heavy jobs claimed since process start, by whether the heavy window was open when they were (a job asked for by kind, by an operator or a test, ignores the window).
+     * The lanes share their parent's. */
+    this.counters = counters ?? { heavyStarted: { inside: 0, outside: 0 } };
     /** @type {Map<string, {at: number, key: string | null}>} */ this.blockRuns = new Map();
     this.lanes = lane ? null : ['heavy', ...Array.from({length: Math.max(1,Math.min(2,config.evolutionLightConcurrency ?? 2))}, () => 'light')]
-      .map(workerLane => new EvolutionWorker({service,decisions,maintenance,callbacks,config,canRun,logger,lane:workerLane}));
+      .map(workerLane => new EvolutionWorker({service,decisions,maintenance,callbacks,config,canRun,logger,lane:workerLane,counters:this.counters}));
   }
-  status() { return { enabled: this.config.evolutionEnabled === true, running: this.running || Boolean(this.lanes?.some(worker => worker.running)), searchPaused: this.config.evolutionSearchPaused === true }; }
+  /** Whether the heavy, model-intensive jobs may be claimed now (`evolutionHeavyWindow.mjs`). */
+  heavyWindowOpen() { return evolutionHeavyWindowOpen(this.config, this.service.now?.() ?? new Date()); }
+  status() { return { enabled: this.config.evolutionEnabled === true, running: this.running || Boolean(this.lanes?.some(worker => worker.running)), searchPaused: this.config.evolutionSearchPaused === true, heavyWindowOpen: this.heavyWindowOpen() }; }
   start() { if (!this.timer) this.timer = setInterval(() => { this.tick().catch((error) => this.logger.error('Evolution worker failed', error)); }, this.config.evolutionPollMs ?? 15000); }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
   interrupt() { this.abortController?.abort(); for (const worker of this.lanes ?? []) worker.interrupt(); }
@@ -65,9 +71,12 @@ export class EvolutionWorker {
         const cost = await this.callbacks.dailyCost(client);
         return cost < (this.config.evolutionDailyBudgetCny ?? 50) && this.callbacks.admitRuntime(client, { kinds, job: candidate });
       } : null });
+      // The polling worker leaves the heavy, model-intensive jobs to the night window; a caller that names the kinds it wants run is not held by it.
+      const heavyAllowed = requestedKinds !== undefined || this.heavyWindowOpen();
       const allowed = (requestedKinds ?? EVOLUTION_JOB_KINDS).filter(kind =>
         (this.lane === 'light' ? LIGHT_KINDS.includes(kind) : !LIGHT_KINDS.includes(kind))
-        && !(this.config.evolutionSearchPaused && SEARCH_KINDS.has(kind)));
+        && !(this.config.evolutionSearchPaused && SEARCH_KINDS.has(kind))
+        && (heavyAllowed || !EVOLUTION_HEAVY_WINDOW_KINDS.includes(kind)));
       const lightweight = LIGHT_KINDS.filter(kind => allowed.includes(kind));
       const runtimeKinds = allowed.filter(kind => !lightweight.includes(kind) && kind !== 'evolution-self-check');
       const computeKinds = allowed.filter(kind => kind === 'evolution-self-check');
@@ -75,6 +84,7 @@ export class EvolutionWorker {
         ?? (runtimeKinds.length ? await claim(runtimeKinds, true) : null)
         ?? (computeKinds.length ? await claim(computeKinds, true) : null);
       if (!job) return null;
+      if (EVOLUTION_HEAVY_WINDOW_KINDS.includes(job.kind)) this.counters.heavyStarted[this.heavyWindowOpen() ? 'inside' : 'outside']++;
       this.abortController = new AbortController();
       if (this.closed) this.abortController.abort();
       let lost = false;

@@ -106,6 +106,14 @@ export function evolutionOpsMetricFamilies(composed, snapshot, refusal = null) {
     help: "Fields of a stored research policy (or trial candidate) that the policy no longer has and that were ignored on reading it, since process start; each stored policy is counted once, however often it is read.",
     series: [{ value: Number(limits.policy.ignoredFields) || 0 }],
   });
+  if (limits.heavyWindow) families.push({
+    name: "open_science_evolution_heavy_window_open", type: "gauge", series: [{ value: limits.heavyWindow.open ? 1 : 0 }],
+    help: "Whether the heavy, model-intensive evolution jobs may be claimed now: 1 inside OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW (22:00-07:00 China time by default) or when there is no window, 0 outside it.",
+  }, {
+    name: "open_science_evolution_heavy_jobs_started_total", type: "counter",
+    help: "Heavy, model-intensive evolution jobs claimed since process start, by whether the window was open: `outside` counts only jobs asked for by kind (an operator's or a test's), never the polling worker's.",
+    series: ["inside", "outside"].map((window) => ({ value: Number(limits.heavyWindow.started?.[window]) || 0, labels: { window } })),
+  });
   families.push({
     name: "open_science_evolution_executor_reachable", type: "gauge", series: [{ value: snapshot.executor ? 1 : 0 }],
     help: "Whether the runtime controller answered for the candidate executor's counters on this scrape (0: the executor series below are absent).",
