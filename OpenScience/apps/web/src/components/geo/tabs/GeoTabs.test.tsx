@@ -219,6 +219,22 @@ describe("旅程", () => {
     await waitFor(() => expect(download.downloadArtifact).toHaveBeenCalledWith("outputs/journey/journey-matrix.xlsx", "workspace"));
     expect(store.select).toHaveBeenCalledWith("prj_geo_1");
   });
+
+  it("shows the people the server stores as objects, and still reads an older journey's plain strings", async () => {
+    client.getGeoJourney.mockResolvedValue({
+      ...journeyFilled,
+      subtypes: [{ name: "BMI≥28 的成人肥胖", definition: "合并至少一种代谢并发症", size: "约 30%", sizeQuality: "估计" }, "旧版写法的分型", { definition: "没有名字的分型" }],
+      personas: [{ name: "王女士", age: "35", situation: ["上班族", "想减重又怕副作用"], voice: "打了会不会一直恶心" }],
+    });
+    renderTab(<JourneyTab {...props()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "人群" }));
+    expect(screen.getByText("BMI≥28 的成人肥胖")).toBeInTheDocument();
+    expect(screen.getByText("合并至少一种代谢并发症 · 约 30% · 估计")).toBeInTheDocument();
+    expect(screen.getByText("旧版写法的分型")).toBeInTheDocument();
+    expect(screen.queryByText("没有名字的分型")).toBeNull();
+    expect(screen.getByText("王女士")).toBeInTheDocument();
+    expect(screen.getByText("35 · 上班族；想减重又怕副作用 · “打了会不会一直恶心”")).toBeInTheDocument();
+  });
 });
 
 describe("问题", () => {

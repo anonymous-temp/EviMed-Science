@@ -56,11 +56,33 @@ export function JourneyTab({ geoId, project }: { geoId: string; project: GeoProj
   );
 }
 
-function normalise(raw: GeoJourney | null | undefined): GeoJourney {
+/** A subtype or persona as the page shows it: its name, then what the run said about it. */
+type Person = { name: string; details: string[] };
+
+/**
+ * The server stores each entry as an object (`geoWrites.mjs` validatedJourney: name plus
+ * definition/size/sizeQuality/note, or age/situation/voice/note); an older journey may still hold
+ * plain strings. A field may be a string or a list of strings. An entry without a name is dropped.
+ */
+function person(value: unknown, fields: string[]): Person | null {
+  if (typeof value === "string") return value.trim() ? { name: value.trim(), details: [] } : null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entry = value as Record<string, unknown>;
+  const field = (key: string) => {
+    const raw = entry[key];
+    const parts = Array.isArray(raw) ? raw : [raw];
+    return parts.filter((part): part is string => typeof part === "string" && part.trim().length > 0).map((part) => part.trim()).join("；");
+  };
+  const name = field("name");
+  if (!name) return null;
+  return { name, details: fields.map((key) => key === "voice" && field(key) ? `“${field(key)}”` : field(key)).filter(Boolean) };
+}
+
+function normalise(raw: GeoJourney | null | undefined): Omit<GeoJourney, "subtypes" | "personas"> & { subtypes: Person[]; personas: Person[] } {
   const list = <T,>(value: T[] | null | undefined): T[] => (Array.isArray(value) ? value : []);
   return {
-    subtypes: list(raw?.subtypes).filter((item) => typeof item === "string" && item),
-    personas: list(raw?.personas).filter((item) => typeof item === "string" && item),
+    subtypes: list<unknown>(raw?.subtypes).map((item) => person(item, ["definition", "size", "sizeQuality", "note"])).filter((item): item is Person => item !== null),
+    personas: list<unknown>(raw?.personas).map((item) => person(item, ["age", "situation", "voice", "note"])).filter((item): item is Person => item !== null),
     stages: list(raw?.stages).filter((stage) => stage && stage.stage).map((stage) => ({
       ...stage,
       questions: list(stage.questions),
@@ -171,14 +193,14 @@ function CareNodes({ nodes }: { nodes: GeoJourney["careNodes"] }) {
   );
 }
 
-function People({ subtypes, personas }: { subtypes: string[]; personas: string[] }) {
+function People({ subtypes, personas }: { subtypes: Person[]; personas: Person[] }) {
   return (
     <div className="flex flex-col gap-8">
       {subtypes.length > 0 && (
         <section aria-label="人群分型">
           <h2 className="mb-3 text-ui font-semibold text-text">人群分型</h2>
           <ul className="flex flex-col gap-2">
-            {subtypes.map((subtype, index) => <li key={index} className="max-w-measure text-ui text-text-2">{subtype}</li>)}
+            {subtypes.map((subtype, index) => <PersonItem key={index} person={subtype} />)}
           </ul>
         </section>
       )}
@@ -186,10 +208,19 @@ function People({ subtypes, personas }: { subtypes: string[]; personas: string[]
         <section aria-label="典型人物">
           <h2 className="mb-3 text-ui font-semibold text-text">典型人物</h2>
           <ul className="flex flex-col gap-2">
-            {personas.map((persona, index) => <li key={index} className="max-w-measure text-ui text-text-2">{persona}</li>)}
+            {personas.map((persona, index) => <PersonItem key={index} person={persona} />)}
           </ul>
         </section>
       )}
     </div>
+  );
+}
+
+function PersonItem({ person: entry }: { person: Person }) {
+  return (
+    <li className="max-w-measure text-ui text-text-2">
+      <span className="text-text">{entry.name}</span>
+      {entry.details.length > 0 && <span className="block text-caption text-text-3">{entry.details.join(" · ")}</span>}
+    </li>
   );
 }
