@@ -5,6 +5,7 @@ import { CAPSULE_FACT_ORIGINS } from "@evimed/domain";
 import { packCapsule, openCapsule, verifyCapsule } from "./capsuleContainer.mjs";
 import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile, unlinkCapsuleFile, syncCapsuleDirectory } from "./capsuleIdentityStore.mjs";
 import { buildAgentSkillsPack } from "./capsuleMethodPack.mjs";
+import { senderDisplayName } from "./capsuleShareLabel.mjs";
 import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
@@ -327,8 +328,9 @@ export class CapsuleTransferService {
    */
   async #card(userId, entries, previous, requested) {
     const asked = capsuleCard(requested) ?? {};
-    const name = String((await this.documents.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [userId])).rows[0]?.name ?? "").trim();
-    const author = name ? cardText(name.slice(0, CARD_LIMITS.author), CARD_LIMITS.author) : undefined;
+    // The display name, and when that is the login name or holds an address, a neutral label (`senderDisplayName`).
+    const name = senderDisplayName((await this.documents.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [userId])).rows[0]?.name, userId);
+    const author = cardText(name.slice(0, CARD_LIMITS.author), CARD_LIMITS.author) || undefined;
     const changes = previous
       ? capsuleChangelog((previous.payload.sourceEntries ?? []).map((/** @type {any} */ entry) => entry.sha256), entries.map((entry) => entry.sha256))
       : null;
@@ -495,7 +497,7 @@ export class CapsuleTransferService {
       ORDER BY updated_at DESC,id LIMIT 50`, [userId]);
     const rows = await exportableMethods(database, userId, found.rows);
     if (!rows.length) throw new HttpError(409, "capsule_export_empty", "No approved method is eligible for this pack.");
-    const author = String((await database.query("SELECT name FROM evimed_control.users WHERE id=$1", [userId])).rows[0]?.name ?? "").trim();
+    const author = senderDisplayName((await database.query("SELECT name FROM evimed_control.users WHERE id=$1", [userId])).rows[0]?.name, userId);
     const pack = buildAgentSkillsPack({ authorName: author, exportedAt, methods: rows.map((row) => ({
       name: String(row.payload.frontmatter?.name ?? ""), description: String(row.payload.frontmatter?.description ?? ""),
       whenToUse: String(row.payload.frontmatter?.whenToUse ?? ""), body: String(row.payload.body ?? "") })) });

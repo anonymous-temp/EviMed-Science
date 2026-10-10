@@ -85,6 +85,32 @@ test("a pack carries a signed card — title, sender, what it holds — and the 
   assert.deepEqual(shelf.find((pack) => pack.id === imported.id)?.card, preview.card);
 });
 
+// 2026-10-10 review M-9 (d): the card's author is the sender's display name, which for a local account defaults to its
+// login name and for an OIDC account could be its e-mail address.
+test("a pack is never signed with the sender's login name or e-mail address", options, async () => {
+  const login = `share_login_${randomUUID()}`;
+  const mailed = `share_mailed_${randomUUID()}`;
+  await database.query(`INSERT INTO evimed_control.users(id,name,auth_type,password_hash) VALUES ($1,$1,'local','not-a-real-hash'),($2,'someone@example.invalid','oidc',NULL)`, [login, mailed]);
+  try {
+    for (const account of [login, mailed]) {
+      const capsule = await capsules.create(account, { title: "我的记忆胶囊" });
+      await capsules.addEntry(account, capsule.id, { factKind: "method_preference", layer: "methods", content: "Meta 分析先报 GRADE 再报效应量。" });
+      const own = await transfers.exportPreview(account, capsule.id, {});
+      assert.equal(own.card.author, "一位研究者");
+      assert.equal(own.card.title, "一位研究者的工作方式");
+      const result = await transfers.export(account, capsule.id, { password });
+      const preview = await transfers.preview(recipient, { archive: result.archive, password });
+      assert.equal(preview.card.author, "一位研究者", "what the recipient is shown");
+      assert.ok(!JSON.stringify(preview).includes(account) && !JSON.stringify(preview).includes("example.invalid"));
+      const imported = await transfers.import(recipient, { archive: result.archive, password, expectedDigest: preview.archiveSha256, confirmed: true });
+      const shelf = (await capsules.received(recipient)).find((pack) => pack.id === imported.id);
+      assert.equal(shelf?.sharedFrom?.label, "来自 一位研究者 的分享");
+    }
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[login, mailed]]);
+  }
+});
+
 test("a pack sealed for named accounts opens with each one's own key, and for nobody else", options, async () => {
   const capsule = await capsules.create(sender, { title: "我的记忆胶囊" });
   await method(capsule.id, "纳入标准先写成表格再检索。");

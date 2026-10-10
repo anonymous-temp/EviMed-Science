@@ -508,7 +508,7 @@ export class CapsuleService {
 
   /**
    * What a trial conversation is handed: the pack's entries in force, as a
-   * block of context, bounded. Empty when the pack is gone.
+   * block of context, bounded. Empty when the pack is gone or was taken down.
    *
    * No bar in the conversation says it is a trial (build spec §9.4 #8): its
    * title carries 「试用 ·」 (`trialTitle`), and the one sentence the reader
@@ -520,6 +520,9 @@ export class CapsuleService {
   async trialContext(userId, capsuleId) {
     const capsule = await this.documents.get(userId, "capsule", capsuleId);
     if (!capsule || capsule.payload.imported !== true) return "";
+    // A pack the author or the operator took down is out of force everywhere (plan §7), also for a trial that began before:
+    // the trial is marked on the conversation and this is read at each of its first steps (2026-10-10 review M-9).
+    if (capsule.payload.takenDown) return "";
     const entries = (await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId, status: "approved" } })).items;
     if (entries.length === 0) return "";
     const lines = [];

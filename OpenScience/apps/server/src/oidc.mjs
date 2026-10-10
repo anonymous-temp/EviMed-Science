@@ -262,12 +262,19 @@ function authorizeClaims(claims, settings) {
   return subject;
 }
 
+/**
+ * The name an identity is kept under, shown to the researcher and — for a shared capsule — to whoever receives it. The
+ * `email` claim is the admission evidence (allowed domains) and is not a name: it was the last fallback, so an identity
+ * with no name was shown to other people by its address (2026-10-10 review M-9). A username that is itself an address
+ * (a UPN) is skipped the same way; what is left is "EviMed User", as for an EviMed identity nobody named.
+ * @param {any} claims @returns {string}
+ */
 function displayName(claims) {
-  for (const key of ["name", "preferred_username", "email"]) {
+  for (const key of ["name", "preferred_username"]) {
     if (typeof claims?.[key] !== "string") continue;
     // eslint-disable-next-line no-control-regex -- stripping control characters is the intent
     const value = claims[key].replace(/[\0-\x1f\x7f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 128);
-    if (value) return value;
+    if (value && !/[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/.test(value)) return value;
   }
   return "EviMed User";
 }
