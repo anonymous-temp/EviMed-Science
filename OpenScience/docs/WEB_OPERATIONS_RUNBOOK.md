@@ -1502,3 +1502,94 @@ Run focused integration tests only against a disposable localhost PostgreSQL who
 database name contains `evimed_test`. Use separate databases for suites that test
 policy activation. No production provider call or real payment is needed for the
 unit, HTTP, migration, concurrency and account-isolation tests.
+
+## Selective OpenMed clinical extraction adoption
+
+`deps-version.json` pins OpenMed 3.0.0 as a reference for contracts and evaluation.
+It is not installed in the web server, runtime or engine. No model weights, local
+inference service, second agent kernel or replacement clinical database are added.
+`packages/contracts/openmed/implementation.json` records each of the 52 adoption
+tasks, its native integration points, tests and remaining external prerequisites.
+The surface inventory covers 152 reviewed upstream capabilities. Corpus and
+terminology rights are individual entries in `data-rights.json`; an upstream
+code licence does not admit a dataset, vocabulary or cloud processing purpose.
+
+Clinical enrichment is off by default. After measuring a selected study, add its
+study id to `OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS` and follow the normal web release
+procedure. An empty list returns the existing extraction guidance. Clearing this
+list does not remove clinical facts, corrections, frozen inputs, registry versions
+or prior reports. Disabling the VCR module also leaves historical cloud permission
+checks active. No production study was activated by this implementation batch.
+
+A patient document first stays in the protected data plane. In its source panel,
+record the processing purpose, approved HTTPS origins, terms, authorization
+reference and optional expiry. A deidentified source needs recorded no-retention,
+no-training and no-human-review terms. These fields are the operator's attestation;
+the application does not independently certify a provider's actual practices.
+Original text is shown only through the authenticated protected view. Explicitly
+reviewed identifier spans produce a study-scoped text projection with an exact
+UTF-16 mapping back to the original. This is not an automatic PII detector. Images,
+scanned records, unsupported geometry and date shifting are not added by this
+projection feature. Missing source permission affects that source operation.
+
+Cloud reads record source/projection hashes, served windows and the run/session
+that received them, without putting text in audit rows. A served window is not
+proof of complete extraction; its extraction coverage remains unknown unless
+supported by another receipt. Provider requests are associated with their actual
+observed model and configuration fingerprint, not an invented model version.
+The ordinary gateway and configured reviewers recheck permission before sending.
+Revocation, expiry and changed terms also prevent resending an affected cached
+conversation. Start a fresh conversation for unrelated work or a newly reviewed
+projection. Clinical sessions do not seed general research memory, capsule notes,
+shared evaluation traces or account-wide method learning. Study-local corrections
+and deterministic historical replay remain available.
+
+The study delete operation hides a study; it has never meant erasing its project.
+Cloud dependencies continue to refuse its cached clinical content after hiding.
+Unfrozen source deletion removes its derived projections and facts. Inputs used by
+a frozen analysis remain protected for historical reproducibility and are identified
+as retained. Full project/account deletion removes the study tables, protected
+study directory and project conversations through the existing deletion path.
+Metadata-only audit records and authorized backup retention follow existing policy;
+this feature makes no claim of instant erasure from backup media or a provider.
+Do not treat these controls as HIPAA, GDPR or 21 CFR Part 11 certification.
+
+Matching jobs freeze the candidate roster, facts, language judgments, criteria and
+as-of time before queueing. Continue a batch using its `inputSnapshotId` and
+`nextOffset`, not current mutable inputs. Requested candidates remain partitioned
+into evaluated, pending and explicitly unavailable. Multi-protocol jobs retain
+independent protocol and input identities; recruitment availability, ranking and
+eligibility are different facts. Monitor `open_science_vcr_matching_records` alongside
+existing job and usage metrics. Compare unknowns, incomplete assessments, fact-write
+issues, eligible recall, latency and actual costs separately. Metric labels do not
+carry subject identifiers or clinical text.
+
+The repeatable local acceptance commands are:
+
+```sh
+OPEN_SCIENCE_TEST_POSTGRES_URL="$TEST_POSTGRES_URL" VCR_R_LIBS="$TEST_R_LIBS" \
+  VCR_ENGINE_TESTS=required pnpm --filter @ai4s/server exec node \
+  --import ../../scripts/test/localhostProbeGuard.mjs --test --test-concurrency=2 test/vcr*.test.mjs
+python3 -m unittest discover -s evals/method-quality -p 'test_*.py'
+python3 -m unittest discover -s runtime/mcp/evimed-research/test -p 'test_vcr*.py'
+```
+
+`evals/method-quality/run_native_clinical.mjs` runs repeated native/on/off synthetic
+extraction through the real DSH executable, cloud gateway, protected fact writer
+and deterministic matching executor. `run_native_vcr.mjs` checks actual MCP use
+across follow-up, a supplementary document, a different subject, tool failure,
+revoked cached context and a fresh conversation. Both take an isolated PostgreSQL
+URL, DSH executable/config dump, output directory and a control-plane key-file
+path; no provider key is given to the child runtime. Use authored synthetic input,
+not production patient records. Predictions are archived before the separate
+`score_native_clinical.py` or `clinical_metrics.py` scorer reads a reference.
+
+The first public corpus pilot is the frozen ten-abstract DrugProt selection.
+`evals/vcr-matching/prepare_openmed_corpus.py` verifies the archive digest and
+mention offsets and separates prediction inputs from gold. It does not admit the
+other inventoried corpora. The internal scorecard distinguishes this pilot from
+the twelve authored Chinese development cases. Those cases were seen during
+tuning; they are not an untouched holdout. Neither an observed improvement on
+these examples nor a successful replay establishes independent clinical validity.
+External expert labels, licensed drug/terminology references, an approved clinical
+OCR route and a partner exchange profile remain explicit conditional work.

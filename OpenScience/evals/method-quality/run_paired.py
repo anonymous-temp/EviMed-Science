@@ -102,6 +102,10 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
 
+# The task scorers run only after inference; references never enter dispatch.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import clinical_metrics
+
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 WORKSPACE_ROOT = HERE.parents[2]
@@ -311,6 +315,7 @@ def load_splits(path: Path = SPLITS_FILE) -> dict[str, Any]:
     overlap = set(data["dev"]["briefs"]) & set(data["holdout"]["briefs"])
     if overlap:
         raise EvalError(f"{path}: dev and holdout must not overlap: {sorted(overlap)}")
+    clinical_metrics.verify_groups(data)
     return data
 
 
@@ -457,6 +462,10 @@ class HiddenReference:
                     if len(value) >= 8:
                         found.add(value)
                 HiddenReference._collect_secrets(value, found)
+                if key == "clinicalTasks" and isinstance(value, list):
+                    for task in value:
+                        if isinstance(task, dict) and isinstance(task.get("reference"), dict):
+                            found.add(json.dumps(task["reference"], ensure_ascii=False, sort_keys=True))
         elif isinstance(payload, list):
             for item in payload:
                 HiddenReference._collect_secrets(item, found)
@@ -1134,10 +1143,25 @@ def run_deterministic_checks(
         else:
             results.append({"id": check_id, "class": check_class, "status": "error", "message": f"unsupported check kind {kind!r}"})
 
+    clinical = []
+    for task in reference.payload.get("clinicalTasks", []):
+        artifact = read(str(task["path"]))
+        try:
+            if artifact.get("error"):
+                raise ValueError("clinical_prediction_unavailable")
+            prediction = json.loads(artifact_text(artifact))
+            measured = clinical_metrics.score(task["task"], task["reference"], prediction)
+            clinical.append({**measured, "status": "measured", "path": task["path"], "prediction": prediction,
+                             "sourceGroup": task["sourceGroup"], "dataClass": task["dataClass"]})
+        except (ValueError, TypeError, KeyError) as error:
+            clinical.append({"task": task.get("task"), "status": "unavailable", "code": type(error).__name__,
+                             "sourceGroup": task.get("sourceGroup"), "dataClass": task.get("dataClass")})
+
     passed = sum(1 for item in results if item["status"] == "pass")
     return {
         "referenceAvailable": True,
         "referencePath": str(reference.path),
+        "clinicalTasks": clinical,
         "checks": results,
         "passed": passed,
         "total": len(results),

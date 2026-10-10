@@ -97,7 +97,7 @@ export function reviewModelApiKey(config) {
 /**
  * One review call.
  *
- * @param {{ config: Record<string, any>, usageLedger?: any, fetchImpl?: typeof fetch }} deps
+ * @param {{ config: Record<string, any>, usageLedger?: any, fetchImpl?: typeof fetch, assertModelAccess?: ((caller:any, body:any)=>Promise<void>) | null }} deps
  * @param {{
  *   userId: string, projectId: string, runId?: string | null,
  *   messages: { role: 'system'|'user'|'assistant', content: string }[],
@@ -108,7 +108,7 @@ export function reviewModelApiKey(config) {
  * }} call
  * @returns {Promise<{ value: any, model: string, usage: { cacheHitTokens: number, cacheMissTokens: number, completionTokens: number, reasoningTokens: number }, cost: number, requestId: string | null, reasoningChars: number, modelReported: boolean }>}
  */
-export async function callReviewModel({ config, usageLedger = null, fetchImpl = fetch }, call) {
+export async function callReviewModel({ config, usageLedger = null, fetchImpl = fetch, assertModelAccess = null }, call) {
   if (evolutionUsageContext()) call={...call,purpose:'evolution',limits:{daily:config.evolutionDailyBudgetCny,weekly:0}};
   const deepseek = config.reviewProvider === "deepseek";
   if (deepseek && !supportedDeepSeekModels.has(config.reviewModel)) {
@@ -132,6 +132,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     max_tokens: Math.floor(Number(call.maxTokens ?? config.reviewMaxOutputTokens ?? 16_000)),
     response_format: deepseek ? { type: "json_object" } : { type: "json_schema", json_schema: { name: call.schemaName, strict: true, schema: call.schema } },
   };
+  await assertModelAccess?.(call, body);
   if (config.requireDurableUsageLedger === true && !usageLedger) {
     throw new ReviewModelError("usage_ledger_unavailable", "Durable usage accounting is unavailable.");
   }
@@ -180,6 +181,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
    */
   let streamedEvents = null;
   try {
+    await assertModelAccess?.(call, body);
     let response;
     try {
       if (controller.signal.aborted) throw controller.signal.reason;

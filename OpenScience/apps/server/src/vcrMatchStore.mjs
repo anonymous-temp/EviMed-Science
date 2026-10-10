@@ -34,8 +34,9 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { correctionHash, correctionPartition } from "./vcrCorrectionCases.mjs";
-import { publicMatchingProvenance } from "./vcrMatching.mjs";
-import { VCR_CRITERION_STATES, VCR_REFERRAL_STATES } from "@evimed/domain";
+import { publicMatchingProvenance, languageKeysOf, matchingInputDigest } from "./vcrMatching.mjs";
+import { languageCriterionHash, languageInput, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
+import { VCR_CRITERION_STATES, VCR_REFERRAL_STATES, clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -122,6 +123,8 @@ const factOf = (row) => (row ? {
   dateSurface: row.date_surface ?? null,
   source: row.source ?? null,
   extractedBy: row.extracted_by,
+  ...(row.provenance ? { provenance: row.provenance } : {}),
+  ...(row.clinical ? { clinical: row.clinical, createdAt: new Date(row.created_at).toISOString() } : {}),
 } : null);
 
 /** @param {any} row */
@@ -275,6 +278,13 @@ export class VcrMatchStore extends VcrStoreBase {
     return rows.map(criterionOf);
   }
 
+  /** @param {string} studyId @param {string|null} [id] */
+  async protocols(studyId, id = null) {
+    return (await this.rows(`SELECT id,version,title,source_ref FROM ${VCR_SCHEMA}.protocol_versions
+      WHERE study_id=$1 AND ($2::text IS NULL OR id=$2) ORDER BY version DESC LIMIT 200`, [studyId,id]))
+      .map(row => ({ id: row.id, version: Number(row.version), title: row.title ?? '', sourceRef: row.source_ref ?? null }));
+  }
+
   /** The newest protocol version of a study. @param {string} studyId */
   async latestProtocol(studyId) {
     const row = await this.one(`SELECT * FROM ${VCR_SCHEMA}.protocol_versions WHERE study_id = $1 ORDER BY version DESC LIMIT 1`, [studyId]);
@@ -299,9 +309,9 @@ export class VcrMatchStore extends VcrStoreBase {
       const id = assessment?.id ?? vcrId("assessment");
       const saved = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.matching_assessments
-           (id, study_id, protocol_version_id, user_id, subject_key, direction, as_of, summary, counts, priority, evidence_gaps, provenance)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb)
-         ON CONFLICT (study_id, protocol_version_id, subject_key, as_of) DO UPDATE SET
+           (id, study_id, protocol_version_id, user_id, subject_key, direction, as_of, summary, counts, priority, evidence_gaps, provenance, input_snapshot_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13)
+         ON CONFLICT (study_id, protocol_version_id, subject_key, as_of, input_snapshot_id) DO UPDATE SET
            reviewed_by = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
              THEN ${VCR_SCHEMA}.matching_assessments.reviewed_by END,
            reviewed_at = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
@@ -313,7 +323,7 @@ export class VcrMatchStore extends VcrStoreBase {
           assessment.direction ?? "trial_to_patient", assessment.asOf, assessment.summary,
           JSON.stringify(assessment.counts ?? {}),
           assessment.priority ? JSON.stringify(assessment.priority) : null,
-          JSON.stringify(assessment.evidenceGaps ?? []), JSON.stringify(assessment.provenance ?? {})],
+          JSON.stringify(assessment.evidenceGaps ?? []), JSON.stringify(assessment.provenance ?? {}), assessment.provenance?.inputSnapshotId ?? "legacy"],
       );
       const row = saved.rows[0];
       const kept = (assessment.judgments ?? []).map((/** @type {any} */ judgment) => String(judgment.criterionId));
@@ -377,10 +387,10 @@ export class VcrMatchStore extends VcrStoreBase {
   }
 
   /** The newest assessment of one subject, which is what a referral points at. */
-  async latestAssessment({ studyId, subjectKey }) {
+  async latestAssessment({ studyId, subjectKey, protocolVersionId = null }) {
     const row = await this.one(
-      `SELECT * FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1 AND subject_key = $2
-        ORDER BY as_of DESC, created_at DESC LIMIT 1`, [studyId, subjectKey]);
+      `SELECT * FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1 AND subject_key = $2 AND ($3::text IS NULL OR protocol_version_id=$3)
+        ORDER BY as_of DESC, created_at DESC LIMIT 1`, [studyId, subjectKey, protocolVersionId]);
     return assessmentOf(row);
   }
 
@@ -390,10 +400,10 @@ export class VcrMatchStore extends VcrStoreBase {
    * first hundred reports a smaller cohort than there is.
    * @param {string} studyId
    */
-  async assessmentTallies(studyId) {
+  async assessmentTallies(studyId, protocolVersionId = null) {
     const rows = await this.rows(
       `SELECT summary, count(*)::int AS total FROM (SELECT DISTINCT ON (subject_key) summary FROM ${VCR_SCHEMA}.matching_assessments
-         WHERE study_id = $1 ORDER BY subject_key, as_of DESC, created_at DESC) latest GROUP BY summary`, [studyId]);
+         WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id = $2) ORDER BY subject_key, as_of DESC, created_at DESC) latest GROUP BY summary`, [studyId, protocolVersionId]);
     /** @type {Record<string, number>} */
     const tallies = {};
     for (const row of rows) tallies[String(row.summary)] = Number(row.total);
@@ -404,10 +414,10 @@ export class VcrMatchStore extends VcrStoreBase {
    * Every subject's pseudonymous key with its newest summary — a page's worth,
    * ordered by key. @param {string} studyId
    */
-  async subjectSummaries(studyId) {
+  async subjectSummaries(studyId, protocolVersionId = null) {
     const rows = await this.rows(
-      `SELECT DISTINCT ON (subject_key) subject_key, summary FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1
-        ORDER BY subject_key, as_of DESC, created_at DESC LIMIT 5000`, [studyId]);
+      `SELECT DISTINCT ON (subject_key) subject_key, summary FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id = $2)
+        ORDER BY subject_key, as_of DESC, created_at DESC LIMIT 5000`, [studyId, protocolVersionId]);
     return rows.map((row) => ({ subjectKey: String(row.subject_key), summary: String(row.summary) }));
   }
 
@@ -416,12 +426,12 @@ export class VcrMatchStore extends VcrStoreBase {
    * how many subjects' newest assessment lists it — the aggregate of the gaps, not
    * the gaps of any one person. @param {string} studyId
    */
-  async evidenceGapCounts(studyId) {
+  async evidenceGapCounts(studyId, protocolVersionId = null) {
     const rows = await this.rows(
-      `WITH latest AS (SELECT DISTINCT ON (subject_key) id, evidence_gaps FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1
+      `WITH latest AS (SELECT DISTINCT ON (subject_key) id, evidence_gaps FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id = $2)
           ORDER BY subject_key, as_of DESC, created_at DESC)
        SELECT g->>'variable' AS variable, g->>'reason' AS reason, count(*)::int AS n
-         FROM latest, jsonb_array_elements(latest.evidence_gaps) g GROUP BY 1, 2 ORDER BY n DESC, 1 LIMIT 100`, [studyId]);
+         FROM latest, jsonb_array_elements(latest.evidence_gaps) g GROUP BY 1, 2 ORDER BY n DESC, 1 LIMIT 100`, [studyId, protocolVersionId]);
     return rows.map((row) => ({ variable: String(row.variable ?? ""), reason: String(row.reason ?? ""), n: Number(row.n) }));
   }
 
@@ -624,6 +634,35 @@ export class VcrMatchStore extends VcrStoreBase {
     return rows.map((row) => ({ studyId: String(row.study_id), subjectKey: String(row.subject_key), due: row.due }));
   }
 
+  /** Platform-issued usage references, never a model's self-description.
+   * A run may make several calls before a write: this is a bounded run-window association.
+   * @param {any} study @param {string|null} runId */
+  async producerContext(study, runId) {
+    const base = { schema: 1, runId, association: 'run_requests_before_write', skillDigest: null, requests: [] };
+    if (!runId) return { ...base, status: 'unknown' };
+    if (!(await this.one("SELECT to_regclass('evimed_usage.model_requests') AS relation"))?.relation) return { ...base, status: 'ledger_unavailable' };
+    const rows = await this.rows(`SELECT id,model,observed_model,request_fingerprint,provider_request_id,status
+      FROM evimed_usage.model_requests WHERE user_id=$1 AND project_id=$2 AND run_id=$3
+      ORDER BY created_at DESC,id DESC LIMIT 101`, [study.userId, study.projectId, runId]);
+    return { ...base, status: rows.length ? 'recorded' : 'pending', truncated: rows.length > 100,
+      requests: rows.slice(0,100).map(row => ({ id: row.id, requestedModel: row.model, observedModel: row.observed_model ?? null,
+        requestHash: row.request_fingerprint, providerRequestId: row.provider_request_id ?? null, status: row.status })) };
+  }
+
+  /** @param {any} client @param {string} studyId @param {string} targetId @param {any} provenance */
+  async saveProducer(client, studyId, targetId, provenance) {
+    if (!provenance) return;
+    const hash = matchingInputDigest(provenance);
+    await client.query(`INSERT INTO ${VCR_SCHEMA}.matching_producers(study_id,target_id,producer_hash,provenance)
+      VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING`, [studyId, targetId, hash, JSON.stringify(provenance)]);
+  }
+
+  /** @param {string} studyId @param {string[]} ids */
+  async producers(studyId, ids) {
+    return this.rows(`SELECT target_id AS "targetId",provenance,created_at AS "createdAt" FROM ${VCR_SCHEMA}.matching_producers
+      WHERE study_id=$1 AND target_id=ANY($2::text[]) ORDER BY created_at`, [studyId, ids]);
+  }
+
   // ---------------------------------------------------------------- facts
 
   /**
@@ -634,21 +673,24 @@ export class VcrMatchStore extends VcrStoreBase {
    * @param {{ studyId: string, userId: string, fact: any }} input
    */
   async saveFact({ studyId, userId, fact }) {
+    if (clinicalFactIssues(fact.clinical).length) throw new HttpError(400, 'vcr_clinical_fact_invalid', 'Clinical metadata is invalid.');
     const key = createHash("sha256").update(JSON.stringify([
       fact.subjectKey, fact.variable, fact.polarity, fact.value ?? null, fact.unit ?? null,
-      fact.source?.documentId ?? null, fact.source?.start ?? null, fact.source?.end ?? null, fact.occurredAt ?? null, fact.source?.vocabularyVersion ?? null,
+      fact.source?.documentId ?? null, fact.source?.start ?? null, fact.source?.end ?? null, fact.occurredAt ?? null, fact.source?.vocabularyVersion ?? null, ...(fact.clinical ? [fact.clinical] : []),
     ])).digest("hex");
     return this.transaction(async (client) => {
       const inserted = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.matching_facts
            (id, study_id, user_id, subject_key, fact_key, variable, value, unit, polarity, occurred_at, recorded_at, visible_at,
-            surface, date_surface, source, extracted_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16)
+            surface, date_surface, source, extracted_by, provenance, clinical)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17::jsonb, $18::jsonb)
          ON CONFLICT (study_id, fact_key) DO UPDATE SET fact_key = EXCLUDED.fact_key RETURNING *, (xmax = 0) AS inserted`,
         [factId(), studyId, userId, fact.subjectKey, key, fact.variable, JSON.stringify(fact.value ?? null), fact.unit ?? null,
-          fact.polarity ?? "affirmed", fact.occurredAt ?? null, fact.recordedAt ?? null, fact.visibleAt,
-          String(fact.surface ?? ""), fact.dateSurface ?? null, fact.source ? JSON.stringify(fact.source) : null, fact.extractedBy ?? "model"]);
+          clinicalFactPolarity(fact), fact.occurredAt ?? null, fact.recordedAt ?? null, fact.visibleAt,
+          String(fact.surface ?? ""), fact.dateSurface ?? null, fact.source ? JSON.stringify(fact.source) : null, fact.extractedBy ?? "model",
+          fact.provenance ? JSON.stringify(fact.provenance) : null, fact.clinical ? JSON.stringify(fact.clinical) : null]);
       const row = inserted.rows[0];
+      await this.saveProducer(client, studyId, row.id, fact.provenance);
       if (row.inserted) {
         await this.audit({ client, studyId, userId, actor: "runtime", action: "vcr.fact.save", object: row.id,
           detail: { subjectKey: fact.subjectKey, variable: fact.variable } });
@@ -691,20 +733,100 @@ export class VcrMatchStore extends VcrStoreBase {
     return rows.map((row) => ({ subjectKey: String(row.subject_key), facts: Number(row.facts) }));
   }
 
+  /** Includes uploaded charts even when extraction produced no facts.
+   * @param {{studyId:string, visibleBy?:string|null}} input */
+  async candidateSubjects({ studyId, visibleBy = null }) {
+    const rows = await this.rows(`SELECT subject_key FROM (
+      SELECT subject_key FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
+      UNION SELECT subject_key FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
+      UNION SELECT subject_key FROM ${VCR_SCHEMA}.matching_candidates WHERE study_id=$1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
+      UNION SELECT detail->>'subjectKey' AS subject_key FROM ${VCR_SCHEMA}.source_files
+        WHERE study_id=$1 AND role='document' AND detail->>'subjectKey' IS NOT NULL
+        AND ($2::timestamptz IS NULL OR COALESCE(NULLIF(detail->>'visibleAt','')::timestamptz,created_at) <= $2)
+      ) roster ORDER BY subject_key`, [studyId, visibleBy]);
+    return rows.map(row => String(row.subject_key));
+  }
+
+  /** @param {{id:string,payload:any}} snapshot */
+  async saveMatchingSnapshot(snapshot) {
+    verifyMatchingSnapshot(snapshot.payload, snapshot.payload.studyId, snapshot.id);
+    await this.query(`INSERT INTO ${VCR_SCHEMA}.matching_inputs (study_id,id,manifest) VALUES ($1,$2,$3::jsonb)
+      ON CONFLICT (study_id,id) DO NOTHING`, [snapshot.payload.studyId, snapshot.id, JSON.stringify(snapshot.payload)]);
+    return snapshot.id;
+  }
+
+  /** @param {string} studyId @param {string} id */
+  async matchingSnapshot(studyId, id) {
+    const row = await this.one(`SELECT manifest FROM ${VCR_SCHEMA}.matching_inputs WHERE study_id=$1 AND id=$2`, [studyId, id]);
+    return verifyMatchingSnapshot(row?.manifest, studyId, id);
+  }
+
+  /** Keep every requested subject accounted for without placing patient keys in engine results.
+   * @param {string} studyId @param {string} id @param {Record<string, any>} outcomes */
+  async recordMatchingOutcomes(studyId, id, outcomes) {
+    await this.rows(`UPDATE ${VCR_SCHEMA}.matching_inputs SET outcomes=outcomes || $3::jsonb WHERE study_id=$1 AND id=$2`, [studyId,id,JSON.stringify(outcomes)]);
+  }
+
+  /** Protected, study-scoped roster; a subject outside a completed batch remains pending.
+   * @param {string} studyId @param {string} id */
+  async matchingProgress(studyId, id) {
+    const row = await this.one(`SELECT manifest FROM ${VCR_SCHEMA}.matching_inputs WHERE study_id=$1 AND id=$2`, [studyId,id]);
+    if (!row) return [];
+    // Continuations have their own immutable job hash, but one candidate
+    // denominator. Merge only batches whose entire input differs by offset.
+    const batches = await this.rows(`SELECT outcomes FROM ${VCR_SCHEMA}.matching_inputs
+      WHERE study_id=$1 AND (manifest - 'offset')=($2::jsonb - 'offset') ORDER BY created_at,id`, [studyId,JSON.stringify(row.manifest)]);
+    const outcomes = Object.assign({}, ...batches.map(batch => batch.outcomes ?? {}));
+    return (row.manifest.subjects ?? []).map(subjectKey => ({ subjectKey, ...(outcomes[subjectKey] ?? { state:'pending' }) }));
+  }
+
+  /** @param {string} studyId @param {string} protocolVersionId */
+  async latestMatchingProgress(studyId, protocolVersionId) {
+    const row = await this.one(`SELECT id FROM ${VCR_SCHEMA}.matching_inputs
+      WHERE study_id=$1 AND manifest->>'protocolVersionId'=$2 ORDER BY created_at DESC,id DESC LIMIT 1`,[studyId,protocolVersionId]);
+    if (!row) return null;
+    const progress = await this.matchingProgress(studyId,row.id);
+    return { inputSnapshotId: row.id, requested: progress.length,
+      ...Object.fromEntries(['evaluated','pending','unavailable'].map(state=>[state,progress.filter(entry=>entry.state===state).length])) };
+  }
+
+
+  /** @param {string} studyId @param {string[]} ids */
+  async matchingFactsByIds(studyId, ids) {
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND id=ANY($2::text[])`, [studyId, ids])).map(factOf);
+  }
+
+  /** @param {string} studyId @param {string[]} ids */
+  async languageJudgmentsByIds(studyId, ids) {
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND id=ANY($2::text[])`, [studyId, ids])).map(row => ({
+      id: row.id, subjectKey: row.subject_key, criterionKey: row.criterion_key, state: row.state, evidence: row.evidence ?? [],
+      protocolVersionId: row.protocol_version_id, criterionHash: row.criterion_hash, provenance: row.provenance ?? null,
+    }));
+  }
+
   /**
    * The answer to a language-only criterion, with its anchored quotes. Each
    * answer is its own row; the newest per (subject, criterion key) is the one
    * evaluated.
-   * @param {{ studyId: string, userId: string, subjectKey: string, criterionKey: string, state: string, evidence: readonly any[] }} input
+   * @param {{ studyId: string, userId: string, subjectKey: string, criterionKey: string, state: string, evidence: readonly any[], protocolVersionId?:string|null, provenance?:any }} input
    */
-  async saveLanguageJudgment({ studyId, userId, subjectKey, criterionKey, state, evidence }) {
+  async saveLanguageJudgment({ studyId, userId, subjectKey, criterionKey, state, evidence, protocolVersionId = null, provenance = null }) {
     return this.transaction(async (client) => {
+      const protocol = (await client.query(`SELECT id FROM ${VCR_SCHEMA}.protocol_versions WHERE study_id=$1
+        AND ($2::text IS NULL OR id=$2) ORDER BY version DESC LIMIT 1`, [studyId, protocolVersionId])).rows[0];
+      if (!protocol) throw new HttpError(409, 'vcr_protocol_version_not_found', 'The protocol version is unavailable.');
+      const criteria = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.criteria WHERE study_id=$1 AND protocol_version_id=$2 ORDER BY ordinal`,
+        [studyId, protocol.id])).rows.map(criterionOf).filter((/** @type {any} */ criterion) => languageKeysOf(criterion.requirement, criterion.id).includes(criterionKey));
+      if (!criteria.length) throw new HttpError(409, 'vcr_criterion_malformed', 'This language key does not belong to the protocol version.');
+      const criterionHash = languageCriterionHash(criteria, criterionKey);
       const visibleAt = (evidence ?? []).map((/** @type {any} */ item) => Date.parse(item?.visibleAt ?? "")).filter(Number.isFinite);
       const result = await client.query(
-        `INSERT INTO ${VCR_SCHEMA}.language_judgments (id, study_id, user_id, subject_key, criterion_key, state, evidence, visible_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8) RETURNING *`,
+        `INSERT INTO ${VCR_SCHEMA}.language_judgments (id, study_id, user_id, subject_key, criterion_key, state, evidence, visible_at, protocol_version_id, criterion_hash, provenance)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb) RETURNING *`,
         [vcrId("judgment"), studyId, userId, subjectKey, criterionKey, state, JSON.stringify(evidence ?? []),
-          new Date(visibleAt.length ? Math.max(...visibleAt) : Date.now()).toISOString()]);
+          new Date(visibleAt.length ? Math.max(...visibleAt) : Date.now()).toISOString(), protocol.id, criterionHash,
+          provenance ? JSON.stringify(provenance) : null]);
+      await this.saveProducer(client, studyId, result.rows[0].id, provenance);
       await this.audit({ client, studyId, userId, actor: "runtime", action: "vcr.language_judgment.save", object: result.rows[0].id,
         detail: { subjectKey, criterionKey, state } });
       return { id: String(result.rows[0].id), subjectKey, criterionKey, state };
@@ -713,20 +835,27 @@ export class VcrMatchStore extends VcrStoreBase {
 
   /**
    * The newest answer per (subject, criterion key), visible by `visibleBy`.
-   * @param {{ studyId: string, visibleBy?: string | null }} input
+   * @param {{ studyId: string, visibleBy?: string | null, protocolVersionId?:string|null }} input
    * @returns {Promise<Map<string, Record<string, any>>>} subjectKey → { criterionKey → { state, evidence } }
    */
-  async latestLanguageJudgments({ studyId, visibleBy = null }) {
+  async latestLanguageJudgments({ studyId, visibleBy = null, protocolVersionId = null }) {
+    const version = protocolVersionId ?? (await this.latestProtocol(studyId))?.id;
+    if (!version) return new Map();
+    const criteria = await this.listCriteria({ studyId, protocolVersionId: version });
     const rows = await this.rows(
-      `SELECT DISTINCT ON (subject_key, criterion_key) id, subject_key, criterion_key, state, evidence
+      `SELECT DISTINCT ON (subject_key, criterion_key) *
          FROM ${VCR_SCHEMA}.language_judgments
         WHERE study_id = $1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
-        ORDER BY subject_key, criterion_key, created_at DESC, id DESC`, [studyId, visibleBy]);
+          AND protocol_version_id=$3
+        ORDER BY subject_key, criterion_key, created_at DESC, id DESC`, [studyId, visibleBy, version]);
     /** @type {Map<string, Record<string, any>>} */
     const bySubject = new Map();
     for (const row of rows) {
+      const bound = criteria.filter(criterion => languageKeysOf(criterion.requirement, criterion.id).includes(row.criterion_key));
+      if (!bound.length || row.criterion_hash !== languageCriterionHash(bound, row.criterion_key)) continue;
       const entry = bySubject.get(String(row.subject_key)) ?? {};
-      entry[String(row.criterion_key)] = { id: row.id, state: row.state, evidence: row.evidence ?? [] };
+      entry[String(row.criterion_key)] = languageInput({ id: row.id, state: row.state, evidence: row.evidence,
+        protocolVersionId: row.protocol_version_id, criterionHash: row.criterion_hash, provenance: row.provenance });
       bySubject.set(String(row.subject_key), entry);
     }
     return bySubject;

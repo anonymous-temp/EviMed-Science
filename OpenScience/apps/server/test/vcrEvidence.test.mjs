@@ -58,6 +58,10 @@ function storeDouble() {
       if (studyId && !uses.some((use) => use.study_id === studyId && use.precedent_id === row.id)) uses.push({ study_id: studyId, precedent_id: row.id });
       return row;
     },
+    async registryVersions(userId, studyId, precedentId) {
+      return precedents.filter(row => row.user_id === userId && row.id === precedentId
+        && uses.some(use => use.study_id === studyId && use.precedent_id === row.id)).map(row => ({recordHash:row.record_hash}));
+    },
     async precedentOfStudy({ userId, studyId, registry, registryId }) {
       const row = precedents.find((entry) => entry.user_id === userId && entry.registry === registry && entry.registry_id === registryId);
       return row && uses.some((use) => use.study_id === studyId && use.precedent_id === row.id) ? row : null;
@@ -1078,5 +1082,5 @@ test("every column the evidence store writes exists in the migration that create
   // And every table it touches is one the migration creates.
   const tables = new Set([...store.matchAll(/\$\{VCR_SCHEMA\}\.([a-z_]+)/g)].map((match) => match[1]));
   // `audit` is written by `VcrStoreBase`, which every package shares.
-  assert.deepEqual([...tables].sort(), ["assumptions", "evidence_items", "precedents", "study_precedents"]);
+  assert.deepEqual([...tables].sort(), ["assumptions", "evidence_items", "precedent_versions", "precedents", "study_precedents"]);
 });

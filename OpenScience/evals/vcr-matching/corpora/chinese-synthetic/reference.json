@@ -1,0 +1,187 @@
+{
+  "schema": 1,
+  "dataClass": "synthetic",
+  "labeling": "author_seen_regression_not_clinician_validation",
+  "cases": [
+    {
+      "id": "family-negation",
+      "group": "synthetic-person-01",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "family-negation": "eligible"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "uncertain-event",
+      "group": "synthetic-person-02",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "uncertain-event": "insufficient_evidence"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "planned-treatment",
+      "group": "synthetic-person-03",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "planned-treatment": "insufficient_evidence"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "conflicting-lab",
+      "group": "synthetic-person-04",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "conflicting-lab": "insufficient_evidence"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "equivalent-units",
+      "group": "synthetic-person-05",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "equivalent-units": "eligible"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "administered-treatment",
+      "group": "synthetic-person-06",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "administered-treatment": "eligible"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "family-only",
+      "group": "synthetic-person-07",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "family-only": "insufficient_evidence"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "affirmed-event",
+      "group": "synthetic-person-08",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "affirmed-event": "ineligible"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "missing-lab",
+      "group": "synthetic-person-09",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "missing-lab": "insufficient_evidence"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "lab-high",
+      "group": "synthetic-person-10",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "lab-high": "ineligible"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "clinical-coreference",
+      "group": "synthetic-person-11",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "clinical-coreference": "eligible"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    },
+    {
+      "id": "unrecognized-unit",
+      "group": "synthetic-person-12",
+      "task": "eligibility",
+      "reference": {
+        "labels": {
+          "unrecognized-unit": "insufficient_evidence"
+        },
+        "states": [
+          "eligible",
+          "ineligible",
+          "insufficient_evidence"
+        ]
+      }
+    }
+  ]
+}

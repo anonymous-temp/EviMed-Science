@@ -2095,3 +2095,6 @@ export {
   selectEvolutionParent,
   evolutionPruningCandidates,
 } from './src/evolutionSelection.mjs';
+export { CLINICAL_FACT_SCHEMA, CLINICAL_FACT_CONTRACT, CLINICAL_ASSERTIONS, CLINICAL_EXPERIENCERS, CLINICAL_RELATIONS, clinicalLocatorIssues, clinicalFactIssues, clinicalFactPolarity, clinicalSemanticFields, clinicalTerminologyContext, clinicalFactView } from './src/clinicalFact.mjs'
+
+export { CLINICAL_UNIT_VERSION, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from './src/clinicalUnits.mjs';

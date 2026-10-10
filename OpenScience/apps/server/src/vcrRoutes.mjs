@@ -199,6 +199,10 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/definitions/:definition/use": ["write"],
   "POST /studies/:id/definitions/:definition/compare": ["run"],
   "POST /studies/:id/data/sources": ["manage_data"],
+  "POST /studies/:id/data/sources/:source/cloud-permission": ["manage_data"],
+  "GET /studies/:id/data/documents/:document": ["read_patient_level"],
+  "POST /studies/:id/data/documents/:document/projection": ["manage_data"],
+  "POST /studies/:id/data/documents/:document/quote": ["read_patient_level"],
   "POST /studies/:id/data/sources/:source/files": ["manage_data"],
   "DELETE /studies/:id/data/files/:file": ["manage_data"],
   "POST /studies/:id/data/sources/:source/fieldmap": ["manage_data"],
@@ -856,6 +860,33 @@ export function createVcrRoutes(dependencies) {
         return reply({ source: sourceView(saved) }, 201);
       }
 
+      if (kind === "sources" && parts.length === 6 && parts[5] === "cloud-permission" && method === "POST") {
+        await authorize(id, "manage_data");
+        const body = await bodyOf(req, maxJsonBytes, ["permission"]);
+        const saved = await plane().setCloudPermission({ ...S, sourceId: parts[4], permission: body.permission });
+        return reply({ source: sourceView(saved) });
+      }
+      if (kind === "documents" && parts.length === 5 && method === "GET") {
+        await authorize(id, "read_patient_level");
+        const document = await plane().documentText({ studyId: id, documentId: parts[4], principal: actor, purpose: 'vcr' });
+        if (!document) throw new HttpError(404, 'vcr_document_not_found', 'Document not found.');
+        const { createHash } = await import('node:crypto');
+        return reply({ document: { id: document.id, text: document.text, sourceHash: createHash('sha256').update(document.text).digest('hex') } });
+      }
+      if (kind === "documents" && parts.length === 6 && parts[5] === "projection" && method === "POST") {
+        await authorize(id, "manage_data");
+        const body = await bodyOf(req, maxJsonBytes, ["sourceHash", "spans", "attestation"]);
+        const saved = await plane().createDocumentProjection({ ...S, documentId: parts[4], sourceHash: body.sourceHash,
+          spans: body.spans, attestation: body.attestation });
+        return reply({ projection: saved }, 201);
+      }
+      if (kind === "documents" && parts.length === 6 && parts[5] === "quote" && method === "POST") {
+        await authorize(id, "read_patient_level");
+        const body = await bodyOf(req, maxJsonBytes, ["start", "end", "quote"]);
+        return reply({ evidence: await plane().resolveProjectionQuote({ studyId: id, documentId: parts[4], principal: actor,
+          span: { start: body.start, end: body.end, quote: body.quote } }) });
+      }
+
       if (kind === "sources" && parts.length === 6 && parts[5] === "files" && method === "POST") {
         try {
           await authorize(id, "manage_data");
@@ -1002,7 +1033,7 @@ export function createVcrRoutes(dependencies) {
         return reply({ jobs: await hooks.jobs.listForStudy(study.id), budget: await hooks.jobs.budgetOf?.(study.id) ?? null });
       }
       if (parts.length === 3 && method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId"]);
+        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "selection"]);
         word(body.kind, VCR_JOB_KINDS, "vcr_job_kind_invalid", "kind");
         if (body.subjectId != null && (typeof body.subjectId !== "string" || !ID.test(body.subjectId))) {
           throw new HttpError(400, "vcr_job_scenario_invalid", "subjectId is the id of one of the study's objects.");
@@ -1015,6 +1046,13 @@ export function createVcrRoutes(dependencies) {
         }
         const { study } = await authorize(id, "run");
         if (!hooks.jobs?.enqueue) throw UNAVAILABLE();
+        if (body.kind === 'match_criteria') {
+          await requireAbility(study, 'read_patient_level');
+          if (body.scenario || body.inputs) throw new HttpError(400, 'vcr_matching_selection_invalid', 'Matching accepts owned record selection, not a caller scenario.');
+          if (!hooks.matching?.enqueuePanel) throw UNAVAILABLE();
+          return reply(await hooks.matching.enqueuePanel(study, body.selection ?? {}, String(user.id)), 201);
+        }
+        if (body.selection != null) throw new HttpError(400, 'vcr_matching_selection_invalid', 'selection is for matching only.');
         const cpuSecondsLimit = body.cpuSecondsLimit == null ? null : wholeNumber(body.cpuSecondsLimit, "cpuSecondsLimit", CPU_SECONDS_MAX);
         // A computation names the object it is for, like the conversation's (`resolveJobSubject`): its result is filed under it.
         const subject = hooks.jobs.store

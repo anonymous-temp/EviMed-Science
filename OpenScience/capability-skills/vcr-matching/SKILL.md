@@ -27,7 +27,7 @@ metadata:
 ## 一、读方案，必要时结构化
 
 `mcp__evimed__vcr_read` `{ "what": "criteria" }` 给出最新的方案版本和它的条件（每条带 `id`、`kind`、`requirement`、`applicability`、`sourceText`）。
-**评估始终针对最新的方案版本**；没有条件时先写：`mcp__evimed__vcr_write` `what: "criteria"`（首次写方案用 `what: "protocol"`），
+**评估针对明确选择的方案版本**；读取时可用 `filter.protocolVersionId`，不指定才取最新版本。没有条件时先写：`mcp__evimed__vcr_write` `what: "criteria"`（首次写方案用 `what: "protocol"`），
 `data` 是 `{ "title"?, "criteria": [ … ] }`，一次写入是一个完整的方案版本，旧版本仍在。
 
 每条条件写成「要满足的要求」——排除标准写成「不被这一条排除」。「既往接受过多西他赛者除外」写成 `absent prior_docetaxel`，不要另写一个取反。
@@ -58,7 +58,7 @@ metadata:
 
 - 不带 `filter`：有文档的受试者及文档数；
 - `{ "subjectKey": "P-001" }`：这位受试者的文档清单（`id`、名称、字数、平台可见时间）；
-- `{ "subjectKey": "P-001", "documentId": "…", "offset": 0 }`：文档的一段文字（每次一段，`more` 为真就把 `offset` 往后推再读）。
+- `{ "subjectKey": "P-001", "documentId": "…", "offset": 0 }`：文档的一段文字（返回 UTF-16 位置；续读使用返回的 `nextOffset`，保留跨段重叠，记录尚未处理的范围）。
 
 这是读病历的唯一入口；不要用知识库检索代替它，那里的内容不带受试者身份，也不进事实的核对。
 
@@ -87,7 +87,7 @@ metadata:
 
 ```json
 { "what": "language_judgment", "items": [ {
-  "subjectKey": "P-001", "criterionKey": "consent", "state": "satisfied",
+  "subjectKey": "P-001", "protocolVersionId": "<selected protocol id>", "criterionKey": "consent", "state": "satisfied",
   "evidence": [ { "documentId": "<文档 id>", "quote": "患者本人可理解研究内容并签署知情同意" } ] } ] }
 ```
 
@@ -98,7 +98,7 @@ metadata:
 ## 四、交给评估器，读回结果
 
 事实和回答都写完后：`mcp__evimed__vcr_simulate` `{ "action": "start", "kind": "match_criteria" }`，**不带 `scenario`、不带 `inputs`**——
-平台按最新方案版本的条件和已经写入的事实自己冻结这次评估（评估时刻取到这一分钟）。`start` 会在工具里短暂等一下，几秒能算完的直接带回结果；没算完就告诉用户在评估什么、算完有通知，然后结束这一轮或接着做不依赖它的事，不要循环查 `status`，也不要用命令行等待；下一轮用户问起时再读下面的结果。
+平台冻结本次选择的条件、受试者名单、事实与语言回答。可传 `selection: { protocolVersionIds: [...], subjectKeys: [...], direction: "patient_to_trial", asOf: "..." }`，一次最多十个方案；返回各方案的作业，分别查询。单方案可用 `protocolVersionId`。不指定时默认当前方案。后续分批用 `selection: { snapshotId: inputSnapshotId, offset: nextOffset }`，不要重新抽取未改变的文档。`start` 会在工具里短暂等一下，几秒能算完的直接带回结果；没算完就告诉用户在评估什么、算完有通知，然后结束这一轮或接着做不依赖它的事，不要循环查 `status`，也不要用命令行等待；下一轮用户问起时再读下面的结果。
 作业成功后，平台自己完成三件事：保存每位受试者的评估、把「候选」建成转介记录（状态 `candidate`）、通知协调员。**转介记录是平台建的，你不建，也不改状态。**
 评估之后才写入的事实不在这一次里，再排一次即可。
 
@@ -160,7 +160,7 @@ metadata:
 
 不要把任何已发表的匹配准确率——我们的或别人的——当作承诺。流传的那些数字是在合成病例上测出来的，遇到真实的纵向病历就不成立，
 而读同一份病历的两位医生也只是部分一致。我们的评估报告四种状态之间的混淆、符合者召回、假排除率、阳性预测值和需筛人数，
-把评估者间一致性写成天花板，不设通过线。照这个写。
+Report inter-rater agreement and disagreements as properties of that reference set, not a universal ceiling or a substitute for clinical validation.
 
 ## 交付之前的两步
 
@@ -177,3 +177,15 @@ metadata:
 Authorized judgment corrections are retained as study-local cases with frozen input references. The matching page can export those references and replay held-out subjects through the deterministic evaluator. This does not re-run clinical-document extraction, does not establish clinical accuracy and does not require a human reviewer to complete ordinary research. Never copy patient text, extracted facts or correction labels into global learning fixtures, prompts or another study.
 
 The internal sex-code mapping is pinned as `evimed-internal-sex-1`. Optional `vocabularyVersion` on a fact must match that supported version; unknown declared versions are not reinterpreted through the current table. This is not ICD, GB/T, USDM or Circe support. Preserve unknown codes as unknown and retain their source evidence.
+
+## Evidence-preserving cloud extraction
+
+When `matching.factContract` is null, keep the existing fact/polarity contract and omit optional `clinical` enrichment. When supplied, use its exact schema before writing facts. For each criterion variable, preserve the exact source quotation and the patient's context. Start with the smallest supported fact; extra fields are optional. Keep the criterion variable unchanged.
+
+Place context only inside `clinical`, for example `"clinical": {"schema": 1, "assertion": "affirmed", "experiencer": "patient"}`. Choose assertion and experiencer independently from the tool's enums. Missing or unrecorded history is unknown, never an explicit denial. A planned treatment uses hypothetical assertion and planned temporality; family events belong to family. Do not guess dates, section offsets, coding editions, or existing fact IDs. Numeric values remain numbers. Omit uncertain optional metadata instead of filling every schema field.
+
+For medication facts, add the supported `clinical.medication.state`: a plan or prescription is not administration. A negative exposure needs `medication.absenceScope`: use `never` only for explicit lifetime absence, `interval` with supported bounds for interval-wide absence, and `current` or `unknown` for an incomplete history. Copied text retains its original event date. For observations explicitly from the same event, use the same `clinical.eventId`; competing results stay visible. Corrections use the existing fact ID in `correctionOf` and a sourced `correctionReason`. Laboratory originals stay in the quote; supported unit conversion is the evaluator's. A descriptor or pending assay is not an inferred diagnosis or negative test.
+
+Read only approved cloud projections. Continue chunks using the returned offset, preserve projection and source locators, and report unprocessed sections as unknown. Do not copy patient text into shared memory, disease packs, or evaluation corpora. Language judgments name the selected protocol version. Candidate retrieval and registry status do not establish eligibility or current site availability.
+
+Reuse `matching.semanticFields` through `mcp__evimed__dataset_semantics` as metadata only, with `basis: model_inferred` and the exact source hash. Researcher-confirmed meanings take precedence. Keep useful report portions with claim-level limitations; optional enrichment is not a delivery veto.

@@ -13,6 +13,7 @@ import YAML from "yaml";
 
 import { validateEngineResult, validateEngineJob } from "@evimed/domain";
 
+import { freezeMatchingInputs, MATCHING_SNAPSHOT_PREFIX } from "../src/vcrMatchingSnapshot.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { vcrReadiness } from "../src/vcrService.mjs";
 import { removeVcrArtifacts } from "../src/vcrStoreBase.mjs";
@@ -92,7 +93,13 @@ const CRITERIA = [
 ];
 
 function matchStoreDouble(overrides = {}) {
+  const snapshots = new Map();
   return {
+    async candidateSubjects() { return ["P-001"]; },
+    async saveMatchingSnapshot({ id, payload }) { snapshots.set(id, payload); },
+    async matchingSnapshot(_studyId, id) { return snapshots.get(id); },
+    async matchingFactsByIds() { return this.listFacts(); },
+    async languageJudgmentsByIds() { return []; },
     async latestProtocol() { return { id: "prt_1", version: 1, title: "EV-201" }; },
     async listCriteria() { return CRITERIA; },
     async listAssessments() { return [{ id: "mas_1", subjectKey: "P-001", summary: "eligible", judgments: [] }]; },
@@ -117,15 +124,16 @@ function matchStoreDouble(overrides = {}) {
         judgments: [{ criterionId: "crt_mi", state: "unknown", applicable: true, decidedBy: "code", recheckAt: null, evidence: [],
           overrideState: "satisfied", overriddenBy: "coordinator-li@hospital", overrideNote: "电话核实，无心梗" }] };
     },
-    async listFacts() { return [{ id: "fac_1", variable: "age", value: 62, unit: "year", polarity: "affirmed", occurredAt: null, visibleAt: AS_OF, surface: "62 岁", source: null }]; },
+    async listFacts() { return [{ id: "fac_1", subjectKey: "P-001", variable: "age", value: 62, unit: "year", polarity: "affirmed", occurredAt: null, visibleAt: AS_OF, surface: "62 岁", source: null }]; },
     async latestLanguageJudgments() { return new Map(); },
     ...overrides,
   };
 }
+const cloudDocuments = { async runtimeEvidence(_study, entries) { return entries; } };
 const storeDouble = { async latestProtocolVersion() { return { id: "prt_1", version: 1 }; } };
 
 test("the matching tab is assembled from the package's store and its pure judgments", async () => {
-  const seam = vcrMatchingSeam({ matchStore: matchStoreDouble(), store: storeDouble });
+  const seam = vcrMatchingSeam({ matchStore: matchStoreDouble(), store: storeDouble, documents: cloudDocuments });
   const tab = await seam.tab({ id: "std_1", userId: "u1" }, { id: "u1" });
   assert.equal(tab.available, true);
   assert.equal(tab.criteria.length, 2);
@@ -137,7 +145,7 @@ test("the matching tab is assembled from the package's store and its pure judgme
 });
 
 test("CW-22 a run reads criterion-level aggregates and pseudonymous subject keys — no reviewer, no note, no rationale", async () => {
-  const seam = vcrMatchingSeam({ matchStore: matchStoreDouble(), store: storeDouble });
+  const seam = vcrMatchingSeam({ matchStore: matchStoreDouble(), store: storeDouble, documents: cloudDocuments });
   const overview = await seam.runtimeRead({ id: "std_1" }, {});
   assert.deepEqual(overview.summaryCells, [{ key: "eligible", n: 12 }, { key: "ineligible", n: 40 }, { key: "insufficient_evidence", n: 3 }],
     "counts leave as sibling cells, so the one boundary can hide the small ones together");
@@ -170,6 +178,14 @@ test("the frozen context of a matching job is read back from its inputs, and a m
   assert.throws(() => matchingContextOf(matchingInputs("28/09/2026")), (error) => error.code === "vcr_asof_invalid");
 });
 
+async function snapshotInputs(matchStore, criteria = CRITERIA) {
+  const facts = await matchStore.listFacts({ studyId: "std_1", visibleBy: AS_OF });
+  const snapshot = freezeMatchingInputs({ studyId: "std_1", protocolVersionId: "prt_1", asOf: AS_OF,
+    criteria, facts, languages: new Map(), subjects: facts.map(fact => fact.subjectKey) });
+  await matchStore.saveMatchingSnapshot(snapshot);
+  return [...matchingInputs(), { kind: "evidence", id: `${MATCHING_SNAPSHOT_PREFIX}${snapshot.id}` }];
+}
+
 test("AC-14 CS-31 the local executor loads what it evaluates by study, decides in code and answers a valid engine result", async () => {
   const facts = new Map([["P-001", [{ id: "f1", subjectKey: "P-001", variable: "age", value: 62, unit: "year", polarity: "affirmed", occurredAt: null,
     visibleAt: "2026-09-01T00:00:00.000Z", surface: "62 岁", source: null, extractedBy: "code" }]]]);
@@ -177,11 +193,13 @@ test("AC-14 CS-31 the local executor loads what it evaluates by study, decides i
   const asked = [];
   const matchStore = matchStoreDouble({
     async listFacts(query) { asked.push(query); return [...facts.values()].flat(); },
+    async matchingFactsByIds(studyId, ids) { asked.push({ studyId, ids }); return [...facts.values()].flat(); },
   });
   const run = vcrMatchingExecutor({ matchStore, store: { async studyById() { return { id: "std_1", userId: "u1" }; } } });
+  const inputs = await snapshotInputs(matchStore);
   const progress = [];
   const result = await run({
-    job: { id: "job_1", studyId: "std_1", scenarioHash: "b".repeat(64), seed: 7, inputs: matchingInputs(),
+    job: { id: "job_1", studyId: "std_1", scenarioHash: "b".repeat(64), seed: 7, inputs,
       // Whatever a run put in here about patients is not read: a scenario is a thing a run can write.
       scenario: { criteria: CRITERIA.map((criterion) => ({ id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: "unknown" })),
         subjects: [{ subjectKey: "P-FORGED", facts: [{ variable: "age", value: 99, extractedBy: "snapshot" }] }] } },
@@ -198,7 +216,7 @@ test("AC-14 CS-31 the local executor loads what it evaluates by study, decides i
   assert.equal(result.diagnostics.protocolVersionId, "prt_1");
   assert.ok(progress.length >= 1, "progress is reported even for a short job");
   assert.equal(result.manifest.engineVersion, "control-plane");
-  assert.deepEqual(asked, [{ studyId: "std_1", visibleBy: AS_OF }], "facts are read by study and as of the frozen instant: nothing later is visible");
+  assert.deepEqual(asked, [{ studyId: "std_1", visibleBy: AS_OF }, { studyId: "std_1", ids: ["f1"] }], "execution loads only the references frozen when queued");
 });
 
 test("CS-34 one subject that cannot be evaluated is counted and never stops the others; a fact with no document is void", async () => {
@@ -207,22 +225,24 @@ test("CS-34 one subject that cannot be evaluated is counted and never stops the 
     source: { documentId: "doc-1", start: 0, end: 5, quote: "否认心梗史" }, extractedBy: "model" };
   const bad = { id: "f3", subjectKey: "P-003", variable: "age", value: 50, polarity: "affirmed", visibleAt: AS_OF, surface: "50", source: null, extractedBy: "code" };
   const matchStore = matchStoreDouble({ async listFacts() { return [good, modelFact, bad]; } });
+  const inputs = await snapshotInputs(matchStore);
   const documents = { async read(_study, { subjectKey, documentId }) {
     if (subjectKey === "P-003") throw new Error("boom");
     return documentId === "doc-1" && subjectKey === "P-002" ? { text: "否认心梗史。" } : null;
   } };
   const run = vcrMatchingExecutor({ matchStore, store: { async studyById() { return { id: "std_1", userId: "u1" }; } }, documents });
-  const result = await run({ job: { id: "job_1", studyId: "std_1", inputs: matchingInputs(), scenario: { criteria: CRITERIA.map((criterion) => ({ id: criterion.id })) } }, onProgress: async () => {} });
+  const result = await run({ job: { id: "job_1", studyId: "std_1", inputs, scenario: { criteria: CRITERIA.map((criterion) => ({ id: criterion.id })) } }, onProgress: async () => {} });
   assert.deepEqual(result.assessments.map((row) => row.subjectKey), ["P-001", "P-002", "P-003"], "a document read that throws is a document that is not there, not a dead job");
   const negated = result.assessments.find((row) => row.subjectKey === "P-002");
   assert.equal(negated.voidedFacts.length, 0, "a located fact whose span is really in the document is admitted");
   const missing = result.assessments.find((row) => row.subjectKey === "P-003");
   assert.equal(missing.summary, "insufficient_evidence");
   const withoutDocuments = vcrMatchingExecutor({ matchStore, store: { async studyById() { return { id: "std_1", userId: "u1" }; } } });
-  const voided = await withoutDocuments({ job: { id: "job_2", studyId: "std_1", inputs: matchingInputs(), scenario: { criteria: [{ id: "crt_mi" }] } }, onProgress: async () => {} });
+  const subsetInputs = await snapshotInputs(matchStore, CRITERIA.filter(criterion => criterion.id === "crt_mi"));
+  const voided = await withoutDocuments({ job: { id: "job_2", studyId: "std_1", inputs: subsetInputs, scenario: { criteria: [{ id: "crt_mi" }] } }, onProgress: async () => {} });
   assert.deepEqual(voided.assessments.find((row) => row.subjectKey === "P-002").voidedFacts.map((fact) => fact.reason), ["document_unavailable"]);
   assert.equal(voided.diagnostics.voidedFacts, 1);
-  await assert.rejects(() => run({ job: { id: "job_3", studyId: "std_1", inputs: matchingInputs(), scenario: { criteria: [{ id: "crt_other_study" }] } }, onProgress: async () => {} }),
+  await assert.rejects(() => run({ job: { id: "job_3", studyId: "std_1", inputs, scenario: { criteria: [{ id: "crt_other_study" }] } }, onProgress: async () => {} }),
     (error) => error.code === "vcr_criteria_missing", "criteria the study does not hold are not evaluated");
 });
 
@@ -233,7 +253,7 @@ test("the matching job's scenario is the domain's engine schema with the frozen 
   const built = await seam.matchScenario({ id: "std_1", userId: "u1" });
   assert.equal(built.ok, true);
   assert.deepEqual(built.scenario.criteria.map((criterion) => criterion.id), ["crt_age", "crt_mi"]);
-  assert.deepEqual(built.inputs.map((input) => input.id).slice(0, 2), ["matching:asof:2026-09-28T08:30:00.000Z", "matching:protocol:prt_1"], "the instant is frozen to the minute, as a valid ISO date");
+  assert.deepEqual(built.inputs.map((input) => input.id).slice(0, 2), ["matching:asof:2026-09-28T08:30:45.123Z", "matching:protocol:prt_1"], "the exact instant is frozen, as a valid ISO date");
   const issues = validateEngineJob({ jobId: "job_1", studyId: "std_1", kind: "match_criteria", method: "matching.evaluate", methodVersion: "1.0.0",
     protocolVersion: 1, seed: 1, cpuSecondsLimit: 60, scenario: built.scenario, inputs: built.inputs });
   // The scenario and every input are the domain's. The one thing left is the domain's own listing of
@@ -254,6 +274,7 @@ test("the documents seam reads through the plane's judged reader and answers onl
       reads.push(entry);
       return entry.documentId === "fil_1" ? { id: "fil_1", text: "患者本人可理解研究内容。", subjectKey: "P-001", visibleAt: AS_OF } : null;
     },
+    async projectionText(entry) { return this.documentText(entry); },
     async listDocuments({ subjectKey }) {
       return [{ id: "fil_1", subjectKey: "P-001", name: "入院记录", chars: 12, visibleAt: AS_OF }, { id: "fil_2", subjectKey: "P-002", name: "出院小结", chars: 9, visibleAt: AS_OF }]
         .filter((entry) => !subjectKey || entry.subjectKey === subjectKey);
@@ -267,7 +288,7 @@ test("the documents seam reads through the plane's judged reader and answers onl
   const subjects = await documents.subjectDocuments(study, {});
   assert.deepEqual(subjects.subjects, [{ subjectKey: "P-001", documents: 1 }, { subjectKey: "P-002", documents: 1 }]);
   const listed = await documents.subjectDocuments(study, { subjectKey: "P-001" });
-  assert.deepEqual(listed.documents, [{ id: "fil_1", name: "入院记录", chars: 12, visibleAt: AS_OF }], "metadata only: no text");
+  assert.deepEqual(listed.documents, [{ id: "fil_1", name: "病历文档", chars: 12, visibleAt: AS_OF }], "filenames never reach the model");
   const window = await documents.subjectDocuments(study, { subjectKey: "P-001", documentId: "fil_1", offset: 2 });
   assert.deepEqual([window.document.text, window.document.chars, window.document.more], ["本人可理解研究内容。", 12, false]);
   assert.equal((await documents.subjectDocuments(study, { documentId: "fil_1" })).code, "vcr_read_filter_invalid");

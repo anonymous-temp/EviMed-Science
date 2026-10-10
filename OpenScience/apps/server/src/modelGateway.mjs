@@ -929,7 +929,7 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
 
 /**
  * @param {Record<string, any>} config @param {any} runtimeManager
- * @param {{ fetchImpl?: typeof fetch, usageLedger?: any,
+ * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, assertModelAccess?: ((caller:any,body:any)=>Promise<void>)|null,
  *           attributeRun?: (caller: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
  *           runPurpose?: (request: { userId: string, projectId: string, runId: string | null }) => Promise<string>,
  *           runScope?: (request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null> }} [options]
@@ -947,7 +947,7 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
  *   throw to refuse the call (a run whose cap cannot be read is not run).
  */
 export function createModelGatewayHandler(config, runtimeManager, {
-  fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null, runScope = null,
+  fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null, runScope = null, assertModelAccess = null,
 } = {}) {
   const prefixes = new PromptPrefixMemo();
   return async function modelGatewayHandler(req, res, onFailure) {
@@ -1003,7 +1003,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
           cacheMissTokens: exactUsage.cacheMissTokens,
           completionTokens: exactUsage.completionTokens,
         },
-        actualCost: actual.cost, priced: actual.priced, providerRequestId,
+        actualCost: actual.cost, priced: actual.priced, providerRequestId, observedModel: usageTail?.observedModel() ?? null,
       });
     };
     const timeoutMs = Math.max(1, Number(config.modelGatewayTimeoutMs) || 300_000);
@@ -1051,6 +1051,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
       let normalized = route.normalize(body, requestConfig);
       const scoped = caller.engine ? { request: normalized, scope: null } : consumeBudgetScope(normalized, caller, config);
       normalized = scoped.request;
+      if (assertModelAccess) await assertModelAccess({ ...caller, sessionId: kernelSessionId(req) }, normalized);
       modelName = normalized.model;
       streamRequested = normalized.stream === true;
       if (config.requireDurableUsageLedger === true && !usageLedger) {
@@ -1127,6 +1128,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
           now: requestStartedAt,
         });
       }
+      if (assertModelAccess) await assertModelAccess({ ...caller, sessionId: kernelSessionId(req) }, normalized);
       let upstream;
       try {
         const providerUrl = route.upstream(config.deepseekBaseUrl, config.production);
@@ -1424,6 +1426,7 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
           usage: { cacheHitTokens, cacheMissTokens, completionTokens },
           actualCost: actual.cost, priced: actual.priced,
           providerRequestId: payload?.id == null ? null : String(payload.id).slice(0, 512),
+          observedModel: typeof payload?.model === "string" ? payload.model.slice(0, 160) : null,
         });
       } else {
         await usageLedger.markUncertain(call.userId, reservation.id, "response_usage_missing", {});

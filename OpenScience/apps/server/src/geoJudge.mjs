@@ -249,7 +249,7 @@ const labelClaim = (claim) => claim.inLabel === true || claim.sourceKind === "la
  * @param {GeoJudgeInput} input
  */
 export function buildJudgeInput(input) {
-  /** @type {Array<Record<string, any> & {alias: string}>} */
+  /** @type {Array<GeoJudgeInput["claims"][number] & {alias: string}>} */
   const claims = input.claims.map((claim, index) => ({ ...claim, alias: `C${index + 1}` }));
   const project = {
     product: {

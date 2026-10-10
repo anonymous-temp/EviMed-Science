@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "source": "https://zenodo.org/records/5119892",
+  "archiveSha256": "679ca89698ca471a7fedc9af95acc8722c127c04eba19660fead406b5b9b52c9",
+  "selectionSeed": "evimed-drugprot-pilot-1",
+  "license": "CC-BY-4.0",
+  "offsetTransformation": "title + single space + abstract; codepoint to UTF-16",
+  "labelTransformation": "GENE-Y/GENE-N merged into GENE",
+  "cases": [
+    {
+      "id": "drugprot-14730417",
+      "pmid": "14730417",
+      "upstreamSplit": "training",
+      "split": "dev",
+      "inputSha256": "6c158acd958ac414bf64b5b35631ef14371ad5277214fa8339ee9051e97ea20b"
+    },
+    {
+      "id": "drugprot-6441926",
+      "pmid": "6441926",
+      "upstreamSplit": "training",
+      "split": "dev",
+      "inputSha256": "acdb878fd7c73f66cba6e4d9108812f6edb4578fe1eab18ee6d26d137cf32455"
+    },
+    {
+      "id": "drugprot-3058238",
+      "pmid": "3058238",
+      "upstreamSplit": "training",
+      "split": "dev",
+      "inputSha256": "2cb48d2e432c405c200ba732a48e199ed1cc203cbaa017bf4c11ce8bbfa4f61e"
+    },
+    {
+      "id": "drugprot-10529655",
+      "pmid": "10529655",
+      "upstreamSplit": "training",
+      "split": "dev",
+      "inputSha256": "3456b5ea5f7d413be9af98e391c13ae1cd1c7aec65b2f796254106e7e74f0ffa"
+    },
+    {
+      "id": "drugprot-10516878",
+      "pmid": "10516878",
+      "upstreamSplit": "training",
+      "split": "dev",
+      "inputSha256": "31ae25593365b33e52435d0210df1a9d2a927c1ee9374b285bc81a105a8a5099"
+    },
+    {
+      "id": "drugprot-23623843",
+      "pmid": "23623843",
+      "upstreamSplit": "training",
+      "split": "dev",
+      "inputSha256": "1f3eb8793f62155537f98ef642a9985a7b6440e95c4cc26736139733eea62850"
+    },
+    {
+      "id": "drugprot-9851542",
+      "pmid": "9851542",
+      "upstreamSplit": "development",
+      "split": "holdout",
+      "inputSha256": "d360d69bf0c1ccb053147cc593045de64f5fbcfed18e286cd4fbd990b31e706a"
+    },
+    {
+      "id": "drugprot-22872607",
+      "pmid": "22872607",
+      "upstreamSplit": "development",
+      "split": "holdout",
+      "inputSha256": "a7ca75072dedff9eae181ebac4e94c032b45b13856cbacbc27c834fffa589a1e"
+    },
+    {
+      "id": "drugprot-2982865",
+      "pmid": "2982865",
+      "upstreamSplit": "development",
+      "split": "holdout",
+      "inputSha256": "a2089d13d83b71ef9d429f46abe05d339f5de1e054d7f3510776b7d90655a3b7"
+    },
+    {
+      "id": "drugprot-9310349",
+      "pmid": "9310349",
+      "upstreamSplit": "development",
+      "split": "holdout",
+      "inputSha256": "fc3ff31aaefa4b7fd8e7088a63dbaff176e771b42cbfbfb5c232620454da723c"
+    }
+  ]
+}

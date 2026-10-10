@@ -181,7 +181,7 @@ def tool_definitions():
                 "(filter.query searches it); what: library lists the account's reusable population definitions. "
                 "what: matching answers criterion by criterion (how many subjects stand where, and the gaps) "
                 "and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's "
-                "judgments with their evidence quotes and the facts written for them, and the language criteria still "
+                "judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still "
                 "waiting for the run's answer."
             ),
             "inputSchema": {
@@ -198,9 +198,10 @@ def tool_definitions():
                             "sourceId": ID,
                             "subjectKey": ID,
                             "documentId": ID,
+                            "protocolVersionId": ID,
                             "query": {"type": "string", "minLength": 1, "maxLength": 200},
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
-                            "offset": {"type": "integer", "minimum": 0, "maximum": 10000},
+                            "offset": {"type": "integer", "minimum": 0, "maximum": 1048576},
                         },
                         "additionalProperties": False,
                     },
@@ -261,6 +262,8 @@ def tool_definitions():
                 "set, comparator or design grid) names it: subjectId is the id vcr_write returned, and its result is filed under that "
                 "object alone; with none, the one object the scenario fits is taken, and several are refused with the list. "
                 "How to read the results is in the vcr-analysis skill."
+                "For matching, selection names one protocolVersionId or up to ten protocolVersionIds, subjectKeys "
+                "and direction; continue a frozen batch with snapshotId and offset. "
             ),
             "inputSchema": {
                 "type": "object",
@@ -273,6 +276,14 @@ def tool_definitions():
                     "replicates": {"type": "integer", "minimum": 1, "maximum": 10000000},
                     "cpuSecondsLimit": {"type": "integer", "minimum": 1, "maximum": 86400},
                     "subjectId": {"type": "string", "minLength": 1, "maxLength": 120},
+                    "selection": {"type": "object", "properties": {
+                        "protocolVersionId": ID,
+                        "protocolVersionIds": {"type": "array", "minItems": 1, "maxItems": 10, "items": ID},
+                        "subjectKeys": {"type": "array", "minItems": 1, "maxItems": 5000, "items": ID},
+                        "direction": {"type": "string", "enum": ["trial_to_patient", "patient_to_trial"]},
+                        "asOf": {"type": "string"}, "offset": {"type": "integer", "minimum": 0},
+                        "snapshotId": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+                    }, "additionalProperties": False},
                     "reconstructionResultId": ID,
                     "jobId": ID,
                 },
@@ -900,7 +911,7 @@ def simulate(arguments: dict) -> dict:
         if kind not in JOB_KINDS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
         payload["kind"] = kind
-        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId"):
+        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection"):
             if arguments.get(key) is not None:
                 payload[key] = arguments[key]
     else:

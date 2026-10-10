@@ -54,6 +54,7 @@ const DOCUMENTS = new Map([
   ["doc-p2", { subjectKey: "P-002", text: "否认心梗史。年龄 45 岁。", visibleAt: "2026-09-01T00:00:00.000Z" }],
 ]);
 const documents = {
+  async runtimeRead(study, input) { return this.read(study, input); },
   async read(_study, { subjectKey, documentId }) {
     const found = DOCUMENTS.get(documentId);
     return found && found.subjectKey === subjectKey ? { id: documentId, text: found.text, visibleAt: found.visibleAt, subjectKey } : null;
@@ -673,7 +674,7 @@ test("M-17 a re-saved assessment keeps a person's override, drops a criterion th
   await vcr.matching.reviewAssessment({ id: "coordinator-1" }, study, { assessmentId: assessment.id });
   // The same assessment saved again.
   const saved = await vcr.matchStore.saveAssessment({ userId: USER, assessment: {
-    studyId: study.id, protocolVersionId: assessment.protocolVersionId, subjectKey: "P-002", asOf: assessment.asOf, summary: assessment.summary,
+    studyId: study.id, protocolVersionId: assessment.protocolVersionId, subjectKey: "P-002", asOf: assessment.asOf, provenance: assessment.provenance, summary: assessment.summary,
     counts: assessment.counts, evidenceGaps: [], judgments: full.judgments.slice(0, 1).map((entry) => ({ criterionId: entry.criterionId, state: "unknown", applicable: true, decidedBy: "code", evidence: [] })),
   } });
   const after = await vcr.matchStore.getAssessment(saved.id, study.id);
@@ -681,7 +682,7 @@ test("M-17 a re-saved assessment keeps a person's override, drops a criterion th
   assert.equal(after.judgments[0].overrideState, "satisfied", "the person's answer survives the re-save");
   assert.equal(after.reviewedBy, "coordinator-1", "the summary it signed is the summary still");
   const changed = await vcr.matchStore.saveAssessment({ userId: USER, assessment: {
-    studyId: study.id, protocolVersionId: assessment.protocolVersionId, subjectKey: "P-002", asOf: assessment.asOf, summary: "ineligible",
+    studyId: study.id, protocolVersionId: assessment.protocolVersionId, subjectKey: "P-002", asOf: assessment.asOf, provenance: assessment.provenance, summary: "ineligible",
     counts: assessment.counts, evidenceGaps: [], judgments: [] } });
   assert.equal((await vcr.matchStore.getAssessment(changed.id, study.id)).reviewedBy, null, "a signature on a different verdict is not a signature");
 });
@@ -855,7 +856,7 @@ test("simulate match_criteria on the real queue: the frozen scenario is accepted
   assert.equal(status.status, 200, status.body);
   assert.equal(status.json().data.state, "succeeded", status.body);
   const latest = await vcr.matchStore.listAssessments({ studyId: study.id, subjectKey: "P-002", limit: 1, latestOnly: true });
-  assert.equal(Date.parse(latest[0].asOf), Date.parse(asOf), "the assessment is the one of the frozen instant, persisted by the hook");
+  assert.equal(new Date(latest[0].asOf).getTime(), Date.parse(asOf), "the assessment is the one of the frozen instant, persisted by the hook");
 });
 
 test("simulate accrual_forecast on the real queue: the scenario built from the ledger passes the engine's own schema, and only its table is kept", options, async () => {

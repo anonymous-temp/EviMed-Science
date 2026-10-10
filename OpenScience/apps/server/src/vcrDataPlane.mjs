@@ -116,6 +116,7 @@ import {
 } from "@evimed/domain";
 
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
+import { buildCloudProjection, cloudPermission, originalProjectionSpan, projectionHash, requireCloudPermission, vcrCloudDestinations } from "./vcrCloudProjection.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
 import { VCR_IMPORT_FORMATS, VCR_INTAKE_SCRATCH, VCR_TABLE_LIMITS, isVcrIntakeScratchLocation } from "./vcrIntakeLayout.mjs";
 import { VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
@@ -1716,7 +1717,7 @@ function columnForModel(table, column, rows, declaredIdentifiers, floor) {
 // ---------------------------------------------------------------------------
 
 /**
- * @typedef {{ vcrDataPlaneDir?: string, vcrDataMaxBytes?: number, maxFileBytes?: number, vcrIntakeMaxBytes?: number }} VcrDataPlaneConfig
+ * @typedef {{ vcrDataPlaneDir?: string, vcrDataMaxBytes?: number, maxFileBytes?: number, vcrIntakeMaxBytes?: number, deepseekBaseUrl?:string, reviewApiBase?:string, reviewJevApiBase?:string }} VcrDataPlaneConfig
  * @typedef {(input: { files: string[], tableNames?: string[], fieldMap: any, sealedFields: string[], asOf: string | null }) => Promise<any>} VcrProfiler
  */
 
@@ -2205,6 +2206,7 @@ export class VcrDataPlane {
     if (!removed) throw refuse(404, VCR_DATA_PLANE_CODES.fileNotFound, "File not found.");
     // The same bytes may be another source's file (a re-upload elsewhere): only
     // this row's path is removed, and it is this source's own.
+    for (const location of removed.projectionLocations ?? []) await fs.rm(path.join(root, location), { force: true });
     const stillNamed = (await this.store.listSourceFilesForStudy(entry.studyId)).some((file) => file.location === removed.location);
     if (!stillNamed) await fs.rm(path.join(root, removed.location), { force: true }).catch(() => {});
     // A converted record's original goes with it, unless another row still names it.
@@ -2591,6 +2593,10 @@ export class VcrDataPlane {
         },
         actor: String(entry.userId),
       }));
+    }
+    if (registered.some(table => table.shape === 'subject')) {
+      await this.store.registerMatchingCandidates({ studyId: entry.studyId, snapshotId: snapshot.id,
+        subjects: derived.identity.map(row => String(row[0])), visibleAt: snapshot.frozenAt ?? this.now().toISOString() });
     }
     if (refused.length && !registered.length) {
       throw refuse(422, VCR_DATA_PLANE_CODES.analysisTableInvalid, "The analysis tables do not hold the shape they declare.", { refused });
@@ -3026,6 +3032,7 @@ export class VcrDataPlane {
    * @param {{ studyId: string, documentId: string, principal: string, purpose?: string | null, maxBytes?:number }} entry
    */
   async documentText(entry) {
+    if (String(entry.documentId).startsWith('prj_')) return this.projectionText(entry);
     const root = this.root();
     const studyId = String(entry.studyId ?? "");
     const file = ID_PATTERN.test(String(entry.documentId ?? "")) ? await this.store.getSourceFile(studyId, entry.documentId) : null;
@@ -3040,6 +3047,95 @@ export class VcrDataPlane {
     } finally { await opened.handle.close(); }
     if (sha256OfBytes(body) !== file.sha256) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, "The document's bytes are not the ones that were uploaded.");
     return { id: file.id, name: file.name, text: body, subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null };
+  }
+
+  /** @param {{studyId:string,sourceId:string,actor:string,permission:any}} entry */
+  async setCloudPermission(entry) {
+    await this.#manager(entry.studyId, entry.actor);
+    const source = await this.store.sourceInStudy(entry.studyId, entry.sourceId);
+    if (!source || source.studyId !== entry.studyId) throw refuse(404, VCR_DATA_PLANE_CODES.sourceNotFound, 'Source not found.');
+    const permission = cloudPermission(entry.permission, entry.actor, this.now().toISOString());
+    return this.store.setCloudPermission({ ...entry, permission });
+  }
+
+  /** The operator reviews spans in the protected original; no cloud model sees that original.
+   * @param {{studyId:string,documentId:string,actor:string,sourceHash:string,spans:any[],attestation:string}} entry */
+  async createDocumentProjection(entry) {
+    await this.#manager(entry.studyId, entry.actor);
+    const file = await this.store.getSourceFile(entry.studyId, entry.documentId);
+    if (!file || file.role !== 'document') throw refuse(404, VCR_DATA_PLANE_CODES.documentNotFound, 'Document not found.');
+    const source = await this.store.sourceInStudy(entry.studyId, file.sourceId);
+    requireCloudPermission(source?.cloudPermission, vcrCloudDestinations(this.config), this.now().toISOString());
+    const original = await this.documentText({ studyId: entry.studyId, documentId: entry.documentId, principal: entry.actor, purpose: 'vcr' });
+    if (projectionHash(original.text) !== entry.sourceHash) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, 'Review refers to another document version.');
+    const projection = buildCloudProjection({ text: original.text, spans: entry.spans, attestation: entry.attestation,
+      key: await studyPseudonymKey(this.root(), entry.studyId) });
+    const permissionHash = projectionHash(canonicalScenarioJson(source.cloudPermission));
+    const id = `prj_${projectionHash(`${entry.studyId}:${entry.documentId}:${permissionHash}:${projection.projectionHash}`).slice(0, 48)}`;
+    const existing = await this.store.documentProjection(entry.studyId, id, permissionHash);
+    if (existing) return { id, sourceHash: existing.source_hash, projectionHash: existing.projection_hash, chars: projection.text.length, offsetUnit: projection.offsetUnit };
+    const manifest = { ...projection, originalDocumentId: entry.documentId, subjectKey: original.subjectKey,
+      visibleAt: original.visibleAt, permissionHash, reviewedBy: entry.actor, reviewedAt: this.now().toISOString() };
+    const written = await writeContentAddressed(this.root(), path.posix.join(studyRelative(entry.studyId), 'projections'), 'json', JSON.stringify(manifest));
+    await this.store.putDocumentProjection({ id, studyId: entry.studyId, sourceId: file.sourceId, documentId: entry.documentId,
+      sourceHash: projection.sourceHash, projectionHash: projection.projectionHash, permissionHash,
+      location: written.location, manifestHash: written.sha256, actor: entry.actor });
+    return { id, sourceHash: projection.sourceHash, projectionHash: projection.projectionHash, chars: projection.text.length, offsetUnit: projection.offsetUnit };
+  }
+
+  /** Protected replay may use an older projection; external reads always check current permission.
+   * @param {{studyId:string,documentId:string,principal:string,purpose?:string|null,cloudContext?:any}} entry
+   * @param {boolean} [external] @returns {Promise<any>} */
+  async projectionText(entry, external = false) {
+    let row = await this.store.documentProjection(entry.studyId, entry.documentId);
+    if (!row) throw refuse(404, 'vcr_projection_unavailable', 'No reviewed cloud projection is available for this document.');
+    await this.access.require({ actor: entry.principal, studyId: entry.studyId, sourceId: row.source_id,
+      ability: 'read_patient_level', purpose: entry.purpose ?? 'vcr', note: external ? 'cloud projection' : 'projection replay' });
+    const source = await this.store.sourceInStudy(entry.studyId, row.source_id);
+    if (external) {
+      requireCloudPermission(source?.cloudPermission, vcrCloudDestinations(this.config), this.now().toISOString());
+      row = await this.store.documentProjection(entry.studyId, entry.documentId, projectionHash(canonicalScenarioJson(source.cloudPermission)));
+      if (!row) throw refuse(403, 'vcr_projection_permission_changed', 'A new permission needs a newly reviewed projection.');
+    }
+    const opened = await openScopedFileNoFollow(this.root(), assertDataPlaneLocation(this.root(), row.location));
+    let body;
+    try { body = (await readStableFileHandle(opened.handle, opened.stat)).toString('utf8'); }
+    finally { await opened.handle.close(); }
+    if (projectionHash(body) !== row.manifest_hash) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, 'The projection manifest changed.');
+    const projection = JSON.parse(body);
+    if (projectionHash(projection.text) !== row.projection_hash) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, 'The projected text changed.');
+    // Also validate the protected original before trusting its mapping.
+    const original = await this.documentText({ ...entry, documentId: row.document_id });
+    if (projectionHash(original.text) !== row.source_hash) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, 'The original document changed.');
+    if (external) await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal,
+      action: 'document.cloud_read', object: row.id, detail: { projectionHash: row.projection_hash, permissionHash: row.permission_hash } });
+    if (external && entry.cloudContext) await this.store.recordCloudRead(entry.studyId, row.id, entry.cloudContext);
+    return { id: row.id, text: projection.text, subjectKey: projection.subjectKey, visibleAt: projection.visibleAt,
+      projectionHash: row.projection_hash, sourceHash: row.source_hash, offsetUnit: 'utf16',
+      // Never return the segment map or original to a runtime caller.
+    };
+  }
+
+  /** Record served geometry, never a clinical completeness assertion or patient text.
+   * @param {string} studyId @param {string} projectionId @param {any} context @param {any} window */
+  async recordDocumentWindow(studyId, projectionId, context, window) {
+    await this.store.recordCloudWindow(studyId, projectionId, context, {
+      hash: window.windowHash, served: window.coverage.served, extraction: 'unknown',
+    });
+  }
+
+  /** @param {{studyId:string,documentId:string,principal:string,span:{start:number,end:number,quote:string}}} entry */
+  async resolveProjectionQuote(entry) {
+    const row = await this.store.documentProjection(entry.studyId, entry.documentId);
+    if (!row) throw refuse(404, 'vcr_projection_unavailable', 'Projection not found.');
+    await this.projectionText(entry);
+    const opened = await openScopedFileNoFollow(this.root(), assertDataPlaneLocation(this.root(), row.location));
+    let body;
+    try { body = (await readStableFileHandle(opened.handle, opened.stat)).toString('utf8'); }
+    finally { await opened.handle.close(); }
+    if (projectionHash(body) !== row.manifest_hash) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, 'The projection manifest changed.');
+    const original = await this.documentText({ ...entry, documentId: row.document_id });
+    return { documentId: row.document_id, ...originalProjectionSpan(JSON.parse(body), original.text, entry.span) };
   }
 
   /**
@@ -3213,9 +3309,9 @@ export class VcrDataPlane {
         const whole = validateFieldMap(source.fieldMap.columns, tablesOf);
         return {
           id: source.id, name: source.name, ownerParty: source.ownerParty, registeredBy: source.userId, mine: source.userId === String(viewer.id),
-          readable, allowedUses: source.allowedUses, visibleWindow: source.visibleWindow, retention: source.retention,
+          readable, cloudPermission: source.cloudPermission ?? null, allowedUses: source.allowedUses, visibleWindow: source.visibleWindow, retention: source.retention,
           valueSource: source.valueSource, status: source.status, createdAt: source.createdAt,
-          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), imports: this.importUpload() },
+          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), cloudDestinations: vcrCloudDestinations(this.config), imports: this.importUpload() },
           // A source the viewer holds no grant on is a name and a state: its files' names, its map and who may read it are not theirs to see.
           files: readable ? own.map((file) => fileView(file)) : [],
           fieldMap: {
@@ -3292,7 +3388,7 @@ function slimProfile(result) {
  */
 export function sourceView(source) {
   return {
-    id: source.id, name: source.name, ownerParty: source.ownerParty, allowedUses: source.allowedUses,
+    id: source.id, cloudPermission: source.cloudPermission ?? null, name: source.name, ownerParty: source.ownerParty, allowedUses: source.allowedUses,
     visibleWindow: source.visibleWindow, retention: source.retention, valueSource: source.valueSource, status: source.status,
     fieldMapState: source.fieldMapState, fieldMapHash: source.fieldMapHash, createdAt: source.createdAt,
   };

@@ -857,15 +857,16 @@ function skippedResult(source, excluded, runSummary = null) {
  * every run it makes. `trial` is a conversation trying someone else's capsule.
  * `automated` is a run a script dispatched (see `recordRun`).
  */
-export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial"]));
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial", "clinical_context"]));
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
-   *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any,feedbackEvents?:any}} dependencies */
-  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null, usageLedger = null, feedbackEvents = null } = {}) {
+   *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any,feedbackEvents?:any,canReuseRun?:any}} dependencies */
+  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null, usageLedger = null, feedbackEvents = null, canReuseRun = null } = {}) {
     this.config = config;
     this.memoryStore = memoryStore;
     this.fetchImpl = fetchImpl;
+    this.canReuseRun = canReuseRun;
     // Extraction is a model call the platform makes on the user's behalf, so it
     // is reserved and settled like every other one. It used to reach
     // `api.deepseek.com` straight from here: off the ledger, outside the
@@ -940,6 +941,7 @@ export class MemoryIntelligence {
     if (!this.enabled || this.#excludedProject(project)) {
       return skippedResult(this.enabled ? "project_excluded" : "disabled", excluded);
     }
+    if (this.canReuseRun && !await this.canReuseRun(project, run)) return skippedResult("clinical_context", excluded);
     // An automated run — a probe, an audit, an acceptance or evaluation
     // harness, marked at dispatch by `automated: true` in the body or the
     // `x-evimed-automated` header — carries a user message a script wrote, not

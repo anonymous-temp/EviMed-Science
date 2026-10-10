@@ -285,8 +285,18 @@ export class VcrKnowledge {
   async studyPack(study) {
     const binding = await this.store.studyBinding(study.id);
     if (!binding) return null;
+    if (binding.packBody) {
+      const row = binding.origin === 'stored' ? await this.store.getPack(study.userId,binding.packId) : null;
+      // Review metadata can change without rewriting the selected clinical body.
+      const pack = row?.version === binding.packVersion ? {...binding.packBody,status:row.status} : binding.packBody;
+      return {binding,origin:binding.origin,pack,row};
+    }
     try {
-      return { binding, ...await this.resolvePack(study.userId, binding.packId) };
+      const resolved = await this.resolvePack(study.userId, binding.packId);
+      // Legacy bindings have no preserved body: a different edition is not
+      // a reconstruction of the one this study actually chose.
+      if (Number(resolved.pack.version) !== binding.packVersion) return null;
+      return { binding, ...resolved };
     } catch (error) {
       if (error instanceof HttpError && error.status === 404) return null;
       throw error;
@@ -302,7 +312,7 @@ export class VcrKnowledge {
     const { origin, pack, row } = await this.resolvePack(study.userId, packId, { forBinding: true });
     const binding = await this.store.bindStudy({
       studyId: study.id, userId: study.userId, origin, packId: origin === "stored" ? String(row?.id) : String(pack.id),
-      packVersion: Number(pack.version ?? 1), actor,
+      packVersion: Number(pack.version ?? 1), actor, packBody: pack,
     });
     this.counters.packsBound += 1;
     return { binding, pack: presentPackSummary(origin, pack, row) };
@@ -327,7 +337,7 @@ export class VcrKnowledge {
     const issues = validateKnowledgePack(pack, { level: "draft" });
     if (issues.length) return { ok: false, issues };
     const row = await this.store.savePack({ userId: study.userId, studyId: study.id, diseaseKey: draftId, status: "ai-draft", body: pack, actor });
-    await this.store.bindStudy({ studyId: study.id, userId: study.userId, origin: "stored", packId: String(row?.id), packVersion: Number(row?.version), actor });
+    await this.store.bindStudy({ studyId: study.id, userId: study.userId, origin: "stored", packId: String(row?.id), packVersion: Number(row?.version), actor, packBody: row?.body ?? pack });
     this.counters.packsDrafted += 1;
     return { ok: true, id: String(row?.id), pack: presentPackSummary("stored", row?.body ?? pack, row) };
   }
@@ -476,7 +486,7 @@ export class VcrKnowledge {
     ]);
     const pack = bound ? presentPackSummary(bound.binding.origin, bound.pack, bound.row) : null;
     // The platform pack side (flywheel F26): a curated pack of the account may be offered to the platform, and what the last re-check said.
-    const own = Boolean(bound?.row && !bound.row.platform && bound.row.userId === study.userId);
+    const own = Boolean(bound?.row && !("platform" in bound.row && bound.row.platform) && bound.row.userId === study.userId);
     const latest = this.platform.enabled && own && bound?.row ? await this.store.latestPromotion(study.userId, bound.row.id) : null;
     const live = this.platform.enabled && own && bound?.row ? await this.store.livePlatformCopyOf(study.userId, bound.row.id, bound.row.version) : null;
     const platform = this.platform.enabled && own

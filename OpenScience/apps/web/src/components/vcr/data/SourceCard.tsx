@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
+import { CloudDocuments } from "./CloudDocuments";
 import { FieldMapEditor } from "./FieldMapEditor";
 import { IMPORT_FORMATS, documentAccept, importAccept, importProblem, importSummary, intakeErrorMessage, uploadProblem } from "./intakeState";
 
@@ -362,6 +363,7 @@ export function SourceCard({ studyId, source, snapshots, options, canManage, onC
               </ul>
             )}
             {editable && source.status !== "withdrawn" && <UploadForm studyId={studyId} source={source} onChanged={onChanged} />}
+            {editable && <CloudDocuments studyId={studyId} source={source} onChanged={onChanged} />}
           </Step>
 
           <Step number={2} title="字段映射" meta={source.fieldMap.stateLabel}>

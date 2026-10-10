@@ -839,6 +839,8 @@ function vcrSettings(overrides) {
   return {
     vcrEnabled: overrides.vcrEnabled ?? boolEnv("OPEN_SCIENCE_VCR_ENABLED", false),
     vcrAudience: audience,
+    // Explicit study ids only; an empty list preserves native extraction guidance.
+    vcrClinicalStudyIds: overrides.vcrClinicalStudyIds ?? listEnv('OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS'),
     // Accounts that see the module under `operators` without being operators.
     vcrPreviewUsers: overrides.vcrPreviewUsers ?? listEnv("OPEN_SCIENCE_VCR_PREVIEW_USERS"),
     // The public 「模拟研究」 column (flywheel plan §5.6, 2026-10-06): a study lead may publish a report there and the public pages

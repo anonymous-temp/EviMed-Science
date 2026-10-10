@@ -1,0 +1,16 @@
+{
+  "scope": "Offline exact-unit evidence check over archived real outputs; not a new model accuracy run.",
+  "facts": 118,
+  "unitChecked": 31,
+  "unsupported": [
+    {
+      "cell": "unrecognized-unit-on-1",
+      "caseId": "unrecognized-unit",
+      "arm": "on",
+      "quote": "2026-09-01患者血肌酐1.0",
+      "unit": "mg/dL",
+      "decision": false
+    }
+  ],
+  "preserved": 30
+}

@@ -153,7 +153,7 @@ async function boundedText(response) {
 /**
  * Ask Jev once, with one retry for a transient failure.
  *
- * @param {{ config: Record<string, any>, usageLedger?: any, fetchImpl?: typeof fetch, retryDelayMs?: number }} deps
+ * @param {{ config: Record<string, any>, usageLedger?: any, fetchImpl?: typeof fetch, retryDelayMs?: number, assertModelAccess?: ((caller:any, body:any)=>Promise<void>) | null }} deps
  * @param {{
  *   userId: string, projectId: string, runId?: string | null, purpose?: string,
  *   state: unknown, questions: Record<string, unknown>,
@@ -161,7 +161,7 @@ async function boundedText(response) {
  * }} call
  * @returns {Promise<{ answers: Record<string, any>, model: string, usage: { inputTokens: number, outputTokens: number }, cost: number, priced: boolean, ms: number, attempts: number }>}
  */
-export async function callJev({ config, usageLedger = null, fetchImpl = jevTransport.fetch, retryDelayMs = JEV_RETRY_DELAY_MS }, call) {
+export async function callJev({ config, usageLedger = null, fetchImpl = jevTransport.fetch, retryDelayMs = JEV_RETRY_DELAY_MS, assertModelAccess = null }, call) {
   const apiKey = String(config.typesafeApiKey ?? "");
   if (!apiKey) throw new JevError("jev_unconfigured", "No TypeSafe key is configured.");
   const model = String(config.reviewJevModel ?? "");
@@ -172,7 +172,7 @@ export async function callJev({ config, usageLedger = null, fetchImpl = jevTrans
   if (size.total > maxRequest || size.stateAndLongestQuestion > maxState) {
     throw new JevError("jev_request_too_large", `The request is estimated at ${size.total} tokens (state and longest question ${size.stateAndLongestQuestion}); Jev takes ${maxRequest} (${maxState}).`);
   }
-  const once = () => askOnce({ config, usageLedger, fetchImpl }, { ...call, apiKey, model, apiBase, estimatedTokens: size.total });
+  const once = () => askOnce({ config, usageLedger, fetchImpl, assertModelAccess }, { ...call, apiKey, model, apiBase, estimatedTokens: size.total });
   try {
     return { ...(await once()), attempts: 1 };
   } catch (error) {
@@ -185,10 +185,11 @@ export async function callJev({ config, usageLedger = null, fetchImpl = jevTrans
 
 /**
  * One metered request.
- * @param {{ config: Record<string, any>, usageLedger: any, fetchImpl: typeof fetch }} deps
+ * @param {{ config: Record<string, any>, usageLedger: any, fetchImpl: typeof fetch, assertModelAccess?: ((caller:any, body:any)=>Promise<void>) | null }} deps
  * @param {Record<string, any>} call
  */
-async function askOnce({ config, usageLedger, fetchImpl }, call) {
+async function askOnce({ config, usageLedger, fetchImpl, assertModelAccess }, call) {
+  await assertModelAccess?.(call, { state: call.state, questions: call.questions });
   const at = call.at ?? new Date();
   const payload = JSON.stringify({ model: call.model, state: call.state, questions: call.questions });
   if (config.requireDurableUsageLedger === true && !usageLedger) {
@@ -232,13 +233,15 @@ async function askOnce({ config, usageLedger, fetchImpl }, call) {
   const started = Date.now();
   // Sent unless the network says it never left (NEVER_SENT): a deadline that
   // fires while the answer is awaited has a request on the wire.
-  let dispatched = true;
+  let dispatched = false;
   let refusedStatus = 0;
   try {
+    await assertModelAccess?.(call, { state: call.state, questions: call.questions });
     let response;
     let text;
     try {
       if(controller.signal.aborted){dispatched=false;throw new JevError("jev_cancelled","The Jev request was cancelled.");}
+      dispatched = true;
       response = await fetchImpl(`${call.apiBase}/systemone`, {
         method: "POST",
         headers: { accept: "application/json", authorization: `Bearer ${call.apiKey}`, "content-type": "application/json" },

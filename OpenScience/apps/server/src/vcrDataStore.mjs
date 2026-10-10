@@ -99,6 +99,7 @@ export function vcrSourceFromRow(row) {
     status: row.status,
     valueSource: row.value_source ?? "observed",
     fieldMap: { columns: Array.isArray(object(row.field_map).columns) ? object(row.field_map).columns : [] },
+    cloudPermission: row.cloud_permission ?? null,
     fieldMapState: row.field_map_state ?? "none",
     fieldMapHash: text(row.field_map_hash),
     fieldMapBy: row.field_map_by ?? "",
@@ -342,6 +343,59 @@ export class VcrDataStore extends VcrStoreBase {
   // Sources
   // -------------------------------------------------------------------------
 
+  /** An egress dependency stays after a document is deleted so cached sessions cannot resend it.
+   * @param {string} studyId @param {string} projectionId @param {any} context */
+  async recordCloudRead(studyId, projectionId, context) {
+    await this.rows(`INSERT INTO ${this.schema}.cloud_reads(study_id,session_id,run_id,projection_id)
+      VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`, [studyId,context.sessionId,context.runId,projectionId]);
+  }
+
+  /** @param {string} studyId @param {string} projectionId @param {any} context @param {any} window */
+  async recordCloudWindow(studyId, projectionId, context, window) {
+    await this.rows(`UPDATE ${this.schema}.cloud_reads SET windows=windows || $4::jsonb
+      WHERE study_id=$1 AND session_id=$2 AND projection_id=$3`,
+    [studyId,context.sessionId,projectionId,JSON.stringify({[window.hash]:{...window,runId:context.runId}})]);
+  }
+
+  /** @param {{studyId:string,sourceId:string,actor:string,permission:any}} input */
+  async setCloudPermission({ studyId, sourceId, actor, permission }) {
+    return this.transaction(async client => {
+      const row = (await client.query(`UPDATE ${this.schema}.sources SET cloud_permission=$3::jsonb, updated_at=now()
+        WHERE study_id=$1 AND id=$2 RETURNING *`, [studyId, sourceId, JSON.stringify(permission)])).rows[0];
+      if (!row) return null;
+      await this.audit({ client, studyId, userId: actor, actor, action: 'source.cloud_permission', object: sourceId,
+        detail: { status: permission.status, destinations: permission.destinations ?? [] } });
+      return vcrSourceFromRow(row);
+    });
+  }
+
+  /** @param {any} input */
+  async putDocumentProjection(input) {
+    return this.transaction(async client => {
+      const row = (await client.query(`INSERT INTO ${this.schema}.document_projections
+        (id,study_id,source_id,document_id,source_hash,projection_hash,permission_hash,location,manifest_hash)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO UPDATE SET id=EXCLUDED.id RETURNING *`,
+        [input.id, input.studyId, input.sourceId, input.documentId, input.sourceHash, input.projectionHash,
+          input.permissionHash, input.location, input.manifestHash])).rows[0];
+      await this.audit({ client, studyId: input.studyId, userId: input.actor, actor: input.actor,
+        action: 'document.projection', object: input.id, detail: { documentId: input.documentId, projectionHash: input.projectionHash } });
+      return row;
+    });
+  }
+
+  /** @param {string} studyId @param {string} documentId @param {string|null} [permissionHash] */
+  async documentProjection(studyId, documentId, permissionHash = null) {
+    return this.one(`SELECT * FROM ${this.schema}.document_projections WHERE study_id=$1 AND (id=$2 OR document_id=$2)
+      AND ($3::text IS NULL OR permission_hash=$3) ORDER BY created_at DESC,id DESC LIMIT 1`, [studyId, documentId, permissionHash]);
+  }
+
+  /** Only pseudonyms cross the data-plane boundary; never patient table values.
+   * @param {{studyId:string,snapshotId:string,subjects:string[],visibleAt:string}} input */
+  async registerMatchingCandidates({ studyId, snapshotId, subjects, visibleAt }) {
+    await this.query(`INSERT INTO ${this.schema}.matching_candidates(study_id,snapshot_id,subject_key,visible_at)
+      SELECT $1,$2,unnest($3::text[]),$4::timestamptz ON CONFLICT DO NOTHING`, [studyId, snapshotId, [...new Set(subjects)], visibleAt]);
+  }
+
   /**
    * @param {{ userId: string, studyId?: string | null, name: string, ownerParty?: string,
    *   allowedUses?: string[], visibleWindow?: Record<string, unknown>, retention?: Record<string, unknown>,
@@ -559,12 +613,22 @@ export class VcrDataStore extends VcrStoreBase {
         `SELECT 1 FROM ${this.schema}.snapshots WHERE source_id = $1 AND file_hashes @> $2::jsonb LIMIT 1`,
         [row.source_id, JSON.stringify([{ id: entry.fileId }])]);
       if (used.rowCount) return { removed: null, frozen: true };
+      const projections = (await client.query(`SELECT id,location FROM ${this.schema}.document_projections WHERE study_id=$1 AND document_id=$2`, [entry.studyId,entry.fileId])).rows;
+      const documentIds = [entry.fileId,...projections.map(p => p.id)];
+      const matchingUse = await client.query(`SELECT 1 FROM ${this.schema}.matching_inputs m WHERE m.study_id=$1 AND (
+        EXISTS(SELECT 1 FROM jsonb_array_elements(m.manifest->'facts') ref JOIN ${this.schema}.matching_facts f ON f.id=ref->>'id'
+          WHERE f.study_id=$1 AND f.source->>'documentId'=ANY($2::text[])) OR
+        EXISTS(SELECT 1 FROM jsonb_array_elements(m.manifest->'languages') ref JOIN ${this.schema}.language_judgments j ON j.id=ref->>'id', jsonb_array_elements(j.evidence) e
+          WHERE j.study_id=$1 AND e->>'documentId'=ANY($2::text[]))) LIMIT 1`, [entry.studyId,documentIds]);
+      if (matchingUse.rowCount) return { removed:null, frozen:true };
+      await client.query(`DELETE FROM ${this.schema}.matching_facts WHERE study_id=$1 AND source->>'documentId'=ANY($2::text[])`, [entry.studyId,documentIds]);
+      await client.query(`DELETE FROM ${this.schema}.language_judgments WHERE study_id=$1 AND EXISTS(SELECT 1 FROM jsonb_array_elements(evidence) e WHERE e->>'documentId'=ANY($2::text[]))`, [entry.studyId,documentIds]);
       await client.query(`DELETE FROM ${this.schema}.source_files WHERE id = $1`, [entry.fileId]);
       await this.audit({
         client, studyId: entry.studyId, userId: row.user_id, actor: entry.actor ?? "",
         action: "source.file.remove", object: entry.fileId, detail: { sourceId: row.source_id, role: row.role, sha256: row.sha256 },
       });
-      return { removed: vcrSourceFileFromRow(row), frozen: false };
+      return { removed: { ...vcrSourceFileFromRow(row), projectionLocations: projections.map(p => p.location) }, frozen: false };
     });
   }
 

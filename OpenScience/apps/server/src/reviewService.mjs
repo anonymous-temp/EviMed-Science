@@ -291,13 +291,14 @@ export class ReviewService {
    *   config: Record<string, any>, database: any, jobs?: any, usageLedger?: any, judgeService?: any, runtimeManager?: any, store: any,
    *   agentRegistry?: Promise<any> | any, attributeRun?: (input: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
    *   notifications?: any, imService?: any, webReader?: any, fetchImpl?: typeof fetch, referenceResolver?: any,
+   *   assertModelAccess?: ((caller:any, body:any)=>Promise<void>) | null,
    *   report?: (code: string, detail?: string) => void, now?: () => Date, retryDelayMs?: number, evolutionSignals?:any,
    *   vcrFacts?: ((identity: { userId: string, projectId: string }) => Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>) | null,
    * }} deps
    */
   constructor({ config, database, jobs = null, usageLedger = null, judgeService = null, runtimeManager = null, store, agentRegistry = null, attributeRun = async () => null,
     notifications = null, imService = null, webReader = null, fetchImpl = globalThis.fetch, referenceResolver = null, report = () => {}, now = () => new Date(),
-    retryDelayMs = EDITOR_RETRY_DELAY_MS, evolutionSignals = null, vcrFacts = null }) {
+    retryDelayMs = EDITOR_RETRY_DELAY_MS, evolutionSignals = null, vcrFacts = null, assertModelAccess = null }) {
     this.config = config;
     /**
      * What a 虚拟临床研究 study's conversation is checked against: `(userId, projectId) → { studyId, results, inputs, executions } | null`
@@ -319,6 +320,7 @@ export class ReviewService {
     this.notifications = notifications;
     this.imService = imService;
     this.fetchImpl = fetchImpl;
+    this.assertModelAccess = assertModelAccess;
     this.report = report;
     this.now = now;
     this.resolver = referenceResolver ?? createReferenceResolver({
@@ -597,7 +599,7 @@ export class ReviewService {
       });
       const edit = () => this.editors.run(() => {
         if (configuration) assertStudyReviewConfiguration(configuration, this.config);
-        return callReviewModel({ config: { ...this.config, ...(configuration ? { reviewModel: configuration.model } : {}) }, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
+        return callReviewModel({ config: { ...this.config, ...(configuration ? { reviewModel: configuration.model } : {}) }, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl, assertModelAccess: this.assertModelAccess }, {
         signal, userId: identity.userId, projectId: identity.projectId, runId,
         messages: [{ role: "system", content: editorSystemPrompt({ safety: tier.safety, pass }) }, { role: "user", content: message }],
         schema: reviewEditorSchema({ checklistIds: checklist.map((item) => item.id), acceptanceCount: acceptanceItems.length }), schemaName: "review_findings",
@@ -968,7 +970,7 @@ export class ReviewService {
     if (sentences.length) {
       const cited = references.filter((reference) => sentences.some((sentence) => sentence.numbers.includes(reference.number)));
       const readable = await this.resolver.sourceTexts(cited);
-      const ledger = { config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl };
+      const ledger = { config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl, assertModelAccess: this.assertModelAccess };
       // Jev first where it may settle a sentence; the reviewer model for the
       // rest, or for all of them when Jev is off or fails (replyCheckJev.mjs).
       const judged = await judgeCitedSentences({

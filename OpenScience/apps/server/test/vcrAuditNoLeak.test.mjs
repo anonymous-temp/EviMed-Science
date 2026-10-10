@@ -62,6 +62,10 @@ test('removing a file audits its id, role and hash, and the name goes with the f
   const { audits, database } = scripted([
     [/SELECT \* FROM evimed_vcr\.source_files/, { rows: [row], rowCount: 1 }],
     [/FROM evimed_vcr\.snapshots/, { rows: [], rowCount: 0 }],
+    [/FROM evimed_vcr\.document_projections/, { rows: [], rowCount: 0 }],
+    [/FROM evimed_vcr\.matching_inputs/, { rows: [], rowCount: 0 }],
+    [/DELETE FROM evimed_vcr\.matching_facts/, { rows: [], rowCount: 0 }],
+    [/DELETE FROM evimed_vcr\.language_judgments/, { rows: [], rowCount: 0 }],
     [/DELETE FROM evimed_vcr\.source_files/, { rows: [], rowCount: 1 }],
   ]);
   const store = noMigration(new VcrDataStore({ database }));

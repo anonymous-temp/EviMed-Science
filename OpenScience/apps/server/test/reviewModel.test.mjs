@@ -354,3 +354,16 @@ test("an uncertain reviewer call is booked at its prompt and the output that arr
   const silent = await run(async () => stream([], true));
   assert.deepEqual(silent.last, ["uncertain", "provider_response_incomplete", prompt]);
 });
+
+
+test('revocation during reservation prevents reviewer egress and releases the unused charge', async () => {
+  const ledger=fakeLedger(); let allowed=true; let sent=0;
+  const reserve=ledger.reserveModel;
+  ledger.reserveModel=async input=>{const result=await reserve(input);allowed=false;return result;};
+  const assertModelAccess=async()=>{if(!allowed)throw Object.assign(new Error('Permission revoked'),{code:'vcr_cloud_processing_not_authorized'});};
+  await assert.rejects(callReviewModel({config,usageLedger:ledger,assertModelAccess,
+    fetchImpl:async()=>{sent++;throw new Error('Must not reach provider');}},call),{code:'vcr_cloud_processing_not_authorized'});
+  assert.equal(sent,0);
+  assert.ok(ledger.calls.some(row=>row[0]==='release'));
+  assert.ok(!ledger.calls.some(row=>row[0]==='uncertain'));
+});

@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "dataClass": "synthetic",
+  "independentClinicalValidation": false,
+  "development": [
+    "synthetic-person-01",
+    "synthetic-person-02",
+    "synthetic-person-03",
+    "synthetic-person-04",
+    "synthetic-person-05",
+    "synthetic-person-06",
+    "synthetic-person-07",
+    "synthetic-person-08",
+    "synthetic-person-09",
+    "synthetic-person-10",
+    "synthetic-person-11",
+    "synthetic-person-12"
+  ],
+  "limitation": "All twelve cases and their labels were seen during implementation and prompt tuning. They are development regressions, not an untouched holdout or independent clinician validation.",
+  "untouchedHoldout": []
+}

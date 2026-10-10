@@ -7,7 +7,7 @@ import { RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.
 import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 
-async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null } = {}) {
+async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -28,7 +28,7 @@ async function fixture(t, { memorySubstrate = null, sessions = null, recallItems
   const authorized = new Promise((resolve) => { authorize = resolve; });
   const store = { userById: async () => exists ? { id: project.userId } : null,
     requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); authorize(); return project; } };
-  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate, sessions, handbooks, subscriptions });
+  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate, sessions, handbooks, subscriptions, clinicalContext });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await rm(dir, { recursive: true, force: true }); });
@@ -50,6 +50,18 @@ test("runtime capsule gateway derives identity only from an active signed worklo
   assert.equal(f.calls[0].userId, "owner");
   assert.equal(f.calls[0].input.projectId, "project-one");
   assert.deepEqual(f.calls[0].input.factKinds, ["preference"]);
+});
+
+test('a clinical source dependency prevents shared notes while ordinary recall and a fresh conversation still work',async t=>{
+  let clinical=true;
+  const f=await fixture(t,{clinicalContext:async identity=>{assert.equal(identity.userId,'owner');return clinical;}});
+  const note=await f.request('note',{factKind:'preference',content:'Synthetic patient fact'});
+  assert.equal(note.status,200);assert.equal((await note.json()).takesEffect,false);
+  assert.equal(f.calls.filter(row=>row.action==='note').length,0);
+  assert.equal((await f.request('recall',{query:'study methods'})).status,200);
+  clinical=false;
+  assert.equal((await (await f.request('note',{factKind:'preference',content:'Use concise tables'})).json()).takesEffect,true);
+  assert.equal(f.calls.filter(row=>row.action==='note').length,1);
 });
 
 test("a recall may name the time its question is about, and nothing else new", async (t) => {

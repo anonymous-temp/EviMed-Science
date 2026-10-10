@@ -1,0 +1,942 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-10-09T18:09:33.864782+00:00",
+  "branch": "codex/openmed-adoption-20261009",
+  "decision": "Keep clinical enrichment default-off; complete the external scientific/partner prerequisites before production qualification.",
+  "independentClinicalValidation": false,
+  "productionEnabled": false,
+  "publicLeaderboardSubmission": false,
+  "taskDispositions": {
+    "implemented": 38,
+    "external_validation_required": 1,
+    "native_reused": 6,
+    "conditional_not_activated": 7
+  },
+  "syntheticPaired": {
+    "archive": "results/openmed-v3-20261009/native-predictions.json",
+    "scorer": "../method-quality/score_native_clinical.py",
+    "reference": "corpora/chinese-synthetic/reference.json",
+    "sourceGroups": 12,
+    "repeats": 2,
+    "arms": {
+      "native": {
+        "scorecard": [
+          {
+            "task": "eligibility",
+            "dataClass": "synthetic",
+            "cases": 24,
+            "sourceGroups": 12,
+            "missing": 0,
+            "invalid": 0,
+            "n": 24,
+            "correct": 21,
+            "unknown": 9,
+            "accuracy": 0.875,
+            "byState": {
+              "eligible": {
+                "tp": 8,
+                "fp": 3,
+                "fn": 0,
+                "precision": 0.7272727272727273,
+                "recall": 1.0,
+                "f1": 0.8421052631578947
+              },
+              "ineligible": {
+                "tp": 4,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0
+              },
+              "insufficient_evidence": {
+                "tp": 9,
+                "fp": 0,
+                "fn": 3,
+                "precision": 1.0,
+                "recall": 0.75,
+                "f1": 0.8571428571428571
+              }
+            },
+            "macroF1": 0.899749373433584,
+            "accuracyInterval": {
+              "low": 0.7083333333333334,
+              "high": 1.0,
+              "groups": 12,
+              "seed": 20261009,
+              "repeats": 2000
+            },
+            "eligibleReference": 8,
+            "falseExclusions": 0,
+            "falseExclusionRate": 0.0,
+            "falseExclusionInterval": {
+              "low": 0.0,
+              "high": 0.0,
+              "groups": 12,
+              "seed": 20261009,
+              "repeats": 2000
+            },
+            "eligibleRecall": 1.0,
+            "falseInclusions": 3,
+            "anyFalseExclusionPerGroupWilson95": {
+              "groups": 4,
+              "observed": 0,
+              "low": 0,
+              "high": 0.48990002040399916
+            },
+            "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+          }
+        ],
+        "completed": 24,
+        "attempted": 24,
+        "writesWithIssues": 2,
+        "writeIssues": 3,
+        "medianLatencyMs": 2007.0,
+        "requests": 25,
+        "settledCostCny": 0.03031712,
+        "unpricedRequests": 0,
+        "observedModels": [
+          "deepseek-flash"
+        ]
+      },
+      "on": {
+        "scorecard": [
+          {
+            "task": "eligibility",
+            "dataClass": "synthetic",
+            "cases": 24,
+            "sourceGroups": 12,
+            "missing": 0,
+            "invalid": 0,
+            "n": 24,
+            "correct": 23,
+            "unknown": 11,
+            "accuracy": 0.9583333333333334,
+            "byState": {
+              "eligible": {
+                "tp": 8,
+                "fp": 1,
+                "fn": 0,
+                "precision": 0.8888888888888888,
+                "recall": 1.0,
+                "f1": 0.9411764705882353
+              },
+              "ineligible": {
+                "tp": 4,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0
+              },
+              "insufficient_evidence": {
+                "tp": 11,
+                "fp": 0,
+                "fn": 1,
+                "precision": 1.0,
+                "recall": 0.9166666666666666,
+                "f1": 0.9565217391304348
+              }
+            },
+            "macroF1": 0.9658994032395567,
+            "accuracyInterval": {
+              "low": 0.875,
+              "high": 1.0,
+              "groups": 12,
+              "seed": 20261009,
+              "repeats": 2000
+            },
+            "eligibleReference": 8,
+            "falseExclusions": 0,
+            "falseExclusionRate": 0.0,
+            "falseExclusionInterval": {
+              "low": 0.0,
+              "high": 0.0,
+              "groups": 12,
+              "seed": 20261009,
+              "repeats": 2000
+            },
+            "eligibleRecall": 1.0,
+            "falseInclusions": 1,
+            "anyFalseExclusionPerGroupWilson95": {
+              "groups": 4,
+              "observed": 0,
+              "low": 0,
+              "high": 0.48990002040399916
+            },
+            "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+          }
+        ],
+        "completed": 24,
+        "attempted": 24,
+        "writesWithIssues": 0,
+        "writeIssues": 0,
+        "medianLatencyMs": 2171.5,
+        "requests": 24,
+        "settledCostCny": 0.0319018,
+        "unpricedRequests": 0,
+        "observedModels": [
+          "deepseek-flash"
+        ]
+      },
+      "off": {
+        "scorecard": [
+          {
+            "task": "eligibility",
+            "dataClass": "synthetic",
+            "cases": 24,
+            "sourceGroups": 12,
+            "missing": 0,
+            "invalid": 0,
+            "n": 24,
+            "correct": 20,
+            "unknown": 8,
+            "accuracy": 0.8333333333333334,
+            "byState": {
+              "eligible": {
+                "tp": 8,
+                "fp": 4,
+                "fn": 0,
+                "precision": 0.6666666666666666,
+                "recall": 1.0,
+                "f1": 0.8
+              },
+              "ineligible": {
+                "tp": 4,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0
+              },
+              "insufficient_evidence": {
+                "tp": 8,
+                "fp": 0,
+                "fn": 4,
+                "precision": 1.0,
+                "recall": 0.6666666666666666,
+                "f1": 0.8
+              }
+            },
+            "macroF1": 0.8666666666666667,
+            "accuracyInterval": {
+              "low": 0.5833333333333334,
+              "high": 1.0,
+              "groups": 12,
+              "seed": 20261009,
+              "repeats": 2000
+            },
+            "eligibleReference": 8,
+            "falseExclusions": 0,
+            "falseExclusionRate": 0.0,
+            "falseExclusionInterval": {
+              "low": 0.0,
+              "high": 0.0,
+              "groups": 12,
+              "seed": 20261009,
+              "repeats": 2000
+            },
+            "eligibleRecall": 1.0,
+            "falseInclusions": 4,
+            "anyFalseExclusionPerGroupWilson95": {
+              "groups": 4,
+              "observed": 0,
+              "low": 0,
+              "high": 0.48990002040399916
+            },
+            "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+          }
+        ],
+        "completed": 24,
+        "attempted": 24,
+        "writesWithIssues": 0,
+        "writeIssues": 0,
+        "medianLatencyMs": 1879.5,
+        "requests": 24,
+        "settledCostCny": 0.02793688,
+        "unpricedRequests": 0,
+        "observedModels": [
+          "deepseek-flash"
+        ]
+      }
+    },
+    "limitations": [
+      "Authored synthetic regression, not independent clinician validation or a representative cohort.",
+      "Native DSH predictions pass through the real control-plane gateway, located fact writer and matching executor; this is not a deployed browser-to-kernel acceptance test.",
+      "An unknown judgment caused by a refused fact is not evidence of better clinical understanding. Write failures are reported separately.",
+      "Repeated prompts share the patient/source cluster; the reported interval does not treat repetitions as independent patients.",
+      "No automatic production promotion or clinical qualification follows this scorecard.",
+      "All twelve authored cases were used during implementation. There is no untouched clinical holdout.",
+      "This 72-call batch preceded the final exact-unit evidence check. Its observed errors are preserved, not retroactively rescored as new model outputs."
+    ]
+  },
+  "targetedUnitRetest": {
+    "archive": "results/openmed-v3-20261009/unit-regression-predictions.json",
+    "sourceGroups": 1,
+    "repeats": 2,
+    "arms": {
+      "native": {
+        "scorecard": [
+          {
+            "task": "eligibility",
+            "dataClass": "synthetic",
+            "cases": 2,
+            "sourceGroups": 1,
+            "missing": 0,
+            "invalid": 0,
+            "n": 2,
+            "correct": 2,
+            "unknown": 2,
+            "accuracy": 1.0,
+            "byState": {
+              "eligible": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 0,
+                "precision": null,
+                "recall": null,
+                "f1": null
+              },
+              "ineligible": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 0,
+                "precision": null,
+                "recall": null,
+                "f1": null
+              },
+              "insufficient_evidence": {
+                "tp": 2,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0
+              }
+            },
+            "macroF1": 1.0,
+            "accuracyInterval": {
+              "low": null,
+              "high": null,
+              "groups": 1,
+              "reason": "fewer_than_two_source_groups"
+            },
+            "eligibleReference": 0,
+            "falseExclusions": 0,
+            "falseExclusionRate": null,
+            "falseExclusionInterval": {
+              "low": null,
+              "high": null,
+              "groups": 1,
+              "reason": "fewer_than_two_source_groups"
+            },
+            "eligibleRecall": null,
+            "falseInclusions": 0,
+            "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+          }
+        ],
+        "completed": 2,
+        "attempted": 2,
+        "writesWithIssues": 0,
+        "writeIssues": 0,
+        "medianLatencyMs": 2032.0,
+        "requests": 2,
+        "settledCostCny": 0.00214012,
+        "unpricedRequests": 0,
+        "observedModels": [
+          "deepseek-flash"
+        ]
+      },
+      "on": {
+        "scorecard": [
+          {
+            "task": "eligibility",
+            "dataClass": "synthetic",
+            "cases": 2,
+            "sourceGroups": 1,
+            "missing": 0,
+            "invalid": 0,
+            "n": 2,
+            "correct": 2,
+            "unknown": 2,
+            "accuracy": 1.0,
+            "byState": {
+              "eligible": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 0,
+                "precision": null,
+                "recall": null,
+                "f1": null
+              },
+              "ineligible": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 0,
+                "precision": null,
+                "recall": null,
+                "f1": null
+              },
+              "insufficient_evidence": {
+                "tp": 2,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0
+              }
+            },
+            "macroF1": 1.0,
+            "accuracyInterval": {
+              "low": null,
+              "high": null,
+              "groups": 1,
+              "reason": "fewer_than_two_source_groups"
+            },
+            "eligibleReference": 0,
+            "falseExclusions": 0,
+            "falseExclusionRate": null,
+            "falseExclusionInterval": {
+              "low": null,
+              "high": null,
+              "groups": 1,
+              "reason": "fewer_than_two_source_groups"
+            },
+            "eligibleRecall": null,
+            "falseInclusions": 0,
+            "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+          }
+        ],
+        "completed": 2,
+        "attempted": 2,
+        "writesWithIssues": 1,
+        "writeIssues": 1,
+        "medianLatencyMs": 2152.0,
+        "requests": 2,
+        "settledCostCny": 0.00300228,
+        "unpricedRequests": 0,
+        "observedModels": [
+          "deepseek-flash"
+        ]
+      },
+      "off": {
+        "scorecard": [
+          {
+            "task": "eligibility",
+            "dataClass": "synthetic",
+            "cases": 2,
+            "sourceGroups": 1,
+            "missing": 0,
+            "invalid": 0,
+            "n": 2,
+            "correct": 2,
+            "unknown": 2,
+            "accuracy": 1.0,
+            "byState": {
+              "eligible": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 0,
+                "precision": null,
+                "recall": null,
+                "f1": null
+              },
+              "ineligible": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 0,
+                "precision": null,
+                "recall": null,
+                "f1": null
+              },
+              "insufficient_evidence": {
+                "tp": 2,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0
+              }
+            },
+            "macroF1": 1.0,
+            "accuracyInterval": {
+              "low": null,
+              "high": null,
+              "groups": 1,
+              "reason": "fewer_than_two_source_groups"
+            },
+            "eligibleReference": 0,
+            "falseExclusions": 0,
+            "falseExclusionRate": null,
+            "falseExclusionInterval": {
+              "low": null,
+              "high": null,
+              "groups": 1,
+              "reason": "fewer_than_two_source_groups"
+            },
+            "eligibleRecall": null,
+            "falseInclusions": 0,
+            "intervalScope": "Repeated prompts are clustered; zero observed events are not proof of zero error. Synthetic cases are not a population sample."
+          }
+        ],
+        "completed": 2,
+        "attempted": 2,
+        "writesWithIssues": 0,
+        "writeIssues": 0,
+        "medianLatencyMs": 1907.0,
+        "requests": 2,
+        "settledCostCny": 0.00187424,
+        "unpricedRequests": 0,
+        "observedModels": [
+          "deepseek-flash"
+        ]
+      }
+    },
+    "limitation": "Six new native/on/off calls after the final unit check; a targeted retest, not a full new 72-call batch."
+  },
+  "publicCorpusPilot": {
+    "resourceId": "drugprot-5119892-pilot",
+    "selection": "corpora/drugprot/selection.json",
+    "archive": "results/openmed-v3-20261009/public-predictions.json",
+    "scorecard": [
+      {
+        "task": "ner",
+        "dataClass": "public_biomedical_abstract",
+        "cases": 10,
+        "sourceGroups": 10,
+        "missing": 0,
+        "invalid": 4,
+        "strict": {
+          "tp": 0,
+          "fp": 175,
+          "fn": 286,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "overlap": {
+          "tp": 61,
+          "fp": 114,
+          "fn": 225,
+          "precision": 0.3485714285714286,
+          "recall": 0.21328671328671328,
+          "f1": 0.2646420824295011
+        }
+      },
+      {
+        "task": "relation",
+        "dataClass": "public_biomedical_abstract",
+        "cases": 10,
+        "sourceGroups": 10,
+        "missing": 0,
+        "invalid": 4,
+        "relations": {
+          "tp": 0,
+          "fp": 30,
+          "fn": 69,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      }
+    ],
+    "limitation": "Ten public biomedical abstracts, six from the development selection and four frozen upstream-development heldout pilot abstracts. This is a raw-offset extraction transport/task probe, not clinical-population validation or the official DrugProt test leaderboard. Four malformed/truncated responses remain failures. Strict spans and relation attachment failed; no relation-quality claim follows from semantic-looking text."
+  },
+  "nativeConversation": {
+    "archive": "results/openmed-v3-20261009/conversation-observations.json",
+    "turns": [
+      {
+        "id": "01-extract",
+        "exitCode": 0,
+        "latencyMs": 6222,
+        "diagnosticBytes": 0
+      },
+      {
+        "id": "02-followup",
+        "exitCode": 0,
+        "latencyMs": 4966,
+        "diagnosticBytes": 0
+      },
+      {
+        "id": "03-supplement",
+        "exitCode": 0,
+        "latencyMs": 6539,
+        "diagnosticBytes": 0
+      },
+      {
+        "id": "04-subject-switch",
+        "exitCode": 0,
+        "latencyMs": 7441,
+        "diagnosticBytes": 0
+      },
+      {
+        "id": "05-tool-failure",
+        "exitCode": 0,
+        "latencyMs": 7883,
+        "diagnosticBytes": 0
+      },
+      {
+        "id": "06-revoked-cache",
+        "exitCode": 1,
+        "latencyMs": 1290,
+        "diagnosticBytes": 57
+      },
+      {
+        "id": "07-fresh-context",
+        "exitCode": 0,
+        "latencyMs": 5153,
+        "diagnosticBytes": 0
+      }
+    ],
+    "observations": [
+      "Two subjects retained their separate ages (44 and 16); the supplement retained creatinine 1 mg/dL.",
+      "Tool unavailability was disclosed; the same conversation continued.",
+      "A revoked cached session was refused before the provider; a fresh unrelated session answered.",
+      "Some replies were verbose, exposed implementation identifiers, or began in English. Product answer quality remains an open evaluation issue."
+    ],
+    "privacy": {
+      "canaries": 2,
+      "providerAttempts": 13,
+      "canaryLeaks": 0,
+      "outputLeaks": 0,
+      "scope": "Two explicitly marked synthetic canaries; no claim of universal PII detection."
+    },
+    "limitation": "Real native DSH with production VCR MCP and gateways in an isolated process, not a full deployed browser-to-kernel test."
+  },
+  "engineeringRuleReview": {
+    "scope": "Exact permission, version, identity, span, schema and unit operations; no new medical prose classifier or whole-report veto.",
+    "languageUnderstanding": "The cloud model still interprets clinical language; deterministic code checks the declared source and numeric operations.",
+    "dataFirst": "Short machine-readable tool contracts and existing knowledge packs supply the schema and selected terminology.",
+    "effectOnResearch": "Unknown or unavailable evidence affects its fact/judgment or authorized source operation; unrelated research remains available.",
+    "measuredReproduction": "The archived unknown-unit case fabricated mg/dL; the source span did not contain it. The exact-unit replay checked 31 of 118 extracted facts, identified that one unsupported unit and preserved 30 stated units. Remaining facts used units outside the bounded check or had no unit.",
+    "controls": "Repeated native/on/off calls and real multi-turn MCP observations are retained, with independent clinical validation explicitly absent."
+  },
+  "reproduceOffline": [
+    "python3 evals/method-quality/score_native_clinical.py --reference evals/vcr-matching/corpora/chinese-synthetic/reference.json --predictions evals/vcr-matching/results/openmed-v3-20261009/native-predictions.json --output /tmp/openmed-native-scorecard.json",
+    "python3 evals/method-quality/clinical_metrics.py --reference <verified-drugprot-pilot/reference.json> --predictions evals/vcr-matching/results/openmed-v3-20261009/public-predictions.json --also-ner --output /tmp/openmed-public-scorecard.json"
+  ],
+  "rawArtifacts": "outputs/audit/openmed-v3-2026-10-09/implementation-branch/artifacts.json",
+  "artifactHashes": {
+    "native-predictions.json": "e437b869c86bcd3d5fb70e94eb8f63d10e8a81ac9fc39f218a9fde4a8de4ebd7",
+    "unit-regression-predictions.json": "24819c2dd4c92b72f0085ae312f2ca63182a32ba8ff4645683ad963e541b6c7d",
+    "public-predictions.json": "a65d3c5dd69692a132d5276bfb1f3daeb368f48def261b96f13883232966d39a",
+    "conversation-observations.json": "77de5859ad8bae4ffa4e005c255f36ee330379250a2511000611a3829fb0dc0c",
+    "unit-evidence-replay.json": "e7188b500f2e047383c98a29a259ddb7b4cd2663f1cf9d5f77f1b953e3ce3477"
+  },
+  "externalAcceptance": [
+    {
+      "task": "B03",
+      "remaining": [
+        "Acquire an independently labeled, rights-cleared Chinese reference set and freeze patient-level holdout before tuning; measure actual reviewer disagreement."
+      ]
+    },
+    {
+      "task": "B06",
+      "remaining": [
+        "Measure untouched clinical cases before claiming population-level improvement. The authored development sample is not that evidence."
+      ]
+    },
+    {
+      "task": "C02",
+      "remaining": [
+        "Independent held-out Chinese contextual/time accuracy has not been established."
+      ]
+    },
+    {
+      "task": "C04",
+      "remaining": [
+        "Held-out abbreviation/coreference improvement has not been established; the public pilot retains relation failures."
+      ]
+    },
+    {
+      "task": "C05",
+      "remaining": [
+        "Clinical relation attachment performance needs independent held-out measurement."
+      ]
+    },
+    {
+      "task": "C09",
+      "remaining": [
+        "An existing disease pack is version-preserved and connected, but improved held-out criterion coverage is not established."
+      ]
+    },
+    {
+      "task": "D01",
+      "remaining": [
+        "Untouched protocol-translation cases and independent semantic references are still required."
+      ]
+    },
+    {
+      "task": "D03",
+      "remaining": [
+        "A full deployed browser-to-kernel multi-trial acceptance is still required before production enabling; isolated native and HTTP/PG paths were tested."
+      ]
+    },
+    {
+      "task": "D04",
+      "remaining": [
+        "Measure candidate recall on a labeled trial universe before adding a cloud reranker or claiming discovery improvement."
+      ]
+    },
+    {
+      "task": "E01",
+      "remaining": [
+        "A specific partner resource/profile contract and authorized round-trip fixtures are required for new export/SMART/Bulk work."
+      ]
+    },
+    {
+      "task": "F01",
+      "remaining": [
+        "A licensed versioned interaction source/provider and reference cases are required before building/activating that optional provider."
+      ]
+    },
+    {
+      "task": "F02",
+      "remaining": [
+        "Suitable licensed rules and applicability cases are required before implementing a new dose-check route."
+      ]
+    },
+    {
+      "task": "F03",
+      "remaining": [
+        "A commissioned authorized adverse-event report dataset is required to measure duplicate/follow-up reconciliation and signals."
+      ]
+    },
+    {
+      "task": "F04",
+      "remaining": [
+        "A concrete research measure, time window and denominator are required before adding a new measure adapter."
+      ]
+    },
+    {
+      "task": "F05",
+      "remaining": [
+        "An explicitly approved clinical OCR service, processing terms and scan reference set are required before enabling cloud scan processing."
+      ]
+    },
+    {
+      "task": "F06",
+      "remaining": [
+        "A named partner format/language and its acceptance fixtures are required for each extension."
+      ]
+    },
+    {
+      "task": "G03",
+      "remaining": [
+        "Production release/enabling is a separate action; the enhanced extraction default remains off pending independent measurement."
+      ]
+    }
+  ],
+  "verification": [
+    {
+      "name": "vcr_server_regression",
+      "status": "passed_with_skip",
+      "tests": 1003,
+      "passed": 1002,
+      "failed": 0,
+      "skipped": 1,
+      "log": "verification/openmed-vcr-verified.log",
+      "sha256": "2699263f8af3124c9a97b8f43a778f00101f0325d17745febc8b948d51be994b",
+      "scope": "Real isolated PostgreSQL and the locked R library; before the final exact-unit check. Docker writer-fence acceptance skipped because OPEN_SCIENCE_TEST_VCR_DOCKER_CONTEXT is not configured."
+    },
+    {
+      "name": "unit_evidence_matching_gateway",
+      "status": "passed",
+      "tests": 129,
+      "passed": 129,
+      "failed": 0,
+      "skipped": 0,
+      "log": "verification/openmed-unit-verified2.log",
+      "sha256": "3ec7c7bb408a42e0e4dc5a42700272c05a80cabb9bc6df487eb8b037e6c283a0",
+      "scope": "After the final exact-unit evidence fix; real PostgreSQL included."
+    },
+    {
+      "name": "multi_protocol_persistence_and_privacy",
+      "status": "passed",
+      "tests": 10,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "log": "verification/openmed-panel-verified.log",
+      "sha256": "6d8149b93b70f39faff878b987842b13005c95c9a66d083034cd7b9d8d6768f2",
+      "scope": "Real PostgreSQL queue, local executor, finish hook, separate protocol outcomes, presented comparisons, idempotency and foreign-study refusal."
+    },
+    {
+      "name": "domain",
+      "status": "passed",
+      "tests": 851,
+      "passed": 851,
+      "failed": 0,
+      "skipped": 0,
+      "log": "verification/openmed-domain-verified.log",
+      "sha256": "28e8baa8b3e01c5d73280ce37ff992a3af9bc7876fbb1c1c99a8ec8d13ee013b",
+      "scope": "Full domain suite after the unit evidence fix."
+    },
+    {
+      "name": "vcr_web",
+      "status": "passed",
+      "tests": 293,
+      "passed": 293,
+      "failed": 0,
+      "skipped": 0,
+      "log": "verification/openmed-web-verified.log",
+      "sha256": "a6f3c70ed4ff03a562d9ab97c561f856eb4caf85b8e1925ce14ff090d6a76f07",
+      "scope": "Nineteen VCR test files, serialized to avoid local CPU contention."
+    },
+    {
+      "name": "privacy_memory_usage",
+      "status": "passed",
+      "tests": 202,
+      "passed": 202,
+      "failed": 0,
+      "skipped": 0,
+      "log": "verification/openmed-privacy-verified.log",
+      "sha256": "f53961dd7dce22669e877c6188010b404b2dbe90d79b4d0bc6921cc261d05bc6",
+      "scope": "Gateway, memory, learning, capsules and usage regression."
+    },
+    {
+      "name": "provider_boundaries",
+      "status": "passed",
+      "tests": 191,
+      "passed": 191,
+      "failed": 0,
+      "skipped": 0,
+      "log": "verification/openmed-edges-final.log",
+      "sha256": "16f440f36afcb1b7d0dcb5a83788cd5bb6e4d7ad0c9b92d05c2e1cb60768132a",
+      "scope": "Provider, review, usage and source-copy boundaries; overlaps with the privacy suite."
+    },
+    {
+      "name": "evaluation_harness",
+      "status": "passed",
+      "tests": 109,
+      "passed": 109,
+      "failed": 0,
+      "skipped": 0,
+      "log": "verification/openmed-eval-final.log",
+      "sha256": "a600aa20ffaa70c5f0cc5abf0fc9c46508d74afb789b85f21067bca7f9e4ab26",
+      "scope": "Offline Python evaluation harness tests."
+    },
+    {
+      "name": "vcr_mcp",
+      "status": "passed_with_skip",
+      "tests": 146,
+      "passed": 145,
+      "failed": 0,
+      "skipped": 1,
+      "log": "verification/openmed-mcp-complete.log",
+      "sha256": "46ffdcd95b91b3e6d145fea764c55121024a8d4c3f909e7be7575fef49cc798e",
+      "scope": "VCR Python MCP regression; one conditional fixture test skipped. Existing file-resource warnings are retained in the log."
+    },
+    {
+      "name": "openmed_contract",
+      "status": "passed",
+      "tests": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "log": "verification/openmed-contract-staged.log",
+      "sha256": "67d8ef5be0ef1ade8eb558d8b1f39e5d194839ca59905896a31c9ab4f36534d1",
+      "scope": "Pinned upstream inventory, 52 task evidence paths and data admission."
+    },
+    {
+      "name": "capability_copies_and_single_gate",
+      "status": "passed",
+      "tests": 18,
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "log": "verification/openmed-copy-verified.log",
+      "sha256": "8ee7b04f90ecd349eaa93a9775b0f385d37a6edf7d967f87d6768a55ddc20202",
+      "scope": "Capability copy consistency and single clinical evidence implementation."
+    },
+    {
+      "name": "server_lint",
+      "status": "passed",
+      "log": "verification/openmed-lint-verified.log",
+      "sha256": "29d850a555d7522a141239f4cfb2db7dbb3fc9a43309b2d8b4eff8a96e1b8f2f"
+    },
+    {
+      "name": "server_types",
+      "status": "passed",
+      "log": "verification/openmed-ts-verified-final.log",
+      "sha256": "2c8cbb6f94baa4b00d2759ec435fa390688619c69e361a74c9f336f3666f16d5"
+    },
+    {
+      "name": "panel_test_lint",
+      "status": "passed",
+      "log": "verification/openmed-panel-lint-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "domain_lint",
+      "status": "passed",
+      "log": "verification/openmed-domain-lint-complete.log",
+      "sha256": "b7de0eb41dc39c093203a39f02cf1dccbdf7c4f49978f8db8109dddd9af7deb8"
+    },
+    {
+      "name": "domain_types",
+      "status": "passed",
+      "log": "verification/openmed-domain-ts-complete.log",
+      "sha256": "bb16f7165f16b289c7776bd59a328ada710e2382a11a0a6c50e5b59c14f50357"
+    },
+    {
+      "name": "web_types",
+      "status": "passed",
+      "log": "verification/openmed-web-ts-final.log",
+      "sha256": "d2d873a5d28ade4c7cdc5222544cb408358f7d2390d2366701a9852dc78934e5"
+    },
+    {
+      "name": "web_lint",
+      "status": "passed_with_warning",
+      "log": "verification/openmed-web-lint-final.log",
+      "sha256": "a7006d782de63ac2dbe64e4cb5a40eee7b47db5e962cdf3fcd9fba03128d77c7",
+      "scope": "One existing LoginPage.tsx no-autofocus warning; zero errors."
+    },
+    {
+      "name": "web_build",
+      "status": "passed_with_warning",
+      "log": "verification/openmed-web-build-final.log",
+      "sha256": "433b392b3518054bbec4cc2d031bfbd155c649cefb4ab4b33bef7dee2115a786",
+      "scope": "Build succeeded with existing large-chunk warnings."
+    },
+    {
+      "name": "skill_packages",
+      "status": "passed",
+      "log": "verification/openmed-skill-packages-verified.log",
+      "sha256": "f915d8728be05c5a7f4dd6567220966ef9d74cfa8dacba63ca74f4c7f4d64122"
+    },
+    {
+      "name": "skill_vocabulary",
+      "status": "passed",
+      "log": "verification/openmed-skill-vocabulary-verified.log",
+      "sha256": "d701342ad24c477943d11de7f8dd3cd362c9b6a9730536c01551262c2eb56df3"
+    },
+    {
+      "name": "skill_digests",
+      "status": "passed",
+      "log": "verification/openmed-skill-digests-complete.log",
+      "sha256": "89cefe12e89306f87cc63e0a6284d1aaaf82e7a1148085e562d3f8c89879b274"
+    },
+    {
+      "name": "capability_manifests",
+      "status": "passed",
+      "log": "verification/openmed-capabilities-final.log",
+      "sha256": "217c8dc7099b6b74905e0167dbe1c3ef4b3c614b1d90683cf83d30dfd81f962e"
+    },
+    {
+      "name": "source_credentials",
+      "status": "passed",
+      "log": "verification/openmed-secrets-staged.log",
+      "sha256": "7bd7cc9452f4c402c6a8d2d86a803f29591822ee87b4e05e6f349ea788f5fb6c",
+      "scope": "Source credential audit after staging every new source, inventory and reproducible prediction artifact."
+    },
+    {
+      "name": "git_staged_whitespace",
+      "status": "passed",
+      "log": "verification/openmed-diff-check-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "verificationScope": "These suites overlap and must not be summed as unique tests. No full ci:web or deployed production acceptance is claimed. The last production logic change has focused matching/gateway coverage and the full domain suite; the multi-protocol integration test was added afterward without changing production logic.",
+  "updatedAt": "2026-10-09T18:18:27.656788+00:00"
+}

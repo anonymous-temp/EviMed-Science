@@ -1,3 +1,4 @@
+import { ClinicalTimeline, MatchingPanelControls } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState } from "react";
 import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock, TriangleAlert } from "lucide-react";
@@ -44,11 +45,10 @@ const VIEWS: ReadonlyArray<{ value: View; label: string }> = Object.freeze([
   { value: "followup", label: "随访" },
 ]);
 
-/**
- * The one direction there is: from the trial's criteria to the people who might meet them. The other (「给患者找试验」) has no data path
- * on the platform, so no control for it is drawn — a switch whose other side is always empty is a promise nothing keeps.
- */
-const DIRECTION: Direction = "trial_to_patient";
+const DIRECTIONS: ReadonlyArray<{ value: Direction; label: string }> = Object.freeze([
+  { value: "trial_to_patient", label: "给试验找患者" },
+  { value: "patient_to_trial", label: "给患者找试验" },
+]);
 
 /**
  * What the model's ranking hint is called wherever it appears. It orders a
@@ -98,9 +98,11 @@ const STATE_ICON: Record<VcrCriterionState, typeof CircleCheck> = {
  */
 export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const [view, setView] = useState<View>("matching");
+  const [direction, setDirection] = useState<Direction>("trial_to_patient");
   const [candidate, setCandidate] = useState<string | null>(null);
-  const { state, reload } = useVcrLoad(`${studyId}:matching:${view}`, () => getVcrMatching(studyId, {
-    view, direction: DIRECTION, ...(view === "matching" && candidate ? { candidate } : {}),
+  const [protocolVersionId, setProtocolVersionId] = useState<string | null>(null);
+  const { state, reload } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => getVcrMatching(studyId, {
+    view, direction, ...(protocolVersionId ? { protocolVersionId } : {}), ...(view === "matching" && candidate ? { candidate } : {}),
   }));
   const pick = (id: string) => {
     setCandidate(id);
@@ -109,10 +111,13 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   };
   const switchView = (next: View) => { setView(next); setCandidate(null); };
 
+  const switchDirection = (next: Direction) => { setDirection(next); setCandidate(null); };
+
   const toolbar = (summary?: string) => (
     <VcrToolbar summary={summary}>
       {study.abilities.includes("export") && study.abilities.includes("read_patient_level") && <VcrCorrectionCasesActions key={studyId} studyId={studyId} />}
       <SegmentedControl aria-label="匹配与招募的视图" value={view} onChange={switchView} options={[...VIEWS]} />
+      {view === "matching" && <SegmentedControl aria-label="匹配方向" value={direction} onChange={switchDirection} options={[...DIRECTIONS]} />}
     </VcrToolbar>
   );
   if (state.kind === "loading") return <div className="flex flex-col gap-6">{toolbar()}<VcrTabSkeleton /></div>;
@@ -128,17 +133,24 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   // Every sub-view counts: a referral ledger with no candidate list is a
   // study whose matching has already run, and offering 「让 AI 做」 there
   // would ask for work that is done.
+  const controls = view === 'matching' ? <MatchingPanelControls studyId={studyId} data={data}
+    canRun={study.abilities.includes('run') && study.abilities.includes('read_patient_level')}
+    onProtocol={setProtocolVersionId} onCandidate={pick} onReload={reload} /> : null;
   const nothing = data.candidates.length === 0 && !data.forecast && !data.pendingReview
     && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0;
   if (nothing) {
-    // Before anything has been judged the tab is one sentence and one button: the export and the four views are for what exists. A reader
-    // who switched to another view keeps the switch to get back — that view was chosen, so the matching one had something to show.
-    const pending = <VcrStepPending studyId={studyId} study={study} step="matching" hint={study.tier === "T0" ? VCR_MATCHING_EMPTY_T0 : undefined} />;
-    return view === "matching" ? pending : <div className="flex flex-col gap-6">{toolbar()}{pending}</div>;
+    return (
+      <div className="flex flex-col gap-6">
+        {toolbar()}
+        {controls}
+        <VcrStepPending studyId={studyId} study={study} step="matching" hint={study.tier === "T0" ? VCR_MATCHING_EMPTY_T0 : undefined} />
+      </div>
+    );
   }
   return (
     <div className="flex flex-col gap-6">
       {toolbar(partnerLine(data))}
+      {controls}
       {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
       {view === "matching" && (
         <MatchingView
@@ -153,6 +165,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       {view === "referral" && <ReferralView studyId={studyId} data={data} abilities={study.abilities} />}
       {view === "sites" && <SitesView data={data} />}
       {view === "followup" && <FollowupView data={data} />}
+      {view === "matching" && <ClinicalTimeline studyId={studyId} data={data} mayReadOriginal={study.abilities.includes("read_patient_level")} />}
     </div>
   );
 }

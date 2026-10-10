@@ -406,6 +406,56 @@ export class VcrStore extends VcrStoreBase {
     return vcrStudyFromRow(owned ?? (rows.length === 1 ? rows[0] : null));
   }
 
+  /** A hidden study still owns cached clinical conversations. No text is returned.
+   * @param {string} userId @param {string} projectId @param {string|null} sessionId @param {string[]} [projectionIds] */
+  async cloudDependencies(userId, projectId, sessionId, projectionIds = []) {
+    return this.clinicalHistoryRows(`WITH studies AS (SELECT s.id,s.deleted_at FROM ${VCR_SCHEMA}.studies s
+      WHERE s.project_id=$1 AND (s.user_id=$2 OR EXISTS
+        (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id=s.id AND m.user_id=$2))),
+      dependencies AS (SELECT r.study_id,r.projection_id AS id FROM ${VCR_SCHEMA}.cloud_reads r
+        JOIN studies s ON s.id=r.study_id WHERE r.session_id=$3
+        UNION SELECT s.id,unnest($4::text[]) FROM studies s)
+      SELECT d.id,d.study_id,s.deleted_at,p.permission_hash,src.cloud_permission FROM dependencies d
+      JOIN studies s ON s.id=d.study_id
+      LEFT JOIN ${VCR_SCHEMA}.document_projections p ON p.study_id=d.study_id AND p.id=d.id
+      LEFT JOIN ${VCR_SCHEMA}.sources src ON src.id=p.source_id AND src.study_id=d.study_id`,
+    [projectId,userId,sessionId,projectionIds]);
+  }
+
+  /** Clinical source dependencies are a copy boundary, not a medical text detector.
+   * Empty contexts mean the caller cannot attribute the write to one conversation.
+   * @param {string} userId @param {string} projectId @param {{sessionId?:string,runId?:string}[]} [contexts] */
+  async hasClinicalContext(userId, projectId, contexts = []) {
+    const sessions = contexts.map(row => row.sessionId).filter(Boolean);
+    const runs = contexts.map(row => row.runId).filter(Boolean);
+    const found = await this.clinicalHistoryRows(`SELECT 1 FROM ${VCR_SCHEMA}.cloud_reads r
+      JOIN ${VCR_SCHEMA}.studies s ON s.id=r.study_id
+      WHERE s.project_id=$1 AND (s.user_id=$2 OR EXISTS
+        (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id=s.id AND m.user_id=$2))
+        AND ($3::boolean OR r.session_id=ANY($4::text[]) OR r.run_id=ANY($5::text[])) LIMIT 1`,
+    [projectId,userId,sessions.length+runs.length===0,sessions,runs]);
+    return found.length > 0;
+  }
+
+  /** History permissions survive disabling the optional VCR module. A deployment
+   * that never created this table gains no VCR schema from a normal model call.
+   * @param {string} sql @param {unknown[]} values */
+  async clinicalHistoryRows(sql, values) {
+    const present = (await this.database.query("SELECT to_regclass('evimed_vcr.cloud_reads') AS table_name")).rows[0]?.table_name;
+    if (!present) return [];
+    return this.database.transaction(async client => {
+      await client.query(`SET LOCAL statement_timeout = ${this.statementTimeoutMs}`);
+      return (await client.query(sql,values)).rows;
+    });
+  }
+
+  /** @param {string} studyId @param {string} sessionId @param {string} runId @param {string} projectionId */
+  async inheritCloudDependency(studyId, sessionId, runId, projectionId) {
+    await this.clinicalHistoryRows(`INSERT INTO ${VCR_SCHEMA}.cloud_reads
+      (study_id,session_id,run_id,projection_id) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+    [studyId,sessionId,runId,projectionId]);
+  }
+
   /**
    * Every study the account may read, newest first: its own, and those where a
    * role that carries `read` was given to it. A member who holds only

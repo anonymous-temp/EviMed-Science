@@ -192,3 +192,7 @@ description: 「虚拟临床研究」的对话分析师：研究者要哪一步�
 过程记述、改稿说明、自查记录写进 `revision-notes.md`，不要写进报告正文——报告正文里不写过程，正是因为过程有它自己的去处。
 
 然后 `evimed_submit_deliverable{deliverableId}`。它应用的规则只有一份实现，和服务端应用的是同一份。
+
+## Clinical extraction and adoption boundary
+
+Preserve the source sentence and locator when translating eligibility into the native requirement grammar. Keep Boolean scope, exceptions, time anchors, units and applicability separate; an unsupported clause remains an explicit language criterion or named gap. New registry text or a what-if threshold creates a distinct protocol version. Do not reinterpret an old language judgment under the new criterion.

@@ -920,7 +920,20 @@ export interface VcrCriterionJudgement {
   overridden?: boolean;
 }
 
+export interface VcrProtocolChoice { id: string; title: string; version: number; sourceRef?: unknown }
+export interface VcrClinicalTimelineEntry {
+  id: string; variable: string; value: unknown; unit: string | null; at: string | null; assertion: string; experiencer: string | null;
+  medicationState: string | null; correctionOf: string | null; quote: string | null;
+  superseded?: boolean; conflictFactIds?: string[]; correctionReason?: string | null;
+  locator: { documentId: string; start: number; end: number } | null;
+}
 export interface VcrMatchingTab {
+  protocols?: VcrProtocolChoice[];
+  protocolVersionId?: string | null;
+  candidateRoster?: string[];
+  candidateCoverage?: { inputSnapshotId: string; requested: number; evaluated: number; pending: number; unavailable: number };
+  comparisons?: Array<{ protocol: VcrProtocolChoice; summary: string | null; asOf: string | null; evidenceGaps: Array<{ variable: string; reason: string }> }>;
+  timeline?: VcrClinicalTimelineEntry[];
   /** The sub-tab the payload is for. */
   view: "matching" | "referral" | "sites" | "followup";
   /** False when the package is not composed here; the tab says so and nothing else waits. */
@@ -2353,7 +2366,13 @@ export interface VcrIntakeGrant {
   createdAt: string | null;
 }
 
+export interface VcrCloudPermission {
+  status: 'approved' | 'revoked'; dataClass?: 'public' | 'synthetic' | 'deidentified'; destinations?: string[];
+  purpose?: 'vcr'; reference?: string; retention?: 'none' | 'limited' | 'unknown'; training?: 'disabled' | 'unknown';
+  humanReview?: 'disabled' | 'unknown'; expiresAt?: string | null;
+}
 export interface VcrIntakeSource {
+  cloudPermission?: VcrCloudPermission | null;
   id: string;
   name: string;
   ownerParty: string | null;
@@ -2369,6 +2388,7 @@ export interface VcrIntakeSource {
   window: string | null;
   retention: string | null;
   upload: {
+    cloudDestinations?: string[];
     formats: string[]; maxBytes: number | null; maxText: string | null;
     /** A patient record: text, and PDF or Word where the deployment converts them (the page offers only what would be taken). */
     documents: { formats: string[]; maxBytes: number | null; maxText: string | null; converter: boolean };
@@ -2475,8 +2495,10 @@ function readIntakeSource(raw: Loose): VcrIntakeSource {
     id: text(raw.id) ?? "", name: text(raw.name) ?? "", ownerParty: text(raw.ownerParty), mine: raw.mine === true, readable: raw.readable === true,
     canGrant: raw.canGrant === true, status: text(raw.status) ?? "registered", statusLabel: text(raw.statusLabel) ?? "",
     valueSource: text(raw.valueSource) ?? "observed", valueSourceLabel: text(raw.valueSourceLabel) ?? "",
+    cloudPermission: raw.cloudPermission as VcrCloudPermission | null ?? null,
     allowedUses: strings(raw.allowedUses), window: text(raw.window), retention: text(raw.retention),
     upload: {
+      cloudDestinations: strings(upload.cloudDestinations),
       formats: strings(upload.formats), maxBytes: finite(upload.maxBytes), maxText: text(upload.maxText),
       documents: {
         formats: strings(obj(upload.documents).formats), maxBytes: finite(obj(upload.documents).maxBytes),
@@ -2541,6 +2563,17 @@ export function readVcrIntake(raw: unknown): VcrIntake {
 }
 
 const dataRoute = (studyId: string) => `${study(studyId)}/data`;
+
+export const setVcrCloudPermission = (studyId: string, sourceId: string, permission: VcrCloudPermission) =>
+  productRequest(`${dataRoute(studyId)}/sources/${encodeURIComponent(sourceId)}/cloud-permission`, 'POST', { permission });
+export const getVcrProtectedDocument = (studyId: string, documentId: string) =>
+  productRequest<{ document: { id: string; text: string; sourceHash: string } }>(`${dataRoute(studyId)}/documents/${encodeURIComponent(documentId)}`, 'GET');
+export const createVcrProjection = (studyId: string, documentId: string, input: { sourceHash: string; spans: Array<{ start: number; end: number; kind: string }>; attestation: string }) =>
+  productRequest(`${dataRoute(studyId)}/documents/${encodeURIComponent(documentId)}/projection`, 'POST', input);
+export const resolveVcrQuote = (studyId: string, documentId: string, span: { start: number; end: number; quote: string }) =>
+  productRequest<{ evidence: { quote: string } }>(`${dataRoute(studyId)}/documents/${encodeURIComponent(documentId)}/quote`, 'POST', span);
+export const enqueueVcrMatching = (studyId: string, selection: { protocolVersionIds: string[]; subjectKeys?: string[]; direction: string }) =>
+  productRequest<{ jobs: Array<{ jobId: string; state: string }>; unavailable: Array<{ code: string }> }>(`${study(studyId)}/jobs`, 'POST', { kind: 'match_criteria', selection });
 
 /** 登记数据源: whose data it is, what it may be used for, for how long. */
 export async function registerVcrSource(studyId: string, input: VcrSourceBody) {
