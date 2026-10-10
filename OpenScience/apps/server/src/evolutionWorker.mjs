@@ -13,6 +13,7 @@ export class EvolutionWorker {
     this.activePromise = null; this.abortController = null; this.closed = false;
     /** @type {Set<Promise<any>>} */ this.inFlight = new Set(); /** @type {Promise<any>|null} */ this.housekeepingPromise = null;
     this.lane = lane;
+    /** @type {Map<string, {at: number, key: string | null}>} */ this.blockRuns = new Map();
     this.lanes = lane ? null : ['heavy', ...Array.from({length: Math.max(1,Math.min(2,config.evolutionLightConcurrency ?? 2))}, () => 'light')]
       .map(workerLane => new EvolutionWorker({service,decisions,maintenance,callbacks,config,canRun,logger,lane:workerLane}));
   }
@@ -138,53 +139,87 @@ export class EvolutionWorker {
     // development run that merely ended `runtime_spend_limit_reached` is only waited for when the window is known to be the cause.
     return !typed && cause === 'unknown' ? null : cause;
   }
+  /**
+   * One block of housekeeping, run when it is due: it never ran, what it keys on has changed (the day, the month), or its interval has passed.
+   * A block marks itself done only after it succeeded, so one that failed is tried again on the next poll.
+   * @param {string} name @param {{ms: number, key?: string | null}} schedule @param {() => Promise<any>} work
+   */
+  async every(name, { ms, key = null }, work) {
+    const at = this.service.now().getTime(), last = this.blockRuns.get(name);
+    if (last && last.key === key && at - last.at < ms) return;
+    await work();
+    this.blockRuns.set(name, { at, key });
+  }
+  /**
+   * The housekeeping every poll comes to. All of it is idempotent (an enqueue has a fixed key, a write reads first), and a poll is every 15 s, so
+   * unguarded it was a standing load of dozens of reads and writes, several of them listing every tool and evaluation, that grew with what they
+   * listed (review D-E24). Each block now runs on its first poll, when its day or month changes, and otherwise at most once a minute for what must
+   * notice a change quickly (an interrupted enqueue, a retirement, the digest hour, the end of a pause) and once a day for the rest.
+   */
   async housekeeping() {
-    await this.service.reconcileQueued?.();
     const now = this.service.now();
     const local = new Date(now.getTime() + 8 * 3600000);
     const day = local.toISOString().slice(0, 10);
-    for (const tool of await this.service.tools()) if (tool.payload.status === 'retired' && tool.payload.retirement?.state !== 'complete') {
-      await this.service.enqueue('maintain', { action: 'retirement-reconcile', toolId: tool.id }, `retirement:${tool.id}:${day}`);
-    }
-    for(const review of await this.service.list('maintenance-review')) if(review.payload.restoration?.state==='pending' && review.payload.restoration.decisionId) await this.service.enqueue('decision',{decisionId:review.payload.restoration.decisionId},`restore-decision:${review.id}:${day}`);
-    const preferences = await this.service.notifications?.preferences?.(await this.service.owner());
-    const digestTime = preferences?.digestTime ?? '08:00';
-    const releaseId = String(this.config.releaseId ?? ''), sourceRevision = String(this.config.sourceRevision ?? '');
-    if (/^[a-zA-Z0-9._-]{1,128}$/.test(releaseId) && !/^unknown$/i.test(releaseId) && /^[a-f0-9]{40}$/i.test(sourceRevision)) {
-      await this.service.enqueue('evaluate', { action: 'release-replay', releaseId, sourceRevision }, `release-replay:${releaseId}:${sourceRevision}`);
-    } else if (!await this.service.get('evolution-release-provenance-unknown')) await this.service.save('observation', 'evolution-release-provenance-unknown', {
-      kind: 'release-replay', status: 'waiting', reason: 'A named deployment and immutable source revision are required before claiming release replay.' });
-    if (local.toISOString().slice(11, 16) >= digestTime) await this.service.enqueue('digest', { day }, `daily-digest:${day}`);
-    if (!this.config.evolutionSearchPaused) await this.service.enqueue('scout', { action: 'daily-scan', day }, `daily-scout:${day}`);
-    await this.service.ingestEvent({id:`handbook-scan:${day}`,type:"handbook-gap-scan"});
-    await this.service.ingestEvent({ id: `source-facts:${day}`, type: 'source-facts-scan', origin: 'tool-result' });
-    await this.service.ingestEvent({ id: `prospective-targets:${day}`, type: 'prospective-target-scan', origin: 'tool-result' });
-    if (this.service.callbacks?.scanLeadSources) await this.service.ingestEvent({ id: `lead-sources:${day}`, type: 'lead-source-scan', origin: 'platform-inference' });
     const month = now.toISOString().slice(0, 7);
     const previousMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
-    await this.service.enqueue('maintain', { month, metricsMonth: previousMonth }, `monthly-v2:${month}`);
-    const observations = [...await this.service.tools(), ...await this.service.list('evaluation')];
-    const firstMonth = observations.map(row => String(row.createdAt ?? '').slice(0, 7)).filter(value => /^\d{4}-\d{2}$/.test(value)).sort()[0];
-    if (firstMonth) {
-      const cursor = new Date(`${firstMonth}-01T00:00:00Z`);
-      for (let count = 0; count < 120 && cursor.toISOString().slice(0, 7) < previousMonth; count++, cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
-        const metricsMonth = cursor.toISOString().slice(0, 7);
-        if (!await this.service.get(`evolution-monthly-metrics-${metricsMonth}`)) await this.service.enqueue('maintain', { month, metricsMonth, metricsOnly: true }, `monthly-metrics:${metricsMonth}`);
-      }
-    }
-    if (local.getUTCDay() === 1) await this.service.enqueue('evaluate', { action: 'scorer-audit', day }, `weekly-scorer-audit:${day}`);
-    if (local.getUTCDay() === 1) await this.service.enqueue('evaluate', { action: 'time-holdout', day }, `weekly-holdout:${day}`);
-    if (!this.config.evolutionSearchPaused) {
-      const monday = new Date(local); monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay()+6)%7);
-      const week = monday.toISOString().slice(0,10);
-      await this.service.enqueue('plan', {week}, `platform-plan:${week}:${day}`);
-      await this.service.enqueue('research', {week}, `self-research:${week}`);
-      await this.service.enqueue('meta', {month}, `meta-loop:${month}`);
-      await this.resumePaused();
-    }
     const quarter = `${local.getUTCFullYear()}-Q${Math.floor(local.getUTCMonth()/3)+1}`;
+    const MINUTE = 60_000, DAY = 86_400_000;
+    await this.every('reconcile', { ms: MINUTE }, async () => { await this.service.reconcileQueued?.(); });
+    await this.every('retirements', { ms: MINUTE }, async () => {
+      for (const tool of await this.service.tools()) if (tool.payload.status === 'retired' && tool.payload.retirement?.state !== 'complete') {
+        await this.service.enqueue('maintain', { action: 'retirement-reconcile', toolId: tool.id }, `retirement:${tool.id}:${day}`);
+      }
+      for(const review of await this.service.list('maintenance-review')) if(review.payload.restoration?.state==='pending' && review.payload.restoration.decisionId) await this.service.enqueue('decision',{decisionId:review.payload.restoration.decisionId},`restore-decision:${review.id}:${day}`);
+    });
+    await this.every('release', { ms: DAY }, async () => {
+      const releaseId = String(this.config.releaseId ?? ''), sourceRevision = String(this.config.sourceRevision ?? '');
+      if (/^[a-zA-Z0-9._-]{1,128}$/.test(releaseId) && !/^unknown$/i.test(releaseId) && /^[a-f0-9]{40}$/i.test(sourceRevision)) {
+        await this.service.enqueue('evaluate', { action: 'release-replay', releaseId, sourceRevision }, `release-replay:${releaseId}:${sourceRevision}`);
+      } else if (!await this.service.get('evolution-release-provenance-unknown')) await this.service.save('observation', 'evolution-release-provenance-unknown', {
+        kind: 'release-replay', status: 'waiting', reason: 'A named deployment and immutable source revision are required before claiming release replay.' });
+    });
+    await this.every('digest', { ms: MINUTE }, async () => {
+      const preferences = await this.service.notifications?.preferences?.(await this.service.owner());
+      const digestTime = preferences?.digestTime ?? '08:00';
+      if (local.toISOString().slice(11, 16) >= digestTime) await this.every('digest-queued', { ms: DAY, key: day }, () => this.service.enqueue('digest', { day }, `daily-digest:${day}`));
+    });
+    // A block that depends on the pause is not consulted while research is paused, so a poll that skipped it does not count as having run it.
+    const paused = Boolean(this.config.evolutionSearchPaused);
+    if (!paused) await this.every('scout', { ms: DAY, key: day }, () => this.service.enqueue('scout', { action: 'daily-scan', day }, `daily-scout:${day}`));
+    await this.every('daily-events', { ms: DAY, key: day }, async () => {
+      await this.service.ingestEvent({id:`handbook-scan:${day}`,type:"handbook-gap-scan"});
+      await this.service.ingestEvent({ id: `source-facts:${day}`, type: 'source-facts-scan', origin: 'tool-result' });
+      await this.service.ingestEvent({ id: `prospective-targets:${day}`, type: 'prospective-target-scan', origin: 'tool-result' });
+      if (this.service.callbacks?.scanLeadSources) await this.service.ingestEvent({ id: `lead-sources:${day}`, type: 'lead-source-scan', origin: 'platform-inference' });
+    });
+    await this.every('monthly', { ms: DAY, key: month }, async () => {
+      await this.service.enqueue('maintain', { month, metricsMonth: previousMonth }, `monthly-v2:${month}`);
+      const observations = [...await this.service.tools(), ...await this.service.list('evaluation')];
+      const firstMonth = observations.map(row => String(row.createdAt ?? '').slice(0, 7)).filter(value => /^\d{4}-\d{2}$/.test(value)).sort()[0];
+      if (firstMonth) {
+        const cursor = new Date(`${firstMonth}-01T00:00:00Z`);
+        for (let count = 0; count < 120 && cursor.toISOString().slice(0, 7) < previousMonth; count++, cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+          const metricsMonth = cursor.toISOString().slice(0, 7);
+          if (!await this.service.get(`evolution-monthly-metrics-${metricsMonth}`)) await this.service.enqueue('maintain', { month, metricsMonth, metricsOnly: true }, `monthly-metrics:${metricsMonth}`);
+        }
+      }
+    });
+    await this.every('weekly', { ms: DAY, key: day }, async () => {
+      if (local.getUTCDay() === 1) await this.service.enqueue('evaluate', { action: 'scorer-audit', day }, `weekly-scorer-audit:${day}`);
+      if (local.getUTCDay() === 1) await this.service.enqueue('evaluate', { action: 'time-holdout', day }, `weekly-holdout:${day}`);
+    });
+    if (!paused) {
+      await this.every('plan', { ms: DAY, key: day }, async () => {
+        const monday = new Date(local); monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay()+6)%7);
+        const week = monday.toISOString().slice(0,10);
+        await this.service.enqueue('plan', {week}, `platform-plan:${week}:${day}`);
+        await this.service.enqueue('research', {week}, `self-research:${week}`);
+        await this.service.enqueue('meta', {month}, `meta-loop:${month}`);
+      });
+      await this.every('resume', { ms: MINUTE }, () => this.resumePaused());
+    }
     // Audit composition curates and seals the quarter only after independent tasks exist.
-    await this.service.enqueue('audit', {month:previousMonth,quarter}, `heldout-audit:${previousMonth}`);
+    await this.every('audit', { ms: DAY, key: `${previousMonth}:${quarter}` }, () => this.service.enqueue('audit', {month:previousMonth,quarter}, `heldout-audit:${previousMonth}`));
   }
   /** A job that will not be tried again ends the mission opened to carry its cost as failed (`recordJob`); one that will be leaves it open.
    * @param {any} mission @param {any} error */

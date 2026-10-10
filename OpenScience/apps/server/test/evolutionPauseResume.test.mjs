@@ -28,7 +28,7 @@ test('ending the pause resumes the missions it stopped, once, and not before',as
  missions.register({tools:{enabled:false}});
  const resumed=await missions.run({missionId:'m1'});
  assert.equal(resumed.payload.reason,'module-disabled','the mission left its pause');
- await worker.housekeeping();assert.equal((await resumeEvents()).length,1,'nothing is paused any more');
+ f.advance(61_000);await worker.housekeeping();assert.equal((await resumeEvents()).length,1,'nothing is paused any more');
 });
 test('a second pause is resumed as well as the first',async()=>{
  const {f,config,missions,worker,resumeEvents}=await setup();
@@ -39,6 +39,6 @@ test('a second pause is resumed as well as the first',async()=>{
  config.evolutionSearchPaused=true;
  await f.service.save('mission','m2',{moduleId:'tools',kind:'research',status:'ready',dependencies:[]});
  await missions.run({missionId:'m2'});
- config.evolutionSearchPaused=false;await worker.housekeeping();
+ config.evolutionSearchPaused=false;f.advance(61_000);await worker.housekeeping();
  assert.equal((await resumeEvents()).length,2);
 });
