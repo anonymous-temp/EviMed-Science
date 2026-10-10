@@ -277,10 +277,8 @@ function RouteRail({ data }: { data: ComparatorData }) {
             key={route.route}
             data-vcr-route={route.route}
             data-vcr-route-state={route.state}
-            className={cn(
-              "rounded border-l-2 px-3 py-2.5",
-              route.selected ? "border-accent bg-accent-soft" : "border-transparent",
-            )}
+            aria-current={route.selected ? "true" : undefined}
+            className={cn("rounded px-3 py-2.5", route.selected && "bg-accent-soft")}
           >
             <div className="flex items-baseline gap-2">
               <span className="w-4 shrink-0 text-caption tabular-nums text-text-3">{index + 1}</span>

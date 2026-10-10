@@ -671,6 +671,8 @@ describe("对照", () => {
     expect(within(card).getByText("把 ECOG 纳入熵平衡")).toBeInTheDocument();
     expect(within(card).getByText("判定依据：加权后有效样本量低于下限")).toBeInTheDocument();
     expect(container.querySelector("[data-vcr-route='literature_control']")?.className).toContain("bg-accent-soft");
+    expect(container.querySelector("[data-vcr-route='literature_control']")).toHaveAttribute("aria-current", "true");
+    expect(container.querySelector("[data-vcr-route='external_control']")).not.toHaveAttribute("aria-current");
     expect(container.querySelector("[data-vcr-route='external_control']")).toHaveTextContent("缺 3 项数据，见下方清单");
   });
 
