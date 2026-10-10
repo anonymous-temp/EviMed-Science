@@ -9,7 +9,7 @@ import { MemoryIndexing } from "../src/memoryIndexing.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { ResearchMemoryStore } from "../src/researchMemory.mjs";
-import { projectMemoryUri, researchMemoryRoots, userMemoryRoot } from "../src/openVikingClient.mjs";
+import { projectMemoryUri, researchMemoryRoots, sessionMemoryUri, userMemoryRoot } from "../src/openVikingClient.mjs";
 
 /**
  * What a deletion owes the recall index, against a real PostgreSQL.
@@ -178,6 +178,66 @@ test("deleting a project's memory removes its rows and owes the index the subtre
   const owedNow = (await rows()).map((row) => row.uri);
   for (const root of researchMemoryRoots(owner)) assert.ok(owedNow.includes(root), root);
   assert.equal(owedNow.some((uri) => uri.endsWith("/capsule")), false);
+  await clear();
+});
+
+// 2026-10-10 review M-10: a project's deletion removed its project-scoped records and its conversations' state rows, but
+// extraction also writes records scoped to one conversation (scope "session", scope_id the conversation), which stayed in
+// the export and in search; and the index was told to forget the project's subtree only.
+test("deleting a project's memory removes what its conversations wrote and owes the index their subtrees too", options, async () => {
+  const index = indexDouble();
+  const ledger = new MemoryIndexWithdrawals({ database, openViking: index });
+  await ledger.migrate();
+  await clear();
+  const store = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database, withdrawals: ledger });
+  const session = (scopeId, key) => store.upsertRecord(owner, {
+    scope: "session", scopeId, kind: "follow_up", key, value: `Pending: ${key}.`, summary: key,
+    origin: "inferred", status: "active", confidence: 0.7, importance: 0.5,
+  });
+  await store.upsertRecord(owner, { scope: "project", scopeId: "paper5", kind: "preference", key: "paper5.pref", value: "Prefer primary evidence.", summary: "Primary.",
+    origin: "inferred", status: "active", confidence: 0.7, importance: 0.9 });
+  await session("ses_paper5_a", "paper5.a");
+  await session("ses_paper5_b", "paper5.b");
+  await session("ses_elsewhere", "elsewhere.c");
+  // A conversation that holds a trial state and wrote nothing is the project's too.
+  await store.updateSessionState(owner, "paper5", "ses_paper5_trial", { trialCapsuleId: "pack-1" });
+  const mine = async () => (await store.listAllRecords(owner)).filter((record) => ["paper5.pref", "paper5.a", "paper5.b", "elsewhere.c"].includes(record.key)).map((record) => record.key).sort();
+  assert.deepEqual(await mine(), ["elsewhere.c", "paper5.a", "paper5.b", "paper5.pref"]);
+
+  index.failure = timeout();
+  const removed = await store.deleteProjectMemory(owner, "paper5", { sessionIds: ["ses_paper5_a", "ses_paper5_b"] });
+  assert.equal(removed.structured, 3, "the project's record and the two conversations' records");
+  assert.deepEqual(await mine(), ["elsewhere.c"], "another project's conversation is not touched");
+  assert.equal(index.asked.length, 0, "the index is never waited on");
+  assert.deepEqual((await rows()).map((row) => row.uri).sort(), [
+    projectMemoryUri(owner, "paper5"),
+    sessionMemoryUri(owner, "ses_paper5_a"), sessionMemoryUri(owner, "ses_paper5_b"), sessionMemoryUri(owner, "ses_paper5_trial"),
+  ].sort(), "the project's subtree and each of its conversations'");
+  assert.deepEqual((await database.query("SELECT 1 FROM evimed_memory.sessions WHERE user_id=$1 AND project_id='paper5'", [owner])).rows, []);
+
+  // A conversation id this store cannot hold names no subtree and fails nothing.
+  await store.deleteProjectMemory(owner, "paper5", { sessionIds: ["bad id/../x", ""] });
+  await store.purgeUserMemory(owner);
+  await clear();
+});
+
+test("a project's conversations are found from its run summaries when the caller names none, whatever the case of their ids", options, async () => {
+  const index = indexDouble();
+  const ledger = new MemoryIndexWithdrawals({ database, openViking: index });
+  await ledger.migrate();
+  await clear();
+  const store = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database, withdrawals: ledger });
+  const base = { origin: "inferred", status: "active", confidence: 0.7, importance: 0.5 };
+  // One run summary per conversation, keyed by the lower-cased id (`memoryIntelligence.mjs`).
+  await store.upsertRecord(owner, { ...base, scope: "project", scopeId: "paper6", kind: "run_summary", key: "run.session.ses_mixedcase6", value: "{}", summary: "run" });
+  await store.upsertRecord(owner, { ...base, scope: "session", scopeId: "ses_MixedCase6", kind: "follow_up", key: "paper6.followup", value: "Pending.", summary: "p" });
+  await store.upsertRecord(owner, { ...base, scope: "session", scopeId: "ses_unrelated6", kind: "follow_up", key: "unrelated6.followup", value: "Pending.", summary: "q" });
+  const removed = await store.deleteProjectMemory(owner, "paper6");
+  assert.equal(removed.structured, 2, "the run summary and the conversation's record");
+  assert.deepEqual((await store.listAllRecords(owner)).filter((record) => record.key.endsWith("6.followup")).map((record) => record.key), ["unrelated6.followup"]);
+  assert.deepEqual((await rows()).map((row) => row.uri).sort(),
+    [projectMemoryUri(owner, "paper6"), sessionMemoryUri(owner, "ses_MixedCase6")].sort(), "the subtree is addressed by the id as it was written");
+  await store.purgeUserMemory(owner);
   await clear();
 });
 

@@ -2965,6 +2965,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // capsule methods a launch mounts and the resident profile a dispatch writes, not only the records
   // (`RuntimeManager.recallPausedFor`; 2026-10-10 review M-1, L-5). Unassigned, the manager reads "nothing paused".
   runtimeManager.memoryPause = (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId);
+  /**
+   * The conversations a project had, from its run ledger and its sessions — what its memory deletion needs to find the records
+   * those conversations wrote (`deleteProjectMemory`, 2026-10-10 review M-10). A ledger that cannot be read names none: the
+   * deletion still finds the conversations the memory store itself knows of, and a project is deleted either way.
+   * @param {any} project @returns {Promise<string[]>}
+   */
+  async function projectConversationIds(project) {
+    const ids = new Set();
+    for (const run of await agentRuns.list(project).catch(() => [])) if (run?.sessionId) ids.add(String(run.sessionId));
+    for (const session of await researchSessions.list(project).catch(() => [])) if (session?.sessionId) ids.add(String(session.sessionId));
+    return [...ids];
+  }
   /** Actual project-owned native inventory, independent of optional research-session metadata.
    * @param {any} user @param {any} project @param {string} sessionId */
   async function authorizeOwnedNativeSession(user, project, sessionId) {
@@ -4872,7 +4884,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (project) {
           if (await taskManager.hasActiveProject(project)) throw Object.assign(new Error("project_busy"), { code: "project_busy" });
           await runtimeManager.stop(project, { by: "platform" });
-          if (researchMemory.configured) await researchMemory.deleteProjectMemory(owner.id, project.id);
+          if (researchMemory.configured) await researchMemory.deleteProjectMemory(owner.id, project.id, { sessionIds: await projectConversationIds(project) });
         }
         await removeStudyProject(owner, study.projectId).catch(async (error) => {
           // A project that is already gone leaves its draft behind: the row is the only thing left to remove.
@@ -6963,7 +6975,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // 2026-10-05 this asked the index first and failed the deletion when
           // it timed out (live: 503 `memory_index_timeout`, and the same request
           // succeeded two minutes later).
-          if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id);
+          if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id, { sessionIds: await projectConversationIds(project) });
           // With no ledger to hand the withdrawal to (a test's store, a deployment
           // whose index is not composed) there is nothing durable to keep: one
           // attempt, never waited on.

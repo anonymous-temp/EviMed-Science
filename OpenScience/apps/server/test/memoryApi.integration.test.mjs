@@ -328,6 +328,33 @@ test("deleting a project deletes its memory and leaves personal memory alone", o
     "the project's memory went with it and the account's did not");
 });
 
+// 2026-10-10 review M-10: a conversation's own records (scope "session") carry no project, so the project's deletion
+// has to be told which conversations the project had; the route names them from the project's sessions and runs.
+test("deleting a project deletes what its conversations wrote, and not what another project's did", options, async (t) => {
+  const { app, base, headers, user } = await fixture(t);
+  const projectId = "project-session-delete";
+  const sessionHeaders = (project) => ({ ...headers, "x-open-science-project": project });
+  assert.equal((await fetch(`${base}/api/projects`, {
+    method: "POST", headers, body: JSON.stringify({ id: projectId, name: "Session memory deletion" }),
+  })).status, 200);
+  for (const [project, sessionId] of [[projectId, "ses_deleted_one"], ["default", "ses_kept_one"]]) {
+    const put = await fetch(`${base}/api/research-sessions/${sessionId}`, { method: "PUT", headers: sessionHeaders(project), body: JSON.stringify({ mode: "open-domain" }) });
+    assert.equal(put.status, 200, await put.clone().text());
+  }
+  const base_ = { origin: "inferred", status: "active", confidence: 0.7, importance: 0.5, sensitive: false };
+  await app.researchMemory.upsertRecord(user.id, { ...base_, scope: "session", scopeId: "ses_deleted_one", kind: "follow_up", key: "deleted.followup", value: "Pending.", summary: "p" });
+  await app.researchMemory.upsertRecord(user.id, { ...base_, scope: "session", scopeId: "ses_kept_one", kind: "follow_up", key: "kept.followup", value: "Pending.", summary: "q" });
+  await app.researchMemory.upsertRecord(user.id, { ...base_, scope: "user", scopeId: "", kind: "preference", key: "tone", value: "tables over prose", summary: "" });
+
+  assert.equal((await fetch(`${base}/api/projects/${projectId}`, {
+    method: "DELETE", headers, body: JSON.stringify({ confirm: projectId }),
+  })).status, 200);
+
+  const exported = await app.researchMemory.exportUserMemory(user.id);
+  assert.deepEqual(exported.records.map((record) => record.key).sort(), ["kept.followup", "tone"],
+    "the deleted project's conversation took its record with it; the other project's and the researcher's stayed");
+});
+
 test("deleting an account takes every memory with it, counted for the audit", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
   await app.researchMemory.upsertRecord(user.id, {
