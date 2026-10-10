@@ -16,3 +16,13 @@ test('malformed or truncated output stays a failure, and prompts contain no gold
   assert.throws(()=>groundPublicExtraction(example,'{}'),/extraction_arrays_missing/);
   assert.ok(publicExtractionPrompt(example).includes('exact source surface'));
 });
+test('new relation evidence must be verbatim and duplicate relations stay visible as issues',()=>{
+  const result=groundPublicExtraction(example,JSON.stringify({entities:[['a','CHEMICAL','aspirin',1],['b','GENE','COX',1]],relations:[['INHIBITOR','a','b','aspirin inhibits COX'],['INHIBITOR','a','b','aspirin inhibits COX'],['ACTIVATOR','a','b','invented evidence']]}));
+  assert.equal(result.relations.length,1);
+  assert.deepEqual(result.groundingIssues.map(row=>row.kind),['duplicate_relation','relation_quote_unresolved']);
+});
+test('prediction projection never includes accidentally supplied reference labels',()=>{
+  const prompt=publicExtractionPrompt({...example,reference:{secret:'gold-label-canary'},split:'holdout'});
+  assert.ok(!prompt.includes('gold-label-canary'));
+  assert.ok(!prompt.includes('holdout'));
+});

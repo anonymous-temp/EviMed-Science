@@ -121,7 +121,7 @@
       "name": "deep-research",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:cc6ae5a31b982a9dc955cc46e41d51dc8e9c8a2be563cfc603c318b5ac2de23d",
+      "digest": "sha256:f724f36aad77701cf7d1d4cc64a606ec27bbca1cab304de06a2a08d49fc922e2",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -149,7 +149,7 @@
       "name": "reporting-guidelines",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:79b6c3c00142b7e90de39e64f715b863b5c005b8083e914f67e3ba5e6d1b6d80",
+      "digest": "sha256:865bd7da5c55f36de3419b795d0c4ae6a9990d25526a02601f37d01cf990192a",
       "digestAlgorithm": "release-directory-v1",
       "references": [
         {"path":"checklists/consort-2025.md","sha256":"074cebbc1e3f0ef41260d58bd38316c8653603de7e755b702a8b58fb54b26323"},
@@ -278,11 +278,11 @@
       "id": "capability/comprehensive-drug-evaluation",
       "name": "comprehensive-drug-evaluation",
       "origin": "capability",
-      "version": "2.5.0",
+      "version": "2.5.1",
       "source": {"kind":"release"},
-      "digest": "sha256:79ae5f11125afc24eb9484a8d0161be153d2dbbd35b44cab3c4352549b5e1957",
+      "digest": "sha256:f65d477e81aeb6f98df08d78f2078ed3783ba99820c128eebc0bf4f2159cf46a",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"eabedc4e9cf1706f0fb3e9c5568488ff61153cbfa5aacf4881b3634dc55a3fec"}],
+      "references": [{"path":"capability.yaml","sha256":"f4f97ee3e7fc58c166bc909570b2f627490baee54cd729bd757d0002fa40b9a8"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -545,11 +545,11 @@
       "id": "capability/geo-content",
       "name": "geo-content",
       "origin": "capability",
-      "version": "2.3.0",
+      "version": "2.3.1",
       "source": {"kind":"release"},
-      "digest": "sha256:6f1995297ee33ba09c72f34ac040746ddf191ebc728524d9f5ce38484dc806aa",
+      "digest": "sha256:5c1cf24e91193e1a23c0b95582ea2ec2d56d37077707653c4b16b2c4b316de27",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"326451035a48bd4e3bd6f645891842e3b24f152bb6a3a6fd8962a19b639f5b56"}],
+      "references": [{"path":"capability.yaml","sha256":"5ad31617485c1bc7b49cc843b41e2cdc071039a7fe217adc24dbf6d125dc1005"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1142,11 +1142,11 @@
       "id": "capability/vcr-matching",
       "name": "vcr-matching",
       "origin": "capability",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "source": {"kind":"release"},
-      "digest": "sha256:f5be3f7366d41bfb64c3d53ab18dceeacda1528d8a007f4d9e00dbdb0e6492a8",
+      "digest": "sha256:7590fcb4c528f4fd6a877b7746cc2dc480d8914cc473c4aeaa51a9a6429b8cc0",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"3d1a33517e4c536e0e0ff4014a4e9fd3d9f547403f166b822af751debf5dea63"}],
+      "references": [{"path":"capability.yaml","sha256":"1ce24ad81268e7032c6fed0ba9f128fa755092d3aaf12048188a4fb570ba59ec"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1289,7 +1289,7 @@
       "name": "deep-research",
       "origin": "core",
       "source": {"kind":"release"},
-      "digest": "sha256:cc6ae5a31b982a9dc955cc46e41d51dc8e9c8a2be563cfc603c318b5ac2de23d",
+      "digest": "sha256:f724f36aad77701cf7d1d4cc64a606ec27bbca1cab304de06a2a08d49fc922e2",
       "digestAlgorithm": "release-directory-v1"
     },
     {

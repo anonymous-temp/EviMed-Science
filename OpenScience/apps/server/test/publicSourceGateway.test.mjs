@@ -359,6 +359,7 @@ test("public-source gateway injects source-specific credentials only into matchi
     addgene: "addgene-secret",
     biogrid: "biogrid-secret",
     opengwas: "opengwas-secret",
+    iuphar: "iuphar-secret",
   };
   const server = createServer(createPublicSourceGatewayHandler({
     publicSourceCredentials: credentials,
@@ -387,6 +388,7 @@ test("public-source gateway injects source-specific credentials only into matchi
     ["biogrid", "https://webservice.thebiogrid.org/interactions?geneList=TP53"],
     ["opengwas", "https://api.opengwas.io/api/gwasinfo?id=ieu-a-2"],
     ["materials-project", "https://api.materialsproject.org/materials/summary/?formula=Fe2O3"],
+    ["iuphar", "https://www.guidetopharmacology.org/services/targets?name=BRCA1"],
   ];
   for (const [credentialProfile, url, method, body] of cases) {
     const response = await gatewayRequest(base, {
@@ -413,6 +415,8 @@ test("public-source gateway injects source-specific credentials only into matchi
   assert.equal(observations[7].url.searchParams.get("accesskey"), "biogrid-secret");
   assert.equal(observations[8].headers.authorization, "Bearer opengwas-secret");
   assert.equal(observations[9].headers["x-api-key"], "mp-secret");
+  assert.equal(observations[10].headers["gtp-api-key"], "iuphar-secret");
+  assert.equal(observations[10].url.searchParams.has("GTP-API-Key"), false);
 });
 
 test("EviMed evidence POST requests are fixed, read-only, and schema bounded", async (t) => {
@@ -617,10 +621,21 @@ test("credential profiles fail closed when missing, caller-supplied, or used on 
   assert.equal(missing.status, 503);
   assert.equal((await missing.json()).error.code, "public_source_umls_credential_missing");
 
+  const iupharMissing = await gatewayRequest(base, {
+    url: "https://www.guidetopharmacology.org/services/targets?name=BRCA1",
+    accept: ["application/json"], credentialProfile: "iuphar",
+  });
+  assert.equal(iupharMissing.status, 503);
+  assert.equal((await iupharMissing.json()).error.code, "public_source_iuphar_credential_missing");
+
   for (const body of [
     { url: "https://uts-ws.nlm.nih.gov/rest/search/current?string=TP53", accept: ["application/json"] },
     { url: "https://uts-ws.nlm.nih.gov/rest/search/current?string=TP53&apiKey=caller-secret", accept: ["application/json"], credentialProfile: "umls" },
     { url: "https://api.crossref.org/works?query=TP53", accept: ["application/json"], credentialProfile: "umls" },
+    { url: "https://www.guidetopharmacology.org/services/targets?GTP-API-Key=caller-secret", accept: ["application/json"], credentialProfile: "iuphar" },
+    { url: "https://www.guidetopharmacology.org/services/targets?gtp-api-key=caller-secret", accept: ["application/json"], credentialProfile: "iuphar" },
+    { url: "https://www.guidetopharmacology.org/GRAC/ObjectDisplayForward?objectId=2332", accept: ["application/json"], credentialProfile: "iuphar" },
+    { url: "https://api.crossref.org/works?query=TP53", accept: ["application/json"], credentialProfile: "iuphar" },
   ]) {
     const rejected = await gatewayRequest(base, body);
     assert.notEqual(rejected.status, 200);
@@ -968,6 +983,27 @@ test("a researcher's own credential fills a profile the deployment has not confi
   assert.equal(observations.at(-1).url.searchParams.get("apiKey"), "deployment-umls");
   // The store was never consulted for a profile the deployment serves.
   assert.deepEqual(asked, [["alice", "opengwas"], ["bob", "opengwas"]]);
+});
+
+test("WikiPathways metadata fallback is confined to its exact read-only official index", async (t) => {
+  let fetchCalls = 0;
+  const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return new Response('{"pathwayInfo":[]}', { headers: { "content-type": "application/json" } });
+    },
+  }));
+  const base = await listen(server);
+  t.after(() => close(server));
+  const url = "https://www.wikipathways.org/json/getPathwayInfo.json";
+  assert.equal((await gatewayRequest(base, { url, accept: ["application/json"] })).status, 200);
+  for (const request of [
+    { url: `${url}/other`, accept: ["application/json"] },
+    { url: "https://www.wikipathways.org/json/listPathways.json", accept: ["application/json"] },
+    { url: "https://www.wikipathways.org/instance/WP1", accept: ["application/json"] },
+    { url, accept: ["application/json"], method: "POST", body: {} },
+  ]) assert.equal((await gatewayRequest(base, request)).status, 403);
+  assert.equal(fetchCalls, 1);
 });
 
 test("an approved host that serves more than one API is bounded to the approved API", async (t) => {

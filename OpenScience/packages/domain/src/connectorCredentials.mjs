@@ -90,6 +90,12 @@ export const CONNECTOR_CREDENTIALS = Object.freeze([
     capabilities: Object.freeze([]), keyless: false,
   }),
   Object.freeze({
+    id: 'iuphar', title: 'IUPHAR/BPS Guide to Pharmacology', kind: 'api-key',
+    unlocks: '药物靶点与药理学记录检索。',
+    obtainUrl: 'https://www.guidetopharmacology.org/webServices.jsp',
+    capabilities: Object.freeze([]), keyless: false,
+  }),
+  Object.freeze({
     id: 'ncbi', title: 'NCBI E-utilities', kind: 'api-key',
     unlocks: 'PubMed 等 NCBI 检索的更高请求配额；没有也能用。',
     obtainUrl: 'https://www.ncbi.nlm.nih.gov/account/settings/',
@@ -154,7 +160,7 @@ export function connectorForMissingCode(code) {
 const CONFIG_KEYS = Object.freeze({
   'evimed-evidence': 'evimedEvidence',
   opengwas: 'opengwas', 'semantic-scholar': 'semanticScholar', core: 'core', unpaywall: 'unpaywall', umls: 'umls',
-  omim: 'omim', addgene: 'addgene', biogrid: 'biogrid', ncbi: 'ncbi', openfda: 'openFda', 'materials-project': null,
+  omim: 'omim', addgene: 'addgene', biogrid: 'biogrid', iuphar: 'iuphar', ncbi: 'ncbi', openfda: 'openFda', 'materials-project': null,
 })
 
 /**

@@ -5,17 +5,17 @@
 # delivered a probe ledger, a monitor table and content blocks; measurement is
 # now the platform's (a server-side queue, one question per engine per fresh
 # chat, metrics computed by code), so this run writes the layered articles and
-# correction materials the claim library supports, and the contract reads the
+# correction materials the preserved research and verified claims support, and the contract reads the
 # articles themselves. Hidden from 科研工具 by `display.listed: false`: the GEO
 # module's orchestrator dispatches it in batches.
 id: geo-content
-version: 2.3.0
+version: 2.3.1
 title: GEO Content
 category: Content Production
 description: Step 6 of an evidence-based GEO project — audience-specific content grounded in drug value,
   clinical evidence and real decisions. Choose useful formats, retain benefit-risk conditions and uncertainty,
   reuse specialist research, and register medically reviewed articles and corrections in the project.
-whenToUse: “循证 GEO”项目的写稿交给我：按主战场和讲错我方，从主张库写深度分析、证据卡片、科普稿件、问答与纠错材料，每篇一份工作记录，医学审核后去 AI 味。完整方案里平台会在信源分析之后按批次安排我；用户在对话里给了自己的稿件要优化或去 AI 味时，可以直接委派我。
+whenToUse: “循证 GEO”项目的写稿交给我：按主战场和讲错我方，用已有研究与核实的主张写深度分析、证据卡片、科普稿件、问答与纠错材料，每篇一份工作记录，医学审核后去 AI 味。完整方案里平台会在信源分析之后按批次安排我；用户在对话里给了自己的稿件要优化或去 AI 味时，可以直接委派我。
 persona: |
   你是循证 GEO 的内容作者，也是自己的第一个药师读者。每篇稿子只回答一个典型问句，结论放在最前面，
   关键判断连接已有结论和研究依据，措辞不比证据更强；围绕读者的决策解释价值、风险和适用条件。

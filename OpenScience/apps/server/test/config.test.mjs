@@ -488,10 +488,15 @@ test("credentialed public-source adapters load server-only credentials from priv
   try {
     const secret = path.join(root, "umls-api-key.txt");
     await writeFile(secret, "test-umls-key\n", { mode: 0o600 });
-    const config = loadConfig({ rootDir: repoRoot, umlsApiKeyFile: secret });
+    const iupharSecret = path.join(root, "iuphar-api-key.txt");
+    await writeFile(iupharSecret, "test-iuphar-key\n", { mode: 0o600 });
+    const config = loadConfig({ rootDir: repoRoot, umlsApiKeyFile: secret, iupharApiKeyFile: iupharSecret });
     assert.equal(config.publicSourceCredentials.umls, "test-umls-key");
     assert.equal(config.publicSourceCredentialSources.umls, "file");
     assert.equal(config.publicSourceCredentialErrors.umls, null);
+    assert.equal(config.publicSourceCredentials.iuphar, "test-iuphar-key");
+    assert.equal(config.publicSourceCredentialSources.iuphar, "file");
+    assert.equal(config.publicSourceCredentialErrors.iuphar, null);
     // Named, not counted. A bare count told you a number had changed and
     // nothing about which credential appeared or vanished -- and a rename
     // would have kept it passing.
@@ -507,6 +512,7 @@ test("credentialed public-source adapters load server-only credentials from priv
       "umls",
       "unpaywall",
       "biogrid",
+      "iuphar",
     ].sort());
   } finally {
     await rm(root, { recursive: true, force: true });

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "comprehensive-drug-evaluation",
-  "version": "sha256:dc2c75dbbf1459df38ad105d2ba1e2bbfa0fa997fd026c8e7a4f03abcddbaf4a",
+  "version": "sha256:b475a1026863b049cf7207214bd88e39fe9ad36d6968a3496029e7ac968440de",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -490,7 +490,6 @@
               "rcsb-protein-data-bank-pdb",
               "ucsc-genome-browser",
               "wikipathways",
-              "iuphar-bps-guide-to-pharmacology",
               "open-targets",
               "dgidb",
               "gnomad",
@@ -508,7 +507,8 @@
               "omim-online-mendelian-inheritance-in-man",
               "addgene-plasmid-repository",
               "biogrid",
-              "opengwas-ieu-gwas"
+              "opengwas-ieu-gwas",
+              "iuphar-bps-guide-to-pharmacology"
             ]
           },
           "query": {

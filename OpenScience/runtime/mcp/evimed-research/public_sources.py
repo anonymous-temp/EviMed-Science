@@ -329,6 +329,8 @@ def _open_remote(url, accepted, method="GET", json_body=None, timeout_seconds=No
     if gateway is None:
         direct_credential = _direct_credential(credential_profile) if credential_profile else None
         if credential_profile and not direct_credential:
+            if credential_profile == "iuphar":
+                raise SourceNotConfigured("iuphar", "IUPHAR/BPS Guide to Pharmacology")
             raise PublicSourceError(
                 "public_source_managed_credential_required",
                 "This connector requires the EviMed server gateway to inject a managed credential.",
@@ -3065,7 +3067,32 @@ def mesh_descriptor(term, narrower_limit=20):
     }
 
 
+def _metadata_fallback_allowed(error):
+    # A provider's alternate metadata surface is not a way around rate limits
+    # or authorization. Only transport failures and explicit 5xx responses qualify.
+    return error.code == "public_source_unavailable" or (
+        error.code == "public_source_http_error" and re.search(r"\bHTTP 5\d\d\b", str(error)) is not None
+    )
+
+
+def _complete_metadata_index(payload, key, required):
+    if not isinstance(payload, dict) or any(payload.get(name) for name in (
+        "@odata.nextLink", "nextLink", "next", "nextPage", "next_page", "truncated", "hasMore", "has_more",
+    )):
+        raise PublicSourceError("public_source_invalid_response", "The official metadata index is not a complete single response.")
+    records = payload.get(key)
+    if not isinstance(records, list) or not records or any(
+        not isinstance(record, dict) or any(not isinstance(record.get(field), str) or not record[field].strip() for field in required)
+        for record in records
+    ):
+        raise PublicSourceError("public_source_invalid_response", "The official metadata index has an invalid record shape.")
+    if any(name in payload and payload[name] != len(records) for name in ("@odata.count", "total", "totalCount")):
+        raise PublicSourceError("public_source_invalid_response", "The official metadata index count does not cover the complete response.")
+    return records
+
+
 def _simple_json_source(source_id, query, limit):
+    metadata_resolution = None
     if source_id == "cbioportal":
         base = _base("EVIMED_CBIOPORTAL_BASE_URL", "https://www.cbioportal.org/api")
         url = _url(base, "studies", {"keyword": query, "pageSize": limit, "pageNumber": 0})
@@ -3175,7 +3202,17 @@ def _simple_json_source(source_id, query, limit):
     elif source_id == "who-gho":
         base = _base("EVIMED_WHO_GHO_BASE_URL", "https://ghoapi.azureedge.net/api")
         url = _url(base, "Indicator", {"$filter": "contains(IndicatorName,'%s')" % query.replace("'", ""), "$top": limit})
-        records = _list(_get_json(url).get("value"))
+        try:
+            records = _list(_get_json(url).get("value"))
+        except PublicSourceError as error:
+            if not _metadata_fallback_allowed(error):
+                raise
+            index_url = base + "/Indicator"
+            index = _complete_metadata_index(_get_json(index_url), "value", ("IndicatorCode", "IndicatorName"))
+            records = [record for record in index if query.casefold() in record["IndicatorName"].casefold()][:limit]
+            metadata_resolution = {"mode": "complete-official-metadata-index", "url": index_url,
+                                   "recordsInspected": len(index), "completeIndex": True,
+                                   "queryMode": "indicator-name-substring"}
         get_id = lambda r: r.get("IndicatorCode")
         get_title = lambda r: r.get("IndicatorName")
         get_url = lambda r, i: "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/%s" % urllib.parse.quote(i)
@@ -3195,7 +3232,11 @@ def _simple_json_source(source_id, query, limit):
         record_url = get_url(record, identifier)
         items.append({"id": identifier, "title": title, "url": record_url})
         sources.append(_source(identifier, title, record_url, source_id))
-    return _metadata_result(source_id, items, sources)
+    result = _metadata_result(source_id, items, sources)
+    if metadata_resolution is not None:
+        result["data"]["resolution"] = metadata_resolution
+        result["warnings"].append("The filtered WHO endpoint was unavailable; matching used its complete official indicator-name index. These are indicator metadata, not observation values.")
+    return result
 
 
 def _isrctn(query, limit):
@@ -3494,7 +3535,12 @@ def _wikipathways(query, limit):
     sparql = 'SELECT ?pathway ?title WHERE { ?pathway a wp:Pathway ; dc:title ?title . FILTER(CONTAINS(LCASE(STR(?title)), LCASE("%s"))) } LIMIT %d' % (literal, limit)
     base = _base("EVIMED_WIKIPATHWAYS_BASE_URL", "https://sparql.wikipathways.org")
     url = _url(base, "sparql", {"query": sparql})
-    payload = _get_json(url, accepted=("application/sparql-results+json", "application/json"))
+    try:
+        payload = _get_json(url, accepted=("application/sparql-results+json", "application/json"))
+    except PublicSourceError as error:
+        if not _metadata_fallback_allowed(error):
+            raise
+        return _wikipathways_metadata(query, limit)
     records = _list(_dict(payload.get("results")).get("bindings"))
     items, sources = [], []
     for record in records[:limit]:
@@ -3506,10 +3552,26 @@ def _wikipathways(query, limit):
     return _metadata_result("wikipathways", items, sources)
 
 
+def _wikipathways_metadata(query, limit):
+    index_url = "https://www.wikipathways.org/json/getPathwayInfo.json"
+    index = _complete_metadata_index(_get_json(index_url), "pathwayInfo", ("id", "name", "url"))
+    if any(not re.fullmatch(r"WP\d+", record["id"]) or record["url"] != "https://www.wikipathways.org/instance/" + record["id"] for record in index):
+        raise PublicSourceError("public_source_invalid_response", "The official WikiPathways metadata index has an invalid pathway identity.")
+    records = [record for record in index if query.casefold() in record["name"].casefold()][:limit]
+    items = [{"id": record["id"], "title": record["name"], "url": record["url"],
+              "species": record.get("species"), "revision": record.get("revision")} for record in records]
+    result = _metadata_result("wikipathways", items, [_source(record["id"], record["name"], record["url"], "wikipathways") for record in records])
+    result["data"]["resolution"] = {"mode": "complete-official-metadata-index", "url": index_url,
+                                    "recordsInspected": len(index), "completeIndex": True,
+                                    "queryMode": "pathway-title-substring"}
+    result["warnings"].append("The SPARQL endpoint was unavailable; matching used the complete official WikiPathways title index. These are pathway metadata, not gene membership or interaction evidence.")
+    return result
+
+
 def _iuphar(query, limit):
     base = _base("EVIMED_IUPHAR_BASE_URL", "https://www.guidetopharmacology.org/services")
     url = _url(base, "targets", {"name": query})
-    records = _list(_get_json_value(url))
+    records = _list(_get_json_value(url, credential_profile="iuphar"))
     items, sources = [], []
     for record in records[:limit]:
         record = _dict(record)
@@ -4157,7 +4219,6 @@ BIOMEDICAL_SOURCE_IDS = (
     "gtex-genotype-tissue-expression", "human-protein-atlas-hpa",
     "alliancemine-alliance-of-genome-resources-intermine-based", "metabolomics-workbench",
     "rcsb-protein-data-bank-pdb", "ucsc-genome-browser", "wikipathways",
-    "iuphar-bps-guide-to-pharmacology",
     "open-targets", "dgidb", "gnomad", "openneuro", "civic",
     "human-cell-atlas", "1000-genomes-project", "archs4",
     "rummageo-geo-gene-set-enrichment-search",
@@ -4167,7 +4228,7 @@ BUNDLED_DATASET_SOURCE_IDS = ("sider",)
 CONDITIONAL_BIOMEDICAL_SOURCE_IDS = (
     "core", "semantic-scholar", "unpaywall", "umls",
     "omim-online-mendelian-inheritance-in-man", "addgene-plasmid-repository",
-    "biogrid", "opengwas-ieu-gwas",
+    "biogrid", "opengwas-ieu-gwas", "iuphar-bps-guide-to-pharmacology",
 )
 QUERYABLE_BIOMEDICAL_SOURCE_IDS = BIOMEDICAL_SOURCE_IDS + CONDITIONAL_BIOMEDICAL_SOURCE_IDS
 
@@ -4185,6 +4246,7 @@ def biomedical_search(arguments):
         "addgene-plasmid-repository": _addgene,
         "biogrid": _biogrid,
         "opengwas-ieu-gwas": _opengwas,
+        "iuphar-bps-guide-to-pharmacology": _iuphar,
     }
     if source_id in credentialed_connectors:
         return credentialed_connectors[source_id](query, limit)
@@ -4249,8 +4311,6 @@ def biomedical_search(arguments):
         return _ucsc(query, limit)
     if source_id == "wikipathways":
         return _wikipathways(query, limit)
-    if source_id == "iuphar-bps-guide-to-pharmacology":
-        return _iuphar(query, limit)
     if source_id == "open-targets":
         return _open_targets(query, limit)
     if source_id == "dgidb":

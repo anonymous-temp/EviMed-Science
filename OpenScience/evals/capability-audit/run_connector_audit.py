@@ -16,6 +16,23 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 MCP_ROOT = REPO / "runtime" / "mcp" / "evimed-research"
+# arXiv's published API policy requires a single request every three seconds.
+# A rate-limit response stops this source for the campaign; a different query
+# is not permission to bypass the upstream cooldown.
+_LAST_REQUEST = {}
+_RATE_LIMITED = set()
+
+
+def pace_request(source):
+    if source == "arxiv":
+        previous = _LAST_REQUEST.get(source)
+        if previous is not None:
+            delay = 3.1 - (time.monotonic() - previous)
+            if delay > 0:
+                time.sleep(delay)
+        _LAST_REQUEST[source] = time.monotonic()
+
+
 QUERY_CASES = {
     "arxiv": ("protein structure machine learning", "climate change population health"),
     "cbioportal": ("TP53", "lung"),
@@ -94,6 +111,18 @@ def load_server():
     return module
 
 
+def validate_query_cases(registry, conditional):
+    """Keep historical conditional fixtures explicit without probing them as public."""
+    public = set(registry)
+    conditional = set(conditional)
+    if public.intersection(conditional):
+        raise SystemExit("public and conditional connector registries overlap")
+    fixtures = set(QUERY_CASES)
+    if public - fixtures or fixtures - (public | conditional):
+        raise SystemExit("connector fixtures must cover every public connector and name only public or conditional connectors")
+    return sorted(fixtures & conditional)
+
+
 def traceable(source):
     return (
         isinstance(source, dict)
@@ -108,7 +137,10 @@ def traceable(source):
 def probe_case(server, source, query, gateway_used):
     started = time.monotonic()
     attempts = 0
-    while attempts < 3:
+    result = {"status": "error", "summary": "This source was rate-limited earlier in this campaign; no further request was sent.",
+              "error": {"code": "audit_upstream_rate_limited", "retryable": False}}
+    while attempts < 2 and source not in _RATE_LIMITED:
+        pace_request(source)
         attempts += 1
         result = server.call_tool("biomedical_source_search", {
             "source": source,
@@ -116,9 +148,14 @@ def probe_case(server, source, query, gateway_used):
             "limit": 2,
         })
         error = result.get("error") if isinstance(result.get("error"), dict) else {}
+        if error.get("status") == 429 or "HTTP 429" in str(error.get("message", result.get("summary", ""))):
+            _RATE_LIMITED.add(source)
+            break
         if result.get("status") in {"success", "warning"} or error.get("retryable") is not True:
             break
-        if attempts < 3:
+        if error.get("code") == "adapter_circuit_open":
+            break
+        if attempts < 2:
             time.sleep(1 << (attempts - 1))
     elapsed = round((time.monotonic() - started) * 1000)
     data = result.get("data") if isinstance(result.get("data"), dict) else {}
@@ -154,7 +191,7 @@ def probe_case(server, source, query, gateway_used):
         "elapsedMs": elapsed,
         "attempts": attempts,
         "executionRoute": (
-            "bundled_verified_dataset" if bundled
+            "not_executed" if attempts == 0 else "bundled_verified_dataset" if bundled
             else ("server_allowlisted_gateway" if gateway_used else "direct_audit_only")
         ),
         "checks": checks,
@@ -166,7 +203,7 @@ def source_result(source, cases, gateway_used):
     identifiers = [set(case["identifiers"]) for case in cases]
     distinct = bool(identifiers[0] and identifiers[1] and identifiers[0] != identifiers[1])
     quality_checks = {
-        "twoQueriesExecuted": len(cases) == 2,
+        "twoQueriesExecuted": len(cases) == 2 and all(case.get("attempts", 1) > 0 for case in cases),
         "allCasesPassedContract": all(case["pass"] for case in cases),
         "distinctQueryResults": distinct,
         "controlledProductionRoute": gateway_used and all(
@@ -221,8 +258,7 @@ def main():
     registry = tuple(server.public_sources.BIOMEDICAL_SOURCE_IDS)
     registry_source = MCP_ROOT / "public_sources.py"
     registry_source_sha256 = hashlib.sha256(registry_source.read_bytes()).hexdigest()
-    if set(registry) != set(QUERY_CASES):
-        raise SystemExit("connector fixtures do not exactly cover the public connector registry")
+    conditional_fixtures = validate_query_cases(registry, server.public_sources.CONDITIONAL_BIOMEDICAL_SOURCE_IDS)
     selected = set(args.source)
     if selected - set(registry):
         raise SystemExit("unknown connector selection: %s" % ", ".join(sorted(selected - set(registry))))
@@ -272,9 +308,11 @@ def main():
             "registered": len(registry),
             "registrySha256": hashlib.sha256("\0".join(registry).encode("utf-8")).hexdigest(),
             "registrySourceSha256": registry_source_sha256,
+            "conditionalFixturesNotProbed": conditional_fixtures,
             "qualityPass": passed,
             "qualityFail": len(registry) - passed,
-            "queriesExecuted": sum(len(item["cases"]) for item in results),
+            "queriesPlanned": sum(len(item["cases"]) for item in results),
+            "queriesExecuted": sum(case.get("attempts", 1) > 0 for item in results for case in item["cases"]),
             "productionRoute": "controlled_connector_routes" if gateway_used else "direct_audit_only",
             "productionRoutes": ["bundled_verified_dataset", "server_allowlisted_gateway"] if gateway_used else ["direct_audit_only"],
             "productionGatewayUsed": gateway_used,

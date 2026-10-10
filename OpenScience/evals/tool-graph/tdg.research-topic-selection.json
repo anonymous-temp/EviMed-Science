@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "research-topic-selection",
-  "version": "sha256:7f0ce1fedcccb851ebf797161d1523093da2e13b6673e649e43f3c99566045d7",
+  "version": "sha256:f973f70cd8f54a2e962baccd4b8650e9c2f79df26b371853c7da8a285ac450ed",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -557,7 +557,6 @@
               "rcsb-protein-data-bank-pdb",
               "ucsc-genome-browser",
               "wikipathways",
-              "iuphar-bps-guide-to-pharmacology",
               "open-targets",
               "dgidb",
               "gnomad",
@@ -575,7 +574,8 @@
               "omim-online-mendelian-inheritance-in-man",
               "addgene-plasmid-repository",
               "biogrid",
-              "opengwas-ieu-gwas"
+              "opengwas-ieu-gwas",
+              "iuphar-bps-guide-to-pharmacology"
             ]
           },
           "query": {

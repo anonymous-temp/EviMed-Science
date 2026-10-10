@@ -20,6 +20,8 @@ Use this skill when a question requires more than a short factual answer or a si
 9. Synthesize agreement, conflict, directness, bias, precision, recency, and applicability. Do not write a source-by-source annotated list as the final analysis.
 10. Stop or narrow the conclusion when the evidence cannot support the requested scope.
 
+For an explicitly bounded task, the supplied call budget overrides the broad search expansion above. Count each attempted search or source-read tool invocation, including failures and retries, before making it; returned document counts are separate. When the next call would exceed the budget, stop acquisition and report the evidence gap rather than silently extending the task.
+
 ## EviMed tools
 
 Select only relevant tools from the agent's declared contract:

@@ -247,7 +247,7 @@ class ToolContractTests(unittest.TestCase):
         rows = ready["data"]["items"]
         self.assertEqual({row["id"] for row in rows}, {
             "core", "semantic-scholar", "unpaywall", "umls", "omim-online-mendelian-inheritance-in-man",
-            "addgene-plasmid-repository", "biogrid", "opengwas-ieu-gwas",
+            "addgene-plasmid-repository", "biogrid", "opengwas-ieu-gwas", "iuphar-bps-guide-to-pharmacology",
         })
         for row in rows:
             self.assertIn("设置 → 数据源", row["blocker"], row["id"])

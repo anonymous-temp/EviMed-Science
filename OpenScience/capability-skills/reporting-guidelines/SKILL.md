@@ -41,6 +41,8 @@ number is one they cannot check.
   - the item does not apply to this study — 「未报告：不适用（单中心试验）」;
   - the sources do not have it — 「未报告：资料未提供，需补充……」.
 
+Before assigning an item number, read the supplied checklist file for the named version. Never carry item numbers from an older version into a newer checklist. If the exact checklist cannot be read, record that limitation and use unnumbered domain labels; do not invent numbered compliance. This applies to a bounded partial mapping as well as a complete checklist.
+
 ## What the checklist may not do
 
 - **Claim what the text does not say.** An item marked as reported has to be

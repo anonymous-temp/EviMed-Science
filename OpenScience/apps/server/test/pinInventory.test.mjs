@@ -118,6 +118,7 @@ test("what a live kernel produced is never filed as a pin", async () => {
   assert.equal(kindOf("OpenScience/apps/server/test/fixtures/dsh/golden-frames.json", 3), "provenance");
   assert.equal(kindAt("OpenScience/apps/server/src/dshRuntimeAdapter.mjs", "Recorded live from"), "provenance");
   assert.equal(kindAt("OpenScience/evals/judge-sites/release-readiness.json", '"kernel"'), "provenance");
+  assert.equal(kindAt("OpenScience/evals/vcr-matching/openmed-scorecard.json", '"kernel"'), "provenance");
   assert.equal(kindOf("OpenScience/scripts/ops/check-kernel-defaults.mjs", 101), "provenance");
 });
 
@@ -132,6 +133,7 @@ test("a contract fixture recorded off a live upstream is provenance, whatever th
     "OpenScience/packages/contracts/knowledge-plugin/fixtures/entries-page-1.json",
     "OpenScience/packages/contracts/knowledge-plugin/fixtures/provenance.json",
     "OpenScience/packages/contracts/evimed-extract/fixtures/health.json",
+    "OpenScience/evals/acceptance/local-integration-20261010/skills-native/community/transcript.json",
   ]) {
     assert.equal(classify({ file, line: 1, text: line }, { pin: "0.1.7-rc.2" })?.kind, "provenance", file);
   }

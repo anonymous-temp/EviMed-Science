@@ -229,17 +229,20 @@ def _measurement_key(value: str) -> str:
 
 
 def _unbound_measurements(content: str, evidence_text: str) -> list[str]:
-    evidence_key = _measurement_key(evidence_text)
-    matches = []
-    # A plain percentage is often a value derived from the retrieved evidence
-    # set (for example, the share of records with a clinical endpoint).  Only
-    # inequality percentages are treated as externally asserted thresholds.
+    # Most structured leaves are identifiers, prose or graph labels. Inspect
+    # the small leaf first so they do not repeatedly normalize the full corpus.
+    candidates = []
+    # Plain percentages may be derived; only inequality percentages are
+    # externally asserted thresholds.
     for pattern in (_MEASUREMENT_PATTERN, _RATIO_TARGET_PATTERN, _PERCENT_THRESHOLD_PATTERN):
         for match in pattern.finditer(content):
             value = match.group(0).strip()
-            if _measurement_key(value) not in evidence_key and value not in matches:
-                matches.append(value)
-    return matches
+            if value not in candidates:
+                candidates.append(value)
+    if not candidates:
+        return []
+    evidence_key = _measurement_key(evidence_text)
+    return [value for value in candidates if _measurement_key(value) not in evidence_key]
 
 
 def _normalize_unbound_measurements(content: str, evidence_text: str) -> str:

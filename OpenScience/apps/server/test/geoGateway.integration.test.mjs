@@ -3,7 +3,10 @@
 // back, answer text is cut at 4,000 characters, and a read pages at 50.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import fs from "node:fs/promises";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler } from "../src/geoGateway.mjs";
@@ -29,6 +32,7 @@ let database = null;
 /** @type {http.Server | null} */
 let server = null;
 let base = "";
+let workspace = "";
 /** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */
 let isolated = null;
 /** What the run ledger answers for an article's deliverable, as the composition's `articleGate` does. */
@@ -51,7 +55,17 @@ before(async () => {
     return { userId: USER, projectId: PROJECT };
   } };
   const articleGate = async (/** @type {any} */ target, /** @type {any} */ ref) => { ledgerAsked.push([target.id, ref.path]); return "passed"; };
-  const handler = createGeoGatewayHandler(config, runtimeManager, { geo: { store, service, social: null, articleGate } });
+  workspace = await fs.mkdtemp(path.join(os.tmpdir(), "evimed-geo-gateway-"));
+  await fs.mkdir(path.join(workspace, "deliverables/geo-content"), { recursive: true });
+  await fs.writeFile(path.join(workspace, "deliverables/geo-content/qa-1.md"), "# Evidence-backed draft\n");
+  const articleExists = async (/** @type {any} */ target, /** @type {string} */ relative) => {
+    assert.equal(target.id, project.id);
+    const file = path.resolve(workspace, relative);
+    if (!file.startsWith(workspace + path.sep)) return false;
+    const stat = await fs.lstat(file).catch(() => null);
+    return Boolean(stat?.isFile() && !stat.isSymbolicLink() && stat.size > 0);
+  };
+  const handler = createGeoGatewayHandler(config, runtimeManager, { geo: { store, service, social: null, articleGate, articleExists } });
   server = http.createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server?.listen(0, "127.0.0.1", () => resolve(undefined)));
   base = `http://127.0.0.1:${/** @type {any} */ (server.address()).port}`;
@@ -61,6 +75,7 @@ after(async () => {
   if (server) await new Promise((resolve) => server?.close(() => resolve(undefined)));
   if (database) await database.close();
   await isolated?.drop();
+  if (workspace) await fs.rm(workspace, { recursive: true, force: true });
 });
 
 /** @param {string} operation @param {unknown} body */
@@ -124,11 +139,17 @@ test("answer text is cut at 4,000 characters, and a long list pages at fifty", o
 
 test("an article written through the gateway takes its gate from the platform's ledger, not from the run", options, async () => {
   const map = await call("write", { what: "questions", data: { groups: [{ pool: "P2", name: "群", questions: [{ text: "问", isMeasured: true }] }] } });
-  const written = await call("write", { what: "articles", items: [{ path: "deliverables/geo-content/qa-1.md", layer: "qa", groupId: map.body.data.ids[0],
-    claimIds: [], safety: "clear", contentSha256: "c".repeat(64), gate: "failed" }] });
+  const written = await call("write", { what: "articles", items: [
+    { path: "deliverables/geo-content/qa-1.md", layer: "qa", groupId: map.body.data.ids[0],
+      claimIds: [], safety: "clear", contentSha256: "c".repeat(64), gate: "failed" },
+    { path: "deliverables/geo-content/missing.md", layer: "qa", groupId: map.body.data.ids[0],
+      claimIds: [], safety: "clear", contentSha256: "d".repeat(64), gate: "passed" },
+  ] });
   assert.equal(written.status, 200, JSON.stringify(written.body));
   assert.deepEqual(written.body.data.articles.map((/** @type {any} */ entry) => entry.gate), ["passed"], "the run's own 'failed' is not what counts either");
   assert.deepEqual(ledgerAsked, [[project.id, "deliverables/geo-content/qa-1.md"]]);
+  assert.ok(written.body.data.issues.some((/** @type {any} */ issue) => issue.field === "path" && issue.code === "not_found"),
+    "a nonexistent article is refused while the real file is registered");
   const read = await call("read", { what: "articles" });
   assert.deepEqual(read.body.data.articles.map((/** @type {any} */ article) => [article.gate, article.status]), [["passed", "publishable"]]);
 });

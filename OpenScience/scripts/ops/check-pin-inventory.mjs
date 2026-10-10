@@ -63,6 +63,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/evals\/acceptance\/local-integration-\d{8}\/skills-native\/.*\.json$/,
+    why: "retained hosted task transcripts and receipts record the exact runtime observations, including upstream versions; they cannot be rewritten on an upgrade",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/evals\/judge-sites\/release-readiness\.json$/,
     why: "the runtime proof records the exact kernel used for isolated acceptance; upgrading must not re-date that measurement",
   },
@@ -70,6 +75,12 @@ export const RULES = [
     kind: "provenance",
     where: /^OpenScience\/evals\/(method-quality|vcr-matching)\/(reports|results)\//,
     why: "an evaluation report records the kernel a measurement was taken on; re-dating it claims the number came from a version that never produced it",
+  },
+  {
+    kind: "provenance",
+    where: /^OpenScience\/evals\/vcr-matching\/openmed-scorecard\.json$/,
+    line: /"kernel"\s*:/,
+    why: "the scorecard records the kernel used by its live evaluation; an upgrade cannot change that observation",
   },
   {
     kind: "provenance",

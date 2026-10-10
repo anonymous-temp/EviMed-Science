@@ -1,6 +1,6 @@
 ---
 name: geo-content
-description: Step 6 of a “循证 GEO” project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from the project's claim library, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
+description: Step 6 of a “循证 GEO” project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from available preserved research or verified claims, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
 metadata:
   evimed-agent: geo-content
 ---
@@ -31,7 +31,7 @@ the `geo-private` root.
 
 | Part | Load |
 |---|---|
-| the four layers from the claim library | `geo-layered-content` |
+| the audience formats from available research and verified claims | `geo-layered-content` |
 | one article at a time, with its work record | `pharma-geo-article-optimizer` |
 | the medical review before any language edit | `geo-create-medical-review` |
 | 去 AI 味, protected spans byte-identical | `geo-humanize-register` |
@@ -77,13 +77,13 @@ observed demand. Write the article before registering its path. Existing source,
 safety and publication checks still apply to the resulting draft; a partial draft
 does not become verified or authorized for distribution by being written.
 For example, low-certainty effectiveness findings without cards still support an
-explicitly uncertain draft now, rather than waiting for cards to arrive. If file
+explicitly uncertain draft now, rather than waiting for cards to arrive. The requested batch includes the actual draft now, not only a plan or a list of future prerequisites. If file
 tools are unavailable, put that useful draft in the answer and do not register a
 file path: a registration tool cannot create the article bytes.
 
 ## What goes into a batch
 
-Read before writing: `geo_read cards` first, then `strategy` (battlefield first), `targets`,
+Read available records before writing; empty records are context, not prerequisites: `geo_read cards`, then `strategy` (battlefield first), `targets`,
 `questions` (the group and its typical question), `claims`, `errors` (open
 讲错我方 with their trace), `articles` (what exists — never rewrite a published
 article, write the next one). A batch is at most five articles unless the brief
@@ -173,7 +173,7 @@ default with its reason in `assumptions[]`.
 - `mcp__evimed__drug_label_search`, `mcp__evimed__guideline_search`, `mcp__evimed__literature_search`,
   `mcp__evimed__clinical_trial_search`, `mcp__evimed__open_access_full_text`, `mcp__evimed__locate_quote` for a claim
   an article needs and the library lacks — add it through `geo_write claims`
-  first, then write from it. `mcp__evimed__web_read` to read a published page a correction
+  when a verified claim is needed. Missing claim entries do not delay an explicitly uncertain research draft. `mcp__evimed__web_read` to read a published page a correction
   answers.
 - Measurement is the platform's. Never batch-probe inside a run;
   `mcp__evimed__geo_visibility_probe` is only for a single question the user asks about.

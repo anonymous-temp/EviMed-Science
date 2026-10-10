@@ -396,6 +396,48 @@ class RegistryTailToolsAreCertifiable(unittest.TestCase):
                 self.assertIs(rows[tool]["operational"], True, tool)
 
 
+class OwnedTaskProbe(unittest.TestCase):
+    def test_schedule_is_future_dated_and_pause_uses_the_returned_identity(self):
+        import run_tool_audit as runner
+        calls = []
+        def call(name, arguments):
+            calls.append((name, arguments))
+            return {"status": "success", "data": {"taskId": "agenda-owned", "state": "active" if name == "schedule_task" else "paused"}}
+        with tempfile.TemporaryDirectory() as temporary:
+            rows = runner.owned_task_probes(SimpleNamespace(call_tool=call), Path(temporary))
+            self.assertEqual(calls[1], ("update_task", {"taskId": "agenda-owned", "paused": True}))
+            scheduled = datetime.fromisoformat(calls[0][1]["schedule"]["date"]).replace(tzinfo=timezone.utc)
+            self.assertGreater(scheduled, datetime.now(timezone.utc) + timedelta(days=5))
+            self.assertEqual(rows["update_task"][0]["data"]["state"], "paused")
+            self.assertEqual(len(json.loads((Path(temporary) / "task-lifecycle.json").read_text())["pauseAttempts"]), 1)
+
+    def test_failed_creation_never_updates_an_invented_task(self):
+        import run_tool_audit as runner
+        calls = []
+        def call(name, _arguments):
+            calls.append(name)
+            return {"status": "error", "error": {"code": "task_limit_reached"}}
+        with tempfile.TemporaryDirectory() as temporary:
+            rows = runner.owned_task_probes(SimpleNamespace(call_tool=call), Path(temporary))
+        self.assertEqual(calls, ["schedule_task"])
+        self.assertEqual(rows["update_task"][0]["error"]["code"], "audit_task_not_created")
+
+    def test_cleanup_retry_does_not_relabel_an_unconfirmed_pause_as_success(self):
+        import run_tool_audit as runner
+        calls = []
+        def call(name, _arguments):
+            calls.append(name)
+            if len(calls) == 2:
+                raise OSError("private transport detail")
+            return {"status": "success", "data": {"taskId": "agenda-owned", "state": "active" if name == "schedule_task" else "paused"}}
+        with tempfile.TemporaryDirectory() as temporary:
+            rows = runner.owned_task_probes(SimpleNamespace(call_tool=call), Path(temporary))
+            recorded = json.loads((Path(temporary) / "task-lifecycle.json").read_text())
+        self.assertEqual(calls, ["schedule_task", "update_task", "update_task"])
+        self.assertEqual(rows["update_task"][0]["status"], "error")
+        self.assertEqual(recorded["pauseAttempts"][1]["data"]["state"], "paused")
+
+
 class IncompleteProbeRecording(unittest.TestCase):
     """What `run_tool_audit.py` writes when a tool cannot be certified.
 

@@ -9,6 +9,7 @@ content-addressed artifact receipts.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -23,8 +24,6 @@ from zipfile import ZipFile
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-RESULTS = HERE / "results"
-ARTIFACT_ROOT = RESULTS / "platform-skill-execution-v1-artifacts"
 AUDIT_PYTHON = os.environ.get("EVIMED_AUDIT_PYTHON", sys.executable)
 
 
@@ -53,6 +52,7 @@ def run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProc
         cwd=cwd or REPO,
         capture_output=True,
         text=True,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         timeout=30,
         check=False,
     )
@@ -96,7 +96,11 @@ def package_row(
         and all(checks.values())
         and not artifact_errors
     )
+    sources = sorted(path for path in manifest.parent.rglob("*") if path.is_file() and not path.is_symlink() and "__pycache__" not in path.parts and path.suffix != ".pyc")
+    if package.startswith("office/"):
+        sources.append(REPO / "runtime/skills/office/shared/render_document.py")
     return {
+        "sourceReceipts": [receipt(path) for path in sources],
         "package": package,
         "operation": "task",
         "command": [str(part) for part in command],
@@ -315,49 +319,27 @@ def audit_artifact_utilities(run_root: Path) -> list[dict]:
     write_text(output, json.dumps(extracted, ensure_ascii=False, indent=2) + "\n")
     checks = {
         "pdfActuallyParsed": isinstance(extracted.get("pages"), int) and extracted.get("pages", 0) >= 1,
-        "textActuallyExtracted": "EviMed" in str(extracted.get("text") or ""),
+        "textActuallyExtracted": "EviMedevidencereportTraceableresult" in re.sub(r"\s+", "", str(extracted.get("text") or "")),
         "claimContractPresent": isinstance(extracted.get("claims"), list),
     }
     rows.append(package_row(package, entrypoint, command, completed, [source, output], checks))
 
-    package = "external/ai4s-skills/integrity-auditor"
-    task = run_root / "integrity-auditor"
-    output = task / "smoketest.log"
-    entrypoint = REPO / "runtime" / "skills" / package / "tests" / "smoketest.sh"
-    command = ["bash", str(entrypoint)]
-    completed = run(command)
-    write_text(output, completed.stdout + completed.stderr)
-    checks = {
-        "positiveAndNegativeControlsExecuted": "PASS: 22" in completed.stdout,
-        "allForensicChecksPassed": "FAIL: 0" in completed.stdout,
-    }
-    rows.append(package_row(package, entrypoint, command, completed, [output], checks))
-
-    package = "external/ai4s-skills/mindmap-render"
-    task = run_root / "mindmap-render"
-    source = write_text(task / "topic_matrix.md", "# Evidence synthesis\n- Discovery\n  - Search\n  - Screen\n- Analysis\n  - Estimate\n")
-    output_dir = task / "output"
-    entrypoint = REPO / "runtime" / "skills" / package / "scripts" / "generate_mindmap.py"
-    command = [
-        AUDIT_PYTHON, str(entrypoint), "--md", str(source), "--output-dir", str(output_dir),
-        "--title", "evidence-synthesis", "--theme", "air", "--scale", "1",
-    ]
-    completed = run(command)
-    html = output_dir / "evidence-synthesis.html"
-    png = output_dir / "evidence-synthesis.png"
-    pdf = output_dir / "evidence-synthesis.pdf"
-    checks = {
-        "htmlArtifactCreated": html.is_file() and "Evidence synthesis" in html.read_text(encoding="utf-8"),
-        "pngArtifactCreated": png.is_file() and png.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"),
-        "pdfArtifactCreated": pdf.is_file() and pdf.read_bytes().startswith(b"%PDF"),
-    }
-    rows.append(package_row(package, entrypoint, command, completed, [source, html, png, pdf], checks))
     return rows
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--results-dir", type=Path, required=True, help="New retained evidence directory; historical results are never overwritten")
+    args = parser.parse_args()
+    results = args.results_dir.resolve()
+    if not results.is_relative_to(REPO.resolve()):
+        parser.error("results directory must be inside OpenScience")
+    destination = results / "platform-skill-execution-v1.json"
+    if destination.exists():
+        parser.error("results already exist; choose a new directory")
+    artifact_root = results / "platform-skill-execution-v1-artifacts"
     started = datetime.now(timezone.utc)
-    run_root = ARTIFACT_ROOT / (started.strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8])
+    run_root = artifact_root / (started.strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8])
     run_root.mkdir(parents=True, exist_ok=False)
     rows = (
         audit_office(run_root)
@@ -381,11 +363,11 @@ def main() -> None:
         "packages": rows,
         "claimBoundary": (
             "This certifies one bounded deterministic task per listed first-party package. "
+            "Remote-compute and modal-run exercise local provenance recording only, not remote execution. "
             "It does not certify every input shape, external remote availability, or feature-complete Office fidelity."
         ),
     }
-    RESULTS.mkdir(parents=True, exist_ok=True)
-    destination = RESULTS / "platform-skill-execution-v1.json"
+    results.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: document[key] for key in ("installedPackagesExamined", "executionCertified", "failed")}, indent=2))
     if document["failed"]:

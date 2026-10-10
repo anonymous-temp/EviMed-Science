@@ -157,16 +157,39 @@ def skill_execution_coverage(repo: Path, results: Path, composition: dict) -> li
                 entrypoint = repo / str(row.get('entrypoint', ''))
                 if row.get('manifestSha256') != package['manifestSha256'] or not entrypoint.resolve().is_relative_to(repo.resolve()) or not entrypoint.is_file() or sha256(entrypoint) != row.get('entrypointSha256') or not row.get('checks') or not all(row['checks'].values()):
                     continue
+                sources = row.get('sourceReceipts', [])
+                root = (repo / package.get('manifest', row['entrypoint'])).parent
+                expected = sorted(path.resolve().relative_to(repo.resolve()).as_posix() for path in root.rglob('*') if path.is_file() and not path.is_symlink() and '__pycache__' not in path.parts and path.suffix != '.pyc')
+                if identifier.startswith('office/'):
+                    expected.append('runtime/skills/office/shared/render_document.py')
+                if sources and (sorted(receipt.get('path', '') for receipt in sources) != sorted(expected) or not all(_receipt_matches(repo, receipt) for receipt in sources)):
+                    continue
             receipts = row.get('artifacts', [])
             if row.get('artifactErrors') or len(receipts) < (2 if curated else 1) or not all(_receipt_matches(repo, receipt) for receipt in receipts):
                 continue
             certified[identifier] = filename
-    return [dict(packageId=identifier, state='bounded-historical-task-matched' if identifier in certified else 'unknown', currentImageExecution='unknown', fullPackageExecution='unknown', evidence=certified.get(identifier), reason=None if identifier in certified else reasons.get(identifier, 'no-current-matching-task-evidence')) for identifier in sorted(packages)]
+    hosted = {}
+    hosted_file = results / 'hosted-skill-execution-v1.json'
+    if hosted_file.is_file():
+        from hosted_skill_evidence import coverage as hosted_coverage
+        try:
+            hosted = hosted_coverage(repo, json.loads(hosted_file.read_text()), composition)
+        except (ValueError, KeyError, TypeError, OSError, json.JSONDecodeError) as error:
+            # A corrupt retained batch certifies none of its rows.
+            for identifier in packages:
+                reasons[identifier] = 'hosted-task-evidence-invalid: %s' % error
+    return [dict(packageId=identifier,
+                 state='bounded-hosted-task-matched' if identifier in hosted else 'bounded-historical-task-matched' if identifier in certified else 'unknown',
+                 currentImageExecution='unknown', fullPackageExecution='unknown',
+                 dispatch=hosted.get(identifier, {}).get('dispatch'),
+                 evidence='hosted-skill-execution-v1.json' if identifier in hosted else certified.get(identifier),
+                 reason=None if identifier in hosted or identifier in certified else reasons.get(identifier, 'no-current-matching-task-evidence'))
+            for identifier in sorted(packages)]
 
 
 def skill_evidence_metadata(results: Path) -> list[dict]:
     rows = []
-    for name in ['skill-execution-v1.json', 'platform-skill-execution-v1.json']:
+    for name in ['skill-execution-v1.json', 'platform-skill-execution-v1.json', 'hosted-skill-execution-v1.json']:
         file = results / name
         if not file.is_file():
             rows.append({'file': name, 'state': 'missing'})

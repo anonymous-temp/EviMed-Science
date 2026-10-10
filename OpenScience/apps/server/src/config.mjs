@@ -1506,6 +1506,7 @@ export function loadConfig(overrides = {}) {
     omim: ["omimApiKey", "OPEN_SCIENCE_OMIM_API_KEY", "omim.api-key"],
     addgene: ["addgeneApiKey", "OPEN_SCIENCE_ADDGENE_API_KEY", "addgene.api-key"],
     biogrid: ["biogridApiKey", "OPEN_SCIENCE_BIOGRID_API_KEY", "biogrid.api-key"],
+    iuphar: ["iupharApiKey", "OPEN_SCIENCE_IUPHAR_API_KEY", "iuphar.api-key"],
     opengwas: ["opengwasJwt", "OPEN_SCIENCE_OPENGWAS_JWT", "opengwas.jwt"],
     // Rate-ceiling keys, not authorizing ones: both upstreams serve without
     // them, just slower. Injected by host in the gateway rather than through a

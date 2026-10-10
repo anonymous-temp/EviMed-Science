@@ -126,7 +126,7 @@ def fresh_web_packages() -> list[str]:
 
 
 def execution_certified_packages() -> set[str]:
-    return {row["packageId"] for row in skill_execution_coverage(REPO, RESULTS, skill_composition(REPO)) if row["state"] == "bounded-historical-task-matched"}
+    return {row["packageId"] for row in skill_execution_coverage(REPO, RESULTS, skill_composition(REPO)) if row["state"] in {"bounded-historical-task-matched", "bounded-hosted-task-matched"}}
 
 
 def source_value(source: dict, current: str, legacy: str, fallback=None):
@@ -150,7 +150,7 @@ def main() -> None:
     web_packages = {item["id"] for item in composition["packages"]}
     evidence_dir = args.evidence_dir.resolve()
     coverage = skill_execution_coverage(REPO, evidence_dir, composition)
-    certified_packages = {row["packageId"] for row in coverage if row["state"] == "bounded-historical-task-matched"}
+    certified_packages = {row["packageId"] for row in coverage if row["state"] in {"bounded-historical-task-matched", "bounded-hosted-task-matched"}}
     rows = []
     for source in incoming:
         name = source_value(source, "name", "sourceName")

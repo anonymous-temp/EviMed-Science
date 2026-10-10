@@ -545,3 +545,19 @@ def test_summary_and_conclusion_prompts_keep_the_same_selected_record_scope():
         assert 'selected retrieved records' in text and 'complete year coverage' in text
         assert '714' in text and '2027' in text
         assert '时间跨度: 2022-2026' not in text
+
+
+def test_threshold_free_leaf_does_not_rescan_evidence_corpus(monkeypatch):
+    import evimed_runner
+
+    def unexpected_scan(value):
+        raise AssertionError("threshold-free leaf scanned the evidence corpus")
+
+    monkeypatch.setattr(evimed_runner, "_measurement_key", unexpected_scan)
+    assert evimed_runner._unbound_measurements("inflammation", "large evidence corpus") == []
+    assert evimed_runner._unbound_measurements("network weight: 1", "large evidence corpus") == []
+
+
+def test_repeated_threshold_is_checked_once_and_source_supported_range_survives():
+    assert _unbound_measurements("Cmin 2 mg/L; Cmin 2 mg/L", "No concentration reported") == ["Cmin 2 mg/L", "Cmin 2"]
+    assert _unbound_measurements("Cmin 2–4 mg/L", "Cmin 2-4 mg/L") == []

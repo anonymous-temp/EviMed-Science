@@ -659,7 +659,7 @@ class PublicSourceConnectorTests(unittest.TestCase):
             "type": "enzyme",
             "familyNames": ["Ubiquitin C-terminal hydrolase"],
         }]
-        with mock.patch.object(sources, "_get_json_value", return_value=payload):
+        with mock.patch.object(sources, "_get_json_value", return_value=payload) as request:
             result = sources.biomedical_search({
                 "source": "iuphar-bps-guide-to-pharmacology",
                 "query": "BRCA1",
@@ -668,6 +668,67 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertEqual(result["data"]["items"][0]["id"], "2332")
         self.assertEqual(result["sources"][0]["id"], "2332")
         self.assertIn("objectId=2332", result["sources"][0]["url"])
+        self.assertEqual(request.call_args.kwargs["credential_profile"], "iuphar")
+
+    def test_iuphar_without_gateway_names_the_missing_server_credential(self):
+        with mock.patch.object(sources, "_gateway_settings", return_value=None), mock.patch.object(sources.fixtures, "fixtures_dir", return_value=None):
+            with self.assertRaises(sources.SourceNotConfigured) as missing:
+                sources._iuphar("BRCA1", 1)
+        self.assertEqual(missing.exception.code, "public_source_iuphar_credential_missing")
+        self.assertFalse(missing.exception.retryable)
+
+    def test_wikipathways_uses_complete_official_title_index_after_a_502(self):
+        error = sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 502.", True)
+        index = {"pathwayInfo": [
+            {"id": "WP1", "name": "Insulin signaling", "url": "https://www.wikipathways.org/instance/WP1", "species": "Homo sapiens", "revision": "2026-09-01"},
+            {"id": "WP2", "name": "Apoptosis", "url": "https://www.wikipathways.org/instance/WP2"},
+        ]}
+        with mock.patch.object(sources, "_get_json", side_effect=[error, index]) as request:
+            result = sources._wikipathways("INSULIN", 1)
+        self.assertEqual(request.call_args.args[0], "https://www.wikipathways.org/json/getPathwayInfo.json")
+        self.assertEqual([record["id"] for record in result["data"]["items"]], ["WP1"])
+        self.assertEqual(result["sources"][0]["url"], index["pathwayInfo"][0]["url"])
+        self.assertEqual(result["data"]["resolution"]["recordsInspected"], 2)
+        self.assertTrue(result["data"]["resolution"]["completeIndex"])
+        self.assertIn("not gene membership", " ".join(result["warnings"]))
+
+    def test_who_uses_the_same_complete_odata_index_after_a_filtered_502(self):
+        error = sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 502.", True)
+        index = {"value": [
+            {"IndicatorCode": "A", "IndicatorName": "Maternal mortality ratio"},
+            {"IndicatorCode": "B", "IndicatorName": "Life expectancy"},
+        ]}
+        with mock.patch.object(sources, "_get_json", side_effect=[error, index]) as request:
+            result = sources.biomedical_search({"source": "who-gho", "query": "MATERNAL MORTALITY", "limit": 1})
+        self.assertEqual(request.call_args.args[0], "https://ghoapi.azureedge.net/api/Indicator")
+        self.assertEqual([record["id"] for record in result["data"]["items"]], ["A"])
+        self.assertEqual(result["data"]["resolution"]["queryMode"], "indicator-name-substring")
+        self.assertIn("not observation values", " ".join(result["warnings"]))
+
+    def test_metadata_fallback_does_not_bypass_rate_limits_or_authorization(self):
+        for code in (429, 401, 403, 404):
+            for operation in (lambda: sources._wikipathways("insulin", 1),
+                              lambda: sources.biomedical_search({"source": "who-gho", "query": "mortality", "limit": 1})):
+                error = sources.PublicSourceError("public_source_http_error", "Public source returned HTTP %d." % code, True)
+                with mock.patch.object(sources, "_get_json", side_effect=error) as request:
+                    with self.assertRaises(sources.PublicSourceError):
+                        operation()
+                self.assertEqual(request.call_count, 1)
+
+    def test_complete_metadata_indexes_reject_pagination_truncation_and_malformed_records(self):
+        valid = {"value": [{"IndicatorCode": "A", "IndicatorName": "Mortality"}]}
+        for payload in ({}, {"value": []}, {"value": [None]}, {"value": [{"IndicatorCode": "A"}]},
+                        {**valid, "@odata.nextLink": "https://ghoapi.azureedge.net/api/Indicator?$skip=1"},
+                        {**valid, "truncated": True}, {**valid, "total": 2}):
+            with self.assertRaises(sources.PublicSourceError) as invalid:
+                sources._complete_metadata_index(payload, "value", ("IndicatorCode", "IndicatorName"))
+            self.assertEqual(invalid.exception.code, "public_source_invalid_response")
+
+    def test_wikipathways_metadata_rejects_forged_pathway_urls(self):
+        index = {"pathwayInfo": [{"id": "WP1", "name": "Insulin", "url": "https://example.com/WP1"}]}
+        with mock.patch.object(sources, "_get_json", return_value=index):
+            with self.assertRaises(sources.PublicSourceError):
+                sources._wikipathways_metadata("Insulin", 1)
 
     def test_ensembl_retries_transient_gateway_failures(self):
         transient = sources.PublicSourceError("public_source_unavailable", "timed out", True)
@@ -713,6 +774,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertIn("clinicaltrials-gov", sources.BIOMEDICAL_SOURCE_IDS)
         self.assertNotIn("semantic-scholar", sources.BIOMEDICAL_SOURCE_IDS)
         self.assertIn("semantic-scholar", sources.CONDITIONAL_BIOMEDICAL_SOURCE_IDS)
+        self.assertNotIn("iuphar-bps-guide-to-pharmacology", sources.BIOMEDICAL_SOURCE_IDS)
+        self.assertIn("iuphar-bps-guide-to-pharmacology", sources.CONDITIONAL_BIOMEDICAL_SOURCE_IDS)
         self.assertEqual(
             set(sources.QUERYABLE_BIOMEDICAL_SOURCE_IDS),
             set(sources.BIOMEDICAL_SOURCE_IDS) | set(sources.CONDITIONAL_BIOMEDICAL_SOURCE_IDS),

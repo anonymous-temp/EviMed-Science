@@ -66,6 +66,7 @@ const allowedHosts = new Set([
   "services.swpc.noaa.gov",
   "singlecell.broadinstitute.org",
   "sparql.wikipathways.org",
+  "www.wikipathways.org",
   "string-db.org",
   "uts-ws.nlm.nih.gov",
   "waterservices.usgs.gov",
@@ -100,6 +101,8 @@ const allowedHosts = new Set([
 const apiPathPrefixes = new Map([
   ["www.ncbi.nlm.nih.gov", ["/research/pubtator3-api/"]],
   ["dailymed.nlm.nih.gov", ["/dailymed/services/v2/"]],
+  ["www.guidetopharmacology.org", ["/services/"]],
+  ["www.wikipathways.org", ["/json/getPathwayInfo.json"]],
   // NCBI's download tree over HTTPS (the NCBI Gene Expression Omnibus's series matrix files live under /geo/series/): approved
   // for the named downloads below and for nothing else. No path is approved for a buffered fetch (an empty list), so the
   // runtime cannot read the rest of the tree, which holds genomes; the only way in is a download kind that names an
@@ -122,6 +125,7 @@ const credentialProfiles = new Map([
   ["omim", { configKey: "omim", host: "api.omim.org", path: "/api/", query: "apiKey" }],
   ["addgene", { configKey: "addgene", host: "api.developers.addgene.org", path: "/catalog/", header: "authorization", scheme: "Token" }],
   ["biogrid", { configKey: "biogrid", host: "webservice.thebiogrid.org", path: "/interactions", query: "accesskey" }],
+  ["iuphar", { configKey: "iuphar", host: "www.guidetopharmacology.org", path: "/services/", header: "gtp-api-key", query: "GTP-API-Key" }],
   ["opengwas", { configKey: "opengwas", host: "api.opengwas.io", path: "/api/", header: "authorization", scheme: "Bearer" }],
   // Materials Project's key is a first-party config secret rather than a
   // `publicSourceCredentials` entry, so this profile names it with
@@ -806,6 +810,9 @@ function validatedRequest(value) {
   if (apiPrefixes) {
     if (!apiPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
       throw gatewayError(403, "public_source_api_path_forbidden", "The API path is not approved on this host.");
+    }
+    if (hostname === "www.wikipathways.org" && url.pathname !== "/json/getPathwayInfo.json") {
+      throw gatewayError(403, "public_source_api_path_forbidden", "Only the official WikiPathways metadata index is approved on this host.");
     }
     if (method !== "GET" && !ctisPostEndpoints.has(`${hostname}${url.pathname}`)) {
       throw gatewayError(403, "public_source_api_request_forbidden", "This host is approved for read-only API requests.");

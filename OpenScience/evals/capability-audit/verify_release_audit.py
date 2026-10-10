@@ -479,7 +479,7 @@ def verify_skills():
     coverage = skill_execution_coverage(REPO, RESULTS, composition)
     require(summary.get("historicalExecutionEvidence") == skill_evidence_metadata(RESULTS), "historical skill totals/time/environment/evidence identity drifted")
     require(summary.get("executionCoverage") == coverage, "skill execution coverage does not match current source and retained receipts")
-    certified = [row["packageId"] for row in coverage if row["state"] == "bounded-historical-task-matched"]
+    certified = [row["packageId"] for row in coverage if row["state"] in {"bounded-historical-task-matched", "bounded-hosted-task-matched"}]
     unknown = [row["packageId"] for row in coverage if row["state"] == "unknown"]
     require(summary.get("sourcePlannedSkillPackages") == len(coverage), "skill source count does not match its concrete inventory")
     require(summary.get("boundedHistoricalTaskPackageIds") == certified and summary.get("boundedHistoricalTaskPackageCount") == len(certified), "skill execution certification is inflated")

@@ -461,6 +461,44 @@ class ExplicitMetaRequestTests(unittest.TestCase):
                 self.assertEqual(run.call_args.args[2], {"topic": topic, "outputLanguage": "zh"})
                 self.assertEqual(driver.BRIEFS, before)
 
+    def test_remote_meta_uses_authenticated_hosted_capture_while_local_meta_needs_no_adapter(self):
+        for remote in (False, True):
+            with self.subTest(remote=remote), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary).resolve()
+                scope = {"userId": "audit-user", "projectId": "audit-project", "activeWorkspace": ""}
+                argv = ["driver", "--probe-workspace", str(repo / "audit"), "--tool", "meta_analysis"]
+                with patch.object(sys, "argv", argv), patch.object(driver, "REPO", repo), \
+                        patch.dict(os.environ, {"EVIMED_META_ANALYSIS_URL": "http://local-adapter/api/v1/evimed/meta-analysis" if remote else ""}), \
+                        patch.object(driver, "adapter_context", return_value=scope) as context, \
+                        patch.object(driver, "load_server", return_value=object()), \
+                        patch.object(driver, "fresh_terminal_job", return_value=None), \
+                        patch.object(driver, "run_one", return_value={"tool": "meta_analysis", "outcome": "succeeded", "jobId": "response-only-unit-test"}) as run, \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    with self.assertRaises(SystemExit) as done:
+                        driver.main()
+                    self.assertEqual(done.exception.code, 0)
+                    self.assertEqual(context.call_count, int(remote))
+                    self.assertEqual(run.call_args.kwargs["scope"], scope if remote else None)
+
+    def test_local_meta_in_a_mixed_sweep_does_not_receive_another_tools_hosted_scope(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary).resolve()
+            scope = {"userId": "audit-user", "projectId": "audit-project", "activeWorkspace": ""}
+            argv = ["driver", "--probe-workspace", str(repo / "audit"), "--tool", "meta_analysis", "--tool", "bibliometric_analysis"]
+            with patch.object(sys, "argv", argv), patch.object(driver, "REPO", repo), \
+                    patch.dict(os.environ, {"EVIMED_META_ANALYSIS_URL": ""}), \
+                    patch.object(driver, "adapter_context", return_value=scope) as context, \
+                    patch.object(driver, "load_server", return_value=object()), \
+                    patch.object(driver, "fresh_terminal_job", return_value=None), \
+                    patch.object(driver, "run_one", side_effect=lambda _server, tool, *_args, **_kwargs: {"tool": tool, "outcome": "succeeded"}) as run, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(SystemExit) as done:
+                    driver.main()
+                self.assertEqual(done.exception.code, 0)
+                context.assert_called_once()
+                self.assertIsNone(run.call_args_list[0].kwargs["scope"])
+                self.assertEqual(run.call_args_list[1].kwargs["scope"], scope)
+
     def test_invalid_or_unselected_meta_request_stops_before_loading_a_server(self):
         for value, tool in [(" ", "meta_analysis"), ("x" * 10001, "meta_analysis"), ("Explicit request", "peer_review")]:
             with self.subTest(tool=tool, length=len(value)), patch.object(sys, "argv", ["driver", "--probe-workspace", "/unused", "--tool", tool, "--meta-topic", value]), \

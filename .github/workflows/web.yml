@@ -97,6 +97,8 @@ jobs:
           pnpm test:eval-briefs
           pnpm test:specialist-driver
           pnpm test:release-audit
+          pnpm test:connector-audit
+          pnpm test:hosted-skill-evidence
           pnpm test:judge-sites
           pnpm test:phi-masking
 
