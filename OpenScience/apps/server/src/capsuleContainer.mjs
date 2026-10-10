@@ -62,16 +62,24 @@ const PACK_KEY_BYTES = 32;
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 const HKDF_INFO = "evimedcap/v1/pack-key";
-/** scrypt parameters for a password-wrapped copy. N=2^15 is ~100ms on a laptop. */
-const SCRYPT_PARAMS = Object.freeze({ N: 32768, r: 8, p: 1, maxmem: 96 * 1024 * 1024 });
+/**
+ * scrypt parameters for a password-wrapped copy: N=2^17, r=8, p=1, OWASP's first choice for scrypt (review C-7; it was 2^15
+ * until 2026-10-10). That is 128 MiB and about 0.3 s of a pool thread here, four times the old cost, and `maxmem` covers
+ * the whole working set (128·r·(N+p+2) = 128 MiB and 3 KiB) with room to spare. The memory is spent one derivation at a
+ * time, process-wide (capsuleKdfGate.mjs), so the process pays it once whoever is asking, and below the 256 MiB a header
+ * could ask for before the costs were pinned (review C-10). The minimum password length is the owner's decision and is
+ * unchanged: this raises the price of each guess, not the number of passwords worth guessing.
+ */
+const SCRYPT_PARAMS = Object.freeze({ N: 131072, r: 8, p: 1, maxmem: 160 * 1024 * 1024 });
 /**
  * The costs a password wrap is opened with: the ones this platform has written, and no others. The header travels with the
  * container, so its N, r and p are the sender's choice, and any cost the sender names is memory and pool-thread time spent
  * on the sender's behalf in the one process everybody shares; refusing every cost the platform never wrote leaves nothing
  * for a hostile header to choose (review C-10). A new default is added here before it is written, and an old one stays as
- * long as a container written with it may still be opened.
+ * long as a container written with it may still be opened: N=2^15 is every pack made before 2026-10-10.
  */
 const ACCEPTED_KDF_COSTS = Object.freeze([
+  Object.freeze({ N: 131072, r: 8, p: 1 }),
   Object.freeze({ N: 32768, r: 8, p: 1 }),
 ]);
 /** The most memory limit a header may record: its own number is only a limit scrypt checks, never an allocation. */

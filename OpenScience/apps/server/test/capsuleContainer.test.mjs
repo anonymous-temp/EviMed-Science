@@ -234,7 +234,7 @@ test("a key derivation this platform never wrote is refused by name before the p
     crypto.scryptSync = () => { throw new Error("A cost nobody wrote reached the primitive"); };
     crypto.scrypt = () => { throw new Error("A cost nobody wrote reached the primitive"); };
     syncBuiltinESMExports();
-    for (const bad of [{ N: 262144, r: 8, p: 1 }, { N: 65536, r: 8, p: 1 }, { N: 16384, r: 8, p: 1 }, { N: 32768, r: 16, p: 1 }, { N: 32768, r: 8, p: 2 }, { N: 32768, r: 1, p: 1 }]) {
+    for (const bad of [{ N: 262144, r: 8, p: 1 }, { N: 65536, r: 8, p: 1 }, { N: 16384, r: 8, p: 1 }, { N: 32768, r: 16, p: 1 }, { N: 32768, r: 8, p: 2 }, { N: 32768, r: 1, p: 1 }, { N: 131072, r: 16, p: 1 }, { N: 131072, r: 8, p: 4 }]) {
       await assert.rejects(
         async () => unwrapWithPassword(wrapWithHeader(bad), "correct horse battery staple"),
         (error) => error.code === "capsule_password_params_unsupported" && /not one this platform writes/.test(error.message),
@@ -244,6 +244,28 @@ test("a key derivation this platform never wrote is refused by name before the p
   } finally {
     crypto.scryptSync = originalSync; crypto.scrypt = originalAsync; syncBuiltinESMExports();
   }
+});
+
+test("a new password wrap is written at the cost OWASP asks of scrypt, and a pack written at the old cost still opens (review C-7)", async () => {
+  const container = await packForBob({ password: "correct horse battery staple" });
+  const headerLength = container.passwordWrap.readUInt16BE(0);
+  const header = JSON.parse(container.passwordWrap.subarray(2, 2 + headerLength).toString("utf8"));
+  // N=2^17 at r=8, p=1 is OWASP's first choice for scrypt: 128 MiB, about 0.3 s here, where 2^15 was 32 MiB.
+  assert.deepEqual([header.N, header.r, header.p], [131072, 8, 1]);
+  assert.ok(header.maxmem >= 128 * header.r * (header.N + header.p + 2), "the recorded limit covers the cost's whole working set");
+  const keys = { issuer: { signingPublicKey: alice.signing.publicKey }, passwordWrap: container.passwordWrap, password: "correct horse battery staple" };
+  assert.ok((await openCapsule(container, keys)).ok);
+
+  // Every pack written before the change carries N=2^15. Re-wrap the same pack key at that cost and re-sign the manifest that
+  // names the wrap, which is what such a pack is, and it opens to the same entries.
+  const packKey = await unwrapWithPassword(container.passwordWrap, "correct horse battery staple");
+  const { wrapped } = handWrap({ params: { N: 32768, r: 8, p: 1 }, maxmem: 96 * 1024 * 1024, password: "correct horse battery staple", packKey });
+  const legacy = { manifest: structuredClone(container.manifest), payload: container.payload };
+  legacy.manifest.encryption.passwordWrapSha256 = createHash("sha256").update(wrapped).digest("hex");
+  legacy.manifest.signature.value = sign(null, Buffer.from(signablePayload(legacy.manifest)), createPrivateKey({ key: Buffer.from(alice.signing.privateKey, "base64"), type: "pkcs8", format: "der" })).toString("base64");
+  const opened = await openCapsule(legacy, { ...keys, passwordWrap: wrapped });
+  assert.ok(opened.ok, JSON.stringify(opened.issues ?? []));
+  assert.equal(opened.entries["lessons.jsonl"], entries[2].content);
 });
 
 test("a password wrap records the cost it used, so a later build can reproduce it", async () => {
