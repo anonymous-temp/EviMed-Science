@@ -36,7 +36,7 @@
  */
 
 import {
-  EVIDENCE_AI_STEPS, EVIDENCE_CALCULATION_FORMATS, EVIDENCE_CALCULATION_LABEL_ZH, EVIDENCE_PLATFORM_PRODUCER_NAME, NUMBER_UNCOMPUTED, digestPlacement,
+  EVIDENCE_AI_STEPS, EVIDENCE_CALCULATION_FORMATS, EVIDENCE_PLATFORM_PRODUCER_NAME, NUMBER_UNCOMPUTED, digestPlacement,
   evidenceCardClaims, evidenceReportingStandard, evidenceStructuredContent, renderNumberTemplate, verifyEvidenceCardClaims,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
@@ -256,7 +256,6 @@ export function buildProgrammeCard(input) {
   const answer = leadClaim ? labelled(leadClaim)
     : `这张卡汇总了 ${claims.length} 条引文已逐字核对的结论；其中没有达到“发现”标准的结论，请逐条阅读下面的限定。`;
 
-  const independent = candidates.filter((entry) => entry.agendaClaim?.refutation === "stands" || entry.agendaClaim?.tier === "reproduced").length;
   const lines = claims.map((made, position) => {
     const numbers = (made.sourceIndexes ?? []).map((index) => `[${index}]`).join("");
     const how = made.claimType === "synthesized" ? `综合判断（把握度：${CONFIDENCE_ZH[/** @type {keyof typeof CONFIDENCE_ZH} */ (made.confidence)] ?? "未标注"}），来源 ${numbers}` : `直接引用，来源 ${numbers}`;
@@ -264,7 +263,6 @@ export function buildProgrammeCard(input) {
   });
   const applicability = [...new Set(claims.map((made) => made.applicability).filter(Boolean))];
   const uncertainty = [...new Set(claims.map((made) => made.uncertainty).filter(Boolean))];
-  const excludedCount = new Set(excluded.map((entry) => entry.claimId)).size;
   const body = [
     "## 已逐字核对的结论", ...lines,
     ...(applicability.length ? ["", "## 适用范围", ...applicability.map((line) => `- ${line}`)] : []),

@@ -208,7 +208,7 @@ async function citedAnswer({ reply, silent = false }) {
     if (reply || silent) {
       kit.hub.attach((/** @type {string} */ type, /** @type {any} */ fields) => {
         if (type !== 'source-citations' || silent) return;
-        queueMicrotask(() => kit.hub.deliver('source-citations', { requestId: fields.requestId, ...reply?.(fields) }));
+        process.nextTick(() => kit.hub.deliver('source-citations', { requestId: fields.requestId, ...reply?.(fields) }));
       });
     }
     const props = { ...answerProps(), node: { ...answerProps().node, data: { ...answerProps().node.data, blocks: [{ kind: 'text', text: CITING }] } } };
