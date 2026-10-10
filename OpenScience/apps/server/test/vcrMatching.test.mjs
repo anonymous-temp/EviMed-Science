@@ -1050,3 +1050,37 @@ test('a newer prescribed, planned or unknown-state exposure that could reset the
   assert.deepEqual(assessed.evidenceGaps, [{ variable: 'docetaxel', reason: 'unresolved_exposure', criterionIds: ['washout'] }]);
   assert.deepEqual(assessed.blockingExclusionUnknowns, ['washout']);
 });
+
+test('a unit the quote prints beside another number does not support this fact\'s value, with or without a laboratory block; a unit written as a word is not chased (E-10)', () => {
+  const clinical = (/** @type {any} */ laboratory) => ({ schema: 1, assertion: 'affirmed', experiencer: 'patient', ...(laboratory ? { laboratory } : {}) });
+  const check = (/** @type {string} */ text, /** @type {string} */ surface, /** @type {any} */ rest) => {
+    const source = chart(text);
+    return verifyFactEvidence(source.fact(surface, rest), { documents: source.documents });
+  };
+  const two = '血糖 6.1 mmol/L（110 mg/dL）';
+  // The fact's own number, 6.1, carries mmol/L; mg/dL belongs to 110. Both used to pass: mg/dL is in the quote.
+  const wrongUnit = { variable: 'glucose', value: 6.1, unit: 'mg/dL' };
+  assert.deepEqual(check(two, two, { ...wrongUnit, clinical: clinical({ analyte: 'glucose', originalValue: 6.1, originalUnit: 'mg/dL' }) }), { ok: false, reason: 'unit_not_in_span' }, 'laboratory block');
+  assert.deepEqual(check(two, two, { ...wrongUnit }), { ok: false, reason: 'unit_not_in_span' }, 'no clinical block at all');
+  assert.deepEqual(check(two, two, { ...wrongUnit, clinical: clinical(null) }), { ok: false, reason: 'unit_not_in_span' }, 'clinical block without a laboratory one');
+  assert.deepEqual(check(two, two, { variable: 'glucose', value: 6.1, unit: 'mmol/L' }), { ok: true, reason: null }, 'the unit that is beside it');
+  assert.deepEqual(check(two, '110 mg/dL', { variable: 'glucose', value: 110, unit: 'mg/dL' }), { ok: true, reason: null }, 'and the other number takes the other unit');
+  // A unit outside the table that is a ratio is held to the quote whether or not the fact says laboratory.
+  assert.deepEqual(check('HbA1c 48，单位未记载', 'HbA1c 48，单位未记载', { variable: 'hba1c', value: 48, unit: 'mmol/mol' }), { ok: false, reason: 'unit_not_in_span' });
+  assert.deepEqual(check('HbA1c 48 mmol/mol', 'HbA1c 48 mmol/mol', { variable: 'hba1c', value: 48, unit: 'mmol/mol' }), { ok: true, reason: null });
+  // The converted value and the original are each held to their own unit.
+  const converted = clinical({ analyte: 'glucose', originalValue: 110, originalUnit: 'mg/dL' });
+  assert.deepEqual(check(two, two, { variable: 'glucose', value: 6.1, unit: 'mmol/L', clinical: converted }), { ok: true, reason: null });
+  assert.deepEqual(check(two, two, { variable: 'glucose', value: 6.1, unit: 'mmol/L', clinical: clinical({ analyte: 'glucose', originalValue: 6.1, originalUnit: 'mg/dL' }) }),
+    { ok: false, reason: 'unit_not_in_span' }, 'an original unit that is beside a different number');
+  // A fact whose unit is a word the chart spells otherwise keeps passing: 岁 for year.
+  assert.deepEqual(check('年龄44岁', '年龄44岁', { variable: 'age', value: 44, unit: 'year' }), { ok: true, reason: null });
+  assert.deepEqual(check('体重 70 公斤', '体重 70 公斤', { variable: 'weight', value: 70, unit: 'kg' }), { ok: true, reason: null });
+  // Through the evaluator: the wrong unit voids the fact, so the threshold is unknown rather than read from 6.1 mg/dL.
+  const source = chart(two);
+  const guessed = source.fact(two, { id: 'g', variable: 'glucose', value: 6.1, unit: 'mg/dL' });
+  const assessed = assessSubject({ criteria: [{ id: 'glu', kind: 'inclusion', requirement: { op: 'compare', variable: 'glucose', comparator: 'lte', value: 126, unit: 'mg/dL' } }],
+    facts: [guessed], documents: source.documents, asOf: AS_OF });
+  assert.equal(assessed.summary, 'insufficient_evidence');
+  assert.deepEqual(assessed.voidedFacts, [{ factId: 'g', variable: 'glucose', reason: 'unit_not_in_span' }]);
+});

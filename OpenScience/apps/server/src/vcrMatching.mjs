@@ -297,10 +297,13 @@ export function verifyFactEvidence(fact, context = {}) {
   if (typeof fact?.dateSurface === "string" && fact.dateSurface.trim() && !span.includes(fact.dateSurface)) {
     return { ok: false, reason: "date_not_in_span" };
   }
-  if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory)) === false) return {ok:false,reason:'unit_not_in_span'};
+  // A unit supports a number only where the quote prints it beside that number: a quote with two units supports each for its own
+  // value, not for every value of the fact (E-10). A fact whose value is not a number is held to the older question, unit anywhere.
+  const printedValue = (/** @type {unknown} */ value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory),printedValue(fact.value)) === false) return {ok:false,reason:'unit_not_in_span'};
   const original = fact.clinical?.laboratory;
   if (original?.originalValue != null && !numeralsIn(span).some(number => Math.abs(number-original.originalValue)<1e-9)) return {ok:false,reason:'value_not_in_span'};
-  if (original?.originalUnit && clinicalUnitInQuote(original.originalUnit,span,true) === false) return {ok:false,reason:'unit_not_in_span'};
+  if (original?.originalUnit && clinicalUnitInQuote(original.originalUnit,span,true,printedValue(original.originalValue)) === false) return {ok:false,reason:'unit_not_in_span'};
   return { ok: true, reason: null };
 }
 
