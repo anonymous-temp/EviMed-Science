@@ -1060,7 +1060,7 @@ export class MemoryIntelligence {
         candidate.lastConfirmedAt = null;
       }
     }
-    const rejectedKeys = await this.#rejectedKeys(project.userId);
+    const rejectedKeys = await this.#rejectedKeys(project.userId, candidates.slice(0, 12));
     let extracted = 0;
     let activated = 0;
     let sensitive = 0;
@@ -1254,18 +1254,18 @@ export class MemoryIntelligence {
   }
 
   /**
-   * The memories the researcher took out, as `kind NUL key`: deleted,
-   * archived, or undone (`memory-rejected` in the feedback ledger). Best
-   * effort — an unreadable ledger must not cost the run its memory.
-   * @param {string} userId @returns {Promise<Set<string>>}
+   * Which of these candidates' memories the researcher took out — deleted, archived, or undone (`memory-rejected` in the
+   * feedback ledger) — as `kind NUL key`. Every removal there has ever been of the memories asked about, however long ago
+   * (it read the newest 200 removals of the account until review M-13, so an older one could be learned again). Best effort —
+   * an unreadable ledger must not cost the run its memory.
+   * @param {string} userId @param {readonly { kind: string, key: string, origin?: string }[]} candidates @returns {Promise<Set<string>>}
    */
-  async #rejectedKeys(userId) {
-    if (!this.feedbackEvents) return new Set();
+  async #rejectedKeys(userId, candidates) {
+    // Only an inference can be refused for it (the researcher's own statement brings a memory back), so only theirs are asked.
+    const pairs = candidates.filter((candidate) => candidate.origin !== "explicit").map((candidate) => ({ kind: candidate.kind, key: candidate.key }));
+    if (!this.feedbackEvents || pairs.length === 0) return new Set();
     try {
-      const page = await this.feedbackEvents.list(userId, { trigger: "memory-rejected", limit: 200 });
-      return new Set((page?.items ?? [])
-        .filter((event) => typeof event?.detail?.key === "string" && typeof event?.detail?.kind === "string")
-        .map((event) => `${event.detail.kind}\u0000${event.detail.key}`));
+      return await this.feedbackEvents.rejectedMemoryKeys(userId, pairs);
     } catch (error) {
       await this.audit("memory.extraction.rejected_keys", error);
       return new Set();
