@@ -1581,9 +1581,11 @@ python3 -m unittest discover -s evals/method-quality -p 'test_*.py'
 python3 -m unittest discover -s runtime/mcp/evimed-research/test -p 'test_vcr*.py'
 ```
 
-`evals/method-quality/run_native_clinical.mjs` runs repeated native/on/off synthetic
-extraction through the real DSH executable, cloud gateway, protected fact writer
-and deterministic matching executor. `run_native_vcr.mjs` checks actual MCP use
+`evals/method-quality/run_native_clinical.mjs` runs repeated native/on synthetic
+extraction (two arms with different prompts; the `off` arm it used to run had the
+`native` prompt byte for byte, and scorecards read its cells as `native`) through the
+real DSH executable, cloud gateway, protected fact writer and deterministic matching
+executor. `run_native_vcr.mjs` checks actual MCP use
 across follow-up, a supplementary document, a different subject, tool failure,
 revoked cached context and a fresh conversation. Both take an isolated PostgreSQL
 URL, DSH executable/config dump, output directory and a control-plane key-file

@@ -8,6 +8,11 @@ import statistics
 from pathlib import Path
 from clinical_metrics import VERSION, score, scorecard
 
+# Until 2026-10-10 the runner also ran an `off` arm. Its prompt was byte-identical to `native`'s (the enhanced guidance only ever
+# went to `on`), so the two are replicates of one arm. Archives written then are read as one: each cell keeps its own id, and the
+# pooled `native` arm is every cell that was run without the guidance.
+LEGACY_ARMS = {'off': 'native'}
+
 
 def summarize(reference, archive):
     refs = {case['id']: case for case in reference['cases']}
@@ -15,7 +20,7 @@ def summarize(reference, archive):
     for cell in archive['predictions']:
         case = refs[cell['caseId']]
         measured = score(case['task'], case['reference'], cell['predicted'])
-        grouped[cell['arm']].append({'id': cell['cell'], 'sourceGroup': cell['group'],
+        grouped[LEGACY_ARMS.get(cell['arm'], cell['arm'])].append({'id': cell['cell'], 'sourceGroup': cell['group'],
             'dataClass': cell['dataClass'], 'status': 'invalid' if cell['parseError'] else 'predicted', **measured,
             'writeFailures': len(cell['writeIssues']), 'milliseconds': cell['latencyMs'], 'completed': cell['code'] == 0,
             'requests': len(cell['usage']), 'settledCostCny': sum(float(row['actual_cost']) for row in cell['usage'] if row.get('actual_cost') is not None),

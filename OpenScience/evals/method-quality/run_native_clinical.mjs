@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createNativeDsh } from './native_dsh.mjs';
+import { CLINICAL_ARMS, armsForRepeat, clinicalExtractionPrompt } from './clinical_arms.mjs';
 // Bounded native DSH adapter for clinical_metrics.py. Prediction never opens a
 // reference file. The operator key stays in the control plane, behind its real
 // gateway and usage ledger. Only synthetic cases are accepted by this adapter.
@@ -39,7 +40,7 @@ const pin = JSON.parse(await fs.readFile(path.join(product,'deps-version.json'),
 const executableVersion = execFileSync(values.dsh,['--version'],{encoding:'utf8',env:{PATH:process.env.PATH,DSH_HOME:path.join(root,'version'),DSH_TELEMETRY_MODE:'DISABLED'}}).trim();
 const identity = {schema:1,inputHash:hash(cases),skillHash:hash(skill),guidanceHash:hash(guidance),dumpHash:hash(dump),dsh:pin,executableVersion,
   sourceCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:product,encoding:'utf8'}).trim(),
-  sourceDiffHash:hash(execFileSync('git',['diff','HEAD'],{cwd:product,encoding:'utf8',maxBuffer:16*1024*1024})),repeats,limit,model:'deepseek-flash',maxTokens:4000,thinking:'disabled'};
+  sourceDiffHash:hash(execFileSync('git',['diff','HEAD'],{cwd:product,encoding:'utf8',maxBuffer:16*1024*1024})),arms:CLINICAL_ARMS,repeats,limit,model:'deepseek-flash',maxTokens:4000,thinking:'disabled'};
 const sourceFiles = execFileSync('git',['ls-files','--cached','--others','--exclude-standard','-z','OpenScience/apps/server/src','OpenScience/packages/domain','OpenScience/evals/method-quality','OpenScience/capabilities/vcr-matching'],{cwd:path.dirname(product.replace(/\/$/,'')),encoding:'utf8'}).split('\0').filter(Boolean);
 identity.sourceFiles = {};
 for (const name of sourceFiles) identity.sourceFiles[name] = hash(await fs.readFile(path.join(product,'..',name)));
@@ -68,7 +69,7 @@ const base=`http://127.0.0.1:${server.address().port}/internal/model/v1`;
 const native=await createNativeDsh({root,executable:values.dsh,dump,gateway:base,token});
 const predictions=[];
 try {
-  for(let repeat=0;repeat<repeats;repeat++) for(const example of cases.cases.slice(0,limit)) for(const arm of (repeat%2?['off','on','native']:['native','on','off'])) {
+  for(let repeat=0;repeat<repeats;repeat++) for(const example of cases.cases.slice(0,limit)) for(const arm of armsForRepeat(repeat)) {
     const cell=`${example.id}-${arm}-${repeat}`, receiptPath=path.join(root,cell+'.json');
     try { const cached=JSON.parse(await fs.readFile(receiptPath,'utf8'));if(cached.digest!==digest)throw new Error('Receipt mismatch');predictions.push(cached);continue; } catch(error) { if(error.code!=='ENOENT')throw error; }
     const projectId=`eval-${randomUUID()}`,runId=`run-${randomUUID()}`;
@@ -86,7 +87,7 @@ try {
     const protocol=await vcrRuntimeWrite({...context,what:'criteria',items:[{title:example.id,criteria:example.criteria}]});
     if(!protocol.ok)throw new Error(JSON.stringify(protocol.issues));
     const projected=await vcr.dataPlane.projectionText({studyId:study.id,documentId:projection.id,principal:userId},true);
-    const prompt=`Extract sourced facts for this synthetic study. Return only JSON {"facts":[...]}. Each fact has subjectKey, documentId, variable, value (number or text), unit (optional), polarity (affirmed/negated/hypothetical/family), occurredAt (ISO date if explicit), surface (exact substring), quote (exact substring). Do not calculate eligibility. Optional clinical metadata follows the supplied schema when guidance is present. No invented measurements. Omit optional unknown fields. Clinical metadata belongs only inside clinical.\n${arm==='on'?guidance+'\n'+JSON.stringify({factContract:CLINICAL_FACT_CONTRACT}):''}\n${JSON.stringify({subjectKey,documentId:projection.id,text:projected.text,criteria:example.criteria,asOf:manifest.createdAt})}`;
+    const prompt=clinicalExtractionPrompt({arm,guidance,factContract:CLINICAL_FACT_CONTRACT,input:{subjectKey,documentId:projection.id,text:projected.text,criteria:example.criteria,asOf:manifest.createdAt}});
     const started=Date.now();
     const {code,text:final}=await native({prompt,filename:cell});
     const output=await fs.readFile(path.join(root,cell+'.events.jsonl'),'utf8');

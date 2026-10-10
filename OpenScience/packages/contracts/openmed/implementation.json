@@ -495,7 +495,7 @@
         "C138",
         "C139"
       ],
-      "implementationSummary": "Repeated real native/on/off extraction traverses the fact writer and deterministic matching executor. Raw outputs, fact refusals, downstream states, latency and cost are retained.",
+      "implementationSummary": "Repeated real native/on extraction (the former off arm ran the native prompt byte for byte and is pooled into native) traverses the fact writer and deterministic matching executor. Raw outputs, fact refusals, downstream states, latency and cost are retained.",
       "remaining": [
         "Measure untouched clinical cases before claiming population-level improvement. The authored development sample is not that evidence."
       ],
