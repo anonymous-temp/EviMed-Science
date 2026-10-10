@@ -92,9 +92,15 @@ services:
       # 0 serves the stream without crawling (a restore drill, a paused registry).
       EVIMED_SOURCE_REQUESTS_URL: ${OPEN_SCIENCE_PUBLIC_URL:-http://localhost:8787}/evolution/source-requests.json
       KNOWLEDGE_PLUGIN_CRAWL: ${KNOWLEDGE_PLUGIN_CRAWL:-1}
-      # The platform's own evidence feed (flywheel F09), read as one more ordinary source: its public address, which
-      # the registry cannot name. Unset, the source `evimed-evidence` loads disabled and nothing is polled.
-      EVIMED_EVIDENCE_FEED_URL: ${EVIMED_EVIDENCE_FEED_URL:-}
+      # The platform's own evidence feed (flywheel F09), read as one more ordinary source. Its address is the deployment's own
+      # public one, <public url><evidence base path>/feed.json: the platform links every card on OPEN_SCIENCE_PUBLIC_URL and the
+      # plugin keeps only the cards on the host it read the feed from, so the feed is read where its cards live. (A compose-internal
+      # address, http://open-science-web:8787/..., would not do: the plugin's fetcher reaches global addresses only, and every card
+      # would be on a host other than the one the feed was read from.) The base path follows
+      # OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH. EVIMED_EVIDENCE_FEED_URL set reads that address instead, and set to nothing turns the
+      # source off; with no OPEN_SCIENCE_PUBLIC_URL there is no address and `evimed-evidence` loads disabled, nothing polled. A
+      # deployment whose public evidence pages are still off answers the feed 404 by name, which the source reads as empty.
+      EVIMED_EVIDENCE_FEED_URL: ${EVIMED_EVIDENCE_FEED_URL-${OPEN_SCIENCE_PUBLIC_URL:+${OPEN_SCIENCE_PUBLIC_URL}${OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH:-/evidence}/feed.json}}
     volumes:
       - type: bind
         source: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_HOST_FILE:-/dev/null}

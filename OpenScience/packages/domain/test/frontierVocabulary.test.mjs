@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   FRONTIER_ACCESSES,
   FRONTIER_ACCESS_LABELS_ZH,
+  FRONTIER_BROAD_SAFETY_FLAGS,
   FRONTIER_DATE_PRECISIONS,
   FRONTIER_EGRESSES,
   FRONTIER_EGRESS_LABELS_ZH,
@@ -137,8 +138,16 @@ test("the eight reader lanes are the contract's lanes without mixed, and every f
   assert.ok(FRONTIER_HEALTH_STATES.includes(FRONTIER_VOCABULARY_FALLBACKS.health));
   assert.equal(FRONTIER_SPECIALTIES.length, 21);
   assert.equal(FRONTIER_EVIDENCE_TYPES.length, 10);
-  assert.equal(FRONTIER_ITEM_FLAGS.length, 12);
+  assert.equal(FRONTIER_ITEM_FLAGS.length, 14);
   for (const flag of FRONTIER_MODEL_FLAGS) assert.ok(FRONTIER_ITEM_FLAGS.includes(flag));
+});
+
+test("F12c: the marks that send a safety alert to every reader are two - one the editor may propose, one code reads off the recall's class", () => {
+  assert.deepEqual([...FRONTIER_BROAD_SAFETY_FLAGS], ["class-i-recall", "boxed-warning"]);
+  for (const flag of FRONTIER_BROAD_SAFETY_FLAGS) assert.ok(FRONTIER_ITEM_FLAGS.includes(flag), flag);
+  assert.deepEqual([...FRONTIER_MODEL_FLAGS], ["press-release", "boxed-warning"], "the model may propose a boxed warning, never a recall's class");
+  assert.equal(FRONTIER_ITEM_FLAG_LABELS_ZH["class-i-recall"], "I 类召回");
+  assert.equal(FRONTIER_ITEM_FLAG_LABELS_ZH["boxed-warning"], "黑框警告");
 });
 
 test("every value has a Chinese label, and no label names a value that does not exist", () => {

@@ -224,6 +224,13 @@ const operatorLevers = {
   OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_OFFPEAK: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD: ["open-science-web"],
+  // The preprint lane (2026-10-10, F12b): how many preprints and company news a day are selected without reaching the line, and the
+  // total they must reach. A limit that never arrived would leave the default in force while the operator believes theirs applies.
+  OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE: ["open-science-web"],
+  // The safety push ceiling (2026-10-10, F12c): a Class I recall and a boxed-warning alert reach every reader with the push on, and this is
+  // what keeps a day of them from being a stream. A limit that never arrived would leave 3 in force while the operator believes theirs applies.
+  OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP: ["open-science-web"],
   // The platform's evidence programme and its public pages (evidence-flywheel B7, 2026-10-05): the programme's switch, its
   // day's model money and its slot, and the two public-page switches. A lever that does not arrive leaves the programme off, or
   // on and spending, or the public pages indexable, with the operator believing otherwise.
@@ -864,5 +871,53 @@ test("runtime UI proxy settings reach both processes after real Compose base and
     for(const name of ["open-science-web","open-science-runtime-controller"])
       assert.equal(services[name].environment.OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED,expected,
         `${name} receives ${String(value)} in ${overlay ? "API-only" : "base"}`);
+  }
+});
+
+test("F12e: the plugin reads the platform's own evidence feed by default, at the address its cards are linked on, and an operator's own value wins", {
+  skip: spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status !== 0 && "Docker Compose CLI required",
+}, async () => {
+  // The platform links every card on OPEN_SCIENCE_PUBLIC_URL, and the plugin keeps only the cards on the host it read the feed from (and
+  // its fetcher reaches global addresses only), so the default is <public url><evidence base>/feed.json - never a compose-internal
+  // address. Rendered by the real Compose, as the runtime-UI-proxy test does, from synthetic values and never an operator's .env.
+  const files = ["docker-compose.yml", "docker-compose.knowledge.yml"].map((name) => path.join(deployDir, name));
+  const sources = await Promise.all(files.map((file) => readFile(file, "utf8")));
+  const env = { ...process.env };
+  for (const key of ["EVIMED_EVIDENCE_FEED_URL", "OPEN_SCIENCE_PUBLIC_URL", "OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH"]) delete env[key];
+  for (const match of sources.join("\n").matchAll(/\$\{([A-Z0-9_]+):\?/g)) env[match[1]] = match[1].endsWith("_HOST_FILE") ? "/tmp/evimed-env-forwarding-fixture" : "fixture";
+  env.OPEN_SCIENCE_DOCKER_SOCKET_GID = "0";
+  /** The plugin container's feed address under `values`: Compose's own reading. @param {Record<string, string>} [values] @returns {string | undefined} */
+  const rendered = (values = {}) => {
+    const result = spawnSync("docker", ["compose", "--env-file", "/dev/null", "--profile", "full-product", "-f", files[0], "-f", files[1], "config",
+      "--format", "json", "--no-env-resolution"], { env: { ...env, ...values }, encoding: "utf8", timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
+    assert.equal(result.status, 0, `Compose must render without starting anything: ${result.stderr}`);
+    return JSON.parse(result.stdout).services["evimed-knowledge-plugin"].environment.EVIMED_EVIDENCE_FEED_URL;
+  };
+  const { EVIDENCE_PUBLIC_BASE_PATHS } = await import("@evimed/domain");
+  const { evidenceCardAddress } = await import("../src/evidenceFeed.mjs");
+  const { evidenceFeedJsonPath } = await import("../src/evidenceFeedRoutes.mjs");
+  const { evidencePublicBase, setEvidencePublicBase } = await import("../src/evidencePublicPaths.mjs");
+  const served = evidencePublicBase();
+  try {
+    for (const publicUrl of ["https://science.example.com", "https://82.156.128.153"]) {
+      // Unset or empty base path is the code's own default, /evidence.
+      assert.equal(rendered({ OPEN_SCIENCE_PUBLIC_URL: publicUrl }), `${publicUrl}/evidence/feed.json`);
+      assert.equal(rendered({ OPEN_SCIENCE_PUBLIC_URL: publicUrl, OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH: "" }), `${publicUrl}/evidence/feed.json`);
+      for (const base of EVIDENCE_PUBLIC_BASE_PATHS) {
+        const feed = new URL(/** @type {string} */ (rendered({ OPEN_SCIENCE_PUBLIC_URL: publicUrl, OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH: base })));
+        setEvidencePublicBase(base);
+        assert.equal(feed.pathname, evidenceFeedJsonPath(), `${base}: the path the platform answers the feed on`);
+        assert.equal(feed.origin, new URL(evidenceCardAddress(publicUrl, "ec_1")).origin, `${base}: the host the feed's cards are linked on`);
+        assert.ok(feed.hostname.includes(".") || /^[\d.]+$/.test(feed.hostname), "a public host, never a compose service name");
+      }
+    }
+    // The operator's own value wins, and nothing set (no public address to name) leaves the source off, as it was.
+    const other = "https://other.example.org/evidence/feed.json";
+    assert.equal(rendered({ OPEN_SCIENCE_PUBLIC_URL: "https://science.example.com", EVIMED_EVIDENCE_FEED_URL: other }), other);
+    assert.equal(rendered({ OPEN_SCIENCE_PUBLIC_URL: "https://science.example.com", EVIMED_EVIDENCE_FEED_URL: "" }), "", "set to nothing: the source is off");
+    assert.equal(rendered(), "");
+    assert.equal(rendered({ OPEN_SCIENCE_PUBLIC_URL: "" }), "");
+  } finally {
+    setEvidencePublicBase(served);
   }
 });

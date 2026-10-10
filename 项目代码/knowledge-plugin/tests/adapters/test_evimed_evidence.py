@@ -12,14 +12,20 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
 from knowledge_plugin.adapters import REGISTRY, validate_config
 from knowledge_plugin.adapters.common import query_param
-from knowledge_plugin.model import FetchError, FetchResult
+from knowledge_plugin.fetch import is_public_address
+from knowledge_plugin.model import FetchError, FetchResult, SourceConfig
 from knowledge_plugin.normalize import prepare
+from knowledge_plugin.registry import resolve_env_url
 from replay import load_case
+
+REGISTRY_FILE = Path(__file__).resolve().parents[2] / "registry" / "sources.json"
 
 ADAPTER = REGISTRY["json-api"]
 CASE = "json-api/evimed-evidence"
@@ -131,3 +137,66 @@ def test_a_version_this_reader_does_not_know_is_refused_by_name(case):
     with pytest.raises(FetchError) as html:
         ADAPTER.parse(replace(result, body=b"<html>not json</html>"), case.source, case.now)
     assert html.value.detail == "evimed_evidence_not_json"
+
+
+def _row():
+    return next(r for r in json.loads(REGISTRY_FILE.read_text(encoding="utf-8"))["sources"] if r["id"] == "evimed-evidence")
+
+
+def _source(row):
+    return SourceConfig(**{name: row.get(name) for name in SourceConfig.__dataclass_fields__})
+
+
+def _feed(public, base, count=3):
+    """A feed as the platform builds it for a deployment whose public address is `public`: every card linked on that address."""
+    return {"version": "evimed-evidence-feed/1", "generatedAt": "2026-10-10T08:00:00.000Z", "next": None, "items": [
+        {"id": f"ec_{n}", "url": f"{public}{base}/c/ec_{n}", "title": f"证据卡 {n}", "summary": "一张证据卡的摘要。", "publishedAt": "2026-10-09T08:00:00.000Z",
+         "updatedAt": "2026-10-09T08:00:00.000Z", "originality": "original_research", "primary": True, "about": {"doi": [], "pmid": [], "registryIds": []}}
+        for n in range(1, count + 1)]}
+
+
+@pytest.mark.parametrize("base", ["/evidence", "/evimed-evidence"])
+@pytest.mark.parametrize("public", ["https://science.example.com", "https://82.156.128.153"])
+def test_the_feed_address_the_platforms_public_url_gives_is_a_source_the_plugin_reads_card_for_card(case, public, base):
+    # F12e: the deployment's default for EVIMED_EVIDENCE_FEED_URL is `$OPEN_SCIENCE_PUBLIC_URL<evidence base>/feed.json`, the address the
+    # platform builds every card link on, so the host the feed is read from is the host of each card.
+    url = f"{public}{base}/feed.json"
+    resolved = resolve_env_url(_row(), {"EVIMED_EVIDENCE_FEED_URL": url})
+    assert resolved["enabled"] is True and resolved["config"]["url"] == url and resolved["config"]["allowed_hosts"] == [urlsplit(url).hostname]
+    source = _source(resolved)
+    assert validate_config(source) == []
+    (request,) = ADAPTER.plan(source, case.state, case.now)
+    assert request.url == url and request.api is True
+    (recorded,) = case.results()
+    result = replace(recorded, request=request, final_url=url, body=json.dumps(_feed(public, base)).encode("utf-8"))
+    assert [entry.url for entry in ADAPTER.parse(result, source, case.now).entries] == [f"{public}{base}/c/ec_{n}" for n in (1, 2, 3)]
+
+
+def test_an_address_inside_the_compose_network_cannot_be_the_feed_address_the_cards_would_all_be_dropped(case):
+    # F12e, why the default is the public address and not `http://open-science-web:8787/...`: the plugin keeps only the cards linked on the
+    # host it read the feed from, and the platform links its cards on its public address. (The fetcher also refuses any address that is
+    # not a global one, which is what a compose service name resolves to: `is_public_address`.)
+    assert not any(is_public_address(address) for address in ("172.18.0.5", "10.0.3.2", "192.168.16.4", "127.0.0.1"))
+    internal = resolve_env_url(_row(), {"EVIMED_EVIDENCE_FEED_URL": "http://open-science-web:8787/evidence/feed.json"})
+    assert internal["config"]["allowed_hosts"] == ["open-science-web"]
+    source = _source(internal)
+    (recorded,) = case.results()
+    result = replace(recorded, body=json.dumps(_feed("https://science.example.com", "/evidence")).encode("utf-8"))
+    assert ADAPTER.parse(result, source, case.now).entries == []
+
+
+def test_a_platform_whose_public_evidence_pages_are_off_has_no_feed_to_offer_and_that_is_not_a_failure_of_the_source(case):
+    # F12e: with the feed address on by default, a deployment that has not switched its public evidence pages on (the shipped default)
+    # answers the feed 404 by name. The source then reads as empty, instead of failing until it is called unreadable.
+    (recorded,) = case.results()
+    off = replace(recorded, status=404, body=json.dumps({"error": "The public evidence pages are not enabled.", "code": "evidence_public_not_enabled"}).encode("utf-8"))
+    output = ADAPTER.parse(off, case.source, case.now)
+    assert output.entries == [] and output.next is None and output.notes == ["evimed_evidence_not_enabled"]
+    # Any other 404, and the same code on any other status, is a failure by name, as before.
+    for body in (b"{}", b'{"code": "something_else"}', b"<html>not found</html>", b"[]", b'"x"', b""):
+        with pytest.raises(FetchError) as refused:
+            ADAPTER.parse(replace(off, body=body), case.source, case.now)
+        assert refused.value.outcome == "http-error" and refused.value.detail == "evimed_evidence_http_404", body
+    with pytest.raises(FetchError) as server:
+        ADAPTER.parse(replace(off, status=500), case.source, case.now)
+    assert server.value.detail == "evimed_evidence_http_500"

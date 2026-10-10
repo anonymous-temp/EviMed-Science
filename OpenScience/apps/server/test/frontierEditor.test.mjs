@@ -224,12 +224,11 @@ test("D-04: the edit prompt says a design the vocabulary has no key for is `othe
   assert.equal(FRONTIER_EDIT_INSTRUCTIONS.split("\n").filter((line) => line.includes("一律填 other")).length, 1, "one line, not a second rule");
 
   const cases = JSON.parse(await readFile(new URL("../../../evals/frontier-editing/cases.json", import.meta.url), "utf8"));
-  assert.deepEqual([cases.lane.length, cases.same_event.length, cases.evidence_type.length], [5, 11, 3], "the sections the other readers use are as they were");
-  assert.deepEqual(cases.evidence_type.map((entry) => entry.id), ["synthetic-mcda-genomic-testing", "synthetic-cost-effectiveness-model", "synthetic-pharmacist-survey"]);
+  assert.deepEqual([cases.lane.length, cases.same_event.length], [5, 11], "the sections the other readers use are as they were");
+  assert.equal(cases.evidence_type[0].id, "synthetic-mcda-genomic-testing");
   assert.equal(cases.evidence_type[0].public_id, "5a5fed19cd8ee71f", "the incident's own item");
   for (const entry of cases.evidence_type) {
-    assert.deepEqual(entry.expect, ["other"], entry.id);
-    assert.ok(entry.expect.every((type) => FRONTIER_EVIDENCE_TYPES.includes(type)), entry.id);
+    assert.ok(entry.expect.length > 0 && entry.expect.every((type) => FRONTIER_EVIDENCE_TYPES.includes(type)), entry.id);
     assert.ok(entry.why.length > 20, entry.id);
     // The case goes through the editor's own input builder, and an answer typed `other` is a verified edit of it.
     const input = buildModelInput({ ...entry.edit, allowedLanes: ["evidence"] });
@@ -239,6 +238,63 @@ test("D-04: the edit prompt says a design the vocabulary has no key for is `othe
     assert.equal(verified.output.evidenceType, "other", entry.id);
     assert.ok(!verified.failed.has("evidence_type"), entry.id);
   }
+});
+
+test("F12c: the edit prompt lets the editor propose a boxed warning, once, only for one a safety notice adds or strengthens; a flag outside the model's list is sent back by name", () => {
+  // The owner's ruling of 2026-10-10 sends a Class I recall or a boxed-warning alert to every reader with the push on. A recall's class is
+  // a field of the record (code reads it); a boxed warning is language, so the editor judges it and code keeps the answer closed.
+  assert.equal(FRONTIER_EDIT_INSTRUCTIONS.split("\n").filter((line) => line.includes("boxed-warning")).length, 1, "one line, not a second rule");
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /新增、加强或要求加框警告/);
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /已有的、放宽或取消的黑框警告不算/);
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /"press-release"/, "the first flag is still there, unchanged");
+  const refused = verifyEdit(answer({ flags: ["sponsored"] }), item(), buildModelInput(item()));
+  assert.ok(refused.failed.has("flags"));
+  assert.ok(refused.issues.some((issue) => issue.includes("press-release") && issue.includes("boxed-warning")), "the rewrite is told what a flag may be");
+});
+
+test("F12c: the eval has cases that hold the boxed-warning judgement, both ways: added or strengthened, and everything near it that is not", async () => {
+  const cases = JSON.parse(await readFile(new URL("../../../evals/frontier-editing/cases.json", import.meta.url), "utf8"));
+  const ids = cases.flags.map((/** @type {any} */ entry) => entry.id);
+  assert.deepEqual(ids, ["synthetic-fda-adds-boxed-warning", "synthetic-nmpa-adds-boxed-warning-zh", "synthetic-boxed-warning-removed",
+    "synthetic-label-revision-without-boxed-warning", "synthetic-existing-boxed-warning-mentioned", "synthetic-class-ii-recall"]);
+  for (const entry of cases.flags) {
+    assert.ok(entry.expect.every((/** @type {string} */ flag) => ["boxed-warning"].includes(flag)), entry.id);
+    assert.ok(entry.expect_not.every((/** @type {string} */ flag) => ["boxed-warning"].includes(flag)), entry.id);
+    assert.equal(entry.expect.length + entry.expect_not.length, 1, `${entry.id}: one judgement each`);
+    assert.ok(entry.why.length > 20 && /F12c/.test(entry.why), entry.id);
+    assert.equal(entry.edit.evidenceFixed.type, "safety-notice", "a safety feed's items arrive with their type fixed by code");
+    const input = buildModelInput({ ...entry.edit, allowedLanes: ["safety"] });
+    assert.match(input, /^允许的栏目：safety/);
+    assert.match(input, /证据类型：safety-notice（已由程序确定，照填）/);
+  }
+  assert.deepEqual(cases.flags.filter((/** @type {any} */ entry) => entry.expect.length).map((/** @type {any} */ entry) => entry.id),
+    ["synthetic-fda-adds-boxed-warning", "synthetic-nmpa-adds-boxed-warning-zh"], "two ways it is added, an English notice and a Chinese one");
+  assert.equal(cases.flags.find((/** @type {any} */ entry) => entry.id === "synthetic-nmpa-adds-boxed-warning-zh").edit.isChinese, true);
+});
+
+test("F12a: every economic evaluation and decision analysis the owner named has an eval case that expects `other`, and two controls hold the real designs", async () => {
+  // The owner's ruling of 2026-10-10 (review B, D-04): a multi-criteria decision analysis, a Markov cost-effectiveness model, a budget
+  // impact analysis and a discrete-event simulation are economic evaluation or decision analysis, never a cohort or a trial. The first
+  // two cases came with the prompt line; the rest are what the line is held by, and the two that follow tempt the nearest design with
+  // the data the model was built on (a trial's curves, a registry's rates). The controls make the line unable to pass by sending
+  // everything to `other`.
+  const cases = JSON.parse(await readFile(new URL("../../../evals/frontier-editing/cases.json", import.meta.url), "utf8"));
+  const byId = new Map(cases.evidence_type.map((/** @type {any} */ entry) => [entry.id, entry]));
+  assert.equal(byId.size, cases.evidence_type.length, "no case id twice");
+  const economic = ["synthetic-mcda-genomic-testing", "synthetic-cost-effectiveness-model", "synthetic-budget-impact-analysis", "synthetic-discrete-event-simulation",
+    "synthetic-partitioned-survival-cost-utility", "synthetic-screening-microsimulation"];
+  for (const id of economic) {
+    assert.ok(byId.has(id), `${id} is an eval case`);
+    assert.deepEqual(byId.get(id).expect, ["other"], id);
+  }
+  assert.deepEqual(cases.evidence_type.map((/** @type {any} */ entry) => entry.id), [...economic, "synthetic-pharmacist-survey",
+    "synthetic-control-prospective-cohort", "synthetic-control-randomised-trial"], "the section, in the order it is read");
+  assert.deepEqual(byId.get("synthetic-pharmacist-survey").expect, ["other"]);
+  assert.deepEqual(byId.get("synthetic-control-prospective-cohort").expect, ["observational"]);
+  assert.deepEqual(byId.get("synthetic-control-randomised-trial").expect, ["rct"]);
+  // Each case is a distinct abstract: a second copy of one text would count one answer twice.
+  assert.equal(new Set(cases.evidence_type.map((/** @type {any} */ entry) => entry.edit.abstract)).size, cases.evidence_type.length);
+  for (const id of economic.slice(2)) assert.match(byId.get(id).why, /F12a/, `${id} says which ruling it holds`);
 });
 
 test("an edit that passes every check is published as written, with what the model was shown and its hash", async () => {
@@ -598,6 +654,8 @@ test("the verification's other checks: vocabularies, lengths, links, Chinese pro
   assert.ok(issues({ flags: ["sponsored"] }).some((issue) => issue.includes("flags")));
   assert.deepEqual(verifyEdit(answer({ flags: ["preprint", "press-release"] }), item(), modelInput).output.flags, ["press-release"],
     "a flag code decides is dropped, not failed");
+  assert.deepEqual(verifyEdit(answer({ flags: ["class-i-recall", "boxed-warning", "china"] }), item(), modelInput).output.flags, ["boxed-warning"],
+    "a boxed warning is the model's to propose; a recall's class and every other mark are code's");
   assert.deepEqual(verifyEdit(null, item(), modelInput).failed.has("answer"), true);
 });
 
