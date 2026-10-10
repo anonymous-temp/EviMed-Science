@@ -7,6 +7,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { isOurCitation } from "@evimed/domain";
 import { classifyProbeAnswer, isRetriableRawStatus, stripPageChrome } from "../src/geoSanity.mjs";
 import { brandRegistry, citationRows, countMentions, countedNames, failureMode, foldText, parseAnswer, registryKey } from "../src/geoParse.mjs";
 import { buildJudgeInput, quantityTokens, recountedFacts, verifyJudgement } from "../src/geoJudge.mjs";
@@ -147,6 +148,37 @@ test("a citation is in the body only where the engine renders inline markers; ou
   assert.equal(facts.retrievalTriggered, true);
   const notOurs = parseAnswer({ answer: LONG, registry: [], citations: [{ url: "https://notmazdutide.example.com/x", domain: "notmazdutide.example.com", title: "", inBody: null }], owned: { domains: ["mazdutide.example.com"] } });
   assert.equal(notOurs.citesOurs, false, "label-aligned: a longer domain ending in ours is not ours");
+});
+
+test("a citation's stored domain is the host of its link and nothing that follows the host (Q-15)", () => {
+  // The domain was cut at the first `/`, so a query, a fragment, a port or credentials right after the host stayed in it: a link to
+  // the brand's own homepage with a tracking parameter was not ours, and a link to anyone's page with the brand's domain in its query
+  // was. The same string keys the sources table.
+  const owned = { domains: ["owned.com"], urls: [] };
+  for (const [url, domain, ours] of [
+    ["https://owned.com?utm_source=chatgpt.com", "owned.com", true],
+    ["https://owned.com/?utm_source=chatgpt.com", "owned.com", true],
+    ["https://www.owned.com:443/a", "www.owned.com", true],
+    ["https://owned.com:8443", "owned.com", true],
+    ["https://user:secret@owned.com/x", "owned.com", true],
+    ["HTTPS://Owned.COM./a?b#c", "owned.com", true],
+    ["https://attacker.com?ref=x.owned.com", "attacker.com", false],
+    ["https://attacker.com#.owned.com", "attacker.com", false],
+    ["https://attacker.com:80/x.owned.com", "attacker.com", false],
+    ["https://owned.com@attacker.com/", "attacker.com", false],
+    ["https://owned.com.attacker.com/x", "owned.com.attacker.com", false],
+    // Not an http(s) link: no host, as before.
+    ["ftp://owned.com/x", "", false],
+    ["owned.com/x", "", false],
+    ["", "", false],
+  ]) {
+    const [row] = citationRows([{ url, title: "t" }], "answer", "deepseek");
+    assert.equal(row.domain, domain, url);
+    assert.equal(isOurCitation(row, owned), ours, url);
+  }
+  // A string the URL parser cannot read still gives its host up to the same three characters.
+  const [loose] = citationRows([{ url: "see https://owned.com?ref=x for the label" }], "answer", "deepseek");
+  assert.equal(loose.domain, "owned.com");
 });
 
 test("failure modes: wrong wins, a refusal is none, not named is omitted", () => {

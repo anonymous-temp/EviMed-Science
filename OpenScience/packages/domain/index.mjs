@@ -1346,6 +1346,7 @@ export {
   computeGeoMetrics,
   computeGvi,
   geoCellRows,
+  geoCitationHost,
   geoConstant,
   geoMetricDefinition,
   hardLines,

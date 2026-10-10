@@ -13,6 +13,7 @@ import {
   geoConstant,
   geoMetricDefinition,
   hardLines,
+  geoCitationHost,
   isOurCitation,
   netEffect,
   noiseBand,
@@ -338,6 +339,19 @@ test("an inclusion-channel engine reports mentions only", () => {
   // and it does not dilute the pool's rates
   assert.equal(cellOf(cells, { metricId: "M-01", scope: "pool", pool: "P2" }).denominator, 1);
 });
+
+test("a link read without a stored domain gives up its host where the URL says it ends (Q-15)", () => {
+  const owned = { domains: ["owned.com"] }
+  assert.equal(isOurCitation({ url: "https://owned.com?utm_source=chatgpt.com" }, owned), true, "a tracking parameter straight after the host")
+  assert.equal(isOurCitation({ url: "https://www.owned.com:443/a" }, owned), true, "a port")
+  assert.equal(isOurCitation({ url: "https://user:secret@owned.com/x" }, owned), true, "credentials")
+  assert.equal(isOurCitation({ url: "https://attacker.com?ref=x.owned.com" }, owned), false, "the brand's domain in someone else's query")
+  assert.equal(isOurCitation({ url: "https://attacker.com#.owned.com" }, owned), false, "or in their fragment")
+  assert.equal(isOurCitation({ url: "https://owned.com@attacker.com/" }, owned), false, "or as their credentials")
+  assert.equal(geoCitationHost("HTTPS://Owned.COM./a?b#c"), "owned.com")
+  assert.equal(geoCitationHost("ftp://owned.com/x"), "", "not an http(s) link")
+  assert.equal(geoCitationHost(undefined), "")
+})
 
 test("isOurCitation matches an owned domain label by label and accepts our published article URLs", () => {
   assert.equal(isOurCitation({ domain: "www.example-pharma.com" }, OWNED), true);

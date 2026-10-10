@@ -420,10 +420,23 @@ function emptyCell(metricId, where, status, reason) {
  * @property {boolean|null} safetyHit
  */
 
-/** @param {unknown} url @returns {string} */
-function hostOf(url) {
-  const match = /https?:\/\/([^/\s]+)/.exec(String(url ?? ''))
-  return match ? match[1].toLowerCase() : ''
+/**
+ * The host an http(s) link points at, lower case, without credentials, port or a trailing dot; empty for anything else. The URL parser
+ * decides where the host ends: the pattern this replaced took everything up to the first `/`, so `https://owned.com?utm_source=x`,
+ * `https://owned.com:443/a` and `https://user@owned.com/` kept their query, port and credentials in the "host" (the brand's own link
+ * was not ours, and `https://attacker.com?ref=x.owned.com` was), and the string keys the sources table. A string the parser cannot read
+ * falls back to the pattern, cut at the same `/`, `?` and `#`.
+ * @param {unknown} url @returns {string}
+ */
+export function geoCitationHost(url) {
+  const text = String(url ?? '').trim()
+  try {
+    const parsed = new URL(text)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.hostname.toLowerCase().replace(/\.$/, '') : ''
+  } catch {
+    const match = /https?:\/\/([^/?#\s]+)/i.exec(text)
+    return match ? match[1].replace(/^.*@/, '').replace(/:\d*$/, '').toLowerCase().replace(/\.$/, '') : ''
+  }
 }
 
 /**
@@ -465,7 +478,7 @@ export function isOurCitation(citation, owned) {
 
 /** @param {GeoCitation} citation @param {OwnedSources} owned */
 function citationIsOurs(citation, owned) {
-  const domain = String(citation?.domain || hostOf(citation?.url)).toLowerCase()
+  const domain = String(citation?.domain || geoCitationHost(citation?.url)).toLowerCase()
   if (domain && owned.domains.some((owner) => domain === owner || domain.endsWith(`.${owner}`))) return true
   const key = canonicalGeoUrl(citation?.url)
   return Boolean(key) && owned.urls.has(key)
@@ -490,7 +503,7 @@ function prepare(row, ctx) {
   const rivalCounts = {}
   for (const brand of brands) if (brand.competitor && count(brand) > 0) rivalCounts[brand.name] = count(brand)
   const citations = (inDenominator && Array.isArray(row.citations) ? row.citations : []).map((citation) => ({
-    domain: String(citation?.domain || hostOf(citation?.url)).toLowerCase(),
+    domain: String(citation?.domain || geoCitationHost(citation?.url)).toLowerCase(),
     ours: citationIsOurs(citation, ctx.owned),
     inBody: typeof citation?.inBody === 'boolean' ? citation.inBody : null,
   }))
