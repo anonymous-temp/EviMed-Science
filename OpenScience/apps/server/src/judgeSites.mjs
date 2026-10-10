@@ -19,8 +19,16 @@ const fields = {
 // the plan names no purpose for them, and whose budget pays for an evidence card's recall or a reader's topic request is an owner decision.
 const policies = Object.fromEntries(JUDGE_SITE_IDS.map(id=>[id,Object.freeze({id,purpose:id==='reply-check'?'review':['J1','J14','J16'].includes(id)?'learning':['J10','J11','J12','J17'].includes(id)?'evolution':id==='J5'||id==='J6'?'frontier':id==='J2'?'channel-intent':id==='J3'?'routing':id==='J7'?'source-understanding':['J21','J22'].includes(id)?'geo':id==='J4'?'review':'engine',interactive:['J2','J3','J13'].includes(id),pairwise:pairSites.has(id),threshold:id==='J4'?0.7:id==='J8'?0.9:0.8,calibration:id==='reply-check'?'calibrated':'uncalibrated'})]));
 export const JUDGE_SITES = Object.freeze(policies);
+/** The most characters of state (its JSON) any site reads; past it a request is `judge_input_too_large`. The gateway's body ceiling is derived from it. */
+export const JUDGE_STATE_MAX_CHARS = 256_000;
+/** The most projects J2 reads. Its caller offers no more, and the original classifier it is sampled against stops at the same number. */
+export const JUDGE_J2_MAX_PROJECTS = 51;
+/** The longest `text` any site reads. */
+const TEXT_MAX_CHARS = 30_000;
 const list = (value,max) => {if(!Array.isArray(value)||value.length>max)throw new Error('judge_invalid_input');return value;};
-const bounded = value => {const encoded=JSON.stringify(value);if(!encoded||encoded.length>256_000)throw new Error('judge_input_too_large');return JSON.parse(encoded);};
+const bounded = value => {const encoded=JSON.stringify(value);if(!encoded||encoded.length>JUDGE_STATE_MAX_CHARS)throw new Error('judge_input_too_large');return JSON.parse(encoded);};
+/** The first `max` characters, never ending in half of a surrogate pair. */
+const clipText = (value,max) => value.length<=max?value:/[\ud800-\udbff]/.test(value[max-1])?value.slice(0,max-1):value.slice(0,max);
 
 /** @param {string} site @param {any} input @param {{reverse?:boolean}} [options] */
 export function buildJudgeRequest(site,input,{reverse=false}={}) {
@@ -32,7 +40,9 @@ export function buildJudgeRequest(site,input,{reverse=false}={}) {
  for(const [field,keys] of Object.entries(arrayFields))if(state[field]!==undefined&&field!=='pairs'&&!(site==='reply-check'&&field==='items'))state[field]=list(state[field],field==='candidates'?254:field==='criteria'?40:field==='items'?20:field==='cards'?15:100).map(item=>clean(item,keys));
  if(state.pairs)state.pairs=list(state.pairs,40).map(pair=>({id:text(pair.id,128),left:typeof pair.left==='string'?text(pair.left):clean(pair.left,['name','description','title','summary']),right:typeof pair.right==='string'?text(pair.right):clean(pair.right,['name','description','title','summary'])}));
  for(const key of ['left','right','method'])if(state[key]!==undefined)state[key]=typeof state[key]==='string'?text(state[key]):clean(state[key],['id','name','description','title','abstract','summary']);
- for(const key of ['message','question','line','filename','text','manuscript','title','abstract','topic','trait','term','remark','query','studyType','targetOutcome','currentProjectId'])if(state[key]!==undefined)state[key]=text(state[key],key==='manuscript'?100000:key==='text'?30000:15000);
+ // A paper's full text is routinely longer than the site reads and its role is told from the opening, so it is clipped, not refused.
+ if(site==='meta-evidence-role'&&typeof state.text==='string')state.text=clipText(state.text,TEXT_MAX_CHARS);
+ for(const key of ['message','question','line','filename','text','manuscript','title','abstract','topic','trait','term','remark','query','studyType','targetOutcome','currentProjectId'])if(state[key]!==undefined)state[key]=text(state[key],key==='manuscript'?100000:key==='text'?TEXT_MAX_CHARS:15000);
  if(state.currentTask!=null)state.currentTask=typeof state.currentTask==='string'?text(state.currentTask):clean(state.currentTask,['id','title','status','question']);
  for(const key of ['types','publicationTypes'])if(state[key]!==undefined)state[key]=list(state[key],40).map(value=>text(value,200));
  const questions={};
@@ -44,7 +54,7 @@ export function buildJudgeRequest(site,input,{reverse=false}={}) {
   else {if(state.left===undefined||state.right===undefined)throw new Error('judge_invalid_input');if(reverse)[state.left,state.right]=[state.right,state.left];ask('relation','Classify the semantic relationship between left and right.',relations);}
  } else if(relevanceSites.has(site)) ask('relevance','Is the title and abstract relevant to the stated topic or to reusable research methods?',['unrelated','related']);
  else if(site==='J2') {
-  const options=ids(state.projects,51);
+  const options=ids(state.projects,JUDGE_J2_MAX_PROJECTS);
   ask('switch_to','Which listed project, if any, does the message ask to move this chat to? Choose none for merely mentioning a project as a topic/example, an unlisted project, or ambiguity between projects.',['none',...options]);
   questions.switch_to.criteria={none:'The message does not clearly ask to move this chat to another listed project.',...Object.fromEntries(options.map((id,index)=>[id,`The message asks to move this chat to the project whose name is in projects[${index}].name.`]))};
   ask('has_request','Besides any request to switch project, does the message contain something to answer or do: a question, task, added requirement, clarification or small talk? A switch-only message contains nothing else to answer.',['no','yes']);

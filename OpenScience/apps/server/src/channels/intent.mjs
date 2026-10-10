@@ -21,6 +21,7 @@
  */
 
 import { callModelForControlPlane } from "../modelGateway.mjs";
+import { JUDGE_J2_MAX_PROJECTS } from "../judgeSites.mjs";
 
 /** The usage ledger's purpose for these calls (contract X1). */
 export const CHANNEL_INTENT_PURPOSE = "channel-intent";
@@ -111,7 +112,8 @@ export class ChannelIntentClassifier {
     if (this.judgeService) {
       try {
         const decision = await this.judgeService.judge("J2", {
-          message: text, currentProjectId: projectId, projects,
+          // The same list the original classifier is shown: no more than J2 reads, so an account with more projects is judged, not refused.
+          message: text, currentProjectId: projectId, projects: projects.slice(0, JUDGE_J2_MAX_PROJECTS),
           currentTask: runningTask?.question ?? null,
         }, {
           userId, projectId,
@@ -165,7 +167,7 @@ export class ChannelIntentClassifier {
                 role: "user",
                 content: JSON.stringify({
                   message: String(text).slice(0, 2_000),
-                  projects: projects.slice(0, 51).map((project) => ({ id: project.id, name: project.name })),
+                  projects: projects.slice(0, JUDGE_J2_MAX_PROJECTS).map((project) => ({ id: project.id, name: project.name })),
                   current_project: projectId,
                   running_task: runningTask ? { question: String(runningTask.question ?? "").slice(0, 500) } : null,
                 }),

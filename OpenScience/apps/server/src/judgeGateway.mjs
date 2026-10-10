@@ -2,6 +2,14 @@
 import { verifyEngineModelToken } from "./modelGatewayEngineTokens.mjs";
 import { HttpError, readBody, sendError, sendJson } from "./security.mjs";
 export const JUDGE_GATEWAY_PATH = "/internal/judge/v1/ask";
+/**
+ * The largest request body the gateway reads. It has to hold anything a site would then
+ * accept (at most JUDGE_STATE_MAX_CHARS characters of state, three bytes each in UTF-8,
+ * and the envelope), or a request the registry would read is turned away at the wire; it
+ * is also the ceiling the shared Python client (`项目代码/evimed_judge.py`) holds its own
+ * requests to, so neither side refuses what the other lets through. A test pins both.
+ */
+export const JUDGE_GATEWAY_MAX_BODY_BYTES = 1024 * 1024;
 const allowed = {
   J8: ["peer-review"],
   J9: ["mendelian-randomization"],
@@ -39,7 +47,7 @@ export function createJudgeGatewayHandler({ config, judgeService, runtimeManager
         );
       let body;
       try {
-        body = JSON.parse((await readBody(req, 128 * 1024)).toString("utf8"));
+        body = JSON.parse((await readBody(req, JUDGE_GATEWAY_MAX_BODY_BYTES)).toString("utf8"));
       } catch {
         throw new HttpError(
           400,
