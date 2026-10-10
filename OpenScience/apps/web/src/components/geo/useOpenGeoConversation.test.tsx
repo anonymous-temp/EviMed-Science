@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getWebProjectId } from "@/lib/apiClient";
+import { getWebProjectId, webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
+import { useToastStore } from "@/lib/toast";
 import { useOpenGeoConversation } from "./useOpenGeoConversation";
 
 const mocks = vi.hoisted(() => ({
@@ -23,7 +25,13 @@ vi.mock("@/lib/runtimeWarm", () => ({ warmWebRuntime: vi.fn() }));
 
 function Opener({ sessionId, draft }: { sessionId: string | null; draft?: string }) {
   const open = useOpenGeoConversation();
-  return <button type="button" onClick={() => { void open({ projectId: "p-new", sessionId }, draft); }}>open</button>;
+  const [result, setResult] = useState("");
+  return (
+    <>
+      <button type="button" onClick={() => { void open({ projectId: "p-new", sessionId }, draft).then((opened) => setResult(String(opened))); }}>open</button>
+      <span data-testid="result">{result}</span>
+    </>
+  );
 }
 
 function Probe() {
@@ -44,6 +52,9 @@ const probe = () => JSON.parse(screen.getByTestId("probe").textContent!) as { pa
 beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.clear();
+  // The remembered project is the next test's current one otherwise, and a switch to it would not be a switch.
+  window.localStorage.clear();
+  useToastStore.setState({ toasts: [] });
   useProjectStore.getState().clear();
   mocks.projects = [{ id: "default", name: "我的研究" }];
   mocks.listWebProjects.mockImplementation(async () => mocks.projects);
@@ -66,6 +77,8 @@ describe("opening a GEO project's conversation", () => {
     expect(getWebProjectId()).toBe("p-new");
     expect(mocks.listWebProjects).toHaveBeenCalled();
     expect(mocks.fetchWebMe).toHaveBeenCalledWith({ projectId: "p-new" });
+    expect(screen.getByTestId("result")).toHaveTextContent("true");
+    expect(useToastStore.getState().toasts).toEqual([]);
   });
 
   it("opens a new conversation in the project when it has none yet", async () => {
@@ -77,5 +90,32 @@ describe("opening a GEO project's conversation", () => {
     expect(intent).toMatchObject({ kind: "create", projectId: "p-new" });
     expect(intent.draft).toBeUndefined();
     expect(typeof intent.sessionId).toBe("string");
+  });
+
+  it("says so in one toast, in Chinese, when the project cannot be proved — and resolves false, still where it was", async () => {
+    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
+    const refusal = new WebApiError("offline", { status: 503, code: "service_unavailable" });
+    mocks.fetchWebMe.mockRejectedValue(refusal);
+    renderOpener({ sessionId: "ses_new", draft: "品牌提及率：18%" });
+    await userEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("false"));
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts.map((toast) => toast.tone)).toEqual(["error"]);
+    expect(toasts[0].message).toBe(webErrorMessage(refusal, { fallback: "对话暂时无法打开，请稍后重试。" }));
+    expect(toasts[0].message).toMatch(/[一-鿿]/);
+    expect(toasts[0].message).not.toMatch(/offline/);
+    expect(probe().path).toBe("/app/geo");
+    expect(useProjectStore.getState().currentId).toBe("default");
+  });
+
+  it("says the fallback sentence when the account cannot open the project and the refusal carries no code", async () => {
+    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
+    // The server answered for another project: the store refuses with a plain error.
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "x" }, projects: mocks.projects });
+    renderOpener({ sessionId: null });
+    await userEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("false"));
+    expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]);
+    expect(probe().path).toBe("/app/geo");
   });
 });

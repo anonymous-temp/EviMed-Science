@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoProject } from "@/lib/geoClient";
+import { useToastStore } from "@/lib/toast";
 import {
   articlesFilled,
   cell,
@@ -1267,6 +1268,41 @@ describe("药品价值分析在页签里", () => {
     expect(tiles.compareDocumentPosition(list) & FOLLOWS).toBeTruthy();
     expect(list.compareDocumentPosition(heading) & FOLLOWS).toBeTruthy();
     expect(document.querySelector("[data-geo-tab='accuracy']")?.lastElementChild).toBe(heading.closest("section"));
+  });
+});
+
+describe("a hand-off to the conversation that fails", () => {
+  beforeEach(() => useToastStore.setState({ toasts: [] }));
+  const toasts = () => useToastStore.getState().toasts.map((toast) => toast.message);
+
+  it("写纠错稿: says so in a toast and gives the button back, where it used to end in nothing", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    store.select.mockRejectedValueOnce(new Error("project is gone"));
+    renderTab(<AccuracyTab {...props()} />);
+    const button = (await screen.findAllByRole("button", { name: "写纠错稿" }))[0];
+    await userEvent.click(button);
+    await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(button).not.toHaveAttribute("aria-busy");
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
+  });
+
+  it("在对话中处理: says so in a toast and gives the button back", async () => {
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
+    store.select.mockRejectedValueOnce(new Error("project is gone"));
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(document.querySelector("[data-geo-source='baike.baidu.com']")?.closest("li") as HTMLElement).getByRole("button", { name: /百度百科/ }));
+    const dialog = await screen.findByRole("dialog", { name: "百度百科" });
+    await within(dialog).findByRole("region", { name: "讲错的回答" });
+    const button = within(dialog).getByRole("button", { name: "在对话中处理" });
+    await userEvent.click(button);
+    await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(button).not.toHaveAttribute("aria-busy");
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
   });
 });
 
