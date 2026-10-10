@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, ShieldCheck } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { parseQCode, segmentsFor, type QCodeParsed } from "@/lib/qcode";
 import { cn } from "@/lib/cn";
 import { parseFailureMessage } from "@/lib/errorText";
@@ -52,11 +52,6 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
         <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted">
           {filename} · {doc.sources.length} 个来源 · {doc.codes.length} 个编码
         </span>
-        <Tooltip content="高亮内容来自原文精确片段，引用直接截取自来源，不由模型生成。">
-          <span className="inline-flex items-center gap-1 text-caption text-ok">
-            <ShieldCheck size={16} aria-hidden="true" /> 引用均为来源原文片段
-          </span>
-        </Tooltip>
       </div>
 
       <div className="flex min-h-0 flex-1">

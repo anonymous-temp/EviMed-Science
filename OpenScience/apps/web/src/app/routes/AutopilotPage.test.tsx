@@ -689,8 +689,11 @@ describe("scheduled tasks", () => {
       const open = within(drawer).getByRole("region", { name: "尚未解决" });
       expect(open).toHaveTextContent("你的问题：亚组 B 的结果呢？"); expect(open).toHaveTextContent("最近一次研究没有完成，结果未知。");
       expect(open).toHaveTextContent("尚未独立复核：无酮症酸中毒增加"); expect(open).toHaveTextContent("复核未能进行：住院减少"); expect(open).toHaveTextContent("被复核削弱：HFpEF 获益更大");
-      expect(open).toHaveTextContent("任务已停止，未做独立复核：停止时尚未开始"); expect(open).toHaveTextContent("任务已暂停，未做独立复核：暂停时没做");
-      expect(open).toHaveTextContent("单次上限不够再支付一次复核，未安排独立复核：单次上限太小"); expect(open).toHaveTextContent("超出每次研究复核的条数，未安排独立复核：超出条数");
+      // A finding that will not be independently re-checked is listed as what it is, not with the platform's reason for not checking it
+      // (the task stopped, paused, the cap, the budget): owner ruling 2026-10-10.
+      expect(open).toHaveTextContent("停止时尚未开始"); expect(open).toHaveTextContent("暂停时没做");
+      expect(open).toHaveTextContent("单次上限太小"); expect(open).toHaveTextContent("超出条数");
+      expect(open).not.toHaveTextContent(/未做独立复核|未安排独立复核/);
       expect(drawer).not.toHaveTextContent("运行记录"); expect(drawer).not.toHaveTextContent("agenda_stopped");
       expect(mocks.getResearchState).toHaveBeenCalledWith(agenda.id);
     });

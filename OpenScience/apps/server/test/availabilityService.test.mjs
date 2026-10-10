@@ -155,13 +155,19 @@ test("a module-only capability is unavailable where its module is off, and where
   assert.notEqual(stateOf(everyone, "vcr-protocol").state, "unavailable");
 });
 
-test("a method not yet measured limits the virtual-clinical-research capabilities, and only while the module is on", async () => {
+// Whether a method's numeric validation has been measured is a record of the platform's own confidence in itself (the method library
+// keeps it); it is not a limit of the capability, and the capability's label says nothing of it (owner ruling 2026-10-10, R37).
+test("a method not yet measured is not a limit of the virtual-clinical-research capabilities", async () => {
   const { service } = build({ cfg: config({ vcrEnabled: true, vcrAudience: "all", vcrEngineConfigured: true }), validation: async () => ({ status: "unmeasured", reason: "not_configured" }) });
-  const entry = stateOf(await service.capabilities(alice), "vcr-analysis");
-  assert.equal(entry.state, "limited");
-  assert.equal(entry.reason.code, "method-unmeasured");
-  const verified = build({ cfg: config({ vcrEnabled: true, vcrAudience: "all", vcrEngineConfigured: true }), validation: async () => ({ status: "verified" }) });
-  assert.notEqual(stateOf(await verified.service.capabilities(alice), "vcr-analysis").reason.code, "method-unmeasured");
+  const entries = await service.capabilities(alice);
+  // The one capability the old reading limited with nothing else against it.
+  assert.notEqual(stateOf(entries, "vcr-analysis").state, "limited");
+  for (const id of ["vcr-analysis", "vcr-protocol", "vcr-evidence"]) {
+    const entry = stateOf(entries, id);
+    assert.notEqual(entry.reason.code, "method-unmeasured", id);
+    assert.doesNotMatch(entry.text, /验证/, id);
+    assert.equal(entry.also.some((reason) => reason.code === "method-unmeasured"), false, id);
+  }
 });
 
 // The same reading the job a page shows and readiness read (`vcrEngineProbe.mjs`): a label that says the engine is

@@ -61,7 +61,7 @@ async function previewTransfer() {
   await user.selectOptions(screen.getByLabelText("数据格式"), "account");
   await user.upload(screen.getByLabelText("迁移文件"), new File(['{}'], "account.json", { type: "application/json" }));
   await user.click(screen.getByRole("button", { name: "上传迁移文件" })); await user.click(await screen.findByRole("checkbox", { name: "迁移核对技能" })); await user.click(screen.getByRole("button", { name: "预览迁移" }));
-  await screen.findByText("尚未完成原生验证，确认导入后逐个版本验证并保存。"); return user;
+  await screen.findByRole("region", { name: "迁移预览" }); expect(screen.queryByText(/原生验证/)).not.toBeInTheDocument(); return user;
 }
 it("requires explicit account record selection and data preview before a single confirmation", async () => {
   await previewTransfer(); expect(api.uploadPersonalSkillTransfer).toHaveBeenCalledWith(expect.any(File), "account");
@@ -141,7 +141,7 @@ it("failed load-more retains recovered records and retries the same cursor witho
 });
 it("a reloaded first-validation failure shows a reserved target as pending without a false saved link", async () => {
   api.pendingPersonalSkillTransfers.mockResolvedValue({ items: [{ ...recoveredTransfer, mappings: [{ ...recoveredTransfer.mappings[0], imported: 0, revisions: [] }] }], nextCursor: null }); api.previewPersonalSkillTransfer.mockResolvedValue(transferPreview);
-  open(); await userEvent.click(await screen.findByRole("button", { name: "继续未完成的迁移" })); await screen.findByText("尚未完成原生验证，确认导入后逐个版本验证并保存。");
+  open(); await userEvent.click(await screen.findByRole("button", { name: "继续未完成的迁移" })); await screen.findByRole("region", { name: "迁移预览" }); expect(screen.queryByText(/原生验证/)).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "迁移核对技能" })).not.toBeInTheDocument(); expect(screen.queryByText("已保存 0 个版本")).not.toBeInTheDocument(); expect(screen.getByText("待验证，尚未保存")).toBeInTheDocument(); expect(api.confirmPersonalSkillTransfer).not.toHaveBeenCalled();
 });
 it("account import accepts the exported tar-gzip without expanding it in the browser, while portable stays JSON", async () => {

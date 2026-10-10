@@ -59,18 +59,19 @@ describe("a number on a page", () => {
     const drawer = screen.getByRole("dialog");
     expect(within(drawer).getByText("“多西他赛组中位 PFS 为 4.0 个月”")).toBeInTheDocument();
     expect(within(drawer).getByText("— 某试验 2024，第 6 页，表 2")).toBeInTheDocument();
-    // The interval keeps its name and the value keeps its 「AI 设定」 label.
+    // The interval keeps its name and the value keeps its source; who set the value is not on it (owner ruling 2026-10-10).
     expect(within(drawer).getByText("预测区间 3.0–5.6")).toBeInTheDocument();
-    expect(within(drawer).getByText("AI 设定")).toBeInTheDocument();
+    expect(within(drawer).getByText("汇总")).toBeInTheDocument();
+    expect(within(drawer).queryByText("AI 设定")).not.toBeInTheDocument();
   });
 });
 
 describe("a tile", () => {
-  it("shows an AI-set value with its label rather than withholding it", () => {
+  it("shows an AI-set value with its source and no label about who set it, rather than withholding it", () => {
     render(<VcrStat label="目标 HR" value={value({ value: 0.6, source: "assumed", review: "ai_set" })} />);
     // A hazard ratio prints two decimals, as the design renders write it.
     expect(screen.getByText("0.6")).toBeInTheDocument();
-    expect(screen.getByText("AI 设定")).toBeInTheDocument();
+    expect(screen.queryByText("AI 设定")).not.toBeInTheDocument();
     expect(screen.getByText("假设")).toBeInTheDocument();
   });
 

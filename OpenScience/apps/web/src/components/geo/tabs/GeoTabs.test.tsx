@@ -464,13 +464,13 @@ describe("信源", () => {
     for (const answer of dialog.querySelectorAll("[data-geo-source-answer]")) expect(answer.getAttribute("href")).toMatch(/^\/app\/geo\/geo_1\/answers\/snap_src_2_/);
     // 显示更多 keeps a long list short.
     expect(others.querySelectorAll("[data-geo-source-answer]")).toHaveLength(10);
-    // The last thing it says: the conditions, as words, and what is unchecked.
+    // The last thing it says: the conditions the platform knows, as words. A condition it has not checked is not listed, and nothing says so
+    // (owner ruling 2026-10-10: "not verified" is the platform's bookkeeping, not a line on a site's page).
     const conditions = dialog.querySelector("[data-geo-source-detail]") as HTMLElement;
     expect(conditions.querySelector("[data-geo-condition='icp:yes']")).not.toBeNull();
     expect(conditions.querySelector("[data-geo-condition='newsIndexed:no']")).not.toBeNull();
-    expect(conditions).toHaveTextContent("医疗未核实");
     expect(conditions.querySelector("[data-geo-condition='medical:unknown']")).toBeNull();
-    expect(within(dialog).getByText("“未核实”是平台还没核对这一项，不等于不满足。")).toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent(/未核实/);
     expect(within(dialog).getByRole("button", { name: "在对话中处理" })).toBeInTheDocument();
     // The expansion in the row is gone.
     expect(rowOf("baike.baidu.com").querySelector("[data-geo-source-detail]")).toBeNull();
@@ -672,16 +672,15 @@ describe("信源", () => {
     expect(await screen.findByText(/只看 ?DeepSeek/)).toBeInTheDocument();
   });
 
-  it("says “三项都未核实” once instead of three dashes, in the drawer", async () => {
+  it("lists no condition the platform has not checked, and says nothing of it, in the drawer", async () => {
     const rows = many(2);
     client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: rows });
     client.getGeoSource.mockResolvedValue(sourceDetailOf(rows[0] as never));
     renderTab(<SourcesTab {...props()} />);
     await userEvent.click(await screen.findByRole("button", { name: /站点0/ }));
     const dialog = await screen.findByRole("dialog", { name: "站点0" });
-    const detail = dialog.querySelector("[data-geo-source-detail]") as HTMLElement;
-    expect(detail).toHaveTextContent("三项都未核实");
-    expect(detail.querySelector("[data-geo-condition]")).toBeNull();
+    expect(dialog).not.toHaveTextContent(/未核实/);
+    expect(dialog.querySelector("[data-geo-condition]")).toBeNull();
   });
 
   it("filters by engine, by what a site did to us, and by a word of its name or domain", async () => {

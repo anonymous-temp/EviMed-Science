@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/Input";
 import {
   declineDelivery, importDelivery, importShareLink, openDelivery, openShareLink, type SharedPreview,
 } from "@/lib/capsuleShareClient";
-import { CAPSULE_SCAN_REASONS, capsuleEntryLabel, fromSender } from "@/lib/capsuleText";
+import { capsuleEntryLabel, fromSender, takenEntries } from "@/lib/capsuleText";
 import { announceMemoryChanged, enableReceivedCapsule, startCapsuleTrial } from "@/lib/memoryClient";
 import { productErrorMessage, type CapsuleRecord } from "@/lib/productClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -84,7 +84,7 @@ export function SharedCapsulePage() {
   const preview = shared?.preview ?? null;
   const closed = shared?.delivery && !preview ? CLOSED_TEXT[shared.delivery.state] ?? "这份分享已经不能收下了。" : null;
   const sender = preview?.card?.author ?? shared?.delivery?.sender.name ?? null;
-  const dropped = preview?.scan?.dropped ?? [];
+  const taken = preview ? takenEntries(preview.entries, preview.scan) : [];
 
   return (
     <PageShell title="收到的分享">
@@ -109,19 +109,15 @@ export function SharedCapsulePage() {
         <div className="max-w-measure space-y-4">
           <div className="space-y-1">
             {preview.card?.title && <p className="text-ui font-semibold text-text">{preview.card.title}</p>}
-            <p className="text-ui text-text-2">{[sender ? fromSender(sender) : null, preview.card?.summary ?? `${preview.entries.length} 条`].filter(Boolean).join(" · ")}</p>
+            <p className="text-ui text-text-2">{[sender ? fromSender(sender) : null, preview.card?.summary ?? `${taken.length} 条`].filter(Boolean).join(" · ")}</p>
             {shared?.link && <p className="text-caption text-text-3">这个链接还能用 {shared.link.usesLeft} 次。</p>}
-            {dropped.length > 0 && <p className="text-caption text-text-3">不会带上 {dropped.length} 条没有通过自动检查的内容。</p>}
           </div>
           <ul className="space-y-1">
-            {preview.entries.map((entry) => {
-              const drop = dropped.find((item) => item.id === entry.id);
-              return <li key={entry.id}>
-                <Disclosure summary={`${capsuleEntryLabel(entry.factKind)}${drop ? ` · 不会带上：${CAPSULE_SCAN_REASONS[drop.code] ?? "没有通过自动检查"}` : ""}`}>
-                  <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{entry.content}</p>
-                </Disclosure>
-              </li>;
-            })}
+            {taken.map((entry) => <li key={entry.id}>
+              <Disclosure summary={capsuleEntryLabel(entry.factKind)}>
+                <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{entry.content}</p>
+              </Disclosure>
+            </li>)}
           </ul>
           {error && <p role="alert" className="text-ui text-error">{error}</p>}
           {imported ? (

@@ -2,7 +2,6 @@ import {
   VCR_CONCLUSION_LABELS_ZH,
   VCR_COUNT_LABELS_ZH,
   VCR_INTERVAL_KINDS,
-  VCR_REVIEW_STATE_LABELS_ZH,
   VCR_VALUE_SOURCES,
   VCR_VALUE_SOURCE_LABELS_ZH,
 } from "@evimed/domain";
@@ -18,7 +17,6 @@ import {
   mcseText,
   NO_VALUE,
   numberText,
-  reviewLabel,
   sourceLabel,
   staleSentence,
   valueSentence,
@@ -33,9 +31,8 @@ describe("the labels are the domain's, not a second copy", () => {
     }
   });
 
-  it("names the three conclusions and the three review states from the vocabulary", () => {
+  it("names the three conclusions from the vocabulary", () => {
     expect(conclusionLabel("not_estimable")).toBe(VCR_CONCLUSION_LABELS_ZH.not_estimable);
-    expect(reviewLabel("ai_set")).toBe(VCR_REVIEW_STATE_LABELS_ZH.ai_set);
     expect(countLabel("effectiveSampleSize")).toBe(VCR_COUNT_LABELS_ZH.effectiveSampleSize);
   });
 
@@ -93,7 +90,9 @@ describe("a count", () => {
 });
 
 describe("the whole value as one sentence", () => {
-  it("carries the source, the named interval, the simulation error and the review state", () => {
+  // R36, 2026-10-10: who set a number and whether a person has signed it are the module's bookkeeping; the sentence a screen reader gets for a number
+  // is its value, its source, its interval, its simulation error and whether it is out of date.
+  it("carries the source, the named interval and the simulation error, and says nothing of who set the number", () => {
     const sentence = valueSentence({
       value: 4.1, unit: "个月", source: "aggregate", review: "ai_set",
       interval: { kind: "prediction", low: 3.0, high: 5.6 },
@@ -103,7 +102,7 @@ describe("the whole value as one sentence", () => {
     expect(sentence).toContain("汇总");
     expect(sentence).toContain("预测区间 3.0–5.6");
     expect(sentence).toContain("±0.4");
-    expect(sentence).toContain("AI 设定");
+    expect(sentence).not.toMatch(/AI 设定|已复核|复核后有变更/);
   });
 
   it("says a result is stale without dropping its number", () => {

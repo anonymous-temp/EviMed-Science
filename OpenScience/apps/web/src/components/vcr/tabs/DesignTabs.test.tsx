@@ -103,9 +103,10 @@ describe("总览", () => {
     expect(band.querySelector("[data-vcr-count='generatedRecords']")).toHaveTextContent("约 648 万");
   });
 
-  it("links an attention line to the tab the server named, and gives the budget line no link of its own", () => {
+  it("links an attention line to the tab the server named, gives the budget line no link of its own, and has no line about who set an assumption", () => {
     draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
-    expect(screen.getByRole("link", { name: "去复核" })).toHaveAttribute("href", `/app/virtual-research/${STUDY_ID}/data`);
+    expect(screen.queryByRole("link", { name: "去复核" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/由 AI 设定/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看缺口" })).toHaveAttribute("href", `/app/virtual-research/${STUDY_ID}/comparator`);
     const budget = screen.getByText("1 项计算在等你确认计算预算").closest("li") as HTMLElement;
     expect(within(budget).queryByRole("link")).not.toBeInTheDocument();
@@ -725,12 +726,11 @@ describe("对照", () => {
     expect(container.querySelector("[data-vcr-counts]")).toBeNull();
   });
 
-  it("says the method's conclusion and the review state apart", async () => {
+  it("says the method's conclusion, and nothing of who set it or whether it was reviewed", async () => {
     const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
     const verdict = await found(container, "[data-vcr-verdict]");
     expect(verdict).toHaveTextContent("有限制地估计");
-    expect(verdict).toHaveTextContent("AI 设定");
-    expect(verdict).toHaveTextContent("未复核");
+    expect(verdict).not.toHaveTextContent(/AI 设定|未复核|已复核/);
   });
 
   it("prints 1.04 as 1.04, not as 1.0", async () => {
@@ -784,7 +784,9 @@ describe("试验", () => {
     expect(codes).toEqual(["A", "B", "C", "D"]);
     const d = container.querySelector("tr[data-vcr-design='D']") as HTMLElement;
     expect(d).toHaveAttribute("data-vcr-dominated");
-    expect(d.querySelector("[data-vcr-dominated-note]")).toHaveTextContent("在比较目标的全部指标上都不优于 C");
+    // D is dominated by B, not by C: C beats it by less than three combined Monte-Carlo errors on every measure, which the tie rule
+    // (D10) no longer counts (860954be1 regenerated the fixture; this line was left reading C).
+    expect(d.querySelector("[data-vcr-dominated-note]")).toHaveTextContent("在比较目标的全部指标上都不优于 B");
     expect(d.querySelectorAll("[data-vcr-measure]")).toHaveLength(0);
     expect(d.textContent).not.toContain("%");
   });
@@ -1019,7 +1021,8 @@ describe("试验", () => {
     expect(within(drawer).getByLabelText("比较目标")).toHaveValue("在成功把握尽量高、样本量尽量少的目标下选哪个方案");
     expect(within(drawer).getByRole("radio", { name: "B" })).toBeChecked();
     expect(within(drawer).getByLabelText("选择理由")).toHaveValue("成功把握与样本量的折中；方案 C 周期更长。");
-    expect(within(drawer).getByText("平台不自动选定方案。")).toBeInTheDocument();
+    expect(within(drawer).getByText("先写比较目标，再选一个，并说明理由。")).toBeInTheDocument();
+    expect(drawer).not.toHaveTextContent(/不自动选定/);
     expect(within(drawer).getByText("上次记录于 今天 09:07")).toBeInTheDocument();
   });
 

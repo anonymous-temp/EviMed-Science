@@ -65,7 +65,7 @@ describe("evidence reading", () => {
     expect(within(details).getByText("AI 编写 · EviMed 证据 AI")).toBeInTheDocument();
     expect(within(details).getByText(/用户修订记录 · 李研究/)).toBeInTheDocument();
     expect(within(details).getByText("评议者 王药师")).toBeInTheDocument();
-    expect(within(details).getByText("AI 已评议")).toBeInTheDocument();
+    expect(within(details).queryByText(/AI 已评议|AI 待评议/)).not.toBeInTheDocument();
     expect(within(details).getByText(/评议于/)).toBeInTheDocument();
     expect(within(details).getByText(/全部来源上次核查于/)).toBeInTheDocument();
     // The disclosure of how the card was made is in the same fold, and no model is named anywhere on the page.
@@ -78,7 +78,7 @@ describe("evidence reading", () => {
     expect(row).toContainElement(details);
   });
 
-  it("keeps what is wrong or unfinished above the fold, in warning colour: a source not re-read, a card waiting for its review", () => {
+  it("keeps what is wrong above the fold, in warning colour: a source that changed under the card — and says nothing of a source the upkeep did not re-read", () => {
     const editorial: NonNullable<EvidenceCard["editorial"]> = {
       author: { kind: "ai", name: "EviMed 证据 AI" }, reviewer: null, status: "review-pending", reviewRevision: null,
       sourceChangedAt: "2026-10-04T00:00:00Z", sourceCheckedAt: "2026-10-03T00:00:00Z",
@@ -86,13 +86,11 @@ describe("evidence reading", () => {
     };
     const { container } = render(<EvidenceReading evidence={{ ...richCard, editorial }} />);
     const details = fold(container);
-    const retained = screen.getByText(/部分来源本轮尚未完成复核/);
+    expect(container.textContent).not.toMatch(/部分来源本轮尚未完成复核|沿用上次保留内容/);
     const pending = screen.getByText(/依据来源更新于/);
     expect(pending).toHaveTextContent("等待复核");
-    for (const line of [retained, pending]) {
-      expect(details).not.toContainElement(line);
-      expect(line).toHaveClass("text-warn");
-    }
+    expect(details).not.toContainElement(pending);
+    expect(pending).toHaveClass("text-warn");
     // The same source change, settled, is a plain line in the fold and no longer a warning.
     const { container: settled } = render(<EvidenceReading evidence={{ ...richCard, editorial: { ...editorial, status: "ai-reviewed", reviewer: { kind: "ai", name: "核对 AI" }, reviewRevision: richCard.revision, sourceChecks: [] } }} />);
     expect(within(fold(settled)).getByText(/依据来源更新于/)).toBeInTheDocument();

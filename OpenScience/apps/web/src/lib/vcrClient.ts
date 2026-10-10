@@ -219,7 +219,7 @@ export type VcrSteps = Partial<Record<VcrStepKey, VcrStep>>;
 export interface VcrAttention {
   kind: string;
   text: string;
-  /** `attention` is the amber 「AI 设定 / 缺口」 line; `stale` is the grey one. */
+  /** `attention` is the amber line (a gap, a failed step, a wait for the allowance); `stale` is the grey one. */
   tone?: "attention" | "stale" | "neutral";
   /** The names under the line: the three assumptions, the three gaps. */
   items?: string[];
@@ -276,7 +276,7 @@ export interface VcrRecruitTodo {
 export interface VcrReviewSummary {
   id: string; reviewerKind: "ai" | "human"; role: string; label: string; state: string;
   status: "queued" | "running" | "done" | "failed"; current: boolean;
-  by?: string | null; at?: string | null; note: string;
+  by?: string | null; at?: string | null; note?: string | null;
   /**
    * One sentence each (`fix`, or `message` where the reviewer wrote no fix) and, when the finding is about an object this study holds, the
    * way to it. The reviewer's path into the frozen snapshot and the JSON it quoted are the review's own provenance and are not sent.
@@ -355,7 +355,7 @@ export interface VcrChange {
   at: string;
   text: string;
   by?: string | null;
-  state?: VcrReviewState | "stale" | null;
+  state?: "stale" | null;
 }
 
 /** A design on the trade-off scatter and in the grid. */
@@ -512,7 +512,6 @@ export interface VcrCriterion {
   kept: number | null;
   excluded: number | null;
   unknown: number | null;
-  review?: VcrReviewState | null;
   source?: VcrValueSource | null;
   /** 「v2 修改」. */
   changed?: string | null;
@@ -805,7 +804,7 @@ export interface VcrComparatorTab {
   methods?: Array<{ label: string; version?: string | null; note?: string | null; passed?: boolean }>;
   /** ICH E10's four conditions. */
   e10?: Array<{ key: string; label: string; state: "met" | "partial" | "doubtful"; note?: string | null }>;
-  estimand?: { rows: Array<{ label: string; value: string }>; note?: string | null; source?: VcrValueSource | null; review?: VcrReviewState | null } | null;
+  estimand?: { rows: Array<{ label: string; value: string }>; note?: string | null; source?: VcrValueSource | null } | null;
   comparability: VcrProfileRow[];
   comparabilityNote?: string | null;
   /** The ten comparability dimensions, each with its state. */
@@ -822,8 +821,8 @@ export interface VcrComparatorTab {
   /** 「不可估计」 — the gaps, and what each one would answer. */
   gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null; rule?: string | null } | null;
   counts: VcrCounts | null;
-  /** 「本页结论：有限制地估计 · AI 设定 · 未复核」. */
-  verdict?: { conclusion: VcrConclusion | null; review: VcrReviewState; reviewed?: boolean } | null;
+  /** 「本页结论：有限制地估计」. */
+  verdict?: { conclusion: VcrConclusion | null } | null;
   stale: VcrStaleNote | null;
   partial: VcrPartial | null;
 }
@@ -843,7 +842,6 @@ export interface VcrTrialTab {
   headline?: string | null;
   /** ADEMP, one line each. */
   ademp: Array<{ key: string; label: string; text: string }>;
-  ademReview?: VcrReviewState | null;
   designs: VcrDesign[];
   /** The columns of the design grid, in order. */
   columns: Array<{ key: string; label: string; unit?: string | null }>;
@@ -1200,7 +1198,7 @@ export interface VcrPackSource {
   accessed?: string | null;
 }
 
-/** A disease knowledge pack, without its sections (`VCR_PACK_STATUSES`: curated 已整理, ai-draft AI 草拟). */
+/** A disease knowledge pack, without its sections (`VCR_PACK_STATUSES`: curated, ai-draft — the status decides whether a lead may promote it, and the page does not tag it). */
 export interface VcrPackSummary {
   origin: "shipped" | "stored";
   id: string;

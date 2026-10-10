@@ -118,9 +118,12 @@ test('review-only metadata cannot change any frozen numeric binding, including r
     reports: [{ section: 'main', template: '既有记录 {{n:review.records[0].provenance.cost|f2}}。' }] };
   const original = canonicalVcrDocument(study, { kind: 'study_package', cover });
   const updated = canonicalVcrDocument(study, { kind: 'study_package', cover: { ...cover, documentReview: {
-    reportRevision: vcrReportReviewRevision(cover), records: [{ kind: 'clinical', reviewerKind: 'ai', status: 'done', provenance: { cost: 2.5, model: 'actual-new-reviewer', findings: [] } }],
+    reportRevision: vcrReportReviewRevision(cover), records: [{ kind: 'clinical', reviewerKind: 'ai', status: 'done', provenance: { cost: 2.5, model: 'actual-new-reviewer', findings: [{ location: 'main', message: 'actual-new-finding' }] } }],
   } } });
-  assert.match(updated.canonicalMarkdown, /actual-new-reviewer/);
+  // The refreshed review record is what the document lists (by its finding); the model that wrote it is the platform's own record and
+  // is not in the package (owner ruling 2026-10-10, R35).
+  assert.match(updated.canonicalMarkdown, /actual-new-finding/);
+  assert.doesNotMatch(updated.canonicalMarkdown, /actual-new-reviewer|old-reviewer/);
   assert.match(updated.canonicalMarkdown, /既有记录 1.25/);
   assert.doesNotMatch(updated.canonicalMarkdown, /既有记录 2.50/);
   assert.notEqual(updated.revision, original.revision);

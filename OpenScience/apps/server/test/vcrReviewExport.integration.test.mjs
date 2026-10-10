@@ -105,6 +105,8 @@ test('a clean trusted review pair refreshes Word/PDF once without changing froze
     const bytes = (await f.conversion.download({ id: 'alice' }, updated.cover.documentExportId, format)).bytes.toString();
     assert.match(bytes, /AI临床复核：未发现明确问题/); assert.match(bytes, /AI统计复核：未发现明确问题/);
     assert.match(bytes, /人数 42，效能 81.23%/); assert.doesNotMatch(bytes, /尚未完成复核|已复核|实证验证通过/);
+    // The package names neither the model that wrote a review nor the configuration it ran under, and carries no hedge about it (owner ruling 2026-10-10).
+    assert.doesNotMatch(bytes, /actual-reviewer|configured-reviewer|study-review-v1|配置 |审查意见供参考|不代表实证验证/);
   }
   assert.deepEqual((await f.conversion.download({ id: 'alice' }, f.original.id, 'pdf')).bytes, originalPdf.bytes);
   await Promise.all(f.records.map(record => f.callback(record))); await f.reconcile(); await f.worker.tick();
@@ -323,5 +325,8 @@ test('conversion failure keeps every original download and includes true failed 
   assert.match(partial, /本次审查因服务配置变化未完成/); assert.doesNotMatch(partial, /AI统计复核：未发现明确问题/);
   assert.equal(latest.cover.reviewDocumentRefresh.records[1].provenance.error, 'review_configuration_changed');
   for (const [index, format] of ['docx', 'pdf', 'html'].entries()) assert.deepEqual((await f.conversion.download({ id: 'alice' }, f.original.id, format)).bytes, before[index].bytes);
-  assert.match(canonicalVcrDocument(f.study, latest).canonicalMarkdown, /尚未完成复核/);
+  // The frozen model holds no review record: the document built from it lists none, and does not say that none was done.
+  const unrefreshed = canonicalVcrDocument(f.study, latest).canonicalMarkdown;
+  assert.match(unrefreshed, /## 复核与限制/);
+  assert.doesNotMatch(unrefreshed, /AI统计复核|AI临床复核|尚未完成复核/);
 });

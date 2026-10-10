@@ -278,12 +278,11 @@ export function presentPopulationTab(bundle) {
       notEvaluated: notEvaluated.get(codes.get(criterion.id) ?? "") ?? null,
       name: (/** @type {Record<string, string>} */ (VCR_CRITERION_TYPE_LABELS_ZH))[criterion.criterionType] ?? "其他",
       quote: text(criterion.sourceText),
-      quoteSource: vcrLocatorText(criterion.sourceLocator, { draftPack: bundle.knowledge?.pack?.status === "ai-draft" }),
+      quoteSource: vcrLocatorText(criterion.sourceLocator),
       kind: criterion.kind,
       kept: entry?.kept ?? null,
       excluded: entry?.removed ?? null,
       unknown: entry?.unknown ?? null,
-      review: criterion.reviewState,
       source: "extracted",
       changed: null,
     };
@@ -391,14 +390,14 @@ export function presentPopulationTab(bundle) {
 }
 
 /**
- * 「第 12 页」 from a stored locator. A criterion taken from the study's knowledge pack says
- * so, and says 「AI 草拟」 when that pack is a draft: the label goes wherever a draft's content is used.
- * @param {unknown} raw @param {{ draftPack?: boolean }} [options]
+ * 「第 12 页」 from a stored locator. A criterion taken from the study's knowledge pack says so, and nothing more of the pack: whether
+ * the pack was drafted by a model or curated is the platform's own record (owner ruling 2026-10-10), not a label on the quotation.
+ * @param {unknown} raw
  */
-export function vcrLocatorText(raw, { draftPack = false } = {}) {
+export function vcrLocatorText(raw) {
   const locator = object(raw);
   const parts = [];
-  if (text(locator.pack)) parts.push(draftPack ? "知识包（AI 草拟）" : "知识包");
+  if (text(locator.pack)) parts.push("知识包");
   if (locator.page != null) parts.push(`第 ${locator.page} 页`);
   if (text(locator.section)) parts.push(String(locator.section));
   if (text(locator.table)) parts.push(String(locator.table));
@@ -698,7 +697,6 @@ export function presentComparatorTab(bundle) {
       ],
       note: text(object(current.targetTrial).note),
       source: "assumed",
-      review: current.reviewState,
     } : null,
     comparability: balance.map((row, index) => {
       const smd = finite(row.smdAdjusted);
@@ -715,11 +713,7 @@ export function presentComparatorTab(bundle) {
     robustness: robustnessView(result, value),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
-    verdict: shown ? {
-      conclusion,
-      review: result?.reviewState ?? shown.reviewState,
-      reviewed: (result?.reviewState ?? shown.reviewState) === "reviewed",
-    } : null,
+    verdict: shown ? { conclusion } : null,
     at: shown ? zhTime(shown.createdAt, now) : null,
     stale: staleNote(marks),
     // One sentence, and no version numbers: the page says that these are the previous design's numbers, not which version that was.
@@ -879,7 +873,6 @@ export function presentTrialTab(bundle) {
   return {
     headline: trialHeadline(designs),
     ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null),
-    ademReview: headlineRow?._result?.reviewState ?? null,
     designs,
     columns,
     grid: grids.heat,
@@ -895,7 +888,6 @@ export function presentTrialTab(bundle) {
       rationale: text(decision?.rationale),
       recordedAt: decision ? zhTime(decision.createdAt, now) : null,
       options: designs.map((design) => ({ id: design.id, label: design.code, name: design.name, disabled: design.dominated })),
-      note: "平台不自动选定方案。",
     } : null,
     runRecord,
     forecasts: forecastRows,
@@ -1353,7 +1345,7 @@ export function presentDataTab(bundle, query = {}) {
     .map((id) => (evidence?.items ?? []).find((/** @type {any} */ item) => String(item.id) === id)).filter(Boolean);
   // Who countersigned the card, when, and which version — read off the card, which the store
   // gives the state its countersignatures earned. A card whose signed version is an older one
-  // says which (针对版本 1) beside 「复核后有变更」.
+  // says which (针对版本 1) in its detail; no chip on the card says reviewed or changed.
   const reviewOf = (/** @type {any} */ card) => (card.reviewedAt
     ? { by: card.reviewedBy ?? null, at: zhDate(card.reviewedAt, now), version: card.reviewedVersion ?? card.version,
       kind: (/** @type {Record<string, string>} */ (VCR_REVIEW_KIND_LABELS_ZH))[card.reviewKind] ?? null }
@@ -1378,7 +1370,7 @@ export function presentDataTab(bundle, query = {}) {
     const pooling = object(card.pooling);
     const versions = (bundle.assumptionVersions?.get?.(card.key) ?? []).map((/** @type {any} */ row) => ({
       version: row.version, at: zhTime(row.createdAt, now), text: text(row.note) ?? `${row.name || row.key}${row.pointValue != null ? ` = ${row.pointValue}` : ""}`,
-      note: row.afterFreeze === true ? "冻结后新增，不影响已冻结的计划" : row.reviewState === "reviewed" ? "已复核" : null,
+      note: row.afterFreeze === true ? "冻结后新增，不影响已冻结的计划" : null,
       ...(row.afterFreeze === true ? { afterFreeze: true } : {}),
     }));
     // News about this card's sources (flywheel F24): open signals say what, a version after the freeze says it is already beside the frozen one.
@@ -1425,9 +1417,8 @@ export function presentDataTab(bundle, query = {}) {
     return { ...presentPrecedentRow(row), usedFor: [...new Set(items.map((/** @type {any} */ item) => PARAMETER_LABELS[String(item.parameter)]).filter(Boolean))].slice(0, 3).join("、") || null };
   });
   const snapshots = presentDataSnapshots(dataPlane, now);
-  const aiSet = cards.filter((card) => card.value.review === "ai_set").length;
   return {
-    headline: cards.length ? `${cards.length} 张假设卡${aiSet ? `，其中 ${aiSet} 张由 AI 设定、还没有复核` : ""}。` : null,
+    headline: cards.length ? `${cards.length} 张假设卡。` : null,
     status: [
       ...(precedents.length ? [{ label: "试验先例", value: `${precedents.length} 项` }] : []),
       ...(cards.length ? [{ label: "假设卡", value: `${cards.length} 张` }] : []),

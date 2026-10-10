@@ -538,8 +538,9 @@ test("the study's latest conclusion is a rendered sentence, or null when nothing
   assert.equal(said.state, "estimable");
 });
 
-test("what needs attention is deterministic over the rows: AI-set cards, a route that cannot be estimated, stale results, the budget, a failed step", () => {
+test("what needs attention is deterministic over the rows: a route that cannot be estimated, stale results, the budget, a failed step — and never a card an AI set", () => {
   const lines = attentionOf({
+    // A card an AI set and nobody countersigned, used by a design: the list used to open with 「1 条关键假设由 AI 设定」.
     assumptions: [{ id: "a1", key: "hr", name: "目标 HR", reviewState: "ai_set" }, { id: "a2", key: "orr", name: "ORR", reviewState: "reviewed" }],
     scenarios: [{ assumptionIds: ["hr"] }],
     comparators: [{ route: "external_control", conclusion: "not_estimable", gapList: [{ title: "同期治疗记录" }, { title: "ECOG 缺失 38%" }], resultId: null }],
@@ -547,14 +548,14 @@ test("what needs attention is deterministic over the rows: AI-set cards, a route
     jobs: [{ state: "awaiting_budget" }, { state: "running" }],
     steps: { trial: { status: "failed" } },
   });
-  assert.deepEqual(lines.map((line) => line.kind), ["ai_set", "not_estimable", "stale", "budget_confirm", "step_failed"]);
-  assert.equal(lines[0].text, "1 条关键假设由 AI 设定");
-  assert.deepEqual(lines[1].items, ["同期治疗记录", "ECOG 缺失 38%"]);
-  assert.equal(lines[1].text, "真实外部对照不可估计，缺 2 项数据");
-  assert.match(lines[2].text, /入排条件已变更/);
-  assert.deepEqual(attentionOf({ assumptions: [], scenarios: [], comparators: [], results: [], stale: [], jobs: [], steps: {} }), [], "a study with nothing wrong says nothing");
+  assert.deepEqual(lines.map((line) => line.kind), ["not_estimable", "stale", "budget_confirm", "step_failed"]);
+  assert.doesNotMatch(JSON.stringify(lines), /AI 设定|还没有复核|去复核/);
+  assert.deepEqual(lines[0].items, ["同期治疗记录", "ECOG 缺失 38%"]);
+  assert.equal(lines[0].text, "真实外部对照不可估计，缺 2 项数据");
+  assert.match(lines[1].text, /入排条件已变更/);
+  assert.deepEqual(attentionOf({ comparators: [], results: [], stale: [], jobs: [], steps: {} }), [], "a study with nothing wrong says nothing");
   // A step the allowance would not start is a line of its own, marked 模拟 where the wallet is, and only while it is queued.
-  const quiet = { assumptions: [], scenarios: [], comparators: [], results: [], stale: [], jobs: [] };
+  const quiet = { comparators: [], results: [], stale: [], jobs: [] };
   const one = attentionOf({ ...quiet, steps: { evidence: { status: "queued", waiting: "simulated_allowance" } } });
   assert.deepEqual(one.map((line) => [line.kind, line.text]), [["allowance_waiting", "「证据」这一步在等模拟额度，模拟充值后会自动开始。"]]);
   const many = attentionOf({ ...quiet, steps: { trial: { status: "queued", waiting: "allowance" }, comparator: { status: "queued", waiting: "allowance" } } });
@@ -565,7 +566,7 @@ test("what needs attention is deterministic over the rows: AI-set cards, a route
 });
 
 test("an export that ended with no document is said under 「需要关注」 the way a failed step is, on the home list and the study page alike", () => {
-  const quiet = { assumptions: [], scenarios: [], comparators: [], results: [], stale: [], jobs: [], steps: {} };
+  const quiet = { comparators: [], results: [], stale: [], jobs: [], steps: {} };
   const document = { results: { study: { id: "std_1" } }, reports: [{ section: "main", template: "正文", rendered: "正文" }] };
   const line = (/** @type {string} */ label) => ({ kind: "export_failed", tone: "attention", tab: null, text: `「${label}」没有生成，已算出的结果保留` });
   // Newest first, as the store returns them: the pilot's study after its 模拟报告 and its CDE pack ended 「未完成」.
@@ -599,7 +600,7 @@ test("an export that ended with no document is said under 「需要关注」 the
   const steps = { trial: { status: "failed" } };
   const expected = [{ kind: "step_failed", tone: "attention", tab: null, text: "「试验」这一步没有做完，已算出的部分保留" }, line("CDE 沟通交流资料包"), line("模拟报告")];
   const home = presentSummary({ study: { ...study, steps, updatedAt: "2026-09-28T01:00:00.000Z", createdAt: "x" }, results: [], stale: [], jobs: [],
-    assumptions: [], scenarios: [], comparators: [], grid: null, exports: pilot, now: NOW });
+    scenarios: [], comparators: [], grid: null, exports: pilot, now: NOW });
   assert.deepEqual(home.attention, expected);
   assert.deepEqual(presentStudy({ ...emptyBundle(), study: { ...study, steps }, exports: pilot }).overview.attention, expected);
 });
@@ -942,6 +943,49 @@ test("the reader shows a model document as its own sections, and says the snapsh
   assert.equal(after.snapshotChanged, true);
 });
 
+test("the package reader's cover and register say no review state: the reviews are listed, the register keeps its source column", () => {
+  const inputs = modelInputs();
+  const results = resultRows();
+  const model = reportModelFor({ inputs, versions: [frozenVersion(inputs)], results });
+  // One AI statistical review and no clinical one. The cover used to print 「统计复核：已复核（日期）」 and 「临床复核：未复核」,
+  // and the register a 「复核」 column of 「AI 设定」 for every card.
+  const review = { id: "rev_1", reviewerKind: "ai", kind: "statistical", status: "done", createdAt: "2026-10-04T09:00:00.000Z", nodes: [], provenance: { findings: [] } };
+  const bundle = {
+    now: NOW, study: modelStudy, exports: [], definition: inputs.definition, assumptions: inputs.assumptions, results, seal: null, reviews: [], stale: [],
+    models: [], populations: [], comparators: [], comparator: null, scenarios: [], patientSets: [], executions: new Map(), decisions: [], allResults: [], currentNodes: null,
+  };
+  const row = { id: "exp_2", kind: "study_package", state: "ready", createdAt: "2026-10-04T08:00:00.000Z",
+    cover: { results: { ...model, review: { ...model.review, records: [review] } }, reviews: [review], reports: [{ section: "main", template: "概要。", rendered: "概要。" }] } };
+  const shown = presentExport(row, { ...bundle, exports: [row] });
+  assert.deepEqual(shown.document.status.map((entry) => entry.label), ["预期用途", "结局封存"], "intended use and seal; no line per kind of review");
+  assert.doesNotMatch(JSON.stringify(shown.document.status), /复核/);
+  assert.equal(shown.document.reviews.length, 1, "the review itself is still listed, with its findings");
+  const register = shown.document.sections.find((/** @type {any} */ section) => section.id === "assumptions");
+  assert.ok(register, "the study package has its assumption register");
+  assert.deepEqual(register.table.columns, ["假设", "取值", "来源"]);
+  assert.equal(register.table.rows.length, inputs.assumptions.length);
+  assert.ok(register.table.rows.every((/** @type {string[]} */ cells) => cells.length === 3 && cells[2] !== "—"), "every card keeps the word for where its value came from");
+  assert.doesNotMatch(JSON.stringify(register), /AI 设定|已复核|复核后有变更/);
+  // No review at all: nothing says so (it used to read 「未复核」 twice).
+  const bare = presentExport({ ...row, cover: { results: model, reports: row.cover.reports } }, { ...bundle, exports: [row] });
+  assert.deepEqual(bare.document.status.map((entry) => entry.label), ["预期用途", "结局封存"]);
+});
+
+test("the data tab counts its cards and says nothing of who set them: no AI-set tally in the headline, no 「已复核」 on a version", () => {
+  const card = (/** @type {string} */ key, /** @type {string} */ reviewState) => ({ id: `a_${key}`, key, name: key, version: 2, pointValue: 0.7, unit: null, reviewState,
+    sourceKind: "scenario", valueSource: "assumed", pooling: {}, evidenceIds: [] });
+  const bundle = { ...emptyBundle(), assumptions: [card("hr", "ai_set"), card("orr", "ai_set"), card("sd", "reviewed")],
+    assumptionVersions: new Map([["sd", [{ version: 2, createdAt: "2026-09-28T01:00:00.000Z", note: "更新", reviewState: "reviewed", name: "sd", key: "sd" }]]]) };
+  const data = presentDataTab(bundle);
+  assert.equal(data.headline, "3 张假设卡。");
+  assert.equal(data.assumptions.length, 3, "the cards are all there");
+  assert.equal(data.assumptions[2].detail.versions.length, 1, "the version log is there");
+  assert.equal(data.assumptions[2].detail.versions[0].note, null, "a version does not say it was reviewed");
+  assert.doesNotMatch(JSON.stringify(data.headline), /AI 设定|还没有复核/);
+  // The countersignature itself is still offered by the card's state, which the page reads to show or hide the button.
+  assert.deepEqual(data.assumptions.map((entry) => entry.value.review), ["ai_set", "ai_set", "reviewed"]);
+});
+
 test("a precedent keeps planned and actual apart and shows a rate only when its three inputs exist", () => {
   const precedent = presentPrecedent({ id: "p", registry_id: "NCT1", registry: "clinicaltrials.gov", title: "t",
     pico: { conditions: ["NSCLC"] }, design: { phases: ["PHASE3"] }, enrollment: { planned: 420, actual: 400, accrualToPrimaryCompletionMonths: 20 }, sites: { count: 10, countries: ["中国"] },
@@ -956,7 +1000,7 @@ test("a study summary reads as the home list's row: tier, latest conclusion, att
   const { designs } = presentDesigns(designsBundle());
   void designs;
   const row = presentSummary({ study: { ...study, updatedAt: "2026-09-28T01:00:00.000Z", createdAt: "x", steps: {} }, results: designsBundle().results, stale: [], jobs: [],
-    assumptions: [], scenarios: designsBundle().scenarios, comparators: [], grid: designsBundle().grid, now: NOW });
+    scenarios: designsBundle().scenarios, comparators: [], grid: designsBundle().grid, now: NOW });
   assert.equal(row.tier, "T0");
   assert.equal("dataTier" in row, false, "the page's word is `tier`");
   assert.equal(row.updatedAt, "今天 09:00");
@@ -1228,11 +1272,11 @@ test("C3-07 a review is current only when every node it names is at its current 
 
 // --- a criterion taken from the study's pack says so ---------------------------------
 
-test("a locator that names a knowledge pack says 知识包, and 「AI 草拟」 when the study's pack is a draft; the old locators read as they did", () => {
+test("a locator that names a knowledge pack says 知识包 and nothing of who drafted the pack; the old locators read as they did", () => {
   assert.equal(vcrLocatorText({ page: 12, section: "4.2" }), "第 12 页，4.2");
   assert.equal(vcrLocatorText({ pack: "type_2_diabetes", entry: "c_hba1c" }), "知识包");
-  assert.equal(vcrLocatorText({ pack: "rare_thing", entry: "c1" }, { draftPack: true }), "知识包（AI 草拟）");
-  assert.equal(vcrLocatorText({ pack: "rare_thing", entry: "c1" }, { draftPack: false }), "知识包");
+  // The second argument used to carry the pack's draft status into the quotation's caption as 「知识包（AI 草拟）」.
+  assert.equal(vcrLocatorText({ pack: "rare_thing", entry: "c1" }, { draftPack: true }), "知识包");
   assert.equal(vcrLocatorText({ registryId: "NCT02296125", field: "eligibility" }), null);
   assert.equal(vcrLocatorText(null), null);
 });

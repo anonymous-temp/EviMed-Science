@@ -62,7 +62,6 @@ export const VCR_PACK_SCHEMA = 'evimed.vcr.knowledge-pack/1'
 
 /** Who stands behind a pack. Written with a hyphen because that is the word the plan and the page use. */
 export const VCR_PACK_STATUSES = frozen(['curated', 'ai-draft'])
-export const VCR_PACK_STATUS_LABELS_ZH = Object.freeze({ curated: '已整理', 'ai-draft': 'AI 草拟' })
 
 /** How demanding a check is: the floor every pack meets, and what a shipped pack meets in addition. */
 export const VCR_PACK_LEVELS = frozen(['draft', 'complete'])

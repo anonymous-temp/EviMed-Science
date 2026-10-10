@@ -27,7 +27,6 @@
       "text": "功效、I 类错误、期望样本量"
     }
   ],
-  "ademReview": "ai_set",
   "designs": [
     {
       "id": "scn_1",
@@ -1077,8 +1076,7 @@
         "name": "1:1 随机 无期中",
         "disabled": true
       }
-    ],
-    "note": "平台不自动选定方案。"
+    ]
   },
   "runRecord": [
     {

@@ -1147,20 +1147,9 @@ export class EvidenceEditorial {
       })),
     }, upkeep.billing);
     await this.renew(job);
-    const findings = [
-      ...review.findings,
-      ...card.sources.flatMap((s, index) =>
-        (s.documentText ?? s.excerpt ?? "").length > 24000
-          ? [
-              {
-                kind: "coverage",
-                text: "本次 AI 核对仅使用该来源的部分已保存正文。",
-                sourceIndex: index + 1,
-              },
-            ]
-          : [],
-      ),
-    ];
+    // The review's own findings and nothing of the pipeline's: how much of a long source the model was shown (`inputTruncated`, above)
+    // is the platform's bookkeeping, and the sentence that used to say so beside the findings is gone (owner ruling 2026-10-10).
+    const findings = [...review.findings];
     await this.service.saveEditorial(
       user,
       {

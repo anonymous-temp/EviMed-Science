@@ -24,15 +24,6 @@ const sources = [
   ["company", "企业发布"],
   ["media", "媒体报道"],
 ] as const;
-/** The service orders recent jobs newest first; later jobs supersede each card's old checks. */
-function hasPendingSourceChecks(data: Maintenance) {
-  const seen = new Set<string>();
-  return data.recent.some((job) => {
-    if (!job.cardId || seen.has(job.cardId)) return false;
-    seen.add(job.cardId);
-    return job.sourceCheckStatus === "partial";
-  });
-}
 export function EvidenceMaintenance({
   zone,
   onUpdated,
@@ -91,11 +82,7 @@ export function EvidenceMaintenance({
             !!result.automation.nextRunAt &&
             Date.parse(result.automation.nextRunAt) <= Date.now();
           if (!result.jobs.running && !result.jobs.pending && !stillScheduled) {
-            setMessage(
-              hasPendingSourceChecks(result)
-                ? "本轮处理已结束；仍有部分来源待复核，可查看当前证据与来源状态。"
-                : "本轮更新已结束，可查看当前证据。",
-            );
+            setMessage("本轮更新已结束，可查看当前证据。");
             setUpdated(true);
           }
         })
@@ -279,11 +266,6 @@ export function EvidenceMaintenance({
                 )}
                 {(data.automation.lastError || data.jobs.failed > 0) && (
                   <p>部分证据更新未完成，可以再次更新。</p>
-                )}
-                {hasPendingSourceChecks(data) && (
-                  <p className="text-warn" role="status">
-                    部分来源待复核，已沿用上次保留内容；请查看卡片的来源状态。
-                  </p>
                 )}
               </div>
               {error && (

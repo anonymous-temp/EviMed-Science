@@ -28,6 +28,9 @@ describe("the community cards of an official zone", () => {
     expect(screen.getByRole("link", { name: "阿哌沙班在真实世界中的出血事件" })).toHaveAttribute("href", "/app/frontier/zones/ez_user1/evidence/ec_1");
     expect(screen.getAllByRole("link", { name: "李医生" })[0]).toHaveAttribute("href", "/app/frontier/authors/alice");
     expect(screen.getByText(/3\/4 条结论已在来源里核对到原文 · 读者评分 4.5（2 人）/)).toBeInTheDocument();
+    // What the section is, and no disclaimer from the platform about the cards of other users (owner ruling 2026-10-10).
+    expect(screen.getByText("其他用户公开发布的相关卡片；点开卡片可以看到来源和核对结果。")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "社区卡片" })).not.toHaveTextContent(/背书|平台没有改动/);
     expect(screen.getByRole("link", { name: "第二张卡" })).toBeInTheDocument();
     expect(client.fetchEvidenceCommunity).toHaveBeenCalledWith("ez_official");
   });

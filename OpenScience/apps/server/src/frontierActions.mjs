@@ -114,7 +114,7 @@ export function frontierLibraryRecord({ item, savedAt, day, reason = null, timeZ
   if (item.reason_zh) lines.push("", "## 为什么值得看", "", String(item.reason_zh));
   if (item.abstract_raw) lines.push("", "## 原文摘要", "", String(item.abstract_raw).trim());
   lines.push("", "---", "",
-    `由 EviMed「前沿动态」于 ${agendaLocalDate(timeZone, savedAt)} 存入。${reason ? `${reason}` : ""}导读由模型根据原文写成，数字已逐字核对；引用前请阅读原文。`, "");
+    `由 EviMed「前沿动态」于 ${agendaLocalDate(timeZone, savedAt)} 存入。${reason ? `${reason}` : ""}`, "");
   return lines.join("\n");
 }
 

@@ -206,6 +206,36 @@ const LEAKS = [
 export const BACK_OFFICE = [
   /(?<!\p{Script=Han})已交付(?!\p{Script=Han})/u, /核对\s*\d+\s*条/, /(?<!引文)已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /\d+月\d+日\s*起生效/, /缓存命中/, /tok\/s/,
   /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /openFDA (药品召回|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
+  // The owner's ruling of 2026-10-10 (「全平台都不要呈现给用户看」): a received pack is shown as what comes in, with no trust verdict and no
+  // word of what the automatic scan left out. Specific shapes, because 「没有带上」 alone is a researcher's own sentence.
+  /来源未验证/, /不会带上\s*(?:\d+\s*条|：)/, /\d+\s*条没有带上/, /没有通过自动检查/,
+  // What a shared file or a subscribed zone holds is not assured to the researcher.
+  /只分享文字，不含脚本/, /脚本不会随它分享/, /引用时只引用原始来源/,
+  // The citation checker's own state under an answer: drawn only when it has a list to show.
+  /引文核对中/, /引文暂时无法核对/,
+  // The result inspector: no digest, no image, no list of what the platform did not record or observe about a version.
+  /文件摘要/, /摘要未记录/, /记录不完整：/, /运行镜像/, /未被观察的部分/, /生成过程未被观察/, /没有可读取的核对意见/, /(?:已|未)保存此版本/, /引用均为来源原文片段/, /不由模型生成/,
+  // A run's verdict sentences: no gate sending work back, no chore for the reader, no word of a signing key.
+  /退回修复/, /未经校验的文件不会被当作交付物/, /请自行复核/, /用密钥验回执/,
+  // Why a request was routed as it was is the ledger's, not a sentence for the researcher.
+  /按问题内容交给/, /这个问题不需要交付报告/, /路由判断没有给出结论/,
+  // An evidence card: whether an AI reviewed it, and what the upkeep rounds kept from the last reading.
+  /引擎\s+\S+\s*·\s*方法\s+\S+\s*·\s*回执/, /\S+\s*·\s*\S+@\S+\s*·\s*回执/, /没有对上引擎回执/, /平台保存的回执/, /本卡由平台议程完成/, /证明哈希/, /留在平台的内部研究记录/,
+  /审查意见供参考/, /不代表实证验证/, /旧意见保留供参考/, /表中每个数都是这个研究的结果/, /平台不自动选定方案/,
+  /模型推断\s*\d+/, /你已确认\s*\d+/, /数据字典所述/, /确认以上推断/,
+  /导读由模型根据原文写成/, /引用前请阅读原文/,
+  // The model-only notes and the English binding sentence must never be a line of a page; the old partial-text finding of an upkeep round and a
+  // generic 「review not done」 announcement are the card pipeline's.
+  /不是操作指令/, /source support remains separately assessed/, /仅使用该来源的部分已保存正文/, /尚未完成复核/,
+  /证据卡是 EviMed 对来源的整理/, /请引用它列出的原始来源/, /不要引用这张卡/, /撤回的卡片保留这一页/, /不为它们背书/, /是平台还没核对这一项/, /三项都未核实/, /(?:未做|未安排)独立复核/,
+  /AI 已评议/, /AI 待评议/, /当前内容(?:已完成 AI 评议|待重新评议)/, /沿用上次保留内容/, /上次成功读取于/, /本轮(?:未能重新读取|尚未核查)/, /部分来源(?:本轮尚未完成复核|待复核)/,
+  // 虚拟临床研究: who set a value, who drafted a pack or wrote a record, and whether a card was countersigned are not marks on the
+  // value, the card or the cover. 「AI 设定」 stands on its own as the chip did; inside a sentence it is the headline's or the nag's.
+  /(?<![\p{Script=Han}\w])AI 设定(?![\p{Script=Han}\w])/u, /由 AI 设定/, /去复核/, /复核后有变更/, /AI 草拟/, /AI 写入/, /AI 最小版本/,
+  /(?:临床|统计)复核[：:]?\s*(?:未复核|已复核（)/,
+  // The skills and tools pages: no digest row, no verification state of an import, no trust sentence about a package, a method or
+  // a tool's result — not even for assistive technology, which the walk reads too.
+  /尚未完成原生验证/, /包摘要/, /按未验证的方法对待/, /需再对照最新的官方来源/, /不能证明真实可运行/, /无法确认能否运行/, /没有统计实际运行的情况/, /实际运行的情况暂时读不到/, /^未验证$/m,
 ];
 
 /**

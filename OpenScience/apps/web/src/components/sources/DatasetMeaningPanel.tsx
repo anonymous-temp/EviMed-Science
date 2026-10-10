@@ -7,13 +7,12 @@ import { productErrorMessage } from "@/lib/productClient";
 import { formatClock, formatDay } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { Tag } from "@/components/ui/Tag";
 import { LoadError } from "@/components/cards/LoadError";
 
 /**
- * 数据含义: what this project knows about a data file, beside the file — which parts the researcher confirmed,
- * which a data dictionary states, which the assistant only inferred, and what the last check of a new delivery
- * found. The meaning is the one the next analysis of the same data starts from, so a wrong unit seen here is a
+ * 数据含义: what this project knows about a data file, beside the file — each fact with what it rests on (the researcher's
+ * words, a data dictionary, the assistant's judgement) on its own line, and what the last check of a new delivery found. No
+ * count of who vouches for what and no tag beside a fact (owner ruling 2026-10-10). The meaning is the one the next analysis of the same data starts from, so a wrong unit seen here is a
  * wrong unit everywhere; the correction is said in the conversation, where the researcher's words are kept, and
  * the one thing this page does is confirm what it shows.
  *
@@ -72,19 +71,13 @@ function DatasetMeaningView({ projectId, datasetId, path, sha256 }: { projectId:
   const inferred = semanticFacts(asset as Parameters<typeof semanticFacts>[0]).filter((item) => item.fact.basis === "model_inferred").map((item) => item.target);
   const binding = asset.bindings.find((candidate) => candidate.path === path) ?? asset.bindings.find((candidate) => sha256 && candidate.sha256 === sha256);
   const outdated = Boolean(binding && sha256 && binding.sha256 !== sha256);
-  const { summary } = meaning;
   return (
     <section className="space-y-4 text-ui text-text" aria-label="数据含义">
       <EvolutionPanel projectId={projectId} dataset={evolutionDataset} />
       <div className="space-y-2">
         <h3 className="font-semibold">数据含义{asset.title ? ` · ${asset.title}` : ""}</h3>
         {outdated && <p className="max-w-measure font-medium">这份文件不是记录含义时读的那一版，下面的含义可能已不适用，先核对再用。</p>}
-        <div className="flex flex-wrap items-center gap-2">
-          <Tag>{`你已确认 ${summary.researcherConfirmed}`}</Tag>
-          {summary.dictionaryStated > 0 && <Tag>{`数据字典所述 ${summary.dictionaryStated}`}</Tag>}
-          <Tag>{`模型推断 ${summary.modelInferred}`}</Tag>
-          {inferred.length > 0 && <Button size="sm" variant="secondary" loading={busy} onClick={() => void confirmInferred(inferred)}>确认以上推断</Button>}
-        </div>
+        {inferred.length > 0 && <div><Button size="sm" variant="secondary" loading={busy} onClick={() => void confirmInferred(inferred)}>确认这些含义</Button></div>}
         <DatasetFacts facts={asset.facts} />
       </div>
       {asset.tables.map((table) => (
@@ -128,11 +121,10 @@ function DatasetFacts({ facts }: { facts: Record<string, SemanticFactSummary> })
             <div className="flex flex-wrap items-baseline gap-2">
               <dt className="text-text-3">{facetLabel(facet)}</dt>
               <dd className="min-w-0 break-words">{factText(facet, fact.value)}</dd>
-              <Tag>{basisLabel(fact.basis)}</Tag>
             </div>
             {source && <p className="text-caption text-text-3">{source}</p>}
             {fact.contested?.map((other, index) => (
-              <p key={index} className="text-caption text-text-3">{`${basisLabel(other.basis)}另有判断：${factText(facet, other.value)}，没有采用`}</p>
+              <p key={index} className="text-caption text-text-3">{`${basisLabel(other.basis)}给出的是：${factText(facet, other.value)}，没有采用`}</p>
             ))}
           </div>
         );

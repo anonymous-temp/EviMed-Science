@@ -36,20 +36,22 @@ describe("the two views of one card", () => {
     expect(screen.getByText(/卒中（2 年）：常规治疗 120，试验药 70/)).toBeInTheDocument();
     expect(screen.getByText(/大出血（2 年）：常规治疗 10，试验药 30/)).toBeInTheDocument();
   });
-  it("labels a machine's counts and numbers 平台计算, and says what was left out because its receipt did not hold", async () => {
+  // R30, 2026-10-10: a machine's numbers are labelled 平台计算 (content); the engine, the method and the receipt behind them, and the notices
+  // about a receipt that did not hold, are the back office's. What cannot be shown is still said, in the words of the check.
+  it("labels a machine's counts and numbers 平台计算 without the engine, method or receipt, and says plainly what could not be computed", async () => {
     const calculation = { label: "平台计算", engine: "drug_safety_analysis", method: "faers.signals@1.1.0", receiptId: `rv_${"a".repeat(64)}` };
     const withCalculation = { ...card, views: {
       clinical: { ...clinicalView, rows: [{ ...clinicalView.rows[0], platformCalculation: calculation }, { ...clinicalView.rows[1], absoluteEffect: { status: "unavailable" as const, reason: "calculation_unverified" as const } }], withheldCalculations: [{ claimId: "CALC-9", reason: "receipt_unavailable" }] },
       public: { ...publicView, calculations: [{ claimId: "CALC-1", text: "报告比值比为 2.40。", ...calculation }], factBox: { ...publicView.factBox, status: "unavailable" as const, reason: "calculation_unverified" as const, benefits: [], harms: [] } },
     } };
-    render(<EvidenceCardViews evidence={withCalculation} />);
-    expect(screen.getByText("平台计算 · drug_safety_analysis · faers.signals@1.1.0")).toBeInTheDocument();
-    expect(screen.getByText("平台计算的回执没有对上这些数字")).toBeInTheDocument();
-    expect(screen.getByText("有 1 条平台计算的结论没有对上引擎回执，没有列出。")).toBeInTheDocument();
+    const { container } = render(<EvidenceCardViews evidence={withCalculation} />);
+    expect(screen.getByText("无法计算")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/drug_safety_analysis|faers\.signals|回执|引擎/);
     await userEvent.click(screen.getByRole("radio", { name: "公众版" }));
+    expect(screen.getByText("平台计算")).toBeInTheDocument();
     expect(screen.getByText("报告比值比为 2.40。")).toBeInTheDocument();
-    expect(screen.getByText(`drug_safety_analysis · faers.signals@1.1.0 · 回执 rv_${"a".repeat(64)}`)).toBeInTheDocument();
-    expect(screen.getByText("比较里的数字是平台计算的，但引擎回执没有对上这些数字，所以没有事实框。")).toBeInTheDocument();
+    expect(screen.getByText("比较里的数字没有核对上，所以没有事实框。")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/drug_safety_analysis|faers\.signals|回执|引擎/);
   });
   it("shows the reason in place of a fact box that has no numbers", () => {
     render(<EvidenceFactBoxView factBox={reasonedFactBox} />);

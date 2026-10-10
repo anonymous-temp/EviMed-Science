@@ -78,7 +78,7 @@ test('a mock runtime never yields executable, installed or any claim about a rea
   assert.equal(mocked.reason.source, 'runtime-mode')
   assert.equal(projectAvailability({ subject, operations, runtime: { mode: 'kernel' } }).state, 'executable')
   // What the composition says is still true under a mock, so a known limit is still shown.
-  const limited = projectAvailability({ subject, runtime: { mode: 'mock' }, reasons: [{ code: 'method-unmeasured', source: 'method-validation' }] })
+  const limited = projectAvailability({ subject, runtime: { mode: 'mock' }, reasons: [{ code: 'dependency-software-missing', detail: 'rdkit', source: 'image-recipe' }] })
   assert.equal(limited.state, 'limited')
 })
 
@@ -127,10 +127,10 @@ test('a missing engine or data source is a fact about today and outranks a succe
   // Several limits: the first decides, the rest are carried, never dropped.
   const several = projectAvailability({ subject, reasons: [
     { code: 'optional-tool-not-offered', detail: 'web_read', source: 'deployment-composition' },
-    { code: 'method-unmeasured', source: 'method-validation' },
+    { code: 'dependency-software-missing', detail: 'rdkit', source: 'image-recipe' },
   ] })
   assert.equal(several.reason.code, 'optional-tool-not-offered')
-  assert.deepEqual(several.also.map((/** @type {any} */ reason) => reason.code), ['method-unmeasured'])
+  assert.deepEqual(several.also.map((/** @type {any} */ reason) => reason.code), ['dependency-software-missing'])
 })
 
 test('what the deployment declines is unavailable, and the reader is told which tool', () => {
@@ -140,7 +140,7 @@ test('what the deployment declines is unavailable, and the reader is told which 
   assert.match(entry.text, /在这个部署上没有提供/)
   // Declined outranks a known limit and a success.
   const both = projectAvailability({ subject, operations: recordOf(success('2026-10-03T08:00:00.000Z')), reasons: [
-    { code: 'method-unmeasured', source: 'method-validation' },
+    { code: 'dependency-software-missing', detail: 'rdkit', source: 'image-recipe' },
     { code: 'required-tool-not-offered', detail: 'drug_safety_analysis', source: 'deployment-composition' },
   ] })
   assert.equal(both.state, 'unavailable')
@@ -292,4 +292,19 @@ test('install, use, update, remove, rollback and restart of an extension each mo
 test('counting entries by state names every state, including the empty ones', () => {
   const counts = countAvailabilityStates([{ state: 'executable' }, { state: 'executable' }, { state: 'limited' }, { state: 'bogus' }])
   assert.deepEqual(counts, { 'source-planned': 0, installed: 0, executable: 2, limited: 1, unavailable: 0, unverified: 0 })
+})
+
+// Owner ruling 2026-10-10 (R37): the platform does not tell a reader that it cannot vouch for its own method, or for what ran
+// here. A reason that only describes the platform's confidence in itself is not a reason the reader is given; the ones left say
+// what is missing, what was declined, or what failed.
+test('no reason a limit is read from describes the platform\'s own confidence in a method', () => {
+  assert.equal(AVAILABILITY_REASON_CODES.includes('method-unmeasured'), false, 'the unmeasured-method limit is gone')
+  assert.equal(domain.AVAILABILITY_RECORD_SOURCES.includes('method-validation'), false, 'and with it the record source only it cited')
+  assert.equal(availabilityReasonState('method-unmeasured'), null)
+  for (const code of AVAILABILITY_REASON_CODES) {
+    if (availabilityReasonState(code) !== 'limited') continue
+    const entry = projectAvailability({ subject: { kind: 'capability', id: 'x', version: '1.0.0' }, reasons: [{ code, detail: 'rdkit', source: 'deployment-composition' }] })
+    assert.equal(entry.state, 'limited', code)
+    assert.doesNotMatch(entry.text, /未验证|验证还没有完成|对待/, code)
+  }
 })

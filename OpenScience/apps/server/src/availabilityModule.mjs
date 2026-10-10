@@ -39,7 +39,6 @@ const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
  *   agentRuns: () => any,
  *   usageLedger: any,
  *   connectorCredentials: any,
- *   methodValidation: (() => Promise<{ status: string, reason?: string } | null>) | null,
  *   vcrEngine?: (() => import("./vcrEngineProbe.mjs").VcrEngineReading | null) | null,
  *   vcrEngineRefresh?: (() => Promise<import("./vcrEngineProbe.mjs").VcrEngineReading | null>) | null,
  *   extensionService: any,
@@ -51,7 +50,7 @@ const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
  * }} dependencies
  */
 export function createAvailability({
-  config, authStore, registry, database, jobs, documents, agentRuns, usageLedger, connectorCredentials, methodValidation, vcrEngine = null, vcrEngineRefresh = null,
+  config, authStore, registry, database, jobs, documents, agentRuns, usageLedger, connectorCredentials, vcrEngine = null, vcrEngineRefresh = null,
   extensionService, mutation, canRun = () => true, fetchImpl = globalThis.fetch, report = () => {}, skillSupply = null,
 }) {
   const collecting = Boolean(database && jobs) && config.availabilityEnabled !== false && config.runtimeMode !== "mock";
@@ -61,7 +60,6 @@ export function createAvailability({
   const service = new AvailabilityService({
     config, registry, store: records, engineProbe, skillSupply, vcrEngine, vcrEngineRefresh,
     connectorStatus: connectorCredentials ? (userId) => connectorCredentials.status(userId) : null,
-    methodValidation,
     extensionViews: extensionService ? async (user) => {
       const [installations, catalogue] = await Promise.all([extensionService.list(user), extensionService.catalogue()]);
       const byId = new Map(catalogue.items.map((/** @type {any} */ item) => [item.id, item]));

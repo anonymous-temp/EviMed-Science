@@ -7,8 +7,7 @@ import {
   type WebAgentRun,
   type WebResearchAgent,
 } from "@/lib/apiClient";
-import { CAPABILITY_DISPLAY } from "@evimed/domain";
-import { announceRunsChanged, OPEN_DOMAIN_ANSWER_AGENT_ID, runAgentName } from "@/lib/runPresentation";
+import { announceRunsChanged } from "@/lib/runPresentation";
 
 /**
  * Where a request goes when the shell starts it.
@@ -79,52 +78,6 @@ export async function rerouteRun(run: WebAgentRun, target: DispatchTarget, text:
     }
   }
   return dispatchResearch(target, text);
-}
-
-/** The answer line's name wherever the product shows a line. */
-export const ANSWER_LINE_LABEL = "普通问答";
-
-export interface RouteLine {
-  /** The effective capability, or null for the answer line. */
-  agentId: string | null;
-  /** 「临床证据深度分析」, or 「普通问答」 for the answer line. */
-  label: string;
-  answerLine: boolean;
-  /** 「通常 15～30 分钟」, or null when neither the run nor the catalogue says. */
-  minutes: string | null;
-  /** The control plane's own Chinese sentence for why (contract C3), or null. */
-  reason: string | null;
-}
-
-/**
- * What a run's route line says. The typical duration is the run's own
- * `estimatedMinutes` (the dispatch response carries it), else the
- * capability's display figure (its `display.estimatedMinutes`, the same one
- * the control plane reads), else the catalogue's planning estimate; a line
- * with none says nothing about time rather than guessing one. The reason is
- * only ever the Chinese `routeReason` — never the ledger's internal
- * `effectiveRouteReason` code.
- */
-export function routeLineOf(run: WebAgentRun, catalog: ReadonlyArray<WebResearchAgent> = []): RouteLine {
-  const agentId = run.effectiveAgentId ?? run.agentId ?? null;
-  const answerLine = agentId === OPEN_DOMAIN_ANSWER_AGENT_ID || (!agentId && run.mode === "open-domain");
-  const entry = agentId ? catalog.find((agent) => agent.id === agentId) : undefined;
-  const label = answerLine
-    ? ANSWER_LINE_LABEL
-    : runAgentName(agentId) ?? entry?.title ?? "所选能力";
-  const range = run.estimatedMinutes
-    ?? (agentId && !answerLine ? CAPABILITY_DISPLAY[agentId]?.estimatedMinutes : undefined)
-    ?? (entry?.estimatedMinutes ? { min: entry.estimatedMinutes[0], max: entry.estimatedMinutes[1] } : null);
-  const reason = typeof run.routeReason === "string" && run.routeReason.trim() ? run.routeReason.trim() : null;
-  return { agentId: answerLine ? null : agentId, label, answerLine, minutes: minutesText(range), reason };
-}
-
-export function minutesText(range: { min: number; max: number } | null | undefined): string | null {
-  if (!range) return null;
-  const min = Math.max(0, Math.round(range.min));
-  const max = Math.max(min, Math.round(range.max));
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= 0) return null;
-  return min === max ? `通常约 ${max} 分钟` : `通常 ${min}～${max} 分钟`;
 }
 
 /**

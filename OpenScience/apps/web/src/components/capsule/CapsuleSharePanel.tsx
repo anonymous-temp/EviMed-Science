@@ -82,7 +82,7 @@ export function CapsuleSharePanel({ capsuleId }: { capsuleId: string | null }) {
     <div className="space-y-2">
       <Input label="发给平台内的账号" placeholder="账号名或账号 ID，完全一致；多个用逗号隔开" value={names} disabled={busy || !capsuleId}
         onChange={(event) => setNames(event.target.value)} maxLength={2000} />
-      <p className="text-caption text-text-3">对方会在收件箱里收到一条通知，可以先预览、试用一次，再决定收不收下。只分享文字，不含脚本。</p>
+      <p className="text-caption text-text-3">对方会在收件箱里收到一条通知，可以先预览、试用一次，再决定收不收下。</p>
       <Button disabled={busy || !capsuleId || recipients.length === 0} onClick={() => void perform(async () => {
         if (!capsuleId) return;
         const result = await deliverCapsule(capsuleId, { recipients });
@@ -132,9 +132,9 @@ export function CapsuleSharePanel({ capsuleId }: { capsuleId: string | null }) {
       <Button variant="secondary" disabled={busy || !capsuleId} onClick={() => void perform(async () => {
         if (!capsuleId) return;
         await downloadMethodPack(capsuleId);
-        if (mounted.current) setNotice("已下载。每个做法一个文件夹，带署名和来源，只含文字，可以放进其他支持技能的工具。");
+        if (mounted.current) setNotice("已下载。每个做法一个文件夹，带署名和来源，可以放进其他支持技能的工具。");
       })}>导出做法</Button>
-      <p className="text-caption text-text-3">已学到的做法按通用的技能格式导出；脚本不会随它分享。</p>
+      <p className="text-caption text-text-3">已学到的做法按通用的技能格式导出。</p>
     </div>
   </section>;
 }

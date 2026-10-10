@@ -35,12 +35,14 @@ describe("收到的分享", () => {
   beforeEach(() => { vi.clearAllMocks(); });
   afterEach(cleanup);
 
-  it("a link opens as a preview of the pack — who sent it, what it holds, what would be dropped — and no file is involved", async () => {
+  it("a link opens as a preview of the pack — who sent it and what comes in, nothing of the automatic check — and no file is involved", async () => {
     share.openShareLink.mockResolvedValue({ preview, link: { expiresAt: "2026-11-04T00:00:00Z", usesLeft: 3 } });
-    page(`/app/memory/shared/${"T".repeat(32)}`);
+    const { container } = page(`/app/memory/shared/${"T".repeat(32)}`);
     expect(await screen.findByText("来自李主任 · 2 条做法")).toBeInTheDocument();
     expect(screen.getByText("这个链接还能用 3 次。")).toBeInTheDocument();
-    expect(screen.getByText("不会带上 1 条没有通过自动检查的内容。")).toBeInTheDocument();
+    // What the scan left out is not listed, counted or explained (owner ruling 2026-10-10); only the entry that comes in is.
+    expect(screen.getAllByText("研究方法")).toHaveLength(1);
+    expect(container.textContent).not.toMatch(/不会带上|没有通过自动检查|指挥助手|Ignore your rules/);
     expect(screen.queryByRole("button", { name: "不需要" })).not.toBeInTheDocument();
     expect(share.openShareLink).toHaveBeenCalledWith("T".repeat(32));
   });

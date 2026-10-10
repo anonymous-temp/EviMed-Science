@@ -24,7 +24,7 @@ export function VcrReviews({ reviews = [], studyId, onNavigate }: { reviews?: Vc
     {reviews.slice(0, 6).map(review => <article key={review.id} className="rounded-card border border-border p-4">
       <p className="text-ui font-medium text-text">{review.label} · {review.state}</p>
       <p className="mt-1 text-caption text-text-3">{[review.by, review.at].filter(Boolean).join(' · ')}</p>
-      <p className="mt-1 text-caption text-text-2">{review.note}</p>
+      {review.note && <p className="mt-1 text-caption text-text-2">{review.note}</p>}
       {review.findings.length > 0 && <ul className="mt-2 space-y-2">
         {review.findings.map((finding, index) => {
           const path = studyId && finding.target ? targetPath(studyId, finding.target) : null;

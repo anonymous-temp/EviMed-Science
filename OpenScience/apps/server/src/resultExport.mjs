@@ -20,42 +20,32 @@ const authorizationProjection = version => JSON.stringify({ inputs: version.inpu
  */
 const VERIFIER = readFileSync(new URL("./resultPackageVerify.py", import.meta.url));
 
-const README = Buffer.from(`EviMed selected research result
+const README = Buffer.from(`EviMed 研究结果包
 
-What this is
-  One result version and the versions it recorded as its inputs, code and environment, each with its size and sha-256,
-  plus three records of how it was made and checked. manifest.json lists every file; nothing else is in the archive.
+这个包里有：
+  results/<版本>/...   所选的结果，以及随它保存的输入、代码和环境文件
+  execution.json       每个计算是怎么产生的：方法、脚本、运行环境、输入
+  verification.json    结论与来源的对应，以及重算和修改的记录
+  reproduction.json    可以重算的计算：配方、环境、数值和容差
+  manifest.json        包里每个文件的清单，以及没有带上的内容和原因
+  verify.py            检查文件是否完整、比对重算数值的脚本，只需要 python3
 
-  results/<version>/...   the selected result and the dependencies whose bytes are included
-  execution.json          what produced each calculation: method, script digest, environment facts as reported, inputs
-  verification.json       what has been checked: findings, review and number bindings, re-runs and their comparisons, corrections
-  reproduction.json       for a supported calculation: the recipe, the environment, the numbers and the tolerances to hold a re-run to
-  verify.py               a verifier that needs nothing but python3
+检查文件是否完整：
+  python3 -I verify.py                 （在解压后的文件夹里）  或  python3 -I verify.py package.zip
+  它检查文件大小和哈希、清单与文件是否一致、清单里的每个输入是文件还是写明原因的缺项，
+  不运行包里的任何东西。退出码 0 表示与清单一致，1 表示不一致，2 表示读不了这个包。
 
-Check it
-  python3 -I verify.py                 (from the extracted folder)   or   python3 -I verify.py package.zip
-  It checks file sizes and hashes, that nothing is extra or outside the package, that the versions agree with their files,
-  that every input, code and environment a version records is either a file or a named omission, and that the completeness
-  the manifest declares is the one its omissions give. Exit status 0: as declared. 1: not as declared. 2: not readable.
-  It runs nothing from this package and reads the ZIP without extracting it. The hashes show the files are the ones the
-  manifest lists, not that the manifest is the one the platform wrote: take the manifest digest it prints from the sender,
-  over another channel. Prefer a copy of verify.py you trust over the one in a package you do not.
+重算一个计算：
+  reproduction.json 列出每个可以重算的计算怎样重建环境，以及重算的数值要对上哪些数、容差是多少。
+  把你重算得到的结果写成 {key, value, unit} 的 JSON 列表（numbers.json），运行
+  python3 -I verify.py --compare numbers.json
+  退出码 3 表示数值不同。
 
-Reproduce a calculation
-  reproduction.json lists, for each supported calculation, how its environment is reconstructed and the numbers a re-run
-  must match, under the tolerances the original declared. Write what you re-ran as a JSON list of {key, value, unit} and
-  run  python3 -I verify.py --compare numbers.json.  Exit status 3 means the numbers differ. A re-run is a numerical
-  agreement, not a judgement of whether the method suits the question: scientific applicability is not assessed here.
-
-What is not here
-  Each omission in manifest.json names the dependency and the reason its bytes are not included: only an identity is
-  recorded, access was withdrawn, the record is gone, the stored bytes could not be read back as recorded, including them
-  would pass the package limit, or they contain text shaped like a credential. manifest.json also lists what no package
-  contains by design: credentials, patient-level data, workspace files that were not selected, the conversation, the
-  words of a correction request, and an engine's own code (identified by digest).
-
-Importing or reading this package never executes code, resumes a job, restores a credential or gives access to the project
-it came from. Nothing in it is signed; an identity in it is a label.
+没有带上的内容：
+  manifest.json 的 omissions 里逐条写明缺的依赖和原因：只记录了身份、已经没有访问权限、
+  记录已不在、保存的内容读不回原样、放进来会超出包的大小上限，或含有形似凭据的文本。
+  凭据、受试者层面的数据、没有选中的工作区文件、对话本身、修改请求的原话，以及计算引擎自己的代码
+  （只记录摘要）从不放进包里。
 `);
 
 /** What every package carries besides the versions: manifest, verifier, readme and the three records. */

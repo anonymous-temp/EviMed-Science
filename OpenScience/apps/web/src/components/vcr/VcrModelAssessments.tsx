@@ -80,7 +80,8 @@ export function VcrModelAssessments({ studyId, assessments, canEdit, onSaved, wi
 }
 
 function AssessmentCard({ record, canEdit, onEdit }: { record: VcrAssessmentRecord; canEdit: boolean; onEdit: () => void }) {
-  const writer = record.savedBy ? (record.savedBy.kind === "run" ? "AI 写入" : `${record.savedBy.name ?? "团队成员"} 修改`) : null;
+  // A person's edit is said, and when; that the run wrote a record is not (owner ruling 2026-10-10).
+  const writer = record.savedBy && record.savedBy.kind !== "run" ? `${record.savedBy.name ?? "团队成员"} 修改` : null;
   return (
     <Card
       header={(

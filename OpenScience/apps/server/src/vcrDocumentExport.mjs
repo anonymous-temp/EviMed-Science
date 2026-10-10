@@ -34,17 +34,17 @@ export function canonicalVcrDocument(study, row) {
     const findings = shown.findings.map(finding => `  - ${finding.location ? `${finding.location}：` : ''}${finding.message ?? finding.evidence ?? ''}${finding.fix ? ` 建议：${finding.fix}` : ''}${finding.response ? ` 已说明：${finding.response}` : ''}`).join('\n');
     const failure = shown.status === 'failed' && review.provenance?.error === 'review_configuration_changed'
       ? ' 本次审查因服务配置变化未完成。' : '';
-    // The page attributes an AI review by its label alone (`presentVcrReview` carries no model name); the exported package is the
-    // study's record, and a record names the model that reviewed and the configuration it ran under.
-    const ai = review.reviewerKind === 'ai';
-    const by = ai ? review.provenance?.model ?? null : shown.by;
-    const configuration = ai ? review.provenance?.configuration?.revision ?? null : null;
-    return `- ${shown.label}：${shown.state}；${by ?? '身份未返回'}；${shown.at ?? ''}；配置 ${configuration ?? '不适用'}。${shown.note}${failure}${findings ? `\n${findings}` : ''}`;
+    // A review is listed as the page lists it: its label, its outcome, a person's name when a person reviewed, when it ended, its findings.
+    // The model that wrote an AI review and the configuration it ran under are the platform's own record and are not in the package
+    // (owner ruling 2026-10-10); an AI review is attributed by its label, as on the page.
+    const who = shown.by ? `；${shown.by}` : '';
+    const when = shown.at ? `；${shown.at}` : '';
+    return `- ${shown.label}：${shown.state}${who}${when}。${shown.note ?? ''}${failure}${findings ? `\n${findings}` : ''}`;
   });
   const use = model.intendedUse ?? model.study.intendedUse ?? study.intendedUse;
   const seal = model.seal ?? {};
   const header = [`# ${title}`, `预期用途：${VCR_INTENDED_USE_LABELS_ZH[use] ?? use}`, '## 复核与限制',
-    reviewLines.length ? reviewLines.join('\n') : '尚未完成复核。',
+    ...(reviewLines.length ? [reviewLines.join('\n')] : []),
     ...((model.stale ?? []).map(mark => `- ${mark.node}: ${mark.reason}`)),
     seal.required ? `分析计划冻结：${seal.planFrozenAt ?? '未记录'}；首次读取结局：${seal.outcomeFirstReadAt ?? '未记录'}。` : '结局封存：不适用。', ''];
   // The two model documents are the platform's structure with a run's words in it: the same report write fills the prose

@@ -249,7 +249,6 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
     {reading && <Loading text="正在读取所选版本" />}
     {readError && <div role="alert" className="space-y-2 text-error"><p>{readError}</p><Button variant="secondary" onClick={() => setReadAttempt((n) => n + 1)}>重试</Button></div>}
     {version && <>
-      <p className="break-all text-caption text-muted">文件摘要：{version.digest}</p>
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" disabled={!blob} onClick={() => blob && saveResultBlob(blob, filename)}>下载此版本</Button>
         <Button variant="secondary" disabled={version.reuseEligibility?.replay.status !== "available" || action !== null} loading={action === "replay"} onClick={() => void act("replay")}>重算此结果</Button>
@@ -263,13 +262,12 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       {actionError && <p role="alert" className="text-error">{actionError}</p>}
       {replay && <div role="status" className="flex flex-wrap items-center gap-2"><span>{replayLabel(replay.state)}</span>{replay.error && <span className="text-error">{replayErrorText(replay.error)}</span>}{replay.resultVersionId && <Button variant="text" onClick={() => void openSuccessor(replay.resultVersionId!)}>打开新结果</Button>}{["queued", "running", "pending"].includes(replay.state) && <Button variant="text" loading={action === "cancel"} onClick={() => void refreshReplay(true)}>取消重算</Button>}{actionError && <Button variant="text" onClick={() => void refreshReplay()}>刷新进度</Button>}</div>}
       {replay?.comparison && <ReplayOutcome comparison={replay.comparison} />}
-      <Disclosure summary="依据与核对意见" defaultOpen>
-        {!version.findings.length && <p className="py-2 text-muted">此版本没有可读取的核对意见，尚未核实。</p>}
-        <ul className="space-y-3 py-2">{version.findings.map((finding) => <li key={finding.id}><p className={finding.status === "verified" ? "text-verify-ok" : "text-verify-pending"}>{finding.status === "verified" ? "✓ " : "⚠ "}{finding.message}</p>{finding.sourceRefs?.map((source) => <SourceReference key={source.id} source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} />)}</li>)}</ul>
+      {/* Nothing to show is no section: a version with no finding, source or number is not one that "was not verified" (owner ruling 2026-10-10). */}
+      {(version.findings.length > 0 || version.inputs.length > 0 || version.machineValues.length > 0) && <Disclosure summary="依据与核对意见" defaultOpen>
+        <ul className="space-y-3 py-2">{version.findings.map((finding) => <li key={finding.id}><p className={finding.status === "verified" ? "text-verify-ok" : "text-verify-pending"}>{finding.status === "verified" ? "✓ " : "⚠ "}{findingText(finding)}</p>{finding.sourceRefs?.map((source) => <SourceReference key={source.id} source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} />)}</li>)}</ul>
         {version.inputs.length > 0 && <ul className="space-y-2">{version.inputs.map((source) => <li key={`${source.id}:${source.versionId ?? source.digest}`}><SourceReference source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} /></li>)}</ul>}
-        {version.coverage.gaps.length > 0 && <p className="py-2 text-verify-pending">记录不完整：{version.coverage.gaps.map(resultGapLabel).join("；")}</p>}
         {version.machineValues.length > 0 && <MachineValues version={version} />}
-      </Disclosure>
+      </Disclosure>}
       {text !== null && /\.(md|markdown|txt)$/i.test(version.path) && <DocumentExportActions source={{ versionId: version.versionId }} groupLabel="导出此版本" />}
       <ResultCorrectionPanel key={`correction:${version.versionId}`} versionId={version.versionId} onOpen={(id) => void openSuccessor(id)} />
       <ResultLineagePanel key={`lineage:${version.versionId}`} version={version} selectedText={anchor && anchor.versionId === version.versionId ? anchor.selection.selectedText : null}
@@ -313,12 +311,17 @@ function versionLabels(items: ResultVersion[], path: string, complete: boolean):
     return number ? `第 ${number} 版 · ${when}` : when;
   };
 }
+/** What a finding says: its own words, or for a claim's mark the two words the product fixed for a quotation check (design reference appendix B, E-12). */
+function findingText(finding: ResultVersion["findings"][number]): string {
+  if (finding.message) return finding.message;
+  return finding.kind === "claim_source_binding" ? (finding.status === "verified" ? "引文已核对" : "未核对上") : "";
+}
 function isText(version: ResultVersion) { return version.mimeType.startsWith("text/") || /\.(md|txt|json|csv|tsv|py|r|js|mjs)$/i.test(version.path); }
 function canCompareResults(left: ResultVersion, right: ResultVersion) { return left.projectId === right.projectId && ((left.path === right.path && left.artifactId === right.artifactId) || directlyRelatedResults(left, right)); }
 function resultHref(version: ResultVersion) { return `/app/runs/${encodeURIComponent(version.producer.runId ?? version.producer.sessionId ?? "result")}/files/${version.path.split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(version.versionId)}`; }
 function replayLabel(state: string) { return ({ queued: "等待重算", pending: "等待重算", running: "正在重算", completed: "重算完成", succeeded: "重算完成", failed: "重算失败", cancelled: "重算已取消", canceled: "重算已取消", timed_out: "重算超时", ownership_unknown: "重算进程状态尚未确认", cleanup_uncertain: "重算停止状态尚未确认" } as Record<string, string>)[state] ?? "重算状态尚未确认"; }
 function SourceReference({ source, onOpen }: { source: ResultVersion["inputs"][number]; onOpen: (id: string) => void }) {
-  return <div className="break-all text-caption text-muted">{source.path ?? source.id} · {source.digest ? `摘要 ${source.digest.slice(0, 12)}` : "摘要未记录"} · {["available", "captured"].includes(source.availability) ? "原文可用" : "原文不可用或尚未确认"}{source.versionId && ["available", "captured"].includes(source.availability) && <Button size="sm" variant="text" onClick={() => onOpen(source.versionId!)}>查看原文版本</Button>}</div>;
+  return <div className="break-all text-caption text-muted">{source.path ?? source.id} · {["available", "captured"].includes(source.availability) ? "原文可用" : "原文不可用或尚未确认"}{source.versionId && ["available", "captured"].includes(source.availability) && <Button size="sm" variant="text" onClick={() => onOpen(source.versionId!)}>查看原文版本</Button>}</div>;
 }
 function MachineValues({ version }: { version: ResultVersion }) { return <table className="w-full text-left text-ui"><caption className="py-2 text-left">计算值</caption><thead><tr><th>指标</th><th>数值</th><th>单位</th></tr></thead><tbody>{version.machineValues.map((value, index) => <tr key={value.name ?? value.key ?? index}><td>{value.name ?? value.key ?? "未注明"}</td><td className="font-mono">{JSON.stringify(value.value)}</td><td>{value.unit ?? "未注明"}</td></tr>)}</tbody></table>; }
 export function ResultComparison({ current, prior, before, after }: { current: ResultVersion; prior: ResultVersion; before: string | null; after: string | null }) {
@@ -334,7 +337,7 @@ export function ResultComparison({ current, prior, before, after }: { current: R
     {environment && <p className={ranOn?.status === "differs" ? "text-verify-pending" : "text-muted"}>{environment}</p>}
     {differences === null ? <p className="text-muted">无法比较此格式的文本内容。</p> : differences.length === 0 ? <p>文本一致。</p> : <ol className="max-h-64 overflow-auto font-mono text-caption">{differences.map((line, index) => <li key={index} className={line.kind === "added" ? "text-verify-ok" : "text-verify-pending"}>{line.kind === "added" ? "+" : "−"} {line.line} {line.text}</li>)}</ol>}
     <p>新增或改变来源 {sourceChanges.length}；移除或替换来源 {removedSources.length}</p>
-    {[...sourceChanges, ...removedSources].map((input, index) => <p key={index} className="text-caption text-muted">{input.path ?? input.id} · {input.digest ?? "摘要未记录"}</p>)}
+    {[...sourceChanges, ...removedSources].map((input, index) => <p key={index} className="text-caption text-muted">{input.path ?? input.id}</p>)}
     {[...valueKeys].map((key) => { const value = currentValues.get(key); const old = priorValues.get(key); return <p key={key}>{key}：{old ? JSON.stringify(old.value) : "无旧值"} → {value ? JSON.stringify(value.value) : "无新值"} {value?.unit ?? old?.unit ?? ""} · {resultValueDifference(old, value)}</p>; })}
   </section>;
 }

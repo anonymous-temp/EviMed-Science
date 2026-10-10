@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { apply, BODY, historyWanted } from '../src/runtimeUiTranscript.mjs';
+import { apply, BODY, historyWanted, withoutPlatformBlocks } from '../src/runtimeUiTranscript.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, realReact, renderStatic } from './helpers/frameFakes.mjs';
 
 /** A kernel whose context row is a real component, so a pass-through can be seen. */
@@ -16,6 +16,15 @@ function kernel() {
   const KernelContextRow = (/** @type {any} */ props) => React.createElement('div', { 'data-kernel-context': props.node.data.provenance.role }, props.t('message.contextRecall'));
   const shipped = /** @type {any} */ (slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.chat.node' && entry.options.key === 'context'));
   shipped.component = KernelContextRow;
+  // The kernel's own user row, as the pinned `ui-chat` draws it (0.1.7-rc.2, `UserStyleBubble` over `contentParts`): every text part of
+  // the message joined into one bubble, and any other part as a JSON block. Nothing of a message's text parts is left out.
+  /** @param {any} props */
+  const KernelUserRow = (/** @type {any} */ props) => React.createElement('div', { 'data-kernel-user': props.node.kind },
+    props.node.data.content.filter((/** @type {any} */ part) => part.type === 'text').map((/** @type {any} */ part) => part.text).join(''));
+  for (const key of ['user', 'steering']) {
+    const row = /** @type {any} */ (slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.chat.node' && entry.options.key === key));
+    row.component = KernelUserRow;
+  }
   return slots;
 }
 
@@ -146,7 +155,7 @@ test("a researcher's transcript draws neither the system prompt, injected contex
   const target = fakeTarget();
   apply(ctx, {}, target, undefined, kitFor(ctx, target));
   const ours = ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'conversation.chat.node' && entry.options.priority === -1);
-  assert.deepEqual(ours.map((/** @type {any} */ entry) => entry.options.key).sort(), ['context', 'system-prompt', 'unknown']);
+  assert.deepEqual(ours.map((/** @type {any} */ entry) => entry.options.key).sort(), ['context', 'steering', 'system-prompt', 'unknown', 'user']);
   assert.ok(ours.every((/** @type {any} */ entry) => entry.options.locale === 'chat'));
   const byKey = (/** @type {string} */ key) => ours.find((/** @type {any} */ entry) => entry.options.key === key).component;
   assert.equal(renderStatic(byKey('system-prompt'), { node: { kind: 'system-prompt', data: {} }, t }), '');
@@ -179,4 +188,50 @@ test('outside a frame nothing is taken over and nothing is read', async () => {
   await settle();
   assert.equal(ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.options.priority === -1).length, 0);
   assert.deepEqual(s.loads, []);
+});
+
+// R6, 2026-10-10: a result revision's frozen selection (`resultRevision.bind`) is appended to the researcher's own prompt as a second text
+// part, for the model. The kernel's user row joins every text part into the bubble, so the raw JSON stood under what the researcher wrote.
+const SELECTION = '\n<evimed_result_selection>\n{"versionId":"rv_1","anchor":{"kind":"text","selectedText":"0.8"},"preservation":"Read the frozen input."}\n</evimed_result_selection>';
+const userNode = (/** @type {string} */ kind, /** @type {any[]} */ content) => ({ key: 'n2', kind, data: { content, time: 1 } });
+
+test("a result revision's model-only block is not drawn under the researcher's own message", () => {
+  const ctx = fakeCtx({ slots: kernel(), sessions: sessionsFake({}).service });
+  const target = fakeTarget();
+  apply(ctx, {}, target, undefined, kitFor(ctx, target));
+  const row = (/** @type {string} */ key) => ctx.slots.registrations.find((/** @type {any} */ entry) => entry.options.key === key && entry.options.priority === -1).component;
+  const draft = '请修改所选内容：\n“0.8”\n\n修改要求：把结论写得更谨慎。';
+  for (const kind of ['user', 'steering']) {
+    const bubble = renderStatic(row(kind), { node: userNode(kind, [{ type: 'text', text: draft }, { type: 'text', text: SELECTION }]), t });
+    assert.equal(bubble, `<div data-kernel-user="${kind}">${draft}</div>`);
+    assert.doesNotMatch(bubble, /evimed_result_selection|versionId|Read the frozen input/);
+  }
+  // The block inside the one text part a different carrier may have used.
+  const joined = renderStatic(row('user'), { node: userNode('user', [{ type: 'text', text: `${draft}${SELECTION}` }]), t });
+  assert.doesNotMatch(joined, /evimed_result_selection|versionId/);
+  assert.match(joined, /把结论写得更谨慎/);
+  assert.deepEqual(target.warnings, []);
+});
+
+test("every other message of a researcher is drawn as the kernel draws it", () => {
+  const ctx = fakeCtx({ slots: kernel(), sessions: sessionsFake({}).service });
+  const target = fakeTarget();
+  apply(ctx, {}, target, undefined, kitFor(ctx, target));
+  const row = ctx.slots.registrations.find((/** @type {any} */ entry) => entry.options.key === 'user' && entry.options.priority === -1).component;
+  const plain = userNode('user', [{ type: 'text', text: '比较 A 与 B 的疗效，<b>加粗</b> 与 <evimed_other> 的写法照旧。' }]);
+  assert.equal(renderStatic(row, { node: plain, t }), '<div data-kernel-user="user">比较 A 与 B 的疗效，&lt;b&gt;加粗&lt;/b&gt; 与 &lt;evimed_other&gt; 的写法照旧。</div>');
+  // A message that was only the block leaves nothing to draw (the kernel draws no bubble for an empty text).
+  assert.equal(renderStatic(row, { node: userNode('user', [{ type: 'text', text: SELECTION }]), t }), '<div data-kernel-user="user"></div>');
+  const content = [{ type: 'text', text: '一句话' }, { type: 'image', attachment: { id: 'a' } }];
+  assert.equal(withoutPlatformBlocks(content), content, 'a message without the block is returned as it is, not copied');
+  assert.deepEqual(withoutPlatformBlocks([{ type: 'text', text: `一句话${SELECTION}` }, { type: 'image', attachment: { id: 'a' } }]),
+    [{ type: 'text', text: '一句话' }, { type: 'image', attachment: { id: 'a' } }]);
+  assert.equal(withoutPlatformBlocks(undefined), undefined);
+});
+
+test("an operator's transcript keeps the block, as it keeps every other backstage row", () => {
+  const ctx = fakeCtx({ slots: kernel(), sessions: sessionsFake({}).service });
+  const target = fakeTarget({ frame: { operator: true } });
+  apply(ctx, {}, target, undefined, kitFor(ctx, target));
+  assert.equal(ctx.slots.registrations.filter((/** @type {any} */ entry) => ['user', 'steering'].includes(entry.options.key) && entry.options.priority === -1).length, 0);
 });

@@ -283,8 +283,7 @@
       }
     ],
     "note": "文献对照的估计落在来源试验人群；与本研究人群的可比性见右。",
-    "source": "assumed",
-    "review": "ai_set"
+    "source": "assumed"
   },
   "comparability": [
     {
@@ -558,9 +557,7 @@
     "scope": null
   },
   "verdict": {
-    "conclusion": "limited",
-    "review": "ai_set",
-    "reviewed": false
+    "conclusion": "limited"
   },
   "at": "昨天 09:14",
   "stale": null,

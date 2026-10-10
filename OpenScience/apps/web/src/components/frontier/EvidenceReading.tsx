@@ -29,22 +29,15 @@ export { evidenceDate, evidenceDay };
 const redundantBody = (evidence: EvidenceCard) =>
   !!evidence.content &&
   evidence.body.trim() === evidence.content.answer?.trim();
-export const evidenceReviewLabel = (evidence: EvidenceCard) =>
-  !evidence.editorial
-    ? null
-    : !evidence.sources.some(source=>source.publicationStatus) && evidence.editorial.status === "ai-reviewed" &&
-        evidence.editorial.reviewRevision === evidence.revision &&
-        evidence.editorial.reviewer
-      ? "AI 已评议"
-      : "AI 待评议";
 /** The day the card last changed: its newest revision, else the day it was made. */
 export const evidenceUpdatedAt = (evidence: Pick<EvidenceCard, "revisions" | "createdAt">) =>
   evidence.revisions?.[0]?.recordedAt ?? evidence.createdAt ?? null;
 
 /**
  * Who wrote and checked the card, in the one fold under the answer — 「编写与核查」. A reader weighs a card by what it says and by its
- * labels, not by who typed it; the rest is here for the one who wants it. What is wrong or unfinished is not here but above, in
- * warning colour: a retraction, a source that was not re-read, a card waiting for its review.
+ * labels, not by who typed it; the rest is here for the one who wants it. What is wrong is above, in warning colour: a retraction, a
+ * correction, a source that changed. Whether an AI has reviewed the card, and what the upkeep rounds kept from the last reading, are
+ * the pipeline's bookkeeping and are not said (owner ruling 2026-10-10).
  */
 function EvidenceAuthoring({ evidence }: { evidence: EvidenceCard }) {
   const editorial = evidence.editorial;
@@ -53,7 +46,6 @@ function EvidenceAuthoring({ evidence }: { evidence: EvidenceCard }) {
   else if (evidence.creator) lines.push(`创作者 ${evidence.creator}`);
   if (editorial?.lastEditor) lines.push(`用户修订记录 · ${editorial.lastEditor.name} · ${evidenceDay(editorial.lastEditor.editedAt)}`);
   if (evidence.reviewer) lines.push(`评议者 ${evidence.reviewer}`);
-  if (evidenceReviewLabel(evidence)) lines.push(evidenceReviewLabel(evidence)!);
   if (evidence.reviewedAt) lines.push(`评议于 ${evidenceDay(evidence.reviewedAt)}`);
   if (editorial?.sourceCheckedAt) lines.push(`全部来源上次核查于 ${evidenceDay(editorial.sourceCheckedAt)}`);
   // A source change that left the card waiting for its review is above, as a warning; the same fact, settled, is a line here.
@@ -89,9 +81,6 @@ export function EvidenceReading({
   /** The action that goes with the answer — 「用这张卡继续研究」 — set beside 「编写与核查」 directly under it. */
   afterAnswer?: ReactNode;
 }) {
-  const retainedSources = evidence.editorial?.sourceChecks?.filter(
-    (check) => check.status === "retained",
-  ) || [];
   const publicationSources = evidence.sources.flatMap((source,index)=>source.publicationStatus ? [{source,index:index+1}] : []);
   const publicationLabel = (kind: "retracted" | "corrected" | "concern") => kind === "retracted" ? "存在撤稿记录" : kind === "concern" ? "存在关注声明" : "存在更正记录";
   return (
@@ -103,15 +92,6 @@ export function EvidenceReading({
             <p>来源状态有警示，原有结论需要重新核查。以下内容保留供追溯，不能作为已完成核对的临床或科研依据。</p>
             {publicationSources.map(({source,index})=><p key={index}>{publicationLabel(source.publicationStatus!.kind)}<EvidenceReferences evidence={evidence} indexes={[index]} /></p>)}
           </div>
-        )}
-        {retainedSources.length > 0 && (
-          <p className="text-caption text-warn">
-            部分来源本轮尚未完成复核，沿用上次保留内容。
-            <EvidenceReferences
-              evidence={evidence}
-              indexes={retainedSources.map((check) => check.sourceIndex)}
-            />
-          </p>
         )}
         {evidence.editorial?.sourceChangedAt && evidence.editorial.status === "review-pending" && (
           <p className="text-caption text-warn">
@@ -170,11 +150,6 @@ export function EvidenceReading({
           <h2 className="mb-2 text-ui font-medium text-text">来源与引用</h2>
           <ol className="space-y-3">
             {evidence.sources.map((source, index) => {
-              const sourceCheck = evidence.editorial?.sourceChecks?.find(
-                (check) => check.sourceIndex === index + 1,
-              );
-              const deferred = sourceCheck?.code === "evidence_source_check_deferred";
-              const missingUrl = sourceCheck?.code === "evidence_source_url_missing";
               return (
                 <li
                   id={evidenceSourceId(evidence.id, index + 1)}
@@ -194,7 +169,7 @@ export function EvidenceReading({
                   ) : (
                     source.title
                   )}
-                  {(source.coverage || source.checkedAt) && (
+                  {source.coverage && (
                     <p className="mt-1 text-caption text-text-3">
                       {source.coverage === "full-text"
                         ? "依据全文"
@@ -203,8 +178,6 @@ export function EvidenceReading({
                           : source.coverage === "excerpt"
                             ? "依据原文片段"
                             : ""}
-                      {source.checkedAt &&
-                        ` · 上次成功读取于 ${evidenceDay(source.checkedAt)}`}
                     </p>
                   )}
                   {source.publicationStatus && (
@@ -212,17 +185,6 @@ export function EvidenceReading({
                       <p>{publicationLabel(source.publicationStatus.kind)} · 待核查对结论的影响</p>
                       {source.publicationStatus.notices.map((notice,noticeIndex)=><p key={noticeIndex}>{notice}</p>)}
                     </div>
-                  )}
-                  {sourceCheck?.status === "retained" && (
-                    <p className="mt-1 text-caption text-warn">
-                      {deferred
-                        ? "本轮尚未核查"
-                        : missingUrl
-                          ? "缺少原文链接"
-                          : "本轮未能重新读取"}
-                      ，沿用上次保留内容
-                      {` · ${deferred || missingUrl ? "记录于" : "尝试于"} ${evidenceDay(sourceCheck.attemptedAt)}`}
-                    </p>
                   )}
                   {source.excerpt && (
                     <blockquote className="mt-2 whitespace-pre-wrap border-l-2 border-border pl-3 text-caption text-text-3">

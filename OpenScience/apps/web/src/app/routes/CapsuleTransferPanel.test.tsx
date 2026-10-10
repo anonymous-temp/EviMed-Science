@@ -169,13 +169,15 @@ it("previews an uploaded encrypted capsule, with what its check leaves out, befo
   await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");
   expect(api.importCapsule).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole("button",{name:"预览"}));
-  // One line: where it comes from, how many, and what the check will leave out.
-  expect(await screen.findByText("来源未验证 · 2 条 · 不会带上 1 条")).toBeInTheDocument();
+  // One line: how many come in. Whether the sender could be verified and what the automatic check left out are the back office's
+  // (owner ruling 2026-10-10): the check still gates the mount on the server, and the screen shows what comes in.
+  expect(await screen.findByText("1 条")).toBeInTheDocument();
   // The kind reads as the page names it, not as the stored enum (U11), and no version number.
   await userEvent.click(screen.getByText("研究方法"));
   expect(screen.getByText("Preserve uncertainty")).toBeInTheDocument();
   expect(screen.queryByText(/method_preference|来源版本/)).not.toBeInTheDocument();
-  expect(screen.getByText("研究方法 · 不会带上：在指挥助手做研究方法以外的事")).toBeInTheDocument();
+  expect(screen.queryByText(/Ignore your rules|要求助手无视安全规则/)).not.toBeInTheDocument();
+  expect(container.textContent).not.toMatch(/来源未验证|已验证|不会带上|没有通过自动检查|指挥助手/);
   expect(api.importCapsule).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole("button",{name:"收下这个胶囊"}));
   await waitFor(()=>expect(api.importCapsule).toHaveBeenCalledWith(expect.objectContaining({expectedDigest:preview.archiveSha256,confirmed:true})));
@@ -189,7 +191,7 @@ it("revoked hosted versions cannot be imported",async()=>{
   await userEvent.upload(screen.getByLabelText("选择胶囊文件"),file);await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");
   await userEvent.click(screen.getByRole("button",{name:"预览"}));
   expect(await screen.findByRole("button",{name:"收下这个胶囊"})).toBeDisabled();
-  expect(screen.getByText("已验证 · 2 条 · 已撤回")).toBeInTheDocument();
+  expect(screen.getByText("2 条 · 已撤回")).toBeInTheDocument();
 });
 
 it("reads a pack's card, and updates the pack already received in place",async()=>{

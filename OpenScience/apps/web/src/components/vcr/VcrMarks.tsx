@@ -3,8 +3,8 @@ import { cn } from "@/lib/cn";
 import { Drawer } from "@/components/ui/Drawer";
 import { Tag, tagClasses } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
-import type { VcrCeiling, VcrConclusion, VcrDataTier, VcrReviewState, VcrValueSource } from "@/lib/vcrClient";
-import { conclusionLabel, reviewLabel, sourceLabel, tierLabel, intendedUseLabel } from "./vcrText";
+import type { VcrCeiling, VcrConclusion, VcrDataTier, VcrValueSource } from "@/lib/vcrClient";
+import { conclusionLabel, sourceLabel, tierLabel, intendedUseLabel } from "./vcrText";
 
 /**
  * The one visual encoding of where a number came from, used by every page of
@@ -87,35 +87,9 @@ export function SourceTag({ source, className }: { source: VcrValueSource | null
 }
 
 /**
- * The review state, which is a countersignature and never a gate (plan §10.2).
- * 「AI 设定」 is amber — needs a look, not a failure; 「已复核」 is the quiet
- * green; 「复核后有变更」 is grey, because it is a fact about a version, not a
- * problem.
- */
-export function ReviewChip({ state, by, at, className }: {
-  state: VcrReviewState | null | undefined;
-  /** Who signed it, printed after the word where there is room. */
-  by?: string | null;
-  at?: string | null;
-  className?: string;
-}) {
-  if (!state) return null;
-  const word = reviewLabel(state);
-  const tail = [by, at].filter(Boolean).join(" ");
-  return (
-    <Tag
-      tone={state === "ai_set" ? "warn" : "neutral"}
-      className={cn(state === "reviewed" && "bg-ok-soft text-ok", className)}
-    >
-      {tail ? `${word}（${tail}）` : word}
-    </Tag>
-  );
-}
-
-/**
  * What the method itself says: 可估计 / 有限制地估计 / 不可估计. Never the
- * same thing as the run state and never the same thing as the review state —
- * that is why the three are three components (plan §3.6).
+ * same thing as the run state (plan §3.6). Who set a number and whether a
+ * person has signed it are not drawn beside it (owner ruling 2026-10-10).
  */
 export function ConclusionChip({ state, className }: { state: VcrConclusion | null | undefined; className?: string }) {
   if (!state) return null;

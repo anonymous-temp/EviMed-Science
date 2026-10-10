@@ -55,26 +55,27 @@ describe("DatasetMeaningPanel", () => {
     expect(mocks.get).not.toHaveBeenCalled();
   });
 
-  it("says whose words each fact is — the researcher's with the quote, a dictionary's with the file, the model's with what it read — and keeps a disagreeing inference visibly unused", async () => {
-    render(<DatasetMeaningPanel projectId="project-one" path="knowledge-base/visits.csv" sha256={SHA_A} />);
+  // R34, 2026-10-10: who vouches for a meaning is the contract (a weaker basis never overwrites a stronger one — the domain's tests hold that); on the page
+  // it is neither a count nor a tag on every fact. A fact's own line says what it rests on, in plain words: 你的说明 / 数据字典 / AI 判断.
+  it("says what each fact rests on in its own line — the researcher's words with the quote, the dictionary with the file, the AI's judgement with what it read — and keeps a disagreeing judgement visibly unused", async () => {
+    const { container } = render(<DatasetMeaningPanel projectId="project-one" path="knowledge-base/visits.csv" sha256={SHA_A} />);
     expect(await screen.findByRole("heading", { name: "数据含义 · 脓毒症随访" })).toBeInTheDocument();
-    // The first line counts who vouches for the interpretation.
-    expect(screen.getByText("你已确认 1")).toBeInTheDocument();
-    expect(screen.getByText("数据字典所述 1")).toBeInTheDocument();
-    expect(screen.getByText(/^模型推断 \d+$/)).toBeInTheDocument();
+    // No count of who vouches for what, and no tag beside a fact.
+    expect(screen.queryByText(/你已确认 \d|数据字典所述|^模型推断/)).not.toBeInTheDocument();
+    expect(container.querySelectorAll("dl [data-slot='tag'], dl .rounded-tag").length).toBe(0);
     expect(screen.getByText("2023 年入院的成人脓毒症患者")).toBeInTheDocument();
-    // The confirmed unit is the researcher's own words, and the later inference was not applied.
+    // The confirmed unit is the researcher's own words, and the later judgement was not applied.
     expect(screen.getByText("mmol/L")).toBeInTheDocument();
-    expect(screen.getByText("你说：“这一列的单位是 mmol/L”")).toBeInTheDocument();
-    expect(screen.getByText("模型推断另有判断：mg/dL，没有采用")).toBeInTheDocument();
-    expect(screen.getByText("见 dictionary.csv")).toBeInTheDocument();
-    expect(screen.getAllByText(/^依据：列名 creatinine；取值 40–400$/).length).toBeGreaterThan(0);
+    expect(screen.getByText("依据：你的说明“这一列的单位是 mmol/L”")).toBeInTheDocument();
+    expect(screen.getByText("AI 判断给出的是：mg/dL，没有采用")).toBeInTheDocument();
+    expect(screen.getByText("依据：数据字典（dictionary.csv）")).toBeInTheDocument();
+    expect(screen.getAllByText("依据：AI 判断（列名 creatinine；取值 40–400）").length).toBeGreaterThan(0);
     // Codes and the join in the researcher's words, never an id. A code list is
     // a set, so the domain keeps it in one order whatever order it was written in.
     expect(screen.getByText("F（女）、M（男）")).toBeInTheDocument();
     expect(screen.getByText("visits.csv（patient_id）→ patients.csv（patient_id）")).toBeInTheDocument();
     expect(screen.getByText("多对一")).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/model_inferred|researcher_confirmed|visits-|dsem_/);
+    expect(document.body.textContent).not.toMatch(/model_inferred|researcher_confirmed|visits-|dsem_|模型推断|你已确认|数据字典所述/);
   });
 
   it("says what the last check found and that a check which did not run is not a clean one", async () => {
@@ -95,7 +96,7 @@ describe("DatasetMeaningPanel", () => {
   it("confirms what the model only inferred, exactly as shown, and reloads", async () => {
     mocks.confirm.mockResolvedValue({ revision: 5, summary: {} });
     render(<DatasetMeaningPanel projectId="project-one" path="knowledge-base/visits.csv" sha256={SHA_A} />);
-    await userEvent.click(await screen.findByRole("button", { name: "确认以上推断" }));
+    await userEvent.click(await screen.findByRole("button", { name: "确认这些含义" }));
     await waitFor(() => expect(mocks.confirm).toHaveBeenCalledTimes(1));
     const [projectId, datasetId, targets] = mocks.confirm.mock.calls[0];
     expect([projectId, datasetId]).toEqual(["project-one", "visits"]);

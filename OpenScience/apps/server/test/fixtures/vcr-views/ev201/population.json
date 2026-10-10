@@ -46,7 +46,6 @@
       "kept": 3400,
       "excluded": 12,
       "unknown": 0,
-      "review": "ai_set",
       "source": "extracted",
       "changed": null
     },
@@ -61,7 +60,6 @@
       "kept": 2589,
       "excluded": 152,
       "unknown": 188,
-      "review": "ai_set",
       "source": "extracted",
       "changed": null
     },
@@ -76,7 +74,6 @@
       "kept": 1855,
       "excluded": 611,
       "unknown": 22,
-      "review": "ai_set",
       "source": "extracted",
       "changed": null
     },
@@ -91,7 +88,6 @@
       "kept": 1200,
       "excluded": 90,
       "unknown": 402,
-      "review": "ai_set",
       "source": "extracted",
       "changed": null
     },
@@ -106,7 +102,6 @@
       "kept": null,
       "excluded": null,
       "unknown": null,
-      "review": "ai_set",
       "source": "extracted",
       "changed": null
     },
@@ -121,7 +116,6 @@
       "kept": null,
       "excluded": null,
       "unknown": null,
-      "review": "ai_set",
       "source": "extracted",
       "changed": null
     }
