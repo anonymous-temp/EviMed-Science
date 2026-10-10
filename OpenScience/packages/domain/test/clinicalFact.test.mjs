@@ -97,6 +97,27 @@ test('selected conversions round trip, retain analyte identity and do not case-f
   assert.equal(clinicalUnitInQuote('custom-unit','not supplied'),null);
 });
 
+test('units that differ only in case are one unit where the table lists them; a symbol whose case changes its magnitude is never folded (E-09)', () => {
+  for (const [a, b] of [['ng/mL', 'ng/ml'], ['U/L', 'u/l'], ['10^9/L', '10^9/l'], ['mg/dL', 'MG/DL'], ['mmol/L', 'MMOL/L'], ['IU/mL', 'iu/ml'], ['µg/L', 'UG/L'], ['mL/min', 'ML/MIN']]) {
+    assert.equal(clinicalUnitToken(a), clinicalUnitToken(b), `${a} and ${b} are one unit`);
+  }
+  assert.equal(clinicalUnitToken('ng/ml'), 'ng/mL', 'the token is the table\'s canonical spelling');
+  // The upper-case rendering of these is another unit, or could be: they stay apart from their lower-case neighbours.
+  for (const [a, b] of [['mmol/L', 'Mmol/L'], ['mU/L', 'MU/L'], ['g/L', 'G/L'], ['mg/dL', 'Mg/dL'], ['U/L', 'IU/L'], ['ng/mL', 'ug/mL']]) {
+    assert.notEqual(clinicalUnitToken(a), clinicalUnitToken(b), `${a} and ${b} are not one unit`);
+  }
+  assert.equal(clinicalUnitToken(' custom-Unit '), 'custom-Unit', 'a unit the table does not know is the unit as typed');
+  // The conversion still keys on the canonical spelling.
+  assert.ok(convertClinicalUnit(1.2, 'MG/DL', 'µmol/L', 'creatinine'));
+  assert.equal(convertClinicalUnit(1.2, 'mg/dl', 'UMOL/L', 'creatinine')?.value, 1.2 * 88.4);
+  // A unit the quote must state may be stated in any listed spelling; a unit that was not required to be found still is not.
+  assert.equal(clinicalUnitInQuote('mg/dL', '肌酐 1.2 MG/DL'), true);
+  assert.equal(clinicalUnitInQuote('ng/mL', '肌钙蛋白 0.02 NG/ML', true), true);
+  assert.equal(clinicalUnitInQuote('ng/mL', '肌钙蛋白 0.02 ug/mL', true), false);
+  assert.equal(clinicalUnitInQuote('ng/mL', '肌钙蛋白 0.02，单位未记载'), null, 'caseVariants adds no quote requirement');
+  assert.equal(clinicalUnitInQuote('mU/L', '促甲状腺素 3 MU/L', true), false, 'an unlisted unit is still found exactly');
+});
+
 test('pack grounding follows exact nested criteria and exposes only versioned definitions with their sources',()=>{
   const pack={id:'nsclc',version:3,terms:[{concept:'egfr',label:'EGFR',sources:['r1']}],
     mappings:[{concept:'egfr',source:'Chinese source edition',sources:['r2']},{concept:'ecog',sources:['r3']}],

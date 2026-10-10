@@ -902,6 +902,26 @@ test('an explicit as-of replay uses a clinical fact the platform wrote later but
   assert.equal(assess(source.fact('血肌酐 1.1 mg/dL', { ...base, clinical, createdAt: '2026-10-05T00:00:00Z', visibleAt: '2026-09-20T00:00:00Z' })).factsWithheldAsFuture, 1);
 });
 
+test('units that differ only in case compare as one unit, and units whose case changes the magnitude do not (E-09)', () => {
+  const asOf = Date.parse(AS_OF);
+  /** @param {string} wanted @param {string} observed */
+  const state = (wanted, observed) => evaluateCriterion(
+    { id: 'lab', kind: 'inclusion', requirement: { op: 'compare', variable: 'analyte', comparator: 'lte', value: 10, unit: wanted } },
+    { facts: [{ id: 'f', variable: 'analyte', value: 5, unit: observed, polarity: 'affirmed' }], asOf }).state;
+  for (const [a, b] of [['ng/mL', 'ng/ml'], ['U/L', 'u/l'], ['10^9/L', '10^9/l'], ['mg/dL', 'MG/DL']]) {
+    assert.equal(state(a, b), SATISFIED, `criterion ${a}, fact ${b}`);
+    assert.equal(state(b, a), SATISFIED, `criterion ${b}, fact ${a}`);
+  }
+  for (const [a, b] of [['mmol/L', 'Mmol/L'], ['mU/L', 'MU/L'], ['g/L', 'G/L']]) {
+    assert.equal(state(a, b), UNKNOWN, `${a} and ${b} are not the same unit`);
+    assert.equal(state(b, a), UNKNOWN);
+  }
+  // The same through the evidence check: a laboratory fact whose quote prints the unit in capitals states its unit.
+  const source = chart('肌钙蛋白 0.02 NG/ML。');
+  const clinical = { schema: 1, assertion: 'affirmed', experiencer: 'patient', laboratory: { analyte: 'troponin', originalValue: 0.02, originalUnit: 'ng/mL' } };
+  assert.deepEqual(verifyFactEvidence(source.fact('肌钙蛋白 0.02 NG/ML', { variable: 'troponin', value: 0.02, unit: 'ng/mL', clinical }), { documents: source.documents }), { ok: true, reason: null });
+});
+
 test('a model cannot attach a guessed unit to a quote that omits it, or bypass units with equality',()=>{
   const source=chart('2026-09-01患者血肌酐1.0，单位未记载。');
   const clinical={schema:1,assertion:'affirmed',experiencer:'patient',laboratory:{originalValue:1,originalUnit:'未给单位'}};
