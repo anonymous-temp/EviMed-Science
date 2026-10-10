@@ -49,9 +49,11 @@ describe("知识库", () => {
     expect(screen.getByRole("button", { name: /^范围：/ })).toBeInTheDocument();
 
     const empty = await screen.findByText("把文献、指南、方案、数据表、网页或笔记放进来，对话里会读它们并标出处。");
-    // The empty state is that one sentence and the one button; the header's is the same menu.
+    // The empty state is that one sentence and the one button, and the header carries none then: the page has one solid 「添加」
+    // (review L-5 — it had two, with the same menu behind both). While the list is read the header's is the one.
     expect(within(empty.parentElement!).getAllByRole("button")).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "添加" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "添加" })).toHaveLength(1);
+    expect(within(heading.closest("header")!).queryByRole("button", { name: "添加" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "资料类型" })).not.toBeInTheDocument();
     expect(screen.queryByText(/支持 PDF/)).not.toBeInTheDocument();
     expect(screen.queryByText(/临床/)).not.toBeInTheDocument();
