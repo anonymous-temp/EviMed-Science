@@ -408,6 +408,30 @@ test("isPrivateHost knows the ranges that make plaintext acceptable", () => {
   }
 });
 
+test("isPrivateHost reads the IPv6 ranges as addresses, not a host name that starts with fd (Q-14)", () => {
+  // `host.startsWith("fd")` was meant for the unique-local range fd00::/8 and also took every name beginning with those letters,
+  // so a plaintext hop to a public host such as fda.gov passed the rule that exists to refuse one.
+  for (const host of ["fda.gov", "fdic.gov", "fd.example.com", "fdroid.org", "fe80.example.com", "fc.example.com", "fdnet"]) {
+    assert.equal(isPrivateHost(host), host === "fdnet", `${host} is ${host === "fdnet" ? "a bare internal name" : "public"}`);
+  }
+  // The URL parser hands an IPv6 literal over in brackets; both forms are the same address.
+  for (const host of ["::1", "[::1]", "fd00::1", "[fd12:3456:789a::1]", "fc00::1", "[fe80::1]", "[febf::1]"]) {
+    assert.equal(isPrivateHost(host), true, `${host} is loopback, unique-local or link-local`);
+  }
+  for (const host of ["[2001:db8::1]", "2001:db8::1", "[fec0::1]", "[2a00:1450::1]"]) {
+    assert.equal(isPrivateHost(host), false, `${host} is a routable address`);
+  }
+  // And it is what the origin check sees: http to a public name starting with fd is refused, to a unique-local literal is not.
+  assert.equal(new URL("http://[fd00::1]:9999").hostname, "[fd00::1]");
+});
+
+test("plaintext to a public host whose name starts with fd is refused, to a unique-local address is ordinary (Q-14)", async () => {
+  const refused = await run({ geoProbeUrl: "http://fda.gov:9999" }, async () => jsonResponse({}), { op: "providers" });
+  assert.deepEqual([refused.statusCode, refused.json().code], [503, "geo_probe_plaintext_forbidden"]);
+  const ordinary = await run({ geoProbeUrl: "http://[fd00::1]:9999" }, async () => jsonResponse({ providers: {} }), { op: "providers" });
+  assert.equal(ordinary.statusCode, 200);
+});
+
 test("every failure path carries measurement:failed, so no caller can read one as an empty result", async () => {
   const cases = [
     [{ op: "nope" }, configured, async () => jsonResponse({})],

@@ -211,10 +211,13 @@ function probeOrigin(config) {
 
 /** Loopback, RFC1918, CGNAT, link-local, or a name with no public dot. */
 export function isPrivateHost(hostname) {
-  const host = String(hostname ?? "").toLowerCase();
+  // The URL parser hands an IPv6 literal over in brackets.
+  const host = String(hostname ?? "").toLowerCase().replace(/^\[(.*)\]$/, "$1");
   if (!host) return false;
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
-  if (host === "::1" || host.startsWith("fd") || host.startsWith("fe80:")) return true;
+  // An IPv6 literal is judged as an address: loopback, unique-local (fc00::/7) or link-local (fe80::/10). It is not a name, so
+  // it never reaches the "no public dot" rule below, and a name that merely starts with `fd` (fda.gov) is not a unique-local address.
+  if (host.includes(":")) return host === "::1" || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
   const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (ipv4) {
     const octets = ipv4.slice(1, 5).map(Number);
