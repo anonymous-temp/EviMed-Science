@@ -533,13 +533,13 @@ vcr_case("N06h", c("AC-04", "AC-28"), function() {
   # Now the grid is `limited` when it did not run every cell it planned, or any cell ended failed, capped or limited; the result counts
   # the cells planned against the cells run, and each cell carries its conclusion. The cells that finished are still the deliverable.
   # Three designs on a continuous endpoint: a small one, one so large that its replicates alone outlast the budget (600,000 patients a
-  # replicate), and a small one that never gets its turn. The budget is 10 CPU seconds (the engine stops at 0.9 of it), the heavy cell
-  # needs minutes whatever the machine, and the small ones need a second or two.
+  # replicate), and a small one that never gets its turn. The budget is 20 CPU seconds (the engine stops at 0.9 of it: the small cells need
+  # about three, so a machine several times slower still finishes them), the heavy cell needs minutes whatever the machine.
   mk <- function(designs) list(design = list(kind = "two_arm_fixed", nTreat = 20, nControl = 20), endpoint = list(type = "continuous"), truth = list(effect = 0.5, sd = 1),
                                analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power"),
                                designs = designs, truths = list(list(effect = 0.5)))
   stopped <- vcr_test_run(vcr_test_job("design.grid", mk(list(list(nTreat = 20, nControl = 20), list(nTreat = 300000, nControl = 300000), list(nTreat = 25, nControl = 25))),
-                                       seed = 7L, replicates = 5000L, cores = 1L, job_id = "job_n06h_stop", extra = list(cpuSecondsLimit = 10, batchSize = 25L)))
+                                       seed = 7L, replicates = 5000L, cores = 1L, job_id = "job_n06h_stop", extra = list(cpuSecondsLimit = 20, batchSize = 25L)))
   whole <- vcr_test_run(vcr_test_job("design.grid", mk(list(list(nTreat = 20, nControl = 20), list(nTreat = 25, nControl = 25))), seed = 7L, replicates = 5000L, cores = 1L, job_id = "job_n06h_whole"))
   d <- stopped$diagnostics
   codes <- vcr_test_issue_codes(stopped)
@@ -549,7 +549,7 @@ vcr_case("N06h", c("AC-04", "AC-28"), function() {
     identical(whole$status, "succeeded") && identical(whole$conclusion, "estimable") && whole$diagnostics$cellsPlanned == 2L && whole$diagnostics$cellsRun == 2L &&
     identical(whole$diagnostics$cells[[1]]$conclusion, "estimable") && isFALSE(whole$diagnostics$cells[[1]]$replicatesCapped)
   list(pass = ok,
-       detail = sprintf("three designs, the second too large for a 10-second budget: status %s, conclusion %s, %s of %s cells run (cell statuses %s, conclusions %s), issues %s; a grid that runs every cell: conclusion %s, %s of %s cells",
+       detail = sprintf("three designs, the second too large for a 20-second budget: status %s, conclusion %s, %s of %s cells run (cell statuses %s, conclusions %s), issues %s; a grid that runs every cell: conclusion %s, %s of %s cells",
                         stopped$status, stopped$conclusion %||% "NULL", d$cellsRun %||% "NULL", d$cellsPlanned %||% "NULL",
                         paste(vapply(d$cells, function(c_) c_$status, character(1)), collapse = "/"), paste(vapply(d$cells, function(c_) c_$conclusion %||% "NULL", character(1)), collapse = "/"),
                         paste(codes, collapse = ","), whole$conclusion %||% "NULL", whole$diagnostics$cellsRun %||% "NULL", whole$diagnostics$cellsPlanned %||% "NULL"))
