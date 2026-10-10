@@ -118,6 +118,9 @@ before(async () => {
 });
 after(async () => {
   if (!database) return;
+  // The reply-check rows carry no foreign key to the user, and the last test leaves its check queued on purpose (it is tried
+  // again): a row left behind would be claimed by the next run's first check and make it count two.
+  await database.query("DELETE FROM evimed_review.reply_checks WHERE user_id=$1", [userId]);
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [userId]);
   await database.close();
 });
