@@ -168,7 +168,7 @@ export interface GeoOverviewMetric {
 export interface GeoWeekItem {
   kind: string;
   text: string;
-  tab: GeoStepKey | "overview" | "answers";
+  tab: GeoStepKey | "overview";
   ref: { snapshotId?: string; errorId?: string; articleId?: string; orderId?: string; sourceId?: string; round?: string } | null;
   /** When it happened, if the server says. */
   at?: string | null;

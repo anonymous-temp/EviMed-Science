@@ -806,7 +806,8 @@ export function dayWord(value: string | null | undefined, now: Date = new Date()
  */
 export function weekTarget(geoId: string, item: GeoWeekItem): string | null {
   const base = `/app/geo/${encodeURIComponent(geoId)}`;
-  if (item.tab === "answers") return item.ref?.snapshotId ? `${base}/answers/${encodeURIComponent(item.ref.snapshotId)}` : null;
+  // A line that quotes an answer opens that answer, whichever tab the server files it under: a wrong statement is filed under 诊断.
+  if (item.ref?.snapshotId) return `${base}/answers/${encodeURIComponent(item.ref.snapshotId)}`;
   const tab = GEO_TAB_REDIRECTS[item.tab];
   return tab ? geoTabPath(geoId, tab) : null;
 }

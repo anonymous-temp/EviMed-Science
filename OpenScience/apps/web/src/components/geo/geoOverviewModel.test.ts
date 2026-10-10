@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { GeoDiagnosis, GeoMonitoring, GeoProject } from "@/lib/geoClient";
+import type { GeoDiagnosis, GeoMonitoring, GeoProject, GeoWeekItem } from "@/lib/geoClient";
 import { cell, diagnosisFilled, diagnosisWith, geoProject } from "./__fixtures__/geoTabs";
 import {
   actionMarkers,
@@ -23,6 +23,7 @@ import {
   shownDelta,
   statedValue,
   trendConclusion,
+  weekTarget,
   withCoverageMarker,
 } from "./geoOverviewModel";
 
@@ -497,5 +498,18 @@ describe("the first citation on the trend", () => {
   it("is not drawn when nothing has been cited", () => {
     expect(actionMarkers(days, { cited: [] } as unknown as GeoMonitoring)).toEqual([]);
     expect(actionMarkers(days, null)).toEqual([]);
+  });
+});
+
+describe("a 本周 line lands on what it is about", () => {
+  it("opens the answer it quotes, whichever tab the server files the line under", () => {
+    // geoService files a wrong statement under 诊断 and quotes the answer that holds it (`ref.snapshotId`).
+    const wrong: GeoWeekItem = { kind: "wrong_ours", text: "DeepSeek 讲错：每天注射一次", tab: "diagnosis", ref: { errorId: "err_2", snapshotId: "snap_2" }, at: "2026-10-20T01:00:00Z" };
+    expect(weekTarget("geo_masi", wrong)).toBe("/app/geo/geo_masi/answers/snap_2");
+  });
+
+  it("lands a line that quotes no answer on the tab that holds it", () => {
+    const orders: GeoWeekItem = { kind: "orders", text: "2 篇稿件已发布", tab: "distribution", ref: null, at: null };
+    expect(weekTarget("geo_masi", orders)).toBe("/app/geo/geo_masi/actions");
   });
 });
