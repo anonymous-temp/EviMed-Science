@@ -1137,3 +1137,77 @@ test("a copiedFrom link is honoured only for a copy of the same variable at the 
   assert.equal(refused.ok, false);
   assert.equal(foreign.saved.length, 0);
 });
+
+test("a defect in the metadata no verdict reads costs that metadata, never the quote-verified fact; the metadata a verdict reads is still refused (E-18)", async () => {
+  const text = "2026-09-01 血肌酐 1.1 mg/dL。";
+  const quote = "血肌酐 1.1 mg/dL";
+  const start = text.indexOf(quote);
+  /** @param {Record<string, any>} clinical */
+  const fact = (clinical) => ({ subjectKey: "P-1", documentId: "doc_1", variable: "creatinine", value: 1.1, unit: "mg/dL", surface: "血肌酐", quote, start, end: start + quote.length,
+    occurredAt: "2026-09-01", clinical: { ...PATIENT, ...clinical } });
+  const codes = (/** @type {any} */ result) => (result.results?.[0]?.warnings ?? []).map((/** @type {any} */ warning) => [warning.field, warning.code]);
+
+  // A section range that does not cover the evidence, as the write used to refuse.
+  const section = factWriter({ text });
+  const badSection = await section.write(fact({ section: { name: "检验", start: 0, end: 4 } }));
+  assert.equal(badSection.ok, true, JSON.stringify(badSection.issues));
+  assert.deepEqual(badSection.issues, []);
+  assert.equal(section.saved.length, 1);
+  assert.equal(section.saved[0].clinical.section, undefined, "the part that failed is not kept");
+  assert.equal(section.saved[0].clinical.assertion, "affirmed", "the rest of the block is");
+  assert.deepEqual(codes(badSection), [["clinical.section", "clinical_section_not_kept"]]);
+  assert.match(badSection.results[0].warnings[0].message, /不需要重写/, "the run is told the fact is saved and need not be written again");
+
+  // A section range that does cover it is kept, untouched.
+  const goodSection = factWriter({ text });
+  const covered = await goodSection.write(fact({ section: { name: "检验", start: 0, end: text.length } }));
+  assert.equal(covered.results[0].warnings, undefined);
+  assert.equal(goodSection.saved[0].clinical.section.name, "检验");
+
+  // A terminology binding the model may not state (only model_inferred is its to write), a malformed one that used to throw, and a specialty with a number.
+  const coding = factWriter({ text });
+  const stated = await coding.write(fact({ coding: [{ system: "LOINC", edition: "2.77", method: "exact", basis: "dictionary_stated", reference: "r1" }] }));
+  assert.equal(stated.ok, true);
+  assert.equal(coding.saved[0].clinical.coding, undefined);
+  assert.deepEqual(codes(stated), [["clinical.coding", "clinical_coding_not_kept"]]);
+  const shapeless = factWriter({ text });
+  const notAList = await shapeless.write(fact({ coding: "LOINC" }));
+  assert.equal(notAList.ok, true, "a coding that is not a list is dropped like any other defective one, not a crash");
+  assert.deepEqual(codes(notAList), [["clinical.coding", "clinical_coding_not_kept"]]);
+  const specialty = factWriter({ text });
+  const numeric = await specialty.write(fact({ specialty: { stage: 3 } }));
+  assert.equal(numeric.ok, true);
+  assert.equal(specialty.saved[0].clinical.specialty, undefined);
+  assert.deepEqual(codes(numeric), [["clinical.specialty", "clinical_specialty_not_kept"]]);
+
+  // A valid model-modelled terminology binding is kept.
+  const fine = factWriter({ text });
+  const kept = await fine.write(fact({ coding: [{ system: "LOINC", edition: "2.77", method: "model", basis: "model_inferred", reference: "r1" }] }));
+  assert.equal(kept.results[0].warnings, undefined);
+  assert.equal(fine.saved[0].clinical.coding.length, 1);
+
+  // Relations: the entry that cannot be read goes, the one that can stays.
+  const relations = factWriter({ text });
+  const mixed = await relations.write(fact({ relations: [{ type: "caused_by", state: "unresolved", quote: "q" }, { type: "same_event", state: "unresolved", quote: "q" }] }));
+  assert.equal(mixed.ok, true);
+  assert.deepEqual(relations.saved[0].clinical.relations.map((/** @type {any} */ relation) => relation.type), ["same_event"]);
+  assert.deepEqual(codes(mixed), [["clinical.relations[0]", "clinical_relations_not_kept"]]);
+
+  // The platform assigns the locator from the verified quote, so one the model typed badly is not a reason to refuse.
+  const located = factWriter({ text });
+  const typed = await located.write(fact({ locator: { kind: "pdf", page: 0 } }));
+  assert.equal(typed.ok, true);
+  assert.deepEqual([located.saved[0].clinical.locator.kind, located.saved[0].clinical.locator.start], ["text", start]);
+
+  // What a verdict reads stays refused when malformed: a fact stored without it would mean something else.
+  for (const defect of [
+    { medication: { state: "given" } }, { laboratory: { originalValue: "1.1" } }, { assertion: "denied" }, { temporality: "future" },
+    { eventId: "visit:1" }, { occurredInterval: { start: "2026-09-02", end: "2026-09-01" } },
+  ]) {
+    const refused = factWriter({ text });
+    const result = await refused.write(fact(defect));
+    assert.equal(result.ok, false, JSON.stringify(defect));
+    assert.equal(refused.saved.length, 0, JSON.stringify(defect));
+    assert.equal(result.issues[0].field, "clinical", JSON.stringify(defect));
+  }
+});
