@@ -118,6 +118,13 @@ describe("a GEO project's page", () => {
     expect(screen.queryByRole("list", { name: "进度" })).not.toBeInTheDocument();
   });
 
+  it("opens the answer a 本周 line quotes, whichever tab the server files it under; a line that quotes none lands on its tab", async () => {
+    renderProject();
+    expect(await screen.findByRole("link", { name: /DeepSeek 仍把用法说成/ })).toHaveAttribute("href", "/app/geo/geo_masi/answers/snap_2");
+    expect(screen.getByRole("link", { name: /豆包在“打了减重针恶心/ })).toHaveAttribute("href", "/app/geo/geo_masi/answers/snap_1");
+    expect(screen.getByRole("link", { name: /和司美格鲁肽怎么选/ })).toHaveAttribute("href", "/app/geo/geo_masi/sources");
+  });
+
   it("opens each tab with a heading of its own, so the outline never jumps from the title to a third-level block", async () => {
     renderProject();
     await screen.findByRole("list", { name: "进度" });

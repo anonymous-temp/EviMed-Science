@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { GeoDiagnosis, GeoProject } from "@/lib/geoClient";
+import type { GeoDiagnosis, GeoMonitoring, GeoProject, GeoWeekItem } from "@/lib/geoClient";
 import { cell, diagnosisFilled, diagnosisWith, geoProject } from "./__fixtures__/geoTabs";
 import {
+  actionMarkers,
   changeWord,
   comparableRun,
   coverageMarker,
@@ -22,6 +23,7 @@ import {
   shownDelta,
   statedValue,
   trendConclusion,
+  weekTarget,
   withCoverageMarker,
 } from "./geoOverviewModel";
 
@@ -320,6 +322,23 @@ describe("the rail and the next step", () => {
     expect(railSteps(funded, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "active" });
     expect(nextSteps(funded).some((step) => step.key === "budget")).toBe(false);
   });
+
+  it("asks for nothing about a placement nobody asked for: the rail and 下一步 agree that it is not waiting on the reader", () => {
+    // The server sends every step; an untouched one is { status: "none", requested: false } (`normalizedSteps`).
+    const untouched = geoProject({ sources: "done" }, { budget: null });
+    const steps = { ...untouched.steps, distribution: { status: "none" as const, requested: false, updatedAt: null } };
+    const never = { ...untouched, steps, overview: { ...untouched.overview, steps } };
+    expect(railSteps(never, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "todo", note: null });
+    expect(nextSteps(never).some((step) => step.key === "budget" || step.key === "market" || step.state === "waiting")).toBe(false);
+  });
+
+  it("still asks for the budget once placement has been requested, before it has started", () => {
+    const asked = geoProject({ sources: "done" }, { budget: null });
+    const steps = { ...asked.steps, distribution: { status: "none" as const, requested: true, updatedAt: null } };
+    const requested = { ...asked, steps, overview: { ...asked.overview, steps } };
+    expect(railSteps(requested, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "waiting", note: "待你确认预算" });
+    expect(nextSteps(requested)[0]).toMatchObject({ key: "budget", state: "waiting" });
+  });
 });
 
 describe("a chart's heading", () => {
@@ -451,5 +470,46 @@ describe("a reading is compared only with one measured over the same thing (R14 
     expect(overviewCoverageNotice(moved)).toBe("引擎范围有变化，不与上一轮比较");
     expect(headlineSentence(moved, null)).toContain("综合可见度 44，引擎范围有变化，不与上一轮比较");
     expect(overviewCoverageNotice(project())).toBeNull();
+  });
+});
+
+describe("the first citation on the trend", () => {
+  // The server sends the instant a citation was first seen; the series are days in the GEO module's zone (Asia/Shanghai).
+  const days = ["2026-10-06", "2026-10-13", "2026-10-20"];
+  const cited = (firstSeen: string) => ({ cited: [{ articleId: "art_1", title: "稿件", engine: "doubao", firstSeen }] }) as unknown as GeoMonitoring;
+
+  it("is drawn on the day it was first seen, not on the measurement after it", () => {
+    expect(actionMarkers(days, cited("2026-10-13T02:11:45.123Z"))).toEqual([{ index: 1, label: "首次被 AI 引用" }]);
+  });
+
+  it("reads the instant as the day it fell on in China: 04:00 on the 13th is the 13th, not the 12th in UTC", () => {
+    const dates = ["2026-10-06", "2026-10-12", "2026-10-13", "2026-10-20"];
+    expect(actionMarkers(dates, cited("2026-10-12T20:00:00Z"))).toEqual([{ index: 2, label: "首次被 AI 引用" }]);
+  });
+
+  it("goes to the last measurement when the citation came after all of them", () => {
+    expect(actionMarkers(days, cited("2026-10-21T01:00:00.000Z"))).toEqual([{ index: 2, label: "首次被 AI 引用" }]);
+  });
+
+  it("is not drawn at all when the time it was seen is not a time", () => {
+    expect(actionMarkers(days, cited("not a time"))).toEqual([]);
+  });
+
+  it("is not drawn when nothing has been cited", () => {
+    expect(actionMarkers(days, { cited: [] } as unknown as GeoMonitoring)).toEqual([]);
+    expect(actionMarkers(days, null)).toEqual([]);
+  });
+});
+
+describe("a 本周 line lands on what it is about", () => {
+  it("opens the answer it quotes, whichever tab the server files the line under", () => {
+    // geoService files a wrong statement under 诊断 and quotes the answer that holds it (`ref.snapshotId`).
+    const wrong: GeoWeekItem = { kind: "wrong_ours", text: "DeepSeek 讲错：每天注射一次", tab: "diagnosis", ref: { errorId: "err_2", snapshotId: "snap_2" }, at: "2026-10-20T01:00:00Z" };
+    expect(weekTarget("geo_masi", wrong)).toBe("/app/geo/geo_masi/answers/snap_2");
+  });
+
+  it("lands a line that quotes no answer on the tab that holds it", () => {
+    const orders: GeoWeekItem = { kind: "orders", text: "2 篇稿件已发布", tab: "distribution", ref: null, at: null };
+    expect(weekTarget("geo_masi", orders)).toBe("/app/geo/geo_masi/actions");
   });
 });

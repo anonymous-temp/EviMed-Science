@@ -15,7 +15,7 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
 }));
 
 const empty = (): GeoValue => ({ version: 0, updatedAt: null, data: {}, research: [], impacts: [], observations: [],
-  coverage: { assessed: 0, represented: 0, partial: 0, contradicted: 0, uncertain: 0, notApplicable: 0, value: null } });
+  coverage: { assessed: 0, represented: 0, partial: 0, contradicted: 0, notAddressed: 0, uncertain: 0, notApplicable: 0, value: null } });
 beforeEach(() => {
   client.getGeoValue.mockReset();
   open.mockReset();
@@ -60,8 +60,16 @@ it("keeps the last round's coverage after the profile moves on, and says which v
   value.coverage = { ...value.coverage, assessed: 3, represented: 2, partial: 1, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("2 / 3 次相关结论被完整表达，1 次不完整，0 次存在冲突。")).toBeInTheDocument();
+  expect(await screen.findByText("2 / 3 次相关结论被完整表达，1 次不完整，0 次存在冲突，0 次未涉及。")).toBeInTheDocument();
   expect(screen.getByText("以上按第 3 版药品价值分析测得；分析已更新到第 4 版，下一轮测量后按新版本判断。")).toBeInTheDocument();
+});
+
+it("says how many answers did not address the claim, so the four parts add up to what was assessed", async () => {
+  const value = { ...empty(), version: 3 };
+  value.coverage = { ...value.coverage, assessed: 7, represented: 2, partial: 1, contradicted: 1, notAddressed: 3, basisVersion: 3 };
+  client.getGeoValue.mockResolvedValue(value);
+  show("coverage");
+  expect(await screen.findByText("2 / 7 次相关结论被完整表达，1 次不完整，1 次存在冲突，3 次未涉及。")).toBeInTheDocument();
 });
 
 it("says nothing about versions when the coverage was measured on the current profile", async () => {
@@ -69,7 +77,7 @@ it("says nothing about versions when the coverage was measured on the current pr
   value.coverage = { ...value.coverage, assessed: 1, represented: 1, basisVersion: 3 };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("1 / 1 次相关结论被完整表达，0 次不完整，0 次存在冲突。")).toBeInTheDocument();
+  expect(await screen.findByText("1 / 1 次相关结论被完整表达，0 次不完整，0 次存在冲突，0 次未涉及。")).toBeInTheDocument();
   expect(screen.queryByText(/下一轮测量后按新版本判断/)).not.toBeInTheDocument();
 });
 
@@ -106,6 +114,32 @@ it("keeps scope, certainty, applicability dates and the source's title with the 
   }
   expect(view.container.querySelector("input, textarea, select")).toBeNull();
   expect(view.container.textContent).not.toMatch(/src_|SHA-256|abc123/);
+});
+
+it("shows what a finding records in its own shape: a list as its items, an object as its labelled fields, a number as a number, the basis as its label", async () => {
+  client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: [{
+    statement: "疗效优于安慰剂", dimension: "effectiveness", basis: "synthesized", certainty: 3,
+    population: { indication: "成人肥胖", setting: "门诊", age: "18 岁以上" }, comparator: "安慰剂", outcomes: ["体重变化", "停药率"],
+    limitations: ["随访仅 12 周", "样本量偏小"],
+  }] } });
+  const view = show();
+  await userEvent.click(await screen.findByText("依据与适用条件"));
+  expect(screen.getByText("综合结论")).toBeVisible();
+  expect(screen.getByText("3")).toBeVisible();
+  expect(screen.getByText("适应证：成人肥胖")).toBeVisible();
+  expect(screen.getByText("使用场景：门诊")).toBeVisible();
+  // A key with no Chinese label is not printed as a code; its value still is.
+  expect(screen.getByText("18 岁以上")).toBeVisible();
+  for (const item of ["安慰剂", "体重变化", "停药率", "随访仅 12 周", "样本量偏小"]) expect(screen.getByText(item)).toBeVisible();
+  expect(view.container.textContent).not.toMatch(/\[object Object\]|[{}]|age/);
+});
+
+it("a zero is a number, and a basis the claim lists do not name is not printed as a machine word", async () => {
+  client.getGeoValue.mockResolvedValue({ ...empty(), version: 2, data: { findings: [{ statement: "疗效优于安慰剂", certainty: 0, basis: "indirect", sourceVersion: 0 }] } });
+  const view = show();
+  await userEvent.click(await screen.findByText("依据与适用条件"));
+  expect(screen.getByText("确定性").closest("div")).toHaveTextContent(/^确定性0$/);
+  expect(view.container.textContent).not.toContain("indirect");
 });
 
 describe("a finding's sources", () => {
@@ -263,7 +297,7 @@ describe("a long list is not cut without a word", () => {
 
   it("lists twenty of the answers a round was judged on, counts them all, and shows the rest on request", async () => {
     const observations = Array.from({ length: 25 }, (_, index) => ({ findingId: `f${index}`, status: "represented", quote: `回答 ${index + 1}`, reason: "", engine: "deepseek", basisVersion: 3, rubricVersion: "1", askedAt: null }));
-    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 25, represented: 25, partial: 0, contradicted: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 25, represented: 25, partial: 0, contradicted: 0, notAddressed: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
     show("coverage");
     await userEvent.click(await screen.findByText("查看回答中的表达 · 共 25 条"));
     const fold = screen.getByText("回答 1").closest("details") as HTMLElement;
@@ -275,7 +309,7 @@ describe("a long list is not cut without a word", () => {
 
   it("a fold that fits says no total", async () => {
     const observations = [{ findingId: "f1", status: "represented", quote: "回答 1", reason: "", engine: "deepseek", basisVersion: 3, rubricVersion: "1", askedAt: null }];
-    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 1, represented: 1, partial: 0, contradicted: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
+    client.getGeoValue.mockResolvedValue({ ...empty(), version: 3, observations, coverage: { assessed: 1, represented: 1, partial: 0, contradicted: 0, notAddressed: 0, uncertain: 0, notApplicable: 0, value: 100, basisVersion: 3 } });
     show("coverage");
     expect(await screen.findByText("查看回答中的表达")).toBeInTheDocument();
   });

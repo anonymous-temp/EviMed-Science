@@ -168,7 +168,7 @@ export interface GeoOverviewMetric {
 export interface GeoWeekItem {
   kind: string;
   text: string;
-  tab: GeoStepKey | "overview" | "answers";
+  tab: GeoStepKey | "overview";
   ref: { snapshotId?: string; errorId?: string; articleId?: string; orderId?: string; sourceId?: string; round?: string } | null;
   /** When it happened, if the server says. */
   at?: string | null;
@@ -772,8 +772,11 @@ export interface GeoValue {
   data: Record<string, unknown>;
   research: Array<{ id: string; question: string | null; status: string; runId: string | null }>;
   impacts: Array<{ change: Record<string, unknown>; findingIds: string[]; groupIds: string[]; articleIds: string[] }>;
-  /** `basisVersion`: the value-profile version the latest round was judged against (null before any judged round). */
-  coverage: { assessed: number; represented: number; partial: number; contradicted: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null };
+  /**
+   * `assessed` is represented + partial + contradicted + notAddressed; `uncertain` and `notApplicable` are not assessed.
+   * `basisVersion`: the value-profile version the latest round was judged against (null before any judged round).
+   */
+  coverage: { assessed: number; represented: number; partial: number; contradicted: number; notAddressed: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null };
   /** At most twenty, the ones that say something first and the most recent answers first; `coverage` counts every one of `observationsTotal`. */
   observations: Array<{ findingId: string; status: string; quote: string; reason: string; engine: string; basisVersion: number | null; rubricVersion: string | null; askedAt: string | null }>;
   observationsTotal?: number;

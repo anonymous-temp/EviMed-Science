@@ -25,10 +25,11 @@ import {
   type GeoOverviewMetricKey,
   type GeoProject,
   type GeoSeriesPoint,
+  type GeoStep,
   type GeoStepKey,
   type GeoWeekItem,
 } from "@/lib/geoClient";
-import { allowanceWaitingSentence, geoCoverageDifference, geoCoverageStatement } from "@evimed/domain";
+import { agendaLocalDate, allowanceWaitingSentence, DISPLAY_TIME_ZONE, geoCoverageDifference, geoCoverageStatement } from "@evimed/domain";
 import { stepAllowanceWait, type AllowanceWaiting } from "@/lib/allowanceWait";
 import type { RailState, RailStep } from "@/components/ui/ProgressRail";
 import type { DeltaPolarity } from "@/components/ui/Delta";
@@ -424,6 +425,17 @@ export function marketConnected(project: GeoProject): boolean {
 export const GEO_MARKET_OFF_NOTE = "等媒介集市接通";
 
 /**
+ * Whether placing has been asked for: the reader requested the step, or it is already moving. The rail and 下一步 both read it here,
+ * so they cannot disagree. A step nobody asked for is owed neither a budget nor a market — the server sends it untouched.
+ */
+function placementAsked(step: GeoStep | undefined): boolean {
+  const status = step?.status ?? "none";
+  const done = status === "done" || status === "minimal";
+  const working = status === "running" || status === "queued" || status === "failed";
+  return !done && (step?.requested === true || working);
+}
+
+/**
  * The eight steps as the header rail. One of them may be `waiting`: the
  * program's single money stop — a placement budget only a person may set —
  * and it is drawn as the thing the reader owes. Without a market there is
@@ -439,7 +451,7 @@ export function railSteps(project: GeoProject, geoTabPathOf: (step: GeoStepKey) 
     const status = step?.status ?? "none";
     const done = status === "done" || status === "minimal";
     const working = status === "running" || status === "queued" || status === "failed";
-    const asked = key === "distribution" && !done && (step?.requested === true || working);
+    const asked = key === "distribution" && placementAsked(step);
     const held = asked && !market;
     const waiting = asked && market && needsBudget;
     // A step the allowance would not start needs the reader as much as the budget does.
@@ -484,7 +496,7 @@ export function nextSteps(project: GeoProject): NextStep[] {
   const needsBudget = project.budget === null || !(project.budget.totalCny > 0);
   const market = marketConnected(project);
   const rows: NextStep[] = [];
-  const placing = steps.distribution && steps.distribution.status !== "done";
+  const placing = placementAsked(steps.distribution);
   if (placing && !market) {
     rows.push({ key: "market", text: "投放要等媒介集市接通", state: "held", when: null });
   } else if (placing && needsBudget) {
@@ -693,9 +705,12 @@ export function actionMarkers(
   dates: readonly string[],
   monitoring: GeoMonitoring | null,
 ): Array<{ index: number; label: string }> {
+  // The series are days in the GEO module's zone, and a citation is an instant: it is compared as the day it fell on there. Compared as
+  // it stands, the same day reads as earlier than its own instant, and the marker moves to the measurement after it.
   const cited = (Array.isArray(monitoring?.cited) ? monitoring.cited : [])
     .map((row) => row?.firstSeen)
-    .filter((date): date is string => typeof date === "string" && date.length > 0)
+    .filter((seen): seen is string => typeof seen === "string" && !Number.isNaN(Date.parse(seen)))
+    .map((seen) => agendaLocalDate(DISPLAY_TIME_ZONE, seen))
     .sort();
   if (cited.length === 0 || dates.length === 0) return [];
   const at = dates.findIndex((date) => date >= cited[0]);
@@ -791,7 +806,8 @@ export function dayWord(value: string | null | undefined, now: Date = new Date()
  */
 export function weekTarget(geoId: string, item: GeoWeekItem): string | null {
   const base = `/app/geo/${encodeURIComponent(geoId)}`;
-  if (item.tab === "answers") return item.ref?.snapshotId ? `${base}/answers/${encodeURIComponent(item.ref.snapshotId)}` : null;
+  // A line that quotes an answer opens that answer, whichever tab the server files it under: a wrong statement is filed under 诊断.
+  if (item.ref?.snapshotId) return `${base}/answers/${encodeURIComponent(item.ref.snapshotId)}`;
   const tab = GEO_TAB_REDIRECTS[item.tab];
   return tab ? geoTabPath(geoId, tab) : null;
 }
