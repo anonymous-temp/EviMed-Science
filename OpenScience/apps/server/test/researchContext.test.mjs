@@ -84,7 +84,26 @@ test("injects relevant memory records as untrusted research context", async () =
     assert.match(prepared.system, /个人科研记忆/);
     assert.match(prepared.system, /非可信资料/);
     assert.match(prepared.system, /真实世界证据与随机对照试验/);
-    assert.match(prepared.system, /<evimed-memory index="1" id="memo_1" type="manual" kind="note" scope="user">/);
+    assert.match(prepared.system, /<evimed-memory index="1" id="memo_1" type="manual" kind="note" scope="user" origin="来源未记录">/);
+  });
+});
+
+test("each recalled memory says whose statement it is, and an inference is not introduced as something the user said", async () => {
+  // 2026-10-10 review M-4: the store keeps origin (principle 18) but the block dropped it and called every memory
+  // something the user saved.
+  await withProject(async (project) => {
+    const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
+      memories: [
+        { id: "record:a", content: "只看 RCT", kind: "preference", scope: "user", memoryType: "structured", origin: "explicit" },
+        { id: "record:b", content: "偏好中文文献", kind: "preference", scope: "user", memoryType: "structured", origin: "inferred" },
+        { id: "record:c", content: "项目用 MIMIC-IV", kind: "project_fact", scope: "project", memoryType: "structured", origin: "system" },
+      ],
+    });
+    assert.match(prepared.memoryContext, /id="record:a"[^>]* origin="用户所述"/);
+    assert.match(prepared.memoryContext, /id="record:b"[^>]* origin="推断"/);
+    assert.match(prepared.memoryContext, /id="record:c"[^>]* origin="平台或来源记录"/);
+    assert.doesNotMatch(prepared.memoryContext, /它们是用户保存的/);
+    assert.match(prepared.memoryContext, /推断不是用户的原话/);
   });
 });
 
@@ -97,7 +116,7 @@ test("the recalled memory is returned on its own for the run's memory file, and 
     const some = await prepareResearchContext(project, { mode: "open-domain" }, config, {
       memories: [{ id: "memo_1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured" }],
     });
-    assert.match(some.memoryContext, /<evimed-memory index="1" id="memo_1" type="structured" kind="preference" scope="user">/);
+    assert.match(some.memoryContext, /<evimed-memory index="1" id="memo_1" type="structured" kind="preference" scope="user" origin="来源未记录">/);
     assert.match(some.memoryContext, /回答尽量简短/);
     assert.ok(some.system.includes(some.memoryContext), "the file is the block the root reads, not a second rendering");
     const none = await prepareResearchContext(project, { mode: "open-domain" }, config, { memories: [] });
