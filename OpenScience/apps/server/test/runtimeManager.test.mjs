@@ -2329,7 +2329,8 @@ test("dispatching a DSH prompt writes the run's own id into the workspace brief"
   });
   await manager.start(project);
   await manager.dispatchPrompt(project, "ses_brief", { text: "hello", runId: "run_brief_1" });
-  const written = JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"));
+  const written = JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", "ses_brief", "index.json"), "utf8"));
+  assert.equal(written.sessionId, "ses_brief");
   assert.equal(written.runId, "run_brief_1");
   assert.match(written.contextRevision, /^req_/);
 });
@@ -2359,12 +2360,12 @@ test("dispatchPrompt materializes the research context beside the run id", async
   });
   await manager.start(project);
   await manager.dispatchPrompt(project, "ses_general", { text: "hello", system: "# Brief\n", runId: "run_brief_2" });
-  const written = JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"));
+  const written = JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", "ses_general", "index.json"), "utf8"));
   assert.equal(written.runId, "run_brief_2");
   assert.match(written.contextRevision, /^req_/);
-  assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "context.md"), "utf8"), "# Brief\n");
+  assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", "ses_general", "context.md"), "utf8"), "# Brief\n");
   // A dispatch that says nothing about memory writes no memory file.
-  const memoryFile = path.join(project.workspaceDir, ".evimed-brief", "memory.md");
+  const memoryFile = path.join(project.workspaceDir, ".evimed-brief", "sessions", "ses_general", "memory.md");
   await assert.rejects(readFile(memoryFile, "utf8"));
   // The recalled memories ride beside the context, for the socket to hand to
   // every delegated child; and an empty recall clears the previous one rather
@@ -2390,6 +2391,7 @@ test("a reserved session receives strict context before its first DSH create", a
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", session.id);
   assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
     runId: "run_strict_1",
+    sessionId: session.id,
     contextRevision: "req_strict_1",
   });
   assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Session context\n");
@@ -2413,6 +2415,7 @@ test("a follow-up and repair commit distinct session context revisions", async (
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", sessionId);
   assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
     runId: "run_same",
+    sessionId,
     contextRevision: "req_repair",
   });
   assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Repair context\n");
@@ -4176,4 +4179,23 @@ test("failed cleanup callbacks do not recursively wait for their own bounded sto
   runtime.close = async () => {};
   await manager.endBoundedRuntime(owned, "episode-one", "old-generation");
   assert.equal(calls, 1, "terminal callback stays single-shot during cleanup retry");
+});
+
+test("concurrent prompts in one workspace write separate session context and identity-bound indexes", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => { await manager.closeAll(); await rm(rootDir, {recursive:true,force:true}); });
+  await manager.start(project);
+  await Promise.all([
+    manager.dispatchPrompt(project,'session_scope_a',{text:'task A',system:'CONTEXT_A',memoryContext:'MEMORY_A',runId:'run_scope_a'}),
+    manager.dispatchPrompt(project,'session_scope_b',{text:'task B',system:'CONTEXT_B',memoryContext:'MEMORY_B',runId:'run_scope_b'}),
+  ]);
+  for (const suffix of ['a','b']) {
+    const scoped=path.join(project.workspaceDir,'.evimed-brief','sessions',`session_scope_${suffix}`);
+    const index=JSON.parse(await readFile(path.join(scoped,'index.json'),'utf8'));
+    assert.equal(index.sessionId,`session_scope_${suffix}`);
+    assert.equal(index.runId,`run_scope_${suffix}`);
+    assert.equal(await readFile(path.join(scoped,'context.md'),'utf8'),`CONTEXT_${suffix.toUpperCase()}`);
+    assert.equal(await readFile(path.join(scoped,'memory.md'),'utf8'),`MEMORY_${suffix.toUpperCase()}`);
+  }
+  await assert.rejects(readFile(path.join(project.workspaceDir,'.evimed-brief','index.json'),'utf8'),{code:'ENOENT'});
 });

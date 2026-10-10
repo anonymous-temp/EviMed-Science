@@ -1282,13 +1282,23 @@ const WRITERS = {
       span: { start: start ?? null, end: end ?? null, quote: String(quote) },
       fact: { surface, dateSurface, value: typeof value === "number" ? value : undefined, clinical, unit } });
     if (!verified) return null;
+    const relationWarnings = [];
     if (clinical) {
       const referenced = [...new Set([clinical.copiedFrom, clinical.correctionOf,
         ...(clinical.relations ?? []).filter(r => r.state === 'supported').map(r => r.targetFactId)].filter(Boolean))];
       const known = referenced.length ? await matchStore.matchingFactsByIds(study.id, referenced) : [];
       if (known.length !== referenced.length || known.some(row => row.subjectKey !== subjectKey)) return void item.bad('clinical', '事实引用必须属于本研究的同一受试者。');
       if (clinical.correctionOf && known.find(row => row.id === clinical.correctionOf)?.variable !== variable) return void item.bad('clinical.correctionOf', '更正必须针对同一临床变量。');
-      if ((clinical.relations ?? []).some(relation => !verified.span.quote.includes(relation.quote))) return void item.bad('clinical.relations', '关系证据必须在所引原文中。');
+      for (const [relationIndex, relation] of (clinical.relations ?? []).entries()) {
+        if (relation.state !== 'supported') continue;
+        const target = known.find(row => row.id === relation.targetFactId);
+        const reason = relationEvidenceReason(relation, target, verified);
+        if (reason) {
+          relation.state = 'unresolved';
+          relationWarnings.push({ relationIndex, targetFactId: relation.targetFactId, code: reason,
+            message: '这条关系缺少可核对的双端点依据，已保留为待核对；事实本身已保存。' });
+        }
+      }
       if (clinical.section && (clinical.section.start > verified.span.start || clinical.section.end < verified.span.end || clinical.section.end > verified.document.text.length)) return void item.bad('clinical.section', '章节范围必须包含这条事实证据。');
       clinical.locator = { kind: 'text', offsetUnit: 'utf16', start: verified.span.start, end: verified.span.end,
         ...(verified.document.sourceHash ? { sourceHash: verified.document.sourceHash } : {}),
@@ -1310,7 +1320,7 @@ const WRITERS = {
       provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
         inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 1 },
     } });
-    extra.results.push({ index: item.index, id: saved.id, subjectKey });
+    extra.results.push({ index: item.index, id: saved.id, subjectKey, ...(relationWarnings.length ? { warnings: relationWarnings } : {}) });
     return saved.id;
   },
 
@@ -1651,6 +1661,29 @@ async function studyHoldsSubject({ matchStore, documents, study, subjectKey, see
   }
   known.set(subjectKey, held);
   return held;
+}
+
+/** A supported link binds two preserved fact spans to one actual quote instance.
+ * Cross-document support requires a dual-source contract this schema does not have.
+ * @param {any} relation @param {any} target @param {any} verified @returns {string|null}
+ */
+function relationEvidenceReason(relation, target, verified) {
+  const source = target?.source;
+  if (source?.documentId !== verified.document.id) return 'relation_dual_document_evidence_missing';
+  const text = verified.document.text;
+  if (!Number.isInteger(source.start) || !Number.isInteger(source.end) || source.start < 0 || source.end <= source.start
+    || source.end > text.length || typeof source.quote !== 'string' || text.slice(source.start, source.end) !== source.quote
+    || ['sourceHash', 'projectionHash'].some(key => source[key] && source[key] !== verified.document[key])) {
+    return 'relation_target_evidence_unverified';
+  }
+  if (!relation.quote) return 'relation_quote_missing';
+  let matches = 0;
+  for (let start = text.indexOf(relation.quote); start >= 0; start = text.indexOf(relation.quote, start + 1)) {
+    const end = start + relation.quote.length;
+    if ([verified.span, source].every(span => span.start >= start && span.end <= end)) matches++;
+    if (matches > 1) break;
+  }
+  return matches === 1 ? null : 'relation_quote_endpoint_mismatch';
 }
 
 async function verifySourceSpan({ item, documents, study, subjectKey, documentId, span, fact, field = "documentId" }) {

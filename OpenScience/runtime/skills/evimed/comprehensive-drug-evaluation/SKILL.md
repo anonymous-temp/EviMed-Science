@@ -24,7 +24,7 @@ decision-support reference, never as current label, guideline, pharmacopoeia,
 HTA, efficacy, or safety evidence. Verify any material rule against a current
 authoritative source and keep private rows labeled `user_provided_other`.
 
-Preserve the exact query, source identifier, URL, jurisdiction, version/date, retrieval time, and observed fields. Bibliographic metadata alone cannot establish study design, outcomes, effect size, certainty, or comparative benefit. Read the abstract or full text required for every material conclusion. A source outage or empty retrieval is missing evidence, not evidence of no effect. Mark uploaded files as user-provided evidence.
+Preserve the exact query, source identifier, URL, jurisdiction, version/date, retrieval time, and observed fields. Bibliographic metadata alone cannot establish study design, outcomes, effect size, certainty, or comparative benefit. The word "cohort" does not establish investigator-assigned treatment: call it interventional only when the preserved methods explicitly describe assignment; otherwise retain the reported cohort design and mark assignment as unknown. Read the abstract or full text required for every material conclusion. A source outage or empty retrieval is missing evidence, not evidence of no effect. Mark uploaded files as user-provided evidence.
 
 For every `sourceInventory` item passed to the compiler, declare `evidenceAccess`
 as `full_text`, `abstract`, `regulatory_record`, `registry_record`,

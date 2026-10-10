@@ -56,7 +56,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { SEAMS, __setHarnessModule } from "@evimed/harness-port";
-import { DELEGATION_BASE_TOOLS, runStateFileFor, workspaceLayout } from "@evimed/domain";
+import { DELEGATION_BASE_TOOLS, planFileFor, runStateFileFor, runStateFileForSession, workspaceLayout } from "@evimed/domain";
 import { RUN_DOMAIN_NAME } from "../src/runMirror.mjs";
 
 __setHarnessModule("@deepseek-ai/dsh-tools", {
@@ -312,7 +312,7 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
     readText: async (/** @type {string} */ target) => {
-      if (target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: "combined_run" });
+      if (!files.has(target) && target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: "combined_run", sessionId: "root-session" });
       for (const [skill, body] of Object.entries(skillBodies)) {
         if (target === `/skills/${skill}/SKILL.md`) return body;
       }
@@ -756,6 +756,11 @@ test("a delegated child is handed its own capability's tools and skills, never t
   assert.equal(appraisalStart.options.persona, APPRAISAL.persona);
   const bibPrompt = bibStart.options.prompt.map((/** @type {any} */ part) => part.text).join("\n");
   const appraisalPrompt = appraisalStart.options.prompt.map((/** @type {any} */ part) => part.text).join("\n");
+  for (const prompt of [bibPrompt, appraisalPrompt]) {
+    assert.ok(prompt.includes(planFileFor("combined_run")));
+    assert.ok(prompt.includes(".evimed-run/runs/combined_run/state.json"));
+    assert.ok(prompt.includes(".evimed-brief/sessions/root-session/research-brief.md"));
+  }
   assert.ok(bibPrompt.includes(SKILL_BODIES["bibliometric-analysis"]), "the bibliometric child must carry its own method text");
   assert.equal(bibPrompt.includes(SKILL_BODIES["evidence-appraisal"]), false, "one capability's method text reached the other's child");
   assert.ok(appraisalPrompt.includes(SKILL_BODIES["evidence-appraisal"]), "the appraisal child must carry its own method text");
@@ -1048,22 +1053,10 @@ test("the projection the control plane reads keeps both children, each separable
   assert.deepEqual(admitted.map((/** @type {any} */ child) => child.deliverableId).sort(), ["d-appraise", "d-bib"],
     "a child the plan does not corroborate by id and capability is dropped by the control plane, so a projection that loses either field shows a combined run with no children");
 
-  // The shared legacy path is written too, for this run. `readRunStateProjection`
-  // falls back to `.evimed-run/state.json` when the per-run file is absent — a
-  // runtime image from before per-run projections — and the store selects which
-  // run gets that path (`native` runs first, otherwise the latest active one).
-  // A selection that offered it to native turns only would leave a
-  // control-plane combined run with nothing at the fallback path, and the
-  // per-run assertions above would not notice.
-  const sharedText = f.files.get(`/workspace/${workspaceLayout.runStateFile}`);
-  assert.ok(sharedText, `the fallback projection was never written: ${JSON.stringify([...f.files.keys()].filter((key) => key.includes(".evimed-run")))}`);
-  const shared = JSON.parse(String(sharedText));
-  assert.equal(shared.runId, "combined_run", "the fallback path must carry this run, not another one's projection");
-  assert.deepEqual(
-    shared.subagents.map((/** @type {any} */ child) => [child.deliverableId, child.capability]),
-    projection.subagents.map((/** @type {any} */ child) => [child.deliverableId, child.capability]),
-    "the shared projection and the run-scoped one must tell the same story about who the children are",
-  );
+  const sessionText = f.files.get(`/workspace/${runStateFileForSession("root-session")}`);
+  assert.ok(sessionText, "native reads must have this session's own projection");
+  assert.equal(JSON.parse(String(sessionText)).runId, "combined_run");
+  assert.equal(f.files.get(`/workspace/${workspaceLayout.runStateFile}`), undefined, "new runs never overwrite legacy shared state");
 });
 
 /* --------------------------------------------------- the package check */
@@ -2042,4 +2035,85 @@ test("a submission records what the run retrieved into its snapshot and names a 
   f.writeFiles(new Map([[`${base}/comprehensive-evaluation-report.md`, report(false)]]));
   const second = await f.execute("evimed_submit_deliverable", { deliverableId: "d-cde" });
   assert.equal(second.value.ok, true, JSON.stringify(second.value));
+});
+
+test("two sessions concurrently write distinct plans and projections while sharing project materials", async () => {
+  const f = await combinedFixture({ projected: true });
+  /** @type {Map<string, any[]>} */
+  const injected = new Map([['root-agent', []], ['other-agent', []]]);
+  /** @param {any} [message] */
+  f.agent.inject = (message) => { injected.get('root-agent')?.push(message); };
+  const other = { id: 'other-agent', session: { id: 'other-session', header: { cwd: '/workspace' } }, inject: (/** @type {any} */ message) => injected.get('other-agent')?.push(message), steer() {} };
+  f.ctx.provide('agents', { get: (/** @type {string} */ id) => id === other.id ? other : f.agent });
+  f.files.set('/workspace/.evimed-brief/sessions/root-session/index.json', JSON.stringify({runId:'task_vcr',sessionId:'root-session',contextRevision:'vcr-1'}));
+  f.files.set('/workspace/.evimed-brief/sessions/root-session/context.md', 'VCR_CONTEXT_ONLY');
+  f.files.set('/workspace/.evimed-brief/sessions/root-session/research-brief.md', 'VCR_BRIEF_ONLY');
+  f.files.set('/workspace/.evimed-brief/sessions/other-session/index.json', JSON.stringify({runId:'task_gene',sessionId:'other-session',contextRevision:'gene-1'}));
+  f.files.set('/workspace/.evimed-brief/sessions/other-session/context.md', 'GENE_CONTEXT_ONLY');
+  f.files.set('/workspace/.evimed-brief/sessions/other-session/research-brief.md', 'GENE_BRIEF_ONLY');
+  f.files.set('/workspace/.evimed-brief/context.md', 'FOREIGN_GLOBAL_CONTEXT');
+  f.files.set('/workspace/.evimed-brief/research-brief.md', 'FOREIGN_GLOBAL_BRIEF');
+  f.files.set('/workspace/task-plan.json', 'HISTORICAL_PLAN');
+  f.files.set('/workspace/.evimed-run/state.json', 'HISTORICAL_STATE');
+  f.files.set('/workspace/shared-reference.txt', 'SHARED_SOURCE');
+  const enter = async (/** @type {any} */ agent, turn = 1) => {
+    for (const handler of f.ctx.listeners.get(SEAMS.events.promptAssemble) ?? []) await handler({sections:[],contexts:[],tools:[],variables:{}},{agent,scope:agent},async()=>({}));
+    for (const handler of f.ctx.listeners.get(SEAMS.events.preStep) ?? []) {
+      const decision = await handler({agent,turn,step:1,messages:[],signal:AbortSignal.timeout(2000)},async()=>({kind:'enter',messages:[]}));
+      injected.get(agent.id)?.push(...(decision.messages ?? []));
+    }
+  };
+  const call = (/** @type {any} */ agent, /** @type {any} */ args) => f.ctx.tools.execute({agent,name:'evimed_plan',callId:`scope-${agent.id}-${Math.random()}`,arguments:args,signal:AbortSignal.timeout(2000)});
+  await Promise.all([enter(f.agent),enter(other)]);
+  let writes = 0;
+  /** @type {() => void} */ let release = () => {};
+  const bothWriting = new Promise(resolve => { release = () => resolve(undefined); });
+  const fs = f.ctx.get('fs'), originalWrite = fs.writeText;
+  fs.writeText = async (/** @type {string} */ target, /** @type {string} */ text) => {
+    if(target.endsWith('/task-plan.json')) { writes++; if(writes===2) release(); await bothWriting; }
+    await originalWrite(target,text);
+  };
+  const [a,b] = await Promise.all([call(f.agent,{action:'write',clarifications:['VCR task assumption'],deliverables:[PLAN_ITEMS.bibliometric]}),call(other,{action:'write',clarifications:['Gene task assumption'],deliverables:[PLAN_ITEMS.appraisal]})]);
+  assert.equal(a.value.ok,true,JSON.stringify(a.value));assert.equal(b.value.ok,true,JSON.stringify(b.value));assert.equal(writes,2);
+  const [pa,pb] = await Promise.all([f.projection('task_vcr'),f.projection('task_gene')]);
+  assert.deepEqual(pa.plan.items.map((/** @type {any} */ i)=>i.id),[PLAN_ITEMS.bibliometric.id]);assert.deepEqual(pb.plan.items.map((/** @type {any} */ i)=>i.id),[PLAN_ITEMS.appraisal.id]);
+  for(const [session,run] of [['root-session','task_vcr'],['other-session','task_gene']]){
+    assert.equal(JSON.parse(String(f.files.get(`/workspace/${runStateFileForSession(String(session))}`))).runId,run);
+    assert.ok(f.files.has(`/workspace/${planFileFor(String(run))}`));
+  }
+  assert.equal(f.files.get('/workspace/task-plan.json'),'HISTORICAL_PLAN');assert.equal(f.files.get('/workspace/.evimed-run/state.json'),'HISTORICAL_STATE');
+  assert.equal(f.files.get('/workspace/shared-reference.txt'),'SHARED_SOURCE');
+  const rootText=JSON.stringify(injected.get('root-agent')), otherText=JSON.stringify(injected.get('other-agent'));
+  assert.ok(rootText.includes('VCR_CONTEXT_ONLY') && rootText.includes('VCR_BRIEF_ONLY'));
+  assert.ok(!rootText.includes('GENE_CONTEXT_ONLY') && !rootText.includes('FOREIGN_GLOBAL'));
+  assert.ok(otherText.includes('GENE_CONTEXT_ONLY') && !otherText.includes('VCR_CONTEXT_ONLY'));
+  assert.ok(rootText.includes(planFileFor('task_vcr')) && otherText.includes(planFileFor('task_gene')));
+  await enter(f.agent,2);
+  const restored=await call(f.agent,{action:'status'});assert.equal(restored.value.data.runId,'task_vcr');assert.equal(restored.value.data.revision,1);
+  fs.writeText=originalWrite;
+});
+
+test("missing session materials never inject another session or an unidentified legacy brief", async () => {
+  for (const owned of [false, true, "scoped-missing", "foreign-owned"]) {
+    const f = await combinedFixture();
+    f.files.set('/workspace/.evimed-brief/index.json', JSON.stringify({runId:'combined_run',...(owned === true ? {sessionId:'root-session'} : {})}));
+    if (owned === 'foreign-owned') {
+      f.files.set('/workspace/.evimed-brief/index.json',JSON.stringify({runId:'combined_run',sessionId:'foreign-session'}));
+      f.files.set('/workspace/.evimed-brief/sessions/root-session/index.json',JSON.stringify({runId:'combined_run',sessionId:'root-session'}));
+    }
+    if (owned === 'scoped-missing') f.files.set('/workspace/.evimed-brief/sessions/root-session/index.json',JSON.stringify({runId:'own_run',sessionId:'root-session',contextRevision:'own_revision'}));
+    f.files.set('/workspace/.evimed-brief/research-brief.md','LEGACY_BOUND_BRIEF');
+    f.files.set('/workspace/.evimed-brief/context.md','LEGACY_BOUND_CONTEXT');
+    f.files.set('/workspace/.evimed-brief/sessions/foreign-session/research-brief.md','FOREIGN_SESSION_BRIEF');
+    const messages=[];
+    for (const handler of f.ctx.listeners.get(SEAMS.events.promptAssemble) ?? []) await handler({sections:[],contexts:[],tools:[],variables:{}},{agent:f.agent,scope:f.agent},async()=>({}));
+    for (const handler of f.ctx.listeners.get(SEAMS.events.preStep) ?? []) {
+      const decision=await handler({agent:f.agent,turn:1,step:1,messages:[],signal:AbortSignal.timeout(2000)},async()=>({kind:'enter',messages:[]}));
+      messages.push(...(decision.messages ?? []));
+    }
+    const text=JSON.stringify(messages);
+    assert.equal(text.includes('LEGACY_BOUND_BRIEF'),owned === true);
+    assert.equal(text.includes('LEGACY_BOUND_CONTEXT'),owned === true);
+    assert.equal(text.includes('FOREIGN_SESSION_BRIEF'),false);
+  }
 });

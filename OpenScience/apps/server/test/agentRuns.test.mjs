@@ -36,6 +36,15 @@ import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
 import { learningTriggersFor } from "../src/learningTriggers.mjs";
 
+/** Bind synthetic legacy fixture state to the actual platform-created run, never an inferred owner. */
+async function bindLegacyFixtureState(project, runId) {
+  const file=path.join(project.workspaceDir,workspaceLayout.runStateFile);
+  try {
+    const value=JSON.parse(await readFile(file,'utf8'));
+    await writeFile(file,JSON.stringify({...value,runId}),'utf8');
+  } catch (error) { if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
+}
+
 test("run start persists exact trusted account incarnation and restores it after restart", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-run-account-incarnation-"));
   const incarnation = "2026-10-03 04:01:02.123456+00";
@@ -1012,13 +1021,17 @@ async function withAnswerModeRun(fn) {
       readSessionStatus: async () => "idle",
     });
     store.scheduleMonitor = () => {};
-    const dispatch = (dispatchId) => store.dispatch(project, {
+    const dispatch = async (dispatchId) => {
+      const result = await store.dispatch(project, {
       sessionId: binding.sessionId,
       dispatchId,
       effectiveAgentId: "open-domain-answer",
       effectiveAgentVersion: "1.0.0",
       effectiveRuntimeAgent: "evimed-open-domain-answer",
     }, async () => ({ accepted: true }));
+      await bindLegacyFixtureState(project,result.id);
+      return result;
+    };
     const appendHistory = (parts) => {
       history = [...history, {
         info: { id: `msg_answer_${Math.random().toString(16).slice(2, 10)}`, role: "assistant", time: { completed: Date.now() + 10 } },
@@ -2067,11 +2080,14 @@ async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChil
     runtimeWorkspaceRoot: () => root,
     onRunProjection: (_project, _run, type, data) => (type === "run/progress" ? progress : frames).push({ type, data }),
   });
+  let currentRunId = "";
+  const start = store.start.bind(store);
+  store.start = async (...args) => { const run = await start(...args); currentRunId = run.id; await bindLegacyFixtureState(project,run.id); return run; };
   let projectionWrites = 0;
   const writeProjection = async (value) => {
     const target = path.join(root, ".evimed-run", "state.json");
     const temporary = `${target}.${projectionWrites += 1}.tmp`;
-    await writeFile(temporary, typeof value === "string" ? value : JSON.stringify(value), "utf8");
+    await writeFile(temporary, typeof value === "string" ? value : JSON.stringify(currentRunId ? {...value,runId:currentRunId} : value), "utf8");
     await rename(temporary, target);
   };
   return { root, project, store, frames, progress, writeProjection, polls };
@@ -5456,7 +5472,7 @@ test("the brief reaches the gate and the workspace, and never the run ledger", a
     assert.equal(store.dispatchedBriefs.get(run.id), brief);
 
     // The run's copy is on disk, byte-identical and read-only.
-    const copyPath = path.join(project.workspaceDir, ".evimed-brief", "research-brief.md");
+    const copyPath = path.join(project.workspaceDir, ".evimed-brief", "sessions", binding.sessionId, "research-brief.md");
     assert.equal(await readFile(copyPath, "utf8"), brief);
     assert.equal((await stat(copyPath)).mode & 0o222, 0, "the run's copy must not be writable");
 
@@ -5487,7 +5503,7 @@ test("a dispatch whose brief is more than the question lists the run by the ques
     }, async () => ({ accepted: true }));
     assert.equal(run.question, instruction, "listed by what the researcher wrote");
     assert.equal(store.dispatchedBriefs.get(run.id), brief, "the gate reads the whole brief");
-    assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "research-brief.md"), "utf8"), brief, "and so does the run");
+    assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", binding.sessionId, "research-brief.md"), "utf8"), brief, "and so does the run");
     const ledger = await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8");
     assert.ok(!ledger.includes("Maximum episode budget"), "the brief still never reaches the ledger");
     await store.cancelSession(project, binding.sessionId);
@@ -6394,6 +6410,7 @@ test("a container that exits with nothing durable still says what the run last k
     await awaitBackgroundMonitor(monitor?.promise?.catch(() => {}));
     await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify({
       formatVersion: 1,
+      runId: started.id,
       degraded: [admitted, fresh],
       qualityNotices: [],
     }), "utf8");
@@ -6452,7 +6469,7 @@ test("a runtime that stopped after its turn's answer leaves an answered run, and
         ? await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: `d_${Math.random().toString(16).slice(2, 10)}`, ...dispatched }, async () => ({ accepted: true }))
         : await store.start(project, { sessionId: binding.sessionId });
       await relabelReceipt(project, started.id);
-      if (writeState) await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify(writeState), "utf8");
+      if (writeState) await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify({...writeState,runId:started.id}), "utf8");
       store.scheduleMonitor = () => {};
       let seq = 1;
       for (const event of events) store.noteRunEvent(project, started.id, { sessionId: binding.sessionId, child: false, replay: false, event: { seq: (seq += 1), ...event } });
@@ -6998,6 +7015,7 @@ test("a package written and never submitted is delivered unverified, not reporte
       });
       const started = await store.start(project, { sessionId: binding.sessionId });
       await relabelReceipt(project, started.id);
+      await bindLegacyFixtureState(project,started.id);
       if (writes) await writeFile(report, "# report\n", "utf8");
       else await rm(report, { force: true });
       await store.closeProject(project, "failed");

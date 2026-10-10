@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createNativeDsh } from './native_dsh.mjs';
-import { publicExtractionPrompt, groundPublicExtraction } from './public_extraction.mjs';
+import { extractPublicTwoPass } from './public_extraction.mjs';
 import { loadConfig } from '../../apps/server/src/config.mjs';
 import { createModelGatewayHandler } from '../../apps/server/src/modelGateway.mjs';
 import { ControlPlaneDatabase } from '../../apps/server/src/controlPlaneDatabase.mjs';
@@ -106,18 +106,22 @@ try {
     for(const example of batch.cases){
       const admitted=selection.cases.find(row=>row.id===example.id);
       if(admitted?.inputSha256!==projectionHash(example.text))throw new Error('Public text differs from reviewed selection');
-      const prompt=publicExtractionPrompt(example);
-      const result=await publicNative({prompt,filename:example.id});
       try{
-        if(result.code!==0)throw new Error('native_prediction_failed');
-        predictions[example.id]=groundPublicExtraction(example,result.text);
+        const extracted=await extractPublicTwoPass(example,publicNative,async frozen=>{
+          await fs.writeFile(path.join(publicRoot,example.id+'-frozen.json'),JSON.stringify(frozen,null,2)+'\n',{mode:0o600});
+        });
+        predictions[example.id]=extracted.prediction;
+        predictions[example.id].transport={code:extracted.relationResult.code,
+          entityCode:extracted.entityResult.code,relationCode:extracted.relationResult.code,
+          latencyMs:extracted.entityResult.latencyMs+extracted.relationResult.latencyMs,
+          entityPromptHash:createHash('sha256').update(extracted.entityPrompt).digest('hex'),
+          relationPromptHash:createHash('sha256').update(extracted.relationPrompt).digest('hex'),
+          entityPredictionHash:createHash('sha256').update(extracted.entityResult.text).digest('hex'),
+          relationPredictionHash:createHash('sha256').update(extracted.relationResult.text).digest('hex')};
       }
       catch(error){predictions[example.id]={entities:[],relations:[],parseError:true,error:error.message};}
-      predictions[example.id].transport={code:result.code,latencyMs:result.latencyMs,
-        promptHash:createHash('sha256').update(prompt).digest('hex'),
-        predictionHash:createHash('sha256').update(result.text).digest('hex')};
       await fs.writeFile(path.join(publicRoot,'predictions.json'),JSON.stringify(predictions,null,2)+'\n',{mode:0o600});
-      console.log(JSON.stringify({publicCase:example.id,code:result.code,parsed:!predictions[example.id].parseError}));
+      console.log(JSON.stringify({publicCase:example.id,code:predictions[example.id].transport?.code??null,parsed:!predictions[example.id].parseError}));
     }
   }
   const facts=await vcr.matchStore.listFacts({studyId:study.id});

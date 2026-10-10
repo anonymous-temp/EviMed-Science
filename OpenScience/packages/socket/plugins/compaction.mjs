@@ -30,6 +30,8 @@
  * @module @evimed/dsh-socket/plugins/compaction
  */
 
+import { planFileFor, runStateFileFor } from '@evimed/domain'
+
 import {
   COMPACTION_POLICIES,
   compactionConfigFromEnv,
@@ -114,6 +116,7 @@ export async function apply(ctx, config) {
     runMirror: domain.table('run_mirror'),
     planIndex: domain.table('plan_index'),
     evidence: domain.table('evidence'),
+    runIdForSession: (/** @type {string} */ sessionId) => ctx.get('evimedRun')?.runIdForSession?.(sessionId) ?? '',
   }
   // In-memory and per session. The marker is a request about *this* turn: a
   // durable one would outlive the turn it was written for and compact a
@@ -257,7 +260,7 @@ export function takeRequest(requests, agent) {
  * one it will not demand, and a compaction that refuses to happen because the
  * projection was mid-write is worse than one that carries fewer handles.
  *
- * @param {{runMirror: any, planIndex: any, evidence: any}} tables
+ * @param {{runMirror: any, planIndex: any, evidence: any, runIdForSession?: (sessionId: string) => string}} tables
  * @param {any} agent
  * @returns {Promise<{kind: string, id: string, note?: string}[]>}
  */
@@ -271,14 +274,16 @@ export async function readRunHandles(tables, agent) {
     handles.push(note ? { kind, id: value, note } : { kind, id: value })
   }
   try {
-    const sessionId = String(agent?.sessionId ?? agent?.session?.id ?? '')
-    const rows = await tables.runMirror.select({ sessionId })
+    const sessionId = String(agent?.session?.header?.parentSession ?? agent?.sessionId ?? agent?.session?.id ?? '')
+    const activeRunId = tables.runIdForSession?.(sessionId)
+    const rows = await tables.runMirror.select(activeRunId ? { runId: activeRunId } : { sessionId })
     const run = Array.isArray(rows) ? rows.at(-1) : rows
     if (!run) return handles
     const planIndex = (await tables.planIndex.select({ runId: run.runId }))?.at?.(-1) ?? null
     const evidence = (await tables.evidence.select({ runId: run.runId })) ?? []
     const state = projectRunState({ run, planIndex, evidence, now: '' })
-    add('plan', 'task-plan.json', 'the plan is authoritative; this summary is not')
+    add('plan', planFileFor(run.runId), 'this run’s plan is authoritative; this summary is not')
+    add('run-state', runStateFileFor(run.runId), 'this run only; other session state is not this task')
     for (const item of state.plan.items ?? []) {
       add('deliverable', item.deliverableId, item.state ? `plan item is ${item.state}` : undefined)
     }

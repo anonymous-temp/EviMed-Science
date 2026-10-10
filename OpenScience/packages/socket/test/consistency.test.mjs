@@ -804,7 +804,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
     readText: async (/** @type {string} */ target) => {
       if (target === "//runtime/revision-token") return "test-workload-token";
-      if (target.endsWith(workspaceLayout.briefIndexFile) && briefId) return JSON.stringify({ runId: briefId });
+      if (target.endsWith(workspaceLayout.briefIndexFile) && briefId) return JSON.stringify({ runId: briefId, sessionId: "native-session" });
       for (const [name, body] of Object.entries(skills ?? {})) {
         if (target.endsWith(`/skills/${name}/SKILL.md`)) return body;
       }
@@ -870,6 +870,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
 
 test("each session-scoped dispatch revision is logged once before its model step", async () => {
   const f = await nativePolicyFixture();
+  const contexts = () => f.injected.filter(message => !JSON.stringify(message).includes("当前运行作用域："));
   const briefRoot = "/workspace/.evimed-brief/sessions/native-session";
   /** @param {string} runId @param {string} contextRevision @param {string} context */
   const setRevision = (runId, contextRevision, context) => {
@@ -879,25 +880,25 @@ test("each session-scoped dispatch revision is logged once before its model step
 
   setRevision("run_first", "req_first", "<required-skills>clinical-evidence-synthesis</required-skills>");
   await f.step(1);
-  assert.equal(f.injected.length, 1);
-  assert.equal(f.injected[0].source.kind, "plugin:evimed-run-policy");
-  assert.match(f.injected[0].content[0].text, /clinical-evidence-synthesis/);
+  assert.equal(contexts().length, 1);
+  assert.equal(contexts()[0].source.kind, "plugin:evimed-run-policy");
+  assert.match(contexts()[0].content[0].text, /clinical-evidence-synthesis/);
 
   // More steps in the same request must not repeat the trusted context.
   await f.step(1);
-  assert.equal(f.injected.length, 1);
+  assert.equal(contexts().length, 1);
 
   // A repair keeps the run id but receives its own committed context revision.
   setRevision("run_first", "req_repair", "<required-skills>citation-integrity</required-skills>");
   await f.step(2);
-  assert.equal(f.injected.length, 2);
-  assert.match(f.injected[1].content[0].text, /citation-integrity/);
+  assert.equal(contexts().length, 2);
+  assert.match(contexts()[1].content[0].text, /citation-integrity/);
 
   // A later run on the same conversation receives new context and new state.
   setRevision("run_followup", "req_followup", "<required-skills>research-topic-strategy</required-skills>");
   await f.step(3);
-  assert.equal(f.injected.length, 3);
-  assert.match(f.injected[2].content[0].text, /research-topic-strategy/);
+  assert.equal(contexts().length, 3);
+  assert.match(contexts()[2].content[0].text, /research-topic-strategy/);
   assert.ok(f.rows.has("run_followup"), "the follow-up must project under its own run id");
 
   const child = { session: { id: "child-session", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } } };
@@ -1532,8 +1533,12 @@ test("a session bound to a capability carries that capability's tools on its fir
   const registered = [...mcpNames, "bash", "read", "skill"];
   const skills = { "research-topic-selection": "# 科研选题\n先启动专项任务，再补充检索。\n" };
 
-  const bound = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY], skills });
+  const bound = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY, { ...TOPIC_CAPABILITY, id: "research-brief" }], skills });
   dispatchContext(bound, "平台已根据当前问题确定性路由到专项能力：research-topic-selection（research-topic-selection）。\n");
+  // A routed open-domain dispatch includes the other available capabilities.
+  // Their catalogue names must not mask the explicit route on request one.
+  bound.files.set(`/workspace/${workspaceLayout.briefContextFile}`,
+    "平台已根据当前问题确定性路由到专项能力：research-topic-selection（research-topic-selection）。\nOther available capability: research-brief.\n");
   bound.start();
   assert.ok(!/** @type {any} */ (bound.ctx.tools).schemas(bound.agent).some((/** @type {any} */ tool) => tool.name === managed),
     "narrowed at session start: the engine's tool starts out hidden from the root");
@@ -1546,8 +1551,8 @@ test("a session bound to a capability carries that capability's tools on its fir
   await bound.step(1);
   assert.deepEqual(bound.requests[1].tools, first.tools, "the next request carries the same list, so the request series does not restart");
 
-  const plain = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY], skills });
-  dispatchContext(plain, "本轮未命中确定性专项路由，由开放域答问主路处理。\n");
+  const plain = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY, { ...TOPIC_CAPABILITY, id: "research-brief" }], skills });
+  dispatchContext(plain, "本轮未命中确定性专项路由，由开放域答问主路处理。 Available: research-topic-selection, research-brief.\n");
   plain.start();
   await plain.step(1);
   assert.ok(!plain.requests[0].tools.includes(managed), "a plain question stays light (principle 12)");
@@ -1563,8 +1568,9 @@ test("a conversation the control plane bound when it was opened carries its capa
   const registered = [...mcpNames, "bash", "read", "skill"];
   const skills = { "research-topic-selection": "# 科研选题\n先启动专项任务，再补充检索。\n" };
 
-  const bound = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY], skills });
+  const bound = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY, { ...TOPIC_CAPABILITY, id: "research-brief" }], skills });
   bound.files.set("/workspace/.evimed-brief/sessions/native-session/binding.json", JSON.stringify({ capability: "research-topic-selection" }));
+  dispatchContext(bound, "Available capabilities: research-topic-selection, research-brief.\n");
   bound.start();
   await bound.step(1);
   const [first] = bound.requests;
@@ -2866,7 +2872,8 @@ test("a mirror write produces the workspace projection the control plane reads",
   assert.deepEqual(nextRun.plan.items, [{ id: "d2" }]);
   assert.deepEqual(nextRun.subagents.map((/** @type {any} */ item) => item.skills), [["new-skill"]]);
   assert.deepEqual(nextRun.qualityNotices, ["new notice"]);
-  assert.equal(JSON.parse(written.get("/workspace/.evimed-run/state.json")).runId, "run_next");
+  assert.equal(JSON.parse(written.get("/workspace/.evimed-run/sessions/s2/state.json")).runId, "run_next");
+  assert.equal(written.has("/workspace/.evimed-run/state.json"), false);
 });
 
 test("an evidence row is stamped with the run, so the join that resolves quotes can find it", async () => {
@@ -3058,7 +3065,7 @@ test("a gate run records the check that raised each issue, not only the issue", 
     readText: async (/** @type {string} */ target) => {
       // The run id comes from the brief index, and a gate run with no run id is
       // never recorded at all.
-      if (target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: "run_gate", budget: { maxSteps: 10, maxTokens: 100, maxChildren: 2 } });
+      if (target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: "run_gate", sessionId: "s-gate", budget: { maxSteps: 10, maxTokens: 100, maxChildren: 2 } });
       if (target.endsWith(workspaceLayout.briefFile)) return null;
       return target.endsWith("brief.md") ? "# 标题\n结论。" : null;
     },

@@ -120,6 +120,16 @@ description: 「虚拟临床研究」的对话分析师：研究者要哪一步�
 - `sourceLocator`：`{ "page": 12, "section": "4.2" }` 或 `{ "registryId": "NCT…", "field": "eligibility" }`。
 - `evidenceNeeded`：判这一条需要哪些资料（病理报告、基因检测、某项检验及其时间窗）。
 
+### Criterion provenance and temporal facts
+
+Create conditions only from the researcher’s explicitly stated inclusion and exclusion criteria. Patient cases supply facts to evaluate those conditions; they do not supply new protocol conditions. A case saying that a medication stopped six months ago, or stopped yesterday, must not create a washout period, an elapsed-time threshold, or a new exclusion. Use `elapsed_since` only when the stated criterion explicitly requires a duration; preserve its stated units rather than approximating calendar months as a fixed number of days. A criterion about current medication exposure is not a washout criterion. If the criterion does not specify a timing threshold, that threshold remains unknown and must not be invented. Missing evidence about current exposure also remains unknown; it is not evidence of absence. Keep these distinctions when drafting local criteria as well as when writing a protocol through tools.
+
+### Exclusion polarity and concept identity
+
+Every criterion is encoded as the requirement a participant must satisfy, including exclusion criteria. The evaluator does not reverse a verdict because `kind` is `exclusion`. Encode “exclude current X exposure” as `{"op":"absent","variable":"current_x_exposure"}` (or `not` around the corresponding `present` requirement), never as `present` with an explanation that reverses its meaning. An affirmed current-X fact must make that requirement `not_satisfied`; a sourced explicit denial of current X must make it `satisfied`; an unrecorded history must make it `unknown`. Verify these polarities with the actual deterministic matcher before interpreting eligibility; do not substitute a prose explanation or a model-generated verdict for its result.
+
+Criterion variables identify the same clinical concept in criteria and facts. A fact about another medication must not use the excluded medication or class variable merely because both are medications. Preserve unrelated medication facts under their own concept variable, or retain them as unindexed context. Historical exposure and current exposure are different predicates: a historical-event affirmation is not a current-exposure affirmation. Preserve a supported stop statement and its exact quote; do not invent event dates or a timing threshold to change that distinction.
+
 ### `requirement` 的写法
 
 要求的结构是封闭的，**只用下面这些节点**；别的写法（`{"field": "ecog", "op": "<=", "value": 1}`、`{"free_text": "…"}`）会被当场拒绝，因为匹配那一步读不懂它们。

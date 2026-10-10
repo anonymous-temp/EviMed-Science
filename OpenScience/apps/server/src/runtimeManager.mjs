@@ -5117,13 +5117,13 @@ export class RuntimeManager {
     if (!allowBounded) this.assertInteractiveRuntimeAvailable(project);
     await this.assertPersonalSkillPromptGeneration(project, { sessionId, mode });
     if (typeof system === "string" && system.trim()) {
-      await this.writeRunContextFile(project, system, { sessionId: strictContext ? sessionId : null, required: strictContext });
+      await this.writeRunContextFile(project, system, { sessionId, required: strictContext });
     }
     // Written even when empty: on the shared path a dispatch that recalled
     // nothing must not leave the previous dispatch's memories for a child to
     // inherit.
     if (typeof memoryContext === "string") {
-      await this.writeRunMemoryFile(project, memoryContext, { sessionId: strictContext ? sessionId : null, required: strictContext });
+      await this.writeRunMemoryFile(project, memoryContext, { sessionId, required: strictContext });
     }
     // Only where the researcher's own context belongs: a dispatch into the
     // project's workspace that also recalled memories. A verification, a
@@ -5132,7 +5132,7 @@ export class RuntimeManager {
     if (residentProfile) await this.syncCapsuleProfile(project);
     if (typeof runId === "string" && runId) {
       await this.writeRunBriefIndex(project, runId, {
-        sessionId: strictContext ? sessionId : null,
+        sessionId,
         required: strictContext,
         contextRevision: requestId,
       });
@@ -5278,6 +5278,7 @@ export class RuntimeManager {
       const relative = session ? `.evimed-brief/sessions/${session}/index.json` : workspaceLayout.briefIndexFile;
       const index = {
         runId,
+        ...(session ? { sessionId: session } : {}),
         ...(typeof contextRevision === "string" && contextRevision ? { contextRevision } : {}),
       };
       const text = `${JSON.stringify(index, null, 2)}\n`;

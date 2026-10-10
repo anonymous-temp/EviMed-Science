@@ -149,7 +149,10 @@ export {
   isGateImplementationPath,
   isProtectedWritePath,
   normalizeWorkspacePath,
+  briefFileForSession,
+  planFileFor,
   runStateFileFor,
+  runStateFileForSession,
   workspaceLayout,
 } from './src/workspaceLayout.mjs'
 

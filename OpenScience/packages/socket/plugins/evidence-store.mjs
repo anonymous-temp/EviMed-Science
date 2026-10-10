@@ -13,7 +13,7 @@
  */
 
 import { errorMessage } from '../src/runPolicy.mjs'
-import { runStateFileFor, workspaceLayout } from '@evimed/domain'
+import { runStateFileFor, runStateFileForSession } from '@evimed/domain'
 import { configSchema, onDomainChanged, openDomain, writeWorkspaceFile } from '@evimed/harness-port'
 import { RUN_DOMAIN_NAME, RUN_DOMAIN_SPEC, projectRunState } from '../src/runMirror.mjs'
 
@@ -199,17 +199,18 @@ export async function apply(ctx, config) {
         recordProjectionFailure(ctx, store, error)
       }
     }
-    // Native UI adoption predates per-run paths. Keep the newest active run at
-    // the established path while control-plane runs read their own file.
-    const native = projections.filter((projection) => projection.runId.startsWith('native_'))
-    const sharedCandidates = native.length ? native : projections
-    const latest = sharedCandidates.toSorted((left, right) => Date.parse(
-      String(runs.find((run) => run.runId === left.runId)?.startedAt ?? ''),
-    ) - Date.parse(String(runs.find((run) => run.runId === right.runId)?.startedAt ?? ''))).at(-1)
-    if (latest) {
-      const run = runs.find((candidate) => candidate.runId === latest.runId)
+    // One latest projection per root session. The legacy shared file is left
+    // intact for historical readers, never overwritten by another active task.
+    const sessions = new Map()
+    for (const projection of projections) {
+      const previous = sessions.get(projection.sessionId)
+      const startedAt = String(runs.find(run => run.runId === projection.runId)?.startedAt ?? '')
+      if (!previous || Date.parse(startedAt) >= Date.parse(previous.startedAt)) sessions.set(projection.sessionId, { projection, startedAt })
+    }
+    for (const { projection } of sessions.values()) {
+      const run = runs.find(candidate => candidate.runId === projection.runId)
       try {
-        await writeWorkspaceFile(ctx, String(run?.cwd ?? ctx.get('workspaceCwd') ?? '.'), workspaceLayout.runStateFile, `${JSON.stringify(latest, null, 2)}\n`)
+        await writeWorkspaceFile(ctx, String(run?.cwd ?? ctx.get('workspaceCwd') ?? '.'), runStateFileForSession(projection.sessionId), `${JSON.stringify(projection, null, 2)}\n`)
       } catch (error) {
         recordProjectionFailure(ctx, store, error)
       }

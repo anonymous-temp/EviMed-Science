@@ -76,7 +76,9 @@ import {
   transition as domainTransition,
   transitionEvents,
   validateDeliveryReceipt,
+  briefFileForSession,
   runStateFileFor,
+  runStateFileForSession,
   workspaceLayout,
 } from "@evimed/domain";
 
@@ -2579,8 +2581,8 @@ async function loadedOrInjectedSkills(project, assistantMessages, run = null) {
     // session: every plain question asked on the adopted path was delivered
     // 未核验 with 「运行时未载入能力方法」 (2026-09-15, again 2026-09-19).
     if (run?.nativeTurn && read.state === "unattributed" && run.sessionId) {
-      const raw = await readRunStateProjection(project, project.workspaceDir, null);
-      if (raw.state === "read" && raw.projection?.sessionId === run.sessionId) {
+      const raw = await readRunStateProjection(project, project.workspaceDir, { ...run, nativeTurn: null, nativeWorkflow: run.nativeWorkflow ?? {}, id: run.nativeWorkflow?.kernelRunId ?? "" });
+      if (raw.state === "read" && raw.projection?.runId && raw.projection?.sessionId === run.sessionId) {
         for (const name of raw.projection?.injectedSkills ?? []) {
           if (typeof name === "string" && name.trim()) loaded.add(name.trim());
         }
@@ -3677,11 +3679,11 @@ const UNVERIFIED_DELIVERY_NOTICE = "已生成的文件已保留，可以查看�
 export async function readRunStateProjection(project, workspaceRoot, run = null) {
   let text;
   try {
-    const relative = run && !run.nativeTurn ? runStateFileFor(run.id) : workspaceLayout.runStateFile;
+    const relative = run ? ((run.nativeTurn || run.nativeWorkflow) ? runStateFileForSession(run.sessionId) : runStateFileFor(run.id)) : workspaceLayout.runStateFile;
     text = await readTextFileNoFollow(workspaceRoot, path.join(workspaceRoot, relative), "");
     // Compatibility with a runtime image from before per-run projections. The
     // run-id check below still rejects another run's shared file.
-    if (!text && run && !run.nativeTurn) {
+    if (!text && run) {
       text = await readTextFileNoFollow(workspaceRoot, path.join(workspaceRoot, workspaceLayout.runStateFile), "");
     }
   } catch {
@@ -3694,7 +3696,7 @@ export async function readRunStateProjection(project, workspaceRoot, run = null)
     const projection = JSON.parse(text);
     if (!projection || typeof projection !== "object" || Array.isArray(projection)) return { state: "unreadable" };
     if (!run?.nativeTurn) {
-      if (run && projection.runId && projection.runId !== run.id) return { state: "unattributed" };
+      if (run?.id && projection.runId !== run.id) return { state: "unattributed" };
       return { state: "read", projection };
     }
     // Only read when the plan index claims an acceptance the parent cannot
@@ -4739,7 +4741,7 @@ export class AgentRunStore {
     // next. This is the authoritative copy and the only one the gate reads.
     if (briefText) {
       await this.keepBrief(project, record.id, briefText);
-      await this.writeWorkspaceBrief(project, briefText);
+      await this.writeWorkspaceBrief(project, briefText, sessionId);
     }
     try {
       // The hold on the run's budget is placed here, after the brief is kept and immediately before the prompt goes
@@ -5057,12 +5059,12 @@ export class AgentRunStore {
    *
    *  Failure to write is not a reason to refuse a dispatch: the brief is still
    *  in the prompt and still on the run record.
-   *  @param {any} project @param {string} briefText */
-  async writeWorkspaceBrief(project, briefText) {
+   *  @param {any} project @param {string} briefText @param {string} sessionId */
+  async writeWorkspaceBrief(project, briefText, sessionId) {
     try {
       await writeFileAtomicNoFollow(
         project.workspaceDir,
-        path.join(project.workspaceDir, workspaceBriefPath),
+        path.join(project.workspaceDir, briefFileForSession(sessionId)),
         briefText,
         { encoding: "utf8", mode: 0o444 },
       );
@@ -7331,8 +7333,8 @@ export class AgentRunStore {
     const evidence = nativeWorkflowEvidence(run, history);
     if (!evidence) return run;
     const candidate = { ...run, nativeWorkflow: evidence };
-    const projection = await readRunStateProjection(project, project.workspaceDir);
-    const scoped = projection.state === "read" ? scopeNativeProjection(projection.projection, candidate) : null;
+    const projection = await readRunStateProjection(project, project.workspaceDir, candidate);
+    const scoped = projection.state === "read" ? projection.projection : null;
     if (scoped) evidence.kernelRunId = scoped.runId;
     else {
       const receipt = await readDeliveryReceipt(project);

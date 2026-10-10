@@ -44,6 +44,9 @@ import {
   studyTypeLabel,
   validateTaskPlan,
   workspaceLayout,
+  planFileFor,
+  briefFileForSession,
+  runStateFileFor,
 } from '@evimed/domain'
 import { SKILL_BODY_MAX_CHARS } from './skillBodies.mjs'
 import { learnedMethodCardLines, splitMountedMethods } from './learnedMethods.mjs'
@@ -983,6 +986,8 @@ export function namedCapabilityIds(text, capabilities) {
  * section was left for the child to load.
  *
  * @param {{
+ *   runId?: string,
+ *   sessionId?: string,
  *   manifest: Record<string, any>,
  *   item: Record<string, any>,
  *   briefExcerpt: string,
@@ -1023,7 +1028,8 @@ export function buildDelegation(input) {
     // quarter of its shell calls spent finding what this message could say.
     '## 工作区',
     '',
-    `- 当前目录是这次运行的工作区。你负责的交付物、相关题面与要写的文件都在本消息里；完整题面在 \`${workspaceLayout.briefFile}\`，全部交付物的计划在 \`${workspaceLayout.planFile}\`。`,
+    `- 当前目录是这次运行的工作区。你负责的交付物、相关题面与要写的文件都在本消息里；完整题面在 \`${input.sessionId ? briefFileForSession(input.sessionId) : workspaceLayout.briefFile}\`，本次计划在 \`${input.runId ? planFileFor(input.runId) : workspaceLayout.planFile}\`。`,
+    ...(input.runId ? [`- 本次状态在 \`${runStateFileFor(input.runId)}\`。其他会话的计划与状态不代表本任务；项目来源资料与已交付成果仍可共享。`] : []),
     `- 检索、全文与官方页面工具保存的来源都在 \`${workspaceLayout.sourcesDir}/\` 下，每个工具结果都写明了它保存的来源的路径或 id；按那个路径用 read/grep 读原文。`,
     ...(input.toolFilter.some((name) => name.endsWith('__locate_quote'))
       ? ['- 核对一句引文在不在原文里、在哪一段，用 `mcp__evimed__locate_quote{sourceId, quote}`：sourceId 用那个路径，或 PMCID、DOI 等 id；它按交付核验同样的规则判断，也会给出原文实际怎么写。']

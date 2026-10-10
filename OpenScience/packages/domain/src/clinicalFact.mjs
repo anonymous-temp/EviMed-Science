@@ -22,7 +22,7 @@ export const CLINICAL_FACT_CONTRACT = Object.freeze({
   coding: { required: ['system', 'edition', 'method', 'basis', 'reference'], method: ['exact', 'alias', 'model', 'unresolved'],
     modelWriteBasis: 'model_inferred', optionalText: ['sourceCode', 'code', 'display'], optionalTextArray: ['alternatives'] },
   eventId: 'Use the same source-grounded event identifier for observations explicitly belonging to one event: 1–80 ASCII letters, digits, underscore or hyphen only (e.g. sample-2026-09-01), no colon or long document-ID concatenation; omit if uncertain.',
-  relation: { type: CLINICAL_RELATIONS, state: ['supported', 'unresolved'], quote: 'Exact source substring', targetFactId: 'Required for supported links: an existing fact of this subject' },
+  relation: { type: CLINICAL_RELATIONS, state: ['supported', 'unresolved'], quote: 'An actual quote instance covering both fact source spans in the same document; missing dual-endpoint evidence remains unresolved', targetFactId: 'Required for supported links: an existing fact of this subject' },
   example: { schema: 1, assertion: 'affirmed', experiencer: 'patient', temporality: 'current' },
   note: 'Omit optional fields unless grounded. Reuse the criterion variable verbatim. Numeric originals are numbers, not strings. Do not invent coding editions or source references. Locators are assigned from verified quotes by the platform.',
 });

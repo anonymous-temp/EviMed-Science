@@ -48,6 +48,9 @@ import {
   sourceTypeSidecarPath,
   withRetrievedSources,
   workspaceLayout,
+  planFileFor,
+  briefFileForSession,
+  runStateFileFor,
 } from '@evimed/domain'
 import { capabilityCatalogue } from './guidance.mjs'
 import {
@@ -631,16 +634,18 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /**
    * The capability this session is working as, when there is exactly one.
    *
-   * The plan is the model's own declaration and comes first. Before there is a
-   * plan, a session the control plane routed to a capability says so in the
-   * context block it was dispatched with, and matching that against the
-   * catalogue is a closed-vocabulary lookup (principle 5). Two capabilities
-   * named is a run that should delegate them in parallel, and neither is
-   * activated.
+   * The control plane's explicit route or session binding comes first. The
+   * context also contains a catalogue naming other capabilities; those names
+   * must not suppress the routed capability's tools on the first request.
+   * Without an explicit route, one model plan or one named capability is the
+   * fallback. Ambiguous unbound work activates neither capability.
    * @param {Record<string, any>} entry
    * @returns {{ capabilityId: string, item: Record<string, any> | null } | null}
    */
   const boundCapability = (entry) => {
+    const routed = routedCapabilityOf(entry.contextText)
+    if (routed) return { capabilityId: routed, item: null }
+    if (entry.binding) return { capabilityId: entry.binding, item: null }
     const planned = [...new Set(entry.items.map((/** @type {any} */ item) => String(item.capability ?? '')).filter(Boolean))]
     if (planned.length > 1) return null
     if (planned.length === 1) {
@@ -649,8 +654,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const named = namedCapabilityIds(`${entry.briefText ?? ''}\n${entry.contextText ?? ''}`, ctx.get('evimedCapabilities') ?? [])
     if (named.length === 1) return { capabilityId: named[0], item: null }
     if (named.length > 1) return null
-    // A conversation the control plane bound when it was opened, with no dispatch to say so (`sessionBindingFile`).
-    return entry.binding ? { capabilityId: entry.binding, item: null } : null
+    return null
   }
 
   /**
@@ -953,6 +957,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       if (!entry.runId && step.root) {
         entry.runId = `native_${(await sha256Hex(`${entry.cwd}\n${step.sessionId}`)).slice(0, 32)}`
         await putRunMirror(ctx, entry, config.bundleVersion)
+      }
+      if (step.root && entry.runId && entry.pathContextRunId !== entry.runId) {
+        injectContext(ctx.get('agents')?.get?.(step.agentId),
+          `当前运行作用域：本次运行 ${entry.runId}，会话 ${entry.sessionId}。本次计划在 ${planFileFor(entry.runId)}，本次状态在 ${runStateFileFor(entry.runId)}；需要计划进度时用 evimed_plan action:status。项目资料和已交付成果仍共享；根目录 ${workspaceLayout.planFile} 与 ${workspaceLayout.runStateFile} 是旧运行历史，不代表本次任务，不得用其他会话的计划或状态替代当前用户请求。`, name)
+        entry.pathContextRunId = entry.runId
       }
       const decision = stepPolicy(entry.budget, entry.limits)
       if (!decision.allow) {
@@ -1416,7 +1425,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             if (entry.items.some((/** @type {any} */ item) => item.id === delegation.deliverableId)) continue
             delegation.abort.abort(new Error(`计划修订后不再包含交付物「${delegation.deliverableId}」`))
           }
-          await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.planFile, `${JSON.stringify(raw, null, 2)}\n`)
+          await writeFileAt(ctx, entry.cwd || call.cwd, planFileFor(entry.runId), `${JSON.stringify(raw, null, 2)}\n`)
           await putPlanIndex(store(), entry)
           // What the run-level tools may look at: this conversation's own
           // deliverables, not everything the project's workspace holds.
@@ -1533,6 +1542,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // 2026-09-19 while the fake-context tests passed.
           const method = capSkillBodies(skillBodies, { skillsDir: config.skillsDir })
           const request = buildDelegation({
+            runId: entry.runId,
+            sessionId: entry.sessionId,
             manifest,
             item,
             briefExcerpt: String(args.brief ?? entry.briefText ?? ''),
@@ -2876,10 +2887,14 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   // The conversation's binding, read before the early return below: a turn typed into the kernel's own window has no
   // dispatch index, and it is exactly that turn that needs the capability's tools on its first request. Latched once found.
   if (!entry.binding) entry.binding = parseBinding(await readFileAt(ctx, cwd, workspaceLayout.sessionBindingFile(sessionId)))
-  const rawIndex = await readFileAt(ctx, cwd, `${sessionBriefDir}/index.json`)
-    ?? await readFileAt(ctx, cwd, workspaceLayout.briefIndexFile)
+  const scopedIndex = await readFileAt(ctx, cwd, `${sessionBriefDir}/index.json`)
+  const legacyIndex = parseJson(await readFileAt(ctx, cwd, workspaceLayout.briefIndexFile) ?? undefined)
+  const legacyOwned = legacyIndex?.runId && (legacyIndex.sessionId ? legacyIndex.sessionId === sessionId : (entry.runId && legacyIndex.runId === entry.runId))
+  const rawIndex = scopedIndex ?? (legacyOwned ? JSON.stringify(legacyIndex) : null)
   if (rawIndex == null) return
   const index = parseJson(rawIndex)
+  if (index?.sessionId && index.sessionId !== sessionId) return
+  const legacyMatches = legacyIndex?.runId === index?.runId && (!legacyIndex?.sessionId || legacyIndex.sessionId === sessionId) && (legacyOwned || scopedIndex != null)
   const contextRevision = String(index?.contextRevision ?? '')
   // Legacy indexes have no revision and preserve the old inject-once behavior.
   // New indexes use the request id, so a repair of the same run is still a new
@@ -2921,16 +2936,17 @@ async function loadBriefRevision(ctx, agent, entry, config) {
     entry.frozen = false
   }
   entry.limits = runLimits(config, index?.budget && typeof index.budget === 'object' ? index.budget : {})
-  const brief = await readFileAt(ctx, cwd, workspaceLayout.briefFile)
+  const brief = await readFileAt(ctx, cwd, briefFileForSession(sessionId))
+    ?? (legacyMatches ? await readFileAt(ctx, cwd, workspaceLayout.briefFile) : null)
   const context = await readFileAt(ctx, cwd, `${sessionBriefDir}/context.md`)
-    ?? await readFileAt(ctx, cwd, workspaceLayout.briefContextFile)
+    ?? (legacyMatches ? await readFileAt(ctx, cwd, workspaceLayout.briefContextFile) : null)
   const capsule = await readFileAt(ctx, cwd, workspaceLayout.capsuleProfileFile)
   const agenda = await readFileAt(ctx, cwd, workspaceLayout.agendaFile)
   // Not injected here: the recalled memories are already inside `context`,
   // which is. Kept on the entry so a delegation can hand its child the block
   // the root was given, instead of the parent's paraphrase of it.
   const memory = await readFileAt(ctx, cwd, `${sessionBriefDir}/memory.md`)
-    ?? await readFileAt(ctx, cwd, workspaceLayout.briefMemoryFile)
+    ?? (legacyMatches ? await readFileAt(ctx, cwd, workspaceLayout.briefMemoryFile) : null)
   entry.briefText = brief
   entry.contextText = typeof context === 'string' ? context : null
   entry.memoryText = typeof memory === 'string' && memory.trim() ? memory : null

@@ -93,13 +93,37 @@ export const workspaceLayout = Object.freeze({
 })
 
 /** One immutable control-plane run's projection. The legacy shared file stays
- * available for native UI turns that do not begin with a control-plane run id.
+ * available only as a historical compatibility artifact. New native turns use their session projection.
  * @param {string} runId @returns {string}
  */
 export function runStateFileFor(runId) {
   const id = String(runId ?? '')
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/.test(id)) throw new TypeError('Invalid run id for projection path')
   return `${RUN_STATE_DIR}/runs/${id}/state.json`
+}
+
+/** The task plan belongs to one immutable workflow, not the whole project.
+ * @param {string} runId @returns {string}
+ */
+export function planFileFor(runId) {
+  return runStateFileFor(runId).replace(/state\.json$/, workspaceLayout.planFile)
+}
+/** A native session's latest projection; different sessions never overwrite it.
+ * @param {string} sessionId @returns {string}
+ */
+export function runStateFileForSession(sessionId) {
+  const id = String(sessionId ?? '')
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/.test(id)) throw new TypeError('Invalid session id for projection path')
+  return `${RUN_STATE_DIR}/sessions/${id}/state.json`
+}
+
+/** This session's control-plane brief; shared old briefs are not current input.
+ * @param {string} sessionId @returns {string}
+ */
+export function briefFileForSession(sessionId) {
+  const id = String(sessionId ?? '')
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/.test(id)) throw new TypeError('Invalid session id for brief path')
+  return `${BRIEF_DIR}/sessions/${id}/research-brief.md`
 }
 
 /**
