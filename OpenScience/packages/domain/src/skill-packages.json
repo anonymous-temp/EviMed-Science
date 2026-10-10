@@ -130,7 +130,7 @@
       "name": "geo-drug-value",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:4d594a41d311e7c9bc078f6fea7604b8a64d12e478e6c6a2c234b7b2c00bede5",
+      "digest": "sha256:756ef07946fc17f82c72f549bc5deddd278ea6575935d5497be4ce2ce1e2c074",
       "digestAlgorithm": "release-directory-v1"
     },
     {

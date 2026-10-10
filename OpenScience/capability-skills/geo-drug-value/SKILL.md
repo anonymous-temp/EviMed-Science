@@ -35,6 +35,9 @@ The optional data below is a vocabulary for useful context, not a required form:
   When a finding rests on a file in the project's knowledge base, list that
   file's id (`src_...`, as `mcp__evimed__kb_search` returns it) in its
   `sourceRefs`: only then does a replaced file reach the findings built on it.
+  A finding's `dimension` is one of `effectiveness`, `safety`, `economics`,
+  `suitability`, `accessibility` or `innovation`; the pages read only these
+  words, so put any other qualifier in the statement.
 - `landscape`, `audiences`, `decisions`, `opportunities`: preserve a useful
   sentence even if structured details cannot yet be established. Optional
   findingIds/groupIds link analysis to questions and content. Opportunities
