@@ -54,7 +54,7 @@ import {
 import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab,
 } from "./vcrViewsTabs.mjs";
-import { numeric, withReviewState } from "./vcrViewsKit.mjs";
+import { dominatedScenarioMap, numeric, withReviewState } from "./vcrViewsKit.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 import { buildModelAnalysis, isModelDocumentKind, readModelAnalysisInputs } from "./vcrModelDocuments.mjs";
 
@@ -1461,44 +1461,19 @@ export class VcrService {
 /**
  * Scenarios beaten on every measure of the team's comparison goal. Ties do not
  * dominate: a scenario equal on everything is not worse, and calling it
- * dominated would delete a legitimate choice from the page.
+ * dominated would delete a legitimate choice from the page. A tie includes two
+ * simulated numbers closer than three times their combined Monte-Carlo error
+ * (`dominatedScenarioMap`, the one rule the design page uses too).
  * @param {Array<{ id: string, label: string, result: any }>} scenarios
  * @param {{ measures?: Array<{ name: string, direction?: string }> }} goal
  */
 export function vcrDominatedScenarios(scenarios, goal) {
-  const measures = list(object(goal).measures).map((measure) => ({
-    name: String(object(measure).name), higherIsBetter: String(object(measure).direction ?? "higher") !== "lower",
-  })).filter((measure) => measure.name);
-  if (!measures.length) return [];
-  /** @param {any} scenario @param {string} name */
-  const valueOf = (scenario, name) => {
+  const beaten = dominatedScenarioMap(scenarios, (scenario, name) => {
     const found = list(object(scenario.result).measures).find((measure) => String(object(measure).name) === name);
     const value = Number(object(found).value);
-    return Number.isFinite(value) ? value : null;
-  };
-  /** @type {Array<{ id: string, label: string, dominatedBy: string }>} */
-  const dominated = [];
-  for (const candidate of scenarios) {
-    for (const other of scenarios) {
-      if (other.id === candidate.id) continue;
-      let strictlyBetterSomewhere = false;
-      let neverWorse = true;
-      for (const measure of measures) {
-        const mine = valueOf(candidate, measure.name);
-        const theirs = valueOf(other, measure.name);
-        if (mine == null || theirs == null) { neverWorse = false; break; }
-        const better = measure.higherIsBetter ? theirs > mine : theirs < mine;
-        const worse = measure.higherIsBetter ? theirs < mine : theirs > mine;
-        if (worse) { neverWorse = false; break; }
-        if (better) strictlyBetterSomewhere = true;
-      }
-      if (neverWorse && strictlyBetterSomewhere) {
-        dominated.push({ id: candidate.id, label: candidate.label, dominatedBy: other.id });
-        break;
-      }
-    }
-  }
-  return dominated;
+    return Number.isFinite(value) ? { value, mcse: Number(object(found).mcse) } : null;
+  }, goal);
+  return scenarios.filter((scenario) => beaten.has(scenario.id)).map((scenario) => ({ id: scenario.id, label: scenario.label, dominatedBy: String(beaten.get(scenario.id)?.id) }));
 }
 
 /** A readiness failure as `readinessCheck` in `server.mjs` reads one. @param {string} code @param {Record<string, any> | null} [details] */

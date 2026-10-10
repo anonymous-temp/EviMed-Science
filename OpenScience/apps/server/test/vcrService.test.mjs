@@ -87,6 +87,28 @@ test("a design is dominated only when the team's own goal makes it decidable, an
   assert.deepEqual(vcrDominatedScenarios(partial, goal).map((entry) => entry.id), []);
 });
 
+test("D10 a gap inside three combined Monte-Carlo errors is a tie, and a design is not called dominated by noise", () => {
+  const simulated = (/** @type {Record<string, [number, number | undefined]>} */ values) => ({
+    result: { measures: Object.entries(values).map(([name, [value, mcse]]) => ({ name, value, ...(mcse === undefined ? {} : { simulated: true, mcse }) })) },
+  });
+  const goal = { measures: [{ name: "power", direction: "higher" }, { name: "cost", direction: "lower" }] };
+  // Equal cost, simulated power 0.905 and 0.903, each with a Monte-Carlo error of 0.004: the same power. The first rule called B dominated.
+  const noise = [{ id: "A", label: "A", ...simulated({ power: [0.905, 0.004], cost: [1000, undefined] }) }, { id: "B", label: "B", ...simulated({ power: [0.903, 0.004], cost: [1000, undefined] }) }];
+  assert.deepEqual(vcrDominatedScenarios(noise, goal), [], "0.002 apart against a threshold of 3 x 0.00566 = 0.017 is a tie");
+  // A real gap is still a verdict: 0.905 against 0.85, and the same cost, with errors of 0.004.
+  const apart = [noise[0], { id: "C", label: "C", ...simulated({ power: [0.85, 0.004], cost: [1000, undefined] }) }];
+  assert.deepEqual(vcrDominatedScenarios(apart, goal).map((entry) => `${entry.id}<${entry.dominatedBy}`), ["C<A"]);
+  // The tie holds on one measure and the other decides: equal power within noise, and a cost that is lower for one and exact for both.
+  const cheaper = [noise[0], { id: "D", label: "D", ...simulated({ power: [0.903, 0.004], cost: [1200, undefined] }) }];
+  assert.deepEqual(vcrDominatedScenarios(cheaper, goal).map((entry) => `${entry.id}<${entry.dominatedBy}`), ["D<A"], "a tie on power and a strictly lower cost still beats");
+  // Numbers that carry no error (analytic ones) are compared exactly, as before.
+  const exact = [{ id: "E", label: "E", ...simulated({ power: [0.9, undefined], cost: [1000, undefined] }) }, { id: "F", label: "F", ...simulated({ power: [0.899, undefined], cost: [1000, undefined] }) }];
+  assert.deepEqual(vcrDominatedScenarios(exact, goal).map((entry) => `${entry.id}<${entry.dominatedBy}`), ["F<E"]);
+  // A noisy number against an exact one still has its own noise: 0.002 apart, one error of 0.004, threshold 3 x 0.004.
+  const mixed = [{ id: "G", label: "G", ...simulated({ power: [0.905, 0.004], cost: [1000, undefined] }) }, { id: "H", label: "H", ...simulated({ power: [0.903, undefined], cost: [1000, undefined] }) }];
+  assert.deepEqual(vcrDominatedScenarios(mixed, goal), []);
+});
+
 test("AC-34 the intended use a result may claim follows from the tiers of the models it used", () => {
   assert.equal(intendedUseCeiling([]), "submission_preparation", "no model, no model ceiling");
   assert.equal(intendedUseCeiling(["scenario"]), "exploratory");

@@ -30,7 +30,10 @@
  *   standard time, from an injected clock — the fixture tests fix the clock and
  *   nothing else in a page depends on when it was rendered.
  * - **Nothing here computes a statistic.** Percent scaling, rounding and
- *   counting stored rows are the whole of the arithmetic.
+ *   counting stored rows are the whole of the arithmetic, and the one comparison
+ *   of two results (`dominatedScenarioMap`) reads each number with the error the
+ *   engine stored beside it: a difference smaller than three times the two
+ *   errors' root-sum-square is a tie, not a ranking.
  *
  * @module vcrViewsKit
  */
@@ -57,6 +60,54 @@ export const numeric = (value) => {
 };
 /** @param {unknown} value @returns {string | null} */
 export const text = (value) => (typeof value === "string" && value.trim() ? value : null);
+
+// --- which scenario beats which ------------------------------------------------------------------
+
+/**
+ * How many combined Monte-Carlo standard errors apart two simulated numbers have to be before one is better than the other. The engine's
+ * own agreement test between a simulation and its closed form is the same three (`withinThreeMcse`, AC-29), and a gap inside it is not a
+ * finding: 0.905 and 0.903 powers of two designs, each ±0.004, are the same power.
+ */
+export const VCR_DOMINANCE_TIE_SIGMAS = 3;
+
+/**
+ * The scenarios another scenario beats on EVERY measure of the team's comparison goal, and the first that does.
+ * A scenario is beaten when no measure of the goal is worse than the other's and one is better; "better" and "worse" mean apart by more
+ * than `VCR_DOMINANCE_TIE_SIGMAS` times the root of the sum of the two numbers' squared Monte-Carlo errors (an analytic number carries
+ * none, so two analytic numbers compare strictly). A tie on every measure beats nobody, and a measure one scenario does not report
+ * leaves the pair undecidable. No goal written down, no verdict.
+ * @param {readonly Record<string, any>[]} scenarios
+ * @param {(scenario: any, name: string) => { value: number, mcse?: number | null } | null} measureOf the stored number and error of a scenario's measure
+ * @param {{ measures?: Array<{ name?: string, direction?: string }> } | null | undefined} goal
+ * @returns {Map<string, Record<string, any>>} the beaten scenario's id → the scenario that beats it
+ */
+export function dominatedScenarioMap(scenarios, measureOf, goal) {
+  const measures = list(object(goal).measures).map((measure) => ({
+    name: String(object(measure).name ?? ""), higherIsBetter: String(object(measure).direction ?? "higher") !== "lower",
+  })).filter((measure) => measure.name);
+  /** @type {Map<string, Record<string, any>>} */
+  const beaten = new Map();
+  if (!measures.length) return beaten;
+  for (const candidate of scenarios) {
+    for (const other of scenarios) {
+      if (other.id === candidate.id) continue;
+      let strictlyBetterSomewhere = false;
+      let neverWorse = true;
+      for (const measure of measures) {
+        const mine = measureOf(candidate, measure.name);
+        const theirs = measureOf(other, measure.name);
+        if (!mine || !theirs || !Number.isFinite(mine.value) || !Number.isFinite(theirs.value)) { neverWorse = false; break; }
+        const noise = VCR_DOMINANCE_TIE_SIGMAS * Math.hypot(finite(mine.mcse) ?? 0, finite(theirs.mcse) ?? 0);
+        // positive: the other scenario is better on this measure
+        const edge = measure.higherIsBetter ? theirs.value - mine.value : mine.value - theirs.value;
+        if (edge < -noise) { neverWorse = false; break; }
+        if (edge > noise) strictlyBetterSomewhere = true;
+      }
+      if (neverWorse && strictlyBetterSomewhere) { beaten.set(candidate.id, other); break; }
+    }
+  }
+  return beaten;
+}
 
 // --- what a page says about a computation that did not finish -----------------------------
 
