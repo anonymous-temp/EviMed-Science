@@ -146,28 +146,43 @@ test("declared specialist artifacts are reusable while unsafe paths remain outsi
   assert.ok(reads.every(path => !path.includes("secret") && !path.includes("outside") && !path.includes("plot")));
 });
 
+/**
+ * A store double whose coverage read answers as the SQL does (D-08): the observation counts by (value basis, status), and the first
+ * observations of each basis. The SQL itself is exercised against a real database in geoValue.integration.test.mjs.
+ * @param {Array<{ basis: number, entries: Array<Record<string, any>>, engine?: string, roundId?: string }>} facts @param {{ filter?: any }} [received]
+ */
+const coverageRead = (facts, received = {}) => async (/** @type {string} */ _id, /** @type {any} */ filter) => {
+  received.filter = filter;
+  /** @type {Map<string, { basisVersion: number, status: string, n: number }>} */
+  const counts = new Map();
+  const sample = [];
+  for (const fact of facts) {
+    for (const entry of fact.entries) {
+      const key = `${fact.basis}:${entry.status}`;
+      counts.set(key, { basisVersion: fact.basis, status: entry.status, n: (counts.get(key)?.n ?? 0) + 1 });
+      sample.push({ ...entry, engine: fact.engine ?? "deepseek", roundId: fact.roundId ?? null, basisVersion: fact.basis, rubricVersion: null, askedAt: null });
+    }
+  }
+  return { counts: [...counts.values()], sample };
+};
+
 test("coverage never combines different value bases and passes audience/group/engine scope to the measurement read", async () => {
-  let parameters;
+  const received = {};
   const store = { latestValue: async () => ({ version: 2, data: { findings: [] } }), researchRequests: async () => [], listArticles: async () => [],
-    query: async (_sql, args) => {
-      parameters = args;
-      return { rows: [1, 2].map(version => ({ engine: "deepseek", judge_extract: { valueBasisVersion: version,
-        valueCoverage: [{ findingId: "f1", status: "represented" }] } })) };
-    } };
+    valueCoverage: coverageRead([1, 2].map(version => ({ basis: version, entries: [{ findingId: "f1", status: "represented" }] })), received) };
   const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
   const value = await service.valueOf({ id: "g" }, { groupId: "group", audience: "caregiver", engine: "deepseek" });
   assert.equal(value.coverage.assessed, 1);
   assert.equal(value.coverage.basisVersion, 2);
   assert.ok(value.observations.every(observation => observation.basisVersion === 2));
-  assert.deepEqual(parameters, ["g", "deepseek", "group", "caregiver"]);
+  assert.deepEqual(received.filter, { engine: "deepseek", groupId: "group", audience: "caregiver" });
 });
 
 test("a profile written after the round keeps that round's coverage, read against the basis it was judged on", async () => {
   // The round froze value version 2; a research import then wrote version 3. Before the fix the page
   // filtered on the latest version and showed nothing until the next round.
   const store = { latestValue: async (_id, version) => ({ version: version ?? 3, data: { findings: [] } }), researchRequests: async () => [], listArticles: async () => [],
-    query: async () => ({ rows: [{ engine: "kimi", round_id: "r1", judge_extract: { valueBasisVersion: 2,
-      valueCoverage: [{ findingId: "f1", status: "represented" }, { findingId: "f2", status: "partial" }] } }] }) };
+    valueCoverage: coverageRead([{ basis: 2, engine: "kimi", roundId: "r1", entries: [{ findingId: "f1", status: "represented" }, { findingId: "f2", status: "partial" }] }]) };
   const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
   const current = await service.valueOf({ id: "g" });
   assert.equal(current.version, 3);
@@ -179,6 +194,20 @@ test("a profile written after the round keeps that round's coverage, read agains
   assert.equal(asked.coverage.basisVersion, 3);
 });
 
+test("the reply carries a bounded sample of the observations and their total; the counts are over all of them (D-08)", async () => {
+  const entries = [...Array.from({ length: 300 }, (_, index) => ({ findingId: `f${index % 20}`, status: index % 3 === 0 ? "not_applicable" : "represented" })),
+    ...Array.from({ length: 40 }, (_, index) => ({ findingId: `f${index % 20}`, status: "partial" }))];
+  const store = { latestValue: async () => ({ version: 1, data: { findings: [] } }), researchRequests: async () => [], listArticles: async () => [],
+    valueCoverage: coverageRead([{ basis: 1, entries }]) };
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
+  const value = await service.valueOf({ id: "g" });
+  assert.equal(value.observationsTotal, 340, "the total is every observation on the basis");
+  assert.equal(value.observations.length, 20, "and the reply carries twenty of them");
+  assert.deepEqual([value.coverage.assessed, value.coverage.represented, value.coverage.partial, value.coverage.notApplicable], [240, 200, 40, 100],
+    "the counts are over every observation, not the twenty");
+  const empty = await new GeoService({ store: { ...store, latestValue: async () => ({ version: 0, data: {} }) }, config: { geoEnabled: true, geoAudience: "all" } }).valueOf({ id: "g" });
+  assert.deepEqual([empty.observations, empty.observationsTotal, empty.coverage.basisVersion], [[], 0, null], "no profile, no coverage");
+});
 
 test("judge output contract requests semantic assessments and refusals cannot become measured omissions", () => {
   const schema = JSON.parse(GEO_JUDGE_INSTRUCTIONS.split("\n").at(-1));

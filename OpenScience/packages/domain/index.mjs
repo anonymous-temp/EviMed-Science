@@ -52,6 +52,7 @@ export {
   geoValueJudged,
   geoValueImpacts,
   summarizeGeoValueCoverage,
+  summarizeGeoValueCoverageCounts,
 } from './src/geoValue.mjs'
 
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */

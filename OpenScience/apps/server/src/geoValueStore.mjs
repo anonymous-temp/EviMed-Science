@@ -56,6 +56,52 @@ export async function writeGeoValue(store, userId, geoId, patch, runId = null) {
   });
 }
 
+/** The coverage observations a reply carries at most; the counts beside them are over every one. */
+export const GEO_VALUE_OBSERVATIONS_SHOWN = 20;
+
+/**
+ * What the judge found of the profile's findings in the answers of the project's latest finished measurement round
+ * (`judge_extract.valueCoverage`), read where it is stored. One entry per finding per answer: 400 answers and 20 findings
+ * are eight thousand entries and nearly three megabytes of JSON, which the runtime's client refuses past four (D-08) — so
+ * the counts are taken in SQL, grouped by the profile version each answer was judged against and by status, and only the
+ * first `GEO_VALUE_OBSERVATIONS_SHOWN` entries of each version come back, those that say something (any status but
+ * `not_applicable`) before those that do not, the most recent answers first.
+ * @param {any} store @param {string} geoId @param {{ engine?: string | null, groupId?: string | null, audience?: string | null }} [filter]
+ * @returns {Promise<{ counts: Array<{ basisVersion: number | null, status: string | null, n: number }>,
+ *   sample: Array<Record<string, any> & { basisVersion: number | null }> }>}
+ */
+export async function readGeoValueCoverage(store, geoId, { engine = null, groupId = null, audience = null } = {}) {
+  const basis = `CASE WHEN jsonb_typeof(f.judge_extract -> 'valueBasisVersion') = 'number' THEN (f.judge_extract ->> 'valueBasisVersion')::numeric END`;
+  const from = `FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(f.judge_extract -> 'valueCoverage') = 'array'
+      THEN f.judge_extract -> 'valueCoverage' ELSE '[]'::jsonb END) WITH ORDINALITY AS obs(entry, position)
+    WHERE f.geo_project_id = $1 AND f.judged_at IS NOT NULL AND jsonb_typeof(obs.entry) = 'object'
+      AND ($2::text IS NULL OR s.engine = $2)
+      AND ($3::text IS NULL OR s.question_id IN (SELECT id FROM evimed_geo.questions WHERE geo_project_id = $1 AND group_id = $3))
+      AND ($4::text IS NULL OR s.question_id IN (SELECT q.id FROM evimed_geo.questions q JOIN evimed_geo.question_groups g ON g.id = q.group_id WHERE q.geo_project_id = $1 AND g.audience = $4))
+      AND s.round_id =
+        (SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'weekly', 'single_step')
+          AND status IN ('done', 'partial') ORDER BY created_at DESC LIMIT 1)`;
+  const parameters = [geoId, engine, groupId, audience];
+  const [counted, shown] = await Promise.all([
+    store.query(`SELECT ${basis} AS basis, obs.entry ->> 'status' AS status, count(*)::integer AS n ${from} GROUP BY 1, 2`, parameters),
+    store.query(`SELECT * FROM (
+        SELECT obs.entry, ${basis} AS basis, f.judge_extract -> 'rubricVersion' AS rubric, s.engine, s.round_id, s.asked_at,
+          row_number() OVER (PARTITION BY ${basis}
+            ORDER BY (coalesce(obs.entry ->> 'status', '') = 'not_applicable'), s.asked_at DESC NULLS LAST, s.id, obs.position) AS place
+        ${from}) ranked
+      WHERE place <= ${GEO_VALUE_OBSERVATIONS_SHOWN} ORDER BY basis DESC NULLS LAST, place`, parameters),
+  ]);
+  return {
+    counts: counted.rows.map((/** @type {any} */ row) => ({ basisVersion: row.basis == null ? null : Number(row.basis), status: row.status ?? null, n: Number(row.n) })),
+    sample: shown.rows.map((/** @type {any} */ row) => {
+      const basisVersion = row.basis == null ? null : Number(row.basis);
+      return { ...row.entry, engine: row.engine, roundId: row.round_id, basisVersion, rubricVersion: row.rubric ?? null,
+        askedAt: row.asked_at ? new Date(row.asked_at).toISOString() : null };
+    }),
+  };
+}
+
 /** @param {any} row */
 export function geoResearchRow(row) {
   const detail = row.detail ?? {};

@@ -53,6 +53,57 @@ test("semantic observations respect real profile, group, audience and engine bou
   assert.equal(historical.observations[0].basisVersion, 1);
 });
 
+test("a round of eight thousand observations comes back as exact counts and twenty observations, the ones that say something first (D-08)", options, async () => {
+  // 400 judged answers with 20 findings each were 2.87 MB of observations in every reply, and the runtime's client refuses past 4.
+  const project = await fresh();
+  await store.writeValue("alice", project.id, { findings: Array.from({ length: 20 }, (_, index) => ({ id: `f${index}`, statement: `Finding ${index}` })) });
+  const round = `gr_${randomUUID()}`;
+  await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status) VALUES($1,'alice',$2,'baseline','done')", [round, project.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at)
+    SELECT 'gs_' || $4 || g, 'alice', $1, $2, CASE WHEN g % 2 = 0 THEN 'deepseek' ELSE 'kimi' END, now() - make_interval(secs => g) FROM generate_series(1, $3::integer) g`,
+  [project.id, round, 400, round]);
+  // Even-numbered findings do not apply to the question; the odd ones are judged partly represented, and the first fifth of the answers were judged
+  // against an older profile (basis 1) than the rest (basis 2).
+  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,judge_extract)
+    SELECT 'gs_' || $3 || g, 'alice', $1, now(), jsonb_build_object('valueBasisVersion', CASE WHEN g <= 80 THEN 1 ELSE 2 END, 'rubricVersion', 'rubric-7', 'valueCoverage',
+      (SELECT jsonb_agg(jsonb_build_object('findingId', 'f' || f, 'status', CASE WHEN f % 2 = 0 THEN 'not_applicable' ELSE 'partial' END, 'quote', 'q', 'reason', 'r') ORDER BY f)
+        FROM generate_series(0, 19) f))
+    FROM generate_series(1, $2::integer) g`, [project.id, 400, round]);
+  await store.writeValue("alice", project.id, { findings: [{ id: "f0", limitations: "newer" }] });
+  await store.writeValue("alice", project.id, { findings: [{ id: "f0", limitations: "newer still" }] });
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
+  const value = await service.valueOf(project);
+  assert.equal(value.version, 3);
+  assert.equal(value.coverage.basisVersion, 2, "the newest basis the round used, never two mixed");
+  assert.equal(value.observationsTotal, 320 * 20, "320 answers on basis 2, twenty observations each");
+  assert.deepEqual([value.coverage.assessed, value.coverage.partial, value.coverage.notApplicable, value.coverage.represented], [3200, 3200, 3200, 0], "exact counts over every observation");
+  assert.equal(value.observations.length, 20);
+  assert.ok(value.observations.every((observation) => observation.status === "partial" && observation.basisVersion === 2 && observation.rubricVersion === "rubric-7"),
+    "the observations that say something first; the ones that do not apply only when there are no others");
+  assert.ok(Buffer.byteLength(JSON.stringify(value)) < 30_000, "the reply no longer grows with the round");
+  const newest = value.observations.map((observation) => Date.parse(observation.askedAt));
+  assert.deepEqual([...newest].sort((a, b) => b - a), newest, "the most recent answers first");
+  // A version asked for is read only against itself, and so is its sample.
+  const older = await service.valueOf(project, { version: 1 });
+  assert.equal(older.coverage.basisVersion, 1);
+  assert.equal(older.observationsTotal, 80 * 20);
+  assert.ok(older.observations.length === 20 && older.observations.every((observation) => observation.basisVersion === 1));
+  // The scope filters count what they scope.
+  const kimi = await service.valueOf(project, { engine: "kimi" });
+  assert.equal(kimi.observationsTotal, 160 * 20);
+  assert.ok(kimi.observations.every((observation) => observation.engine === "kimi"));
+  // A round whose observations all do not apply: they are the sample, there being no others, and the rate is unknown, never zero.
+  const quiet = await fresh();
+  await store.writeValue("alice", quiet.id, { findings: [{ id: "f1", statement: "Unrelated to these questions" }] });
+  const quietRound = `gr_${randomUUID()}`;
+  await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status) VALUES($1,'alice',$2,'weekly','done')", [quietRound, quiet.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at) VALUES ($1,'alice',$2,$3,'kimi',now())`, [`gs_${quietRound}`, quiet.id, quietRound]);
+  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,judge_extract) VALUES ($1,'alice',$2,now(),$3::jsonb)`,
+    [`gs_${quietRound}`, quiet.id, JSON.stringify({ valueBasisVersion: 1, valueCoverage: Array.from({ length: 30 }, () => ({ findingId: "f1", status: "not_applicable" })) })]);
+  const none = await service.valueOf(quiet);
+  assert.deepEqual([none.observationsTotal, none.observations.length, none.coverage.assessed, none.coverage.value], [30, 20, 0, null]);
+});
+
 test("backend owns versions, merges concurrent partial work, and isolates readers", options, async () => {
   const project = await fresh();
   await Promise.all([write(project, "value", { findings: [{ id: "f1", statement: "Conflicting effectiveness evidence" }] }),

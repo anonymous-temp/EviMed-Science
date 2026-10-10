@@ -49,7 +49,7 @@ import { canonicalGeoUrl, geoValueCanonical, geoArticlePublishable, GEO_STEPS, S
 import { GEO_SCHEMA, migrateGeo } from "./geoPersistence.mjs";
 import { geoScreenshotFile } from "./geoScreenshots.mjs";
 import { randomId } from "./security.mjs";
-import { readGeoValue, writeGeoValue, readGeoResearch, requestGeoResearch } from "./geoValueStore.mjs";
+import { readGeoValue, writeGeoValue, readGeoResearch, readGeoValueCoverage, requestGeoResearch } from "./geoValueStore.mjs";
 
 /** The statement timeout every GEO transaction sets for itself. */
 const STATEMENT_TIMEOUT_MS = 5_000;
@@ -406,6 +406,9 @@ export class GeoStore {
 
   /** @param {string} userId @param {string} geoId @param {Record<string, any>} patch @param {string | null} [runId] */
   writeValue(userId, geoId, patch, runId = null) { return writeGeoValue(this, userId, geoId, patch, runId); }
+
+  /** @param {string} geoId @param {{ engine?: string | null, groupId?: string | null, audience?: string | null }} [filter] */
+  valueCoverage(geoId, filter) { return readGeoValueCoverage(this, geoId, filter); }
 
   /** @param {string} geoId */
   researchRequests(geoId) { return readGeoResearch(this, geoId); }

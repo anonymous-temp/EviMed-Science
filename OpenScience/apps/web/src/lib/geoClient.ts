@@ -774,7 +774,9 @@ export interface GeoValue {
   impacts: Array<{ change: Record<string, unknown>; findingIds: string[]; groupIds: string[]; articleIds: string[] }>;
   /** `basisVersion`: the value-profile version the latest round was judged against (null before any judged round). */
   coverage: { assessed: number; represented: number; partial: number; contradicted: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null };
+  /** At most twenty, the ones that say something first and the most recent answers first; `coverage` counts every one of `observationsTotal`. */
   observations: Array<{ findingId: string; status: string; quote: string; reason: string; engine: string; basisVersion: number | null; rubricVersion: string | null; askedAt: string | null }>;
+  observationsTotal?: number;
 }
 
 export function getGeoValue(geoId: string) {
